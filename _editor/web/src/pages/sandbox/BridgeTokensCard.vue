@@ -42,12 +42,7 @@ const zedSnippet = computed(() =>
             :heading="2"
             icon="code"
             title="Editor bridge (ACP)"
-            description="Run this sandbox's agents from Zed, JetBrains, or any ACP editor. Mint a token, paste the snippet into your editor's agent settings, then open your synced folder as the project."
         />
-        <p class="text-2xs text-warning">
-            An editor token lets its holder run the agent, edit files, and run commands in this sandbox. Treat it like a password. Revoke it here if
-            it leaks.
-        </p>
 
         <div class="flex items-center gap-2">
             <input

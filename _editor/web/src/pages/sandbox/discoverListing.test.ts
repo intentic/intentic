@@ -116,7 +116,7 @@ describe(`how the list is grouped and searched`, () => {
         const sections = listingSections(listings);
         expect(sections.map((section) => section.id)).toEqual([`verified`, `listed`]);
         expect(sections[0]?.listings).toHaveLength(1);
-        expect(sections[1]?.caption).toContain(`no human source review`);
+        expect(sections[1]?.caption).toBe(``);
     });
 
     test(`a group nothing landed in is not a heading over nothing`, () => {

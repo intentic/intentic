@@ -109,10 +109,8 @@ onUnmounted(stopRecording);
 
 <template>
     <div class="flex flex-col gap-3">
-        <div class="flex items-start justify-between gap-3">
-            <p class="text-sm text-muted">Record a new shortcut for any command, or reset it to the default. Shortcuts are per-browser.</p>
+        <div v-if="hasAnyOverride" class="flex justify-end">
             <button
-                v-if="hasAnyOverride"
                 type="button"
                 class="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-content"
                 @click="resetKeymap()"

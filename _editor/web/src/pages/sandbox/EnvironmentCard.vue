@@ -90,7 +90,6 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
             :heading="2"
             icon="box"
             title="Environment"
-            description="What this sandbox has installed, and the recipe it was built from. The agent proposes changes; you approve them, and a rebuild applies the result."
         >
             <template #control>
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />

@@ -90,7 +90,7 @@ const subline = computed<{ text: string; tone: string }>(() => {
     if (editing.value) return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
     if (availability.value === `busy`) return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
     if (availability.value === `starting` || availability.value === `warming`) return { text: `Getting the workspace ready…`, tone: `text-muted` };
-    return { text: `The workspace Claude Code and your tools operate from.`, tone: `text-muted` };
+    return { text: ``, tone: `text-muted` };
 });
 
 const startEdit = async (): Promise<void> => {

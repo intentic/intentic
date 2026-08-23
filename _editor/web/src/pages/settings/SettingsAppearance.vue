@@ -132,7 +132,6 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <Row
                 :icon="THEME_ICON[themeChoice]"
                 title="Theme"
-                description="The workspace's whole look: plain light and dark, the HUD's lit glass over a survey grid, or the Sanctum's gilded stone."
             >
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
@@ -144,19 +143,18 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <Row
                 icon="palette"
                 title="Colour"
-                description="The accent everything is built from: links, buttons, highlights and the tint of every surface."
             >
                 <template #below>
                     <ColorPicker :model-value="accent" @update:model-value="setAccent" />
                 </template>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->
-            <Row icon="expand" title="Text size" description="How large everything reads: text, spacing and controls together.">
+            <Row icon="expand" title="Text size">
                 <template #control
                     ><SegmentedControl :model-value="textSize" :options="textSizeOptions" @update:model-value="setTextSize"
                 /></template>
             </Row>
-            <Row icon="sliders-h" title="Icon rail" description="Width and spacing of the desktop navigation rail.">
+            <Row icon="sliders-h" title="Icon rail">
                 <template #control>
                     <SegmentedControl
                         :model-value="iconRailSize"
@@ -169,7 +167,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
 
         <!-- File tree: the explorer's look, with its live preview flush under the row (no boxed inset). -->
         <RowGroup label="File tree">
-            <Row icon="sitemap" title="Explorer" description="Size, colour and emphasis of the file tree.">
+            <Row icon="sitemap" title="Explorer">
                 <template #control>
                     <SegmentedControl
                         :model-value="explorerStyle"
@@ -195,7 +193,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="eye"
                 title="Show ignored files"
-                description="List node_modules, build output and .gitignore'd paths in the explorer, grayed out. This is the whole filesystem the agent sees."
+                description="Show node_modules, build output, and gitignored paths."
             >
                 <template #control>
                     <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
@@ -205,7 +203,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="filter"
                 title="Hide tests"
-                description="Leave test and spec files out of the explorer: the .test and .spec files and the __tests__ folders beside them."
+                description="Hide test files and folders in explorer."
             >
                 <template #control>
                     <ToggleSwitch :model-value="hideTests" @update:model-value="toggleHideTests()" />
@@ -222,16 +220,15 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="box"
                 title="Group by module"
-                description="Head each run of changed files with the package it lives in, and let the row be the file rather than a repo-relative path. Applies to agent reviews too."
+                description="Group files by package in review lists."
             >
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
-            <!-- Not `as="label"`, unlike the switches around it: a label wrapping three buttons hands every
+            <!-- Not `as=\"label\"`, unlike the switches around it: a label wrapping three buttons hands every
                  click on the description to the first of them. -->
             <Row
                 icon="forward"
                 title="Where a diff opens"
-                description="Which change every diff lands on: the top of the file, the first change that isn't an import, or the biggest block of changed lines. The biggest one can leave earlier changes above you. Nothing is ever hidden."
             >
                 <template #control
                     ><SegmentedControl :model-value="diffOpen" :options="DIFF_OPEN_OPTIONS" @update:model-value="setDiffOpen"
@@ -248,7 +245,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 as="label"
                 icon="eye"
                 title="Show tool calls"
-                description="List every command, file read and edit an agent makes as its own row. Off, a turn's calls fold into one mark between messages that opens when you click it."
+                description="Display individual tool calls in transcript."
             >
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
@@ -259,14 +256,14 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
              back. The same preference is a checked row in the panel's own right-click menu and the
              work-terminals popover's footer, which is where someone irritated by it will actually reach. -->
         <RowGroup label="Terminal">
-            <Row as="label" icon="sparkles" title="Work terminals" description="Give every agent and job terminal its own tab in the terminal panel.">
+            <Row as="label" icon="sparkles" title="Work terminals">
                 <template #control><ToggleSwitch v-model="showWorkTerminals" /></template>
             </Row>
         </RowGroup>
 
         <!-- Theme import: the one row that needs a full-width editor. Its body lives in #below. -->
         <RowGroup label="Theme import">
-            <Row icon="palette" title="Import a VSCode theme" description="Paste a VSCode / OpenVSX color theme JSON to recolor the workspace.">
+            <Row icon="palette" title="Import a VSCode theme">
                 <template #control>
                     <button
                         v-if="importedTheme"

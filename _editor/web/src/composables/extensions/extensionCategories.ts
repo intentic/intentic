@@ -35,7 +35,7 @@ const CATEGORIES: readonly { readonly id: string; readonly label: string; readon
 
 // Declared nothing, or something this build doesn't know. A real section rather than a silent drop: an
 // extension the tab doesn't render is an extension its owner cannot switch off.
-const OTHER = { id: `other`, label: `Other`, caption: `no section declared, or one this build doesn't know` };
+const OTHER: { readonly id: string; readonly label: string; readonly caption?: string } = { id: `other`, label: `Other` };
 
 /** The tab's sections in render order, each holding its rows, empty ones omitted, so a filter that empties a
  *  section removes the heading with it rather than leaving a label over nothing. */

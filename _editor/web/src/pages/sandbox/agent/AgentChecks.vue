@@ -90,16 +90,10 @@ const savePrepush = (): void => {
         <Row
             icon="shield"
             title="Verify before finishing"
-            description="If a turn changes code and no check passes afterwards, ask the assistant once to run one."
+            description="Prompt the assistant to run a check after code changes."
         >
             <template #control>
                 <ToggleSwitch :model-value="verify()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVerify" />
-            </template>
-            <template #below>
-                <p v-if="verify()?.enabled === true" class="text-2xs text-muted">
-                    It names the test/lint/typecheck scripts this workspace actually defines, and asks at most twice per turn. Edits to documentation
-                    never trigger it.
-                </p>
             </template>
         </Row>
 
@@ -111,7 +105,7 @@ const savePrepush = (): void => {
         <Row
             icon="shield"
             title="Check before you push"
-            description="Run this command over your workspace when you push. It runs in the workspace root, exactly as a terminal would: pass and the push goes, fail and you get the output. Empty turns the check off."
+            description="Run a check before pushing code."
         >
             <template #below>
                 <div

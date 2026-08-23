@@ -169,7 +169,7 @@ const firedOf = (rule: Rule): string => {
             v-else-if="listed.length === 0 && !adding"
             icon="shield"
             density="compact"
-            description="No rules yet: the three above are the common ones, written the same way."
+            description="No custom rules added yet."
         />
 
         <Row v-if="adding" icon="plus" density="compact" title="New rule">

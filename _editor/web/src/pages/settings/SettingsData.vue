@@ -52,7 +52,7 @@ const confirmDelete = async (): Promise<void> => {
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup label="Data &amp; privacy">
-            <Row icon="download" title="Export my data" description="Download everything the platform stores about your account as JSON.">
+            <Row icon="download" title="Export my data">
                 <template #control>
                     <Button label="Export" severity="secondary" size="small" :loading="exporting" @click="exportData" />
                 </template>
@@ -61,7 +61,7 @@ const confirmDelete = async (): Promise<void> => {
                 icon="trash"
                 tone="danger"
                 title="Delete account"
-                description="Signs out every sandbox, then permanently removes your account and shared access. Keep your sandboxes online."
+                description="Permanently removes your account and shared access."
             >
                 <template #control>
                     <Button v-if="!confirmingDelete" label="Delete" severity="danger" size="small" @click="confirmingDelete = true" />

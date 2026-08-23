@@ -34,7 +34,7 @@ const {
     ready = true,
 } = defineProps<{
     title: string;
-    description: string;
+    description?: string;
     /** The named route the sections live on: `/<path>/:tab?`. */
     routeName: string;
     /** The section the param-less URL shows. Its row writes no param, so no section has two URLs. */

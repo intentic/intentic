@@ -99,7 +99,7 @@ const connect = async (): Promise<void> => {
 
 <template>
     <Card>
-        <Row flush :heading="2" icon="credit-card" title="Getting paid" description="Claim what you publish, and connect where the money goes." />
+        <Row flush :heading="2" icon="credit-card" title="Getting paid" />
 
         <div class="mt-3 flex flex-col gap-4">
             <Notice v-if="loadError" :of="loadError" />
@@ -190,9 +190,6 @@ const connect = async (): Promise<void> => {
                     </p>
                     <p class="text-xs text-muted">{{ payoutLine }}</p>
                     <p v-if="payouts?.disabledReason" class="text-xs text-muted">Stripe is holding payouts for: {{ payouts.disabledReason }}.</p>
-                    <p class="text-2xs text-muted">
-                        Bank details, identity and tax forms are collected by Stripe on its own pages. This platform never sees or stores them.
-                    </p>
                     <div>
                         <Button
                             :label="payouts?.connected ? `Continue on Stripe` : `Set up payouts`"

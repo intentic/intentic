@@ -182,10 +182,6 @@ const prove = async (): Promise<void> => {
 <template>
     <div class="flex flex-col gap-2">
         <h3 class="text-xs font-semibold">Claim a publisher name</h3>
-        <p class="text-xs text-muted">
-            Earnings add up against the publisher name in your extension's manifest, or, for a paid service with no extension, against your domain.
-            Prove it's yours and they become payable to you.
-        </p>
 
         <!-- Names the creator's own repositories publish under. Absent rather than empty when there are none:
              an empty suggestion strip is a promise the screen just failed to keep. -->
@@ -239,10 +235,6 @@ const prove = async (): Promise<void> => {
                     <Button label="I'm serving it, verify" size="small" :loading="proving" @click="prove" />
                     <span v-if="step" class="text-2xs text-muted">{{ step }}</span>
                 </div>
-                <p class="text-2xs text-muted">
-                    A static file works (most hosts serve <span class="font-mono">.well-known/</span> from the site root), and so does a route.
-                    Listings under a domain may only use endpoints on that domain or its subdomains.
-                </p>
                 <Notice v-if="proveNotice" :of="proveNotice" />
             </template>
 
@@ -272,7 +264,6 @@ const prove = async (): Promise<void> => {
                         <Button :label="published ? `Check again` : `Add the proof and push`" size="small" :loading="proving" @click="prove" />
                         <span v-if="step" class="text-2xs text-muted">{{ step }}</span>
                     </div>
-                    <p class="text-2xs text-muted">Adds one file, commits just that file, and pushes to the default branch.</p>
                 </template>
 
                 <!-- ELSEWHERE: one line that does every step, then the same verify. -->

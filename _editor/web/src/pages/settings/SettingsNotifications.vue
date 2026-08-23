@@ -43,11 +43,9 @@ const status = computed(() => {
         case `unsupported`:
             return `This browser can't receive push notifications. Safari needs the app added to your Home Screen first.`;
         case `denied`:
-            return `Blocked for this app. It won't ask again. Re-allow notifications in your browser's site settings (or, in the iOS app, in Settings > Notifications), then reload.`;
-        case `on`:
-            return `This device will be notified when a turn finishes, when the agent needs an answer, and when an automation is waiting for approval.`;
+            return `Blocked for this app. Re-allow notifications in site settings, then reload.`;
         default:
-            return `Get told when your agent finishes or needs you, without keeping the tab open.`;
+            return undefined;
     }
 });
 </script>
@@ -63,7 +61,6 @@ const status = computed(() => {
                     v-if="enabled"
                     icon="send"
                     title="Send a test"
-                    description="Checks the whole chain: the sandbox, the push service, and your operating system's notification settings."
                 >
                     <template #control>
                         <button
@@ -77,11 +74,6 @@ const status = computed(() => {
                     </template>
                 </Row>
             </RowGroup>
-
-            <p class="px-0.5 text-2xs leading-relaxed text-subtle">
-                A registration belongs to the browser or phone that created it, so turn this on again on every device you want notified. Nothing is
-                sent while a tab on this sandbox is open and active, so you're only interrupted once you've actually stepped away.
-            </p>
         </div>
 
         <p v-if="error" class="text-xs text-danger">{{ error }}</p>

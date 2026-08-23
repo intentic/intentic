@@ -133,13 +133,13 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
         {
             id: `verified`,
             label: `Verified`,
-            caption: `the deterministic scan and agent audit passed, and someone read the source at the listed commit`,
+            caption: ``,
             listings: listings.filter((listing) => listing.entry.trust === `verified`),
         },
         {
             id: `listed`,
             label: `Everything published`,
-            caption: `no human source review, open an entry to see both automated checks`,
+            caption: ``,
             listings: listings.filter((listing) => listing.entry.trust !== `verified`),
         },
     ].filter((section) => section.listings.length > 0);

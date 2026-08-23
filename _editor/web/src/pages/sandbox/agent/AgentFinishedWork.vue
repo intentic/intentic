@@ -52,34 +52,28 @@ const RETENTION_OPTIONS = [
     <RowGroup label="Finished work">
         <template #info><FinishedWorkInfo /></template>
 
-        <!-- Auto-land: the sandbox's standing answer to "does finished work reach my workspace by itself".
+        <!-- Auto-land: the sandbox's standing answer to \"does finished work reach my workspace by itself\".
              Daemon-side rather than a browser preference, because automation-opened agents (Discord, webhooks,
              email) finish turns with no browser in the room. Off is the default and turns every clean completion
-             into a "Ready to land" card; per-agent exceptions live on the review panel's hold toggle. -->
+             into a \"Ready to land\" card; per-agent exceptions live on the review panel's hold toggle. -->
         <Row
             icon="download"
             title="Land finished work automatically"
-            description="When an agent finishes cleanly, apply its work to your workspace as uncommitted changes right away. Off, it waits on the agent's branch until you land it."
+            description="Apply completed work directly to workspace as uncommitted changes."
         >
             <template #control>
                 <ToggleSwitch :model-value="land()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setLand" />
-            </template>
-            <template #below>
-                <p v-if="land()?.enabled === true" class="text-2xs text-muted">
-                    A single agent can still be held back from the review panel, and a rule below can narrow this: hold anything touching a path you
-                    name, and let the rest through.
-                </p>
             </template>
         </Row>
 
         <!-- Agent retention: how long a finished agent keeps its card AND its worktree checkout. The Finished
              lane has no exit of its own, so without this the board (and the disk behind it) grows for the life
              of the sandbox. Archiving is lossless, which is what makes an automatic sweep acceptable at all:
-             "Never" is offered, but it costs a checkout per agent forever. -->
+             \"Never\" is offered, but it costs a checkout per agent forever. -->
         <Row
             icon="box"
             title="Archive finished agents"
-            description="Take a finished agent off the board after it has been quiet this long, and reclaim its worktree. Its branch, diff and conversation are kept: restore it any time from the board's archive."
+            description="Archive quiet agents and reclaim worktrees (diffs and history are kept)."
         >
             <template #control>
                 <SegmentedControl

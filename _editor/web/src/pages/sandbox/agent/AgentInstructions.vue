@@ -149,7 +149,7 @@ const reachLine =
         <Row
             icon="align-left"
             title="Terse responses"
-            description="Ask the assistant to answer concisely without restating context: fewer output tokens per reply."
+            description="Answer concisely without restating context."
         >
             <template #control>
                 <ToggleSwitch

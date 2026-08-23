@@ -133,7 +133,6 @@ const copySecret = async (): Promise<void> => {
             :heading="2"
             icon="bolt"
             title="Offer a paid service"
-            description="List an endpoint of yours and be paid in members' credits, without asking anyone."
         />
 
         <div class="mt-3 flex flex-col gap-4">
@@ -287,10 +286,6 @@ const copySecret = async (): Promise<void> => {
                     <input v-model="form.upstreamUrl" placeholder="https://… the endpoint we call" :class="ui.input()" />
                     <input v-model.number="form.creditsPerRun" type="number" placeholder="credits per run" :class="ui.input()" />
                     <textarea v-model="form.sampleRequest" rows="2" :class="ui.input(`font-mono`)" />
-                    <p class="text-2xs text-muted">
-                        The sample request is a body your service actually answers. We send it as the health check, and members' agents read it as the
-                        worked example of your request shape.
-                    </p>
                     <div>
                         <Button label="Create draft" size="small" :loading="creating" @click="create" />
                     </div>

@@ -70,7 +70,6 @@ const sizeLabel = (bytes: number): string => {
             :heading="2"
             icon="box"
             title="Move this sandbox"
-            description="Export the workspace, its git history and the agent board as one file: then restore it into a fresh sandbox."
         />
 
         <template v-if="isOwner">
@@ -87,7 +86,7 @@ const sizeLabel = (bytes: number): string => {
                  THE BLEED IS THE WRAPPER'S, NOT THE ROW'S, and it has to be: a <Row> carries `w-full`, and a
                  negative side margin on a box whose width is pinned to 100% SLIDES it instead of widening it:
                  the band hung a card-padding over the left edge and finished a card-padding short of the right,
-                 which is the "still not full-width" of the second report. An undecorated wrapper has no width of
+                 which is the \"still not full-width\" of the second report. An undecorated wrapper has no width of
                  its own, so `-mx-5` widens it by the card's padding on both sides (`5`, like
                  `--ui-card-padding`), and the row inside is 100% of THAT. The row keeps the padding, so the
                  words stay lined up with everything else on the card while the tint runs edge to edge. -->
@@ -98,7 +97,6 @@ const sizeLabel = (bytes: number): string => {
                     :icon="withSecrets ? `unlock` : `lock`"
                     :tone="withSecrets ? `warning` : `default`"
                     title="Include secrets"
-                    description="Capability credentials, the CI webhook secret, extension settings, ssh keys and the agent's AI logins. Leave this off and the bundle is safe to hand to someone else: the restore then lists what to re-enter."
                     class="px-5 py-2.5"
                     :class="packing === undefined ? `cursor-pointer` : `cursor-default`"
                 >

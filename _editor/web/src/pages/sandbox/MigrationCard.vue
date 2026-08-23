@@ -149,7 +149,6 @@ const cancel = (): Promise<void> =>
             :heading="2"
             icon="upload"
             title="Arrive from another assistant"
-            description="Bring a Hermes or OpenClaw setup here: its personality and memory, skills, scheduled jobs and connections land as ordinary pieces of this sandbox, previewed as a checklist before anything is written."
         />
 
         <template v-if="isOwner">
@@ -161,7 +160,7 @@ const cancel = (): Promise<void> =>
                      correction: the first cut rendered nothing unless a setup was found, so an owner whose
                      laptop was simply ASLEEP (the ordinary state of a laptop) saw a card that had never
                      heard of their computers and no reason to think reading one was possible at all. A row
-                     saying "asleep, wake it and check again" is not a dead-end offer; it is the difference
+                     saying \"asleep, wake it and check again\" is not a dead-end offer; it is the difference
                      between a feature that is missing and one that is waiting. -->
                 <RowGroup v-if="hosts.length > 0">
                     <Row
@@ -176,9 +175,7 @@ const cancel = (): Promise<void> =>
                                 host.found === undefined ? host.id : `Found a ${host.found === `hermes` ? `Hermes` : `OpenClaw`} setup on ${host.id}`
                             }}</span></template
                         >
-                        <template #description>{{
-                            host.found === undefined ? host.detail : `Nothing to pack, it can be read straight off that computer.`
-                        }}</template>
+                        <template v-if="host.found === undefined" #description>{{ host.detail }}</template>
                         <template #control>
                             <Button
                                 v-if="host.found !== undefined"
@@ -200,11 +197,6 @@ const cancel = (): Promise<void> =>
                         </template>
                     </Row>
                 </RowGroup>
-                <!-- Said to the owner who has connected no computer at all: the shortcut exists, and knowing
-                     it exists is what makes them reach for it next time rather than packing again. -->
-                <p v-else-if="probed" class="text-2xs text-subtle">
-                    If you connect the computer that runs it (Capabilities → your computer), the setup can be read straight off it: no packing at all.
-                </p>
 
                 <!-- Step 1, and it is a question rather than a form: which tool you run is the one thing you
                      never have to look up, and answering it halves everything below. -->

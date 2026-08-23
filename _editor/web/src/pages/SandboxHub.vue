@@ -151,7 +151,6 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
 <template>
     <HubLayout
         :title="sandbox.active.value?.name ?? `Sandbox`"
-        description="The workspace AI operates from. The platform keeps only its address; accounts and credentials stay inside it."
         route-name="sandbox"
         :default-slug="DEFAULT"
         :groups="groups"

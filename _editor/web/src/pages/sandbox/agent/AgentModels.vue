@@ -202,7 +202,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
         <Row
             icon="sparkles"
             title="Quick model"
-            description="The cheap, fast models behind small automatic jobs like the commit message written when an agent's work lands: tried in order, so a spent account doesn't take the feature down."
+            description="Fast models for automatic background tasks."
         >
             <template #control>
                 <Picker
@@ -247,7 +247,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
         <Row
             icon="bolt"
             title="Agent runs"
-            description="What a run someone else started opens on: a full session in its own worktree, so pick a tier that can finish the job."
+            description="Model tier for runs started in a worktree."
         >
             <template #control>
                 <Picker
@@ -316,7 +316,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
         <Row
             icon="credit-card"
             title="Automatic tier"
-            description="Run turns that look simple on a cheaper model from the same provider. It can only ever go cheaper than your pick, never dearer."
+            description="Run simple turns on a cheaper model from the same provider."
         >
             <template #control>
                 <SegmentedControl

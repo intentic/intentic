@@ -84,7 +84,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
         <Row
             icon="bolt"
             title="Clean command output"
-            description="Trim noisy shell output before it reaches the assistant: fewer tokens, same signal (errors always kept)."
+            description="Trim noisy shell output before it reaches the assistant."
         >
             <template #control>
                 <ToggleSwitch

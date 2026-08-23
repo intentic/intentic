@@ -47,7 +47,7 @@ const repoLabel = (repo: string): string => (repo === `root` ? `Workspace reposi
             :key="repo"
             icon="book"
             :title="repoLabel(repo)"
-            description="Have each commit carry a one-line note about what changed for the people who use it, ready to publish when you release."
+            description="Include a release note with each commit."
         >
             <template #control>
                 <ToggleSwitch

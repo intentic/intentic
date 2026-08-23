@@ -201,7 +201,6 @@ const pushToCi = async (): Promise<void> => {
             <RowGroup
                 v-if="attention.length > 0"
                 label="Needs attention"
-                caption="required values nobody has set, and copies CI never got"
                 :count="attention.length"
             >
                 <SecretEntryRow
@@ -301,7 +300,6 @@ const pushToCi = async (): Promise<void> => {
                     <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open/fold:rotate-90" />
                     <span :class="ui.sectionLabel()">Connected accounts</span>
                     <span class="text-2xs font-medium text-subtle">{{ accountCount }}</span>
-                    <span class="min-w-0 text-2xs text-subtle">held by your connections: set up where they were added</span>
                 </summary>
 
                 <div class="mt-3 flex flex-col gap-6">

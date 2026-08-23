@@ -18,7 +18,7 @@ defineProps<{ title: string; description?: string }>();
                 <slot name="actions" />
             </div>
         </div>
-        <p v-if="description !== undefined || $slots['description']" class="mt-1 text-sm text-muted">
+        <p v-if="(description !== undefined && description !== ``) || $slots['description']" class="mt-1 text-sm text-muted">
             <slot name="description">{{ description }}</slot>
         </p>
     </header>

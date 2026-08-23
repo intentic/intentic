@@ -62,7 +62,6 @@ const DEFAULT = `profile`;
 <template>
     <HubLayout
         title="Settings"
-        description="Your personal preferences on this platform."
         route-name="settings"
         :default-slug="DEFAULT"
         :groups="GROUPS"

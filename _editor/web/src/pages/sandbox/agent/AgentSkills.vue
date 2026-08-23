@@ -194,7 +194,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             v-else-if="skills.length === 0 && !adding"
             icon="book"
             density="compact"
-            description="No skills yet. Write one to teach the agent something it should do the same way every time."
+            description="No skills added yet."
         />
         <!-- Three different facts, and the wrong one is a lie the reader can see: an empty list, a filter that
              found nothing, and a filter whose only hits are inside the fold below (which is open, so this is

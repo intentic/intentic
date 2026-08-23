@@ -29,15 +29,15 @@ const setAutomationFailureLimit = (event: Event): void => {
     <RowGroup label="When a turn breaks">
         <!-- THE DEFAULT, and the row says so in its own title. A single chat can answer this for itself from
              the banner under the turn that died, and that press deliberately does NOT reach this switch: what
-             a person means inside one conversation is "finish this", and what they mean here is "this is how
-             the board behaves". Conflating the two is how one midnight click used to sign every agent up.
+             a person means inside one conversation is \"finish this\", and what they mean here is \"this is how
+             the board behaves\". Conflating the two is how one midnight click used to sign every agent up.
 
              So the row states the two things a default owes its reader: what it governs (everything that has
              not answered for itself), and that some chats may have. -->
         <Row
             icon="refresh"
             title="Resume after provider outages, by default"
-            description="Retry a turn the provider failed (500, at capacity, a dropped connection), backing off between attempts and trying one agent at a time."
+            description="Retry turns failed by the provider (500, capacity, connection drops)."
         >
             <template #control>
                 <ToggleSwitch
@@ -45,12 +45,6 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :disabled="settings === undefined"
                     @update:model-value="(value: boolean) => patch({ resumeAfterOutage: value })"
                 />
-            </template>
-            <template #below>
-                <p class="text-2xs text-muted">
-                    The starting answer for every agent. One chat can be kept going on its own from the banner under the turn an outage killed, and a
-                    chat that has answered for itself keeps its own answer whatever this switch says.
-                </p>
             </template>
         </Row>
 
@@ -60,7 +54,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         <Row
             icon="refresh"
             title="Resume turns after a restart"
-            description="When the sandbox restarts while an agent is mid-turn: an update, an approved environment change, a crash, pick that turn back up when it comes back."
+            description="Pick up in-flight turns when the sandbox restarts."
         >
             <template #control>
                 <ToggleSwitch
@@ -79,7 +73,7 @@ const setAutomationFailureLimit = (event: Event): void => {
         <Row
             icon="stop"
             title="Stop a failing automation"
-            description="Disable an automation after this many failed runs in a row. 0 never disables one."
+            description="Disable an automation after consecutive failures (0 never disables)."
         >
             <template #control>
                 <input
@@ -92,12 +86,6 @@ const setAutomationFailureLimit = (event: Event): void => {
                     :disabled="settings === undefined"
                     @change="setAutomationFailureLimit"
                 />
-            </template>
-            <template #below>
-                <p v-if="(settings?.automationFailureLimit ?? 0) > 0" class="text-2xs text-muted">
-                    Only errored runs count: a guard skipping a run, or the daemon restarting under one, does not. The row says why it stopped, and
-                    its switch turns it back on.
-                </p>
             </template>
         </Row>
     </RowGroup>

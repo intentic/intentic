@@ -93,7 +93,6 @@ const sections = computed<ExtensionSection[]>(() => [
               {
                   id: `attention`,
                   label: `Needs attention`,
-                  caption: `loaded with a problem, or built against a different version`,
                   entries: attention.value,
               },
           ]),
@@ -291,7 +290,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
              parse, or an id something else already owns. Named per directory because nothing install-shaped
              ever rejected them: this group is where their author (usually an agent, via GET /extensions)
              learns why the row is missing. -->
-        <RowGroup v-if="invalid.length > 0" label="Not loadable" caption="workspace-extension directories the sandbox could not read">
+        <RowGroup v-if="invalid.length > 0" label="Not loadable">
             <div v-for="entry in invalid" :key="entry.dir" class="flex items-start justify-between gap-3 px-3 py-2">
                 <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-content">.intentic/config/workspace-extensions/{{ entry.dir }}</p>
@@ -302,7 +301,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         </RowGroup>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
-        <RowGroup v-if="unlisted.length > 0" label="Running but not listed" caption="compiled into this app build, unknown to the sandbox image">
+        <RowGroup v-if="unlisted.length > 0" label="Running but not listed">
             <div v-for="status in unlisted" :key="status.id" class="flex items-center justify-between gap-3 px-3 py-2">
                 <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-content">{{ status.extensionId }}</p>

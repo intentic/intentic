@@ -334,7 +334,7 @@ const emptyNote = computed<string | undefined>(() => {
             <div class="flex flex-wrap items-baseline gap-x-2">
                 <span :class="ui.sectionLabel()">{{ section.label }}</span>
                 <span class="text-2xs tabular-nums text-subtle">{{ section.listings.length }}</span>
-                <span class="text-2xs text-muted">{{ section.caption }}</span>
+                <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
             </div>
             <!-- Container queries: how many cards fit is a fact about this pane, which shares the page with the
                  hub's index column and the shell with a chat panel the user drags. -->

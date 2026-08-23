@@ -87,33 +87,22 @@ const routedProvider = computed<KeyedProvider | undefined>(() =>
         ? managedProvider.value
         : undefined,
 );
-// Each routed row carries two registers of explanation, because they are read at different moments. `hint` is
-// the glanceable one: what this connection costs you, in a fragment, and it is the only one on screen. `about`
-// is the full mechanic, parked behind the row's (i) for the reader who actually wants it: printing both is what
-// turned this card into a wall of prose. The live sign-in's own copy (destination button, login hint) lives in
-// ConnectFlow beside the flow it narrates.
-const ROUTED_ROW: Record<KeyedProvider, { title: string; hint: string; about: string }> = {
+// The full mechanic is parked behind the row's (i) rather than printed on screen.
+const ROUTED_ROW: Record<KeyedProvider, { title: string; about: string }> = {
     codex: {
         title: `ChatGPT subscription`,
-        hint: `The only connection Codex needs.`,
         about: `Runs Codex on your ChatGPT subscription, everywhere: on its own and under the Claude Code harness.`,
     },
     grok: {
         title: `Under Claude Code`,
-        hint: `Your SuperGrok / X Premium subscription.`,
         about: `Runs Grok models under the Claude Code harness on your SuperGrok / X Premium subscription, a separate sign-in from the Grok account above.`,
     },
     kimi: {
         title: `Kimi Code subscription`,
-        hint: `Runs on your Kimi Code plan.`,
         about: `Runs Kimi models under the Claude Code harness on your Kimi Code subscription, no API key or metered API balance required.`,
     },
     gemini: {
         title: `Google account`,
-        // The models are worth naming even in the short line, because they are not the ones a "Google" tab
-        // implies: Google's Antigravity channel vends Claude and GPT-OSS on the same ordinary sign-in (see
-        // gemini-models.ts). Free is the other half: it is the only free row on this page.
-        hint: `Free, Gemini, Claude and GPT-OSS models.`,
         about: `Runs Gemini, Claude and GPT-OSS models under the Claude Code harness on your Google account, free, and the one connection this provider needs.`,
     },
 };
@@ -558,7 +547,6 @@ onUnmounted(() => clearTimeout(ringTimer));
                     :title="ROUTED_ROW[routedProvider].title"
                     state="connected"
                     :note="account.label"
-                    :description="ROUTED_ROW[routedProvider].hint"
                     :about="ROUTED_ROW[routedProvider].about"
                     :headroom="headroom"
                     :exhausted="exhausted"
@@ -586,7 +574,6 @@ onUnmounted(() => clearTimeout(ringTimer));
                     state="missing"
                     :note="routedFlowLive ? `signing in…` : `not connected`"
                     :note-busy="routedFlowLive"
-                    :description="ROUTED_ROW[routedProvider].hint"
                     :about="ROUTED_ROW[routedProvider].about"
                 >
                     <template #control>

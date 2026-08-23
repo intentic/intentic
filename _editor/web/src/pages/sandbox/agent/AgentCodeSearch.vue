@@ -47,7 +47,7 @@ const searchReadings = computed<PanelReading[]>(() => {
 
         <!-- iq code search: loads the iq plugin (skill + nudge) so the assistant reaches for the iq CLI instead
              of grep/find/glob. Opt-in per sandbox; the browser Search box uses iq regardless. -->
-        <Row icon="search" title="iq code search" description="Let the assistant use the iq search CLI instead of grep / find / glob.">
+        <Row icon="search" title="iq code search" description="Use iq search CLI instead of grep/find/glob.">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.iqSearch ?? false"
@@ -71,15 +71,15 @@ const searchReadings = computed<PanelReading[]>(() => {
             </template>
         </Row>
 
-        <!-- The project map: one question earlier than search. Search answers "where is this thing"; this
-             answers "what is this and which part of it am I in", which every new conversation has to buy for
+        <!-- The project map: one question earlier than search. Search answers \"where is this thing\"; this
+             answers \"what is this and which part of it am I in\", which every new conversation has to buy for
              itself and, left to itself, buys with a folder listing. Read off disk each time a conversation
              opens rather than written down anywhere, which is the whole reason it is a switch here and not a
              paragraph somebody maintains by hand. -->
         <Row
             icon="sitemap"
             title="Project map"
-            description="Hand the assistant the main parts of the project it opens in, read fresh from your folders."
+            description="Provide project structure overview to new conversations."
         >
             <template #control>
                 <ToggleSwitch

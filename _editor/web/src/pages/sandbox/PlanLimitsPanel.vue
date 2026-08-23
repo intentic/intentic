@@ -175,7 +175,6 @@ const roster = computed(() => {
         id="accounts"
         class="@container"
         label="Plan limits"
-        caption="your whole plan, not this sandbox: every device on the account spends the same pools"
     >
         <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
              on" is the question, and it survives having 31 of them. -->
@@ -430,17 +429,6 @@ const roster = computed(() => {
                 <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">No account matches that filter.</p>
             </div>
         </div>
-
-        <!-- The caveat sits INSIDE the surface, as the last row: a footnote floating below the border is read
-             after the numbers it qualifies, if at all. Two readers, one caveat: Claude's pools come off the turn
-             that just ended, so an idle sandbox's reading is as old as its last turn, and the routed
-             subscriptions' are pulled on the daemon's own cadence. Either way the pools keep draining
-             elsewhere, which is the entire distance between "1%" here and 98% in a terminal on the same
-             account. -->
-        <p class="px-4 py-2.5 text-2xs text-subtle">
-            A floor, not a reading: other clients spend the same pools without telling this sandbox, and Claude's figure is only as fresh as your last
-            turn.
-        </p>
     </RowGroup>
 
     <!-- An unread state is not an empty one: until the connection read lands, this says nothing about having no

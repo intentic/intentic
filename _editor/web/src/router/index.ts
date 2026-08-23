@@ -234,11 +234,7 @@ const routes: RouteRecordRaw[] = [
                 // page is rather than guessing which box, and the description is the hub's own (SandboxHub.vue).
                 component: asyncView(
                     () => import(`../pages/SandboxHub.vue`),
-                    hubOutline(
-                        `Sandbox`,
-                        `The workspace AI operates from. The platform keeps only its address; accounts and credentials stay inside it.`,
-                        7,
-                    ),
+                    hubOutline(`Sandbox`, ``, 7),
                 ),
             },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`) so a reload or a
@@ -268,7 +264,7 @@ const routes: RouteRecordRaw[] = [
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
                 component: asyncView(
                     () => import(`../pages/SettingsHub.vue`),
-                    hubOutline(`Settings`, `Your personal preferences on this platform.`, 5),
+                    hubOutline(`Settings`, ``, 5),
                 ),
             },
         ],

@@ -68,7 +68,7 @@ const saveProfile = async (): Promise<void> => {
 <template>
     <Card>
         <form @submit.prevent="saveProfile">
-            <Row flush :heading="2" icon="user" title="Profile" description="Your display name and avatar on this platform." />
+            <Row flush :heading="2" icon="user" title="Profile" />
             <div class="mt-3 flex items-center gap-3">
                 <Avatar :size="56" :src="avatarImage" />
                 <Button label="Change avatar" severity="secondary" size="small" @click="avatarInput?.click()">

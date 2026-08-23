@@ -28,7 +28,7 @@ const DEPTH = { min: 1, max: 10 };
         <Row
             icon="users"
             title="Subagents at once"
-            description="How many delegated agents may work in parallel. Reaching this doesn't fail anything: the assistant is told to stop starting new ones and carry on itself."
+            description="Maximum delegated agents running in parallel."
         >
             <template #control>
                 <input
@@ -53,7 +53,7 @@ const DEPTH = { min: 1, max: 10 };
         <Row
             icon="clone"
             title="Subagents per conversation"
-            description="The total one conversation may start, across every message in it. Counts every agent ever started, not just the ones still running."
+            description="Total delegated agents allowed per conversation."
         >
             <template #control>
                 <input
@@ -77,7 +77,7 @@ const DEPTH = { min: 1, max: 10 };
         <Row
             icon="sitemap"
             title="Nesting depth"
-            description="How far delegation may go: 1 lets the assistant delegate but stops its agents from delegating in turn."
+            description="Maximum delegation depth."
         >
             <template #control>
                 <input
@@ -92,12 +92,6 @@ const DEPTH = { min: 1, max: 10 };
                         (event: Event) => commitCount(event, settings?.subagentDepth ?? 3, DEPTH, (subagentDepth: number) => patch({ subagentDepth }))
                     "
                 />
-            </template>
-            <template #below>
-                <p v-if="(settings?.subagentDepth ?? 3) > 3" class="text-2xs text-muted">
-                    Each level multiplies the one above it, and every agent at every level spends tokens. The two caps above are what actually bound
-                    that: this row only decides how far down it can go.
-                </p>
             </template>
         </Row>
     </RowGroup>

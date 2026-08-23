@@ -300,8 +300,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             {{ formatPercent(cacheHitRate(totals)) }}
                         </div>
                         <p class="mt-auto pt-2 text-2xs text-subtle">
-                            {{ formatCompact(totals.cacheReadTokens) }} of prompt input served from cache: the share you were not billed full rate
-                            for.
+                            {{ formatCompact(totals.cacheReadTokens) }} prompt input cached
                         </p>
                     </Card>
                 </div>
@@ -358,7 +357,6 @@ const hasSpend = computed(() => current.value.length > 0);
                 <section v-if="hasSavings" class="@container">
                     <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
                         <span :class="ui.sectionLabel()">Token savings</span>
-                        <span class="min-w-0 text-2xs text-subtle">what the token-reduction settings were worth</span>
                     </div>
 
                     <!-- items-start: a card with nothing to report stays short instead of being stretched to the

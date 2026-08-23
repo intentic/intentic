@@ -93,15 +93,8 @@ onUnmounted(stop);
 <template>
     <Card id="desktop-sync" class="@container flex flex-col gap-4 transition-shadow" :class="ringing ? 'ring-2 ring-info' : ''">
         <div class="flex flex-col gap-3 @2xl:flex-row @2xl:items-center @2xl:justify-between">
-            <Row flush :heading="2" icon="sync" title="Desktop sync">
-                <template #description>
-                    <template v-if="isOwner">
-                        Edit your sandbox in your own editor, and reach its dev servers on your own localhost, with the same ports, cookies, and CORS.
-                    </template>
-                    <template v-else>Mirror this sandbox's dev servers onto your own localhost, with the same ports, cookies, and CORS.</template>
-                </template>
-            </Row>
-            <!-- The pill follows the HEARTBEAT, not the enrollment record: a green "Enabled" over a machine that
+            <Row flush :heading="2" icon="sync" title="Desktop sync" />
+            <!-- The pill follows the HEARTBEAT, not the enrollment record: a green \"Enabled\" over a machine that
                  stopped polling hours ago is the exact lie that let a lost pairing go unnoticed. -->
             <span
                 v-if="enrolled"
@@ -142,12 +135,6 @@ onUnmounted(stop);
                         <dd v-else class="min-w-0 text-right text-subtle">not reported yet</dd>
                     </div>
                 </dl>
-                <!-- The "Ports: on localhost at <machine>" and "Manage: intentic-sync status" rows that used to
-                     sit here are gone. Both were this card admitting it could not answer: the first named a
-                     machine instead of the ports, and the second named a terminal command. The Computers list
-                     above states each of them as a fact the machine reported, so repeating them here would be two
-                     vaguer copies of what the reader has already scrolled past. -->
-                <p class="text-2xs text-subtle">Folders, ports and agent health for every paired computer are listed above.</p>
                 <!-- The holder went quiet. Name the likeliest cause first: on a computer running more than one
                      sandbox, the agent is shared, and older builds silently handed the whole pairing to whichever
                      sandbox was set up last, so a folder stops syncing with nothing on either end saying so. -->

@@ -225,7 +225,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 icon="exclamation-circle"
                 tone="warning"
                 title="Your membership needs a working card"
-                description="Stripe couldn't take the last payment, so premium extensions are switched off until one goes through. Nothing else has changed: what you've installed stays installed, and your allowance comes back the moment the charge clears."
+                description="Payment failed. Update your card to restore access."
             >
                 <template #below>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -246,7 +246,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                 spin
                 tone="info"
                 title="Payment received, activating your membership"
-                description="This takes a few seconds. The page updates itself; there's nothing to click."
+                description="Activating membership…"
             />
         </Card>
 

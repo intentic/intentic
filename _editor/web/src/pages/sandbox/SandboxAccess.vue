@@ -359,12 +359,8 @@ const revoke = async (target: string): Promise<void> => {
                     </Button>
                 </div>
 
-                <!-- Invite affordance as the group's footer row (mirrors the Secrets "add" pattern). -->
+                <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
                 <div class="flex flex-col gap-2 px-4 py-3">
-                    <p class="text-xs text-muted">
-                        People you invite get an email to open
-                        <span class="font-medium text-content">{{ sandbox.active.value?.name }}</span> and sign in with their own Google account.
-                    </p>
                     <!-- The link goes in the slot, not in the model: it must wrap rather than run out of the
                          box, and it is the one thing on this card a person copies by hand. -->
                     <Notice v-if="notice" :of="notice">
@@ -413,13 +409,9 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- The credential kill switch. Owner-only, and separate from the member list above on purpose: this
-             answers "is anything still holding a way in", not "who is allowed in". -->
+             answers \"is anything still holding a way in\", not \"who is allowed in\". -->
         <RowGroup v-if="isOwner" label="Signed-in browsers">
             <div class="flex flex-col gap-2 px-4 py-3">
-                <p class="text-xs text-muted">
-                    Browsers stay signed in to this sandbox for 30 days. Sign them all out if a device was lost or shared: everyone still on the
-                    access list simply signs in again with Google.
-                </p>
                 <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">
                     <Icon name="check-circle" /> Every browser has been signed out of this sandbox.
                 </p>

@@ -185,7 +185,7 @@ test(`a missing description is called out rather than left blank`, () => {
 
 test(`an empty list invites the first skill rather than reading as a failure`, () => {
     const host = mount();
-    expect(host.textContent).toContain(`No skills yet`);
+    expect(host.textContent).toContain(`No skills added yet`);
     expect(host.textContent).toContain(`Write a skill`);
 });
 
