@@ -321,7 +321,7 @@ const save = async (): Promise<void> => {
                             </div>
                             <StatusBadge class="shrink-0" :variant="availabilityBadge.variant" :label="availabilityBadge.label" dot />
                         </div>
-                        <p class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
+                        <p v-if="subline.text" class="h-4 truncate px-2 text-xs leading-4" :class="subline.tone">{{ subline.text }}</p>
                     </div>
                 </div>
             </div>

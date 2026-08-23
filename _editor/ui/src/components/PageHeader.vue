@@ -8,8 +8,8 @@ defineProps<{ title: string; description?: string }>();
 </script>
 
 <template>
-    <header class="mb-6">
-        <div class="flex items-start justify-between gap-3">
+    <header :class="description ? 'mb-6' : 'mb-4'">
+        <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
                 <h1 class="text-2xl font-semibold">{{ title }}</h1>
                 <slot name="info" />
