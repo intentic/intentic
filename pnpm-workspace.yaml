@@ -248,6 +248,10 @@ catalog:
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
   oxlint: 1.76.0
+  # webq's HTML parser. parse5 rather than jsdom for the sandbox-image path: webq is baked into the daemon's
+  # deployed tree, and parse5 is the spec-compliant parser alone (one dependency, no DOM emulation layer) —
+  # the traversal webq needs is fifty lines of its own helpers.
+  parse5: 8.0.1
   pg: 8.22.0
   pino: 10.3.1
   pino-pretty: 13.1.3

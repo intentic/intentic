@@ -801,6 +801,9 @@ export const planHarnessTurn = async (
     // contributes.agent manifest entry ride the same SDK plugin loader.
     const plugins = [
         ...(services.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? iqSearch) ? [services.config.iqPluginDir] : []),
+        // The webq plugin rides ungated: the CLI is baked onto PATH unconditionally, and the skill is what
+        // keeps an agent from WebFetch-looping a JS-rendered docs site it could read in one webq call.
+        ...(services.config.webqPluginDir !== "" ? [services.config.webqPluginDir] : []),
         ...pluginDirsOf(granted, services.workspace.root),
         ...extensionAgentDirs,
         /* LAST, after the sandbox-wide plugins, because it is the most specific thing this turn carries, the

@@ -97,6 +97,7 @@ export const testConfig: Config = {
     iqModelDir: "",
     iqRgPath: "",
     iqPluginDir: "",
+    webqPluginDir: "",
     local: { port: 8788 },
 };
 

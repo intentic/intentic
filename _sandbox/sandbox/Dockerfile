@@ -304,6 +304,10 @@ RUN printf '%s\n' '#!/bin/sh' 'exec node "$@"' > /usr/local/bin/tsx \
 # `plugins` option), so iq is the default in the sandbox exactly as external users get it from the marketplace.
 # Copied from the build context (the npm package ships only dist/ — the plugin lives beside it in the source tree).
 COPY _search/iq/plugin /opt/iq-plugin
+# The webq Claude Code plugin (skill only) — teaches every agent when to reach for webq over WebFetch. Always
+# loaded via WEBQ_PLUGIN_DIR (turn-plan.ts), ungated: unlike iq there is no default-tool to displace and no
+# experiment to run, the CLI is simply on PATH and the skill says when it helps.
+COPY _sandbox/webq/plugin /opt/webq-plugin
 # The sandbox daemon.
 COPY --from=trees sandbox /opt/sandbox
 # node-pty ships no linux prebuild, so it gets source-compiled by whatever host ran pnpm deploy — linked
@@ -335,6 +339,13 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
 # transformers, ast-grep) for a CLI whose own code is under 1 MiB. Same chmod-as-existence-check rationale.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq
+# The webq CLI on PATH — the agent's web-fetch tool (URL → clean budgeted markdown, bounded site crawls,
+# shared 15-min cache). Symlinked out of the daemon's tree exactly like lsp and iq above: @intentic/webq is a
+# dependency of @intentic/sandbox, so /opt/sandbox already carries it and its deps (parse5; playwright is the
+# daemon's own copy). Uses the browser pack's Chromium when a page needs JS and degrades to static HTML with a
+# notice when this image doesn't carry it. Same chmod-as-existence-check rationale.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
 # packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
 # daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.
@@ -483,7 +494,7 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 WORKDIR /work
 # LANG: without a UTF-8 locale zsh's line editor counts BYTES as columns, so bira's multibyte prompt glyphs
 # (╰─, ↵) desync the cursor and corrupt the prompt after any non-zero exit status. C.utf8 is glibc-built-in.
-ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin EXTENSIONS_DIR=/opt/extensions
+ENV WORKSPACE_ROOT=/work SANDBOX_PORT=8787 LANG=C.utf8 IQ_MODEL_DIR=/opt/iq-models IQ_PLUGIN_DIR=/opt/iq-plugin WEBQ_PLUGIN_DIR=/opt/webq-plugin EXTENSIONS_DIR=/opt/extensions
 # The translator's fixed localhost endpoint + a loopback-only bearer (the token is just what Claude Code must
 # send as ANTHROPIC_AUTH_TOKEN to a same-host proxy). The ENV is a pointer, not the binary — cli-proxy-api
 # itself is the `translator` pack, and main.ts only spawns it when it is present and a connected provider

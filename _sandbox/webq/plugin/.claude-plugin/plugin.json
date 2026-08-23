@@ -1,0 +1,8 @@
+{
+    "name": "webq",
+    "description": "Teach a coding agent to use the webq CLI for reading web pages as clean, token-budgeted markdown and for bounded docs-site crawls, instead of WebFetch loops or pasting whole pages into context. Requires the webq binary, install with `npm i -g @intentic/webq`.",
+    "version": "0.0.0",
+    "author": { "name": "intentic" },
+    "homepage": "https://github.com/intentic/intentic",
+    "repository": "https://github.com/intentic/intentic"
+}

@@ -223,7 +223,8 @@ test("compose dedupes identical fragments and orders distinct ones canonically",
 
     const reordered = stubServices("", [discord, vpn("office")]);
     await composeEnvironment(reordered);
-    // Same content (and so same hash) regardless of manifest order or duplicate count.
+    // Same content (and so same hash) regardless of manifest order or duplicate count — the canonical
+    // ordering guarantee, asserted as byte equality instead of spot-checked marker positions.
     expect(await services.files.read(approvedPath(reordered))).toBe(approved);
 });
 

@@ -41,9 +41,13 @@
                 "bin/*.mjs",
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
-            ]
+            ],
+            "ignoreDependencies": ["@intentic/webq"]
         },
         "_search/iq": {
+            "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
+        },
+        "_sandbox/webq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
         },
         "_deploy/cli": {

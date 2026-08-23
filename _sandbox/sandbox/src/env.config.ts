@@ -121,6 +121,11 @@ const configSchema = z.object({
     // (IQ_PLUGIN_DIR=/opt/iq-plugin); empty on a bare `tsx watch` dev run (the plugin isn't baked outside the
     // image) ⇒ not loaded.
     iqPluginDir: z.string().default(""),
+    // The image-baked webq Claude Code plugin dir (the skill teaching agents to fetch web pages as budgeted
+    // markdown with the webq CLI). Loaded ungated whenever baked — the CLI is always on PATH, so unlike iq
+    // there is no setting to mirror. Set by the Dockerfile (WEBQ_PLUGIN_DIR=/opt/webq-plugin); empty on a
+    // bare `tsx watch` dev run ⇒ not loaded.
+    webqPluginDir: z.string().default(""),
     // The image-baked first-party extensions dir (Dockerfile: EXTENSIONS_DIR=/opt/extensions). Each subdir is
     // an intentic-extension.json checkout (ext-discord, ext-connectors) enumerated alongside git-installed
     // extension capabilities by installedExtensions(). Empty on a bare `tsx watch` dev run ⇒ none baked (point
