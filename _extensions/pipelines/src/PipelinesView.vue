@@ -3,7 +3,6 @@ import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract";
 import {
     StatusTally,
     Icon,
-    InfoHint,
     Notice,
     noticeOf,
     PageAction,
@@ -213,20 +212,6 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         title="Pipelines"
         :description="scope === undefined ? `CI runs on your workspace repos' GitHub and GitLab remotes.` : `CI runs on ${scope.repo.project}.`"
     >
-        <template #info>
-            <InfoHint label="Pipelines">
-                <span class="block text-sm font-medium text-content">Pipelines</span>
-                <span class="mt-1 block text-xs text-muted">
-                    Every workspace repo whose remote lands on a connected GitHub/GitLab account is watched: completed pipelines arrive over a
-                    webhook, can wake <b>CI automations</b> (see Automations), and land here. <b>Fix with agent</b> starts an isolated agent seeded
-                    with that run's failed jobs' logs and takes you to its card on the Agents board: it stands out on the failure a branch is
-                    actually stuck on, and stays quiet on older failures a later green run has already left behind. It opens on the model in Sandbox ▸
-                    Agent ▸ Models; the caret beside it runs one fix on something else. Each row's circles are its stages: click one for that stage's
-                    jobs, or expand the row for the full job graph.
-                </span>
-            </InfoHint>
-        </template>
-
         <template #actions>
             <!-- No `hint`: the vendor is what the glyph already says, and the project is what the
                  label already says. A hint here would only be the same fact a third time. -->

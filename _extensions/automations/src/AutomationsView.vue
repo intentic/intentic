@@ -5,7 +5,6 @@ import {
     ui,
     ConfirmDialog,
     Icon,
-    InfoHint,
     Notice,
     noticeOf,
     Page,
@@ -35,8 +34,7 @@ import { useAutomations } from "./useAutomations";
  * The page is a LIST, not a gallery: one dense line per automation under two labelled groups (chores watch
  * this codebase, integrations are fired from outside it), because the question this page answers at any size
  * is "what is on, what fired, what broke". Everything that used to be a paragraph is now either a column, a
- * hover, or the row's own disclosure: the explanation of how automations fire lives in the header hint, and
- * each stock chore's explanation on its suggestion pill.
+ * hover, or the row's own disclosure: each stock chore's explanation rides its suggestion pill.
  *
  * The chore SUGGESTIONS sit under the list rather than above it: they are the one kind of automation a user is
  * expected to want without knowing it exists, so they must stay visible, but they are an offer and the list is
@@ -255,14 +253,6 @@ const toggleDetail = (id: string): void => {
 <template>
     <Page width="wide">
         <PageHeader title="Automations" description="Wake your agent on a schedule, a webhook, a live provider event, or your fleet's own work.">
-            <template #info>
-                <InfoHint label="How an automation fires">
-                    <span class="block text-sm font-medium text-content">Trigger → wake</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        Every wake is a fresh agent session on your own hardware; its transcript appears with your chats.
-                    </span>
-                </InfoHint>
-            </template>
             <template #actions>
                 <PageAction icon="plus" label="New automation" primary @click="createOpen = true" />
             </template>

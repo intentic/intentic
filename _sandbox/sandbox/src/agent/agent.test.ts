@@ -263,7 +263,7 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
     // otherwise it writes "A) … B) …" as prose.
     await collect(request, capture);
     const intentic = captured.at(-1)?.systemPrompt as string;
-    expect(intentic).toContain("You are a Claude agent on Claude Agent SDK.");
+    expect(intentic).toContain("You are an Intentic agent on Claude Agent SDK.");
     expect(intentic).toContain("AskUserQuestion");
     expect(intentic).toContain("TaskCreate");
     expect(intentic).toContain("mcp__web__browser_take_screenshot");

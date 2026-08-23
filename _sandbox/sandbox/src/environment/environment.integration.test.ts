@@ -20,6 +20,7 @@ import {
     readEnvironment,
     rejectEnvironment,
 } from "./environment.js";
+import { packFragment } from "./packs.js";
 
 // A proposal is custom-section content only: the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
@@ -193,13 +194,23 @@ test("compose folds a capability's fragment (install + runtime directives) into 
 });
 
 test("compose dedupes identical fragments and orders distinct ones canonically", async () => {
-    // Two vpn entries share one fragment; discord adds whisper. Lexicographic content order is manifest-independent.
+    /* Two vpn entries share one fragment, so it rides once. Discord's cli connector NAMES the whisper pack
+     * rather than carrying a fragment of its own, so that content rides the overlay exactly when the running
+     * base does not already bake that pack version. Asked through packFragment(), the way the compose itself
+     * asks, so this holds in a dev checkout AND inside a stamped standard image, where the honest answer is
+     * "nothing to compose". Lexicographic content order is manifest-independent: the vpn blocks open with
+     * "# The container ..." / "# vpn capability ...", the whisper pack with "# whisper.cpp ...". */
+    const whisper = await packFragment("whisper");
     const services = stubServices("", [vpn("office"), discord, vpn("home-lab")]);
     await composeEnvironment(services);
     const approved = (await services.files.read(approvedPath(services)))!;
     expect(approved.split("wireguard-tools").length - 1).toBe(1);
-    expect(approved).toContain("whisper-cli");
-    expect(approved.indexOf("# discord voice")).toBeLessThan(approved.indexOf("# vpn capability"));
+    if (whisper === undefined) {
+        expect(approved).not.toContain("whisper-cli");
+    } else {
+        expect(approved).toContain(whisper);
+        expect(approved.indexOf("# vpn capability")).toBeLessThan(approved.indexOf(whisper));
+    }
 
     const reordered = stubServices("", [discord, vpn("office")]);
     await composeEnvironment(reordered);

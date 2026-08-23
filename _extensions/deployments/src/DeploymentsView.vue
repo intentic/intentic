@@ -5,7 +5,6 @@ import {
     ui,
     StatusTally,
     Icon,
-    InfoHint,
     Notice,
     noticeOf,
     Page,
@@ -254,17 +253,6 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
     <div class="scrollbar-thin h-full min-h-0 overflow-auto">
         <Page width="wide">
             <PageHeader title="Deployments" description="Container health, incidents and one-click redeploys across your Komodo.">
-                <template #info>
-                    <InfoHint label="Deployments">
-                        <span class="block text-sm font-medium text-content">Deployments</span>
-                        <span class="mt-1 block text-xs text-muted">
-                            Every stack and deployment on the connected Komodo, grouped by the host it runs on, so a bad box reads as a bad box
-                            rather than as six unrelated outages. The rail badges an <b>incident</b>: a container that left running, a host that went
-                            unreachable, a build that failed. It counts the moment things broke, not how long they have been broken, and it clears
-                            when you look. <b>Ask the agent to fix</b> starts an isolated agent with the container's logs and this workspace's source.
-                        </span>
-                    </InfoHint>
-                </template>
                 <template #actions>
                     <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
                 </template>

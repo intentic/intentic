@@ -4,7 +4,6 @@ import {
     Checkbox,
     ui,
     Icon,
-    InfoHint,
     Notice,
     noticeOf,
     Page,
@@ -386,32 +385,6 @@ const run = async (model: PickedModel): Promise<void> =>
             title="Acceptance"
             description="User stories and their acceptance criteria, walked through the running app by agents driving browsers."
         >
-            <template #info>
-                <InfoHint label="How a run works">
-                    <p class="text-xs text-muted">
-                        Every story in scope starts its own isolated agent session, and they run in parallel. Each opens the app in a real Chromium,
-                        walks every acceptance criterion, screenshots each step, then writes a verdict and a report.
-                    </p>
-                    <p class="mt-2 text-xs text-muted">
-                        Sessions run unattended in their own worktree with tool permissions bypassed, so nothing stops mid-test to ask. The brief
-                        forbids changing the application's source: defects get reported, not fixed.
-                    </p>
-                    <p class="mt-2 text-xs text-muted">
-                        You can watch any session's browser live, and take control of it: from the report. Sessions also appear on the Agents board
-                        like any other. Reports and screenshots land in <span class="font-mono">{{ RUNS_DIR }}/</span>, outside every repository, so a
-                        run never shows up in your changes.
-                    </p>
-                    <p class="mt-2 text-xs text-muted">
-                        Stories themselves are markdown in each repo's <span class="font-mono">docs/user-stories/</span>: product documentation,
-                        versioned with the code it describes. Editing one here writes that file; there is no separate copy.
-                    </p>
-                    <p class="mt-2 text-xs text-muted">
-                        A subdirectory of that is a group, and a run walks one address per group, so a repository serving both a marketing site and an
-                        app can test each of them, against its own server, in the same run. The agents reach these from inside the sandbox, so a
-                        localhost address is the direct route.
-                    </p>
-                </InfoHint>
-            </template>
             <template #actions>
                 <!-- One Refresh for the whole page. The dev-server states are as re-readable as the stories
                      are, and a panel started from Preview while this was open is exactly the staleness someone

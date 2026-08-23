@@ -6,7 +6,6 @@ import {
     ui,
     ConfirmDialog,
     formatTimestamp,
-    InfoHint,
     Notice,
     noticeOf,
     NoticeStack,
@@ -379,16 +378,6 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                 : `${activeScope.label} posts your agent prepared for you to approve.`
         "
     >
-        <template #info>
-            <InfoHint label="How drafts are published">
-                <span class="block text-xs font-semibold text-content">From proposal to post</span>
-                <span class="mt-2 block text-xs text-muted">
-                    Your agent writes drafts while it works and never posts one by itself. Approving one starts a short countdown you can stop, when
-                    it runs out the post goes to that platform, or waits for the date you gave it. Rejecting deletes the draft.
-                </span>
-            </InfoHint>
-        </template>
-
         <!-- Whole-page banners: the countdown speaks for every platform, and a file that could not be parsed
              has no platform to be filed under. Both belong above the split rather than inside the slice. -->
         <template #strips>
