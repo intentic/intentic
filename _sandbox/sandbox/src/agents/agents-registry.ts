@@ -211,6 +211,12 @@ export interface AgentsRegistry {
     readonly withRewindLease: <T>(conversationId: string, fn: () => Promise<T>) => Promise<T | undefined>;
     // Record the worktree composition on first creation (per-repo full base shas).
     readonly recordWorktree: (id: string, repos: readonly PersistedAgent["repos"][number][]) => Promise<void>;
+    /* Take repos that no longer exist out of EVERY composition, live and archived, and answer with the
+     * conversations that named them. The one write that may edit a composition after it is frozen, because a
+     * deleted repo is the one change to the workspace a frozen composition cannot survive: every per-repo pass
+     * would keep running git in a directory that is not there. Who decides a repo is gone, and what happens to
+     * the checkouts, is agents/vanished-repos.ts; this is only the registry's half of it. */
+    readonly dropRepos: (repos: readonly string[]) => Promise<string[]>;
     /* Record what the complexity judge made of the turn just planned (PersistedAgent.tier), which the NEXT
      * turn in this conversation reads as its `afterHardTurn` signal.
      *
@@ -536,11 +542,28 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
      * branch stands against the main line (standing.ts), and whether what already landed is still in the tree
      * (landed-presence.ts). Both, or the board answers the discard case with a confident stale yes. Run
      * together rather than chained so neither waits on the other's git, and `moved` is the OR: either half
-     * changing is a card the user is looking at changing. */
+     * changing is a card the user is looking at changing.
+     *
+     * AND NEITHER MAY BE THE REASON A TURN FAILS, which is why this settles both instead of awaiting them.
+     * They are DERIVED readings of a world git already holds, best-effort by construction: the repo-level
+     * failures they actually meet (a pruned branch, a rewritten history, a checkout deleted under them) are
+     * answered per repo inside, so anything that reaches here is a projection misreading its own edge case
+     * rather than news about the conversation.
+     *
+     * What makes ignoring that the right call is WHERE this is awaited. `finish` runs in the turn generator's
+     * `finally`, so a rejection here does not merely skip a card refresh, it BECOMES the turn's outcome, and
+     * because the pass covers the whole roster, any one agent's broken repo ends every other agent's turn.
+     * That is precisely how one deleted workspace repo came to kill every session in a workspace, hours after
+     * the delete, with a git error naming a repo the conversation had never heard of. The board keeps its last
+     * verdicts and re-derives on the next pass instead, which is what an unprobed agent does at boot anyway.
+     *
+     * allSettled rather than one catch around both, so a half that fails costs only its own reading: the
+     * other's `moved` still publishes, instead of a broken standing suppressing a presence change nobody would
+     * see until something unrelated moved the fleet. */
     const reprobe = async (): Promise<boolean> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
-        const [standingMoved, presenceMoved] = await Promise.all([standings.refresh(live), presences.refresh(live)]);
-        return standingMoved || presenceMoved;
+        const probes = await Promise.allSettled([standings.refresh(live), presences.refresh(live)]);
+        return probes.some((probe) => probe.status === "fulfilled" && probe.value);
     };
 
     // Chained, not fire-and-forget: `entries` is REPLACED (not mutated) by every write path, so two overlapping
@@ -785,6 +808,24 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             }
             replace({ ...entry, repos: [...repos] });
             await persist();
+        },
+        dropRepos: async (repos) => {
+            const gone = new Set(repos);
+            // Snapshotted before the first replace, which rebuilds `entries`; the rows themselves are copied,
+            // never mutated, because every reader holding this array must keep seeing what it read.
+            const touched = entries.filter((entry) => entry.repos.some(({ repo }) => gone.has(repo)));
+            if (touched.length === 0) {
+                return [];
+            }
+            for (const entry of touched) {
+                replace({ ...entry, repos: entry.repos.filter(({ repo }) => !gone.has(repo)) });
+            }
+            // One persist and one broadcast for the whole sweep: nothing on a card moves for a nested repo
+            // going away, but the entries did change, and a roster that says so is what stops the next reader
+            // asking about the repo again.
+            await persist();
+            broadcast();
+            return touched.map((entry) => entry.id);
         },
         recordTier: async (id, tier) => {
             const entry = entryOf(id);

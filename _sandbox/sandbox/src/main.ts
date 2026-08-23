@@ -9,6 +9,7 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import { sweepAgedAgents } from "./agents/archive.js";
+import { startVanishedRepoSweep } from "./agents/vanished-repos.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { startWatchers } from "./agent/watchers.js";
@@ -1128,6 +1129,10 @@ const main = async (): Promise<void> => {
     // ANY workspace repo re-frames the surfaces built on the commit graph. Neither watcher above can carry it,
     // git dirs live off /work entirely (repo-git-dirs.ts) and the file watcher ignores .git besides.
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
+    // The agent plane converges on the same feed, in the one direction a conversation's FROZEN composition
+    // cannot absorb by itself: a repo that has been deleted is taken out of every composition that still names
+    // it, and its stranded checkouts are reclaimed (agents/vanished-repos.ts explains what leaving them costs).
+    shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
 
     // Rotate Claude subscription tokens on a quiet timer rather than letting a burst of turn starts discover the
     // expiry together. Anthropic rotates refresh tokens and revokes the whole family on a replay, so the goal is

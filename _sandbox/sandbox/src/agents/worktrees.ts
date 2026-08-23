@@ -1,4 +1,4 @@
-import { access, lstat, mkdir, readdir, readFile, rm, rmdir, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
@@ -55,6 +55,21 @@ export interface AgentWorktrees {
     // and `ensure` can restore the checkout from it whenever the agent runs again. The branch itself then
     // leaves refs/heads/ for the parked shelf (agents/agent-refs.ts), which nothing above this layer can tell.
     readonly retire: (id: string, recorded: readonly { repo: string; base: string }[], title: string | undefined) => Promise<void>;
+    /* Get a DELETED repo's checkout out of a conversation, the disk half of dropping it from the composition
+     * (agents/vanished-repos.ts). Not a `worktree remove`: the repo it belonged to is gone, so there is no main
+     * repo left to run one in and no admin entry left to prune, only a directory full of files.
+     *
+     * It has to GO, rather than simply be left unused, because of what it becomes the moment its repo stops
+     * being discovered: the root repo's exclude list is re-derived from the LIVE repo set and shared by every
+     * agent worktree (history.ts syncRootExcludes), so a checkout nothing excludes any more is untracked
+     * content of the ROOT branch, sitting inside root's own worktree. The next `add -A` (a retire, a land's
+     * remainder commit) would sweep a deleted repo's entire tree onto the agent's branch, and a land would
+     * then put it back in /work as ordinary files.
+     *
+     * Moved to <historyRoot>/trash rather than deleted, the same treatment (and the same reasoning) as the git
+     * dir that went with it: the daemon reclaiming a checkout is not the user deleting their work, and only
+     * this copy of an uncommitted edit was ever going to exist. */
+    readonly reapRepoCheckout: (id: string, repo: string) => Promise<void>;
     // Boot sweep: delete conversation dirs with no registry entry, `git worktree prune` every repo, park the
     // branches of agents that are off the board, and drop parked refs the registry no longer knows.
     //
@@ -426,7 +441,8 @@ export const createAgentWorktrees = (
                         return; // Never created, or already retired: nothing to preserve.
                     }
                     // The repository this checkout belongs to is gone (see repoBehind): no git command can run
-                    // here, so there is nothing to commit and no way to commit it. Pass 2 still reclaims the dir.
+                    // here, so there is nothing to commit and no way to commit it. Pass 2 still reclaims the dir,
+                    // and agents/vanished-repos.ts takes the repo out of the composition for good.
                     if (!(await repoBehind(worktree))) {
                         logger.warn({ id, repo }, "agents: retiring a checkout whose repository is gone, nothing to preserve");
                         return;
@@ -470,6 +486,26 @@ export const createAgentWorktrees = (
             // The branch is the archive; the overlays are not part of it, an archived conversation's
             // dependency scratch has no more claim on the disk than a removed one's.
             await rm(overlaysFor(id), { recursive: true, force: true });
+        },
+        reapRepoCheckout: async (id, repo) => {
+            // Root is the workspace itself and cannot be the repo that vanished; asking for it would move a
+            // whole conversation's checkout to the trash on the strength of a momentarily unreadable /work.
+            const target = worktreeDir(id, repo);
+            if (repo === "root" || !(await exists(target))) {
+                return;
+            }
+            // Encoded like the git dirs beside it (history.ts reapGitDir): a nested repo id holds slashes, and
+            // one entry per conversation keeps two agents' checkouts of the same dead repo apart.
+            const trashed = join(historyRoot, "trash", `${encodeURIComponent(repo)}-${id}-${Date.now()}`);
+            try {
+                await mkdir(dirname(trashed), { recursive: true });
+                await rename(target, trashed);
+                logger.warn({ id, repo, trashed }, "agents: reaped a deleted repo's checkout out of a conversation");
+            } catch (error) {
+                // The checkout stays where it is, which is the pollution risk in the header, so this is a
+                // warning rather than a debug line: the next sweep retries it.
+                logger.warn({ err: error, id, repo }, "agents: could not reap a deleted repo's checkout");
+            }
         },
         prune: async (knownIds, archivedIds) => {
             for (const name of await readdir(worktreesRoot).catch(() => [])) {

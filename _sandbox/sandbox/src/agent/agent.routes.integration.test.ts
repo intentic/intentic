@@ -60,6 +60,7 @@ const realCheckout = async (id: string): Promise<{ work: string; worktree: strin
             ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos }),
             remove: async () => {},
             retire: async () => {},
+            reapRepoCheckout: async () => {},
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
         },

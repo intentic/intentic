@@ -688,6 +688,32 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
     });
 
+    /* THE BLAST-RADIUS GUARANTEE, and the reason it is pinned here rather than in either projection's suite:
+     * every turn ends inside a `finally` that awaits this, over the WHOLE roster, so a probe that throws for
+     * one agent used to end the turn of every other one, with an error about a repo that conversation had
+     * never touched. Held by the registry because neither projection can know what awaits it. */
+    it("a probe that throws cannot fail a turn, and does not silence the other one", async () => {
+        const failing: LandStandings = {
+            of: () => "idle",
+            refresh: async () => {
+                throw new Error(`fatal: cannot change to '${WORKSPACE_ROOT}/deleted': No such file or directory`);
+            },
+            forget: () => {},
+        };
+        const moving = presences();
+        // The half that still works reports a change, which is what has to reach the browser anyway.
+        const registry = createAgentsRegistry(memoryStore(), failing, { ...moving, refresh: async () => true });
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        const frames: (string | undefined)[] = [];
+        const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
+        await expect(registry.finish("c1", 2_000)).resolves.toBeUndefined();
+        await expect(registry.refreshStandings()).resolves.toBeUndefined();
+        unsubscribe();
+        expect(registry.get("c1")?.status).toBe("idle");
+        expect(frames).toContain("idle");
+    });
+
     it("error during the turn persists as error status at finish", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();

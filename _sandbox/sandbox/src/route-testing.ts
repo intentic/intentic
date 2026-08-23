@@ -563,6 +563,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             }),
             remove: async () => {},
             retire: async () => {},
+            reapRepoCheckout: async () => {},
             prune: async () => {},
             withRepoLock: (_repo, task) => task(),
         },

@@ -57,9 +57,20 @@ export const branchSha = async (main: string, branch: string, git: GitRunner): P
  * repo holding nothing costs the one spawn rather than none. Where a branch is BOTH live and parked, the crash
  * window in the middle of parkAgentRefs, the parked spelling wins, because git sorts its output by refname and
  * `refs/agent/…` precedes `refs/heads/agent/…`. That is the same tie, resolved the same way, as branchSha
- * taking the first line of its own two-pattern read. */
+ * taking the first line of its own two-pattern read.
+ *
+ * A REPO THIS CANNOT READ AT ALL answers "nothing here" rather than throwing, and that is about blast radius,
+ * not about refs. A pattern matching nothing was always an empty line; a repo whose checkout has been DELETED
+ * under the daemon (the user removes a clone from /work, and history reaps its git dir) is a `fatal: cannot
+ * change to` on the -C, from a sweep the whole fleet's standing pass awaits, which every turn's finish awaits
+ * in a `finally`. So one deleted repo, named by one archived conversation's frozen composition, ended every
+ * OTHER conversation's turn with a git error for as long as the composition still named it. Nothing here is
+ * worth that: the undefined tip this produces already means "nothing of this agent's is left in this repo",
+ * which is exactly true of a repo that is gone (agents/vanished-repos.ts drops the row for good). */
 export const agentBranchTips = async (main: string, git: GitRunner): Promise<Map<string, string>> => {
-    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`, parkedRef(AGENT)]);
+    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`, parkedRef(AGENT)]).catch(() => ({
+        stdout: "",
+    }));
     const tips = new Map<string, string>();
     for (const line of stdout.split("\n")) {
         const [sha, ref] = line.split(" ");

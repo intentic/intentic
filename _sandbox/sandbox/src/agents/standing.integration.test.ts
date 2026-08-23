@@ -249,3 +249,24 @@ test("a repo whose branch has been deleted contributes nothing outstanding", asy
     await worktrees.remove("c1", conversation.repos);
     expect(await standingOf(worktrees, entry)).toBe("idle");
 });
+
+/* THE INCIDENT, and the sibling of the case above: not the branch gone but the whole REPO, deleted from the
+ * workspace under a composition that is frozen at creation and still names it. The ref sweep then ran in a
+ * directory that was not there, `fatal: cannot change to`, and because this pass covers the whole roster and
+ * every turn's `finally` awaits it, one deleted repo ended EVERY conversation's turn for as long as any
+ * composition mentioned it (the registry pins that half; agents/vanished-repos.ts drops the row for good).
+ *
+ * The reading here is the same one a deleted branch gets, and it is the true one: nothing of this agent's is
+ * in that repo any more. What the rest of its composition holds is unaffected, which is the point, a
+ * conversation spanning six repos does not stop being able to land the other five. */
+test("a repo deleted from the workspace contributes nothing, and cannot fail the pass", async () => {
+    const { worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+
+    const withDeleted = [...conversation.repos, { repo: "deleted", base: "0".repeat(40) }];
+    expect(await standingOf(worktrees, isolatedAgent(withDeleted))).toBe("ready");
+    // And an agent whose whole composition was that repo is idle rather than an exception.
+    expect(await standingOf(worktrees, isolatedAgent([{ repo: "deleted", base: "0".repeat(40) }]))).toBe("idle");
+});
