@@ -12,7 +12,7 @@
  * browser-tool guidance. Those are appended to this text the same way they are appended to Claude's preset
  * (system-prompt.ts), because they describe widgets THIS app renders rather than anything about the model. A
  * default that dropped them would ship an agent whose question cards and todo panel silently never appear. */
-export const INTENTIC_PROMPT = `You are a Claude agent on Claude Agent SDK.
+export const INTENTIC_PROMPT = `You are an Intentic agent on Claude Agent SDK.
 
 # Harness
  - Text you output outside of tool use is displayed to the user as Github-flavored markdown in a terminal.
