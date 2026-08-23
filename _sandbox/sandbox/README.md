@@ -385,6 +385,16 @@ conversation's worktree instead of a path that still reaches the shared checkout
   would have cost elsewhere), the realized routed spend, and the guardrail, how often the very next turn of the
   same conversation asked for a dearer model. A mechanism that changes what the user's money buys owes them all
   three: a warning, a veto, and the numbers.
+
+  Two consequences of taking that seriously. The warning is RECORDED, not merely drawn: `restoredTurn` folds a
+  routed `tier` frame into a notice row carrying its own one-press opt-out, because a line only the window that
+  watched it ever saw is not a record of anything, and the question a week later is "was THIS answer the cheap
+  one". And the cutoff is the owner's (`settings.autoTierEagerness`, three named stops over `FAST_CEILINGS`),
+  since measurement with no way to act on it is a report nobody can use. The dial moves the cutoff and nothing
+  else: a fast verdict additionally requires a positively-easy signal, enforced in the judge rather than left to
+  the weights summing past the ceiling, so no setting of it can downgrade a short vague request. That is also
+  why the ledger records the verdict and the ceiling beside the score, a bare 0.35 is standard on one stop and
+  fast on the next, and a refit reading the score column alone could not tell those rows apart.
 - **`slow` spans live in their own file so that `daemon.log` can be read.** `src/platform/perf.ts` warns one line
   per slow span, which is right, and in a live 3.5 MB `daemon.log` those lines were 5,465 of the warnings against
   six errors in the whole file: a log whose signal could not be found. The per-span lines now go to

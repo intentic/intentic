@@ -92,6 +92,28 @@ test("a bump after a STANDARD verdict is not held against the judge", async () =
     expect(report?.escalated).toBe(0);
 });
 
+test("the recorded verdict wins over the old derivation, because the cutoff is now the owner's to move", async () => {
+    // A row judged at the eager stop can sit well above the balanced cutoff and still have been called simple.
+    // Reading the score against one fixed number would report it as a turn the judge left alone.
+    const report = await readTierReport(
+        storeOf([
+            row({ tierScore: 0.35, tierCeiling: 0.4, tierFast: true, costUsd: 0.2 }),
+            row({ tierScore: 0.2, tierCeiling: 0, tierFast: false, costUsd: 0.1 }),
+        ]),
+        {},
+    );
+
+    expect(report).toMatchObject({ judged: 2, fast: 1, atStakeUsd: 0.2 });
+});
+
+test("a row from before the dial existed is read the way it was actually judged", async () => {
+    // No verdict and no ceiling means the balanced cutoff, which is what those rows were judged against, so the
+    // two eras stay one population instead of the older one quietly dropping out of the share.
+    const report = await readTierReport(storeOf([row({ tierScore: 0.2 }), row({ tierScore: 0.3 })]), {});
+
+    expect(report).toMatchObject({ judged: 2, fast: 1 });
+});
+
 test("denied counts the veto rows, and failed or cancelled turns leave every population", async () => {
     // The same rule the experiments apply (turn-experiments.ts `measurable`): a turn that died measures
     // nothing, and a burst of refusals must not read as a flood of simple turns.

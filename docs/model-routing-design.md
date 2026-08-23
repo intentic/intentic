@@ -272,8 +272,10 @@ that it only routes down. Swapping it for something merely known to be cheap is 
 | The previous turn's verdict + the standing veto | `agents-store.ts` / `agents-registry.ts` (`tier`, `tierHold`, `recordTier`) |
 | The readout: fast share, money, escalations | `sandbox/src/usage/tier-report.ts` → `SavingsReport.tier` |
 | The settings row + the numbers under it | `AgentModels.vue` |
-| Per-turn awareness in chat | the `tier` frame (`events.ts`) → picker notice (`ChatModelPicker.vue`), first-routed-turn notice (`conversation.ts` `applyTier`) |
+| Per-turn awareness in chat | the `tier` frame (`events.ts`) → picker notice (`ChatModelPicker.vue`), routed-turn notice (`conversation.ts` `applyTier`) |
+| …and the same notice on a reopened chat | `sessions/turn-transcript.ts` folds a routed `tier` frame into a recorded notice row, offer included (`RestoredMessage.noticeAction`) |
 | The pre-send preview + per-chat veto | `composables/chat/tierPreview.ts`, `ComposerTierChip.vue`, `AgentTurn.tierHold` |
+| The one dial | `FAST_CEILINGS` + `ComplexityInput.eagerness` (`settings.autoTierEagerness`) |
 
 The judge lives in the contract for the reason `quick-model.ts` does: a settings row has to be able to say what
 a turn will run on before it runs. Configuration mirrors `quickModel` — one ordered list, empty means derive
@@ -376,10 +378,27 @@ Since built, closing what §4 called prerequisites for switching step 3 on:
   flag, persisted on the entry); the judge still runs and the veto lands on the ledger as `tierDenied`, the
   strongest negative label the calibration gets.
 
+- ~~**One aggressiveness knob.**~~ **Built**, as three named stops rather than a slider (`FAST_CEILINGS`:
+  cautious / balanced / eager, `settings.autoTierEagerness`). A number means nothing to anyone who has not read
+  the weights; "only the unmistakable", "the default", "an easy question about real code too" are sentences an
+  owner can hold an opinion about. It is offered in *measure* mode as well as *on*, because trying a stop and
+  reading the share it produces is exactly what measuring is for.
+
+  Moving the cutoff forced §3.2's invariant to become code. "The two absence features cannot cross the ceiling"
+  was true only because 0.3 > 0.25 — a coincidence of two numbers, one click from false the moment the ceiling
+  became a setting. The two POSITIVE easing features are now marked `easing`, and a fast verdict requires one of
+  them at every stop. The deceptive follow-up ("now do the same for the other file") turns out to be caught by
+  that rule more strongly than by any cutoff: it makes no claim of ease at all.
+
+  The ledger gained the verdict and the ceiling beside the score (`tierFast`, `tierCeiling`), because a score
+  alone stopped being an answer: the same 0.35 is standard on one stop and fast on the next. Rows written before
+  the knob carry neither and are read at the balanced cutoff, which is what they were actually judged against,
+  so the two eras stay one population.
+
 Still open, and deliberately so:
 
-- **One aggressiveness knob.** Today the cutoff is a constant. Exposing it (RouteLLM's `router-mf-0.3` vs
-  `router-mf-0.7`) is a step-3 concern and needs shadow data to be meaningful.
+- **Stage 2 kNN**, per the build order above: only if shadow data shows an ambiguous band wide enough to be
+  worth it.
 
 An honest expectation to set against step 3: the Oracle-to-best-router gap in every benchmark above is
 large (64.91 vs 53.14 AUC), and the closest thing to a like-for-like production figure — a managed

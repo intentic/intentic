@@ -387,6 +387,19 @@ export const RestoredMessageSchema = z.object({
         .describe(
             "A person wrote this in the agent's voice, with no turn behind it. Marked for the human re-reading the conversation months later, so their own words do not pass as the agent's. The agent itself never sees the mark.",
         ),
+    /* THE ONE-PRESS OFFER A RECORDED NOTICE CARRIES (notice rows only), named rather than inferred from its
+     * words. Only `tierHold` today: the line saying this turn ran on a cheaper model, whose offer is "keep this
+     * chat on my pick".
+     *
+     * It is on the wire because the offer has to survive a reopen, and a reopened tab has only the record. The
+     * chat's other one-press notices are drawn live and never recorded, so they never needed this; a routed turn
+     * is different precisely because the whole point of recording it is that somebody reads it LATER. A KIND, not
+     * a callback, exactly as the live ones are: the reader decides what the press does and whether the offer
+     * still stands (a chat already holding its pick shows a settled sentence, not a stale button). */
+    noticeAction: z
+        .enum(["tierHold"])
+        .optional()
+        .describe("A one-press follow-up this recorded notice offers, by name. The chat decides what it does and whether it still applies."),
 });
 export type RestoredMessage = z.infer<typeof RestoredMessageSchema>;
 

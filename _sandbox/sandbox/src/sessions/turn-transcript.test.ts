@@ -234,4 +234,37 @@ describe("restoredTurn", () => {
             { role: "notice", text: refusal },
         ]);
     });
+
+    /* AND SO DOES A TURN THAT RAN CHEAPER THAN THE MODEL ASKED FOR. Same argument as the refusal above: the
+     * live chat says it as it happens, and without a row here that sentence belonged to whoever had the tab
+     * open at the time. Scrolling back a week later, "was THIS answer the cheap one" is the question, and only
+     * a row per routed turn can answer it. The offer rides along so the reopened line keeps its one press. */
+    it("writes down a turn that ran on a cheaper model, with the opt-out it was offered live", () => {
+        const events: AgentEvent[] = [
+            { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], model: "claude-haiku-4-5", routed: true },
+            { kind: "delta", text: "a closure is…" },
+        ];
+        expect(restoredTurn({ prompt: "what is a closure?" }, events, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "what is a closure?", sentAt: SENT_AT },
+            { role: "notice", text: "This turn looked simple, so it ran on claude-haiku-4-5 instead of your pick.", noticeAction: "tierHold" },
+            { role: "assistant", text: "a closure is…" },
+        ]);
+    });
+
+    it("says nothing about a verdict that moved nothing, which is most of them", () => {
+        /* Measuring, a held chat, a provider with nothing cheaper: all three judge the turn and all three run
+         * the user's own model. A row apiece would bury the conversation under instrumentation about turns
+         * where nothing happened. */
+        const judged: AgentEvent[] = [
+            { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], routed: false },
+            { kind: "delta", text: "sure" },
+        ];
+        const held: AgentEvent[] = [
+            { kind: "tier", tier: "fast", score: 0.1, rules: ["easy-words"], model: "claude-haiku-4-5", routed: false, held: true },
+            { kind: "delta", text: "sure" },
+        ];
+        for (const events of [judged, held]) {
+            expect(restoredTurn({ prompt: "go" }, events, "/work", SENT_AT).map((message) => message.role)).toEqual(["user", "assistant"]);
+        }
+    });
 });

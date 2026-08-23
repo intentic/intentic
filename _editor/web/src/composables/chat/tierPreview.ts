@@ -56,6 +56,9 @@ export const useTierPreview = (conversation: () => Conversation, draft: () => st
             unattended: false,
             planMode: chat.modePick.value === `plan`,
             afterHardTurn: chat.lastTier.value === `standard`,
+            // The same dial the daemon reads, so the chip cannot promise a cutoff the turn will not be judged
+            // against. Absent settings resolve to the judge's own default, which is the daemon's too.
+            ...(settings.value?.autoTierEagerness !== undefined ? { eagerness: settings.value.autoTierEagerness } : {}),
         });
         if (verdict.tier !== `fast`) {
             return undefined;

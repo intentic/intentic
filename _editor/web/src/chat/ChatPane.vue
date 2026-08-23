@@ -1444,7 +1444,12 @@ watch(
                                         class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
                                         :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
                                     >
-                                        <ChatImageThumb v-if="a.previewUrl ?? attachmentPreview(a.path)" :src="a.previewUrl ?? attachmentPreview(a.path) ?? ''" :alt="a.name" size="h-9 w-9" />
+                                        <ChatImageThumb
+                                            v-if="a.previewUrl ?? attachmentPreview(a.path)"
+                                            :src="a.previewUrl ?? attachmentPreview(a.path) ?? ''"
+                                            :alt="a.name"
+                                            size="h-9 w-9"
+                                        />
                                         <Icon name="file" v-else class="text-sm text-subtle" />
                                         <span class="max-w-36 truncate text-content" v-tooltip.top="a.error ?? a.name">{{ a.name }}</span>
                                         <!-- The chip's own state, in a glyph. The progress hairline below is
@@ -1560,9 +1565,11 @@ watch(
                                         <!-- The tier judge's pre-send answer, only when it has one: the draft
                                              looks simple and automatic tier selection will (or would) act. Sits
                                              with the "which brain" group because it is a sentence about exactly
-                                             that; hidden on narrow panes with the effort label rather than
-                                             squeezing the send button. -->
-                                        <ComposerTierChip :conversation="conversation" class="@max-lg:hidden" />
+                                             that. It keeps its mark at every width and drops only its words
+                                             (the chip owns that rule): a control announcing that your model is
+                                             about to be substituted is the last thing a narrow pane should
+                                             hide. -->
+                                        <ComposerTierChip :conversation="conversation" />
                                     </div>
 
                                     <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT: the group that

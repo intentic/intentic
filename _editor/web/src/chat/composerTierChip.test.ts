@@ -80,6 +80,19 @@ test("a standing hold reads as held and the same press lifts it again", async ()
     expect(setTierHold).toHaveBeenCalledWith(false);
 });
 
+test("a narrow pane costs the chip its words, never its mark", () => {
+    /* The one control on that row announcing that the chosen model is about to be substituted. Hiding it whole
+     * on a split pane or a phone would make the substitution silent on exactly the layouts where the model row
+     * is hardest to read, so only the label folds away and the icon (plus its hover text) carries the state. */
+    settings.value = { ...settings.value, autoTier: `on` };
+    const host = mount(chatWith());
+
+    const control = host.querySelector(`button`)!;
+    expect(control.className).not.toContain(`hidden`);
+    expect(control.querySelector(`span`)!.className).toContain(`@max-lg:hidden`);
+    expect(control.getAttribute(`title`)).toContain(`claude-haiku-4-5`);
+});
+
 test("an empty composer and a hard-looking draft both draw nothing at all", () => {
     settings.value = { ...settings.value, autoTier: `on` };
 

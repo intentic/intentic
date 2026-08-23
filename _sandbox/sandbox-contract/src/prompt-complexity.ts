@@ -89,6 +89,10 @@ export interface ComplexityInput {
      * or the feature switched off) says nothing about the difficulty of the work, and reading it as escalation
      * would make the sandbox's configuration leak into its opinion about a sentence. */
     readonly afterHardTurn: boolean;
+    /* HOW EAGER THE OWNER ASKED THIS TO BE (settings.autoTierEagerness), the one preference the judge takes.
+     * Absent ⇒ `balanced`, which is the stop every verdict recorded before the knob existed was judged
+     * against, so an absent value and an old row mean the same thing. See FAST_CEILINGS. */
+    readonly eagerness?: TierEagerness;
 }
 
 export interface ComplexityVerdict {
@@ -99,6 +103,10 @@ export interface ComplexityVerdict {
     // Every rule that fired, in declaration order. Empty is legal and means "nothing distinctive": the score is
     // the base, which sits above the fast ceiling, so an unremarkable turn stays on the user's own pick.
     readonly rules: readonly ComplexityRule[];
+    /* The cutoff this score was judged against, carried out so the caller can record it beside the score.
+     * A score is only half a verdict once the ceiling is a setting: 0.35 was standard yesterday and is fast
+     * today, and a refit reading a column of bare scores could not tell those rows apart. */
+    readonly ceiling: number;
 }
 
 /* WHERE AN UNREMARKABLE TURN STARTS, and it starts ABOVE the fast ceiling on purpose: a prompt that matches no
@@ -107,10 +115,35 @@ export interface ComplexityVerdict {
  * escalation, and a user who stops trusting the feature. */
 const BASE_SCORE = 0.5;
 
-// Fast iff the score lands at or below this. Exported because the shadow ledger's whole purpose is to let this
-// be re-fitted against real traffic rather than argued about, and a reader of a stored score needs the ceiling
-// that score was judged against.
-export const FAST_CEILING = 0.25;
+/* HOW EAGER THE JUDGE IS, the one knob this feature exposes, and deliberately the only one.
+ *
+ * The routing literature's own answer to "how do you tune a router in public" is a single aggressiveness
+ * threshold (RouteLLM ships it in the model name, `router-mf-0.3` against `router-mf-0.7`); everything else it
+ * learns stays inside. Same here: the weights below are a hypothesis with a ledger under them and are nobody's
+ * business, while "should this err toward my model or toward the cheap one" is a preference only the owner can
+ * hold, and the shadow numbers are useless without a way to act on what they say.
+ *
+ * THREE NAMED STOPS, not a slider, because the page has no slider idiom and, more to the point, a continuous
+ * control here invites fiddling with a number whose meaning nobody can feel. Each stop is a sentence about
+ * which turns move:
+ *   cautious — every easing signal at once and nothing pulling the other way: a short bare question, in easy
+ *              words, naming no file. "what is a closure?" and very little else. The zero is not a disabled
+ *              state, it is the floor the score clamps to, so it means exactly "leave no room for doubt".
+ *   balanced — the shipped default, and what every stored verdict before this knob existed was judged against.
+ *              Easy words carry a turn on their own; naming a file still holds it back.
+ *   eager    — an easy-worded question about real code goes too ("explain what this file does").
+ *
+ * NONE OF THEM CAN REACH THE ABSENCE FEATURES, at any setting, because that property is enforced structurally
+ * now rather than by the weights happening to sum above the ceiling (see `easing` below). That is what makes an
+ * eager stop safe to offer at all: raising a bare number would, at 0.3, have started downgrading every short
+ * vague request in the product, which is the single worst population to be wrong about. */
+export const FAST_CEILINGS = { cautious: 0, balanced: 0.25, eager: 0.4 } as const;
+export type TierEagerness = keyof typeof FAST_CEILINGS;
+
+// The stop a turn is judged against when nobody has chosen one, and the one every verdict recorded before the
+// knob existed was judged against. Exported because a reader of a stored score needs the ceiling behind it, and
+// a row written before ceilings were recorded was written against exactly this.
+export const FAST_CEILING = FAST_CEILINGS.balanced;
 
 // Characters, not tokens: nothing here can tokenize, and for a threshold the constant cancels. ~600 chars is
 // where a request stops being a sentence and starts being a brief; ~2400 is where it is carrying pasted
@@ -215,38 +248,56 @@ const forcing = (input: ComplexityInput, text: string): ComplexityRule[] => {
  * nothing, which is exactly why the mechanism ships in shadow first — see docs/model-routing-design.md §4. They
  * are not a claim, they are a hypothesis with a ledger under it.
  *
- * ONE PROPERTY IS NOT A HYPOTHESIS AND MUST SURVIVE ANY REFIT: the two ABSENCE features (`short-prompt`,
- * `no-workspace-reference`) are too light to reach the ceiling together. Absence of complexity is not evidence
- * of simplicity — "fix the bug" is four words naming no file and is not a cheap turn — so a downgrade always
- * requires something POSITIVE to have been said, which in practice means `easy-words` or `bare-question`
- * carrying it. Weighted the obvious way instead, the judge downgraded every short vague request in the
- * product, which is the single worst population to be wrong about. */
-const GRADED: readonly { readonly rule: ComplexityRule; readonly weight: number; readonly of: (input: ComplexityInput, text: string) => boolean }[] =
-    [
-        { rule: "medium-prompt", weight: +0.2, of: (_input, text) => text.length > MEDIUM_PROMPT_CHARS },
-        { rule: "attachment", weight: +0.15, of: (input) => input.attachments > 0 },
-        { rule: "editor-context", weight: +0.1, of: (input) => input.editorContext },
-        // Enough on its own to hold an easy-worded question at standard: "explain what this file does" is a
-        // question about real code in this repo, and the cheap rung's failures on real code are the silent kind.
-        { rule: "paths", weight: +0.15, of: (_input, text) => PATH_LIKE.test(text) },
-        {
-            rule: "many-verbs",
-            weight: +0.15,
-            of: (_input, text) => new Set((text.match(VERBS) ?? []).map((verb) => verb.toLowerCase())).size >= MANY_VERBS,
-        },
-        // The heaviest single weight, because it is the only feature that can see past the words. See
-        // ComplexityInput.afterHardTurn for why it is a weight rather than the gate it was designed as.
-        { rule: "after-hard-turn", weight: +0.25, of: (input) => input.afterHardTurn },
-        // The two absence features, deliberately light; see the note above the list.
-        { rule: "short-prompt", weight: -0.1, of: (_input, text) => text.length <= SHORT_PROMPT_CHARS },
-        { rule: "easy-words", weight: -0.25, of: (_input, text) => EASY_WORDS.test(text) },
-        { rule: "bare-question", weight: -0.15, of: (_input, text) => BARE_QUESTION.test(text) },
-        {
-            rule: "no-workspace-reference",
-            weight: -0.1,
-            of: (input, text) => input.attachments === 0 && !input.editorContext && !PATH_LIKE.test(text),
-        },
-    ];
+ * ONE PROPERTY IS NOT A HYPOTHESIS AND MUST SURVIVE ANY REFIT, and it is a RULE here rather than an accident of
+ * arithmetic: absence of complexity is not evidence of simplicity. "fix the bug" is four words naming no file
+ * and is not a cheap turn, so a downgrade always requires something POSITIVE to have been said — an easy word,
+ * or a bare question. Those two are marked `easing`, and `judgeComplexity` refuses a fast verdict without one
+ * whatever the score says.
+ *
+ * It used to hold only because the two ABSENCE features (`short-prompt`, `no-workspace-reference`) summed to
+ * 0.3 against a ceiling of 0.25, which is a coincidence of two numbers rather than a property, and the moment
+ * the ceiling became a setting it was one click from being false. Weighted the obvious way, the judge
+ * downgraded every short vague request in the product, which is the single worst population to be wrong
+ * about. */
+interface GradedFeature {
+    readonly rule: ComplexityRule;
+    readonly weight: number;
+    readonly of: (input: ComplexityInput, text: string) => boolean;
+    // A POSITIVE reason to think this is easy, as opposed to the mere absence of reasons to think it is hard.
+    // At least one has to fire before any turn is called fast; see the note above.
+    readonly easing?: true;
+}
+
+const GRADED: readonly GradedFeature[] = [
+    { rule: "medium-prompt", weight: +0.2, of: (_input, text) => text.length > MEDIUM_PROMPT_CHARS },
+    { rule: "attachment", weight: +0.15, of: (input) => input.attachments > 0 },
+    { rule: "editor-context", weight: +0.1, of: (input) => input.editorContext },
+    // Enough on its own to hold an easy-worded question at standard on the middle stop: "explain what this file
+    // does" is a question about real code in this repo, and the cheap rung's failures on real code are the
+    // silent kind. The `eager` stop is precisely the choice to let that one through.
+    { rule: "paths", weight: +0.15, of: (_input, text) => PATH_LIKE.test(text) },
+    {
+        rule: "many-verbs",
+        weight: +0.15,
+        of: (_input, text) => new Set((text.match(VERBS) ?? []).map((verb) => verb.toLowerCase())).size >= MANY_VERBS,
+    },
+    // The heaviest single weight, because it is the only feature that can see past the words. See
+    // ComplexityInput.afterHardTurn for why it is a weight rather than the gate it was designed as. Heavy enough
+    // that even the eager stop cannot route a follow-up to hard work on easy words alone.
+    { rule: "after-hard-turn", weight: +0.25, of: (input) => input.afterHardTurn },
+    /* The easing half, in the order it has always been declared, because that order is the order a verdict
+     * lists its rules in and the ledger has rows written against it. `easing` marks the two POSITIVE ones, one
+     * of which every fast verdict must carry; the other two are the absence features, deliberately light and,
+     * by the rule above, never enough by themselves. */
+    { rule: "short-prompt", weight: -0.1, of: (_input, text) => text.length <= SHORT_PROMPT_CHARS },
+    { rule: "easy-words", weight: -0.25, easing: true, of: (_input, text) => EASY_WORDS.test(text) },
+    { rule: "bare-question", weight: -0.15, easing: true, of: (_input, text) => BARE_QUESTION.test(text) },
+    {
+        rule: "no-workspace-reference",
+        weight: -0.1,
+        of: (input, text) => input.attachments === 0 && !input.editorContext && !PATH_LIKE.test(text),
+    },
+];
 
 // Three places, so a stored score is a value rather than a float artefact and two rows written by the same
 // rules compare equal.
@@ -258,14 +309,26 @@ const round3 = (value: number): number => Math.round(value * 1000) / 1000;
  * up a tier, never silently move a different set of turns down.
  *
  * Only what survives all of that gets scored, which keeps the graded layer doing the one job it is good at:
- * separating "explain this" from "wire this up" among requests that look alike. */
+ * separating "explain this" from "wire this up" among requests that look alike.
+ *
+ * TWO CONDITIONS FOR FAST, not one, and the second is the one that does not move: the score has to clear the
+ * owner's chosen ceiling AND something POSITIVE has to have been said (a `easing` feature). The ceiling is a
+ * preference and belongs to whoever pays the bill; "we downgraded it because you didn't say much" is not a
+ * preference, it is a bug, and it stays impossible at every stop of the knob. */
 export const judgeComplexity = (input: ComplexityInput): ComplexityVerdict => {
+    const ceiling = FAST_CEILINGS[input.eagerness ?? "balanced"];
     const text = input.prompt.trim();
     const forced = forcing(input, text);
     if (forced.length > 0) {
-        return { tier: "standard", score: 1, rules: forced };
+        return { tier: "standard", score: 1, rules: forced, ceiling };
     }
     const hits = GRADED.filter((feature) => feature.of(input, text));
     const score = Math.min(1, Math.max(0, BASE_SCORE + hits.reduce((total, feature) => total + feature.weight, 0)));
-    return { tier: score <= FAST_CEILING ? "fast" : "standard", score: round3(score), rules: hits.map((feature) => feature.rule) };
+    const eased = hits.some((feature) => feature.easing === true);
+    return {
+        tier: eased && score <= ceiling ? "fast" : "standard",
+        score: round3(score),
+        rules: hits.map((feature) => feature.rule),
+        ceiling,
+    };
 };

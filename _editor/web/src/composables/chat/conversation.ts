@@ -968,6 +968,9 @@ export class Conversation {
                 // Every row here IS a row of the daemon's record, which for a notice is the only way to know: a
                 // fork counts the recorded ones and skips the ones this client drew locally (see recordedRows).
                 ...(message.role === `notice` ? { recorded: true } : {}),
+                // …and the one press a recorded notice can carry, so a routed turn reopened tomorrow still
+                // offers "keep this chat on my pick" rather than becoming a sentence with nothing behind it.
+                ...(message.noticeAction !== undefined ? { noticeAction: message.noticeAction } : {}),
                 // When the turn was sent, as the daemon wrote it down, so a bubble reopened tomorrow shows the
                 // hour it was actually typed rather than nothing at all.
                 ...(message.sentAt !== undefined ? { sentAt: message.sentAt } : {}),
@@ -1956,15 +1959,21 @@ export class Conversation {
     }
 
     /* A judged turn's verdict arriving. Two standing facts are replaced (the picker notice's answer, the next
-     * preview's `afterHardTurn` input), and the FIRST routed turn of this conversation earns one muted line in
-     * the transcript with the opt-out a press away — the land/outage rule: the moment an automatic behaviour
-     * fires is the moment "don't do that" is worth exactly one press, not a trip to settings. Later routed
-     * turns rely on the standing notice under the model pick; a line per turn would train the eye to skip it. */
+     * preview's `afterHardTurn` input), and EVERY turn that really ran cheaper earns one muted line in the
+     * transcript with the opt-out a press away — the land/outage rule: the moment an automatic behaviour fires
+     * is the moment "don't do that" is worth exactly one press, not a trip to settings.
+     *
+     * EVERY routed turn, not just the first of the conversation, and the reason is what a reader does with the
+     * line months later: scrolling back, the question is not "did this chat ever route" but "was THIS answer the
+     * cheap one", and a single line at the top cannot answer that about message thirty. It is also what keeps
+     * the live chat and the reopened one identical, because the daemon records the same line per routed turn
+     * (turn-transcript.ts); a client rule of its own would make a reopened tab disagree with the tab that
+     * watched it. The line is rare by construction (only turns that really moved) and the offer under it
+     * retires itself the moment it is taken. */
     private applyTier(answer: Extract<AgentEvent, { kind: `tier` }>): void {
-        const first = answer.routed && (this.tierAnswer.value === undefined || !this.tierAnswer.value.routed);
         this.tierAnswer.value = answer;
         this.lastTier.value = answer.tier;
-        if (first && answer.model !== undefined) {
+        if (answer.routed && answer.model !== undefined) {
             this.transcript.notice(
                 `This turn looked simple, so it ran on ${modelLabelFor(this.provider.value, answer.model)} instead of your pick.`,
                 { noticeAction: `tierHold` },

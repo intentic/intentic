@@ -208,3 +208,37 @@ test("no judged turns means no numbers at all: absence, not a row of zeros", asy
 
     expect(host.textContent).not.toContain(`Last 30 days`);
 });
+
+/* THE ONE DIAL. It is the answer to the numbers above it, so what these pin is that it is reachable from the
+ * same screen, that it writes what it says, and that it disappears with the feature rather than sitting there
+ * adjusting a judge that never runs. */
+
+test("the dial defaults to balanced and writes the stop that was clicked", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(modeButton(host, `Balanced`).getAttribute(`aria-selected`)).toBe(`true`);
+    modeButton(host, `Eager`).click();
+
+    expect(patch).toHaveBeenCalledWith({ autoTierEagerness: `eager` });
+});
+
+test("each stop says which turns it lets through, in an example rather than a number", async () => {
+    // The cutoff behind it is meaningless without the weights; a sentence a reader can check their own messages
+    // against is the only honest way to render this control.
+    settings.value = { ...settings.value, autoTierEagerness: `eager` };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain(`explain what this file does`);
+    expect(host.textContent).toContain(`a turn still has to say something positively easy`);
+});
+
+test("the dial goes away with the feature, rather than adjusting a judge that never runs", async () => {
+    const host = mount();
+    await Promise.resolve();
+    modeButton(host, `Off`).click();
+    await Promise.resolve();
+
+    expect(host.textContent).not.toContain(`How readily`);
+});

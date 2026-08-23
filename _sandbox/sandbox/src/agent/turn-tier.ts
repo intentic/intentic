@@ -110,6 +110,9 @@ export const turnTier = async (
         // a model, and a turn cannot change model under its own feet.
         planMode: input.permissionMode === "plan",
         afterHardTurn: context.lastTier === "standard",
+        // The owner's one dial. Read from settings here rather than defaulted in the judge, so the row this
+        // turn writes records the cutoff that was actually in force when it ran.
+        eagerness: context.settings.autoTierEagerness,
     });
     /* SHADOW STOPS HERE, and stopping here is the entire point of the mode: the verdict is recorded against
      * what the turn really cost, and the turn runs on exactly the model it would have without this file. That

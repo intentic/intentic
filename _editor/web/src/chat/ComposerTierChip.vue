@@ -10,7 +10,14 @@
        held    — the veto is standing and just declined a substitution. The press lifts it again.
 
      The chip is the pre-send half of the awareness story; the tier frame and the picker notice are the
-     post-send half, and the daemon's answer always outranks this preview. -->
+     post-send half, and the daemon's answer always outranks this preview.
+
+     IT NEVER DISAPPEARS WITH THE PANE, only its words do. The composer's other controls hide their LABEL on a
+     narrow pane and keep their mark, and this one has more reason to than any of them: it is the only control
+     there that says something is about to happen to the model you chose, so a width that hid it would make a
+     substitution silent on exactly the layout (a split pane, a phone) where the model row is hardest to read.
+     The icon carries the state on its own — muted for measuring, lit for a hold — and the hover text says the
+     whole sentence. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../composables/chat/conversation";
@@ -66,7 +73,9 @@ const press = (): void => {
         :title="title"
     >
         <Icon name="credit-card" class="text-2xs text-subtle" />
-        <span class="text-subtle">{{ label }}</span>
+        <!-- The words go on a narrow pane, the mark stays: see the note at the top of this file for why this
+             control in particular must never vanish with the width. -->
+        <span class="text-subtle @max-lg:hidden">{{ label }}</span>
     </span>
     <button
         v-else-if="preview !== undefined"
@@ -78,6 +87,6 @@ const press = (): void => {
         @click="press"
     >
         <Icon name="credit-card" class="text-2xs" />
-        <span>{{ label }}</span>
+        <span class="@max-lg:hidden">{{ label }}</span>
     </button>
 </template>

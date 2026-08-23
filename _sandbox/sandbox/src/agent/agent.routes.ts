@@ -800,9 +800,7 @@ async function* runTurn(
             lastTier: input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.tier,
             // The turn's own flag when it says anything, else the conversation's persisted veto: `begin` has
             // already merged the two onto the entry by this point, but a one-shot turn has no entry to read.
-            hold:
-                input.tierHold ??
-                (input.conversationId === undefined ? false : (services.agents.entry(input.conversationId)?.tierHold ?? false)),
+            hold: input.tierHold ?? (input.conversationId === undefined ? false : (services.agents.entry(input.conversationId)?.tierHold ?? false)),
         }),
     );
     // The turn as the rest of this function must see it. Only the model can differ, and only downward, and
@@ -1386,6 +1384,10 @@ async function* runTurn(
                     ? {
                           tierScore: tier.verdict.score,
                           tierRules: [...tier.verdict.rules],
+                          // The verdict and the cutoff behind it, written down rather than re-derived: with the
+                          // cutoff an owner setting, a score alone no longer says which side of it a row fell.
+                          tierFast: tier.verdict.tier === "fast",
+                          tierCeiling: tier.verdict.ceiling,
                           tierRouted: tier.model !== undefined && tier.held !== true,
                           // The veto, only when it stood between a fast verdict and a real substitution: the
                           // strongest negative label the calibration read gets (UsageTurn.tierDenied).

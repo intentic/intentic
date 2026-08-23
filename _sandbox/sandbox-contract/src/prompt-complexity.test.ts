@@ -158,3 +158,72 @@ test("the score never leaves 0..1, so a stored row is always comparable against 
     expect(floor.score).toBeGreaterThanOrEqual(0);
     expect(ceiling.score).toBeLessThanOrEqual(1);
 });
+
+// --- the one dial, and the property it may not move ------------------------------------------------------
+
+/* The owner can move the cutoff (settings.autoTierEagerness) because "err toward my model or toward the cheap
+ * one" is a preference nobody else can hold for them. What these pin is that the dial moves the cutoff and
+ * NOTHING else, in particular not the rule that a downgrade needs something positively easy to have been said,
+ * which was the property the old ceiling held only by arithmetic coincidence. */
+
+test("the dial widens what counts as simple, in the direction it says", () => {
+    // A question about a real file: eased by its words, held back by naming a path. The middle stop keeps it on
+    // the user's pick, and the eager stop is precisely the choice to let it through.
+    const aboutAFile = `explain what src/app.ts does`;
+
+    expect(tierOf(aboutAFile, { eagerness: `balanced` })).toBe(`standard`);
+    expect(tierOf(aboutAFile, { eagerness: `eager` })).toBe(`fast`);
+});
+
+test("the cautious stop wants every easing signal at once, not merely an easy word", () => {
+    // Its whole content: leave no room for doubt. A statement in easy words still qualifies at the default,
+    // and does not here; only a short bare question naming no file survives every stop.
+    expect(tierOf(`explain closures`, { eagerness: `balanced` })).toBe(`fast`);
+    expect(tierOf(`explain closures`, { eagerness: `cautious` })).toBe(`standard`);
+    expect(tierOf(`what is a closure?`, { eagerness: `cautious` })).toBe(`fast`);
+});
+
+test("an absent dial is the balanced stop, so every row recorded before it existed still compares", () => {
+    const bare = judgeComplexity(turn(`what is this?`));
+
+    expect(bare.ceiling).toBe(FAST_CEILING);
+    expect(bare.tier).toBe(judgeComplexity(turn(`what is this?`, { eagerness: `balanced` })).tier);
+});
+
+test("no setting of the dial can downgrade a short vague request", () => {
+    // The whole safety argument for offering an eager stop at all. Absence of complexity is not evidence of
+    // simplicity at ANY cutoff, so this is a rule in the judge rather than a sum that happens to clear it.
+    for (const eagerness of [`cautious`, `balanced`, `eager`] as const) {
+        expect(tierOf(`fix the bug`, { eagerness })).toBe(`standard`);
+        expect(tierOf(`have a look at the thing we discussed`, { eagerness })).toBe(`standard`);
+    }
+});
+
+test("the deceptive follow-up is standard at every stop, because it never says anything easy", () => {
+    /* "now do the same for the other file" is the case the whole afterHardTurn signal was built for, and the
+     * easing rule turns out to answer it more strongly than any cutoff can: those words make no positive claim
+     * of ease, so no setting of the dial reaches them. The weight still does its own job one test down. */
+    for (const eagerness of [`cautious`, `balanced`, `eager`] as const) {
+        expect(tierOf(`now do the same for the other file`, { eagerness, afterHardTurn: true })).toBe(`standard`);
+    }
+});
+
+test("a turn following hard work has to clear a higher bar, and at the default an eased one no longer does", () => {
+    // It raises the bar rather than locking the door (see ComplexityInput.afterHardTurn), so this is a shift of
+    // one stop's worth, not a gate: the same words that route in a fresh conversation stay put in a hard one.
+    expect(tierOf(`explain closures`)).toBe(`fast`);
+    expect(tierOf(`explain closures`, { afterHardTurn: true })).toBe(`standard`);
+});
+
+test("the verdict carries the cutoff it was judged against, because a score alone stopped being an answer", () => {
+    // With the cutoff an owner setting, the same 0.35 is standard on one stop and fast on another. A ledger of
+    // bare scores could not tell those two rows apart; the ceiling beside each is what keeps a refit honest.
+    const cautious = judgeComplexity(turn(`explain closures`, { eagerness: `cautious` }));
+    const eager = judgeComplexity(turn(`explain closures`, { eagerness: `eager` }));
+
+    expect(cautious.ceiling).toBeLessThan(FAST_CEILING);
+    expect(eager.ceiling).toBeGreaterThan(FAST_CEILING);
+    // Same words, same score, opposite verdicts: the pair that a column of bare scores could not have told apart.
+    expect(cautious.score).toBe(eager.score);
+    expect([cautious.tier, eager.tier]).toEqual([`standard`, `fast`]);
+});

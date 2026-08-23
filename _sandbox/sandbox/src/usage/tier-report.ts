@@ -27,9 +27,15 @@ import type { UsageStore } from "./usage-store.js";
 // describes how long the user waited, not the work. Absent outcome (old rows) stays.
 const measurable = (turn: UsageTurn): boolean => turn.outcome !== "error" && turn.outcome !== "cancelled";
 
-// Fast iff the stored score sits at or below the exported ceiling — the contract FAST_CEILING documents for
-// exactly this read-back. The verdict itself is not stored; the score plus the ceiling it was judged against is.
-const judgedFast = (turn: UsageTurn): boolean => turn.tierScore !== undefined && turn.tierScore <= FAST_CEILING;
+/* WAS THIS TURN CALLED SIMPLE. The recorded verdict where there is one, and the old derivation where there is
+ * not: rows written before the eagerness knob existed carry a score and no verdict, and every one of them was
+ * judged at the balanced cutoff, which is exactly what FAST_CEILING still is. So the fallback is not a guess,
+ * it is the same arithmetic those rows were actually judged by, and the two eras stay one population.
+ *
+ * The derivation cannot serve the new rows: their cutoff is whatever the owner had the dial on, and a fast
+ * verdict additionally requires a positively-easy signal, which a score does not carry. */
+const judgedFast = (turn: UsageTurn): boolean =>
+    turn.tierFast ?? (turn.tierScore !== undefined && turn.tierScore <= (turn.tierCeiling ?? FAST_CEILING));
 
 // What the row ran, then what it asked for: `model` is resolved past every substitution, so it is the honest
 // base for "did the next turn ask for something dearer than THIS one got".

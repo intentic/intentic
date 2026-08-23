@@ -177,6 +177,29 @@ const foldFrames = (events: readonly AgentEvent[], tag: string | undefined): Res
              * the open bubble first, because it is what ended that block. */
             flush();
             out.push({ role: "notice", text: event.message });
+        } else if (event.kind === "tier" && event.routed && event.model !== undefined) {
+            /* THIS TURN RAN ON A CHEAPER MODEL THAN THE ONE ASKED FOR, written down for the same reason the
+             * refusal above is: it is something that happened TO the turn, the answer below it is the cheap
+             * rung's answer, and a reader coming back tomorrow has no other way to know which of their messages
+             * were served that way. The live chat draws the identical line as the turn happens; recording it is
+             * what stops that line being a thing only the window that watched it ever saw.
+             *
+             * Only a turn that really moved. A fast verdict that changed nothing (measure mode, a held chat, a
+             * provider with nothing cheaper) is machinery, not an event, and a row per judged turn would bury
+             * the conversation under its own instrumentation.
+             *
+             * The model is named by ID here where the live line uses the picker's display label, because a
+             * display label is the browser's catalog and this side has only the id. Same fact, one of them
+             * spelled the way the provider spells it.
+             *
+             * `noticeAction` carries the offer, so the restored line keeps the one press the live line had:
+             * this is the one recorded notice with something to press, which is why the field exists at all. */
+            flush();
+            out.push({
+                role: "notice",
+                text: `This turn looked simple, so it ran on ${event.model} instead of your pick.`,
+                noticeAction: "tierHold",
+            });
         } else if (event.kind === "text_end") {
             retire();
         } else if (event.kind === "thinking") {

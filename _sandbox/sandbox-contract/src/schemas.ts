@@ -2557,6 +2557,23 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Whether an easy-looking turn may run on a cheaper model from the same provider. Three states rather than a switch, because the middle one is the only honest road to the third: it scores every turn and routes nothing, so the guess can become a measurement before it changes anything. It can only ever route down, so the worst case is one turn's quality rather than a bill nobody asked for.",
         ),
+    /* HOW EAGER THE JUDGE IS, the one dial this feature exposes and the answer to what the Measure mode is for:
+     * the numbers say how many turns were called simple, and this is the control that acts on them.
+     *
+     * Three named stops rather than a number, because the number means nothing to anyone who has not read the
+     * weights, while "only the unmistakable" / "the default" / "an easy question about real code too" are three
+     * sentences an owner can actually hold an opinion about (FAST_CEILINGS spells out each). It moves the
+     * cutoff and nothing else: the rule that a downgrade needs something POSITIVE to have been said holds at
+     * every stop, so no setting of this can start downgrading short vague requests.
+     *
+     * `balanced` is the default and is what every verdict recorded before this existed was judged against, so
+     * the shadow history stays comparable across the change rather than silently becoming two populations. */
+    autoTierEagerness: z
+        .enum(["cautious", "balanced", "eager"])
+        .default("balanced")
+        .describe(
+            "How readily a turn counts as simple enough for the cheaper model. It moves only the cutoff: at every setting a turn still has to say something positively easy, so nothing here can downgrade a short vague request.",
+        ),
     /* WHICH CHEAP MODEL A DOWNGRADED TURN LANDS ON, an ordered list of `${provider}:${model}` keys
      * (quickModelKey), or EMPTY for Auto.
      *
@@ -9053,6 +9070,18 @@ export const UsageTurnSchema = z.object({
     tierScore: z.number().optional(),
     tierRules: z.array(z.string()).optional(),
     tierRouted: z.boolean().optional(),
+    /* THE VERDICT ITSELF, and the cutoff it was reached against.
+     *
+     * `tierScore` stopped being able to answer "was this called simple" the moment the cutoff became the owner's
+     * to choose (settings.autoTierEagerness): 0.35 is standard on the middle stop and fast on the eager one, and
+     * a fast verdict also requires a positively-easy signal that no score can express. So the answer is written
+     * down rather than re-derived, and the ceiling goes with it because a refit reading a column of bare scores
+     * could not otherwise tell two rows apart.
+     *
+     * Absent on rows written before the knob existed, which were all judged at the `balanced` cutoff — which is
+     * exactly what a reader falls back to (FAST_CEILING), so old and new rows stay one population. */
+    tierFast: z.boolean().optional(),
+    tierCeiling: z.number().optional(),
     /* THE USER SAID NO: the turn carried AgentTurn.tierHold, so a fast verdict moved nothing. Recorded rather
      * than folded into `tierRouted: false` because it is the strongest calibration label this ledger ever gets,
      * a person looking at this very conversation deciding the cheap rung was not to be trusted with it, and the

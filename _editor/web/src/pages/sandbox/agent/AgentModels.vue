@@ -201,6 +201,21 @@ const autoTierOptions = [
     { label: `On`, value: `on` },
 ];
 
+/* THE ONE DIAL, and it is named rather than numbered: the cutoff behind it is meaningless to anybody who has
+ * not read the weights, while these three are sentences somebody can have an opinion about. Offered in both
+ * live states, not only On, because it changes what MEASURE counts too, which is the whole point of measuring:
+ * try a stop, read the share it produces, then decide whether to act on it. */
+const eagernessOptions = [
+    { label: `Cautious`, value: `cautious` },
+    { label: `Balanced`, value: `balanced` },
+    { label: `Eager`, value: `eager` },
+];
+const eagernessNote: Record<string, string> = {
+    cautious: `Only the unmistakable: a plain question that names no file and asks for nothing else.`,
+    balanced: `The default, and what every earlier measurement was judged against.`,
+    eager: `An easy-worded question about real code counts too, like "explain what this file does".`,
+};
+
 // A pinned key is `${provider}:${model}` (quickModelKey): the provider prefix drives the row's brand mark.
 const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
 </script>
@@ -367,6 +382,34 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                             Bumped to a dearer model right after a simple-judged turn: {{ tierReport.escalated }} of {{ tierReport.fast
                             }}<template v-if="tierReport.denied > 0"> · vetoed outright: {{ tierReport.denied }}</template
                             >. Past a few percent, the judge costs more trust than it saves.
+                        </p>
+                    </div>
+
+                    <!-- THE DIAL, directly under the numbers it is the answer to: the share above says how many
+                         turns the judge is calling simple, and this is the only control that changes it. Offered
+                         while measuring as well as while routing, because trying a stop and reading the share it
+                         produces is exactly what the Measure mode is for. Hidden with the feature itself: a dial
+                         on a judge that never runs is furniture. -->
+                    <div v-if="settings?.autoTier !== `off`" class="mt-3 flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-xs font-medium text-content">How readily</span>
+                            <SegmentedControl
+                                :model-value="settings?.autoTierEagerness ?? `balanced`"
+                                :options="eagernessOptions"
+                                @update:model-value="
+                                    (autoTierEagerness: string) =>
+                                        patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
+                                "
+                            />
+                        </div>
+                        <!-- What the chosen stop actually lets through, in an example rather than a threshold:
+                             the number behind it is meaningless without the weights, and the example is the
+                             thing a reader can check their own messages against. -->
+                        <p v-if="settings !== undefined" class="text-2xs text-muted">
+                            {{ eagernessNote[settings.autoTierEagerness ?? `balanced`] }}
+                        </p>
+                        <p class="text-2xs text-subtle">
+                            At every setting a turn still has to say something positively easy, so a short vague request is never moved.
                         </p>
                     </div>
 
