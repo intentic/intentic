@@ -144,7 +144,7 @@ const freshRuntime = (): RuntimeState => ({
 // here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
 // not, while both share the same identity, status and transcript lifecycle.
 export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
-    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "account" | "origin">> & {
+    Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
         readonly provider: NonNullable<AgentTurn["agent"]>;
@@ -462,6 +462,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             ...(entry.effort !== undefined ? { effort: entry.effort } : {}),
             ...(entry.thinking !== undefined ? { thinking: entry.thinking } : {}),
             ...(entry.fast !== undefined ? { fast: entry.fast } : {}),
+            // The last verdict and the standing veto, the two facts the composer's pre-send preview needs: the
+            // first to judge a follow-up the way the daemon will, the second to restore the user's own toggle.
+            ...(entry.tier !== undefined ? { tier: entry.tier } : {}),
+            ...(entry.tierHold !== undefined ? { tierHold: entry.tierHold } : {}),
             ...(entry.account !== undefined ? { account: entry.account } : {}),
             ...(entry.autoLand !== undefined ? { autoLand: entry.autoLand } : {}),
             ...(entry.resumeAfterOutage !== undefined ? { resumeAfterOutage: entry.resumeAfterOutage } : {}),
@@ -683,6 +687,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const effort = turn.effort ?? existing?.effort;
             const thinking = turn.thinking ?? existing?.thinking;
             const fast = turn.fast ?? existing?.fast;
+            const tierHold = turn.tierHold ?? existing?.tierHold;
             const account = turn.account ?? existing?.account;
             // Provenance belongs to the turn that CREATED the conversation and is never re-derived: the user's
             // own follow-up turns in a surfaced agent's tab carry no origin, and must not strip the Discord
@@ -712,6 +717,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 ...(effort !== undefined ? { effort } : {}),
                 ...(thinking !== undefined ? { thinking } : {}),
                 ...(fast !== undefined ? { fast } : {}),
+                ...(tierHold !== undefined ? { tierHold } : {}),
                 // Carried, never taken from the turn: the client has no opinion about this and the daemon's own
                 // verdict for THIS turn is not in yet (it is written by recordTier, once the turn is planned).
                 // Listed here because `replace` is an explicit field list, so an omission is a deletion, and

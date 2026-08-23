@@ -563,6 +563,7 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
                 ...(input.effort !== undefined ? { effort: input.effort } : {}),
                 ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
                 ...(input.fast !== undefined ? { fast: input.fast } : {}),
+                ...(input.tierHold !== undefined ? { tierHold: input.tierHold } : {}),
                 ...(input.account !== undefined ? { account: input.account } : {}),
                 ...(input.origin !== undefined ? { origin: input.origin } : {}),
             },

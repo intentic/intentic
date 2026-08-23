@@ -244,8 +244,12 @@ export interface ChatMessage {
      *
      * `depsInstall` is the other half of the same bargain, an automation that ran without asking owes the reader
      * a way to SEE it, not just a way to stop it. The install is a real attachable tmux job, so the press is a
-     * reveal rather than a dialog: whoever wants the output gets the terminal it is already scrolling in. */
-    readonly noticeAction?: "landHold" | "outageOptOut" | "depsInstall";
+     * reveal rather than a dialog: whoever wants the output gets the terminal it is already scrolling in.
+     *
+     * `tierHold` is the landed/outage bargain applied to automatic tier selection: the first turn a conversation
+     * quietly runs on a cheaper model is the moment "keep this chat on my pick" is worth one press
+     * (Conversation.applyTier draws it; the press flips the conversation's standing veto). */
+    readonly noticeAction?: "landHold" | "outageOptOut" | "depsInstall" | "tierHold";
     /* Set on a notice describing something that has not finished yet (notices only), rendered with a spinner in
      * place of its info icon while the wait is on, and as an ordinary settled line once it is over.
      *

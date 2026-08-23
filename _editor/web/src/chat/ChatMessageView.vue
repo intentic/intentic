@@ -160,6 +160,17 @@ const watchDepsInstall = (): void => {
     }
 };
 
+/* The routed-turn notice's one press, the landed/outage bargain applied to automatic tier selection: the first
+ * time a conversation quietly runs on a cheaper model is when "keep this chat on my pick" is worth exactly one
+ * press. It flips the conversation's OWN standing veto (Conversation.tierHold, persisted by the daemon per
+ * conversation), never the sandbox setting: the click happens inside one chat, so that is its honest blast
+ * radius. Gated on the current toggle, so a replayed transcript inside an already-holding chat shows a settled
+ * sentence rather than a stale offer. */
+const tierHoldOffer = computed(() => props.message.noticeAction === `tierHold` && !conversation.value.tierHold.value);
+const holdTier = (): void => {
+    conversation.value.setTierHold(true);
+};
+
 // Whimsical status words cycled while a turn is streaming (Claude Code style).
 const LOADER_WORDS = [
     `Thinking`,
@@ -997,6 +1008,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             </template>
             <template v-if="depsInstallOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="watchDepsInstall">Watch the install</button>
+            </template>
+            <template v-if="tierHoldOffer">
+                <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdTier">Keep this chat on my pick</button>
+                <span class="shrink-0">(later turns run the model you chose, even when they look simple)</span>
             </template>
         </div>
         <template v-else>

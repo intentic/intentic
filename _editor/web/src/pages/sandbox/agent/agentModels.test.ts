@@ -25,6 +25,15 @@ vi.mock(`../../../composables/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
+// The tier readout's data source, a fixture like the settings above: what is under test is what the row SAYS
+// over a given report, never the fetch behind it.
+const savings = ref<{
+    tier?: { judged: number; fast: number; atStakeUsd: number; routed: number; routedUsd: number; escalated: number; denied: number };
+}>({});
+vi.mock(`../../../composables/sandbox/useSavings`, () => ({
+    useSavings: () => ({ savings, isLoading: ref(false), refetch: vi.fn(), error: ref(undefined) }),
+}));
+
 // Two connected accounts and one that is not: the whole point of this row is which of them a click spends, so
 // the catalog it reads is the fixture, not a detail.
 const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
@@ -65,6 +74,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
     settings.value = SandboxSettingsSchema.parse({});
     connected.value = [`codex`, `claude`];
+    savings.value = {};
     patch.mockClear();
 });
 
@@ -178,4 +188,23 @@ test("a pinned cheap model is drawn as written, in its own list", async () => {
     await Promise.resolve();
 
     expect(orderOnScreen(host)).toEqual([`CLAUDE · Claude Haiku 4.5`]);
+});
+
+test("the judge's record renders its three numbers once turns have been judged", async () => {
+    savings.value = { tier: { judged: 40, fast: 10, atStakeUsd: 1.5, routed: 4, routedUsd: 0.25, escalated: 1, denied: 2 } };
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.textContent).toContain(`10 of 40`);
+    expect(host.textContent).toContain(`$1.50`);
+    expect(host.textContent).toContain(`4 ran on the cheaper model, spending $0.25`);
+    expect(host.textContent).toContain(`1 of 10`);
+    expect(host.textContent).toContain(`vetoed outright: 2`);
+});
+
+test("no judged turns means no numbers at all: absence, not a row of zeros", async () => {
+    const host = mount();
+    await Promise.resolve();
+
+    expect(host.textContent).not.toContain(`Last 30 days`);
 });

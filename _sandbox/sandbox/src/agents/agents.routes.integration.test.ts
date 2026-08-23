@@ -117,10 +117,17 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
         ),
     );
 
-    // Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
-    // is a real injection being really disclosed (agent.routes.ts) and nothing to do with the error path here.
+    /* Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
+     * is a real injection being really disclosed (agent.routes.ts) and nothing to do with the error path here.
+     * The tier verdict goes with it, for the same reason and one more: the complexity judge runs on every turn
+     * in the default mode (settings.autoTier "shadow"), so its frame rides ahead of everything a turn does,
+     * including a turn that then dies. That it survives an adapter crash is the point of it being emitted at
+     * plan time; what this test is about is what comes after. */
     const frames = await runAgentTurn(client, { prompt: "do it", conversationId: "workspace-error" });
-    expect(frames.filter((frame) => frame.kind !== "preamble")).toEqual([{ kind: "error", message: "adapter crashed" }, { kind: "done" }]);
+    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual([
+        { kind: "error", message: "adapter crashed" },
+        { kind: "done" },
+    ]);
     // And the roster carries WHY, not just that: the sentence is the whole of what a card, a run row or a
     // notification can say about a turn that produced nothing else, and reaching it through the transcript is
     // the trip this field exists to spare the reader.

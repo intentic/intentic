@@ -54,6 +54,7 @@ import ChatRunThroughMenu from "./ChatRunThroughMenu.vue";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
+import ComposerTierChip from "./ComposerTierChip.vue";
 
 /* ONE CHAT ON SCREEN: the transcript, the composer that writes into it, and the pickers and banners that
  * belong to that one conversation. The panel around it (ChatPanel) owns the frame: the chat list, the pop-out,
@@ -1555,6 +1556,13 @@ watch(
                                             :disabled="pickedWorkflow !== undefined"
                                             label-class="@max-lg:hidden"
                                         />
+
+                                        <!-- The tier judge's pre-send answer, only when it has one: the draft
+                                             looks simple and automatic tier selection will (or would) act. Sits
+                                             with the "which brain" group because it is a sentence about exactly
+                                             that; hidden on narrow panes with the effort label rather than
+                                             squeezing the send button. -->
+                                        <ComposerTierChip :conversation="conversation" class="@max-lg:hidden" />
                                     </div>
 
                                     <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT: the group that

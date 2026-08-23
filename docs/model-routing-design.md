@@ -267,10 +267,13 @@ that it only routes down. Swapping it for something merely known to be cheap is 
 | Which cheaper model, and whether one exists | `sandbox-contract/src/fast-tier.ts` |
 | "Is this a cheaper rung" on the tier ladder | `model-order.ts` (`isCheaperRung`) |
 | Settings: mode + the fast ladder | `schemas.ts` (`autoTier`, `autoFastModels`) |
-| Spending the judgement, catalogs, modes | `sandbox/src/agent/turn-tier.ts` |
-| Applying it + the shadow record | `sandbox/src/agent/agent.routes.ts` |
-| The previous turn's verdict | `agents-store.ts` / `agents-registry.ts` (`tier`, `recordTier`) |
-| The settings row | `AgentModels.vue` |
+| Spending the judgement, catalogs, modes, the veto | `sandbox/src/agent/turn-tier.ts` |
+| Applying it + the shadow record + the `tier` frame | `sandbox/src/agent/agent.routes.ts` |
+| The previous turn's verdict + the standing veto | `agents-store.ts` / `agents-registry.ts` (`tier`, `tierHold`, `recordTier`) |
+| The readout: fast share, money, escalations | `sandbox/src/usage/tier-report.ts` → `SavingsReport.tier` |
+| The settings row + the numbers under it | `AgentModels.vue` |
+| Per-turn awareness in chat | the `tier` frame (`events.ts`) → picker notice (`ChatModelPicker.vue`), first-routed-turn notice (`conversation.ts` `applyTier`) |
+| The pre-send preview + per-chat veto | `composables/chat/tierPreview.ts`, `ComposerTierChip.vue`, `AgentTurn.tierHold` |
 
 The judge lives in the contract for the reason `quick-model.ts` does: a settings row has to be able to say what
 a turn will run on before it runs. Configuration mirrors `quickModel` — one ordered list, empty means derive
@@ -358,12 +361,23 @@ guardrail. Past a few percent, the router is costing more in retries and trust t
 5. **Verifiable-subtask cascade** — not built, and separate work: escalate on a hard oracle (tests failed,
    patch did not apply) where one exists. The one place a cascade is the right tool, orthogonal to the above.
 
+Since built, closing what §4 called prerequisites for switching step 3 on:
+
+- ~~**The escalation-rate metric is recorded but not drawn.**~~ **Built.** `tier-report.ts` reads the ledger
+  back into `SavingsReport.tier` — fast share, the money on the table (what fast-judged turns actually cost,
+  never a counterfactual), realized routed spend, the escalation count (next row of the same conversation asked
+  for a dearer rung), and the veto count — and `AgentModels.vue` draws it under the switch itself.
+- ~~**The composer does not preview the decision.**~~ **Built.** `tierPreview.ts` runs the same judge over the
+  draft (`ComposerTierChip.vue`); the daemon reports its authoritative answer on the `tier` frame, the picker
+  renders the disagreement line, and the first routed turn of a conversation draws a transcript notice.
+- **The user can refuse.** Not in the original design, added with the awareness work because they are one
+  bargain: the moment the automatic behaviour fires is the moment "don't do that" must be one press.
+  `AgentTurn.tierHold` is a per-conversation standing veto (composer chip, picker toggle, notice press, all one
+  flag, persisted on the entry); the judge still runs and the veto lands on the ledger as `tierDenied`, the
+  strongest negative label the calibration gets.
+
 Still open, and deliberately so:
 
-- **The escalation-rate metric is recorded but not drawn.** The ledger carries what is needed (§4); no screen
-  reads it yet. Nobody should switch step 3 on before that exists — it is the guardrail, not a nice-to-have.
-- **The composer does not preview the decision.** The judge is in the contract so it can, and the picker
-  already renders a line when the answer disagrees with the ask. Worth doing when step 3 goes live, not before.
 - **One aggressiveness knob.** Today the cutoff is a constant. Exposing it (RouteLLM's `router-mf-0.3` vs
   `router-mf-0.7`) is a step-3 concern and needs shadow data to be meaningful.
 

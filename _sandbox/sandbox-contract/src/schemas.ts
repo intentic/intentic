@@ -378,6 +378,18 @@ export const AgentTurnSchema = z
             .describe(
                 "Ask for the same work at a higher rate for a higher price. A request rather than a promise: the answer says what actually happened.",
             ),
+        /* KEEP THIS TURN ON THE MODEL I PICKED: the user's veto over automatic tier selection, riding the turn
+         * like `fast` does because it changes what the turn costs and so belongs to the turn rather than to the
+         * workspace. The judge still runs and the verdict is still recorded — a deny is the strongest label the
+         * calibration ledger ever gets (UsageTurn.tierDenied) — but nothing is substituted. The composer sends
+         * its conversation-level toggle here every turn, and the registry persists it beside `fast`, so the
+         * choice survives reopening the tab. Absent ⇒ no opinion, routing follows settings.autoTier. */
+        tierHold: z
+            .boolean()
+            .optional()
+            .describe(
+                "Run exactly the model that was picked, even when the turn looks simple enough for a cheaper one. The judgement is still recorded; nothing is substituted.",
+            ),
         // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
         editorContext: EditorContextSchema.optional().describe(
             'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
@@ -1080,6 +1092,21 @@ export const AgentSummarySchema = z.object({
     effort: z.string().optional().describe("How hard that turn was told to think."),
     thinking: z.boolean().optional().describe("Whether that turn showed its reasoning."),
     fast: z.boolean().optional().describe("Whether that turn asked for higher speed. What was asked for, not what was served."),
+    /* WHAT THE COMPLEXITY JUDGE MADE OF THE LAST TURN HERE, mirrored from the persisted entry (agents-store.ts
+     * `tier`) so a client opening the conversation tomorrow can seed its composer preview with the one judge
+     * input a draft cannot contain (prompt-complexity.ts `afterHardTurn`). The JUDGEMENT, never what ran, for
+     * the reason the store states: what ran is a fact about configuration, the next turn is asking about the
+     * difficulty of the work. Absent ⇒ nothing judged yet. */
+    tier: z
+        .enum(["fast", "standard"])
+        .optional()
+        .describe("How hard its last turn looked to the complexity judge. What the next turn's preview needs, not what actually ran."),
+    // The conversation's standing "keep every turn on my pick" choice, the composer's memory of it, the same
+    // shape as `fast` above: what was asked for, restored into the composer on open, sent back on every turn.
+    tierHold: z
+        .boolean()
+        .optional()
+        .describe("Whether this conversation is pinned to the picked model, so a turn that looks simple is never moved to a cheaper one."),
     account: z.string().optional().describe("Which connected account paid for it."),
     // The worktree branch (agent/<id>); absent for a non-isolated (main-tree) conversation.
     branch: z.string().optional().describe("The branch its private copy works on. Absent for a conversation that works directly in the shared tree."),
@@ -2843,10 +2870,45 @@ export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
 // `output`/`search` are absent when that experiment isn't running at all (its flag off, or no holdout set), a
 // section that isn't there reads as "not measured", which is the truth, while zeros would read as "measured,
 // worth nothing".
+/* WHAT THE COMPLEXITY JUDGE HAS BEEN SAYING, read back off the spend ledger's tier fields (UsageTurn.tierScore
+ * and friends) over the requested window. The three numbers docs/model-routing-design.md §4 says the feature
+ * cannot be defended without, plus the veto count, and nothing else: no counterfactual "you would have saved
+ * $X", because the ledger holds what turns COST, not what they would have cost on a model they never ran.
+ *
+ * NOT a TurnExperiment, deliberately. The experiments compare two randomized arms of one population; this is a
+ * tally of what one mechanism observed and did. Dressing it in arms and margins would claim a control group that
+ * does not exist (routing follows the settings mode, which follows time, not a coin flip).
+ *
+ * The whole section is absent when no turn in the window was judged at all (autoTier "off" throughout), which a
+ * screen renders as absence: "not measured" is the truth, zeros would read as "measured, found nothing". */
+export const TierReportSchema = z.object({
+    // Turns the judge ran on in the window, the denominator under everything below.
+    judged: z.number(),
+    // …of which landed at or below FAST_CEILING: the turns that looked simple. fast ÷ judged is the fast share.
+    fast: z.number(),
+    /* What the fast-judged turns that STAYED on the user's pick actually cost, the money measure mode is
+     * pointing at. An upper bound on any saving, never an estimate of one: moving those turns to the cheap rung
+     * would have cost something too, and this schema refuses to guess how much. */
+    atStakeUsd: z.number(),
+    // Turns that actually ran the cheap rung, and what they cost there. Realized, not projected.
+    routed: z.number(),
+    routedUsd: z.number(),
+    /* THE GUARDRAIL: fast-judged turns whose conversation's very next ledger row asked for a dearer model, the
+     * user reaching for the model picker right after a turn the judge called simple. The strongest negative
+     * signal the ledger can carry (§4's first calibration row). Past a few percent of `fast`, the judge is
+     * costing more in retries and trust than it saves in tokens. */
+    escalated: z.number(),
+    // Fast-judged turns the user vetoed outright (UsageTurn.tierDenied): the same signal, said even louder.
+    denied: z.number(),
+});
+export type TierReport = z.infer<typeof TierReportSchema>;
+
 export const SavingsReportSchema = z.object({
     input: InputSavingsSchema,
     output: TurnExperimentSchema.optional(),
     search: TurnExperimentSchema.optional(),
+    // Automatic tier selection's readout, see TierReportSchema. Absent ⇒ nothing was judged in the window.
+    tier: TierReportSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 
@@ -8982,6 +9044,12 @@ export const UsageTurnSchema = z.object({
     tierScore: z.number().optional(),
     tierRules: z.array(z.string()).optional(),
     tierRouted: z.boolean().optional(),
+    /* THE USER SAID NO: the turn carried AgentTurn.tierHold, so a fast verdict moved nothing. Recorded rather
+     * than folded into `tierRouted: false` because it is the strongest calibration label this ledger ever gets,
+     * a person looking at this very conversation deciding the cheap rung was not to be trusted with it, and the
+     * refit (docs/model-routing-design.md §4) needs it kept apart from "nothing cheaper was published". Absent ⇒
+     * no veto, which is every row written before the control existed and most rows after. */
+    tierDenied: z.boolean().optional(),
 });
 export type UsageTurn = z.infer<typeof UsageTurnSchema>;
 
@@ -9114,7 +9182,10 @@ export const ClientDiagnosticSchema = z.object({
     // Which build this browser was running, so a report from a tab nobody has reloaded in a week says so.
     build: z.string().max(100).optional().describe("Which build of the app was running."),
     // Bounded and primitive: a stack, an op name, a duration. Kept flat so a line stays greppable.
-    fields: z.record(z.string().max(60), z.union([z.string().max(4_000), z.number(), z.boolean()])).optional().describe("Whatever else was worth keeping."),
+    fields: z
+        .record(z.string().max(60), z.union([z.string().max(4_000), z.number(), z.boolean()]))
+        .optional()
+        .describe("Whatever else was worth keeping."),
 });
 export type ClientDiagnostic = z.infer<typeof ClientDiagnosticSchema>;
 

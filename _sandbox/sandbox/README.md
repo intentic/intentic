@@ -371,6 +371,20 @@ conversation's worktree instead of a path that still reaches the shared checkout
   kind that arrives in bursts. `rollup` keeps the money honest by summing only turns the provider counted, and
   the experiment readers drop failed and cancelled turns, whose zero prose and zero searches are arithmetic
   rather than behaviour.
+- **Automatic tier selection is judged in one place, said out loud, and refusable.** Every turn passes a pure
+  keyword-and-weights judge before it is planned (`src/agent/turn-tier.ts` over the contract's
+  `prompt-complexity.ts`), which costs no call and, in the default `shadow` mode, no I/O either: the verdict is
+  recorded and nothing is moved. It can only ever route DOWN, to a cheaper rung of the provider the turn is
+  already on, because the standard tier is not a setting, it is whatever the user picked. Three things follow
+  from that being invisible for as long as it was. The daemon emits a `tier` frame on every judged turn, so the
+  chat can say which model actually ran and why (silence is what made the mechanism unauditable). The user can
+  refuse: `AgentTurn.tierHold` is a per-conversation veto, persisted on the entry beside `fast`, honoured after
+  the cheaper model is resolved so the chat can still name what was declined. And the ledger's tier columns are
+  read back by `src/usage/tier-report.ts` into `SavingsReport.tier`, the fast share, what the fast-judged turns
+  that stayed on the pick actually cost (never a counterfactual: this log holds what turns cost, not what they
+  would have cost elsewhere), the realized routed spend, and the guardrail, how often the very next turn of the
+  same conversation asked for a dearer model. A mechanism that changes what the user's money buys owes them all
+  three: a warning, a veto, and the numbers.
 - **`slow` spans live in their own file so that `daemon.log` can be read.** `src/platform/perf.ts` warns one line
   per slow span, which is right, and in a live 3.5 MB `daemon.log` those lines were 5,465 of the warnings against
   six errors in the whole file: a log whose signal could not be found. The per-span lines now go to

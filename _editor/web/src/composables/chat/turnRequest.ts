@@ -28,6 +28,10 @@ export interface TurnSettings {
     // Whether to ask for fast speed. Already reconciled against the selected model when it gets here (see
     // Conversation.turnSettings), this is the answer to send, not the toggle's raw position.
     readonly fast: boolean;
+    // Keep the turn on the picked model even when it looks simple (the automatic-tier veto). Unlike `fast` it
+    // is sent even when false: the daemon persists the hold per conversation, and only an explicit false can
+    // clear one set on an earlier turn.
+    readonly tierHold: boolean;
 }
 
 // A provider-minted resumable session and the runtime/account it belongs to, the trio is coherent by
@@ -104,6 +108,9 @@ export const turnRequestBody = (input: {
     // Sent only when asked for. `false` and "not asked" mean the same thing to the daemon, and omitting keeps
     // the body honest about which turns actually reached for a paid speed-up.
     ...(input.settings.fast ? { fast: true } : {}),
+    // Always sent, unlike `fast`: false and "not asked" mean DIFFERENT things here, because the daemon keeps
+    // the hold on the conversation's entry and an omitted field would leave yesterday's veto standing.
+    tierHold: input.settings.tierHold,
     // The turn's STARTING permission posture. The daemon hands it straight to the SDK, so all four modes are
     // real: 'plan' proposes-then-executes, 'default' prompts per tool on the permission card, 'acceptEdits'
     // auto-accepts edits, 'bypassPermissions' asks nothing.

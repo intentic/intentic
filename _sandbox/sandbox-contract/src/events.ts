@@ -667,6 +667,33 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // wasn't asked for.
         reason: z.string().optional(),
     }),
+    /* WHAT THE COMPLEXITY JUDGE MADE OF THIS TURN, emitted once at turn start on every judged turn (that is,
+     * whenever settings.autoTier is not "off"), for the same reason fast_mode exists: a mechanism that can
+     * change what a turn runs on fails silently unless the daemon says what it decided. One tiny frame per
+     * turn, deliberately on the standard verdicts too, because the client's composer preview needs the
+     * conversation's LAST verdict (prompt-complexity.ts `afterHardTurn`) and a frame only on the interesting
+     * turns would leave it guessing on the common ones.
+     *
+     * `tier`/`score`/`rules` are the verdict verbatim (judgeComplexity): the rules are the named-feature
+     * vocabulary of ComplexityRule, carried as strings so a frame from a build with a rule this client hasn't
+     * heard of still parses. `model` is present only when a substitution actually applies to THIS turn, which
+     * is `routed` (mode on, verdict fast, something cheaper published) or `held` (the same turn the user pinned
+     * to their pick, see AgentTurn.tierHold): measure mode never names one because naming it would cost the
+     * catalog read shadow mode exists to avoid.
+     *
+     * `routed` is what HAPPENED, never implied by the verdict: a fast verdict in measure mode, under a hold, or
+     * with nothing cheaper published all run the user's own pick and say `routed: false`. */
+    z.object({
+        kind: z.literal("tier"),
+        tier: z.enum(["fast", "standard"]),
+        score: z.number(),
+        rules: z.array(z.string()),
+        // The cheaper model this turn ran on (routed) or would have run on (held). Absent otherwise.
+        model: z.string().optional(),
+        routed: z.boolean(),
+        // The user pinned this turn to their pick (AgentTurn.tierHold), so a fast verdict moved nothing.
+        held: z.boolean().optional(),
+    }),
     /* The turn is alive but WAITING on the provider: a request failed transiently (5xx, 529, a dropped socket)
      * and the harness is retrying it inside this same turn. A status, not a failure, nothing has been lost and
      * the turn may still finish normally, so the client renders it where "thinking" goes rather than in the

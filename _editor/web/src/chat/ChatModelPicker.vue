@@ -4,6 +4,8 @@ import { limitationsOf } from "@intentic/sandbox-contract";
 import type { Conversation } from "../composables/chat/conversation";
 import type { PickerEntry } from "../composables/chat/modelPicker";
 import { usePickerAccounts } from "../composables/chat/pickerAccounts";
+import { modelLabelFor } from "../composables/chat/providerCatalog";
+import { useSandboxSettings } from "../composables/sandbox/useSandboxSettings";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "./PickerAccounts.vue";
 
@@ -27,7 +29,12 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * teleports behind a `v-if="open"` and BottomSheet does the same, in both ChatPanel and SuggestedSessionBox.
  * These are the refs of the conversation as it was at mount, so a host that swapped the prop in place would go
  * on editing the previous one. Remount, don't rebind. */
-const { provider, harness, model, thinking, fast, fastOffered, fastMode, streaming, account, capabilities } = conversation;
+const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, account, capabilities } = conversation;
+
+// The sandbox-wide automatic-tier mode, which decides whether the per-conversation veto below is worth a row
+// at all: with the feature off there is nothing to veto, and a dead control is worse than none.
+const { settings } = useSandboxSettings();
+const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 
 // Whether the shared block has anything to say for this provider: the one thing this component needs from it
 // BEFORE rendering it, since the footer's border and padding belong to whoever draws them.
@@ -90,10 +97,32 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
 });
 
+/* The one line under the tier control, fastSpeedNotice's twin, and under the same discipline: only when the
+ * judge's answer DISAGREES with what the pick alone would predict. A standard verdict ran the pick, which is
+ * what the picker already says, so it renders nothing; the three states worth a sentence are the substitution
+ * that happened, the substitution the user's veto stopped, and measure mode's "would have" — the last one shown
+ * because awareness is that mode's entire product. */
+const tierNotice = computed<string | undefined>(() => {
+    const answer = tierAnswer.value;
+    if (answer === undefined || answer.tier !== `fast`) {
+        return undefined;
+    }
+    if (answer.routed && answer.model !== undefined) {
+        return `The last turn looked simple, so it ran on ${modelLabelFor(provider.value, answer.model)}.`;
+    }
+    if (answer.held === true) {
+        return `The last turn looked simple; your hold kept it on your pick.`;
+    }
+    if (tierMode.value === `shadow`) {
+        return `The last turn looked simple. Measuring: it still ran on your pick.`;
+    }
+    return undefined;
+});
+
 /* Whether the footer earns the border and padding it draws. The shared block answers for the account list, the
  * routed subscriptions, the harness axis and a standing refusal; everything after it is this conversation's own
  * runtime, and a rule drawn above nothing is what this check exists to prevent. */
-const footerVisible = computed(() => hasContent.value || provider.value === `claude` || limitations.value.length > 0);
+const footerVisible = computed(() => hasContent.value || provider.value === `claude` || limitations.value.length > 0 || tierMode.value !== `off`);
 </script>
 
 <template>
@@ -168,6 +197,28 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                          asked for: agreeing with the toggle is what the toggle already says, and a notice under a
                          working control trains people to ignore notices. -->
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
+                </div>
+
+                <!-- AUTOMATIC TIER, this conversation's word against the sandbox setting: the toggle is the
+                     standing veto (AgentTurn.tierHold), offered only while the feature can do anything, and the
+                     line under it reports what the judge actually decided about the last turn, which is the one
+                     fact the routing would otherwise change silently. -->
+                <div v-if="tierMode !== `off`" class="flex flex-col gap-1">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-2xs font-medium uppercase tracking-wide text-muted">Simple turns may run cheaper</span>
+                        <button
+                            type="button"
+                            class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
+                            :class="{ 'composer-active': tierHold }"
+                            @click="conversation.setTierHold(!tierHold)"
+                            :aria-pressed="tierHold"
+                            aria-label="Keep this conversation on the picked model"
+                        >
+                            <Icon name="credit-card" class="text-2xs" />
+                            <span>{{ tierHold ? "My pick only" : "Allowed" }}</span>
+                        </button>
+                    </div>
+                    <span v-if="tierNotice !== undefined" class="text-2xs text-subtle">{{ tierNotice }}</span>
                 </div>
 
                 <!-- The honest half of the choice: what this runtime can't do, named before the user relies on it.

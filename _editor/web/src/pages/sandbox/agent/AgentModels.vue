@@ -7,6 +7,7 @@ import { clampEffort, effortsFor } from "../../../composables/chat/effortScale";
 import { describeModelPin } from "../../../composables/chat/modelPins";
 import { quickModelGroups, useQuickModel } from "../../../composables/chat/quickModel";
 import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
+import { useSavings } from "../../../composables/sandbox/useSavings";
 import ProviderLogo from "../../../chat/ProviderLogo.vue";
 import ModelPinList from "./ModelPinList.vue";
 
@@ -43,6 +44,17 @@ import ModelPinList from "./ModelPinList.vue";
 const { settings, patch } = useSandboxSettings();
 const quickModel = useQuickModel();
 const agentRun = useAgentRunModel();
+
+/* THE TIER JUDGE'S OWN RECORD, the numbers the Measure state exists to produce, drawn where the switch is so
+ * "switch to On once the spend history says so" points at something on the same screen instead of at a promise.
+ * Thirty days, fixed: long enough for the shares to mean something, short enough that a re-fitted judge isn't
+ * graded on its predecessor's verdicts forever. */
+const TIER_WINDOW_DAYS = 30;
+const tierWindow = computed(() => ({ from: new Date(Date.now() - TIER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }));
+const { savings } = useSavings(tierWindow);
+const tierReport = computed(() => savings.value?.tier);
+const usd = (value: number): string => `$${value.toFixed(2)}`;
+const pct = (part: number, whole: number): string => `${Math.round((part / whole) * 100)}%`;
 
 /* BOTH ROWS ARE THE SAME LIST WIDGET over two different settings, so the editing is written once. It became
  * worth extracting the moment the second row grew a list: add, promote and remove are three ways to write the
@@ -199,11 +211,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              default exists but which model a click is about to bill, and, the day that one is spent, which
              one catches it. A trigger 14rem wide can say one of those; the full-width area under the row can
              say all of them, numbered, in the order they will actually be tried. -->
-        <Row
-            icon="sparkles"
-            title="Quick model"
-            description="Fast models for automatic background tasks."
-        >
+        <Row icon="sparkles" title="Quick model" description="Fast models for automatic background tasks.">
             <template #control>
                 <Picker
                     v-model="quick.adding.value"
@@ -244,11 +252,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              them, but BELOW rather than in the description, because the description column is 14rem wide and
              a five-item list read there as six lines of prose beside a one-line dropdown. The same names on
              the full-width row underneath are one line, and read as the list they are. -->
-        <Row
-            icon="bolt"
-            title="Agent runs"
-            description="Model tier for runs started in a worktree."
-        >
+        <Row icon="bolt" title="Agent runs" description="Model tier for runs started in a worktree.">
             <template #control>
                 <Picker
                     v-model="runs.adding.value"
@@ -313,11 +317,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              that can override a choice the user made a second ago, and a settings page owes that ordering:
              read down and the reach grows, from jobs nobody picked a model for, to runs somebody started, to
              the conversation in front of you. -->
-        <Row
-            icon="credit-card"
-            title="Automatic tier"
-            description="Run simple turns on a cheaper model from the same provider."
-        >
+        <Row icon="credit-card" title="Automatic tier" description="Run simple turns on a cheaper model from the same provider.">
             <template #control>
                 <SegmentedControl
                     :model-value="settings?.autoTier ?? `shadow`"
@@ -334,13 +334,41 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         Every turn runs on the model you picked. Nothing is judged and nothing is recorded.
                     </p>
                     <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
-                        A turn that looks simple runs on the cheaper model below. Follow-ups in a conversation that has already done hard work stay on
-                        your pick, and anything with a screenshot, a stack trace or a plan attached always does.
+                        A turn that looks simple runs on the cheaper model below, the chat says so on the turn it happens, and every conversation can
+                        veto it from the model picker. Follow-ups after hard work stay on your pick, and anything with a screenshot, a stack trace or
+                        a plan attached always does.
                     </p>
                     <p v-else-if="settings !== undefined" class="text-2xs text-muted">
                         <span class="text-content">Measuring</span>: every turn is judged and the verdict is recorded beside what it cost, but every
-                        turn still runs on your own pick. Switch to On once the spend history says the judgement is worth acting on.
+                        turn still runs on your own pick. The record so far is below; switch to On once it says the judgement is worth acting on.
                     </p>
+
+                    <!-- THE JUDGE'S RECORD, the numbers the row above keeps referring to, drawn where the
+                         switch is so the decision and its evidence share a screen. Three facts and a guardrail,
+                         nothing dressed as an experiment: what share of turns looked simple, what those turns
+                         cost (Measure) or saved population-free (On: what the moved turns cost on the cheap
+                         rung), and how often the user overruled the judge right afterwards, which is the number
+                         that says whether to trust it. Absent entirely until something was judged: "not
+                         measured" must not read as "measured, found nothing".
+                         Separated by spacing rather than a rule, the idiom this page moved to: a settings card
+                         that draws a line between every block reads as a stack of unrelated panels. -->
+                    <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="mt-3 flex flex-col gap-0.5">
+                        <p class="text-2xs text-muted">
+                            <span class="text-content">Last {{ TIER_WINDOW_DAYS }} days</span>: {{ tierReport.fast }} of {{ tierReport.judged }} turns
+                            looked simple<template v-if="tierReport.judged > 0"> ({{ pct(tierReport.fast, tierReport.judged) }})</template>.
+                            <template v-if="tierReport.atStakeUsd > 0">
+                                The ones that stayed on your pick cost {{ usd(tierReport.atStakeUsd) }} there.
+                            </template>
+                        </p>
+                        <p v-if="tierReport.routed > 0" class="text-2xs text-muted">
+                            {{ tierReport.routed }} ran on the cheaper model, spending {{ usd(tierReport.routedUsd) }}.
+                        </p>
+                        <p class="text-2xs text-subtle">
+                            Bumped to a dearer model right after a simple-judged turn: {{ tierReport.escalated }} of {{ tierReport.fast
+                            }}<template v-if="tierReport.denied > 0"> · vetoed outright: {{ tierReport.denied }}</template
+                            >. Past a few percent, the judge costs more trust than it saves.
+                        </p>
+                    </div>
 
                     <div class="mt-3 flex flex-col gap-1.5">
                         <div class="flex items-center justify-between gap-3">

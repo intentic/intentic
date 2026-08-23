@@ -87,9 +87,9 @@ export const PersistedAgentSchema = z.object({
      * `afterHardTurn`).
      *
      * Persisted with the four settings above and for the same reason: the next turn's judgement reads it, and
-     * that turn may be sent tomorrow from another device. NOT on AgentSummary, unlike those four, because no
-     * surface draws it: putting it on the roster frame would spend a board broadcast per turn publishing
-     * machinery nobody can see.
+     * that turn may be sent tomorrow from another device. Mirrored onto AgentSummary too, because a surface now
+     * reads it: the composer's pre-send preview runs the same judge over the draft, and this is the one input a
+     * draft cannot contain.
      *
      * The JUDGEMENT, never what ran. A turn judged fast that ran standard anyway (nothing cheaper published, or
      * the feature switched off) is a fact about this sandbox's configuration, while the next turn is asking
@@ -97,6 +97,11 @@ export const PersistedAgentSchema = z.object({
      * conversation older than the feature both are, and "no reason to be suspicious of these words" is the
      * right reading for both. */
     tier: z.enum(["fast", "standard"]).optional(),
+    /* THE CONVERSATION'S STANDING VETO over automatic tier selection (AgentTurn.tierHold), persisted with the
+     * four turn settings above and for the same reason: the composer restores it on open, and the turn that
+     * needs it honoured may be sent tomorrow from another device. Unlike `tier` it IS mirrored onto
+     * AgentSummary, because a surface draws it: the composer's own toggle. */
+    tierHold: z.boolean().optional(),
     account: z.string().optional(),
     sessionId: z.string().optional(),
     // Set when an automation opened this conversation for an outside message (a Discord mention, a web-chat

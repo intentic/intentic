@@ -24,8 +24,8 @@ const servicesWith = (): Services =>
 
 const turn = (over: Partial<AgentTurn> = {}): AgentTurn => ({ prompt: "what is a closure?", model: "claude-opus-5", ...over }) as AgentTurn;
 
-const judge = (over: Partial<AgentTurn> = {}, settings: Partial<SandboxSettings> = {}, lastTier?: "fast" | "standard") =>
-    turnTier(servicesWith(), turn(over), { settings: settingsWith(settings), provider: "claude", lastTier });
+const judge = (over: Partial<AgentTurn> = {}, settings: Partial<SandboxSettings> = {}, lastTier?: "fast" | "standard", hold = false) =>
+    turnTier(servicesWith(), turn(over), { settings: settingsWith(settings), provider: "claude", lastTier, hold });
 
 // --- the three modes ------------------------------------------------------------------------------------
 
@@ -99,11 +99,17 @@ test("an unreadable catalog leaves the turn on its own model rather than failing
 
 test("an endpoint provider gets pins only, never a guess about somebody else's price list", async () => {
     const services = servicesWith();
-    const auto = await turnTier(services, turn(), { settings: settingsWith({ autoTier: "on" }), provider: "endpoint/mine", lastTier: undefined });
+    const auto = await turnTier(services, turn(), {
+        settings: settingsWith({ autoTier: "on" }),
+        provider: "endpoint/mine",
+        lastTier: undefined,
+        hold: false,
+    });
     const pinned = await turnTier(services, turn(), {
         settings: settingsWith({ autoTier: "on", autoFastModels: ["endpoint/mine:my-haiku-1"] }),
         provider: "endpoint/mine",
         lastTier: undefined,
+        hold: false,
     });
 
     expect(auto?.model).toBeUndefined();
@@ -125,4 +131,27 @@ test("a screenshot is never downgraded, whatever the question about it", async (
 
     expect(tier?.verdict.rules).toContain(`images`);
     expect(tier?.model).toBeUndefined();
+});
+
+// --- the veto --------------------------------------------------------------------------------------------
+
+test("the hold names the model it declined but marks it held, so nothing runs it and the chat can still say it", async () => {
+    // The model is resolved and returned so the notice can say what the veto declined; `held` is what tells
+    // the caller (and through it the ledger's tierDenied) that the user overruled a substitution that would
+    // otherwise have happened.
+    const tier = await judge({}, { autoTier: "on" }, undefined, true);
+
+    expect(tier?.verdict.tier).toBe(`fast`);
+    expect(tier?.model).toBe(`claude-haiku-4-5`);
+    expect(tier?.held).toBe(true);
+});
+
+test("the hold is never reported when there was nothing to veto", async () => {
+    // A standard verdict under a hold is not a denial: recording one would count turns where the user's
+    // choice was irrelevant as evidence the judge was overruled.
+    const standard = await judge({ prompt: "refactor the planner across every provider arm" }, { autoTier: "on" }, undefined, true);
+    const shadow = await judge({}, { autoTier: "shadow" }, undefined, true);
+
+    expect(standard?.held).toBeUndefined();
+    expect(shadow?.held).toBeUndefined();
 });

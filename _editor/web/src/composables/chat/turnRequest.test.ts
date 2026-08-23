@@ -11,6 +11,7 @@ const settings = {
     effort: `high`,
     thinking: false,
     fast: false,
+    tierHold: false,
 } as const;
 
 /* The wire body on its own. Every assertion here is about an OMISSION, because that is where the daemon's
@@ -77,6 +78,15 @@ describe(`turnRequestBody`, () => {
     it(`carries the persona only once one is picked`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`actsAs`);
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, actsAs: `work` } }))).toMatchObject({ actsAs: `work` });
+    });
+
+    /* THE TIER VETO IS THE ONE FLAG SENT EVEN WHEN FALSE, and it is the exception that proves the rule above:
+     * the daemon KEEPS this one on the conversation's entry, so an omitted key means "no opinion, leave
+     * yesterday's veto standing" rather than "no". Omitting it the way `fast` is omitted would make a hold
+     * impossible to lift from the composer. */
+    it(`always states the tier hold, because absence there would leave an earlier hold standing`, () => {
+        expect(wire(turnRequestBody(base))).toMatchObject({ tierHold: false });
+        expect(wire(turnRequestBody({ ...base, settings: { ...settings, tierHold: true } }))).toMatchObject({ tierHold: true });
     });
 
     it(`omits an absent title, attachments and editor context rather than sending empties`, () => {

@@ -43,6 +43,14 @@ export interface StoredTab {
     // like `fast`, and for a stronger reason than the picks above: it is armed precisely for the stops nobody is
     // sitting there for, so a reload dropping it would silently end the unattended run it was turned on for.
     readonly autoContinue?: boolean;
+    // The automatic-tier veto (Conversation.tierHold), per TAB like `fast` and for its reason: a property of
+    // this chat, never a remembered default. The daemon also persists it per conversation, so this only bridges
+    // the reload gap for a chat that has not sent a turn since flipping it.
+    readonly tierHold?: boolean;
+    // The complexity judge's last verdict here (Conversation.lastTier), not a pick at all: it is the one input
+    // the composer's pre-send preview cannot re-derive from a draft, and a reload that dropped it would judge
+    // the first follow-up as if the conversation had no history.
+    readonly tier?: "fast" | "standard";
     // The persona this tab acts as, by id. Per TAB and nowhere else: it is never a remembered default (a
     // narrowing must not follow the user into their next chat), so this store is the only thing standing
     // between a picked persona and a page reload. Absent ⇒ the ordinary chat, every account reachable.
@@ -86,6 +94,8 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
     autoContinue: conversation.autoContinue.value,
+    tierHold: conversation.tierHold.value,
+    tier: conversation.lastTier.value,
     harness: conversation.harness.value,
     session: conversation.session.value && {
         id: conversation.session.value.id,
@@ -174,6 +184,8 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
         ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
         ...(typeof raw[`autoContinue`] === `boolean` ? { autoContinue: raw[`autoContinue`] } : {}),
+        ...(typeof raw[`tierHold`] === `boolean` ? { tierHold: raw[`tierHold`] } : {}),
+        ...(raw[`tier`] === `fast` || raw[`tier`] === `standard` ? { tier: raw[`tier`] as `fast` | `standard` } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),
         ...(validSession !== undefined ? { session: validSession } : {}),
         ...(validForkOf !== undefined ? { forkOf: validForkOf } : {}),

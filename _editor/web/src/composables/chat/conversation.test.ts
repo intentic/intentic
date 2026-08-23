@@ -123,6 +123,7 @@ const settings = {
     effort: `high`,
     thinking: false,
     fast: false,
+    tierHold: false,
 } as const;
 
 describe(`Conversation`, () => {
@@ -446,6 +447,7 @@ describe(`Conversation`, () => {
             effort: conversation.effort.value,
             thinking: false,
             fast: false,
+            tierHold: false,
         });
         const body = turnBodies()[0]!;
         expect(body[`agent`]).toBe(`codex`);
@@ -2563,6 +2565,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
             account: `acct-dead`,
         });
 
@@ -2596,6 +2599,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
         });
 
         expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
@@ -2627,6 +2631,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
         });
 
         expect(conversation.error.value).toBe(
@@ -2652,6 +2657,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
         });
 
         expect(conversation.error.value).toBe(`This agent already has a turn running: wait for it to finish.`);
@@ -2725,6 +2731,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
             account: `acct-dead`,
         });
 
@@ -2754,6 +2761,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
             account: `acct-dead`,
         });
 
@@ -2766,6 +2774,7 @@ describe(`Conversation`, () => {
             effort: `medium`,
             thinking: false,
             fast: false,
+            tierHold: false,
             account: `acct-new`,
         });
 

@@ -103,7 +103,11 @@ export type TurnEffect =
     | { readonly kind: "providerRetry"; readonly retry: Extract<AgentEvent, { kind: "provider_retry" }> }
     // What speed the harness is serving this turn at. Also not a transcript write: it belongs beside the
     // composer's own fast control, which is where the user made the choice this is answering.
-    | { readonly kind: "fastMode"; readonly fast: Extract<AgentEvent, { kind: "fast_mode" }> };
+    | { readonly kind: "fastMode"; readonly fast: Extract<AgentEvent, { kind: "fast_mode" }> }
+    // What the complexity judge decided about this turn (fast_mode's twin for automatic tier selection): the
+    // verdict, whether a cheaper model actually ran, and which. Rendered beside the model pick, not in the
+    // transcript, except for the first routed turn, which earns a notice with its own opt-out (conversation.ts).
+    | { readonly kind: "tier"; readonly tier: Extract<AgentEvent, { kind: "tier" }> };
 
 export interface TurnStep {
     readonly state: TurnState;
@@ -763,6 +767,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step(state, { kind: `providerRetry`, retry: event });
         case `fast_mode`:
             return step(state, { kind: `fastMode`, fast: event });
+        case `tier`:
+            return step(state, { kind: `tier`, tier: event });
         case `rate_limit_info`:
         // The live gate, not a headroom reading: it names whichever single window the provider considered
         // binding for that request. `account_usage` carries every pool, and is what the readouts use.

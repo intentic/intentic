@@ -568,10 +568,13 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
             }),
         ),
     );
-    // Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
-    // is a real injection being really disclosed (agent.routes.ts) and not part of what the adapter streamed.
+    /* Preamble frames dropped: an unstubbed git.sync makes every turn in this suite carry a repo-sync note, which
+     * is a real injection being really disclosed (agent.routes.ts) and not part of what the adapter streamed.
+     * The tier verdict goes with it and for the same reason: the complexity judge runs on every turn in the
+     * default mode (settings.autoTier "shadow") and says so on its own frame, which the daemon adds ahead of
+     * the adapter's stream. What this test is about is that the adapter's own frames arrive intact. */
     const frames = await runAgentTurn(client, { prompt: "do it" });
-    expect(frames.filter((frame) => frame.kind !== "preamble")).toEqual(events);
+    expect(frames.filter((frame) => frame.kind !== "preamble" && frame.kind !== "tier")).toEqual(events);
     // Attribution: pending user changes are captured BEFORE the agent runs, so the turn snapshot is agent-only.
     expect(triggers).toEqual(["user", "turn"]);
 });

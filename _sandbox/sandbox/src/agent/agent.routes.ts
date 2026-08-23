@@ -192,6 +192,7 @@ async function* runConversationTurn(
             ...(input.effort !== undefined ? { effort: input.effort } : {}),
             ...(input.thinking !== undefined ? { thinking: input.thinking } : {}),
             ...(input.fast !== undefined ? { fast: input.fast } : {}),
+            ...(input.tierHold !== undefined ? { tierHold: input.tierHold } : {}),
             ...(input.account !== undefined ? { account: input.account } : {}),
             ...(input.origin !== undefined ? { origin: input.origin } : {}),
             /* A fork names its source on its first turn and only then, `forkOf` rides exactly one request, and
@@ -797,16 +798,38 @@ async function* runTurn(
             settings,
             provider: input.agent ?? "claude",
             lastTier: input.conversationId === undefined ? undefined : services.agents.entry(input.conversationId)?.tier,
+            // The turn's own flag when it says anything, else the conversation's persisted veto: `begin` has
+            // already merged the two onto the entry by this point, but a one-shot turn has no entry to read.
+            hold:
+                input.tierHold ??
+                (input.conversationId === undefined ? false : (services.agents.entry(input.conversationId)?.tierHold ?? false)),
         }),
     );
-    // The turn as the rest of this function must see it. Only the model can differ, and only downward.
-    const planned: AgentTurn = tier?.model !== undefined ? { ...input, model: tier.model } : input;
+    // The turn as the rest of this function must see it. Only the model can differ, and only downward, and
+    // never over the user's veto (turn-tier.ts `held`).
+    const tierRouted = tier?.model !== undefined && tier.held !== true;
+    const planned: AgentTurn = tier !== undefined && tier.model !== undefined && tierRouted ? { ...input, model: tier.model } : input;
     if (tier !== undefined && input.conversationId !== undefined) {
         // Fire-and-forget: the next turn's judgement wants it, this one does not, and a registry write must
         // never be the thing that delays a turn the user is waiting on.
         services.agents
             .recordTier(input.conversationId, tier.verdict.tier)
             .catch((error: unknown) => services.logger.warn({ err: error }, "auto tier: recording the verdict failed"));
+    }
+    /* SAY WHAT THE JUDGE DECIDED, on every judged turn, for the reason the fast_mode frame exists: a mechanism
+     * that can change what a turn runs on fails silently unless the daemon reports its own answer. The standard
+     * verdicts ride too — one tiny frame — because the composer's pre-send preview needs the conversation's
+     * last verdict to judge a follow-up the way this file will (prompt-complexity.ts `afterHardTurn`). */
+    if (tier !== undefined) {
+        yield {
+            kind: "tier",
+            tier: tier.verdict.tier,
+            score: tier.verdict.score,
+            rules: [...tier.verdict.rules],
+            ...(tier.model !== undefined ? { model: tier.model } : {}),
+            routed: tierRouted,
+            ...(tier.held === true ? { held: true } : {}),
+        };
     }
     mark("tier");
     const base: AgentRequest = {
@@ -1360,7 +1383,14 @@ async function* runTurn(
                  * publishes nothing cheaper than the pick. Reading the score as the decision would report
                  * savings that were never made. */
                 ...(tier !== undefined
-                    ? { tierScore: tier.verdict.score, tierRules: [...tier.verdict.rules], tierRouted: tier.model !== undefined }
+                    ? {
+                          tierScore: tier.verdict.score,
+                          tierRules: [...tier.verdict.rules],
+                          tierRouted: tier.model !== undefined && tier.held !== true,
+                          // The veto, only when it stood between a fast verdict and a real substitution: the
+                          // strongest negative label the calibration read gets (UsageTurn.tierDenied).
+                          ...(tier.held === true ? { tierDenied: true } : {}),
+                      }
                     : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));

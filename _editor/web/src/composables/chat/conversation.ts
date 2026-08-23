@@ -24,7 +24,7 @@ import { jsonBody } from "../sandbox/jsonBody";
 import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
-import { providerModels, providerTabs } from "./providerCatalog";
+import { modelLabelFor, providerModels, providerTabs } from "./providerCatalog";
 import {
     type CardKind,
     type ChatAttachment,
@@ -319,6 +319,13 @@ export class Conversation {
      * from off, every time, and says so per conversation. (The daemon takes the same position for the same
      * reason, see the fastModePerSessionOptIn note in agent.ts.) */
     readonly fast = ref<boolean>(false);
+    /* KEEP THIS CONVERSATION ON THE MODEL I PICKED: the standing veto over automatic tier selection
+     * (AgentTurn.tierHold). Per conversation and never a global default, like `fast` above and for the mirror
+     * of its reason: this control REFUSES a saving rather than buying a speed-up, and carrying one chat's
+     * distrust into every later chat would quietly switch the feature off without anyone deciding that. Sent on
+     * every turn as a plain boolean (never omitted), because the daemon persists it on the entry and only an
+     * explicit `false` can clear a hold set yesterday. Seeded from the entry on reopen (AgentSummary.tierHold). */
+    readonly tierHold = ref<boolean>(false);
     /* WHO THIS CHAT IS WHEN IT REACHES THE OUTSIDE WORLD, the id of one of the workspace's personas, or
      * undefined for the ordinary chat that keeps every connected account.
      *
@@ -428,6 +435,19 @@ export class Conversation {
      * more often than a property of one turn, and clearing it would make the notice flicker away exactly when
      * the user goes looking for why the toggle did nothing. A turn that changes the answer replaces it. */
     readonly fastMode = ref<Extract<AgentEvent, { kind: `fast_mode` }> | undefined>();
+
+    /* What the complexity judge said about the LAST judged turn here, fastMode's twin for automatic tier
+     * selection, and kept across turns for its reason: "this ran on the cheaper model" is exactly what the user
+     * goes looking for after noticing an answer felt thinner, and a value cleared at the boundary would be gone
+     * by then. Replaced by the next judged turn's frame; undefined until one arrives (the judge off, or a
+     * conversation reopened — the VERDICT half is reseeded from the entry via `lastTier` below). */
+    readonly tierAnswer = ref<Extract<AgentEvent, { kind: `tier` }> | undefined>();
+
+    /* The last verdict alone, the one judge input a draft cannot contain (prompt-complexity.ts `afterHardTurn`),
+     * held apart from `tierAnswer` because it outlives it: a reopened tab has no frames yet, but the entry
+     * remembers the verdict (AgentSummary.tier) and the composer's pre-send preview must judge a follow-up the
+     * way the daemon will. Seeded from the tab, replaced by every tier frame. */
+    readonly lastTier = ref<`fast` | `standard` | undefined>();
 
     /* What the runtime behind this conversation's provider/harness pair can actually do, the same record the
      * daemon plans the turn against (capabilitiesOf), so the composer can't offer a control nothing applies.
@@ -608,6 +628,13 @@ export class Conversation {
         this.fastMode.value = undefined;
     }
 
+    // Not written to any global default, see the `tierHold` ref. The last answer stays up, unlike setFast's:
+    // "ran on the cheaper model" remains true of the turn it describes whatever the toggle now says, and it is
+    // the sentence that explains what the freshly flipped hold is FOR.
+    setTierHold(value: boolean): void {
+        this.tierHold.value = value;
+    }
+
     // Point the conversation's next turn at a specific account of its current provider (the account switcher).
     // Mid-chat, an account change, like a provider change, retires the session at the next send.
     selectAccount(id: string): void {
@@ -733,6 +760,10 @@ export class Conversation {
         this.effortPick.value = source.effortPick.value;
         this.thinking.value = source.thinking.value;
         this.fast.value = source.fast.value;
+        // The veto and the last verdict both carry: a fork continues the same conversation's work, so its next
+        // turn should be judged, and held, exactly as the source's would have been.
+        this.tierHold.value = source.tierHold.value;
+        this.lastTier.value = source.lastTier.value;
         // The pick again, for the same reason: a fork inherits the posture the user chose, not the one the
         // source's runtime happened to allow it.
         this.modePick.value = source.modePick.value;
@@ -1393,6 +1424,9 @@ export class Conversation {
             // that doesn't publish fast mode, where the harness would refuse it and the user would read the
             // refusal as a bug. Same shape as `effort` clamping to the model's own tier list.
             fast: this.fast.value && this.fastOffered.value,
+            // Always the raw boolean, never conditional: the daemon persists the hold on the entry, and only an
+            // explicit false can clear one set on an earlier turn (or from another device).
+            tierHold: this.tierHold.value,
         };
     }
 
@@ -1912,9 +1946,29 @@ export class Conversation {
                 // turn that reported it.
                 this.fastMode.value = effect.fast;
                 return;
+            case `tier`:
+                this.applyTier(effect.tier);
+                return;
             case `error`:
                 this.failures.apply(effect, turn);
                 return;
+        }
+    }
+
+    /* A judged turn's verdict arriving. Two standing facts are replaced (the picker notice's answer, the next
+     * preview's `afterHardTurn` input), and the FIRST routed turn of this conversation earns one muted line in
+     * the transcript with the opt-out a press away — the land/outage rule: the moment an automatic behaviour
+     * fires is the moment "don't do that" is worth exactly one press, not a trip to settings. Later routed
+     * turns rely on the standing notice under the model pick; a line per turn would train the eye to skip it. */
+    private applyTier(answer: Extract<AgentEvent, { kind: `tier` }>): void {
+        const first = answer.routed && (this.tierAnswer.value === undefined || !this.tierAnswer.value.routed);
+        this.tierAnswer.value = answer;
+        this.lastTier.value = answer.tier;
+        if (first && answer.model !== undefined) {
+            this.transcript.notice(
+                `This turn looked simple, so it ran on ${modelLabelFor(this.provider.value, answer.model)} instead of your pick.`,
+                { noticeAction: `tierHold` },
+            );
         }
     }
 }

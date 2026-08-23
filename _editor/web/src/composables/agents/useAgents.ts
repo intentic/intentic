@@ -1084,7 +1084,20 @@ const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | nul
 export const agentSeed = (
     agent: Pick<
         FleetAgent,
-        "id" | "provider" | "harness" | "sessionId" | "title" | "account" | "model" | "effort" | "thinking" | "fast" | "status" | "branch"
+        | "id"
+        | "provider"
+        | "harness"
+        | "sessionId"
+        | "title"
+        | "account"
+        | "model"
+        | "effort"
+        | "thinking"
+        | "fast"
+        | "tier"
+        | "tierHold"
+        | "status"
+        | "branch"
     >,
 ): AgentTabSeed => ({
     id: agent.id,
@@ -1109,6 +1122,8 @@ export const agentSeed = (
     ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
     ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
     ...(agent.fast !== undefined ? { fast: agent.fast } : {}),
+    ...(agent.tier !== undefined ? { tier: agent.tier } : {}),
+    ...(agent.tierHold !== undefined ? { tierHold: agent.tierHold } : {}),
 });
 
 // Opening a card is a SUMMONS, not a store call: the chat panel showing the result may be another window's (the

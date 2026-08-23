@@ -256,6 +256,14 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.fast !== undefined) {
         conversation.fast.value = tab.fast;
     }
+    // The automatic-tier pair: the standing veto (a pick like the others on this line) and the last verdict,
+    // which is not a pick at all but the one judge input the composer's preview cannot re-derive from a draft.
+    if (tab.tierHold !== undefined) {
+        conversation.tierHold.value = tab.tierHold;
+    }
+    if (tab.tier !== undefined) {
+        conversation.lastTier.value = tab.tier;
+    }
     // The one restored pick that is about what happens while nobody is looking, which is why it comes back at
     // all: a reload during an unattended run must not quietly disarm the thing keeping it going.
     if (tab.autoContinue !== undefined) {
@@ -1448,6 +1456,10 @@ export interface AgentTabSeed {
     effort?: string;
     thinking?: boolean;
     fast?: boolean;
+    // The automatic-tier pair the registry keeps per conversation: the last verdict (seeds the composer
+    // preview's afterHardTurn input) and the standing veto (seeds the hold toggle).
+    tier?: "fast" | "standard";
+    tierHold?: boolean;
     // Whether the fleet actually knows this agent, true unless the caller knows better. The board's
     // client-only DRAFT card is the one that does: its conversation must stay a draft (carded, and taken by
     // the focus-leave sweep when abandoned) until a first turn registers it.
@@ -1469,6 +1481,8 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
         effort: agent.effort,
         thinking: agent.thinking,
         fast: agent.fast,
+        tier: agent.tier,
+        tierHold: agent.tierHold,
         title: agent.title,
         session: agent.sessionId === undefined ? undefined : { id: agent.sessionId, provider: agent.provider, account: agent.account },
         draft: ``,

@@ -36,11 +36,18 @@ const JUDGING = new Set(["shadow", "on"]);
 
 export interface TurnTier {
     readonly verdict: ComplexityVerdict;
-    /* The cheaper model this turn should actually run on, or undefined for "run what the user picked", which is
-     * every turn in shadow mode, every turn judged standard, and every turn whose provider publishes nothing
-     * cheaper than the pick. Three different reasons, one answer, deliberately: the caller's job is to honour a
-     * substitution or not, and the ledger keeps the reasons apart (score, rules, tierRouted). */
+    /* The cheaper model this turn resolves to, or undefined for "run what the user picked", which is every turn
+     * in shadow mode, every turn judged standard, and every turn whose provider publishes nothing cheaper than
+     * the pick. Three different reasons, one answer, deliberately: the caller's job is to honour a substitution
+     * or not, and the ledger keeps the reasons apart (score, rules, tierRouted, tierDenied).
+     *
+     * When `held` is set the model is still named but MUST NOT run: the user vetoed the substitution
+     * (AgentTurn.tierHold) and the name is kept so the chat can say what the veto declined, which is what makes
+     * the control legible rather than superstitious. */
     readonly model?: string;
+    // The turn carried the user's veto and a substitution would otherwise have happened. The strongest
+    // calibration label the ledger gets (UsageTurn.tierDenied); never set when there was nothing to veto.
+    readonly held?: boolean;
 }
 
 const isNative = (provider: AgentProvider): provider is NativeProvider => (NATIVE_PROVIDERS as readonly string[]).includes(provider);
@@ -79,7 +86,15 @@ const catalogFor = async (services: Services, provider: AgentProvider): Promise<
 export const turnTier = async (
     services: Services,
     input: AgentTurn,
-    context: { readonly settings: SandboxSettings; readonly provider: AgentProvider; readonly lastTier: "fast" | "standard" | undefined },
+    context: {
+        readonly settings: SandboxSettings;
+        readonly provider: AgentProvider;
+        readonly lastTier: "fast" | "standard" | undefined;
+        /* The user's standing veto, resolved by the CALLER because only it can see both halves: the turn's own
+         * flag (a composer sends its toggle every turn) and the registry entry's persisted one (an automation
+         * or an older client sends nothing, and the conversation's choice must hold anyway). */
+        readonly hold: boolean;
+    },
 ): Promise<TurnTier | undefined> => {
     if (!JUDGING.has(context.settings.autoTier)) {
         return undefined;
@@ -109,5 +124,12 @@ export const turnTier = async (
         models: await catalogFor(services, context.provider),
         pinned: context.settings.autoFastModels,
     });
-    return model === undefined ? { verdict } : { verdict, model };
+    if (model === undefined) {
+        return { verdict };
+    }
+    /* THE VETO, honoured after the substitution is resolved rather than before, on purpose: the model is still
+     * named so the chat can say what was declined, and the catalog read it costs is spent only on the turns
+     * where the veto actually stood between a fast verdict and a cheaper model, which is the one population the
+     * calibration ledger wants labelled (UsageTurn.tierDenied). */
+    return context.hold ? { verdict, model, held: true } : { verdict, model };
 };
