@@ -131,13 +131,17 @@ it("returns to the chat already acting as that persona", async () => {
     expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
 });
 
-// The account count under the name: the rail says how many accounts are connected without spelling out the raw
-// capability ids, which are internal slugs that read as noise on a list of people.
-it("shows an account count for a persona that holds accounts", async () => {
+/* NEITHER THE ACCOUNT SLUGS NOR A COUNT OF THEM belongs under a person's name. The row spelled the raw
+ * capability ids there first (`reddit-radarsuspam`), which are internal slugs, and then a tally of them, which
+ * answers a question the personas page exists for. Nobody reads a list of PEOPLE to find out either. That line
+ * carries what the person is running on and what they are doing instead, which is what the board and the chats
+ * rail put there and the only reading on this card that changes what you do next. */
+it("spells no capability ids or account counts under a persona's name", async () => {
     withPersonas([{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }], [`reddit-work`]);
     const el = await mountList();
-    expect(rowFor(el, `Work`)?.textContent).toContain(`1 account`);
-    expect(rowFor(el, `Work`)?.textContent).not.toContain(`reddit-work`);
+    const row = rowFor(el, `Work`);
+    expect(row?.textContent).not.toContain(`reddit-work`);
+    expect(row?.textContent).not.toContain(`account`);
 });
 
 /* A PERSONA HOLDING NO ACCOUNTS IS AN ORDINARY ROW, not a broken one. It still bounds what a chat can reach
@@ -321,4 +325,33 @@ it("hands the column back to the chats when the switch is flipped", async () => 
     await settle();
     expect(rows(el)).not.toContain(`Work`);
     expect(el.querySelector(`[aria-label="Filter chats by your messages"]`)).not.toBeNull();
+});
+
+/* --- What the row says the person is doing -----------------------------------------------------------------
+ * The card's facts line, in the arrangement the fleet board and the chats rail already use: what it RUNS ON at
+ * the left, what it is DOING at the right. A persona rail row is a person rather than a session, so it reads
+ * one of that person's chats for both (ChatPersonaRail.leadOf: a turn in flight first, else the latest). */
+
+// The model, under the name. On this card it is also the only place the provider can be said at all: the slot
+// every other surface hangs the provider mark in is wearing a FACE here.
+it("shows what the persona's chat runs on under the name", async () => {
+    const el = await mountList();
+    await pinTo(`work`, [`first`]);
+    const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === `first`);
+    if (conversation !== undefined) {
+        conversation.activeModel.value = `sonnet-under-test`;
+    }
+    await settle();
+    expect(rowFor(el, `Work`)?.textContent).toContain(`sonnet-under-test`);
+});
+
+/* ...and a persona nobody has talked to yet says none of it. There is no chat to read a model, an activity or a
+ * clock off, so the card draws none of the three rather than inventing a line for them: the same rule the empty
+ * account slot follows, and for the same reason. A fresh card is an ordinary card, not a broken one. */
+it("says nothing about what a persona runs on until it has a chat", async () => {
+    withPersonas([{ id: `fresh`, label: `Fresh`, capabilities: [] }]);
+    const el = await mountList();
+    const row = rowFor(el, `Fresh`);
+    expect(row).toBeDefined();
+    expect(row?.textContent).not.toContain(`Claude`);
 });
