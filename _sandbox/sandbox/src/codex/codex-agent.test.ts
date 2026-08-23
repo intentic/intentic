@@ -121,7 +121,7 @@ test("a subscription turn uses the translator bearer and the actor marker that u
             http_headers: { "x-openai-actor-authorization": "intentic" },
             supports_websockets: false,
         },
-        "tools.experimental_request_user_input": true,
+        "tools.experimental_request_user_input.enabled": true,
     });
 });
 
@@ -129,7 +129,7 @@ test("a native (account) turn carries no provider config: Codex uses its own cre
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), { ...request, model: "gpt-5-codex" });
     // The question tool is the one key every turn carries; nothing here names a provider or a credential.
-    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input": true });
+    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true });
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
 });
 
@@ -157,7 +157,7 @@ test("process-backed browser MCP servers ride Codex's per-thread config", async 
             env: { DISPLAY: ":99" },
             tool_timeout_sec: 120,
         },
-        "tools.experimental_request_user_input": true,
+        "tools.experimental_request_user_input.enabled": true,
     });
 });
 
@@ -586,7 +586,8 @@ test("a dismissed question tells Codex so rather than leaving it holding the req
 test("an unattended turn is given no way to ask: a card nobody will answer is a deadlock", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), { ...request, unattended: true });
-    expect(calls[0]!.config).toBeUndefined();
+    // Turned off by name, not by omission: Codex registers the tool when the table is absent.
+    expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": false });
 });
 
 test("a question for a secret is refused without a card, because a card's answers are recorded", async () => {

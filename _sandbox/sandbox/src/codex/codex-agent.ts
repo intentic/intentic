@@ -120,17 +120,20 @@ const translatorProvider = (baseUrl: string): Pick<CodexTurn, "modelProvider" | 
     },
 });
 
-/* THE QUESTION TOOL, WHICH CODEX SHIPS OFF. Codex reads `tools.experimental_request_user_input` before it will
- * offer the model any way to ask a person something, so the absence of this one key, not any absence in Codex,
- * is what made "no clarifying questions" true of this harness. Switched on because the adapter now answers the
- * request it produces (`item/tool/requestUserInput` → a question card → the picks, back on the same request).
+/* THE QUESTION TOOL, DECIDED EXPLICITLY ON EVERY TURN. `tools.experimental_request_user_input` is a TABLE, and
+ * `enabled` inside it is the flag Codex reads before it will offer the model any way to ask a person something.
+ * The bare boolean this key once took is now a config-load FAILURE ("invalid type: boolean `true`, expected
+ * struct ExperimentalRequestUserInput"), which killed a turn before its first token. On for an ordinary turn
+ * because the adapter answers the request it produces (`item/tool/requestUserInput` → a question card → the
+ * picks, back on the same request).
  *
- * WITHHELD FROM AN UNATTENDED TURN, for the reason the Claude Code loop withholds its own ask tool: a benchmark,
- * a schedule or another program started this turn, so a card is not merely useless but a DEADLOCK, it parks the
- * turn on an answer that can never arrive and burns until something aborts it. A turn nobody is watching is
- * better off deciding for itself. */
-const questionToolConfig = (request: AgentRequest): Readonly<Record<string, JsonValue>> =>
-    request.unattended === true ? {} : { "tools.experimental_request_user_input": true };
+ * OFF, AND SAID SO, FOR AN UNATTENDED TURN, for the reason the Claude Code loop withholds its own ask tool: a
+ * benchmark, a schedule or another program started this turn, so a card is not merely useless but a DEADLOCK, it
+ * parks the turn on an answer that can never arrive and burns until something aborts it. Written out rather than
+ * left off, because Codex registers this tool when the table is ABSENT: saying nothing now means asking. */
+const questionToolConfig = (request: AgentRequest): Readonly<Record<string, JsonValue>> => ({
+    "tools.experimental_request_user_input.enabled": request.unattended !== true,
+});
 
 /* THE CARD A CODEX QUESTION BECOMES. Single-pick always: Codex's questions carry no multi-select flag, and the
  * free-text answer every card already offers covers its `isOther` case without a field of ours. A question that
@@ -659,7 +662,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                       env: { ...env, CODEX_API_KEY: request.codexEndpoint.authToken },
                       ...withRuntimeConfig(translatorProvider(request.codexEndpoint.baseUrl), runtimeConfig),
                   }
-                : { env, ...(Object.keys(runtimeConfig).length > 0 ? { config: runtimeConfig } : {}) }),
+                : { env, config: runtimeConfig }),
             /* WHERE APP-SERVER IS BORN. An isolated turn's anchor makes the conversation's worktree /work for the
              * app-server and everything it forks, which is what `isolation: "namespace"` in the Codex row claims,
              * before this the turn was merely cwd'd there and an absolute /work path reached the shared checkout.
