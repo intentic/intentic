@@ -58,6 +58,27 @@ test("bake-only and unknown packs compose no overlay fragment", async () => {
     expect(await packFragment("no-such-pack", stamps)).toBeUndefined();
 });
 
+/* AN ARCHITECTURE-SPECIFIC ARTIFACT MUST ASK WHAT IT IS BEING BUILT FOR, and the failure this guards is
+ * invisible until the binary is RUN. The image ships an amd64 and an arm64 half, each built natively on its
+ * own runner, and these same fragments compose into overlays on user machines, Apple silicon included. A pack
+ * that names one architecture's release unconditionally still BUILDS on the other: the tarball fetches, the
+ * digest checks, the files install, and nothing says a word until `--version` reports an exec-format error.
+ * That is exactly how the arm64 halves of `images` and `release` broke on the llamacpp pack.
+ *
+ * `llamacpp-cuda` is the one exemption and it is a statement rather than an oversight: NVIDIA publishes this
+ * toolkit's apt repository for x86_64, so that pack is amd64-only by construction. It is also overlay-only,
+ * so it never rides the published arm64 half and cannot break it. */
+test("a pack naming an architecture branches on the one it is building for", async () => {
+    const NAMES_AN_ARCH = /x86_64|aarch64|[-_](x64|amd64|arm64)\b/i;
+    const ASKS_WHICH = /dpkg --print-architecture|uname -m/;
+    for (const pack of await listPacks()) {
+        if (pack.name === "llamacpp-cuda" || !NAMES_AN_ARCH.test(pack.content)) {
+            continue;
+        }
+        expect(ASKS_WHICH.test(pack.content), `${pack.name} names an architecture but never asks which one it is building for`).toBe(true);
+    }
+});
+
 /* The pin-lockstep contracts each pack file states in its ponytail comment. These are the tests those
  * comments point at: a bump on one side without the other fails here, not as a runtime skew.
  *   browser : the packed playwright version IS the daemon's, or chromium.executablePath() resolves a

@@ -204,7 +204,13 @@ const setupMode = computed(() => setupOpen.value || activeRun.value === `setup`)
  * (`loadPending`). Until that read lands it is `false`, which is not "the manager is up" but "nobody has
  * looked yet". Titling the window on that guess puts `This computer` in the taskbar for the length of one
  * IPC round trip on every arriving install, and a label that changes twice in half a second is one nobody
- * can read. So the title is only ever changed here on a real transition. */
+ * can read. So the title is only ever changed here on a real transition.
+ *
+ * THE READ, AND NOTHING ELSE, IS WHAT IT WAITS FOR — see `loadPending`, which sets this. It used to be set
+ * at the END of mount, after the container list and the handed-over setup had both finished, and the second
+ * of those is the whole install: minutes, on the one path where the title matters most. A link answered from
+ * a browser started the setup, drew the setup screen, and left the taskbar saying `Intentic` until the run
+ * was over — the only outside signal of which screen is up, absent for the entire screen it describes. */
 const faceKnown = ref(false);
 
 /* The OS title follows the screen. Both faces of the app live in ONE frame (windows.rs), so the title is not
@@ -590,11 +596,17 @@ const loadPending = async (): Promise<void> => {
      * empty answer over the winner's state, which handed the window back to the manager face in the middle
      * of the run it had just started. */
     const taken = await takePendingSetup();
+    if (taken !== null) {
+        pending.value = taken;
+        setupOpen.value = true;
+    }
+    /* THE READ HAS LANDED, so this screen may now say which face it is — set here rather than after the run
+     * below, and in the same tick as `setupOpen` so the frame is titled once rather than twice. See
+     * `faceKnown`: everything after this line is the setup HAPPENING, which the title has already announced. */
+    faceKnown.value = true;
     if (taken === null) {
         return;
     }
-    pending.value = taken;
-    setupOpen.value = true;
     await runSetup();
 };
 
@@ -760,13 +772,13 @@ onMounted(async () => {
     updateState()
         .then((stage) => (update.value = stage))
         .catch(() => undefined);
-    // A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
-    // exactly once: by the event above or by these, whichever finds the request still there.
+    /* A link that arrived while this screen was opening was PARKED rather than delivered, so it is picked up
+     * exactly once: by the event above or by these, whichever finds the request still there.
+     *
+     * `loadPending` owns `faceKnown` rather than this line owning it, and that is the point: this `await`
+     * covers the container list AND the whole handed-over install, neither of which the frame's title has any
+     * reason to wait for. See `faceKnown`. */
     await Promise.all([refresh(), loadPending(), drainRecreate()]);
-    /* THE FIRST READ HAS LANDED, so this screen may now say which face it is. Before this line `setupMode`
-     * was the absence of an answer rather than an answer, and the frame effect stands down for exactly that
-     * window: see `faceKnown`. After it, every change is a real transition and drives the frame. */
-    faceKnown.value = true;
     // Only when nothing was handed over: a fresh link is about a setup the user is starting right now, and it
     // outranks one this app restarted the machine for at some point in the past.
     if (pending.value === undefined) {
