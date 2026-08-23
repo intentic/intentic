@@ -191,8 +191,8 @@ option C's host cache is the follow-up once real usage shows weight duplication 
 - **Non-NVIDIA GPUs.** A Vulkan build of `llama-server` would cover AMD/Intel without CUDA's bulk, but
   `--gpus=all` is an NVIDIA-runtime flag; other vendors need `/dev/dri` device directives the allowlist
   doesn't currently speak. Punt for v1, matching the docker card's NVIDIA-only stance.
-- **Context length vs RAM.** Serving flags (context size, parallel slots) affect memory materially; v1
-  should pick conservative defaults per catalog entry rather than expose knobs.
+- ~~**Context length vs RAM.**~~ Settled the hard way; see §8's last entry. The answer was one flat
+  conservative cap plus a quantized cache, not per-entry defaults.
 - **The hosted flavor.** CPU inference works there today; whether hosted hosts ever offer GPUs is a
   platform pricing question, not a design one. `SANDBOX_GPU` already carries the answer either way.
 
@@ -229,3 +229,39 @@ All five slices landed together. The map, for whoever touches this next:
 - **Directive dedupe**: `runtimeDirectivesOf` (sandbox-run) now dedupes tokens, since the docker card's GPU
   option and a local model's both emit `--gpus=all`, and one flag must reach `docker run`.
 - **Docs**: models + docker + capabilities pages; the endpoint card and this card point at each other.
+- **The conversation cache is capped and quantized**, and this closes §6's context-vs-RAM question by having
+  got it wrong first. The build shipped "read the context length from the model", which reads like generosity
+  and is the setting that made every RAM label on the card unachievable: a modern instruct model advertises
+  128K–256K native, and the KV cache for a window that wide is larger than the weights it serves. Measured off
+  the GGUF metadata of models on the curated list: a 3B at its native 131072 wants **14.0 GB** of f16 KV on
+  top of 1.9 GB of weights, against a card reading "~4 GB"; a 30B at 262144 wants **24.0 GB** on top of
+  17.3 GB, against a card reading "~24 GB". The two outcomes were "the allocation fails and the model never
+  serves" and "it serves after eating the machine", and which one a user got depended on hardware the card
+  never asked about. Now: a flat 32768-token cap (the smallest window that still holds a real agent turn with
+  the harness's tool set) and `q8_0` for both halves of the cache, which together put the reservation back in
+  the 1.5–2 GB band the labels already carry. Flash attention is left at its `auto` default rather than forced,
+  because upstream enables it itself when the V cache is quantized and errors only when it was explicitly
+  disabled. Flat rather than per-entry because the per-token cost varies only ~2x across this list, which one
+  conservative cap absorbs, where a per-row number is arithmetic somebody has to redo by hand on every model
+  added. The cap and the labels are pinned to each other by an integration test and by comments in both
+  directions, since the drift is invisible from either side alone: one is a string in the catalog, the other a
+  flag in the handler. Known narrowing: `q8_0` blocks are 32 wide and upstream refuses a quantized cache whose
+  head dimension does not divide by that, unreachable for the curated list (all 128) and a loud startup failure
+  in the entry's panel for a custom GGUF that hits it.
+
+## 9. Runtimes evaluated since
+
+**NInfer** (Aug 2026), which is what enthusiast threads recommend over llama.cpp for single-GPU decode, and
+which does win it: roughly 2–3x on generation for Qwen3.8-27B via MTP speculative decoding, trailing llama.cpp
+by 15–24% on prefill. It cannot be this card's runtime, and not for a close reason. It builds for `sm_120a`
+only, i.e. one consumer GPU (forks exist per architecture, which is itself the tell); it has **no CPU path**,
+which is the entire no-rebuild product; it ships **no binary or install target**, so it would be a CUDA-13
+source build in the image against a prebuilt release chosen deliberately for portability (see the pack's
+SIGILL note); it accepts **five registered Qwen checkpoints** in its own `.ninfer` container, not GGUF, so the
+curated list and the custom-URL field both die with it; and it needs FFmpeg development libraries. It is a
+tuned artifact for one card, not a runtime a product can stand on. If the GPU path ever justifies a
+second engine, the shape to reach for is the *endpoint* card pointed at whatever the owner built themselves,
+which already works and costs us nothing.
+
+The transferable half of that community advice was not the engine. It was the serving configuration — Unsloth's
+quants (already on the curated list) with a quantized KV cache — and that is the §8 entry above.

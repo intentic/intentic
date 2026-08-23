@@ -223,13 +223,40 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
     return promise;
 };
 
-// llama-server, one process per entry, one model per process. --jinja because the modern instruct models the
-// card curates carry their chat/tool template in the GGUF and serve tool calls only through it; --ctx-size 0
-// reads the model's native context length from the GGUF metadata rather than capping it to a fixed default;
-// -ngl offloads every layer exactly when the GPU actually rode (the stamp, not the ask).
+/* THE CONTEXT WINDOW IS CAPPED, AND THAT CAP IS WHAT MAKES THE CARD'S RAM LABELS TRUE. This used to pass
+ * --ctx-size 0, "read the model's native context length from the GGUF", which sounds generous and is the one
+ * setting that made every number on the card a lie. A modern instruct model advertises 128K-256K native, and
+ * the KV cache for a window that wide dwarfs the weights it serves: measured off the GGUF metadata of the
+ * models this card curates, a 3B at its native 131072 wants 14.0 GB of f16 KV on top of 1.9 GB of weights
+ * (card label: "~4 GB"), and a 30B at 262144 wants 24.0 GB on top of 17.3 GB (card label: "~24 GB"). So the
+ * honest outcomes were "allocation fails and the model never serves" and "it serves after eating the machine",
+ * and which one you got depended on hardware the card never asked about.
+ *
+ * 32768 is the cap because it is the smallest window that still holds a real agent turn (the harness's tool
+ * set plus a working conversation) and it puts the KV back in the 1.5-2 GB band for every curated model, which
+ * is the headroom their labels already carry. It is deliberately NOT a per-model knob: the KV cost per token
+ * varies about 2x across this list, which a single conservative cap absorbs, and the alternative is a number
+ * on every catalog row that has to be recomputed by hand whenever a model is added.
+ *
+ * q8_0 for both halves of the cache roughly halves what is left, for a quality cost the local-model community
+ * treats as free at 8 bits, and it is the pairing people actually run these weights with. Flash attention is
+ * left at its own default (`auto`) rather than forced on: upstream auto-enables it when the V cache is
+ * quantized and errors only if it was explicitly disabled, so the default is the safe spelling and forcing it
+ * would take on the failure modes (Grok, tensor split) that the auto path handles.
+ *
+ * The one thing this can refuse that --ctx-size 0 could not: q8_0 blocks are 32 wide, and upstream rejects a
+ * quantized cache whose head dimension does not divide by that. Every model on the curated list is 128, so
+ * this is reachable only through the custom-GGUF field, where it fails loudly at startup with that exact
+ * sentence in the entry's panel rather than serving something wrong.
+ *
+ * --jinja because the modern instruct models the card curates carry their chat/tool template in the GGUF and
+ * serve tool calls only through it; -ngl offloads every layer exactly when the GPU actually rode (the stamp,
+ * not the ask). */
+const CONTEXT_TOKENS = 32768;
+
 const serverCommand = (path: string, port: number): string => {
     const layers = gpuState() === "all" ? " -ngl 999" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size 0 --jinja${layers}`;
+    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${CONTEXT_TOKENS} --cache-type-k q8_0 --cache-type-v q8_0 --jinja${layers}`;
 };
 
 // llama-server's own readiness: /health answers 503 while the model loads, 200 once it serves. Short timeout:

@@ -832,9 +832,15 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "model",
                 label: "Model",
                 default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+                /* THE RAM FIGURES ARE WEIGHTS PLUS CACHE, NOT WEIGHTS. The cache the server needs for the
+                 * conversation is not a rounding error next to the weights: it is sized by the context window,
+                 * and the daemon caps that window and quantizes the cache precisely so these numbers can stay
+                 * in the shape a person can check against their own machine (see the CONTEXT_TOKENS comment in
+                 * handlers/localmodel.ts, which is where the arithmetic lives). Change the cap there and these
+                 * labels are wrong; the two belong to each other. */
                 options: [
-                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, needs ~4 GB free RAM" },
-                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, needs ~6 GB free RAM" },
+                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, needs ~5 GB free RAM" },
+                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, needs ~8 GB free RAM" },
                     { value: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B, needs ~16 GB free RAM" },
                     {
                         value: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf",
@@ -842,7 +848,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     },
                     { value: "custom", label: "Custom GGUF (advanced)" },
                 ],
-                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox.",
+                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox with a 32k-token conversation window.",
             },
             {
                 key: "url",

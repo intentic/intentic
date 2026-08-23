@@ -227,3 +227,34 @@ test("a server that never serves leaves the routing table alone", async () => {
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
+
+/* THE MEMORY THE CARD PROMISED, PINNED AS A COMMAND LINE. This is the assertion that stops the card's RAM
+ * labels drifting away from what the server actually reserves, because the drift is invisible from either side
+ * on its own: the label is a string in the catalog and the allocation is a flag here.
+ *
+ * The bug it locks out shipped once. Asking the server for the model's native context ("as much as it was
+ * trained for", which reads like generosity) sizes the conversation cache off a 128K-256K window, and that
+ * cache is then bigger than the weights: a 3B whose card said "~4 GB" reserved 14 GB of it, a 30B whose card
+ * said "~24 GB" reserved 24 GB on top of 17 GB of weights. Both numbers are measured off the GGUF metadata of
+ * models on the curated list, and neither machine described by those labels can serve what it was sold.
+ *
+ * So both halves are asserted together, and the negative is asserted too: a capped window AND a quantized
+ * cache, because dropping either one puts the reservation back into the gigabytes the labels do not carry. */
+test("the server is started with a capped, quantized conversation cache, not the model's native window", async () => {
+    const root = await workspace();
+    const { ctx, panels } = context(root);
+    stubFetch(wholeFile);
+
+    await drain("bounded", ctx);
+    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+
+    const command = panels.start.mock.calls[0]?.[1]?.command as string;
+    expect(command).toContain("--ctx-size 32768");
+    expect(command).toContain("--cache-type-k q8_0");
+    expect(command).toContain("--cache-type-v q8_0");
+    // The regression itself: "read it from the model" is the one value that makes the labels unachievable.
+    expect(command).not.toContain("--ctx-size 0");
+
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
