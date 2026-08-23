@@ -427,9 +427,7 @@ const render = (map: WorkspaceMap): string => {
     const head = [
         WORKSPACE_MAP_NOTE_HEADER,
         "",
-        "Not the user's words. The daemon read this off the filesystem when this conversation opened, so it is " +
-            "current. It maps the AREAS of this project, not its files, and it is here so the first thing you do " +
-            "does not have to be a directory listing. Where anything actually lives is still yours to search.",
+        "This is current filesystem context. It maps project areas, not file locations; search for exact paths as needed.",
         "",
         map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\``,
         "",
