@@ -39,9 +39,9 @@ describe("every provider/harness pair declares what it can do", () => {
 
         // Nothing may be left to inference: a `permissions` a surface can't read, or a runtime nobody serves,
         // is the drift this record exists to end.
-        expect(["claude-code", "codex", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
+        expect(["claude-code", "codex", "cursor", "opencode", "opencode-gemini", "acp", "pi"]).toContain(capabilities.runtime);
         expect(["modes", "plan"]).toContain(capabilities.permissions);
-        expect(["full", "browser", "http", "none"]).toContain(capabilities.mcp);
+        expect(["full", "tools", "browser", "http", "none"]).toContain(capabilities.mcp);
         // Every runtime executes SOMETHING: a record listing no backend would hide the shell every loop has.
         expect(capabilities.execution).toContain("shell");
         for (const backend of capabilities.execution) {

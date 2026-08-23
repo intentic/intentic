@@ -134,14 +134,16 @@ endpoint. One Node process serves the oRPC contract on `:8787` and a preview pro
 terminals, panel dev servers, and agent shell commands all run in a shared `tmux` server so they
 survive reconnects. Its subsystems:
 
-- **Agent backends**: Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, and Gemini. Kimi
+- **Agent backends**: Claude (agent SDK, spawned per turn), Codex, Grok/opencode, Kimi Code, Gemini, and
+  Cursor. Kimi
   and Google's models are re-served from subscription OAuth through the bundled translator on the Claude Code
   harness
   ([agent/](_sandbox/sandbox/src/agent/)), plus an anonymous website **webchat** widget over SSE. Native Codex
   points app-server at that same subscription-backed translator; generated image items are copied into
   `.intentic/records/artifacts/imagegen/` and stream as paths, never transcript-embedded base64. The five runtimes
-  behind that seam (the Claude Code loop, Codex app-server, OpenCode, ACP, and Pi's RPC mode under the
-  reserved `pi` capability id: [pi/](_sandbox/sandbox/src/pi/)) do not do the same things, so
+  behind that seam (the Claude Code loop, Codex app-server, OpenCode, ACP, Pi's RPC mode under the
+  reserved `pi` capability id: [pi/](_sandbox/sandbox/src/pi/), and Cursor's own runtime run in-process
+  through `@cursor/sdk`: [cursor/](_sandbox/sandbox/src/cursor/)) do not do the same things, so
   what each one *can* do is **declared**, not inferred: `capabilitiesOf(provider, harness)`
   ([sandbox-contract/agent-catalog.ts](_sandbox/sandbox-contract/src/agent-catalog.ts)) is one row per runtime:
   steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery: and both sides of

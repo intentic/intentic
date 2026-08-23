@@ -1,10 +1,12 @@
 import { access } from "node:fs/promises";
 import { type AgentHarness, type AgentProvider, capabilitiesOf, PI_PROVIDER } from "@intentic/sandbox-contract";
 import { codexReadiness } from "../codex/codex-readiness.js";
+import { cursorReadiness } from "../cursor/cursor-readiness.js";
+import { cursorSdk } from "../cursor/cursor-sdk.js";
 import { openCodeBinaryMissing } from "../grok/opencode.js";
 import { onPath } from "../platform/on-path.js";
 import type { AdapterHealth, AgentAdapter } from "./adapter.js";
-import { planAcpTurn, planCodexTurn, planGeminiTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
+import { planAcpTurn, planCodexTurn, planCursorTurn, planGeminiTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
 
 /* RUNTIME → ADAPTER. The whole dispatch, in one table, so adding a runtime is a row rather than a fifth arm
  * grown onto an if/else chain, and so the question "which runtimes exist" has an answer a reader can see.
@@ -123,6 +125,40 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
+/* Cursor's own runtime, in this daemon's process. The one adapter here with nothing to probe on PATH and no
+ * server to reach: what can be missing is the SDK module (a pack, see cursor/cursor-sdk.ts) or a usable
+ * credential, and cursorReadiness answers both in the order that names the right fix. */
+const CURSOR_ADAPTER: AgentAdapter<"cursor"> = {
+    runtime: "cursor",
+    preflight: (services, input, context, granted) => planCursorTurn(services, input, context, granted),
+    health: async (services) => {
+        const readiness = await attempt(() => cursorReadiness(services.cursorStore));
+        if (readiness === undefined) {
+            return unknown();
+        }
+        return readiness.ok ? ready() : unavailable(readiness.detail);
+    },
+    /* A Cursor session is a row in the SDK's own local agent store, so the question is whether that store still
+     * has it. Asked of the SDK rather than of the filesystem, because the store is pluggable (SQLite or JSONL,
+     * and replaceable) and the daemon does not own its layout.
+     *
+     * LISTED RATHER THAN FETCHED, which looks like the long way round and is the only correct one: `Agent.get`
+     * is documented cloud-only, so on a local id it does not answer "no such agent", it fails for a different
+     * reason entirely — and a resume that IS possible would be reported as impossible on every turn.
+     *
+     * An image with no Cursor pack answers false, which is right rather than merely convenient: without the
+     * runtime the resume could not happen whatever the store says. */
+    holdsSession: async (_services, sessionId, cwd) => {
+        const sdk = await cursorSdk();
+        if (sdk === undefined) {
+            return false;
+        }
+        return sdk.Agent.list({ runtime: "local", cwd })
+            .then((result) => result.items.some((agent) => agent.agentId === sessionId))
+            .catch(() => false);
+    },
+};
+
 const ACP_ADAPTER: AgentAdapter<"acp"> = {
     runtime: "acp",
     preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
@@ -181,6 +217,7 @@ const PI_ADAPTER: AgentAdapter<"pi"> = {
 export const ADAPTERS: readonly AgentAdapter[] = [
     CLAUDE_CODE_ADAPTER,
     CODEX_ADAPTER,
+    CURSOR_ADAPTER,
     OPENCODE_ADAPTER,
     OPENCODE_GEMINI_ADAPTER,
     ACP_ADAPTER,

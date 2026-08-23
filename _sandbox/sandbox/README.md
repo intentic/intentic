@@ -18,8 +18,8 @@ reports the profile.
 ## Responsibilities
 
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by a daemon session minted from verified Google identity (`/health` carved out for liveness).
-- Run one Claude Code, Codex app-server, OpenCode, ACP, or Pi turn over the workspace, normalizing each runtime's
-  native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
+- Run one Claude Code, Codex app-server, OpenCode, ACP, Pi or Cursor turn over the workspace, normalizing each
+  runtime's native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
 - Follow the agents a turn starts. Every child: an Agent-tool subagent, a delegated `codex exec` or `opencode
   run`, is a record on one roster (src/agent/subagents.ts), and the delegates report their OWN state into it: a
   daemon-authored codex hook drops event files into a signal spool (src/codex/codex-config.ts →
@@ -197,6 +197,7 @@ reports the profile.
 - [src/app.ts](src/app.ts), the Hono HTTP API: every route the browser and the CLI reach the daemon through.
 - [src/agent](src/agent), **singular**: one conversation. The turn loop, its tools, steering, terminals and diagnostics.
 - [src/agents](src/agents), **plural**: the fleet. The registry, `worktrees.ts`, `isolation.ts`, `land.ts`, `origins.ts`, `landed-presence.ts`.
+- [src/cursor](src/cursor), the Cursor runtime, run in this process: the account store and its browser sign-in (`cursor-credentials.ts`), the adapter (`cursor-agent.ts`), the delta→frame mapping (`cursor-events.ts`), the socket-backed command gate Cursor calls back into (`cursor-hooks.ts`), and the dynamic module resolution that lets the daemon boot without it (`cursor-sdk.ts`).
 - [src/git/git.routes.ts](src/git/git.routes.ts) (status/commit/push over the wire; [src/workspace](src/workspace)) the repo layout the daemon serves. [src/workspace/workspace-scope.ts](src/workspace/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](src/composition.ts) (what is wired to what; [src/main.ts](src/main.ts)) the entrypoint that builds it and serves.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts): the update lifecycle for git-installed
@@ -330,6 +331,23 @@ connected ChatGPT account, so image generation consumes that subscription rather
 Generated PNGs are copied out of Codex's provider state into `.intentic/records/artifacts/imagegen/`; only the durable
 workspace-relative path enters the event stream and transcript. The `@openai/codex-sdk` dependency remains the
 exact CLI-version anchor and the locator for a vendored development fallback, not the native turn transport.
+
+Cursor turns run in THIS PROCESS, through `@cursor/sdk` ([src/cursor](src/cursor)), which makes them the odd
+one out twice over. First on shape: there is no child process, so there is no mount namespace to put a turn in
+(its worktree is enforced by working directory) and no environment to hand a credential to (the selected
+account's key rides the request instead, so the account a turn was planned against is the account it spends).
+Second on distribution: `@cursor/sdk` is the one dependency here whose licence grants no redistribution, so it
+is pruned out of every published image and arrives only through the overlay rebuild an owner approves after
+connecting a Cursor account; the module is loaded dynamically and the daemon boots cleanly without it.
+
+What that buys is the second-richest capability row in the catalog. The daemon's own functions can BE tools
+(`customTools`), so a Cursor turn gets a real question card while Cursor's own `askQuestion` is withheld — in
+headless runs it has been reported to answer itself with a fabricated "Questions skipped by the user", which is
+consent nobody gave. Plan mode is Cursor's own read-only posture rather than this repo's prompt-level
+emulation. And the owner's command rulebook is enforced at the full `hooks` tier, the only foreign runtime that
+reaches it: the daemon writes Cursor's machine-wide hooks file and answers `beforeShellExecution` over a Unix
+socket ([src/cursor/cursor-hooks.ts](src/cursor/cursor-hooks.ts)), so a `hold` genuinely parks on a card while
+Cursor waits on a script rather than being downgraded to a refusal.
 
 That transport is bidirectional, which is what lifts the native Codex runtime off the foreign-loop floor. A
 mid-turn message from `/agent/steer` is delivered as `turn/steer` rather than forcing an abort-and-resend; the

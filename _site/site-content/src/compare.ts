@@ -139,7 +139,7 @@ export const comparePages: ComparePage[] = [
         family: "orchestrators",
         heading: "Both run parallel agents. Only one hands each a machine it configures.",
         sub: "Both run several agents at once, each on its own branch. They differ in what sits under the agent, and what it costs.",
-        theirPitch: "\"Run parallel Claude Code, Codex, and Cursor agents in isolated workspaces on your Mac.\"",
+        theirPitch: '"Run parallel Claude Code, Codex, and Cursor agents in isolated workspaces on your Mac."',
         verdict: [
             "A polished native Mac app for running many agents in parallel, now with Conductor Cloud to offload them. If your agents only need what is already on that Mac, it does the job well.",
             "intentic gives each agent a container with an image you approve and credentials kept inside. All of it is free and MIT.",
@@ -225,7 +225,7 @@ export const comparePages: ComparePage[] = [
         heading: "The nearest neighbour on this page. The difference sits a layer below the feature list.",
         sub: "Superset runs 100+ parallel agents, each in its own git worktree, with diffs, terminals, cron automations and an MCP server. What it does not hand an agent is a machine of its own.",
         theirPitch:
-            "\"Run 100+ parallel coding agents on your machine.\" Superset is a source-available desktop app under the Elastic License 2.0. It runs any CLI agent in its own isolated Git worktree.",
+            '"Run 100+ parallel coding agents on your machine." Superset is a source-available desktop app under the Elastic License 2.0. It runs any CLI agent in its own isolated Git worktree.',
         verdict: [
             "Feature for feature the closest tool here, and the overlap is real: worktree isolation, scheduled runs, a diff between agent and tree, direct model keys.",
             "Superset's agents run in your local environment. Each intentic agent gets a container from an image you approve, credentials kept inside. intentic is MIT and free; Superset is source-available under ELv2 with a paid Pro tier.",
@@ -300,7 +300,7 @@ export const comparePages: ComparePage[] = [
         heading: "T3 Code controls the agents on your machine. intentic gives each agent a machine.",
         sub: "Both share your subscription, an MIT licence and strong phone support. The difference is the layer under the agent.",
         theirPitch:
-            "\"The open-source control plane for coding agents.\" T3 Code runs Claude Code, Codex, OpenCode, Cursor and Grok from one surface across desktop, web and native iOS and Android. Bring your own subscription or fork the whole product.",
+            '"The open-source control plane for coding agents." T3 Code runs Claude Code, Codex, OpenCode, Cursor and Grok from one surface across desktop, web and native iOS and Android. Bring your own subscription or fork the whole product.',
         verdict: [
             "T3 Code drives the harnesses installed on one computer, from desktop, web and first-class iOS and Android apps. It is MIT, free, and asks for nothing you are not already paying for.",
             "intentic changes what an agent inherits: not your machine as it stands, but a container from an image you approve, capabilities that hand it your systems, and events that start it while you sleep.",
@@ -368,7 +368,7 @@ export const comparePages: ComparePage[] = [
         heading: "Synara runs nine agent runtimes in one window. intentic gives one agent a whole machine.",
         sub: "Both are free, local-first and open source, both isolate work in git worktrees, and neither goes near your tokens. They spend their effort at opposite ends of the same stack.",
         theirPitch:
-            "\"Run every coding agent in one workspace.\" Synara is a free, open-source, local-first desktop workspace and control plane for provider runtimes already configured on your machine.",
+            '"Run every coding agent in one workspace." Synara is a free, open-source, local-first desktop workspace and control plane for provider runtimes already configured on your machine.',
         verdict: [
             "Synara supports nine runtimes: Claude Code, Codex, OpenCode, Cursor, Antigravity, Grok Build, Kilo Code, Pi and Factory Droid, with split chats, terminals, previews, worktrees and a one-action PR.",
             "intentic invests in depth underneath: whichever harness you pick gets a container you approve, capabilities that hand it your repo, database and error tracker, and an event that starts it without you.",
@@ -380,7 +380,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "Breadth at the top, or depth underneath",
-                body: "Synara supports nine agents and keeps context when you hand a session to another. intentic supports five natively plus any ACP agent, and controls the image, credentials and events around it.",
+                body: "Synara supports nine agents and keeps context when you hand a session to another. intentic supports six natively plus any ACP agent, and controls the image, credentials and events around it.",
             },
             {
                 title: "The environment is a file you approve",
@@ -392,7 +392,7 @@ export const comparePages: ComparePage[] = [
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
             {
                 label: "Agent runtimes",
-                intentic: "5 native harnesses, plus any ACP agent as a capability",
+                intentic: "6 native harnesses, plus any ACP agent as a capability",
                 them: "9: Claude Code, Codex, OpenCode, Cursor, Antigravity, Grok Build, Kilo Code, Pi, Droid",
                 theirs: true,
             },
@@ -451,7 +451,7 @@ export const comparePages: ComparePage[] = [
         heading: "Two open-source answers to the same question, built outward in different directions.",
         sub: "Both are local, open source and free, with parallel worktree sessions, phone access and teammates.",
         theirPitch:
-            "\"The open-source visual workspace for building with Codex, Claude Code, and more.\" Markdown, mockups, diagrams, data models and CSVs with visual editors, plus a shared team workspace.",
+            '"The open-source visual workspace for building with Codex, Claude Code, and more." Markdown, mockups, diagrams, data models and CSVs with visual editors, plus a shared team workspace.',
         verdict: [
             "Nimbalyst focuses on the artefacts you share with an agent: markdown, mockups, Excalidraw, CSV and data models, each with a visual editor, and a Teams workspace where local agents edit the same documents live.",
             "intentic builds toward the machine underneath: the image, the credentials, the events that wake it. Neither is the other's lesser version.",
@@ -526,24 +526,28 @@ export const comparePages: ComparePage[] = [
         name: "Cursor",
         url: "https://cursor.com/",
         navLabel: "vs Cursor",
-        menuBlurb: "Cloud agents on Cursor's machines, or on yours",
+        menuBlurb: "Bring your Cursor subscription with you",
         family: "editors",
-        heading: "Cursor grew a fleet of cloud agents. The question is now whose machines they run on.",
-        sub: "This used to be editor versus agents. Not any more: Cursor runs parallel cloud agents too. What differs is where they run, what you can change, and the bill.",
+        heading: "intentic runs Cursor's agent. On your machine, on the subscription you already pay for.",
+        sub: "This is less either/or than it was. Cursor is one of the harnesses intentic drives, so the question is no longer which agent, but whose machine it runs on and what you can change about it.",
         theirPitch:
-            "\"Cursor is your coding agent for building ambitious software.\" A desktop IDE plus cloud agents you can launch in parallel, on schedules and triggers, from your editor, phone or Slack.",
+            '"Cursor is your coding agent for building ambitious software." A desktop IDE plus cloud agents you can launch in parallel, on schedules and triggers, from your editor, phone or Slack.',
         verdict: [
-            "An excellent editor that now also runs parallel cloud agents, scheduled automations and triggered runs. Its agents run in Cursor's own sandboxes, and the product is proprietary with paid tiers.",
-            "intentic runs the same kind of fleet on your own machine: a container you approve, credentials kept inside, free and MIT, on the subscription you already pay for. Keep Cursor as your editor; desktop sync opens the agent's latest work there.",
+            "An excellent editor that also runs parallel cloud agents, scheduled automations and triggered runs. Those agents run in Cursor's own sandboxes, and the product is proprietary with paid tiers.",
+            "Connect your Cursor Pro account and intentic runs Cursor's own agent as one of its harnesses, on your hardware, spending the included usage you already pay for. Keep Cursor as your editor; desktop sync opens the agent's latest work there.",
         ],
         overlap: {
             title: "Where you agree",
-            body: "both run agents in parallel with a plan you approve and a diff you review, both reach you on a phone, and both let an agent start itself on a schedule or event.",
+            body: "both run agents in parallel with a plan you approve and a diff you review, both reach you on a phone, and both let an agent start itself on a schedule or event. And intentic runs Cursor's agent itself, so the model that answers can be the same one either way.",
         },
         differences: [
             {
                 title: "Whose machine the cloud agent runs on",
-                body: "Cursor's cloud agents run in Cursor's own sandboxes, on infrastructure you do not control. An intentic sandbox runs on your laptop, desktop or VPS and dials out over a private tunnel, so the same browser experience never moves your code.",
+                body: "Cursor's cloud agents run in Cursor's own sandboxes, on infrastructure you do not control. An intentic sandbox runs on your laptop, desktop or VPS and dials out over a private tunnel, so the same browser experience never moves your code, even when the agent driving it is Cursor's.",
+            },
+            {
+                title: "What sits around the agent",
+                body: "Run under intentic, a Cursor turn picks up things the agent does not ship with: your command rules can stop a shell command and wait for your answer, its questions arrive as cards you click, and it can reach the browser and the accounts your other agents use. The one thing that does not carry over is Cursor's own editor experience, which is why the two are better together than either alone.",
             },
             {
                 title: "Open and free, versus a metered plan",
@@ -560,9 +564,8 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Model choice",
-                intentic: "5 native harnesses on your own subscriptions, plus any ACP agent",
+                intentic: "6 native harnesses on your own subscriptions, Cursor's among them, plus any ACP agent",
                 them: "every frontier model, on Cursor's plan",
-                theirs: true,
             },
             {
                 label: "Parallel / cloud agents",
@@ -578,6 +581,11 @@ export const comparePages: ComparePage[] = [
                 label: "Where credentials live",
                 intentic: "inside a sandbox you own, injected per turn",
                 them: "with Cursor for the cloud agent's run",
+            },
+            {
+                label: "Running Cursor's agent",
+                intentic: "yes, on your hardware, on your Cursor Pro included usage",
+                them: "yes, in Cursor's editor and its cloud sandboxes",
             },
             {
                 label: "Starts on an event",
@@ -598,19 +606,19 @@ export const comparePages: ComparePage[] = [
             },
         ],
         together: {
-            title: "Keep Cursor as your editor",
-            body: "Nothing here asks you to give up Cursor. Desktop sync mirrors the sandbox onto your machine, so an agent lands a change and you open it in the editor you already know.",
+            title: "Keep Cursor as your editor, and bring its agent along",
+            body: "Nothing here asks you to give up Cursor, or to stop paying for it. Connect the account and its agent becomes one of the harnesses your fleet runs, on your own machine; desktop sync then mirrors the sandbox back so you open the result in the editor you already know.",
         },
         pickThem:
-            "You want the best AI editor under your own hands, model choice across every frontier provider matters more than the machine, and running cloud agents on Cursor's infrastructure is a trade you are happy to make.",
+            "You want the best AI editor under your own hands, and running cloud agents on Cursor's infrastructure is a trade you are happy to make rather than one you would rather host yourself.",
         sources: [
             { label: "Cloud agents", url: "https://cursor.com/docs/cloud-agent" },
             { label: "Pricing", url: "https://cursor.com/pricing" },
         ],
         meta: {
-            title: "intentic vs Cursor · cloud agents, on whose machine",
+            title: "intentic vs Cursor · run Cursor's agent on your own machine",
             description:
-                "Cursor runs parallel cloud agents on its own paid infrastructure. intentic runs the same fleet on your machine, free and MIT. Keep Cursor as your editor.",
+                "intentic runs Cursor's own agent as one of its harnesses, on your hardware and your Cursor Pro included usage. Free and MIT. Keep Cursor as your editor.",
             datePublished: PUBLISHED,
         },
     },
@@ -622,12 +630,12 @@ export const comparePages: ComparePage[] = [
         menuBlurb: "A harness intentic runs, plus its own cloud",
         family: "harnesses",
         heading: "intentic runs Claude Code. Its web version runs on Anthropic's machines; intentic's on yours.",
-        sub: "Claude Code is one of the five harnesses intentic drives, so this is less either/or than it looks. Where it competes is its own cloud, which runs on Anthropic-managed VMs.",
+        sub: "Claude Code is one of the six harnesses intentic drives, so this is less either/or than it looks. Where it competes is its own cloud, which runs on Anthropic-managed VMs.",
         theirPitch:
-            "\"Work with Claude directly in your codebase. Build, debug, and ship from your terminal, IDE, Slack, web, and more.\" On the web, tasks run in isolated, Anthropic-managed cloud VMs.",
+            '"Work with Claude directly in your codebase. Build, debug, and ship from your terminal, IDE, Slack, web, and more." On the web, tasks run in isolated, Anthropic-managed cloud VMs.',
         verdict: [
             "A strong terminal-native agent that also runs in the cloud, with background sessions on Anthropic-managed VMs, parallel subagents and scheduled Routines. Its custody model is well documented.",
-            "It is also one of intentic's built-in harnesses: run it beside Codex, Grok, Kimi Code and Google, with your own capabilities and automations around it.",
+            "It is also one of intentic's built-in harnesses: run it beside Codex, Grok, Kimi Code, Google and Cursor, with your own capabilities and automations around it.",
         ],
         overlap: {
             title: "Where you agree",
@@ -720,7 +728,7 @@ export const comparePages: ComparePage[] = [
         heading: "OpenCode is an open harness. In intentic it is one of the agents you run.",
         sub: "OpenCode is MIT, provider-agnostic and private by design. intentic can run it, so this compares a harness with the machine around one.",
         theirPitch:
-            "\"The open source AI coding agent.\" A terminal, desktop and IDE agent that works with any model from 75+ providers, storing none of your code or context.",
+            '"The open source AI coding agent." A terminal, desktop and IDE agent that works with any model from 75+ providers, storing none of your code or context.',
         verdict: [
             "An MIT harness that works with any provider, local models included. It runs parallel sessions, stores none of your code, and fits teams wanting a lean terminal agent.",
             "intentic adds a container, capabilities, a fleet board and automations around a harness. OpenCode plugs in as an ACP agent, so you can use both.",
@@ -748,7 +756,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Models",
-                intentic: "5 native harnesses on your subscriptions, plus any ACP agent",
+                intentic: "6 native harnesses on your subscriptions, plus any ACP agent",
                 them: "any model from 75+ providers, local models included",
                 theirs: true,
             },
@@ -806,7 +814,7 @@ export const comparePages: ComparePage[] = [
         heading: "OpenClaw answers your messages. intentic answers for your repositories.",
         sub: "Both are MIT, self-hosted and a tap away on a phone. What differs is where the agent is pointed, and what it leaves behind.",
         theirPitch:
-            "\"The AI that really does things.\" OpenClaw is a self-hosted gateway with tools, skills and plugins from ClawHub. It works through WhatsApp, Telegram, Slack, Discord, Signal and iMessage.",
+            '"The AI that really does things." OpenClaw is a self-hosted gateway with tools, skills and plugins from ClawHub. It works through WhatsApp, Telegram, Slack, Discord, Signal and iMessage.',
         verdict: [
             "A personal assistant you host yourself: a gateway on your own devices, reachable from whichever chat app is open, that clears an inbox, moves a calendar and turns off a light.",
             "intentic is a workplace for coding agents: a container, a worktree, credentials and a diff you read before anything lands. Different jobs, and they run together.",
@@ -891,7 +899,7 @@ export const comparePages: ComparePage[] = [
         heading: "Hermes gets better at you. intentic gives every agent a machine.",
         sub: "Both are MIT, self-hosted and answerable from a chat app. Hermes spends its effort on what an agent carries between sessions; intentic on what it runs inside.",
         theirPitch:
-            "\"The Agent That Grows With You.\" Nous Research calls Hermes \"the only agent with a built-in learning loop.\" It creates skills from experience, improves them in use and builds a model of you across sessions.",
+            '"The Agent That Grows With You." Nous Research calls Hermes "the only agent with a built-in learning loop." It creates skills from experience, improves them in use and builds a model of you across sessions.',
         verdict: [
             "A general-purpose agent with a learning loop: it writes its own skills, remembers across sessions, schedules its own work, and can put its terminal on Docker, SSH or a hosted sandbox. On memory it does something intentic does not attempt.",
             "intentic focuses on software work and the environment under it: a container you approve, a worktree, connections to your systems, and a diff before anything lands.",
@@ -936,7 +944,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Which models",
-                intentic: "5 native harnesses on subscriptions you already pay for, plus any ACP agent",
+                intentic: "6 native harnesses on subscriptions you already pay for, plus any ACP agent",
                 them: "any endpoint, including Nous Portal, OpenRouter, OpenAI or your own",
                 theirs: true,
             },
@@ -997,7 +1005,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "Custody, stated architecturally",
-                body: "These platforms clone your repository into a vendor-managed VM: Jules and Claude Code call it a Cloud VM, Codex says \"isolated cloud environments,\" Devin sells Devin Cloud. With intentic your browser holds the command token, and the platform stores identity, a URL and grants, never your code or credentials.",
+                body: 'These platforms clone your repository into a vendor-managed VM: Jules and Claude Code call it a Cloud VM, Codex says "isolated cloud environments," Devin sells Devin Cloud. With intentic your browser holds the command token, and the platform stores identity, a URL and grants, never your code or credentials.',
             },
             {
                 title: "Your subscription and hardware, no meter",

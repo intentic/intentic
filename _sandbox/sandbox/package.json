@@ -24,6 +24,7 @@
     "dependencies": {
         "@agentclientprotocol/sdk": "catalog:",
         "@anthropic-ai/claude-agent-sdk": "catalog:",
+        "@cursor/sdk": "catalog:",
         "@hono/node-server": "catalog:",
         "@huggingface/hub": "catalog:",
         "@intentic-app/capability-catalog": "workspace:*",

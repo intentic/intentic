@@ -30,6 +30,10 @@ export const PROVIDERS: readonly { label: string; value: NativeProvider }[] = [
     // and that channel vends Claude and GPT-OSS models alongside Gemini's own (see gemini-models.ts). A section
     // headed "Gemini" holding Claude Opus would be a lie; "Google" is what the whole list has in common.
     { label: "Google", value: "gemini" },
+    // Cursor's own agent runtime, driven through the SDK Anysphere publishes, on the user's Cursor subscription.
+    // Like Google above, the label names the ACCOUNT rather than a model family: the channel vends Anthropic,
+    // OpenAI and xAI models alongside Cursor's own Composer, and no model name covers that list.
+    { label: "Cursor", value: "cursor" },
 ];
 
 // What it COSTS to unlock a provider, and what the user connects to do it, the axis the picker groups on, since
@@ -52,6 +56,11 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
     grok: { kind: "subscription", requirement: "SuperGrok subscription", runs: "Grok" },
     kimi: { kind: "subscription", requirement: "Kimi Code subscription", runs: "Kimi Code" },
     gemini: { kind: "free", requirement: "Google sign-in", runs: "Gemini, Claude and GPT-OSS under Claude Code" },
+    // A `subscription` like the first four, and the requirement names the PLAN rather than the account, because
+    // a free Cursor account signs in perfectly and still cannot run a turn here: the SDK behind this provider is
+    // gated to the paid tiers. Saying "Cursor account" would send someone to a sign-in that ends in a refusal
+    // they had no way to predict.
+    cursor: { kind: "subscription", requirement: "Cursor Pro subscription", runs: "Cursor Agent" },
 };
 
 /* THE PROVIDERS THAT COST NOTHING, derived from the table above rather than named a second time, and read by
@@ -59,14 +68,14 @@ export const PROVIDER_ACCESS: Record<NativeProvider, ProviderAccess> = {
  *
  * The distinction is worth the export. `accessBadge` answers "what does this row cost" for a row the user is
  * already looking at; this answers "which row should a user who has connected nothing be shown FIRST", which is
- * the connect gate's whole job. Ranking the one free channel fifth among five equal buttons is how a user with
+ * the connect gate's whole job. Ranking the one free channel last among equal buttons is how a user with
  * no subscription concluded the product needed one. Deriving the list keeps that promotion honest: a channel
  * that stops being free stops being promoted, from one edit to PROVIDER_ACCESS. */
 export const FREE_PROVIDERS: readonly NativeProvider[] = NATIVE_PROVIDERS.filter((provider) => PROVIDER_ACCESS[provider].kind === "free");
 export const isFreeProvider = (provider: AgentProvider): boolean => FREE_PROVIDERS.includes(provider as NativeProvider);
 
 /* WHOSE ALLOWANCE A TURN ON THIS PROVIDER SPENDS, as the subject of a sentence, a third naming of the same
- * five ids, and the third is not redundancy. PROVIDERS names the RUNTIME the user picks ("Claude Code", "Kimi
+ * six ids, and the third is not redundancy. PROVIDERS names the RUNTIME the user picks ("Claude Code", "Kimi
  * Code") and PROVIDER_ACCESS.requirement names the thing they CONNECT ("Claude subscription", "Google sign-in");
  * neither reads as English in "… usage limit reached", and neither is what a spent quota belongs to.
  *
@@ -80,6 +89,10 @@ export const PROVIDER_VENDOR: Record<NativeProvider, string> = {
     grok: "xAI",
     kimi: "Kimi Code",
     gemini: "Google",
+    // The plan that gets billed is Cursor's, whichever vendor's model actually answered. A Cursor turn on Claude
+    // Opus spends Cursor's included usage and Anthropic has no part in it, the same reasoning that makes a
+    // `gemini` turn say "Google" above.
+    cursor: "Cursor",
 };
 
 // What a turn on this provider costs at the MARGIN, ordering the same three kinds by the only question a
@@ -190,8 +203,8 @@ export const HARNESSES: readonly { label: string; value: AgentHarness }[] = [
 
 /* WHAT A PROVIDER/HARNESS PAIR CAN ACTUALLY DO, one declaration, read by both sides of the wire.
  *
- * Five runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
- * loop, Codex app-server, OpenCode, any ACP agent, and Pi's RPC surface. They do NOT do the same things, and for a long time
+ * Six runtimes serve turns behind one seam (AgentRequest in, AgentEvent frames out): the Claude Code Agent SDK
+ * loop, Codex app-server, OpenCode, Cursor's own loop run in-process, any ACP agent, and Pi's RPC surface. They do NOT do the same things, and for a long time
  * the only thing that said so was a comment inside each adapter, "Ignores the Claude-only request fields",
  * which no surface above it could read. So the composer offered "Ask before each file edit" on a runtime whose
  * every tool call is pre-approved, and offered a reasoning-effort scale to a runtime that drops the field.
@@ -217,7 +230,7 @@ export interface AgentCapabilities {
     // `opencode-gemini` is the OpenCode loop pointed at Gemini rather than at xAI, and it is a SEPARATE runtime
     // id from `opencode` on purpose: adapter health is keyed by this field (adapter-health.ts), so sharing one
     // would make Grok's xAI credential decide whether the picker greys out Gemini, and the reverse.
-    readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "pi";
+    readonly runtime: "claude-code" | "codex" | "opencode" | "opencode-gemini" | "acp" | "pi" | "cursor";
     // Mid-turn injection (the SteeringQueue behind /agent/steer). Needs the SDK's streaming-input mode.
     readonly steering: boolean;
     // How much of the permission-mode axis the runtime honours. "modes" = every PermissionMode, with per-tool
@@ -226,12 +239,20 @@ export interface AgentCapabilities {
     readonly permissions: "modes" | "plan";
     // Can stop mid-turn and ask the user a multiple-choice question (`question` frames).
     readonly questions: boolean;
-    // Which of the turn's tools reach the agent. "full" = http MCP tools + in-process SDK servers + plugin
-    // checkouts + the browser servers; "browser" = the process-backed browser servers alone; "http" = the http
-    // MCP tools alone, and only if the agent advertises http MCP support; "none" = the runtime has no seam for
-    // them at all. Keeping the partial answers distinct matters: a runtime that can drive a connected account
-    // must not be described as tool-less, and one that cannot host daemon-side SDK servers must not claim full.
-    readonly mcp: "full" | "browser" | "http" | "none";
+    /* Which of the turn's tools reach the agent. "full" = http MCP tools + in-process SDK servers + plugin
+     * checkouts + the browser servers; "tools" = all of that EXCEPT plugin checkouts; "browser" = the
+     * process-backed browser servers alone; "http" = the http MCP tools alone, and only if the agent advertises
+     * http MCP support; "none" = the runtime has no seam for them at all. Keeping the partial answers distinct
+     * matters: a runtime that can drive a connected account must not be described as tool-less, and one that
+     * cannot host daemon-side SDK servers must not claim full.
+     *
+     * "tools" exists for the Cursor runtime and would have been a lie either way without it. Cursor's SDK takes
+     * stdio AND http/sse MCP servers, and its `customTools` run host callbacks in this process, which is the
+     * seam an in-process SDK server needs, so calling it "browser" would understate it by three whole
+     * categories. What it genuinely cannot host is a Claude Code PLUGIN checkout: that is a directory layout the
+     * Agent SDK loads, not a protocol, and no other runtime will ever read one. So the gap is real, permanent
+     * and worth its own word rather than being rounded to "full". */
+    readonly mcp: "full" | "tools" | "browser" | "http" | "none";
     /* WHICH EXECUTION BACKENDS THE RUNTIME HOSTS, the ways a turn RUNS things, as opposed to the tools it is
      * handed. "shell" is the runtime's own command tool (Bash on the Claude Code loop, each foreign loop's
      * equivalent); "js" is the sandbox's JavaScript backend (execution/ in the daemon): the model writes a
@@ -468,7 +489,7 @@ const ACP: AgentCapabilities = {
     secrets: "none",
 };
 
-/* THE PI CAPABILITY ID IS RESERVED, the same way the five native ids are: an `agent`-kind capability installed
+/* THE PI CAPABILITY ID IS RESERVED, the same way the six native ids are: an `agent`-kind capability installed
  * under it is served over Pi's own RPC protocol rather than ACP. Pi closed ACP support deliberately (its RPC
  * mode is the embedding surface), and the two want different records. A bare id rather than a namespace like
  * `endpoint/`, because there is exactly one Pi runtime to name; capabilitiesOf still answers from the id alone,
@@ -504,6 +525,86 @@ const PI: AgentCapabilities = {
     secrets: "none",
 };
 
+/* CURSOR'S OWN AGENT RUNTIME, driven through `@cursor/sdk`, the SDK Anysphere publishes, in this daemon's own
+ * process. The second-richest row in this file after the Claude Code loop, and the reason is the SDK rather
+ * than the vendor: it is an EMBEDDING surface, not a CLI wrapped in a pipe, so most of the seams the other
+ * foreign runtimes lack are simply function arguments here.
+ *
+ * WHY NOT THROUGH OPENCODE, which is already in this image and already serves two providers. Every Cursor
+ * bridge for OpenCode is a community reverse-engineering of Cursor's private agent RPC or a localhost shim
+ * around its CLI, and the OPENCODE record above is the weakest in this file. Routing Cursor through it would
+ * have capped a first-party SDK at Grok's ceiling and made the row depend on a third party's spare time.
+ *
+ * WHY THE HARNESS AXIS DOESN'T APPLY, the same way it doesn't for Gemini, and for the mirror-image reason.
+ * Gemini has no Claude Code route because Google refuses that traffic; Cursor has none because there is no
+ * translator route at all, CLIProxyAPI does not serve Cursor as a provider (asked for repeatedly upstream and
+ * closed as not planned), and Cursor publishes no OpenAI-compatible endpoint on a subscription. The SDK IS the
+ * only door, so `capabilitiesOf` answers this record whatever harness the client sent.
+ *
+ * The three axes below that read weaker than they could are deliberate, not unfinished: see the notes on each. */
+const CURSOR: AgentCapabilities = {
+    runtime: "cursor",
+    // The SDK's Run can be cancelled but not written to mid-flight: a second `send` on a busy agent is an
+    // AgentBusyError, not an injection. So the steering queue has nowhere to go and the composer hides it.
+    steering: false,
+    /* Cursor's OWN plan mode (`mode: "agent" | "plan"`), not this repo's two-phase emulation, which is the
+     * better version of the same bargain: the model is put in a read-only posture by the vendor rather than
+     * being asked to behave.
+     *
+     * Not "modes", and that is the honest half. The hook seam below can gate shell, MCP, file reads and file
+     * edits, which is most of the tool surface but not all of it, and a per-tool posture with a silent gap in
+     * it is worse than one that says where it stops. */
+    permissions: "plan",
+    /* TRUE BECAUSE WE SUPPLY THE TOOL, not because Cursor's own askQuestion is wired. That one is put in
+     * `disallowedTools`: in a headless run it has been reported to answer itself with a fabricated "Questions
+     * skipped by the user", which is the single worst failure shape available here, an agent acting on consent
+     * nobody gave. The ask tool the daemon registers through `customTools` runs in this process, parks on a
+     * real card, and cannot invent an answer because it is the thing that receives one. */
+    questions: true,
+    // stdio + http/sse MCP servers, plus host callbacks through `customTools` (which is where the browser stack
+    // and the in-process SDK servers land). Everything but a Claude Code plugin checkout, see the axis note.
+    mcp: "tools",
+    execution: ["shell"],
+    /* Cursor publishes effort as MODEL PARAMETERS rather than as one scale (`ModelListItem.parameters` /
+     * `variants` → `ModelSelection.params`), so the shared tiers are mapped onto whatever the selected model
+     * declares, and a model that declares none simply offers no control. True here because the axis is
+     * forwardable at all; which tiers exist is the live catalog's answer, not this record's. */
+    effort: true,
+    fastMode: false,
+    /* "cwd", and this is the one place the SDK's in-process design costs something. A namespace is built around
+     * a CHILD the daemon spawns (that is how the Claude Code loop and Codex app-server get theirs); Cursor's
+     * loop runs inside the daemon, whose own /work must stay the shared checkout, so an isolated conversation
+     * gets its worktree by working directory and the turn is told where its tree is (turn-preamble.ts). */
+    isolation: "cwd",
+    // Cursor's commands are files on disk (`.cursor/commands`), which the SDK loads but does not publish back,
+    // so there is no list to hand the `/` popover.
+    commands: false,
+    // The SDK runs its shell in-process; there is no tmux session for the terminal panel to attach to.
+    terminals: false,
+    // The SDK throws typed errors (RateLimitError and friends) rather than dissolving a refusal into prose, so
+    // the adapter can file the coded frames auto-resume keys off.
+    recovery: true,
+    /* "append", the OpenCode answer, reached by a completely different road. There is no system-prompt argument
+     * on `Agent.create`; what there is, is the `beforeSubmitPrompt` hook, whose reply carries
+     * `additional_context` that is folded into the request. So the owner's prompt and the persona note DO reach
+     * the model, on top of Cursor's own base prompt, and nothing can replace that base. */
+    instructions: "append",
+    /* THE FULL HOOK TIER, the only foreign runtime that reaches it. Cursor reads `.cursor/hooks.json` in its
+     * local runtime, and `beforeShellExecution` answers with `allow` / `deny` / `ask` plus the messages that
+     * explain it, with `failClosed` available so a crashed gate blocks instead of waving the command through.
+     *
+     * What earns "hooks" rather than "approval" is that a HOLD can genuinely park: the hook is a process the
+     * daemon wrote, so it blocks on the card and the vendor is simply waiting on a script, exactly the shape
+     * that makes the Claude Code loop's PreToolUse hook able to stop and ask. The vendor never decides which
+     * calls to raise, either, which is the caveat the "approval" tier carries and this one does not. */
+    rulebook: "hooks",
+    /* "none", and structurally so, like every other foreign runtime. Masking needs a seam that rewrites what
+     * the model READS after a tool ran; Cursor's `afterShellExecution` fires with the output but its reply is
+     * discarded upstream, and `beforeReadFile` sees the content only to allow or deny it. Both are gates, not
+     * filters, so there is nothing here to substitute a reference back into. */
+    secrets: "none",
+};
+
 // The pair → its record. An `endpoint/<id>` provider is a model API the user configured, driven BY the Claude
 // Code loop on either harness, so it gets that loop's full ceiling, which is the entire point of routing a
 // model through it rather than adopting a second runtime. The reserved `pi` id is the Pi coding agent on its
@@ -527,6 +628,13 @@ export const capabilitiesOf = (provider: AgentProvider, harness: AgentHarness): 
      * where Gemini's loop is decided, and no way left to route Claude Code traffic at Google by asking for it. */
     if (provider === "gemini") {
         return OPENCODE_GEMINI;
+    }
+    // Cursor ignores the harness for the mirror of Gemini's reason: there is no route to it but its own SDK. No
+    // translator serves Cursor and Cursor publishes no model endpoint on a subscription, so "Cursor under Claude
+    // Code" names a road that does not exist. Answering this record whatever was asked for is what keeps that a
+    // fact of the catalog rather than a rule each surface has to remember.
+    if (provider === "cursor") {
+        return CURSOR;
     }
     if (isEndpointProvider(provider)) {
         return CLAUDE_CODE;
@@ -565,7 +673,9 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
           ? ["MCP tools only: no plugins or browser"]
           : capabilities.mcp === "browser"
             ? ["browser tools only: no plugins or other MCP tools"]
-            : []),
+            : capabilities.mcp === "tools"
+              ? ["no plugins: every other tool reaches it"]
+              : []),
     ...(capabilities.execution.includes("js") ? [] : ["no code runs, its shell is the one way to execute"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),

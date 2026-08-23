@@ -1,6 +1,7 @@
 import type { Model, NativeProvider } from "@intentic/sandbox-contract";
 import type { ClaudeCatalog } from "../claude/claude-models.js";
 import type { CodexCatalog } from "../codex/codex-catalog.js";
+import type { CursorCatalog } from "../cursor/cursor-catalog.js";
 import type { GeminiCatalog } from "../gemini/gemini-catalog.js";
 import type { OpenCodeService } from "../grok/opencode.js";
 import type { KimiCatalog } from "../kimi/kimi-catalog.js";
@@ -32,6 +33,9 @@ export interface ProviderCatalog {
 export interface ProviderCatalogDeps {
     readonly claude: ClaudeCatalog;
     readonly codex: CodexCatalog;
+    // Cursor's list is an ENTITLEMENT rather than a public catalog: two accounts on different plans see
+    // different rows, so it is the only one here that cannot be read without a connected credential.
+    readonly cursor: CursorCatalog;
     readonly gemini: GeminiCatalog;
     readonly kimi: KimiCatalog;
     // Grok's catalog is not a catalog service of its own: OpenCode owns the xAI credential and the discovery
@@ -44,6 +48,7 @@ export interface ProviderCatalogDeps {
 export const createProviderCatalogs = (deps: ProviderCatalogDeps): Record<NativeProvider, ProviderCatalog> => ({
     claude: { models: () => deps.claude.models() },
     codex: { models: () => deps.codex.models() },
+    cursor: { models: () => deps.cursor.models() },
     grok: { models: () => deps.openCode.xaiModels() },
     kimi: { models: () => deps.kimi.models() },
     gemini: { models: () => deps.gemini.models() },

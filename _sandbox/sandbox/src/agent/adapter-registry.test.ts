@@ -77,8 +77,18 @@ test("each runtime is asked about a resume by its own session store", async () =
     // health and credentials (adapter-registry.ts), which is not a reason to resume against different stores.
     expect(asked.toSorted()).toEqual(["claude:/work:s-1", "codex:s-1", "opencode:s-1:/work", "opencode:s-1:/work"]);
     // Pi's store is the filesystem itself: its session id is a session-file path (pi/pi-agent.ts), and a
-    // path that does not exist is a resume that cannot happen.
-    expect(held).toEqual({ "claude-code": false, codex: false, opencode: false, "opencode-gemini": false, acp: true, pi: false });
+    // path that does not exist is a resume that cannot happen. Cursor's is the SDK's own local agent store, and
+    // it answers false for the same shape of reason: nothing has ever opened an agent under this cwd, so the
+    // store holds no row for the id and a resume against it could only fail later and less clearly.
+    expect(held).toEqual({
+        "claude-code": false,
+        codex: false,
+        cursor: false,
+        opencode: false,
+        "opencode-gemini": false,
+        acp: true,
+        pi: false,
+    });
 });
 
 /* Health is a fact about the daemon's configuration, so it is probed against a stubbed one. What matters here

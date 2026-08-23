@@ -19,6 +19,8 @@ import { fetchEmailCode } from "../browser/email-codes.js";
 import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
+import { usableCursorAccount } from "../cursor/cursor-credentials.js";
+import { cursorReadiness } from "../cursor/cursor-readiness.js";
 import { personaKitPlugin, readPersonaPrompt } from "../personas/persona-kit.js";
 import {
     type TurnPersona,
@@ -625,6 +627,75 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
         // Override base's input.model with the validated id; the adapter folds attachment paths into the prompt
         // (OpenCode's tools read them from disk).
         request: withAttachments({ ...context.base, model }, context.attachmentPaths),
+    };
+};
+
+/* CURSOR ON ITS OWN RUNTIME, which is the only route to it: no translator serves Cursor, and Cursor publishes
+ * no model endpoint a subscription can reach, so unlike codex/grok there is no harness fork to make here and
+ * `capabilitiesOf` answers the same record either way.
+ *
+ * THE CREDENTIAL IS PICKED HERE AND CARRIED ON THE REQUEST, which is unlike every neighbour and is forced by
+ * the runtime being IN-PROCESS. Codex gets a CODEX_HOME and OpenCode holds its own auth, because both are
+ * separate processes with their own environments; Cursor's loop runs inside this daemon, where an environment
+ * variable is a daemon-wide fact. So the account a turn was planned against rides the request as a key, and
+ * every SDK call the adapter makes takes it explicitly.
+ *
+ * BROWSER SERVERS COME ALONG, which no other foreign runtime here manages: Cursor takes stdio MCP servers per
+ * agent, so the same specs the Claude Code loop is handed are projected into its own config (cursor-tools.ts).
+ * That is the difference between `mcp: "tools"` and Codex's `"browser"` being a real one rather than a claim. */
+export const planCursorTurn = async (
+    services: Services,
+    input: AgentTurn,
+    context: TurnContext,
+    granted: readonly Capability[],
+): Promise<TurnPlan> => {
+    // One resolver, shared with the health probe, so the greyed-out tooltip and the refusal can never name
+    // different reasons (cursor/cursor-readiness.ts).
+    const readiness = await cursorReadiness(services.cursorStore);
+    if (!readiness.ok) {
+        return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
+    }
+    const account = await usableCursorAccount(services.cursorStore, input.account);
+    if (account === undefined) {
+        // Reachable only when the named account was disconnected between the readiness check and here, or when
+        // the client pinned an id that never existed. Both are "pick another one", not "connect one".
+        return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
+    }
+    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
+    // The catalog is never empty, so this always resolves: keep the pinned model while the catalog still offers
+    // it, else take the catalog's default. The SDK has no default of its own for a local agent, which makes
+    // resolving here mandatory rather than merely tidy.
+    const [catalog, browser] = await Promise.all([
+        services.cursorModels.models(),
+        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
+    ]);
+    const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
+    const withAuth = {
+        ...context.base,
+        model,
+        cursorApiKey: account.apiKey,
+        ...(context.steering !== undefined ? { steering: context.steering } : {}),
+    };
+    const withBrowser =
+        Object.keys(browser.servers).length === 0
+            ? withAuth
+            : {
+                  ...withAuth,
+                  sdkServers: browser.servers,
+                  browserOutputDir: browserOutputDir(services.workspace.root),
+                  browserPorts: browser.ports,
+                  browserPasskeys: browser.passkeys,
+                  browserAccounts: browser.accounts,
+              };
+    return {
+        ok: true,
+        run: services.cursorAgent,
+        // A real account id, unlike the routed providers' shared marker: this sandbox stores the credential
+        // itself, so the usage and rate-limit frames can name exactly which connection paid.
+        account: account.id,
+        // The adapter folds attachment paths into the prompt as a file list; Cursor's read tool takes them off
+        // disk, which is the same treatment OpenCode and Pi get.
+        request: withAttachments(withBrowser, context.attachmentPaths),
     };
 };
 

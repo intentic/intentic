@@ -90,6 +90,10 @@ import { type ClaudeUsageRefresher, createClaudeUsageRefresher } from "./usage/c
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { createCodexAgent } from "./codex/codex-agent.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
+import { createCursorAgent } from "./cursor/cursor-agent.js";
+import { createCursorCatalog, type CursorCatalog } from "./cursor/cursor-catalog.js";
+import { type CursorStore, fileCursorStore } from "./cursor/cursor-credentials.js";
+import { createCursorHookService, type CursorHookService } from "./cursor/cursor-hooks.js";
 import { codexThreadExists } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
@@ -476,6 +480,18 @@ export interface Services {
     // Whether a Codex thread's rollout still exists in the sandbox-wide CODEX_HOME, so a resume of a
     // deleted/lost thread opens a fresh thread seeded from the record instead of failing opaquely mid-turn.
     readonly codexThreadExists: (threadId: string) => Promise<boolean>;
+    // Cursor subscription accounts (one <id>.json per account under .intentic/secrets/auth/cursor), several
+    // per sandbox. The sandbox owns the credential outright here: Cursor's sign-in mints a user API key and
+    // this store is the only copy, so there is no vendor-side auth file the way OpenCode holds xAI's.
+    readonly cursorStore: CursorStore;
+    // Cursor's live model catalog, held directly as well as in the table above for the reason Codex's is: a
+    // Cursor turn MUST resolve a concrete model (the SDK has no default of its own) and it needs the vendor's
+    // own parameter record for that id to translate an effort tier. Neither is a question the shared table asks.
+    readonly cursorModels: CursorCatalog;
+    // The socket-backed command gate Cursor's own runtime calls out to before it runs a shell command, and the
+    // registry of which live turn each consult belongs to (cursor/cursor-hooks.ts). One per daemon, because the
+    // hooks file that names it is machine-global.
+    readonly cursorHooks: CursorHookService;
     // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
     // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
     readonly openCode: OpenCodeService;
@@ -492,6 +508,9 @@ export interface Services {
     // Gemini's native runtime: the SAME OpenCode loop grokAgent runs on, bound to a different model backend,
     // which is why it is built from the same factory rather than being a fourth adapter file.
     readonly geminiAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    // Cursor's runtime, run IN THIS PROCESS through @cursor/sdk rather than as a child, which is why it takes
+    // no spawner and why its worktree isolation is by working directory (see the capability record).
+    readonly cursorAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
     // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
     readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
@@ -825,9 +844,19 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // turn resolves its model from it, and a turn's self-heal records the ids the subscription proved valid.
     // Claude's, Kimi's and Gemini's are locals, the table is the only thing that reads them.
     const codexModels = createCodexCatalog(config, join(codexBase, "models.json"));
+    // Hoisted for the same two reasons Codex's catalog is, and one more: the catalog needs the STORE, because
+    // Cursor's model list is an entitlement rather than a public list, so it can only be read through a
+    // connected account's own key.
+    const cursorStore = fileCursorStore(join(authRoot, "cursor"), logger);
+    const cursorModels = createCursorCatalog(cursorStore, join(authRoot, "cursor", "models.json"));
+    // The command gate Cursor's runtime calls back into. Sited beside the credentials rather than in a temp
+    // dir: the socket is the authority to answer a permission card, so it belongs in the one tree this
+    // workspace already treats as secret.
+    const cursorHooks = createCursorHookService(join(authRoot, "cursor"), logger);
     const providerCatalogs = createProviderCatalogs({
         claude: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
         codex: codexModels,
+        cursor: cursorModels,
         gemini: geminiModels,
         kimi: createKimiCatalog(cliProxy),
         openCode,
@@ -1243,6 +1272,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
         agent: runAgent,
         codexAgent: createCodexAgent({ codexHome: codexBase }),
+        cursorStore,
+        cursorModels,
+        cursorHooks,
+        cursorAgent: createCursorAgent({ catalog: cursorModels, hooks: cursorHooks, logger }),
         grokAgent: createGrokAgent(createGrokRunner(openCode)),
         // One warm OpenCode server serves both, so the runner is the same shape, only the model backend the
         // prompt names differs (opencode.ts registers it as an OpenAI-compatible provider on the translator).

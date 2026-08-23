@@ -297,6 +297,19 @@ const main = async (): Promise<void> => {
         await writeCodexConfig(join(services.authRoot, "codex"), translatorUrl, AGENT_SIGNALS_DIR);
     })().catch((error: unknown) => logger.warn({ err: error }, "codex config not written"));
 
+    /* Cursor's command gate: the socket its runtime calls back into before running a shell command, and the
+     * machine-wide hooks file that points at it (cursor/cursor-hooks.ts).
+     *
+     * Started unconditionally rather than gated on the Cursor pack being present, unlike the translator above,
+     * and the asymmetry is deliberate. The translator gate exists because spawning a missing BINARY fails
+     * ENOENT into a restart ladder; there is no process here, only a listening socket and two files, so the
+     * cost of arming it on an image with no Cursor is a few kilobytes. What it buys is that the gate is
+     * already in place the moment a pack IS installed, rather than only after the next daemon restart —
+     * and an installed pack whose rules silently did not apply until a restart is the worst version of this. */
+    if (role.container) {
+        void services.cursorHooks.start().catch((error: unknown) => logger.warn({ err: error }, "cursor command gate not started"));
+    }
+
     // The other end of those hooks: fold what delegated CLIs report (their session id, blocked, their last
     // words) into the subagent roster. Best-effort like the config write above, a sandbox without the spool
     // still settles every delegation through the Bash result path.

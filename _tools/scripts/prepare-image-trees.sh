@@ -85,8 +85,17 @@ done
 # would put the one copy the pack owns back into every image, core included.
 # The -xtype l pass clears the symlinks both prunes leave dangling in dependents' node_modules (never
 # followed, but no reason to ship them).
+# @cursor/sdk is the daemon's Cursor runtime, and the one dependency here pruned for a LICENCE reason rather
+# than a size one: "all rights reserved, use subject to Cursor's Terms of Service" grants no redistribution, and
+# a published image containing it would redistribute it to everyone who pulls that image, Cursor account or not.
+# It is a repo dependency so the daemon type-checks against it and a dev run works; packs/cursor.Dockerfile
+# installs the same pin into /opt/cursor-sdk on the OWNER's own machine once they connect a Cursor account, and
+# cursor/cursor-sdk.ts loads it dynamically so a tree without it still boots. Its ~15 MiB per-platform packages
+# go with it — nothing left behind can resolve them.
 rm -rf "$out"/sandbox/node_modules/.pnpm/onnxruntime-web@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@openai+codex@*
+rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk@*
+rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk-*
 find "$out/sandbox/node_modules" -xtype l -delete
 
 # The baked embedding + reranker models (~57MB from HF). The marker sits OUTSIDE the model dir so the tree

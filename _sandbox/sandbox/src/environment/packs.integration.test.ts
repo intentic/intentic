@@ -20,9 +20,17 @@ test("profiles name real packs, and placement/overlayability inference matches e
     for (const name of profiles["standard"] ?? []) {
         expect(byName.has(name), `standard profile names unknown pack "${name}"`).toBe(true);
     }
-    for (const name of ["docker", "browser", "codex", "opencode", "translator"]) {
+    for (const name of ["docker", "browser", "codex", "cursor", "opencode", "translator"]) {
         expect(byName.get(name)?.overlayable, `${name} must be overlay-installable`).toBe(true);
         expect(byName.get(name)?.postTrees, `${name} must splice above the tree COPYs`).toBe(false);
+    }
+    /* THE ONE PACK NO PROFILE MAY BAKE. @cursor/sdk is all-rights-reserved and grants no redistribution, so a
+     * published image carrying it would be redistributing it to everyone who pulls that image. It reaches a
+     * machine only through the overlay rebuild its owner approves after connecting a Cursor account
+     * (environment/provider-packs.ts). Asserted here rather than left to review, because the failure mode of
+     * someone adding it to a profile is a licence problem rather than a broken build. */
+    for (const profile of Object.values(profiles)) {
+        expect(profile, "no profile may bake the cursor pack: its licence grants no redistribution").not.toContain("cursor");
     }
     for (const name of ["semantic", "messaging"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
@@ -100,6 +108,12 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
     expect(pin(codex.content, /@openai\/codex@(\S+) /)).toBe(sdkDeps["@openai/codex"]);
     const opencode = (await readPack("opencode"))!;
     expect(pin(opencode.content, /opencode-ai@(\S+) /)).toBe(version("@opencode-ai/sdk"));
+    /* cursor: the packed module IS the version the daemon was compiled against. A skew here is worse than the
+     * CLI ones above, because the daemon does not merely TALK to this dependency, it imports it: the types it
+     * type-checked against and the module it loads at runtime would be different releases, with nothing at
+     * either end to notice. */
+    const cursor = (await readPack("cursor"))!;
+    expect(pin(cursor.content, /@cursor\/sdk@(\S+) /)).toBe(version("@cursor/sdk"));
 });
 
 /* The image-compose splice and the daemon must agree on the stamp hash byte for byte: they are two

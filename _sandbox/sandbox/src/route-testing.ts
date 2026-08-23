@@ -294,6 +294,7 @@ export type ServiceOverrides = Partial<Omit<Services, keyof WideSeamOverrides>> 
 export const testProviderCatalogs: Services["providerCatalogs"] = {
     claude: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
     codex: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }) },
+    cursor: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }) },
     grok: { models: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }) },
     kimi: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
     gemini: { models: async () => ({ models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent" }], default: "gemini-pro-agent" }) },
@@ -484,6 +485,25 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Held directly too, exactly as in composition, the native Codex turn's model resolution and its
         // self-heal both read it, and neither goes through the table above.
         codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+        /* NOTHING CONNECTED by default, which is the opposite of the Claude double above and deliberately so.
+         * Claude's is populated because the /agent guard short-circuits every turn without it, so an empty one
+         * would break suites that are not about accounts at all. Nothing guards on Cursor, so the honest
+         * default is a sandbox where it has not been set up, and the suites that exercise it say so. */
+        cursorStore: {
+            read: async () => undefined,
+            write: async () => {},
+            clear: async () => {},
+            list: async () => [],
+            credentials: async () => [],
+            logger: createLogger(testConfig),
+        },
+        cursorModels: { models: async () => ({ models: [{ id: "auto", label: "Auto" }], default: "auto" }), item: async () => undefined },
+        // Registered but never consulted: with no live turn the gate answers allow, which is what an unwired
+        // hook service does anyway.
+        cursorHooks: { start: async () => {}, register: () => () => {}, ready: () => false, close: async () => {} },
+        cursorAgent: async function* () {
+            yield { kind: "done" };
+        },
         history: fakeHistory(),
         agent: async function* () {
             yield { kind: "done" };

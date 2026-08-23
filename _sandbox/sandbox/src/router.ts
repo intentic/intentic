@@ -9,6 +9,7 @@ import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
 import { createClaudeRoutes } from "./claude/claude.routes.js";
+import { createCursorRoutes } from "./cursor/cursor.routes.js";
 import type { Services } from "./composition.js";
 import { createDraftsRoutes } from "./drafts/drafts.routes.js";
 import { createExtensionsRoutes } from "./extensions/extensions.routes.js";
@@ -48,6 +49,7 @@ export const createRouter = (services: Services) => ({
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
     claude: createClaudeRoutes(services),
+    cursor: createCursorRoutes(services),
     drafts: createDraftsRoutes(services),
     extensions: createExtensionsRoutes(services),
     personas: createPersonasRoutes(services),

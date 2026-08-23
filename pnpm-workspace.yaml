@@ -33,6 +33,19 @@ useNodeVersion: 24.18.0
 
 overrides:
   zod: 4.4.3
+  # THE ONE PACKAGE THE ZOD OVERRIDE ABOVE MUST NOT REACH. @cursor/sdk asks for `^3.25.0` and the blanket
+  # override hands it 4.4.3 anyway, which is a MAJOR it was not written against, and the damage is silent
+  # rather than loud: the SDK's published .d.ts is a ~52k-line wall of zod-3 type shapes, every public type in
+  # it is a `z.infer<typeof …>` over one of them, and against zod 4's generics each of those collapses to
+  # `unknown`. So the whole SDK type-checks as `any`-by-another-name — InteractionUpdate, ToolCall,
+  # ModelListItem, all of it — and the daemon's Cursor adapter would have been written with no type safety at
+  # all while appearing fully typed. cursor-events.test.ts pins the repair by asserting a real discriminated
+  # union is visible, so a future blanket bump cannot quietly undo it.
+  #
+  # Scoped back to its declared range, the tw-to-css>postcss precedent. The second copy of zod this adds is
+  # the point rather than a cost: two packages genuinely want different majors, and this workspace's own code
+  # is unaffected because nothing here imports through @cursor/sdk's zod.
+  "@cursor/sdk>zod": 3.25.76
   # @posthog/core 1.40.1's tarball shipped dist .d.ts that import "../src/*.ts" (raw source), dragging posthog's
   # src into vue-tsc under our strict flags (58 errors); 1.40.2 fixes the declaration emit (types-only bump).
   "@posthog/core": 1.40.2
@@ -132,6 +145,14 @@ catalog:
   "@commitlint/cli": 21.2.1
   "@commitlint/config-conventional": 21.2.0
   "@commitlint/types": 21.2.0
+  # Cursor's own agent runtime (cursor/ in the daemon), and the ONE entry in this catalog that is not
+  # open-source: its licence is "all rights reserved, use subject to Cursor's Terms of Service", which grants
+  # no redistribution. So it is a repo dependency for TYPES and for a dev run, and never rides a published
+  # image: prepare-image-trees.sh prunes it and its platform packages out of the deployed tree, and
+  # packs/cursor.Dockerfile installs the same pin back on the owner's OWN machine when they connect a Cursor
+  # account. packs.integration.test.ts holds the two in step, the @openai/codex precedent.
+  # ponytail: bump together with packs/cursor.Dockerfile.
+  "@cursor/sdk": 1.0.28
   "@dagrejs/dagre": 3.0.0
   # DiceBear v10 discontinued the per-style npm packages (@dicebear/adventurer and its ~50 siblings) in favour of
   # one package of JSON style definitions, so the pair below is what used to be `core` + `adventurer`. They

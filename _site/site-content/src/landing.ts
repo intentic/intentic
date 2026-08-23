@@ -320,7 +320,7 @@ export const landingContent: LandingContent = {
         // messaging.md, and the app, the docs and every other band already do it.
         heading: "intentic is free. Agents use AI plans you already pay for.",
         sub: "You bring the AI plans, your machine does the work, and there is nothing to pay us.",
-        // `logo` is the provider's own brand mark, the same five the app draws beside every session. The
+        // `logo` is the provider's own brand mark, the same set the app draws beside every session. The
         // paths live in @intentic/constants so the two surfaces cannot drift apart.
         accounts: [
             { name: "Claude", logo: "claude", detail: "Opus, Sonnet and Haiku, on your Claude plan" },
@@ -328,6 +328,10 @@ export const landingContent: LandingContent = {
             { name: "Grok", logo: "grok", detail: "on your SuperGrok plan" },
             { name: "Kimi Code", logo: "kimi", detail: "on your Kimi Membership" },
             { name: "Google", logo: "gemini", detail: "Gemini, Claude and GPT-OSS, free on a Google sign-in" },
+            // Named for the PLAN rather than the account, like the others, and here that distinction is load
+            // bearing: a free Cursor account signs in and still cannot run a turn, because the agent behind
+            // this row is gated to the paid tiers.
+            { name: "Cursor", logo: "cursor", detail: "Composer and the frontier models, on your Cursor Pro plan" },
         ],
         points: [
             "We never meter your tokens or add a markup.",

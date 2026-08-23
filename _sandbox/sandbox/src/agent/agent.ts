@@ -127,6 +127,15 @@ export interface AgentRequest {
     // and authenticates with the fixed local bearer, no per-account OAuth auth.json. codexHome then holds only
     // sessions/rollouts, never a credential.
     readonly codexEndpoint?: { readonly baseUrl: string; readonly authToken: string };
+    /* The selected Cursor account's user API key for this turn (Cursor path only), resolved by planCursorTurn
+     * from the sandbox's own store.
+     *
+     * Passed per REQUEST rather than per process, unlike every other credential on this shape, and the reason
+     * is that Cursor's runtime is in-process: there is no child to give an environment to, and CURSOR_API_KEY
+     * in the daemon's own env would silently become the credential for every Cursor turn in the sandbox,
+     * including ones the user pointed at a different account. Every SDK call this adapter makes takes the key
+     * explicitly, so the account a turn was planned against is the account it spends. */
+    readonly cursorApiKey?: string;
     // How tool calls are gated this turn. Defaults to the autonomous sandbox posture (bypassPermissions),
     // the container's isolation is what makes that safe. The agent can move itself out of it mid-turn.
     readonly permissionMode?: PermissionMode;

@@ -54,23 +54,41 @@ const DESTINATION: Record<string, string> = {
     grok: `x.ai`,
     kimi: `Kimi Code`,
     gemini: `Google`,
+    cursor: `Cursor`,
 };
 const destination = computed(() => DESTINATION[provider] ?? provider);
 
+/* Whether this is a NO-PASTE sign-in: the provider (or the daemon) finishes it out of band and this panel is
+ * read-only, as against one that hands the user something to bring back.
+ *
+ * Three ways to know, because there are three shapes of handshake. A routed flow says so outright. A native one
+ * with a code is Grok's, pre-filled at x.ai. And a native one with a HANDSHAKE id is Cursor's, which has
+ * neither a code nor anything to paste: the page it opens is already addressed to the attempt, and the daemon
+ * holds the half that redeems it. That last case is why this cannot simply read `code !== ""` any more — an
+ * empty code used to mean "paste-back", and for Cursor it means the opposite. */
 const deviceFlow = computed(() => {
     const live = flow.value;
-    return live !== undefined && (`flow` in live ? live.flow === `device` : live.code !== ``);
+    if (live === undefined) {
+        return false;
+    }
+    if (`flow` in live) {
+        return live.flow === `device`;
+    }
+    return live.code !== `` || live.handshake !== undefined;
 });
 
 // Only the mechanics a user cannot infer from the button they just pressed and the field in front of them.
 // Anthropic's flow says everything it needs to in "Open Anthropic" + "Paste code…", so it gets no line at all.
 const hint = computed<string | undefined>(() => {
     if (deviceFlow.value) {
-        return kind === `native`
-            ? `Already filled in at x.ai: approve on any device.`
-            : flow.value?.code
-              ? `Sign in and approve: enter this code if the page asks for it.`
-              : `Approve the sign-in on the page that opens.`;
+        if (kind === `native`) {
+            // Two native no-paste flows, and the reassurance each needs is different: Grok's is "the code is
+            // already in the page", Cursor's is "there is no code, and nothing comes back here".
+            return provider === `cursor`
+                ? `Sign in on the page that opens: this sandbox finishes the rest and the account appears here.`
+                : `Already filled in at x.ai: approve on any device.`;
+        }
+        return flow.value?.code ? `Sign in and approve: enter this code if the page asks for it.` : `Approve the sign-in on the page that opens.`;
     }
     return undefined;
 });

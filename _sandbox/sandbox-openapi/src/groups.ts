@@ -282,6 +282,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Begin a sign-in with a code typed on another page, see what is connected, disconnect it. The sandbox waits for the sign-in to complete on its own, so nothing is pasted back.",
     },
     {
+        name: "cursor",
+        shelf: "models",
+        label: "Cursor accounts",
+        summary: "Connecting a Cursor subscription, and the accounts already connected",
+        description:
+            "Begin a sign-in, abandon one nobody finished, see what is connected, rename one, disconnect one. A sandbox can hold several side by side. Nothing is pasted back and there is no code to type: the page that opens is already addressed to the attempt, and the sandbox completes the exchange itself, so the way to learn it worked is to watch the account list.",
+    },
+    {
         name: "translator",
         shelf: "models",
         label: "Routed providers",

@@ -227,6 +227,12 @@ export const harnessReadyProviders = async (services: Services): Promise<Record<
         grok: routed("grok"),
         kimi: routed("kimi"),
         gemini: routed("gemini"),
+        /* Cursor is the only row here that is NOT a translator question, because there is no translator route
+         * to Cursor at all: its own SDK is the one door, and the credential is a stored key this sandbox owns
+         * outright. A key past its expiry reads as not-ready, since the turn that used it would be refused. */
+        cursor: (await services.cursorStore.credentials()).some(
+            (account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now(),
+        ),
     };
     // Named rather than returned raw so a provider added to NATIVE_PROVIDERS without a rung here fails the
     // type-check instead of silently reading back `undefined` (AgentProvider is a bare string on the wire).

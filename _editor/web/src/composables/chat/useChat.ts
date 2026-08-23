@@ -750,7 +750,13 @@ const managedAccounts = computed<readonly OauthAccount[]>(() => accountsOf(manag
 // them out (subscriptionOnly) before anything here is reached.
 // Catalogs are deliberately NOT here: they are the one question every provider answers identically, so they
 // come off a single parameterized route (modelsPath below).
-const providerBase = (p: AgentProvider): string => (p === `grok` ? `/grok` : `/claude`);
+const providerBase = (p: AgentProvider): string => (p === `grok` ? `/grok` : p === `cursor` ? `/cursor` : `/claude`);
+
+/* Where a native sign-in BEGINS, which is the one account path that is not uniform. Claude and Grok both mint
+ * their handshake at `<base>/oauth/start`; Cursor's is `/cursor/login/start`, because what it starts is not an
+ * OAuth handshake this client takes any part in — the daemon runs the whole PKCE exchange itself and the
+ * redeemable half never leaves it (see cursor.contract.ts). Naming it differently is the wire saying so. */
+const connectStartPath = (p: AgentProvider): string => (p === `cursor` ? `/cursor/login/start` : `${providerBase(p)}/oauth/start`);
 
 // Where a provider's model catalog is read from. Two shapes, because there are two kinds of subject: a native
 // provider is one of a closed set the daemon holds a catalog for, so it rides the shared route as a parameter;
@@ -1027,6 +1033,11 @@ interface NativeConnectFlow {
     readonly url: string;
     readonly code: string;
     readonly pkce?: { readonly verifier: string; readonly state: string };
+    /* Cursor only: the attempt's id, so abandoning the card also stops the daemon polling Cursor for a sign-in
+     * nobody is going to complete. Not a credential and not redeemable — the proof that finishes the sign-in
+     * never leaves the sandbox — which is exactly why it can sit on this shape when `pkce` above could not
+     * have. */
+    readonly handshake?: string;
 }
 const nativeConnectFlow = ref<NativeConnectFlow | undefined>(undefined);
 // The display label the user typed for the account being connected (blank ⇒ the daemon derives one from the
@@ -1203,43 +1214,60 @@ export const loadAllProviderModels = async (): Promise<void> => {
 
 // Device-code sign-in expires after 15 minutes; stop polling past it.
 const CODEX_POLL_DEADLINE_MS = 15 * 60 * 1000;
-let grokPollTimer: ReturnType<typeof setTimeout> | undefined;
+let nativePollTimer: ReturnType<typeof setTimeout> | undefined;
 
-// Drop any in-progress handshake: clear the poll timer and the connect UI state. Safe to call repeatedly.
+/* Drop any in-progress handshake: clear the poll timer and the connect UI state. Safe to call repeatedly.
+ *
+ * Cursor gets one extra step, and it is the only flow here that needs one: its handshake is a POLL RUNNING IN
+ * THE DAEMON, not in this tab, so closing the card would otherwise leave the sandbox asking Cursor about a
+ * sign-in nobody is completing for the next eighteen minutes. Fire-and-forget: the attempt expires on its own
+ * anyway, so a failed cancel costs nothing worth reporting. */
 const cancelConnect = (): void => {
-    if (grokPollTimer !== undefined) {
-        clearTimeout(grokPollTimer);
-        grokPollTimer = undefined;
+    if (nativePollTimer !== undefined) {
+        clearTimeout(nativePollTimer);
+        nativePollTimer = undefined;
+    }
+    const flow = nativeConnectFlow.value;
+    if (flow?.provider === `cursor` && flow.handshake !== undefined) {
+        void sandboxRequest(`/cursor/login/cancel`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ handshake: flow.handshake }),
+        }).catch(() => undefined);
     }
     nativeConnectFlow.value = undefined;
     connectLabel.value = ``;
 };
 
-// One tick of the Grok device-flow poll: OpenCode completes the xAI token exchange on approval, so we just ask
-// the sandbox whether xAI is connected yet, flipping to connected on success. Only the no-paste (device) flow
-// polls; a paste-back method finishes via completeConnect instead. Supersession is checked against the flow
-// OBJECT the tick was started for, so a restarted (or cancelled) handshake retires the ticks of the old one.
-const pollGrokOnce = async (deadline: number): Promise<void> => {
+/* One tick of a NO-PASTE sign-in's poll. Two providers use it and they finish out-of-band for different
+ * reasons: OpenCode completes the xAI token exchange itself on approval, and the daemon completes Cursor's PKCE
+ * exchange itself (its verifier must never reach this tab). Either way the question this asks is the same one
+ * — has an account appeared yet — which is why it is one function taking the provider rather than two nearly
+ * identical ones. A paste-back method (Claude's) finishes via completeConnect instead and never polls.
+ *
+ * Supersession is checked against the flow OBJECT the tick was started for, so a restarted or cancelled
+ * handshake retires the ticks of the old one rather than racing them. */
+const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<void> => {
     const flow = nativeConnectFlow.value;
-    if (flow?.provider !== `grok`) {
+    if (flow?.provider !== target) {
         return;
     }
     if (Date.now() > deadline) {
-        error.value = `The Grok sign-in expired: start the connection again.`;
+        error.value = `The ${providerLabel(target)} sign-in expired: start the connection again.`;
         cancelConnect();
         return;
     }
     try {
-        const grokAccounts = await refreshAccounts(`grok`, false);
+        const connected = await refreshAccounts(target, false);
         if (nativeConnectFlow.value !== flow) {
             return;
         }
-        if (grokAccounts.length > 0) {
+        if (connected.length > 0) {
             cancelConnect();
             error.value = null;
             // The account just connected, load its model catalog now so the picker is populated immediately,
             // not only after the next reselect or reload.
-            void loadProviderModels(`grok`);
+            void loadProviderModels(target);
             return;
         }
     } catch {
@@ -1248,7 +1276,7 @@ const pollGrokOnce = async (deadline: number): Promise<void> => {
     if (nativeConnectFlow.value !== flow) {
         return;
     }
-    grokPollTimer = setTimeout(() => void pollGrokOnce(deadline), 3000);
+    nativePollTimer = setTimeout(() => void pollNativeOnce(target, deadline), 3000);
 };
 
 // Reset the whole chat singleton when the active sandbox changes (see sandboxScope). Conversations, history,
@@ -1983,7 +2011,7 @@ const startConnect = async (): Promise<void> => {
     try {
         let response: Response;
         try {
-            response = await sandboxRequest(`${providerBase(target)}/oauth/start`, { method: `POST` });
+            response = await sandboxRequest(connectStartPath(target), { method: `POST` });
         } catch (err) {
             error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
             return;
@@ -1999,7 +2027,20 @@ const startConnect = async (): Promise<void> => {
             // for reassurance. OpenCode polls to completion, we poll /grok/accounts until connected.
             const body = (await response.json()) as { url: string; code: string };
             nativeConnectFlow.value = { provider: `grok`, url: body.url, code: body.code };
-            grokPollTimer = setTimeout(() => void pollGrokOnce(Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
+            nativePollTimer = setTimeout(() => void pollNativeOnce(`grok`, Date.now() + CODEX_POLL_DEADLINE_MS), 3000);
+            return;
+        }
+        if (target === `cursor`) {
+            /* Cursor's page is already addressed to this attempt, so there is NO code to show and nothing to
+             * paste back: the daemon holds the redeemable half and completes the exchange itself. The card is
+             * therefore the URL alone, and the poll below is how this tab learns it worked.
+             *
+             * Its own deadline comes off the wire (`expiresAt`) rather than the shared 15-minute constant,
+             * because the daemon's poll is the one that actually expires and a card that gave up first would
+             * report an abandoned sign-in that was still live. */
+            const body = (await response.json()) as { url: string; handshake: string; expiresAt: number };
+            nativeConnectFlow.value = { provider: `cursor`, url: body.url, code: ``, handshake: body.handshake };
+            nativePollTimer = setTimeout(() => void pollNativeOnce(`cursor`, body.expiresAt), 3000);
             return;
         }
         const body = (await response.json()) as { authorizeUrl: string; verifier: string; state: string };

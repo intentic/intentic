@@ -54,7 +54,7 @@ export const RepoParamSchema = z.object({
 // ACP (Agent Client Protocol).
 // Kept as a bare string on the wire (not an enum) so an unknown id is a clean error frame from the agent
 // route, the same bet RepoParamSchema makes, and adding an ACP agent needs no contract change.
-export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini"] as const;
+export const NATIVE_PROVIDERS = ["claude", "codex", "grok", "kimi", "gemini", "cursor"] as const;
 export type NativeProvider = (typeof NATIVE_PROVIDERS)[number];
 export const AgentProviderSchema = z.string().min(1);
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
@@ -1997,6 +1997,33 @@ export const AuthorizeChallengeSchema = z.object({
     verifier: z.string().describe("Keep this and send it back when finishing. It is what proves the code that comes back belongs to this handshake."),
     state: z.string().describe("The handshake's own id, sent back with it."),
 });
+
+/* CURSOR'S SIGN-IN START. A third login shape, and the reason it is not one of the two above is where the
+ * SECRET lives during the handshake.
+ *
+ * Claude's is paste-back: the browser receives a code and the caller hands it plus its verifier to `exchange`,
+ * so the handshake's proof has to travel on the wire and AuthorizeChallengeSchema carries it. Cursor's PKCE
+ * verifier must never leave the process that generated it, anyone holding it can redeem the login and mint a
+ * durable key, so the daemon starts the whole flow, keeps the verifier in memory, polls Cursor itself, and
+ * writes the account when it lands. Nothing redeemable is on this shape at all.
+ *
+ * Which makes it behave like a DEVICE flow from the caller's side (open the page, then watch the account list),
+ * except that there is no one-time code to display: the login page is addressed to this handshake already. So
+ * DeviceStartSchema's `code` would be a permanently blank field on every card, and TranslatorStartSchema's
+ * `state` a value nothing sends back. `handshake` is neither, it is a cancellation handle. */
+export const CursorLoginStartSchema = z.object({
+    url: z.string().describe("The page to open and sign in on. It is already addressed to this attempt, so there is no code to type."),
+    handshake: z
+        .string()
+        .describe(
+            "This attempt's id, for abandoning it. Not a credential and not redeemable: the proof that finishes the sign-in never leaves the sandbox.",
+        ),
+    expiresAt: z.number().describe("When this attempt stops being answerable, in milliseconds, so a card can stop waiting instead of spinning."),
+});
+export type CursorLoginStart = z.infer<typeof CursorLoginStartSchema>;
+// Abandon a sign-in nobody completed, so the daemon stops polling Cursor for it. Ordinary tidiness rather than
+// a security boundary: an unanswered attempt also times out on its own (see `expiresAt`).
+export const CursorLoginCancelSchema = z.object({ handshake: z.string().min(1).describe("Which attempt to stop waiting on.") });
 // xAI Grok (via OpenCode) uses subscription OAuth via the headless device-code method. `start` returns the
 // `url` the user opens (xAI's verification_uri_complete, which pre-fills the code) and `code`, the same
 // one-time code, surfaced so the card matches x.ai exactly. There is no paste-back: OpenCode polls to

@@ -240,8 +240,9 @@ test("leads the locked band with the provider that costs nothing", () => {
 
     // The active one, then the connected one, then free (a Google sign-in) ahead of the paid subscriptions,
     // which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
-    // `grok` rides along with no rows of its own: an empty section still renders its header and state row.
-    expect(sections.map((section) => section.provider)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`]);
+    // `grok` and `cursor` ride along with no rows of their own: an empty section still renders its header and
+    // state row, which is how a provider nobody has connected is discovered at all.
+    expect(sections.map((section) => section.provider)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`]);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {

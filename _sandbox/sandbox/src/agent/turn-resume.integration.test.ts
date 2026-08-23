@@ -145,6 +145,11 @@ const withProviders = (services: Services, connected: readonly string[]): Servic
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
         list: async () => (connected.includes("claude") ? [{ id: "acct", label: "Claude", connectedAt: 0 }] : []),
     }),
+    // Cursor answers from a stored key rather than from the translator's account map, so it needs its own
+    // entry in this fixture's `connected` list rather than riding `routed` with the four above.
+    cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
+        credentials: async () => (connected.includes("cursor") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
+    }),
     // No model endpoints configured: the sandbox's own providers are the whole picture here.
     capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
 });

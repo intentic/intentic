@@ -181,4 +181,5 @@ export const providerTabs: readonly { value: AgentProvider; label: string }[] = 
     { value: `grok`, label: `Grok` },
     { value: `kimi`, label: `Kimi Code` },
     { value: `gemini`, label: `Google` },
+    { value: `cursor`, label: `Cursor` },
 ];
