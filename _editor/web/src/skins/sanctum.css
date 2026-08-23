@@ -1429,26 +1429,22 @@
 }
 
 /* ── THE QUESTION CARD ─────────────────────────────────────────────────────────────────────────────────────
- * A carved tablet, not a stack of bordered boxes. The base card stacks three levels of border — card,
- * header separator, and a full border on every option — which on this stone reads as a form from another
- * product pasted into a temple. Here the card takes the plate's own material, and the options inside it
- * are niches in the same surface: spacing and the hover wash tell them apart, not lines.
- *
- * THE HEADER IS AN INSCRIPTION: gold, one carved shadow, one hairline rule beneath it. The icon carries
- * the gold at half strength — a second colour on a card that already has one is a second accent.
+ * The same translucent surface the assistant messages use, not the opaque plate the ui-card gets. A plate
+ * read as a darker slab against the lighter assistant bubbles next to it; the translucent wash puts the
+ * question on the same ground as the conversation it sits inside. The tooth, the gold rule and the
+ * inscription header still distinguish it — it is still carved, just carved from the same stone as the
+ * messages rather than from a heavier block dropped into the stream.
  *
  * UNLAYERED, because the card's own `chat-surface` class is unlayered (chat.css sits outside every layer),
  * and the option rows carry Tailwind's `border` utility which sits in the utilities layer. A rule inside
  * `@layer components` cannot outrank either. */
 [data-skin="sanctum"] .chat-question {
-    background-color: var(--color-card);
+    background-color: color-mix(in srgb, var(--color-overlay) 35%, transparent);
     background-image: var(--sanctum-tooth);
     border-color: var(--sanctum-rule);
     box-shadow:
         inset 0 1px 0 rgba(240, 214, 168, 0.07),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-        0 2px 4px -1px rgba(0, 0, 0, 0.55),
-        0 12px 28px -12px rgba(0, 0, 0, 0.6);
+        0 2px 4px -1px rgba(0, 0, 0, 0.35);
 }
 [data-skin="sanctum"] .chat-question-header {
     border-bottom-color: var(--sanctum-rule);
