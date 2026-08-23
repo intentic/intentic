@@ -1,7 +1,30 @@
 // Platform UI/product catalogs: the add-form descriptors + card data the web renders. NOT wire contract,
 // moved out of @intentic-app/api-contract so the contract holds only schemas. Daemon enums are imported.
 import { type CapabilityContribution, type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import { type CapabilityKind, type ExitPoint, type ServiceKind, TOR_EXIT_COUNTRIES, VPNGATE_EXIT_COUNTRIES } from "@intentic/sandbox-contract";
+import {
+    type CapabilityKind,
+    type ExitPoint,
+    LOCAL_MODEL_WINDOW_DEFAULT,
+    LOCAL_MODEL_WINDOWS,
+    type LocalModelWindow,
+    type ServiceKind,
+    TOR_EXIT_COUNTRIES,
+    VPNGATE_EXIT_COUNTRIES,
+} from "@intentic/sandbox-contract";
+
+/* WHAT EACH CONVERSATION-WINDOW RUNG COSTS, in the units the model options next to it are quoted in, because a
+ * bare "32k" is not a choice anybody can make: the whole reason this is a decision is the memory behind it.
+ *
+ * The figures are the quantized (q8_0) cache llama-server reserves for one slot at that width, measured off the
+ * GGUF metadata of the models on the curated list: they land between 50 and 60 KB per token across it, so ~1 GB
+ * per 16k rounds up honestly for all of them. Typed against the rung list so adding a rung fails to compile
+ * rather than shipping a segment with no price on it. */
+const WINDOW_LABELS: Record<LocalModelWindow, string> = {
+    "16384": "16k · 1 GB",
+    "32768": "32k · 2 GB",
+    "65536": "64k · 4 GB",
+    "131072": "128k · 8 GB",
+};
 
 /* One country in the geo-exit card's picker. The capacity share rides in the LABEL rather than being dropped,
  * because a bare country list is misleading here: a third of Tor's countries are one overloaded relay, and
@@ -814,12 +837,19 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         },
     },
     /* THE MANAGED HALF of the concept above: the endpoint card points at a server the user operates, this one
-     * runs the server inside the sandbox. One decision (which weights) and everything else is the daemon's:
-     * the download, the loopback llama-server, the provider registration. The GPU switch is the single field
-     * that costs a rebuild, and it wears the chip that says so; on the published image everything else is
-     * add-and-chat. Model options carry Hugging Face paths so shipping a new recommendation is an edit here,
-     * never a daemon release, and the labels state the real cost (free memory) because that is the one fact a
-     * person needs before choosing. */
+     * runs the server inside the sandbox. Two decisions (which weights, how much conversation) and everything
+     * else is the daemon's: the download, the loopback llama-server, the provider registration. The GPU switch
+     * is the single field that costs a rebuild, and it wears the chip that says so; on the published image
+     * everything else is add-and-chat. Model options carry Hugging Face paths so shipping a new recommendation
+     * is an edit here, never a daemon release, and every label states the real cost (free memory) because that
+     * is the one fact a person needs before choosing.
+     *
+     * MEMORY IS QUOTED IN TWO PARTS, and that is the fix for the version of this card that quoted one. A single
+     * "needs ~8 GB" figure has to assume a conversation window, so the two were pinned to each other and the
+     * window could not be offered as a choice without making every label wrong. It also hid the cheapest lever
+     * on the card: the cache is gigabytes, it scales linearly with a number nobody was allowed to see, and the
+     * flat window the labels assumed was too small to run one agent turn. Split, each half is checkable on its
+     * own, the sum is the ask, and the window becomes what it always was: the owner's call, priced. */
     {
         id: "localmodel",
         name: "Local model",
@@ -832,23 +862,21 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "model",
                 label: "Model",
                 default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
-                /* THE RAM FIGURES ARE WEIGHTS PLUS CACHE, NOT WEIGHTS. The cache the server needs for the
-                 * conversation is not a rounding error next to the weights: it is sized by the context window,
-                 * and the daemon caps that window and quantizes the cache precisely so these numbers can stay
-                 * in the shape a person can check against their own machine (see the CONTEXT_TOKENS comment in
-                 * handlers/localmodel.ts, which is where the arithmetic lives). Change the cap there and these
-                 * labels are wrong; the two belong to each other. */
+                /* THESE FIGURES ARE THE WEIGHTS ALONE. The conversation cache is the other half and it is not a
+                 * rounding error next to them (a gigabyte per 16k of window, quantized), so it is priced on the
+                 * window field below where the choice that sizes it is made. Add the two to get what the machine
+                 * has to have free. */
                 options: [
-                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, needs ~5 GB free RAM" },
-                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, needs ~8 GB free RAM" },
-                    { value: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B, needs ~16 GB free RAM" },
+                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, weights ~3 GB" },
+                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, weights ~6 GB" },
+                    { value: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B, weights ~14 GB" },
                     {
                         value: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf",
-                        label: "Qwen3.8 27B, needs ~24 GB free RAM",
+                        label: "Qwen3.8 27B, weights ~22 GB",
                     },
                     { value: "custom", label: "Custom GGUF (advanced)" },
                 ],
-                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox with a 32k-token conversation window.",
+                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox. Free RAM it needs = this figure plus the conversation window's below.",
             },
             {
                 key: "url",
@@ -856,6 +884,35 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 placeholder: "https://huggingface.co/…/resolve/main/model.gguf",
                 when: "model == 'custom'",
                 hint: "A direct link to a .gguf file. You are choosing the memory it needs.",
+            },
+            /* THE CHOICE THIS CARD USED TO MAKE FOR PEOPLE, AND THE ONE IT GOT WRONG. Every entry served a flat
+             * 32k window, which is under what a turn of the agent loop costs before the user has typed a word:
+             * the loop's instructions plus one schema per tool it can reach, times every connected capability.
+             * A 27B model, seventeen gigabytes downloaded, first message refused. The number is on the card now
+             * because it is the owner's trade to make (their machine, their memory) and nobody else can make it.
+             *
+             * The second figure in each label is the cache that rung reserves, which is the whole reason this is
+             * a decision rather than a default: it is the one line on this card that costs gigabytes. Priced per
+             * rung rather than per model even though the true per-token cost varies about 2x across the list,
+             * because one honest rate a person can check beats four columns of arithmetic somebody has to redo
+             * whenever a model is added. Options and default both come from the contract, so the daemon that
+             * validates the value and the card that offers it cannot drift. */
+            {
+                key: "context",
+                label: "Conversation window",
+                default: LOCAL_MODEL_WINDOW_DEFAULT,
+                options: [
+                    ...LOCAL_MODEL_WINDOWS.map((tokens) => ({ value: tokens, label: WINDOW_LABELS[tokens] })),
+                    { value: "custom", label: "Custom" },
+                ],
+                hint: "How much conversation the model holds, and what it costs in RAM on top of the weights. 64k is the smallest that fits a full agent turn; 16k and 32k are for a model you only pin as the quick model (titles, commit messages).",
+            },
+            {
+                key: "contextTokens",
+                label: "Window in tokens",
+                placeholder: "98304",
+                when: "context == 'custom'",
+                hint: "Your own number, 2,048 to 1,048,576. Reckon about 1 GB of RAM per 16k, and check the model was trained for a window this wide, past that it answers worse rather than refusing.",
             },
             {
                 key: "gpu",
@@ -869,10 +926,10 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: "Nothing leaves this machine: the sandbox downloads the model and serves it itself: no server to install, works offline. Small models won't replace your frontier chat model; they shine as the quick model (free commit messages) and for work that must stay local. Already running Ollama or vLLM? The Model endpoint card points at it instead.",
         guide: {
             steps: [
-                "Pick a model whose memory need fits this machine, the label says it.",
+                "Add up the two memory figures, the model's and the window's, and pick a pair this machine has free.",
                 "On the standard image it downloads and serves right away; only the GPU switch asks for a rebuild.",
                 "It then appears as its own provider in the chat's model picker.",
-                "Optionally pin it as the quick model in Settings, and commit messages and titles then cost nothing.",
+                "Short of memory? Drop the window to 16k or 32k and pin it as the quick model in Settings: commit messages and titles then cost nothing.",
             ],
         },
     },

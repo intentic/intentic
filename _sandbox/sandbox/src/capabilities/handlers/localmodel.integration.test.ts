@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
+import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
 import type { CapabilityCtx } from "../capability.js";
 
 /* WHAT THE ADD PROMISES ABOUT A DOWNLOAD IT DOES NOT WAIT FOR.
@@ -99,14 +100,24 @@ const wholeFile = (): Response =>
         200,
     );
 
-// The add, run to the end of its (now short) stream.
-const drain = async (id: string, ctx: CapabilityCtx): Promise<void> => {
-    for await (const line of localModelHandler.apply(ctx, id, { model: "custom", gpu: "off", url: MODEL_URL })) {
+/* The add, run to the end of its (now short) stream. The window is a parameter because it is a parameter of the
+ * card: the tests about the download pass none and get the default, the ones about the flag pass the rung or the
+ * typed number they are asserting on. */
+const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["context"] = LOCAL_MODEL_WINDOW_DEFAULT, typed?: number): Promise<void> => {
+    const config: LocalModelConfig = {
+        model: "custom",
+        gpu: "off",
+        url: MODEL_URL,
+        context: rung,
+        ...(typed === undefined ? {} : { contextTokens: typed }),
+    };
+    for await (const line of localModelHandler.apply(ctx, id, config)) {
         void line;
     }
 };
 
-const statusOf = (ctx: CapabilityCtx, id: string) => localModelHandler.status(ctx, id, { model: "custom", gpu: "off", url: MODEL_URL });
+const statusOf = (ctx: CapabilityCtx, id: string) =>
+    localModelHandler.status(ctx, id, { model: "custom", gpu: "off", url: MODEL_URL, context: LOCAL_MODEL_WINDOW_DEFAULT });
 
 /* The add's own promise: it comes back while the bytes are still moving, and what it leaves behind is a card
  * that can be asked. This is the regression that mattered, an apply that streamed to the end of the download
@@ -229,31 +240,98 @@ test("a server that never serves leaves the routing table alone", async () => {
 });
 
 /* THE MEMORY THE CARD PROMISED, PINNED AS A COMMAND LINE. This is the assertion that stops the card's RAM
- * labels drifting away from what the server actually reserves, because the drift is invisible from either side
+ * figures drifting away from what the server actually reserves, because the drift is invisible from either side
  * on its own: the label is a string in the catalog and the allocation is a flag here.
  *
- * The bug it locks out shipped once. Asking the server for the model's native context ("as much as it was
- * trained for", which reads like generosity) sizes the conversation cache off a 128K-256K window, and that
- * cache is then bigger than the weights: a 3B whose card said "~4 GB" reserved 14 GB of it, a 30B whose card
- * said "~24 GB" reserved 24 GB on top of 17 GB of weights. Both numbers are measured off the GGUF metadata of
- * models on the curated list, and neither machine described by those labels can serve what it was sold.
+ * TWO BUGS ARE LOCKED OUT AND THEY PULL IN OPPOSITE DIRECTIONS. Asking the server for the model's native
+ * context ("as much as it was trained for", which reads like generosity) sizes the conversation cache off a
+ * 128K-256K window, and that cache is then bigger than the weights: a 3B whose card said "~4 GB" reserved 14 GB
+ * of it, a 30B whose card said "~24 GB" reserved 24 GB on top of 17 GB of weights. Both numbers are measured
+ * off the GGUF metadata of models on the curated list, and neither machine described by those labels can serve
+ * what it was sold. The other direction is the flat 32,768 that replaced it, which no full agent turn fits in:
+ * that is why the window is now the card's own field and why the flag has to FOLLOW it rather than ignore it.
  *
- * So both halves are asserted together, and the negative is asserted too: a capped window AND a quantized
- * cache, because dropping either one puts the reservation back into the gigabytes the labels do not carry. */
-test("the server is started with a capped, quantized conversation cache, not the model's native window", async () => {
+ * The quantized cache is asserted alongside because it is what makes any of the rungs affordable, and the
+ * native-window spelling is asserted absent, because it is the one value that makes every figure unachievable. */
+test("the server is started with the window the card chose, and a quantized cache to fit it", async () => {
     const root = await workspace();
     const { ctx, panels } = context(root);
     stubFetch(wholeFile);
 
-    await drain("bounded", ctx);
+    await drain("bounded", ctx, "131072");
     await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     const command = panels.start.mock.calls[0]?.[1]?.command as string;
-    expect(command).toContain("--ctx-size 32768");
+    expect(command).toContain("--ctx-size 131072");
     expect(command).toContain("--cache-type-k q8_0");
     expect(command).toContain("--cache-type-v q8_0");
-    // The regression itself: "read it from the model" is the one value that makes the labels unachievable.
+    /* ONE SLOT, which is the other multiplier on the same reservation and the one nobody had looked at: the
+     * default is auto, auto is four slots on this image, each slot gets the whole --ctx-size, and a server with
+     * one caller can use one of them. A live entry was measured reserving 4 x 32,768 against a card that had
+     * priced 32,768. Without this flag every memory figure on the card is out by 4x again. */
+    expect(command).toContain("--parallel 1");
+    // The regression itself: "read it from the model" is the one value that makes every figure unachievable.
     expect(command).not.toContain("--ctx-size 0");
+
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
+
+/* THE TYPED NUMBER, which is the field's whole reason for existing: the rungs are for people who want to be
+ * told what to pick, and this is for somebody who already knows their machine. It reaches the flag verbatim,
+ * because a number silently rounded to the nearest rung is a card lying about a value it accepted. */
+test("a custom window reaches the server as the number that was typed", async () => {
+    const root = await workspace();
+    const { ctx, panels } = context(root);
+    stubFetch(wholeFile);
+
+    await drain("typed", ctx, "custom", 98_304);
+    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+
+    expect(panels.start.mock.calls[0]?.[1]?.command as string).toContain("--ctx-size 98304");
+
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
+
+/* "CUSTOM" WITH NOTHING TYPED, which the form cannot submit and a hand-edited manifest can. It lands on the
+ * default rung rather than refusing (the window has a perfectly good answer available, unlike a card that cannot
+ * name which bytes to fetch) and the apply says which number it landed on, so the fallback is visible. */
+test("a custom window with no number falls back to the default rung, out loud", async () => {
+    const root = await workspace();
+    const { ctx, panels } = context(root);
+    stubFetch(wholeFile);
+
+    const lines: string[] = [];
+    for await (const line of localModelHandler.apply(ctx, "unfinished", { model: "custom", gpu: "off", url: MODEL_URL, context: "custom" })) {
+        lines.push((line as { message?: string }).message ?? "");
+    }
+    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+
+    expect(panels.start.mock.calls[0]?.[1]?.command as string).toContain(`--ctx-size ${LOCAL_MODEL_WINDOW_DEFAULT}`);
+    expect(lines.join("\n")).toContain("Conversation window: 64k tokens");
+
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+});
+
+/* WHAT A WINDOW TOO SMALL FOR THE LOOP MUST SAY, at the moment the choice is still fresh rather than after the
+ * download and a refused message. Not an error: the entry will serve, and as a quick model it is a fine trade.
+ * Silence is the failure mode, because from the row alone a 16k entry and a 64k one look identical. */
+test("a window under the agent floor is served, and says what it is still good for", async () => {
+    const root = await workspace();
+    const { ctx } = context(root);
+    stubFetch(wholeFile);
+
+    const lines: string[] = [];
+    for await (const line of localModelHandler.apply(ctx, "quick", { model: "custom", gpu: "off", url: MODEL_URL, context: "16384" })) {
+        lines.push((line as { message?: string }).message ?? "");
+    }
+
+    const said = lines.join("\n");
+    expect(said).toContain("Conversation window: 16k tokens");
+    expect(said).toContain("not for a full agent turn");
+    expect(said).toContain("Raise it on the card");
 
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });

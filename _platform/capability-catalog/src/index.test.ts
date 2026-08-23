@@ -1,4 +1,5 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
+import { LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { CAPABILITY_CATALOG, contributionCard } from "./index.js";
 
@@ -180,5 +181,44 @@ describe("contributionCard", () => {
             fields: [{ key: "command", label: "Command", default: "opencode acp" }],
         };
         expect(contributionCard(preset).fields.map((field) => field.key)).toEqual(["command"]);
+    });
+});
+
+/* THE LOCAL MODEL CARD'S TWO MEMORY HALVES, pinned because the failure they replace was a card that quoted one
+ * number and served another. The window used to be a constant in the daemon and the labels assumed a value they
+ * could not see, so the two drifted the moment either moved: see docs/local-models-design.md §10. */
+describe("the local model card", () => {
+    const card = CAPABILITY_CATALOG.find((entry) => entry.id === "localmodel")!;
+    const field = (key: string) => card.fields.find((entry) => entry.key === key);
+
+    it("prices every window rung and defaults to one of them", () => {
+        const options = field("context")?.options ?? [];
+        // Every rung the schema accepts is offered, in order, plus the typed escape hatch last.
+        expect(options.map((option) => option.value)).toEqual([...LOCAL_MODEL_WINDOWS, "custom"]);
+        // …and every rung carries its price, which is the whole reason this is a choice a person can make.
+        for (const option of options.filter((entry) => entry.value !== "custom")) {
+            expect(option.label).toMatch(/\d+k · \d+ GB/);
+        }
+        expect(field("context")?.default).toBe(LOCAL_MODEL_WINDOW_DEFAULT);
+        expect(LOCAL_MODEL_WINDOWS).toContain(field("context")?.default);
+    });
+
+    /* The default is the smallest rung a full agent turn fits in (the contract argues it). A default under that
+     * is what shipped before: an entry that downloads, serves, and refuses every real turn. */
+    it("defaults to a window a full agent turn fits in", () => {
+        expect(Number(LOCAL_MODEL_WINDOW_DEFAULT)).toBeGreaterThanOrEqual(65_536);
+    });
+
+    // The model options price the WEIGHTS only. A label that folded the cache back in would re-create the
+    // coupling that made the window unofferable, so "free RAM" must not reappear on this field.
+    it("quotes the weights on the model field, never a total", () => {
+        for (const option of field("model")?.options?.filter((entry) => entry.value !== "custom") ?? []) {
+            expect(option.label).toMatch(/weights ~\d+ GB/);
+        }
+    });
+
+    // The typed number is asked for only when the rungs are declined, the custom-GGUF relationship exactly.
+    it("asks for a typed window only when the rungs are declined", () => {
+        expect(field("contextTokens")?.when).toBe("context == 'custom'");
     });
 });

@@ -4,7 +4,8 @@ How someone runs a model on their own hardware and chats with it in Intentic wit
 outside the workspace: a **Local model** capability card that picks a model, downloads its weights, runs an
 inference server inside the sandbox, and surfaces it in the model picker like any other provider. One add,
 zero terminals, optional GPU behind the one rebuild the platform already knows how to ask for. This records
-the reasoning and the options that lost; §8 records what changed when it was built.
+the reasoning and the options that lost; §8 records what changed when it was built, and §10 the one setting that
+turned out to belong to the owner rather than to us.
 
 ## 1. The gap
 
@@ -237,17 +238,12 @@ All five slices landed together. The map, for whoever touches this next:
   top of 1.9 GB of weights, against a card reading "~4 GB"; a 30B at 262144 wants **24.0 GB** on top of
   17.3 GB, against a card reading "~24 GB". The two outcomes were "the allocation fails and the model never
   serves" and "it serves after eating the machine", and which one a user got depended on hardware the card
-  never asked about. Now: a flat 32768-token cap (the smallest window that still holds a real agent turn with
-  the harness's tool set) and `q8_0` for both halves of the cache, which together put the reservation back in
-  the 1.5–2 GB band the labels already carry. Flash attention is left at its `auto` default rather than forced,
-  because upstream enables it itself when the V cache is quantized and errors only when it was explicitly
-  disabled. Flat rather than per-entry because the per-token cost varies only ~2x across this list, which one
-  conservative cap absorbs, where a per-row number is arithmetic somebody has to redo by hand on every model
-  added. The cap and the labels are pinned to each other by an integration test and by comments in both
-  directions, since the drift is invisible from either side alone: one is a string in the catalog, the other a
-  flag in the handler. Known narrowing: `q8_0` blocks are 32 wide and upstream refuses a quantized cache whose
-  head dimension does not divide by that, unreachable for the curated list (all 128) and a loud startup failure
-  in the entry's panel for a custom GGUF that hits it.
+  never asked about. The first fix was a flat 32768-token cap plus `q8_0` for both halves of the cache, which
+  put the reservation back in the 1.5–2 GB band the labels already carried. Flash attention is left at its
+  `auto` default rather than forced, because upstream enables it itself when the V cache is quantized and errors
+  only when it was explicitly disabled. Known narrowing: `q8_0` blocks are 32 wide and upstream refuses a
+  quantized cache whose head dimension does not divide by that, unreachable for the curated list (all 128) and a
+  loud startup failure in the entry's panel for a custom GGUF that hits it. **The flat cap is gone; see §10.**
 
 ## 9. Runtimes evaluated since
 
@@ -265,3 +261,48 @@ which already works and costs us nothing.
 
 The transferable half of that community advice was not the engine. It was the serving configuration — Unsloth's
 quants (already on the curated list) with a quantized KV cache — and that is the §8 entry above.
+
+## 10. The window is the owner's choice (Aug 2026)
+
+The flat cap in §8 was wrong in the other direction, and the report that showed it is one sentence long: a
+Qwen3.8 27B was added, seventeen gigabytes came down, and the first message died on
+`36216 tokens exceeds the available context size (32768 tokens)`.
+
+**The cap was sized against the wrong thing.** It was chosen as "the smallest window that still holds a real
+agent turn", from our own composed preamble. But this sandbox runs a tool-calling loop, and that loop's fixed
+cost — its instructions plus one JSON schema per tool it can reach, times every connected capability — is tens
+of thousands of tokens before the user types anything (`docs/context-budget-design.md` measured 49,181 on an
+opening turn of two words). A window under that floor does not make a smaller product. It makes an entry that
+downloads, serves, appears in the picker, and refuses every real turn.
+
+**So the number is asked for, in rungs, priced.** `context` (16k/32k/64k/128k/custom) and `contextTokens` join
+`LocalModelConfigSchema`; `localModelWindow` in `endpoints/local-model.ts` resolves the pair to one integer, the
+way the port is derived rather than stored, and the handler's `--ctx-size` follows it. The default is 64k: the
+smallest rung a full turn fits in, which is the one product decision in the block and is stated as such in the
+contract beside the constant.
+
+**Memory is now quoted in two parts, and that is the load-bearing half of this change.** A single "needs ~8 GB"
+figure has to assume a window, which is exactly the coupling that made §8's labels fragile ("change the cap and
+these labels are wrong") and made the window unofferable as a choice. Split, the model options carry the weights
+(~3/6/14/22 GB) and the window rungs carry the cache (~1/2/4/8 GB, from the same 50–60 KB-per-token measurements,
+q8_0), the sum is the ask, and each half is checkable on its own. Still priced per rung rather than per model:
+the per-token cost varies ~2x across the list, which one honest rate absorbs, where a per-row number is
+arithmetic somebody redoes by hand on every model added.
+
+**And three quarters of the cache was going to slots nobody could use.** Found while checking the live entry
+that produced the report above: `--parallel` defaults to auto, auto on this image is **four** server slots, and
+each slot is given the whole `--ctx-size`. `/slots` on that server reported four slots of 32,768 against a card
+that had priced one — a 131,072-token reservation, 4x every label, of which a single-caller loopback server can
+use one quarter. Pinned to `--parallel 1`, the flag and the allocation are the same number again, the labels
+become checkable, and the same memory buys four times the conversation. Net of both changes the new 64k default
+reserves *half* what the old 32k default actually did. Concurrent turns on one entry queue rather than batch,
+which is the right trade on hardware where four simultaneous decodes are each four times slower.
+
+**Everything that quotes the number says the caveat with it.** The rungs under the floor are kept, because they
+are honestly useful as a quick-model pin (titles, commit messages, which never gate on the window) and the
+gigabyte they give back is the difference between running one of these on an eight-gigabyte laptop and not. So
+the apply names the window it started with and, under the floor, what it is still good for; the connections row
+reads `Qwen3.8-27B-UD-Q4_K_M · 32k window, quick jobs only`; and `agent/context-budget.ts` now branches its
+refusal on who owns the server — a card in this app gets "raise Conversation window on this model's card", a
+user's own endpoint keeps "raise the context size the server was started with", because sending the one person
+who can fix it in ten seconds to look for a command line they never typed is the same bug in prose.

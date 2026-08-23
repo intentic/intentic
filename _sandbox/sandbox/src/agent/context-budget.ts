@@ -61,6 +61,18 @@ export interface ContextShortfall {
     readonly message: string;
 }
 
+/* WHOSE WINDOW IT IS, carried beside the number because it decides what the refusal may ASK FOR.
+ *
+ * A user-added endpoint is a server the owner started somewhere with flags only they can reach, so the honest
+ * advice there is "raise the context size the server was started with". A sandbox-run local model is a card in
+ * this app with that number on it, and telling its owner to go edit a command line they never typed is telling
+ * them to fix it somewhere it cannot be fixed. Same arithmetic, same three numbers, one sentence that has to
+ * know which of the two it is talking to. */
+interface DeclaredWindow {
+    readonly window: number;
+    readonly onACard: boolean;
+}
+
 /* THE DECLARED WINDOW for the model a turn is about to dial, or undefined when nothing published one.
  *
  * Endpoint providers only, which is not a shortcut but the whole set of models this can answer for: an
@@ -72,7 +84,7 @@ export interface ContextShortfall {
  * The catalog read is cached (a minute's TTL, persisted last-known-good), and the credential resolution that
  * follows a permitted turn reads the same cached answer, so this costs the turn nothing it was not already
  * paying. */
-const declaredWindow = async (services: Services, provider: AgentProvider, model: string | undefined): Promise<number | undefined> => {
+const declaredWindow = async (services: Services, provider: AgentProvider, model: string | undefined): Promise<DeclaredWindow | undefined> => {
     const id = endpointIdOf(provider);
     /* THE TRIAL IS AN ENDPOINT AND STILL ANSWERS NO CATALOG READ, deliberately, the same rule its credential
      * resolution follows and for the same reason (harness-credentials.ts): everything about it is a constant, the
@@ -91,7 +103,8 @@ const declaredWindow = async (services: Services, provider: AgentProvider, model
     }
     const catalog = await services.endpointModels.models(id, config);
     const resolved = routedModel(catalog, model);
-    return catalog.models.find((entry) => entry.id === resolved)?.contextWindow;
+    const window = catalog.models.find((entry) => entry.id === resolved)?.contextWindow;
+    return window === undefined ? undefined : { window, onACard: capability?.kind === "localmodel" };
 };
 
 /* Whether this turn fits, and the refusal when it does not. Undefined means "send it": either the window is
@@ -113,15 +126,26 @@ export const contextShortfall = async (
     if (floor === undefined) {
         return undefined;
     }
-    const window = await declaredWindow(services, turn.provider, turn.model);
-    if (window === undefined) {
+    const declared = await declaredWindow(services, turn.provider, turn.model);
+    if (declared === undefined) {
         return undefined;
     }
+    const { window, onACard } = declared;
     const promptTokens = Math.ceil(turn.prompt.length / CHARS_PER_TOKEN);
     const needed = floor + OUTPUT_RESERVE_TOKENS + promptTokens;
     if (needed <= window) {
         return undefined;
     }
+    /* THE WAY OUT IS NAMED WHERE IT ACTUALLY IS. For a model this sandbox runs itself that is a field on its
+     * card, one the owner can raise in ten seconds, so it leads: it is both the cheapest fix and the one they
+     * would never have found from a message about tokens. For somebody else's server it is a flag on a process
+     * we cannot see, and pretending otherwise would send them looking for a control that isn't there. */
+    const fix = onACard
+        ? `Raise "Conversation window" on this model's card in Connections (each step up costs memory, the card ` +
+          `prices it), pick a model with a larger window, or keep this one for the small jobs (titles, commit ` +
+          `messages) it can do as a quick model.`
+        : `Raise the context size the server was started with, pick a model with a larger window, or keep this ` +
+          `one for the small jobs (titles, commit messages) it can do as a quick model.`;
     return {
         window,
         needed,
@@ -129,8 +153,6 @@ export const contextShortfall = async (
             `This model accepts ${withCommas(window)} tokens in one request and this turn needs about ` +
             `${withCommas(needed)}, so nothing was sent. Roughly ${withCommas(floor)} of that is the agent loop ` +
             `itself, its instructions and one definition per tool it can call, before your message ` +
-            `(~${withCommas(promptTokens)}) and room to answer. Raise the context size the server was started ` +
-            `with, pick a model with a larger window, or keep this one for the small jobs (titles, commit ` +
-            `messages) it can do as a quick model.`,
+            `(~${withCommas(promptTokens)}) and room to answer. ${fix}`,
     };
 };

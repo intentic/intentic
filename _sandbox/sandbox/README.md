@@ -54,7 +54,12 @@ reports the profile.
   feature pack, baked into standard images; the optional CUDA build plus the `--gpus=all` directive ride the
   overlay) on a loopback port derived from the entry's id. The add does not wait for tens of gigabytes: it
   starts the download and returns, the entry's status carries the progress, and a part file is resumed by
-  range rather than re-fetched, so a restart mid-download costs seconds. To everything downstream it is an
+  range rather than re-fetched, so a restart mid-download costs seconds. How much conversation the server holds
+  is the owner's choice on the card (rungs from 16k, or a typed number), because it is a trade only they can
+  make: the cache costs roughly a gigabyte of RAM per 16k of window, and a window under what a turn of the agent
+  loop costs on its own serves fine as a quick-model pin and refuses everything else — so the resolved number is
+  quoted back wherever the entry is shown, and `src/endpoints/local-model.ts` is the one place the card's two
+  fields become the one `--ctx-size` the server is started with. To everything downstream it is an
   `endpoint/<id>` provider like any user-added model API: src/endpoints/local-model.ts is the one place the
   two kinds are joined, and src/capabilities/handlers/localmodel.ts owns the download, the panel session, the
   boot restore, and the one moment this kind does not share with a user-added endpoint. The translator's

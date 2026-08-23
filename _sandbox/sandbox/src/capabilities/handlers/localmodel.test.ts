@@ -40,12 +40,23 @@ test("gpu off leaves no directive in the fragment", async () => {
 // loopback server), so every field must echo, `url` included, the one an incomplete echo would silently vault
 // into a manifest entry that can never validate again (secret-fields.test.ts is the per-kind guard).
 test("the echo carries every field", () => {
-    expect(registry.localmodel.echo({ model: "custom", gpu: "on", url: "https://example.com/m.gguf" }, new Map())).toEqual({
+    expect(
+        registry.localmodel.echo(
+            { model: "custom", gpu: "on", url: "https://example.com/m.gguf", context: "custom", contextTokens: 98_304 },
+            new Map(),
+        ),
+    ).toEqual({
         model: "custom",
         gpu: true,
         url: "https://example.com/m.gguf",
+        context: "custom",
+        contextTokens: 98_304,
     });
-    expect(registry.localmodel.echo({ model: "owner/repo/m.gguf", gpu: "off" }, new Map())).toEqual({ model: "owner/repo/m.gguf", gpu: false });
+    expect(registry.localmodel.echo({ model: "owner/repo/m.gguf", gpu: "off", context: "65536" }, new Map())).toEqual({
+        model: "owner/repo/m.gguf",
+        gpu: false,
+        context: "65536",
+    });
 });
 
 // The one hard refusal: a card that cannot name which bytes to fetch must not be stored gesturing at a

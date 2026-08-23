@@ -140,7 +140,7 @@ test("a local model whose served window cannot hold the loop is refused before a
     const tiny = {
         id: "tiny",
         kind: "localmodel" as const,
-        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const },
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const, context: "32768" as const },
     };
     const services = servicesWith({
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),

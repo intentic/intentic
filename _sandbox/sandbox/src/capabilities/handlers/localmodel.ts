@@ -8,7 +8,15 @@ import { promisify } from "node:util";
 import { downloadFile } from "@huggingface/hub";
 import type { Capability, CapabilityStatus, LocalModelConfig } from "@intentic/sandbox-contract";
 import { packFragment } from "../../environment/packs.js";
-import { localModelLabel, localModelPort, localModelSource, type LocalModelSource } from "../../endpoints/local-model.js";
+import {
+    fitsAgentTurn,
+    localModelLabel,
+    localModelPort,
+    localModelSource,
+    localModelWindow,
+    localModelWindowLabel,
+    type LocalModelSource,
+} from "../../endpoints/local-model.js";
 import { statePath } from "../../workspace/state-paths.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 
@@ -223,26 +231,47 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
     return promise;
 };
 
-/* THE CONTEXT WINDOW IS CAPPED, AND THAT CAP IS WHAT MAKES THE CARD'S RAM LABELS TRUE. This used to pass
- * --ctx-size 0, "read the model's native context length from the GGUF", which sounds generous and is the one
- * setting that made every number on the card a lie. A modern instruct model advertises 128K-256K native, and
- * the KV cache for a window that wide dwarfs the weights it serves: measured off the GGUF metadata of the
- * models this card curates, a 3B at its native 131072 wants 14.0 GB of f16 KV on top of 1.9 GB of weights
- * (card label: "~4 GB"), and a 30B at 262144 wants 24.0 GB on top of 17.3 GB (card label: "~24 GB"). So the
- * honest outcomes were "allocation fails and the model never serves" and "it serves after eating the machine",
- * and which one you got depended on hardware the card never asked about.
+/* THE CONTEXT WINDOW IS THE OWNER'S CHOICE, BOUNDED, AND NEVER THE MODEL'S NATIVE ONE. Two bugs are locked out
+ * here and they pull in opposite directions, which is why neither a flat number nor an open one is right.
  *
- * 32768 is the cap because it is the smallest window that still holds a real agent turn (the harness's tool
- * set plus a working conversation) and it puts the KV back in the 1.5-2 GB band for every curated model, which
- * is the headroom their labels already carry. It is deliberately NOT a per-model knob: the KV cost per token
- * varies about 2x across this list, which a single conservative cap absorbs, and the alternative is a number
- * on every catalog row that has to be recomputed by hand whenever a model is added.
+ * THE FIRST was --ctx-size 0, "read the model's native context length from the GGUF", which sounds generous and
+ * made every number on the card a lie. A modern instruct model advertises 128K-256K native, and the KV cache
+ * for a window that wide dwarfs the weights it serves: measured off the GGUF metadata of the models this card
+ * curates, a 3B at its native 131072 wants 14.0 GB of f16 KV on top of 1.9 GB of weights (card label: "~4 GB"),
+ * and a 30B at 262144 wants 24.0 GB on top of 17.3 GB (card label: "~24 GB"). The honest outcomes were
+ * "allocation fails and the model never serves" and "it serves after eating the machine", and which one you got
+ * depended on hardware the card never asked about.
  *
- * q8_0 for both halves of the cache roughly halves what is left, for a quality cost the local-model community
- * treats as free at 8 bits, and it is the pairing people actually run these weights with. Flash attention is
- * left at its own default (`auto`) rather than forced on: upstream auto-enables it when the V cache is
- * quantized and errors only if it was explicitly disabled, so the default is the safe spelling and forcing it
- * would take on the failure modes (Grok, tensor split) that the auto path handles.
+ * THE SECOND was the fix for the first: a flat 32768 for every entry, chosen as the smallest window that holds
+ * a real agent turn. It is not. The loop's own fixed cost, its instructions plus one schema per exposed tool,
+ * times every capability the owner has connected, is tens of thousands of tokens before the user types anything,
+ * and the first report was a 27B model whose opening message died on `36216 tokens exceeds 32768` after
+ * seventeen gigabytes of download. A cap that cannot hold one turn does not make the labels true; it makes the
+ * whole entry decorative.
+ *
+ * SO THE NUMBER IS ASKED FOR, on the card, in rungs, defaulting to the smallest one a full turn fits in
+ * (contract: LOCAL_MODEL_WINDOW_DEFAULT holds that argument, the card holds what each rung costs in memory).
+ * That the memory moves with the choice is the whole point: it is the one trade only the owner can make, they
+ * are the one who knows what the machine has, and the card is what tells them the rate (~2 GB of quantized
+ * cache per 32k). Still NOT per-model: the KV cost per token varies about 2x across the curated list, which one
+ * rate absorbs, where a number on every catalog row is arithmetic somebody redoes by hand on every model added.
+ *
+ * q8_0 for both halves of the cache roughly halves what any rung costs, for a quality cost the local-model
+ * community treats as free at 8 bits, and it is the pairing people actually run these weights with. It is not
+ * optional and not on the card: it buys a doubling of the window at no visible cost, so the choice it would
+ * offer is between a number and the same number twice. Flash attention is left at its own default (`auto`)
+ * rather than forced on: upstream auto-enables it when the V cache is quantized and errors only if it was
+ * explicitly disabled, so the default is the safe spelling and forcing it would take on the failure modes
+ * (Grok, tensor split) that the auto path handles.
+ *
+ * ONE SLOT, AND THIS IS WHERE THREE QUARTERS OF THE MEMORY WENT. `--parallel` defaults to auto, and auto on
+ * this image is FOUR server slots, each given the full --ctx-size: measured on a live entry, `/slots` reported
+ * four slots of 32,768 against a card that had priced one. So the cache reservation was 131,072 tokens wide, 4x
+ * what every label on this card claimed, and a conversation could use exactly one quarter of it, because a slot
+ * is per in-flight request and this server has one caller. Nothing was gained for it. Pinned to 1, the flag on
+ * the card and the bytes on the machine are the same number again, and the same memory buys four times the
+ * conversation, which is the resource that was actually scarce. Concurrent turns on one entry queue instead of
+ * batching, which is the right trade on hardware where four simultaneous decodes are each four times slower.
  *
  * The one thing this can refuse that --ctx-size 0 could not: q8_0 blocks are 32 wide, and upstream rejects a
  * quantized cache whose head dimension does not divide by that. Every model on the curated list is 128, so
@@ -252,11 +281,9 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
  * --jinja because the modern instruct models the card curates carry their chat/tool template in the GGUF and
  * serve tool calls only through it; -ngl offloads every layer exactly when the GPU actually rode (the stamp,
  * not the ask). */
-const CONTEXT_TOKENS = 32768;
-
-const serverCommand = (path: string, port: number): string => {
+const serverCommand = (path: string, port: number, window: number): string => {
     const layers = gpuState() === "all" ? " -ngl 999" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${CONTEXT_TOKENS} --cache-type-k q8_0 --cache-type-v q8_0 --jinja${layers}`;
+    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja${layers}`;
 };
 
 // llama-server's own readiness: /health answers 503 while the model loads, 200 once it serves. Short timeout:
@@ -267,12 +294,13 @@ const serverHealthy = async (port: number): Promise<boolean> =>
         () => false,
     );
 
-const startServer = async (ctx: CapabilityCtx, id: string, path: string): Promise<void> => {
+const startServer = async (ctx: CapabilityCtx, id: string, path: string, window: number): Promise<void> => {
     const key = localModelPanelKey(id);
-    // Stop-then-start rather than the docker no-op: an apply may be changing WHICH model this entry serves,
-    // and the panel cannot say which weights the running process loaded.
+    // Stop-then-start rather than the docker no-op: an apply may be changing WHICH model this entry serves or
+    // how much conversation it holds, and the panel cannot say which weights the running process loaded or what
+    // it reserved for them.
     await ctx.panels.stop(key);
-    await ctx.panels.start(key, { command: serverCommand(path, localModelPort(id)), cwd: ctx.workspace.root });
+    await ctx.panels.start(key, { command: serverCommand(path, localModelPort(id), window), cwd: ctx.workspace.root });
 };
 
 /* THE MOMENT THE ENTRY BECOMES ROUTABLE, which is neither the moment it was added nor the moment the process
@@ -361,7 +389,7 @@ const stopWatching = (id: string): void => {
  * Idempotent per entry: a second Update while the first is still downloading joins the job in flight rather
  * than racing a second writer onto the same part file. The abort check before the server starts is the removal
  * case, a card deleted while its weights were arriving must not leave a process serving it. */
-const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSource, destination: string): void => {
+const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSource, destination: string, window: number): void => {
     if (jobs.has(id)) {
         return;
     }
@@ -374,7 +402,7 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
         if (abort.signal.aborted) {
             return;
         }
-        await startServer(ctx, id, destination);
+        await startServer(ctx, id, destination, window);
         syncWhenServing(ctx, id);
     })()
         .catch((error: unknown) => {
@@ -392,6 +420,24 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
         });
     jobs.set(id, { promise, abort });
 };
+
+/* WHAT A WINDOW UNDER THE AGENT FLOOR HAS TO SAY, and it is said on both surfaces that quote the number.
+ *
+ * Not an error and not a warning state: the entry does exactly what it was configured to do, and a red row for
+ * an owner who deliberately traded conversation for a gigabyte of RAM would be the card second-guessing a choice
+ * it asked for. What it must not do is stay silent, because the consequence is invisible from the row otherwise:
+ * the model serves, the picker lists it, and every full turn is refused by the arithmetic in
+ * agent/context-budget.ts.
+ *
+ * Two lengths because there are two surfaces, not because there are two facts: the connections row is a table
+ * cell with a model name already in it, the add's log line has a paragraph and the reader's attention while the
+ * choice is still fresh, so that is where the way out belongs. */
+const windowNote = (window: number): string => (fitsAgentTurn(window) ? "" : ", quick jobs only");
+
+const windowAdvice = (window: number): string =>
+    fitsAgentTurn(window)
+        ? ""
+        : " — enough for the quick-model jobs (titles, commit messages), not for a full agent turn, whose tools and instructions fill a window this size on their own. Raise it on the card to chat with this model.";
 
 // What the GPU option has to say, the docker card's sentences with the toolkit clause dropped (there is no
 // nested runtime here to configure): pending until the directive's rebuild, an error a rebuild can't fix when
@@ -425,7 +471,13 @@ export const localModelHandler: CapabilityHandler = {
     // Nothing here is a credential: the weights are public bytes and the server answers loopback unauthenticated.
     echo: (config) => {
         const model = config as LocalModelConfig;
-        return { model: model.model, gpu: gpuAsked(config), ...(model.url !== undefined ? { url: model.url } : {}) };
+        return {
+            model: model.model,
+            gpu: gpuAsked(config),
+            ...(model.url !== undefined ? { url: model.url } : {}),
+            context: model.context,
+            ...(model.contextTokens !== undefined ? { contextTokens: model.contextTokens } : {}),
+        };
     },
     /* The engine pack resolves to nothing on the standard image (it bakes llama-server), which is what makes
      * the CPU add rebuild-free; on a core image it is the install itself. The GPU option adds the CUDA build
@@ -463,7 +515,14 @@ export const localModelHandler: CapabilityHandler = {
         }
         const path = weightsPath(ctx, source);
         const held = await weightsReady(path);
-        startInBackground(ctx, id, source, path);
+        const window = localModelWindow(model);
+        startInBackground(ctx, id, source, path, window);
+        /* THE WINDOW IS SAID OUT LOUD HERE, and it is the one line on this card worth a sentence of argument.
+         * It is the setting that decides whether the entry can run a turn at all, it is the setting whose memory
+         * the person is about to find out about, and "custom" with nothing typed silently lands on the default.
+         * Naming the number the server is actually being started with makes all three visible at the moment the
+         * choice is still fresh, rather than after a download and a refused message. */
+        yield { kind: "log", message: `Conversation window: ${localModelWindowLabel(window)} tokens${windowAdvice(window)}` };
         // The one line the add has to leave behind: what is happening now, and where the rest of it will be
         // said. Everything after this point is reported by `status` on the card, which is the surface that
         // survives a page refresh.
@@ -495,8 +554,17 @@ export const localModelHandler: CapabilityHandler = {
             return { state: "pending", detail: "rebuild required" };
         }
         if (await serverHealthy(localModelPort(id))) {
-            // The server is the headline; the GPU caveat only matters on a card that would otherwise read clean.
-            return gpuStatus(config) ?? { state: "active", detail: localModelLabel(model) };
+            /* The server is the headline; the GPU caveat only matters on a card that would otherwise read clean.
+             * The WINDOW joins the model name because it is the other half of what this entry is: two rows naming
+             * the same weights can be a working agent and a quick-model-only rung, and nothing else on the page
+             * says which one you are looking at. */
+            const window = localModelWindow(model);
+            return (
+                gpuStatus(config) ?? {
+                    state: "active",
+                    detail: `${localModelLabel(model)} · ${localModelWindowLabel(window)} window${windowNote(window)}`,
+                }
+            );
         }
         const held = await weightsReady(path);
         /* A job with no progress yet is the second or two before the first byte, and "loading the model" there
@@ -564,6 +632,6 @@ export const startLocalModelsIfEnabled = async (ctx: CapabilityCtx): Promise<voi
         if (source === undefined || ctx.panels.running(localModelPanelKey(entry.id))) {
             continue;
         }
-        startInBackground(ctx, entry.id, source, weightsPath(ctx, source));
+        startInBackground(ctx, entry.id, source, weightsPath(ctx, source), localModelWindow(entry.config));
     }
 };

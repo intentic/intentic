@@ -21,7 +21,7 @@ const withEndpoint = async (models: readonly { id: string; label: string; contex
     await sandbox.capabilities.upsert({
         id: "tiny",
         kind: "localmodel",
-        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" },
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off", context: "32768" },
     });
     return sandbox;
 };
@@ -40,8 +40,38 @@ test("a window that cannot hold the loop's own instructions refuses, naming the 
     expect(shortfall?.message).toContain("16,384 tokens");
     expect(shortfall?.message).toContain("22,004");
     expect(shortfall?.message).toContain("20,000");
-    // And the ways out, since "too small" without them is a dead end.
-    expect(shortfall?.message).toContain("Raise the context size");
+    // And the ways out, since "too small" without them is a dead end. This entry is a model the SANDBOX runs, so
+    // the cheapest way out is a field on its own card and the refusal has to name that field: the version of this
+    // sentence that said "raise the context size the server was started with" was sending the one person who
+    // could fix it in ten seconds off to look for a command line they never typed.
+    expect(shortfall?.message).toContain(`Raise "Conversation window" on this model's card`);
+});
+
+/* THE OTHER HALF OF THAT SENTENCE, and the reason it is not one sentence: a user-added endpoint is somebody
+ * else's server, started somewhere we cannot see with flags we cannot offer. Naming a card there would be
+ * inventing a control, so the advice goes back to the only place the number really lives. */
+test("a window on somebody else's server points at the server, not at a card", async () => {
+    const sandbox = services({
+        endpointModels: {
+            models: async () => ({ models: [{ id: "tiny", label: "tiny", contextWindow: 16_384 }], default: "tiny" }),
+            forget: async () => {},
+        },
+    });
+    await sandbox.capabilities.upsert({
+        id: "ollama",
+        kind: "endpoint",
+        config: { baseUrl: "http://host.docker.internal:11434/v1", protocol: "openai" },
+    });
+
+    const shortfall = await contextShortfall(sandbox, {
+        provider: "endpoint/ollama",
+        runtime: "claude-code",
+        model: "tiny",
+        prompt: "Are you there?",
+    });
+
+    expect(shortfall?.message).toContain("Raise the context size the server was started with");
+    expect(shortfall?.message).not.toContain("card");
 });
 
 test("a window with room for the loop is sent, not second-guessed", async () => {

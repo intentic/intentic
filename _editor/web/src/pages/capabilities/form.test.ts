@@ -29,6 +29,11 @@ test(`objects to what the daemon would reject, before the round-trip`, () => {
     expect(fieldError({ key: `url`, label: `URL` }, `github.com/owner/repo`)).toContain(`Enter a valid URL`);
     expect(fieldError({ key: `port`, label: `Port` }, `70000`)).toContain(`1–65535`);
     expect(fieldError({ key: `port`, label: `Port` }, `10443`)).toBeUndefined();
+    // The local model card's typed conversation window: gigabytes of RAM ride on this number, so a stray comma
+    // or a fat-fingered million is worth catching in the box rather than in a failed apply.
+    expect(fieldError({ key: `contextTokens`, label: `Window in tokens` }, `98,304`)).toContain(`whole number of tokens`);
+    expect(fieldError({ key: `contextTokens`, label: `Window in tokens` }, `9999999`)).toContain(`whole number of tokens`);
+    expect(fieldError({ key: `contextTokens`, label: `Window in tokens` }, `98304`)).toBeUndefined();
     // A url field that holds a secret is not a url: a token pasted into `tokenUrl` must not be re-read as one.
     expect(fieldError({ key: `tokenUrl`, label: `Token`, secret: true }, `abc123`)).toBeUndefined();
 });

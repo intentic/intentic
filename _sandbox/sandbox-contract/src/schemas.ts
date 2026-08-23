@@ -4977,11 +4977,48 @@ export const EndpointConfigSchema = z.object({
  *
  * `gpu` mirrors the docker card's option and rides the same allowlisted `--gpus=all` directive: the ASK lives
  * here, what became of it is SANDBOX_GPU, stamped by the runner (see the docker handler's gpuState). "on"/"off"
- * rather than a boolean for the manifest-wide reason DockerConfigSchema gives. */
+ * rather than a boolean for the manifest-wide reason DockerConfigSchema gives.
+ *
+ * `context`/`contextTokens` are HOW MUCH CONVERSATION the server holds, the `model`/`url` pair's shape for the
+ * same reason: a short list of rungs anyone can choose between, and one escape hatch for a person who knows the
+ * exact number they want. Resolved to a single token count in exactly one place (the daemon's
+ * endpoints/local-model.ts localModelWindow), because the flag llama-server is started with and the number the
+ * card promises must never be two opinions. */
+export const LOCAL_MODEL_WINDOWS = ["16384", "32768", "65536", "131072"] as const;
+export type LocalModelWindow = (typeof LOCAL_MODEL_WINDOWS)[number];
+
+/* THE RUNG A CARD WITH NO OPINION LANDS ON, and the one number in this block that is a product decision rather
+ * than an arithmetic one.
+ *
+ * It is 65,536 because this sandbox runs a TOOL-CALLING AGENT LOOP, and that loop's own fixed cost, its
+ * instructions plus one JSON schema per tool it can call, times every capability the owner has connected, is
+ * tens of thousands of tokens before the user has typed anything (agent/context-budget.ts holds the measurement
+ * and the refusal built on it). A window that cannot hold that cost is not a smaller version of the product; it
+ * is a model whose every real turn is refused, which is what the previous flat 32,768 shipped: a 27B model,
+ * seventeen gigabytes downloaded, and a first message that died on `36216 tokens exceeds 32768`.
+ *
+ * So the default is the smallest rung a full turn fits in, and the smaller rungs stay on the list because they
+ * are honestly useful: pinned as the quick model (titles, commit messages) a window this size is waste, and the
+ * gigabyte it gives back is the difference between running one of these models on an eight-gigabyte laptop and
+ * not. What each rung costs in memory is the card's job to say (capability-catalog): roughly 2 GB of quantized
+ * cache per 32k of window, on top of the weights. */
+export const LOCAL_MODEL_WINDOW_DEFAULT: LocalModelWindow = "65536";
+
+/* THE BOUNDS ON THE TYPED NUMBER, and they are bounds against a TYPO rather than against a preference. Below
+ * the floor there is no conversation left to have once the loop's own instructions land; above the ceiling is a
+ * number no GGUF on offer was trained for, and llama-server would spend minutes reserving a cache for it before
+ * failing. Everything between is the owner's call: their machine, their memory. */
+export const LOCAL_MODEL_WINDOW_MIN = 2048;
+export const LOCAL_MODEL_WINDOW_MAX = 1_048_576;
+
 export const LocalModelConfigSchema = z.object({
     model: z.string().min(1),
     gpu: z.enum(["on", "off"]).default("off"),
     url: z.url().optional(),
+    context: z.union([z.enum(LOCAL_MODEL_WINDOWS), z.literal("custom")]).default(LOCAL_MODEL_WINDOW_DEFAULT),
+    // Coerced because it arrives from a text field as a string, the ssh card's `port` precedent, and only read
+    // when `context` is "custom" (the `url`/`model` relationship exactly).
+    contextTokens: z.coerce.number().int().min(LOCAL_MODEL_WINDOW_MIN).max(LOCAL_MODEL_WINDOW_MAX).optional(),
 });
 export type LocalModelConfig = z.infer<typeof LocalModelConfigSchema>;
 /* THE SANDBOX WALLET, a USDC balance the agent can spend on x402-payable endpoints, under owner policy.

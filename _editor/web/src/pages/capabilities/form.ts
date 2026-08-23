@@ -1,6 +1,12 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import { type CapabilityField, fieldApplies } from "@intentic/extension-manifest";
-import { type ForticlientConnection, isForticlientCiphertext, VAULTED } from "@intentic/sandbox-contract";
+import {
+    type ForticlientConnection,
+    isForticlientCiphertext,
+    LOCAL_MODEL_WINDOW_MAX,
+    LOCAL_MODEL_WINDOW_MIN,
+    VAULTED,
+} from "@intentic/sandbox-contract";
 
 /* THE CARD'S FORM, adding a connection and editing one are the same form, and this is why they can be.
  *
@@ -74,6 +80,19 @@ const RULES: readonly FieldRule[] = [
         }
         const port = Number(value);
         return Number.isInteger(port) && port >= 1 && port <= 65_535 ? undefined : `Enter a valid port number (1–65535).`;
+    },
+    /* The local model card's typed conversation window, refused here for the reason the port above is: the
+     * daemon's schema already bounds it, and a round-trip that comes back "invalid input" is a worse way to
+     * learn you typed a comma. The bounds are imported rather than restated, so the box and the schema behind
+     * it cannot disagree about what they accept. */
+    (field, value) => {
+        if (value.length === 0 || field.key !== `contextTokens`) {
+            return undefined;
+        }
+        const tokens = Number(value);
+        return Number.isInteger(tokens) && tokens >= LOCAL_MODEL_WINDOW_MIN && tokens <= LOCAL_MODEL_WINDOW_MAX
+            ? undefined
+            : `Enter a whole number of tokens (${LOCAL_MODEL_WINDOW_MIN.toLocaleString()}–${LOCAL_MODEL_WINDOW_MAX.toLocaleString()}).`;
     },
 ];
 

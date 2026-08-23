@@ -1,4 +1,4 @@
-import type { Capability, EndpointConfig, LocalModelConfig } from "@intentic/sandbox-contract";
+import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
 
 /* A LOCAL MODEL, EXPRESSED AS THE ENDPOINT IT IS, the pure half of the `localmodel` kind, beside the endpoint
  * config readers because it answers the same three consumers: the catalog probe, the translator reconciler and
@@ -78,5 +78,27 @@ export const localModelSource = (config: LocalModelConfig): LocalModelSource | u
 
 // What the picker's rows and the card's status call the model: the file, shorn of its extension and quant
 // suffix noise only a download needs ("Qwen3.5-9B-Q4_K_M.gguf" → "Qwen3.5-9B-Q4_K_M").
-export const localModelLabel = (config: LocalModelConfig): string =>
-    (localModelSource(config)?.file ?? config.model).replace(/\.gguf$/i, "");
+export const localModelLabel = (config: LocalModelConfig): string => (localModelSource(config)?.file ?? config.model).replace(/\.gguf$/i, "");
+
+/* HOW MANY TOKENS THIS ENTRY'S SERVER HOLDS, from the card's two fields, and the only place that decides it.
+ *
+ * Three readers need the same answer and none of them may hold their own copy: the handler starts llama-server
+ * with it (`--ctx-size`), the card's status quotes it back to the person who chose it, and the apply's one line
+ * names it while the download begins. A second opinion here would be a card promising a window the server is
+ * not serving, which is precisely the class of bug the flat cap this replaced was covering up.
+ *
+ * "custom" with nothing typed falls back to the default rather than refusing, unlike the missing GGUF url next
+ * to it, and the asymmetry is the point: a card that cannot name which bytes to fetch can do nothing at all,
+ * while a card that did not finish naming a window has a perfectly good answer available. The number it lands
+ * on is said out loud by the apply and the status, so the fallback is visible rather than assumed. */
+export const localModelWindow = (config: LocalModelConfig): number =>
+    config.context === "custom" ? (config.contextTokens ?? Number(LOCAL_MODEL_WINDOW_DEFAULT)) : Number(config.context);
+
+// How the window reads on a card and in a log line: "64k", never "65536". The rungs are all whole thousands of
+// tokens; a typed number that isn't (3,000) keeps its digits rather than rounding to a lie.
+export const localModelWindowLabel = (tokens: number): string => (tokens % 1024 === 0 ? `${tokens / 1024}k` : String(tokens));
+
+// Whether a window this size can hold a turn of the full agent loop, which is what decides if the card says
+// "quick jobs only" beside it. The threshold is the contract's default rung, for the reason stated there: it is
+// the smallest one a real turn fits in, so anything under it is a deliberate trade the card must not hide.
+export const fitsAgentTurn = (tokens: number): boolean => tokens >= Number(LOCAL_MODEL_WINDOW_DEFAULT);

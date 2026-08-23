@@ -196,3 +196,27 @@ What this does NOT do, stated so the next reader does not have to discover it: i
 large enough for the floor and too small for this sandbox's actual tool surface. Those still fail at the
 provider, with the raw 400, until step 3 replaces the constant with a measurement and step 6 codes the runtime
 frame.
+
+## 10. What §6's last bullet turned out to be worth
+
+"Serve a bigger window where the model allows it" was written as the small print under the interesting work. It
+was the whole answer for the one source of small windows this product actually owns.
+
+A sandbox-run local model served a flat 32,768 tokens, chosen by the card as "the smallest window that holds a
+real agent turn" and sized against our own composed preamble rather than against the floor this document
+measured. So the second report reads exactly like the first: a 27B model, seventeen gigabytes downloaded,
+`36216 tokens exceeds the available context size (32768 tokens)`, nothing wrong with the model. §1's finding,
+"trimming our own notes cannot fix this", applies unchanged to picking the cap: **the floor has to enter the
+choice of window, not just the check on it.**
+
+What shipped (`docs/local-models-design.md` §10 has the build): the window is a field on the local-model card,
+in rungs, defaulting to the smallest one a full turn fits in, with the memory each rung costs stated beside it,
+because the reason nobody offered this choice before was that its price was invisible. Two consequences for this
+document's own ladder:
+
+- **§6's "picker-time honesty" is now cheap for this source.** The card knows its window at add time and says
+  what a small one is good for; the connections row keeps saying it. That is not the picker warning step 6 asks
+  for, but it moves the discovery from "my first message failed" to "I chose this, and it told me".
+- **§5's floor is the number that matters most and is still an estimate.** It is now load-bearing in two places
+  rather than one: it gates the turn, and it sets a default that costs the owner gigabytes of RAM. Step 3
+  (calibrate per runtime and tool set off the first successful turn) got more valuable, not less.
