@@ -269,6 +269,12 @@ const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.autoContinue !== undefined) {
         conversation.autoContinue.value = tab.autoContinue;
     }
+    // ...and the stopped turn the switch would act on, for the same reason and one more: the ending that waits
+    // longest (a spent allowance) reliably outlives the window that hit it, so an offer kept only in memory was
+    // certain to be gone by the time it became pressable (see StoredTab.pickUp).
+    if (tab.pickUp !== undefined) {
+        conversation.pickUp.value = tab.pickUp;
+    }
     if (tab.effort !== undefined) {
         conversation.effortPick.value = tab.effort;
     }
@@ -457,15 +463,15 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
      * live over a decision that has already been made (see Conversation.deciding). */
     isDeciding: (message: ChatMessage): boolean => conversation.value.isDeciding(message.id),
     pendingPlanMessage: computed(() => conversation.value.pendingPlanMessage.value),
-    /* This conversation's last turn ended before its work did (Conversation.resumable), and the sentence that
-     * would pick it up. Two values rather than one because the composer needs them at different moments: the
-     * flag arms the offer and the Enter shortcut, and the sentence is only read at the press.
+    /* This conversation's last turn ended before its work did (Conversation.pickUp), and the sentence that would
+     * pick it up. Two values rather than one because the composer needs them at different moments: the state
+     * arms the strip, the offer and the Enter shortcut, and the sentence is only read at the press.
      *
-     * The offer stands down while a turn is live. A resumable flag outlives the failure it describes until the
-     * next turn STARTS, and the gap between a send leaving the composer and that turn beginning is real, long
+     * The offer stands down while a turn is live. A pick-up outlives the failure it describes until the next
+     * turn STARTS, and the gap between a send leaving the composer and that turn beginning is real, long
      * enough, on a slow round-trip, for the strip to sit there under a message the user has already sent,
      * inviting them to send another. */
-    resumable: computed(() => conversation.value.resumable.value && !conversation.value.streaming.value),
+    pickUp: computed(() => (conversation.value.streaming.value ? undefined : conversation.value.pickUp.value)),
     continuation: computed(() => continuationFor(conversation.value.messages.value)),
     /* ...and the standing version of that press: whether this chat continues itself, and when the one it has
      * scheduled goes (Conversation.autoContinue). The instant is what the strip counts down to, the wait has to

@@ -42,6 +42,7 @@ vi.mock(`../composables/agents/useAgents`, async () => {
             loadArchived: () => {},
             restore: () => {},
             busyIds: ref([]),
+            setResumeAfterOutage: vi.fn().mockResolvedValue(undefined),
         }),
     };
 });
@@ -105,7 +106,7 @@ const continueButton = (): HTMLButtonElement | undefined => button(`Continue`);
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
 
-/* A chat whose last turn stopped before it finished, without going near the network to get there: `resumable`
+/* A chat whose last turn stopped before it finished, without going near the network to get there: the pick-up
  * is the state a failed turn LEAVES, and conversation.test.ts is where the failures that leave it are pinned.
  * Here it is a starting position, so this file can be about what the composer does with it. */
 const stoppedChat = (): Conversation => {
@@ -115,14 +116,19 @@ const stoppedChat = (): Conversation => {
         { role: `user`, text: `clean the sandbox` },
         { role: `assistant`, text: `starting` },
     ]);
-    conversation.resumable.value = true;
+    conversation.pickUp.value = { reason: `stopped` };
     return conversation;
 };
 
 beforeEach(async () => {
     app?.unmount();
     app = undefined;
+    // BOTH stores, because a window's tabs live in sessionStorage and only seed from localStorage
+    // (windowStore). A stopped turn is persisted with its tab now, so one test's pick-up would otherwise be
+    // restored into the next one's chat and every "offers nothing" assertion here would pass or fail on
+    // whichever test ran before it.
     localStorage.clear();
+    sessionStorage.clear();
     resetChat();
     // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
@@ -224,6 +230,74 @@ it(`keeps the armed line up on a chat with nothing to continue`, async () => {
     expect(continueButton()).toBeUndefined();
     expect(composerText()).toContain(`Auto-continue is on`);
     expect(button(`Turn off`)).toBeDefined();
+});
+
+/* THE ENDING THAT USED TO GET NOTHING. A spent allowance stops a turn exactly the way a crash does, work
+ * finished and a live session behind it, and it alone knows when the press will work. It used to get a sentence
+ * in the transcript and no affordance at all, on the reasoning that a press before the reset re-fails, so the
+ * one ending that could have said "and here is when" was the one that made the user type the word by hand.
+ *
+ * Both halves are asserted here, because either alone is a different bug: the strip has to be UP (so the work
+ * is visibly still there and the wait has a length), and the press has to be INERT (so nobody spends a click on
+ * a refusal), and the key has to stay out of it. */
+it(`counts a spent allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
+    const conversation = stoppedChat();
+    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
+    await mountPanel();
+
+    expect(composerText()).toContain(`The allowance ran out mid-turn`);
+    expect(composerText()).toContain(`about 60 min`);
+    expect(continueButton()?.disabled).toBe(true);
+    // The key stays what it was: a shortcut that fires into a refusal is worse than no shortcut.
+    expect(composerText()).not.toContain(`Enter to continue`);
+    composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
+    await settle();
+    expect(enqueue).not.toHaveBeenCalled();
+});
+
+// ...and on the far side of the reset it is an ordinary stopped turn, with the ordinary press and the key back.
+it(`hands the press over once the allowance has reset`, async () => {
+    const conversation = stoppedChat();
+    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
+    await mountPanel();
+
+    expect(continueButton()?.disabled).toBe(false);
+    expect(composerText()).toContain(`Enter to continue`);
+    continueButton()!.click();
+    await settle();
+
+    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain, undefined, undefined);
+});
+
+/* THE OUTAGE, IN THE SAME STRIP. It used to be a banner of its own in another component, which is how one
+ * situation, a turn that stopped with work behind it, came to look like three unrelated things depending on
+ * what stopped it. What it keeps that the others don't is the second party: the daemon's breaker is already
+ * retrying, so the strip reports that wait and offers the way out of it, and the manual press stays live for
+ * anyone who won't wait. */
+it(`carries the outage in the same strip, with the way out of its automatic retry`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `outage`, automatic: { at: Date.now() + 120_000 } };
+    await mountPanel();
+
+    expect(composerText()).toContain(`picks it back up by itself`);
+    expect(button(`Stop`)).toBeDefined();
+    // Nothing offers to arm a SECOND automation over a turn something is already bringing back.
+    expect(button(`Auto-continue`)).toBeUndefined();
+    expect(continueButton()?.disabled).toBe(false);
+});
+
+// The same outage with nothing retrying it: the strip becomes the offer to arm the daemon's own resume, beside
+// the press that does it now.
+it(`offers to keep the chat going when nothing is retrying the outage`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `outage` };
+    await mountPanel();
+
+    expect(composerText()).toContain(`nothing is retrying it`);
+    expect(button(`Keep this chat going`)).toBeDefined();
+    expect(continueButton()?.disabled).toBe(false);
 });
 
 // A chat that ended cleanly is not offered anything: the strip is for work left hanging, and one that showed up

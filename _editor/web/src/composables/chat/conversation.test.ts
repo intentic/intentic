@@ -1340,19 +1340,19 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete (error_during_execution)` }]));
         await conversation.send(`ship the parser`, settings);
-        expect(conversation.resumable.value).toBe(true);
+        expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
 
         // The next turn is the answer to the offer, whichever way the user gave it, so the offer stands down
         // at the START of it rather than at its end, and cannot be pressed twice into two turns.
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
         await conversation.send(CONTINUATIONS.plain, settings);
-        expect(conversation.resumable.value).toBe(false);
+        expect(conversation.pickUp.value).toBeUndefined();
 
         for (const code of [`subscription-required`, `agent-busy`, `claude-not-entitled`] as const) {
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code, message: `nope` }]));
             await conversation.send(`again`, settings);
             expect(conversation.error.value, code).toBe(`nope`);
-            expect(conversation.resumable.value, code).toBe(false);
+            expect(conversation.pickUp.value, code).toBeUndefined();
         }
     });
 
@@ -1367,7 +1367,7 @@ describe(`Conversation`, () => {
             await conversation.send(`ship the parser`, settings);
 
             // Scheduled, not sent: the wait is what makes the automation something a person can get in front of.
-            expect(conversation.resumable.value).toBe(true);
+            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
             expect(conversation.autoContinueAt.value).toBeGreaterThan(Date.now());
             expect(turnBodies()).toHaveLength(1);
 
@@ -1377,7 +1377,7 @@ describe(`Conversation`, () => {
             // It said the sentence the button says, and the chat is running again with nobody having touched it.
             expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
             expect(conversation.autoContinueAt.value).toBeUndefined();
-            expect(conversation.resumable.value).toBe(false);
+            expect(conversation.pickUp.value).toBeUndefined();
         } finally {
             vi.useRealTimers();
         }
@@ -1404,7 +1404,7 @@ describe(`Conversation`, () => {
     });
 
     /* THE ONE ENDING IT MUST NEVER ANSWER. Stop is the user saying "not this": restarting the turn they just
-     * stopped is the exact opposite of what they asked for, and it is the same `resumable` flag either way, so
+     * stopped is the exact opposite of what they asked for, and it is the same pick-up either way, so
      * the difference has to be read off who ended it rather than off what was left behind.
      *
      * Waits for the agent's own text rather than for `streaming`, which goes true the instant the send opens and
@@ -1422,7 +1422,7 @@ describe(`Conversation`, () => {
             await conversation.stop();
             await turn;
 
-            expect(conversation.resumable.value).toBe(true);
+            expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
             expect(conversation.autoContinueAt.value).toBeUndefined();
             await vi.advanceTimersByTimeAsync(60_000);
             expect(turnBodies()).toHaveLength(1);
@@ -1509,7 +1509,7 @@ describe(`Conversation`, () => {
         );
         await turn;
 
-        expect(conversation.resumable.value).toBe(true);
+        expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
         const text = continuationFor(conversation.messages.value);
         expect(text).toBe(CONTINUATIONS.afterDenial);
         // Allowing the same tool instead leaves the ordinary sentence: there is no refusal to carry on without.
@@ -1650,10 +1650,14 @@ describe(`Conversation`, () => {
         expect(conversation.status.value).not.toBe(`error`);
     });
 
-    /* A spent allowance names its reset instant and stops there. Nothing re-runs the turn and nothing is armed:
-     * the allowance is the user's own budget, so the next send is theirs to make. A daemon old enough to still
-     * send an `autoResume` verdict on a rate_limit frame changes none of that. */
-    it(`names the reset instant on a usage limit and arms nothing`, async () => {
+    /* A spent allowance names its reset instant and leaves the turn PICKABLE from it. Nothing re-runs it: the
+     * allowance is the user's own budget, so the press is theirs to make, and a daemon old enough to still send
+     * an `autoResume` verdict on a rate_limit frame does not change that.
+     *
+     * The instant riding on the pick-up is the whole difference between this ending and the others. It is what
+     * lets the strip offer a countdown instead of either a button that re-fails or, as it used to be, nothing at
+     * all and a sentence telling the user to type the word themselves. */
+    it(`names the reset instant on a usage limit, and leaves the turn pickable from it`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
         sandboxRequestMock.mockImplementation(
@@ -1668,10 +1672,54 @@ describe(`Conversation`, () => {
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`Resets`);
         expect(notice.text).not.toContain(`Auto-resume`);
-        // No offer banner and no opt-out: there is no automation here to describe or to regret.
+        // No opt-out on the notice and nothing marked automatic: there is no automation here to regret.
         expect(notice.noticeAction).toBeUndefined();
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(conversation.error.value).toBeNull();
+        // The press, and the instant it starts working: the reset, to the millisecond the frame named.
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: resetsAt * 1_000 });
+    });
+
+    /* An allowance the daemon could not date (an unpolled pool, a provider that renamed its bucket) still gets
+     * the press, live: there is nothing to wait for that anyone can name, and the provider's own sentence
+     * already says to send again. A countdown to an instant we are guessing at would be worse than no clock. */
+    it(`offers an undated usage limit straight away`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Kimi usage limit reached.` }, { kind: `done` }]),
+        );
+        await conversation.send(`hello`, settings);
+
+        expect(conversation.pickUp.value).toEqual({ reason: `limit` });
+    });
+
+    /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where the ladder alone gets
+     * it wrong: three retries five, fifteen and forty-five seconds into a quota that reopens in an hour spends
+     * the whole automation on guaranteed failures and then gives up, hours before the work could have resumed.
+     * So the named instant is a floor under the wait, and an armed chat sleeps through the reset. */
+    it(`waits for the reset before continuing itself through a spent allowance`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
+            sandboxRequestMock.mockImplementation(
+                sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, resetsAt }, { kind: `done` }]),
+            );
+            await conversation.send(`ship the parser`, settings);
+
+            // Scheduled for the reset, not for the front of the ladder.
+            expect(conversation.autoContinueAt.value).toBe(resetsAt * 1_000);
+            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+            // A rung's worth of waiting buys nothing: the allowance is what the chat is waiting on.
+            await vi.advanceTimersByTimeAsync(60_000);
+            expect(turnBodies()).toHaveLength(1);
+
+            await vi.advanceTimersByTimeAsync(3_600_000);
+            expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     /* A PROVIDER OUTAGE, which reads like a limit hit and behaves nothing like one: no reset instant to aim at,
@@ -2743,7 +2791,7 @@ describe(`Conversation`, () => {
         conversation.stop();
         await turn;
 
-        expect(conversation.resumable.value).toBe(false);
+        expect(conversation.pickUp.value).toBeUndefined();
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`the setup view is too scary`]);
         // A Stop is the user's own doing, so it says so and nothing more: no red line over a send they cancelled.
         expect(conversation.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);

@@ -1,5 +1,6 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { Conversation } from "./conversation";
+import type { PickUp, PickUpReason } from "./pickUp";
 import { forgetWindowState, readWindowState, writeWindowState } from "../windowStore";
 
 /* Where a sandbox's open chat tabs live between page loads: session/provider identity, title, and the composer
@@ -43,6 +44,13 @@ export interface StoredTab {
     // like `fast`, and for a stronger reason than the picks above: it is armed precisely for the stops nobody is
     // sitting there for, so a reload dropping it would silently end the unattended run it was turned on for.
     readonly autoContinue?: boolean;
+    /* THE STOPPED TURN ITSELF (Conversation.pickUp), which used to die with the tab and take the offer with it.
+     *
+     * Persisting it matters most for the ending that waits longest: a spent allowance resets hours out, reliably
+     * outliving the window that hit it, so an offer held only in memory was guaranteed to be gone by the time it
+     * became pressable. The daemon holds the session either way; what a reload lost was the client's knowledge
+     * that there was anything to pick up. Absent on every chat whose last turn finished. */
+    readonly pickUp?: PickUp;
     // The automatic-tier veto (Conversation.tierHold), per TAB like `fast` and for its reason: a property of
     // this chat, never a remembered default. The daemon also persists it per conversation, so this only bridges
     // the reload gap for a chat that has not sent a turn since flipping it.
@@ -94,6 +102,7 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     thinking: conversation.thinking.value,
     fast: conversation.fast.value,
     autoContinue: conversation.autoContinue.value,
+    pickUp: conversation.pickUp.value,
     tierHold: conversation.tierHold.value,
     tier: conversation.lastTier.value,
     harness: conversation.harness.value,
@@ -140,6 +149,25 @@ const readAttachments = (raw: unknown): { name: string; path: string }[] =>
 const readText = <K extends string>(key: K, raw: unknown): { [P in K]?: string } =>
     typeof raw === `string` && raw !== `` ? ({ [key]: raw } as { [P in K]?: string }) : {};
 
+const PICK_UP_REASONS: readonly PickUpReason[] = [`stopped`, `limit`, `outage`];
+
+/* The stopped turn, read back. `readyAt` survives because it is the whole value of persisting this: an
+ * allowance reset is an absolute instant and stays true across a reload.
+ *
+ * `automatic` deliberately does NOT. It means "something outside this window is already bringing the turn
+ * back", and the thing watching for that arrival was this window's own probe, which the reload ended. Restoring
+ * it would count down to an instant already past and promise an arrival nobody is waiting for; dropped, the tab
+ * comes back saying what is still true, that the turn is here and one press picks it up. */
+const readPickUp = (raw: unknown): { pickUp?: PickUp } => {
+    const entry = typeof raw === `object` && raw !== null ? (raw as Record<string, unknown>) : undefined;
+    const reason = PICK_UP_REASONS.find((candidate) => candidate === entry?.[`reason`]);
+    if (reason === undefined) {
+        return {};
+    }
+    const readyAt = entry?.[`readyAt`];
+    return { pickUp: { reason, ...(typeof readyAt === `number` && Number.isFinite(readyAt) ? { readyAt } : {}) } };
+};
+
 // One entry, or undefined when it carries no usable identity or draft. Skipped rather than fatal: a single
 // unreadable tab must not cost the user every other chat they had open.
 const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
@@ -184,6 +212,7 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         ...(typeof raw[`thinking`] === `boolean` ? { thinking: raw[`thinking`] } : {}),
         ...(typeof raw[`fast`] === `boolean` ? { fast: raw[`fast`] } : {}),
         ...(typeof raw[`autoContinue`] === `boolean` ? { autoContinue: raw[`autoContinue`] } : {}),
+        ...readPickUp(raw[`pickUp`]),
         ...(typeof raw[`tierHold`] === `boolean` ? { tierHold: raw[`tierHold`] } : {}),
         ...(raw[`tier`] === `fast` || raw[`tier`] === `standard` ? { tier: raw[`tier`] as `fast` | `standard` } : {}),
         ...(raw[`harness`] === `claude-code` || raw[`harness`] === `native` ? { harness: raw[`harness`] as AgentHarness } : {}),

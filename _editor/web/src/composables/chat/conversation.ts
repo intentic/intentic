@@ -22,6 +22,7 @@ import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { AUTO_CONTINUE_PROGRESS_MS, AUTO_CONTINUE_TRIES, autoContinueDelay } from "./autoContinue";
+import type { PickUp } from "./pickUp";
 import { clampEffort } from "./effortScale";
 import { rememberedAccountFor, selectedAccountId } from "./providerAccounts";
 import { modelLabelFor, providerModels, providerTabs } from "./providerCatalog";
@@ -124,20 +125,23 @@ export class Conversation {
     readonly error = ref<string | null>(null);
     /* THE LAST TURN ENDED BEFORE ITS WORK DID, and picking it up is a press rather than a sentence.
      *
-     * Two endings share that shape and nothing else does: a turn the user stopped, and a turn that died with no
-     * code anybody can act on, the harness crashing mid-run, an agent that halted after a tool it was refused.
-     * Both leave half-finished work behind a session that is perfectly alive, so the only thing missing is
-     * somebody saying "carry on". That sentence was being typed by hand, into every chat this happened to, which
-     * is the whole reason this flag exists: the offer it arms (ChatPane's continue strip, and Enter on an empty
-     * composer) is the typing, done once.
+     * Four endings share that shape: a turn the user stopped, a turn that died with no code anybody can act on
+     * (the harness crashing mid-run, an agent that halted after a tool it was refused), a provider outage, and a
+     * spent allowance. All four leave half-finished work behind a session that is perfectly alive, so the only
+     * thing missing is somebody saying "carry on". That sentence was being typed by hand, into every chat this
+     * happened to, which is the whole reason this state exists: the offer it arms (the continue strip, and Enter
+     * on an empty composer) is the typing, done once.
+     *
+     * The last two differ from the first two only in KNOWING SOMETHING EXTRA about when the press works, and
+     * pickUp.ts is where that difference lives, not here.
      *
      * DELIBERATELY NOT the failures that name something to fix, a dead credential, a model the provider does
-     * not serve, a spent allowance, a seat nobody enabled. Continuing those re-fails by construction, and an
-     * offer that re-fails teaches the user to stop trusting the offer.
+     * not serve, a seat nobody enabled. Continuing those re-fails by construction, and an offer that re-fails
+     * teaches the user to stop trusting the offer.
      *
      * Cleared by the next turn starting, whichever it is: the continuation itself, or whatever the user decided
      * to send instead of it. */
-    readonly resumable = ref(false);
+    readonly pickUp = ref<PickUp | undefined>();
 
     /* WHETHER THE DAEMON HAS TAKEN THE TURN THIS WINDOW IS ON, false from the moment a send opens one until its
      * ack comes back, and true for the whole of a run adopted by reattach (a run that exists daemon-side is
@@ -482,7 +486,7 @@ export class Conversation {
         account: this.account,
         session: this.session,
         error: this.error,
-        resumable: this.resumable,
+        pickUp: this.pickUp,
         streaming: this.streaming,
         requeue: (userMessageId: number) => this.requeueUndelivered(userMessageId),
         hold: () => {
@@ -1184,7 +1188,7 @@ export class Conversation {
         this.error.value = null;
         // A turn is running, so there is nothing left stopped to pick up, this IS the picking up, or the message
         // the user sent in its place. Either way a scheduled continuation has been overtaken by it.
-        this.resumable.value = false;
+        this.pickUp.value = undefined;
         this.cancelAutoContinue();
         // A live turn supersedes the waits a failed one opened. THIS turn is the retry, or the send that
         // replaced it, whether the scheduler fired it or another window did.
@@ -1218,7 +1222,15 @@ export class Conversation {
      * switch. That last one is the important exclusion: restarting a turn somebody just stopped is the exact
      * opposite of what they asked for, and `interrupted` is what tells the two endings apart. */
     private scheduleAutoContinue(ranForMs: number): void {
-        if (!this.autoContinue.value || !this.resumable.value || this.interrupted) {
+        const pickUp = this.pickUp.value;
+        if (!this.autoContinue.value || pickUp === undefined || this.interrupted) {
+            return;
+        }
+        /* SOMETHING ELSE IS ALREADY BRINGING THIS TURN BACK (an outage the daemon's breaker holds), so the
+         * automation stands down rather than racing it: two continuations of one stopped turn is the failure
+         * mode this whole state exists to make impossible. The strip still says what is happening, and the
+         * manual press is still there for anyone who won't wait. */
+        if (pickUp.automatic !== undefined) {
             return;
         }
         if (ranForMs >= AUTO_CONTINUE_PROGRESS_MS) {
@@ -1243,7 +1255,15 @@ export class Conversation {
             return;
         }
         this.autoContinueTries += 1;
-        this.autoContinueAt.value = Date.now() + delay;
+        /* THE LADDER SETS A FLOOR, NOT THE WAIT. A pick-up that names an instant before which nothing gets
+         * through (a spent allowance, hours out) makes every rung of the ladder a guaranteed failure: three
+         * five-second retries against a quota that resets on Tuesday, and then the automation gives up and the
+         * user comes back to a chat that stopped trying long before it could have worked. So the wait is
+         * whichever is longer, and an armed chat sleeps through the reset and picks the work up on the far side
+         * of it, which is the entire promise this switch makes. */
+        const readyAt = this.pickUp.value?.readyAt;
+        const wait = Math.max(delay, readyAt === undefined ? 0 : readyAt - Date.now());
+        this.autoContinueAt.value = Date.now() + wait;
         this.autoContinueTimer = setTimeout(() => {
             this.autoContinueAt.value = undefined;
             this.autoContinueTimer = undefined;
@@ -1256,7 +1276,7 @@ export class Conversation {
                 return;
             }
             void this.enqueue(continuationFor(this.messages.value));
-        }, delay);
+        }, wait);
     }
 
     // Drop a pending continuation: a turn starting (it has been overtaken), the automation being switched off,
@@ -1285,7 +1305,7 @@ export class Conversation {
          * stop too. The press means "and get on with it"; waiting for the NEXT one would ask the user to press
          * Continue as well, and not pressing Continue is the entire point. No `interrupted` guard here, unlike
          * the turn-end path: somebody who stops a turn and then arms this is asking for that turn to carry on. */
-        if (this.resumable.value && !this.streaming.value) {
+        if (this.pickUp.value !== undefined && this.pickUp.value.automatic === undefined && !this.streaming.value) {
             this.armAutoContinue();
         }
     }
@@ -1490,7 +1510,7 @@ export class Conversation {
          * press would send a bare "Continue" as the conversation's first message and the agent would rightly
          * answer that it has nothing to continue. What that Stop earns instead is the words back, which the
          * send's own pre-ack path hands over. */
-        this.resumable.value = this.turnAccepted;
+        this.pickUp.value = this.turnAccepted ? { reason: `stopped` } : undefined;
         this.abort();
         this.persist();
     }

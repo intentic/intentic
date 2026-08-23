@@ -25,6 +25,15 @@
  */
 export type SendIntent = `place` | `edit` | `plan` | `idle` | `parked` | `steer` | `queue`;
 
+/* A STOPPED TURN, ALREADY READ AGAINST THE CLOCK. The pick-up itself carries instants (pickUp.ts); this file is
+ * pure and value-typed, and a predicate that read the clock would answer differently on two consecutive calls in
+ * one render. So the pane, which owns the ticking clock, resolves both instants into booleans and hands those
+ * over: `ready` is whether a press gets through NOW, and it is the only thing separating an offer from a
+ * countdown. */
+export interface PickUpSituation {
+    readonly ready: boolean;
+}
+
 /** Everything the four answers turn on, as plain values, one snapshot of the composer and its conversation. */
 export interface ComposerSituation {
     /** Words or files in the box: the ordinary reason a press sends anything at all. */
@@ -47,8 +56,8 @@ export interface ComposerSituation {
     readonly awaitingDecision: boolean;
     /** That live turn takes mid-turn input. */
     readonly steerable: boolean;
-    /** The last turn stopped before it finished and can be picked up. */
-    readonly resumable: boolean;
+    /** The last turn stopped before it finished, as the pane reads it against the clock (see PickUpSituation). */
+    readonly pickUp: PickUpSituation | undefined;
     /** Messages written mid-turn that haven't reached the agent yet. */
     readonly queued: number;
     /** There is an account to send with. */
@@ -160,20 +169,23 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
     return undefined;
 };
 
-/* THE LAST TURN STOPPED BEFORE IT FINISHED, and this composer is offering to carry it on.
+/* THE LAST TURN STOPPED BEFORE IT FINISHED, and this composer has something to say about it.
  *
- * The flag itself is the conversation's (Conversation.resumable, which says at length which endings earn it);
- * what the composer adds is the three states in which the offer would be wrong even though the turn really did
+ * The state itself is the conversation's (Conversation.pickUp, and pickUp.ts for which endings earn it); what
+ * the composer adds is the three states in which saying anything would be wrong even though the turn really did
  * stop. An EMPTY BOX is the whole of the gesture, the offer is "press this instead of typing", so the moment
  * there are words or files staged, those are what the user means to send. A PENDING PLAN turns the composer into
  * the revision field, where a continuation would be feedback rather than a continuation. And a QUEUED message is
  * already the answer to "what happens next", waiting for a send of its own.
  *
- * One predicate for both affordances deliberately: the strip and the Enter key are the same offer wearing two
- * shapes, and a user who reaches for the key because the strip is on screen must not find it does something
- * else. */
-export const continueOffered = (situation: ComposerSituation): boolean =>
-    situation.resumable && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
+ * TWO PREDICATES, because a pick-up that is waiting on a known instant is still worth a strip and is not yet
+ * worth a press. Visible is the strip: it says what happened and what is being waited for. Offered is the press
+ * and the Enter key, which are the same offer wearing two shapes, so they share one predicate exactly: a user
+ * who reaches for the key because the strip is on screen must not find it does something else. */
+export const continueVisible = (situation: ComposerSituation): boolean =>
+    situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
+
+export const continueOffered = (situation: ComposerSituation): boolean => continueVisible(situation) && situation.pickUp?.ready === true;
 
 // A bare press with nothing typed, sending the messages written while the agent was busy.
 const queueFlushable = (situation: ComposerSituation): boolean => situation.queued > 0 && !situation.streaming && !situation.pendingPlan;

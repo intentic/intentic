@@ -1,5 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { ref, type Ref } from "vue";
+import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "./providerAccounts";
 import type { TranscriptClock } from "./transcriptClock";
 import type { SessionRef } from "./turnRequest";
@@ -63,9 +64,9 @@ export interface FailureHost {
     readonly session: Ref<SessionRef | undefined>;
     // The red line: this needs the user.
     readonly error: Ref<string | null>;
-    // This turn died with its work half done and nothing to fix first, so the way on is one press, see
-    // Conversation.resumable, and the one branch below that raises it.
-    readonly resumable: Ref<boolean>;
+    // This turn died with its work half done and nothing to fix first, so the way on is one press (pickUp.ts).
+    // Three branches below raise it, and they differ only in what they can say about WHEN the press works.
+    readonly pickUp: Ref<PickUp | undefined>;
     // A probe stands down while a turn is live, the run it was hunting is already here.
     readonly streaming: Ref<boolean>;
     // Take the user's undelivered message back out of the transcript and hold it in the queue, where it waits
@@ -221,14 +222,14 @@ export class TurnFailures {
                  * stopped answering, a turn ended in a subtype nobody has a sentence for ("agent did not
                  * complete"). Those have one thing in common that every code above them lacks, nothing is
                  * broken that the user could go and fix, the session is intact, and the only thing between the
-                 * work and its finish is somebody saying carry on. That is exactly what `resumable` offers.
+                 * work and its finish is somebody saying carry on. That is exactly what a pick-up offers.
                  *
                  * The three NAMED codes here are excluded by hand, because for them the sentence is the point:
                  * a seat nobody enabled, an agent already running a turn, a subscription that isn't there. A
                  * Continue button under any of those re-fails on the press, which is worse than no button,
                  * it converts a clear refusal into one the user now blames themselves for. */
                 if (code === undefined) {
-                    this.host.resumable.value = true;
+                    this.host.pickUp.value = { reason: `stopped` };
                 }
                 return;
         }
@@ -241,15 +242,26 @@ export class TurnFailures {
         markAccountReauth(this.host.provider.value, this.host.account.value, detail);
     }
 
-    /* Claude's subscription usage cap, not a crash, the daemon's message renders as a muted notice (like
-     * session-not-found) rather than the red error ref, so it reads as "wait and retry" instead of "the
-     * workspace broke". Nothing re-runs the turn: unlike an outage or a rotated token, the allowance is the
-     * user's OWN budget, so naming the reset instant and leaving the next send to them is the whole response.
+    /* THE SUBSCRIPTION ALLOWANCE RAN OUT MID-TURN, which is a wait, not a crash: the daemon's message renders as
+     * a muted notice rather than the red error ref, so it reads as "wait and carry on" instead of "the workspace
+     * broke". Nothing re-runs it by itself, unlike an outage or a rotated token: the allowance is the user's OWN
+     * budget, and an automation that spends it the second it reopens is not a decision to make on their behalf.
+     *
+     * WHAT IT DOES LEAVE IS THE PRESS. This branch used to end at the sentence, on the reasoning that a
+     * continuation before the reset only re-fails, which is true and which made this the one ending that knew
+     * exactly when the press WOULD work and was also the only one that made the user type the word by hand. The
+     * instant is the answer to both: the offer stands from here, and it says out loud that it is waiting for it.
+     *
+     * With no instant anywhere (an unpolled pool, a provider that renamed its bucket, the fleet-headroom case
+     * whose own sentence says "send again"), the press is offered live: there is nothing to wait for that anyone
+     * can name, and the daemon's own words already invite the retry.
+     *
      * The frame's own reset instant wins over the usage store's binding window (the frame names the pool that
      * actually refused). */
     private applyLimitError(error: TurnError): void {
         const { message } = error;
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.account.value))?.resetsAt;
+        this.host.pickUp.value = { reason: `limit`, ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }) };
         if (resetsAt === undefined) {
             this.host.transcript.notice(message);
             return;
@@ -282,6 +294,11 @@ export class TurnFailures {
         }
         const scheduled = error.autoResume === `scheduled`;
         this.outageResume.value = { ...outage, scheduled };
+        /* The same stopped-work state every other ending leaves, so the strip above the composer is ONE strip.
+         * Scheduled, the pick-up is marked automatic: the daemon's breaker is already bringing this turn back,
+         * so the strip reports the wait and the local automation keeps out of its way, while the manual press
+         * stays live for anyone who won't wait for it. */
+        this.host.pickUp.value = { reason: `outage`, ...(scheduled ? { automatic: { at: outage.retryAt * 1_000 } } : {}) };
         this.host.transcript.notice(
             scheduled
                 ? `${message} Retrying by itself in ${formatWait(outage.retryAt)}: attempt ${outage.attempt} of ${outage.maxAttempts}.`
@@ -352,6 +369,7 @@ export class TurnFailures {
             return;
         }
         this.outageResume.value = { ...pending, scheduled: true };
+        this.host.pickUp.value = { reason: `outage`, automatic: { at: pending.retryAt * 1_000 } };
         this.host.transcript.notice(
             `This chat picks itself back up in ${formatWait(pending.retryAt)} and keeps doing so through provider outages. Only this chat: Sandbox ▸ Agent sets the default for the rest.`,
         );
@@ -372,6 +390,10 @@ export class TurnFailures {
         }
         this.cancelProbe();
         this.outageResume.value = { ...pending, scheduled: false };
+        // The turn is still stranded and still pickable, which is the truth the strip has to keep telling: the
+        // daemon holds it for the hour either way, so a stop that read as "this turn is gone" would be a lie the
+        // next press disproves. What goes is the automatic mark, and with it the countdown.
+        this.host.pickUp.value = { reason: `outage` };
         this.host.transcript.notice(`Stopped: this chat no longer picks itself back up. The turn is still here to resume by hand.`);
         this.host.persist();
     }

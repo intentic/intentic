@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { Icon, vAction } from "@intentic/ui";
+import { Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE } from "@intentic/sandbox-contract";
 import { trialExhausted } from "../composables/chat/access";
 import { useAgents } from "../composables/agents/useAgents";
 import { trialStatus } from "../composables/chat/providerCatalog";
-import { formatWait } from "../composables/chat/usageStatus";
 import { loadTrialStatus, usePaneView } from "../composables/chat/useChat";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
@@ -16,17 +15,20 @@ import ChatChooseModelButton from "./ChatChooseModelButton.vue";
  * arrived at by itself, each with the one press that answers it.
  *
  * They are together because they are the same kind of thing and share one slot's worth of the reader's
- * attention, in this order: what this agent IS (archived), what it can send with (the account gate, the trial,
- * an expired credential), and what happened to the last turn (an outage). What the composer is FOR: a
- * continuation waiting on a press, an armed edit, stays with the composer: those describe the box, not the
- * chat.
+ * attention, in this order: what this agent IS (archived), and what it can send with (the account gate, the
+ * trial, an expired credential). What the composer is FOR stays with the composer: a stopped turn waiting on a
+ * press, an armed edit. Those describe the box, not the chat.
+ *
+ * The outage banner used to live here, which is how a provider failure and a spent allowance came to be two
+ * unrelated-looking things on screen. Both are a turn that stopped with work behind it, so both are the
+ * continue strip's now (ChatContinueStrip), and this file went back to being about the chat's standing.
  *
  * Everything here reads this pane's own conversation through the injected view, never the focused one: with two
  * chats side by side, a banner about the wrong one is worse than no banner. */
 
 const { conversation, provider, account, accounts, streaming } = usePaneView();
 const { reachable } = useSandbox();
-const { agentById, archived, loadArchived, restore, busyIds, setResumeAfterOutage } = useAgents();
+const { agentById, archived, loadArchived, restore, busyIds } = useAgents();
 
 /* Archiving an agent closes its chat tab (see the archive note in useAgents), but an archived agent can still be
  * READ in a tab: opened from the archive view, or filed away by the daemon's retention sweep while it sat open.
@@ -109,46 +111,6 @@ const activeAccountReauth = computed(() => {
     const id = account.value ?? accounts.value[0]?.id;
     return accounts.value.find((entry) => entry.id === id && entry.needsReauth === true);
 });
-
-/* The outage banner (Conversation.failures.outageResume). A spent usage limit gets no equivalent: it has a known
- * reset instant and nothing anyone can do before it, so the transcript notice naming that instant says
- * everything there is to say. An outage has no known end, which is why it needs a live banner: its whole job is
- * to answer "is anything still happening?", which during an outage is the only question anyone has. When the
- * resume is off it is instead the offer to arm it, which arms the very turn that bounced (the daemon remembered
- * it either way).
- *
- * THE PRESS ARMS THIS CHAT AND NOTHING ELSE. It used to write the sandbox-wide setting, and the gap between what
- * the button looked like: one line in one conversation, under one dead turn, and what it did was the whole
- * bug: a person finishing one piece of work at midnight silently signed every agent on the board up to re-run
- * its turns on their allowance. So it writes this conversation's own override (agents.resumeAfterOutage) and the
- * sandbox default stays where a standing policy belongs, in Sandbox ▸ Agent.
- *
- * …and the same press pointing the other way. `false`, not null: somebody stopping a retry they can watch
- * counting down means THIS chat, now: handing it back to a default that may well say "resume" would restart the
- * very thing they just stopped. The daemon keeps the stranded turn either way; it simply stops offering it to
- * the breaker, and the hour-long staleness sweep retires it. */
-const outageResume = computed(() => conversation.value.failures.outageResume.value);
-const arming = ref(false);
-const setOutageResume = async (resume: boolean): Promise<void> => {
-    if (!reachable.value || arming.value) {
-        return;
-    }
-    arming.value = true;
-    try {
-        await setResumeAfterOutage(conversation.value.conversationId, resume);
-        if (resume) {
-            conversation.value.failures.armOutageResume();
-            return;
-        }
-        conversation.value.failures.disarmOutageResume();
-    } catch {
-        // Left as it stands, in both directions: the offer stays up to press again and the countdown stays
-        // honest until the daemon has actually been told otherwise. A banner that vanished on a failed write
-        // would claim a resume nobody armed.
-    } finally {
-        arming.value = false;
-    }
-};
 </script>
 
 <template>
@@ -221,48 +183,4 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
             >{{ activeAccountReauth.detail ?? `This account needs to be reconnected.` }} <span class="font-semibold underline">Reconnect</span></span
         >
     </RouterLink>
-    <!-- Provider-outage banner: the turn is coming back on an escalating backoff, and this says when and how
-         many tries are left. Naming the bound is the point: an automation spending the user's allowance while
-         they watch has to account for itself, or the reasonable response is to switch it back off. -->
-    <div
-        v-if="outageResume"
-        class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
-    >
-        <Icon name="clock" class="mt-0.5 shrink-0" />
-        <span v-if="outageResume.scheduled" class="min-w-0 flex-1"
-            >This chat is picking the turn back up by itself in {{ formatWait(outageResume.retryAt) }}: attempt {{ outageResume.attempt }} of
-            {{ outageResume.maxAttempts }} since the provider failed it. Sending again yourself works too.</span
-        >
-        <!-- THE WAY BACK OUT, in the surface that armed it. Symmetry is the point: a press that starts something
-             automatic and can only be undone from a settings page is how people learn not to press it. The
-             button that turns this on is two lines down, and this is the same button pointing the other way. -->
-        <button
-            v-if="outageResume.scheduled"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-            :disabled="!reachable || arming"
-            v-action="() => setOutageResume(false)"
-        >
-            Stop
-        </button>
-        <!-- The button arms THIS CHAT and nothing else, which is the one thing about it worth saying, so the
-             sentence says it, in the words the press is made of ("this chat", "keep going") rather than in the
-             name of a setting. The old copy admitted the sandbox-wide blast radius in a parenthesis, which is
-             exactly the place nobody reads before pressing; the honest fix was to make the press smaller, not
-             the warning louder. Where the standing default lives is a different question, and it is answered on
-             the notice the press writes. -->
-        <span v-else class="min-w-0 flex-1"
-            >The model provider failed this turn and nothing is retrying it. Keep this chat going and it picks the turn back up by itself as soon as
-            the provider answers.</span
-        >
-        <button
-            v-if="!outageResume.scheduled"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-            :disabled="!reachable || arming"
-            v-action="() => setOutageResume(true)"
-        >
-            Keep this chat going
-        </button>
-    </div>
 </template>

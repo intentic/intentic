@@ -10,6 +10,7 @@ import {
     type ComposerSituation,
     type ComposerWords,
     continueOffered,
+    continueVisible,
     placeholderFor,
     sendable,
     sendHintFor,
@@ -30,7 +31,7 @@ const SETTLED: ComposerSituation = {
     streaming: false,
     awaitingDecision: false,
     steerable: false,
-    resumable: false,
+    pickUp: undefined,
     queued: 0,
     connected: true,
 };
@@ -98,7 +99,7 @@ it(`refuses more of the agent's voice than of your own`, () => {
 });
 
 it(`offers to continue a stopped turn only when the press could mean nothing else`, () => {
-    const stopped = chat({ resumable: true });
+    const stopped = chat({ pickUp: { ready: true } });
     expect(continueOffered(stopped)).toBe(true);
 
     // Words or files in the box are what the user means to send.
@@ -111,17 +112,33 @@ it(`offers to continue a stopped turn only when the press could mean nothing els
     expect(continueOffered({ ...stopped, connected: false })).toBe(false);
 });
 
+/* THE TWO READINGS OF ONE STOPPED TURN, and the whole reason there are two. A spent allowance stops the turn
+ * and names the instant its own press starts working: before that instant the strip has plenty to say and the
+ * press has nothing to do, so the sentence is visible and the key is not. The old code had one predicate, which
+ * forced that ending to choose between an offer that re-fails and no offer at all, and it chose neither. */
+it(`says what happened while the press is still waiting, without arming it`, () => {
+    const waiting = chat({ pickUp: { ready: false } });
+    expect(continueVisible(waiting)).toBe(true);
+    expect(continueOffered(waiting)).toBe(false);
+    // ...and the bare press sends nothing while it waits: Enter falls back to what it always did.
+    expect(sendable(waiting, sendIntentOf(waiting), sendRefusal(waiting))).toBe(false);
+
+    // Everything that silences the offer silences the strip with it: the box is the user's answer now.
+    expect(continueVisible({ ...waiting, staged: true })).toBe(false);
+    expect(continueVisible({ ...waiting, queued: 1 })).toBe(false);
+});
+
 it(`sends the box, the queue or the continuation, but spends an edit or a placement on words only`, () => {
     const sends = (state: ComposerSituation): boolean => sendable(state, sendIntentOf(state), sendRefusal(state));
 
     expect(sends(SETTLED)).toBe(false);
     expect(sends(chat({ staged: true }))).toBe(true);
     // The bare presses that send something OTHER than the draft.
-    expect(sends(chat({ resumable: true }))).toBe(true);
+    expect(sends(chat({ pickUp: { ready: true } }))).toBe(true);
     expect(sends(chat({ queued: 2 }))).toBe(true);
     // …and neither of them may spend an armed edit or the agent's voice: an empty box would drop the turns and
     // then ask nothing, or place a blank line into the transcript.
-    expect(sends(chat({ resumable: true, editing: true }))).toBe(false);
+    expect(sends(chat({ pickUp: { ready: true }, editing: true }))).toBe(false);
     expect(sends(chat({ queued: 2, voiceAgent: true }))).toBe(false);
     // A refusal outranks all of it.
     expect(sends(chat({ staged: true, uploading: true }))).toBe(false);

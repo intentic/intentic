@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon, PersonaFace, ResponsiveOverlay, useDevice, useLoadingReveal } from "@intentic/ui";
+import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { type AgentCommand, isTrialProvider, loopDesignLine } from "@intentic/sandbox-contract";
@@ -9,6 +10,7 @@ import { modeMeta } from "../composables/chat/catalog";
 import {
     type ComposerSituation,
     continueOffered,
+    continueVisible,
     placeholderFor,
     sendable,
     sendHintFor,
@@ -18,8 +20,8 @@ import {
 } from "../composables/chat/composerIntent";
 import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../composables/chat/providerCatalog";
+import { pickUpReady } from "../composables/chat/pickUp";
 import { type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
-import { formatWait } from "../composables/chat/usageStatus";
 import { withShortcut } from "../composables/commands/useCommands";
 import { navigateInApp } from "../composables/mainWindow";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
@@ -40,6 +42,7 @@ import { useSandbox } from "../composables/sandbox/useSandbox";
 import { inputHistoryFor, recallStep } from "../composables/chat/inputHistory";
 import { insertMention, mentionQueryAt } from "../composables/chat/useMentions";
 import ChatCommandPopover from "./ChatCommandPopover.vue";
+import ChatContinueStrip from "./ChatContinueStrip.vue";
 import ChatImageThumb from "./ChatImageThumb.vue";
 import ChatMentionPopover from "./ChatMentionPopover.vue";
 import ChatForkCut from "./ChatForkCut.vue";
@@ -134,11 +137,8 @@ const {
     streaming,
     awaitingDecision,
     pendingPlanMessage,
-    resumable,
+    pickUp,
     continuation,
-    autoContinue,
-    autoContinueAt,
-    setAutoContinue,
     mode,
     provider,
     model,
@@ -500,6 +500,10 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
     }
 });
 
+/* The composer's own clock, running ONLY while a pick-up is counting down to an instant it named (an allowance
+ * reset, hours out). Nothing else here is time-dependent, and a chat whose last turn simply stopped never
+ * starts it: the press works from the moment the strip appears. */
+const paneNow = useNow(() => pickUp.value?.readyAt !== undefined);
 /* WHAT THE NEXT PRESS MEANS: one snapshot of the composer, and every answer that follows from it. The ladder
  * itself is composerIntent.ts; what the pane owns is the reading of it, because these are the values only a
  * mounted chat has. */
@@ -514,13 +518,18 @@ const situation = computed<ComposerSituation>(() => ({
     streaming: streaming.value,
     awaitingDecision: awaitingDecision.value,
     steerable: steerable.value,
-    resumable: resumable.value,
+    // The pick-up, already read against the clock: the pure ladder must not ask what time it is (see
+    // PickUpSituation), and this is the one place that knows, because it is the one place that ticks.
+    pickUp: pickUp.value === undefined ? undefined : { ready: pickUpReady(pickUp.value, paneNow.value) },
     queued: queued.value.length,
     connected: connected.value,
 }));
 const intent = computed(() => sendIntentOf(situation.value));
 // Why Send is refusing, in the user's words: undefined when the press will land.
 const refusal = computed(() => sendRefusal(situation.value));
+// Two readings of one state: the strip says what happened (including while the press is still waiting on a
+// reset), and the offer is the press and the Enter key, which are the same gesture and share one predicate.
+const continueStrip = computed(() => continueVisible(situation.value));
 const continueOffer = computed(() => continueOffered(situation.value));
 const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
 // Everything a press that spends the box needs to be true, in one name: the two intercepting intents (the
@@ -546,20 +555,6 @@ const sendHint = computed(() => {
 const stopLabel = computed(() => (awaitingDecision.value ? `Stop the turn` : `Stop generating`));
 const stopHint = computed(() =>
     awaitingDecision.value ? `Stop the turn, discards the request above` : mobile.value ? stopLabel.value : `${stopLabel.value} (Esc)`,
-);
-
-/* THE STOPPED TURN'S OFFER, LEFT ON, and the strip carries it because that is where the user is when they wish
- * they had it: reading "this turn stopped before it finished" for the third time in half an hour.
- *
- * Shown WHENEVER the automation is armed, not only alongside the offer, because the switch has to be reachable
- * to be turned off. The armed line is the whole of what a chat looks like while it is waiting on itself: a
- * countdown when one is scheduled, otherwise the standing promise, and without it a conversation sitting on a
- * five-second timer looks exactly like one nothing is happening to. */
-const autoContinueStrip = computed(() => autoContinue.value && connected.value);
-const autoContinueLine = computed(() =>
-    autoContinueAt.value === undefined
-        ? `Auto-continue is on: this chat picks itself back up when a turn stops short.`
-        : `Auto-continue is on, continuing in ${formatWait(autoContinueAt.value / 1000)}.`,
 );
 
 // The one line under the queued stack: what will actually happen to those messages. A turn that can take
@@ -1278,62 +1273,11 @@ watch(
                         <!-- What this chat's standing is: archived, the account gate, the trial, a credential
                              that needs renewing, an outage picking the turn back up (ChatPaneNotices). -->
                         <ChatPaneNotices />
-                        <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on. Under the outage
-                             banner and above the queue, because that is the order the three answer "what is
-                             happening to my work": one is coming back by itself, this one is waiting on a
-                             press, and the queue is what goes next either way. The two can't both be up:
-                             an outage arms its own resume and never this one.
-                             The key is named on the button rather than in a tooltip. A pointer that has
-                             travelled to the button has already spent what the shortcut would have saved,
-                             so the only reader it can still help is the one who hasn't moved yet, and the
-                             composer's hint slot says the same thing one line below, for exactly them. -->
-                        <div
-                            v-if="continueOffer"
-                            class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                        >
-                            <Icon name="pause" class="shrink-0" />
-                            <span class="min-w-0 flex-1">This turn stopped before it finished: the work so far is still here.</span>
-                            <!-- The standing version of the same press, offered where the wish for it happens:
-                                 reading this line for the third time in half an hour. Only while it is OFF:
-                                 armed, the strip below carries both the state and the way out of it. -->
-                            <button
-                                v-if="!autoContinue"
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
-                                :disabled="!reachable"
-                                v-tooltip.top="'Keep pressing Continue for me whenever a turn stops short'"
-                                @click="setAutoContinue(true)"
-                            >
-                                Auto-continue
-                            </button>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                                :disabled="!reachable"
-                                v-tooltip.top="'Pick up where it left off, without retyping'"
-                                @click="continueTurn"
-                            >
-                                Continue<span v-if="!mobile" class="font-normal text-subtle"> · Enter</span>
-                            </button>
-                        </div>
-                        <!-- WHAT AN ARMED CHAT LOOKS LIKE WHILE IT WAITS ON ITSELF. On screen for as long as the
-                             automation is, because a switch with no off is a trap, and because a chat sitting on
-                             a five-second timer is otherwise indistinguishable from one nothing is happening to. -->
-                        <div
-                            v-if="autoContinueStrip"
-                            class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
-                        >
-                            <Icon name="repeat" class="shrink-0" />
-                            <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
-                            <button
-                                type="button"
-                                class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                                v-tooltip.top="'Stop continuing this chat by itself'"
-                                @click="setAutoContinue(false)"
-                            >
-                                Turn off
-                            </button>
-                        </div>
+                        <!-- THE TURN STOPPED BEFORE IT FINISHED, and here is the way on: one strip for every
+                             ending that leaves work behind (ChatContinueStrip). Above the queue, because that
+                             is the order the two answer "what is happening to my work": this one is what
+                             becomes of the turn that stopped, and the queue is what goes next either way. -->
+                        <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
                         <template v-if="connected">
                             <!-- Messages written while the agent was busy that haven't reached it yet. They sit here
                              rather than in the transcript because they are not part of the conversation until the
