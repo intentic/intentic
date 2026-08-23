@@ -101,15 +101,15 @@ const routeManual = { x: 8, y: 12, w: 144, h: 48 };
 const routeBand = { x: 90, y: 156, w: 480, h: 92 };
 const routeCheckBox = { y: 182, w: 224, h: 50 };
 const routeChecks = [
-    { x: 106, label: `Trivy — deterministic`, sub: `dependencies · secrets · deploy config` },
-    { x: 338, label: `an intentic agent — adversarial`, sub: `every executable surface, running none` },
+    { x: 106, label: `Trivy (deterministic)`, sub: `dependencies · secrets · deploy config` },
+    { x: 338, label: `an intentic agent (adversarial)`, sub: `every executable surface, running none` },
 ];
 const routeListed = { y: 272, h: 44 };
 // The same three parties for phone widths, where the lanes would set their labels at a few pixels.
 const shapeParts = [
     { chip: `YOUR REPO`, what: `The extension itself, at one commit. Nothing is uploaded, packaged, or copied anywhere.` },
     { chip: `A REGISTRY`, what: `A git repo holding a <strong>pointer</strong> to that commit. A pull request adds it; delisting removes it and nothing else.` },
-    { chip: `THEIR SANDBOX`, what: `Reads the list, then clones your repo at that sha <strong>straight from your git host</strong> — never through us.` },
+    { chip: `THEIR SANDBOX`, what: `Reads the list, then clones your repo at that sha <strong>straight from your git host</strong>, never through us.` },
 ];
 ---
 
@@ -197,7 +197,7 @@ const shapeParts = [
                     {/* ── the code's own lane, which is the picture's whole point ─────────────────────── */}
                     <path d={shapeCode} fill="none" stroke="currentColor" stroke-width="2.5" marker-end="url(#shape-code)" />
                     <text x={shapeRegistry.cx} y={shapeCodeY - 13} text-anchor="middle" font-size="10" font-weight="600" style="fill: var(--color-link)">
-                        the extension itself — cloned at that sha, straight from your git host
+                        the extension itself, cloned at that sha, straight from your git host
                     </text>
                     <text x={shapeRegistry.cx} y={shapeCodeY + 22} text-anchor="middle" font-size="9" style="fill: var(--color-subtle)">
                         a registry is discovery only: a repo URL and a sha install this without one
@@ -206,7 +206,7 @@ const shapeParts = [
                     {/* ── your repo, and their sandbox ────────────────────────────────────────────────── */}
                     {
                         [
-                            { cx: shapeRepo.cx, label: `YOUR REPO`, line: `acme/incidents`, sub: `@ 9f2c1ab — one commit`, mine: true },
+                            { cx: shapeRepo.cx, label: `YOUR REPO`, line: `acme/incidents`, sub: `@ 9f2c1ab, one commit`, mine: true },
                             { cx: shapeSandbox.cx, label: `THEIR SANDBOX`, line: `Discover → Install`, sub: `someone else's machine`, mine: false },
                         ].map((party) => (
                             <Fragment>
@@ -515,7 +515,7 @@ const shapeParts = [
                 </svg>
             </div>
             <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
-                Nothing here is an account or an upload. The only thing you do by hand is add a topic — everything after it happens to a pull request, in the open, against the exact commit you pushed.
+                Nothing here is an account or an upload. The only thing you do by hand is add a topic. Everything after it happens to a pull request, in the open, against the exact commit you pushed.
             </figcaption>
         </figure>
     </div>
@@ -571,7 +571,7 @@ const shapeParts = [
             </tr>
             <tr>
                 <td><strong>Registry</strong></td>
-                <td>The <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browse plus one-click install straight from <strong>Sandbox → Discover</strong> — the official registry or any repo you point it at.</td>
+                <td>The <a href="/extensions/">gallery</a>, the topic scan that opens your pull request, and browse plus one-click install straight from <strong>Sandbox → Discover</strong>: the official registry or any repo you point it at.</td>
             </tr>
             <tr>
                 <td><strong>Updates</strong></td>

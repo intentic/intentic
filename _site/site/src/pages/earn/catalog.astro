@@ -29,7 +29,7 @@ const flowW = 384;
 const runSteps = [
     { title: `Agent asks`, sub: `it arrives as an offer in your chat` },
     { title: `You approve`, sub: `the Run button is the only thing that spends` },
-    { title: `It runs`, sub: `the platform calls it — you stay anonymous` },
+    { title: `It runs`, sub: `the platform calls it, you stay anonymous` },
     { title: `Charged in credits`, sub: `or refunded automatically if it fails`, pay: true },
 ];
 const runNodes = runSteps.map((step, i) => ({ ...step, n: i + 1, y: flowTop + i * flowGap }));
@@ -48,11 +48,11 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
                         <div class="eyebrow"><a href="/earn/" class="text-subtle no-underline hover:text-link">Earn</a> · The catalog</div>
                         <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">Every service, listed.</h1>
                         <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            These are the metered services a member's agent can ask to run — each run approved by its owner, priced in credits, and
+                            These are the metered services a member's agent can ask to run. Each run is approved by its owner, priced in credits, and
                             refunded automatically if the service fails to answer.
                         </p>
                         <p class="mt-4 max-w-copy text-sm leading-relaxed text-subtle">
-                            Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a> — public, no login — and if
+                            Read live from <a class="font-mono" href={endpoint} target="_blank" rel="noopener">{endpoint}</a> (public, no login). If
                             you run something worth selling, <a href="/developers/services/">listing it is self-serve.</a>
                         </p>
                     </div>
@@ -142,7 +142,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
                                     }
                                 </svg>
                                 <p class="mt-5 max-w-copy text-2xs leading-relaxed text-subtle">
-                                    Every run is approved before it spends, and a failed run refunds itself — so a service is judged only by the runs it
+                                    Every run is approved before it spends, and a failed run refunds itself. A service is judged only by the runs it
                                     actually answers.
                                 </p>
                             </div>
@@ -163,7 +163,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
             <div id="catalog-wanted" class="hidden mt-14 flex flex-col gap-4">
                 <h2 class="text-lg font-semibold tracking-tight text-content">Asked for, and unserved.</h2>
                 <p class="max-w-copy text-sm leading-relaxed text-muted">
-                    When an agent reads this catalog and finds nothing that answers, it can file what it was looking for. This is that list —
+                    When an agent reads this catalog and finds nothing that answers, it can file what it was looking for. This is that list:
                     the last 90 days, counted by distinct members, most asked first. Each row is measured demand nobody is serving yet.
                 </p>
                 <div id="catalog-wants" class="flex flex-col gap-1.5"></div>
@@ -205,7 +205,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
         document.getElementById(`catalog-loading`).classList.add(`hidden`);
         if (!Array.isArray(data.services) || data.services.length === 0) {
             const empty = document.getElementById(`catalog-empty`);
-            empty.textContent = `No services are listed yet. Listing one is self-serve — the first provider changes this page.`;
+            empty.textContent = `No services are listed yet. Listing one is self-serve: the first provider changes this page.`;
             empty.classList.remove(`hidden`);
         } else {
             const grid = document.getElementById(`catalog-services`);

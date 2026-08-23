@@ -68,8 +68,8 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
     </p>
     <p>
         Every install path checks that chain in one go before touching anything, shows you the whole list, and asks once. It then turns on
-        what it can (the features, then a restart), installs Docker Desktop — through the Windows package manager where there is one, and
-        straight from docker.com where there isn't — starts its engine and makes sure it is in Linux-container mode. What it cannot do it
+        what it can (the features, then a restart), installs Docker Desktop (through the Windows package manager where there is one, and
+        straight from docker.com where there isn't), starts its engine and makes sure it is in Linux-container mode. What it cannot do it
         says so about: a firmware virtualization switch is changed in BIOS/UEFI before Windows boots, and a Windows running inside a virtual
         machine needs nested virtualization enabled on its host.
     </p>
@@ -181,7 +181,7 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         The nested engine also runs <strong>Ollama</strong>, for people who want that runtime specifically: <code>docker run -d -p
         11434:11434 ollama/ollama</code> inside the sandbox (add <code>--gpus=all</code> once the docker capability's GPU option is on),
         then point a <strong>Model endpoint</strong> card at <code>http://127.0.0.1:11434/v1</code>. If you don't care which runtime
-        serves the weights, the <strong>Local model</strong> card does all of this with one pick and no engine at all — see{" "}
+        serves the weights, the <strong>Local model</strong> card does all of this with one pick and no engine at all. See{" "}
         <a href="/docs/models/">Models</a>.
     </p>
 

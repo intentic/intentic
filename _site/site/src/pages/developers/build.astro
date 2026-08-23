@@ -212,12 +212,12 @@ const workspace = `.intentic/config/workspace-extensions/
     <p>
         The classes for layout, typography, spacing and colour are <strong>provided by the host</strong>, and they are a promise rather than
         a side effect: the whole spacing scale, every step of the type scale and every colour role exist whether or not anything is currently
-        using one. Nothing scans your bundle for class names — nobody builds it but you — so a class only works if the host promised it.
+        using one. Nothing scans your bundle for class names (nobody builds it but you), so a class only works if the host promised it.
     </p>
     <DocsCodeBlock code={styling} lang="typescript" title="src/IncidentsView.vue" />
     <p>
-        Two rules follow from that, and they are the whole of it. <strong>Name a colour role</strong> — <code>text-muted</code>,{" "}
-        <code>bg-card</code>, <code>border-line</code>, <code>text-danger</code> — rather than a literal colour, so your view reads correctly
+        Two rules follow from that, and they are the whole of it. <strong>Name a colour role</strong> (<code>text-muted</code>,{" "}
+        <code>bg-card</code>, <code>border-line</code>, <code>text-danger</code>) rather than a literal colour, so your view reads correctly
         in light and dark and picks up the reader's accent. And <strong>size against the container</strong>, with{" "}
         <code>@container</code> and <code>@lg:</code> rather than <code>lg:</code>, because your view renders into a pane that can be dragged,
         popped out or stacked under a chat, and the window's width is not the question.
@@ -225,7 +225,7 @@ const workspace = `.intentic/config/workspace-extensions/
     <p>
         What the promise cannot cover is one-off values: <code>w-[37px]</code>, <code>max-w-[64ch]</code>, <code>text-[0.65rem]</code>. They
         are infinite, so no promise reaches them, and they render as nothing. Use the scale, reach for a kit component (<code>Page</code>{" "}
-        already owns the reading column, <code>SplitView</code> the index-beside-body layout), or ship the rule in your own stylesheet —
+        already owns the reading column, <code>SplitView</code> the index-beside-body layout), or ship the rule in your own stylesheet,
         added by <code>activate()</code> and removed when your extension is switched off.
     </p>
 

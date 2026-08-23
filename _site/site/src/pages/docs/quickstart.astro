@@ -104,7 +104,7 @@ RUN=$(tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic $I
 echo "$RUN"
 eval "$RUN"
 
-# That is all of it — the sandbox connects itself outward on boot. There is no
+# That is all of it. The sandbox connects itself outward on boot. There is no
 # second container: the tunnel agent runs inside the image.`;
 ---
 

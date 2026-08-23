@@ -135,8 +135,8 @@ const chat = [
             meta: `${n(SERVICE_CREDITS)} credits per run · ${n(chatBalance)} of ${n(chatBalance)} left today`,
             // The click IS the consent, so the figure shows a click rather than a typed "go ahead" the
             // product no longer accepts as one.
-            run: `Run — ${n(SERVICE_CREDITS)} credits`,
-            skip: "Skip — free",
+            run: `Run (${n(SERVICE_CREDITS)} credits)`,
+            skip: "Skip (free)",
         },
     },
 ];
@@ -185,7 +185,7 @@ const rules = [
     },
     {
         title: "Every listing passes the same checks",
-        body: "A paid service is listed by passing published, mechanical checks — including proving it refuses forged calls — and is suspended automatically when it stops answering.",
+        body: "A paid service is listed by passing published, mechanical checks (including proving it refuses forged calls) and is suspended automatically when it stops answering.",
         d: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
     },
     {
@@ -394,7 +394,7 @@ const rules = [
                     <figure class="w-full lg:justify-self-end">
                         <AppChat
                             thread={chat}
-                            title="Beta launch — where to post"
+                            title="Beta launch: where to post"
                             day={chatDay}
                             input="Answer above, or add a message for after…"
                             ariaLabel="The product's chat, where the agent offers a paid service run and the owner has yet to approve it"

@@ -65,11 +65,11 @@ const R_REFUND = 324;
 const streamBand = { x: 40, y: 156, w: 512, h: 108 };
 // The same run as ordered steps, for phone widths where the sequence would set its labels at a few pixels.
 const runSteps = [
-    "The <strong>member</strong> clicks approve on the run's card — their agent cannot spend without that click.",
+    "The <strong>member</strong> clicks approve on the run's card. Their agent cannot spend without that click.",
     "The <strong>platform</strong> charges the credits and forwards one <strong>signed</strong> call to your endpoint.",
-    "You <strong>stream events back</strong>: <code>status</code> lines while you work, then one <code>result</code> that ends the run — up to five minutes.",
-    "The platform <strong>relays each event live</strong> — status onto the member's card, the result to their agent.",
-    "The <strong>ledger settles</strong> with a receipt: paid. No result — a 5xx, a timeout, a dead stream — and the <strong>charge is reversed</strong>, costing the member nothing.",
+    "You <strong>stream events back</strong>: <code>status</code> lines while you work, then one <code>result</code> that ends the run. Up to five minutes.",
+    "The platform <strong>relays each event live</strong>: status onto the member's card, the result to their agent.",
+    "The <strong>ledger settles</strong> with a receipt: paid. No result (a 5xx, a timeout, a dead stream) and the <strong>charge is reversed</strong>, costing the member nothing.",
 ];
 ---
 
@@ -81,8 +81,8 @@ const runSteps = [
 >
     <h2>What a service is for</h2>
     <p>
-        Most tools should be free extensions. Reach for a <strong>service</strong> only when every run costs <em>you</em> real money —
-        a paid data API, heavy compute, a licensed corpus — so giving it away per run would mean paying to be used. This page is the
+        Most tools should be free extensions. Reach for a <strong>service</strong> only when every run costs <em>you</em> real money:
+        a paid data API, heavy compute, a licensed corpus. Giving it away per run would mean paying to be used. This page is the
         provider's side; what a run looks like from the member's seat is on <a href="/earn/">Earn</a>.
     </p>
     <table>
@@ -92,7 +92,7 @@ const runSteps = [
         <tbody>
             <tr><td><strong>What it is</strong></td><td>Code of yours, run in someone's sandbox</td><td>One HTTPS endpoint, run by you</td></tr>
             <tr><td><strong>Every run</strong></td><td>Free, forever</td><td>Costs credits, priced by you</td></tr>
-            <tr><td><strong>What ships</strong></td><td>A repo pointer, pinned to a commit</td><td>Nothing — a signed call reaches your endpoint</td></tr>
+            <tr><td><strong>What ships</strong></td><td>A repo pointer, pinned to a commit</td><td>Nothing. A signed call reaches your endpoint</td></tr>
             <tr><td><strong>You're paid</strong></td><td>Donations from the monthly pool</td><td>A share of every paid run</td></tr>
         </tbody>
     </table>
@@ -100,11 +100,11 @@ const runSteps = [
     <h2>The shape of a run</h2>
     <p>
         The platform is the intermediary: it charges the member's credits atomically, forwards their JSON to you with a signature, and
-        relays what you send back <strong>as you send it</strong>. Your answer is a stream — NDJSON, one event per line:
+        relays what you send back <strong>as you send it</strong>. Your answer is a stream: NDJSON, one event per line.
         <code>status</code> lines while you work (each replaces the last, a progress label rather than a log) and exactly one
         <code>result</code> whose <code>data</code> is the answer, which ends the run. The status lines appear live on the run's card in
         the member's chat; the result goes to their agent. A run has five minutes and 2&nbsp;MB of stream to finish in, and richer event
-        kinds will join the vocabulary as chat learns to render them — a service written today streams the two above.
+        kinds will join the vocabulary as chat learns to render them. A service written today streams the two above.
     </p>
 
     <div class="docs-embed mt-6">
@@ -140,7 +140,7 @@ const runSteps = [
 
                     {/* The request, out: the click, then the charged-and-signed forward. */}
                     <path d={`M ${MX + RUN_PAD} ${R_APPROVE} L ${PX - RUN_PAD} ${R_APPROVE}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
-                    <text x={(MX + PX) / 2} y={R_APPROVE - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">approve — the click</text>
+                    <text x={(MX + PX) / 2} y={R_APPROVE - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">approve (the click)</text>
                     <path d={`M ${PX + RUN_PAD} ${R_FORWARD} L ${YX - RUN_PAD} ${R_FORWARD}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
                     <text x={(PX + YX) / 2} y={R_FORWARD - 7} text-anchor="middle" font-size="9" style="fill: var(--color-muted)">charge · sign · forward</text>
                     <text x={(PX + YX) / 2} y={R_FORWARD + 12} text-anchor="middle" font-size="8" style="fill: var(--color-subtle)">HMAC signature</text>
@@ -158,12 +158,12 @@ const runSteps = [
                         stroke-width="1"
                         stroke-dasharray="4 4"
                     />
-                    <text x={streamBand.x + 10} y={streamBand.y + 14} font-size="8.5" font-weight="600" style="fill: var(--color-link)">the stream — relayed live, one event at a time</text>
+                    <text x={streamBand.x + 10} y={streamBand.y + 14} font-size="8.5" font-weight="600" style="fill: var(--color-link)">the stream: relayed live, one event at a time</text>
                     <text x={streamBand.x + streamBand.w - 10} y={streamBand.y + 14} text-anchor="end" font-size="8" style="fill: var(--color-subtle)">≤ 5 min · 2 MB</text>
 
                     {[
-                        { y: R_S1, label: "status → card · “Searching 240 communities…”", op: 0.75 },
-                        { y: R_S2, label: "status → card · “Ranking the 12 that fit…”", op: 0.85 },
+                        { y: R_S1, label: "status → card · "Searching 240 communities…"", op: 0.75 },
+                        { y: R_S2, label: "status → card · "Ranking the 12 that fit…"", op: 0.85 },
                         { y: R_RESULT, label: "result → agent · the answer, ending the run", op: 1 },
                     ].map((e) => (
                         <Fragment>
@@ -178,7 +178,7 @@ const runSteps = [
                     <path d={`M ${PX - RUN_PAD} ${R_RECEIPT} L ${MX + RUN_PAD} ${R_RECEIPT}`} fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#run-arrow)" />
                     <text x={(MX + PX) / 2} y={R_RECEIPT - 7} text-anchor="middle" font-size="9" font-weight="600" style="fill: var(--color-link)">receipt · paid · 60 left today</text>
                     <path d={`M ${PX - RUN_PAD} ${R_REFUND} L ${MX + RUN_PAD} ${R_REFUND}`} fill="none" stroke="var(--color-success)" stroke-opacity="0.9" stroke-width="1.25" stroke-dasharray="4 4" marker-end="url(#run-refund)" />
-                    <text x={(MX + PX) / 2} y={R_REFUND - 7} text-anchor="middle" font-size="8.5" style="fill: var(--color-success)">or — no result → refunded · nothing charged</text>
+                    <text x={(MX + PX) / 2} y={R_REFUND - 7} text-anchor="middle" font-size="8.5" style="fill: var(--color-success)">or: no result → refunded · nothing charged</text>
 
                     {/* The three parties, drawn last so they sit above the flow. YOU is tinted: it is the reader. */}
                     {
@@ -206,7 +206,7 @@ const runSteps = [
                 </svg>
             </div>
             <figcaption class="relative border-t border-line px-5 py-3 text-2xs leading-relaxed text-subtle">
-                The platform is the only party that holds the money or learns who is asking. You get a signed call and stream events back — the stream is your whole side of it, never the member's identity or their wallet.
+                The platform is the only party that holds the money or learns who is asking. You get a signed call and stream events back. The stream is your whole side of it, never the member's identity or their wallet.
             </figcaption>
         </figure>
 
@@ -235,42 +235,42 @@ const runSteps = [
     <h2>What's paid, what refunds</h2>
     <p>
         The line is <strong>whether a <code>result</code> arrived</strong>, not whether the caller liked it. A 4xx refusal is still an
-        answer — "your query was malformed" is the service serving exactly what was asked — and it's paid.
+        answer: "your query was malformed" is the service serving exactly what was asked, and it's paid.
     </p>
     <table>
         <thead>
             <tr><th>Your response</th><th>The member</th><th>You</th></tr>
         </thead>
         <tbody>
-            <tr><td><code>2xx</code> — a stream ending in its <code>result</code></td><td>pays</td><td>paid</td></tr>
-            <tr><td><code>4xx</code> — "your query was malformed"</td><td>pays</td><td>paid</td></tr>
-            <tr><td><code>2xx</code> — a stream that dies before its <code>result</code>, or isn't the event format</td><td>refunded</td><td>not paid</td></tr>
-            <tr><td><code>5xx</code> — your endpoint failed</td><td>refunded</td><td>not paid</td></tr>
+            <tr><td><code>2xx</code>: a stream ending in its <code>result</code></td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>4xx</code>: "your query was malformed"</td><td>pays</td><td>paid</td></tr>
+            <tr><td><code>2xx</code>: a stream that dies before its <code>result</code>, or isn't the event format</td><td>refunded</td><td>not paid</td></tr>
+            <tr><td><code>5xx</code>: your endpoint failed</td><td>refunded</td><td>not paid</td></tr>
             <tr><td>Timeout (5 min) or dead socket</td><td>refunded</td><td>not paid</td></tr>
         </tbody>
     </table>
     <p>
-        Credits are spent atomically before the call, so a refund is immediate — the receipt on the member's card says the run cost
+        Credits are spent atomically before the call, so a refund is immediate. The receipt on the member's card says the run cost
         nothing. Validate loudly: a clear <code>4xx</code> is a real answer, and the paid, honest thing to serve.
     </p>
 
     <h2>Pricing &amp; the split</h2>
     <p>
-        You publish one number — <strong>credits per run</strong> — shown on every surface before the run. Price your real cost plus
+        You publish one number, <strong>credits per run</strong>, shown on every surface before the run. Price your real cost plus
         margin, not a teaser; a refusal for lack of credits tells the member what's left and when it resets.
     </p>
     <table>
         <tbody>
             <tr><th scope="row">You set</th><td><strong>Credits per run</strong>: one number, shown before every run.</td></tr>
             <tr><th scope="row">You keep</th><td><strong>{creatorSharePct}%</strong> of every spent credit's dollar value.</td></tr>
-            <tr><th scope="row">Public</th><td>Your run counts, credits and earnings — per service, month by month, for anyone to read.</td></tr>
+            <tr><th scope="row">Public</th><td>Your run counts, credits and earnings, per service, month by month, for anyone to read.</td></tr>
         </tbody>
     </table>
     <p><a href="/earn/">Earn</a> explains what a credit is worth and why the model is unfarmable.</p>
 
     <h2>Admission &amp; the watch</h2>
     <p>
-        A service has no code to audit — none of yours ships to anyone — so admission asks the only three questions that can be answered
+        A service has no code to audit (none of yours ships to anyone), so admission asks the only three questions that can be answered
         mechanically, and answers them without a person. <strong>There is no review queue and no waiting list.</strong> Pass all three and
         your listing is live immediately.
     </p>
@@ -279,7 +279,7 @@ const runSteps = [
             <tr><th>Gate</th><th>What it checks</th></tr>
         </thead>
         <tbody>
-            <tr><td><strong>Identity</strong></td><td>You hold a proved publisher name — a <a href="/developers/publish/">registry name</a> proved from one of its repositories, or <strong>your own domain</strong>, proved by serving a challenge at <code>/.well-known/intentic-claim</code> — and payouts are connected. A listing has to be payable before it can be offered. A domain publisher's endpoints must live on that domain or its subdomains, so the name on the card and the host serving the runs are the same party.</td></tr>
+            <tr><td><strong>Identity</strong></td><td>You hold a proved publisher name (a <a href="/developers/publish/">registry name</a> proved from one of its repositories, or <strong>your own domain</strong>, proved by serving a challenge at <code>/.well-known/intentic-claim</code>) and payouts are connected. A listing has to be payable before it can be offered. A domain publisher's endpoints must live on that domain or its subdomains, so the name on the card and the host serving the runs are the same party.</td></tr>
             <tr><td><strong>Conformance</strong></td><td>A live probe of your endpoint: one correctly signed call that must serve, plus a forged signature and an expired timestamp that must both be <em>refused</em>.</td></tr>
             <tr><td><strong>Listing rules</strong></td><td>A public https endpoint, a price inside {admission.minCredits}–{admission.maxCredits} credits, and bounded name and description carrying no reserved words.</td></tr>
         </tbody>
@@ -289,7 +289,7 @@ const runSteps = [
         forged call is one anyone on the internet can bill against your own upstream costs. We will not list it.
     </p>
     <p>
-        A new listing goes live <strong>on probation</strong> — capped at {admission.probationMaxCredits} credits per run and badged as new
+        A new listing goes live <strong>on probation</strong>: capped at {admission.probationMaxCredits} credits per run and badged as new
         on every card a member sees, which is the honest form of "admitted by machine, not vouched for". It graduates
         after {admission.graduationRuns} served runs. After that the watch is behavioral, because with a service behavior is the artifact:
     </p>
@@ -298,7 +298,7 @@ const runSteps = [
             <tr><th>What's watched</th><th>How it works</th></tr>
         </thead>
         <tbody>
-            <tr><td><strong>Every run</strong></td><td>Public on the ledger, month by month — a track record neither of us can dress up.</td></tr>
+            <tr><td><strong>Every run</strong></td><td>Public on the ledger, month by month. A track record neither of us can dress up.</td></tr>
             <tr><td><strong>Failure rate</strong></td><td>Above {maxRefundPct}% of your last {admission.watchWindowRuns} runs failing to answer, the listing is suspended automatically. Those runs were all refunded, so it cost members nothing.</td></tr>
             <tr><td><strong>Liveness</strong></td><td>Quiet listings are re-probed; {admission.canaryFailures} failed checks in a row suspends one, so a service that died stops being offered before a member finds out by clicking.</td></tr>
             <tr><td><strong>Disputes</strong></td><td>Almost none to have: "no answer, no charge" is the platform's code, not a support queue.</td></tr>
@@ -306,12 +306,12 @@ const runSteps = [
     </table>
     <p>
         A suspension is never a deletion: the row, its runs and its earnings stay, the reason is stated, and a fixed endpoint can publish
-        again — back through probation, because a new endpoint is a new thing to trust. Prices move once
+        again, back through probation, because a new endpoint is a new thing to trust. Prices move once
         every {admission.priceChangeHours} hours, and one account may hold {admission.maxServicesPerOwner} live listings.
     </p>
     <p>
         Throughout, the member keeps their guard: the agent only <em>discovers</em> and offers, and nothing is spent until the owner clicks
-        approve on the run's card — a gate the member's own sandbox enforces, not an etiquette the model is trusted with. Discovery is the
+        approve on the run's card, a gate the member's own sandbox enforces, not an etiquette the model is trusted with. Discovery is the
         agent's job, admission is the platform's, spending stays the member's.
     </p>
 
@@ -323,11 +323,11 @@ const runSteps = [
     <ol class="mt-5 flex list-none flex-col gap-2.5 pl-0">
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">1</span>
-            <div class="text-base leading-relaxed">Prove a publisher name and connect payouts, on <strong>Settings → Getting paid</strong>. No extension in the registry? Claim your domain instead — the screen hands you one line to serve at its well-known path.</div>
+            <div class="text-base leading-relaxed">Prove a publisher name and connect payouts, on <strong>Settings → Getting paid</strong>. No extension in the registry? Claim your domain instead. The screen hands you one line to serve at its well-known path.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">2</span>
-            <div class="text-base leading-relaxed">Create a draft listing. You get your signing secret once, at that moment — we keep only an encrypted copy and can never read it back to you.</div>
+            <div class="text-base leading-relaxed">Create a draft listing. You get your signing secret once, at that moment. We keep only an encrypted copy and can never read it back to you.</div>
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">3</span>
@@ -335,24 +335,24 @@ const runSteps = [
         </li>
         <li class="flex gap-3">
             <span class="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong bg-overlay/50 text-2xs font-semibold text-content">4</span>
-            <div class="text-base leading-relaxed">Publish. You are live on probation the same second — no queue, no approval, nobody emailed.</div>
+            <div class="text-base leading-relaxed">Publish. You are live on probation the same second. No queue, no approval, nobody emailed.</div>
         </li>
     </ol>
     <p class="mt-5">
         The catalog's own <code>demo-research</code> service is the living reference: its upstream is run by the platform and verifies
         exactly the signature on this page, so what this page documents is what the forward actually sends. Its request also picks the
-        outcome, test-card style — <code>scenario</code> of <code>ok</code>, <code>slow</code>, <code>refuse</code> (a paid 4xx),
+        outcome, test-card style: <code>scenario</code> of <code>ok</code>, <code>slow</code>, <code>refuse</code> (a paid 4xx),
         <code>fail</code> (a refunded 5xx) or <code>broken</code> (a stream that dies without its result, refunded), with
-        <code>paceMs</code> setting the stream's tempo — so every settlement a member's card can show is reproducible on demand. And
+        <code>paceMs</code> setting the stream's tempo. Every settlement a member's card can show is reproducible on demand. And
         there is runnable starter code: <a href={`${githubUrl}/tree/HEAD/_platform/example-provider`}>the example provider</a> is this
         whole page as one dependency-free file, kept honest by the platform's own conformance suite, which drives the real admission
         probe and the real metered forward against it.
     </p>
     <p>
-        A listing publishes a <strong>sample request</strong> — a body your service really answers. It does double duty: it is what the
+        A listing publishes a <strong>sample request</strong>: a body your service really answers. It does double duty: it is what the
         health check sends, so the probe tests a call you know works rather than one we invented, and members' agents read it as the worked
         example of your request shape. Stuck on any of it, or think a rule is wrong? <a href={discordUrl}>Discord</a> is where that
-        conversation happens — it is just no longer the thing standing between you and a listing.
+        conversation happens. It is just no longer the thing standing between you and a listing.
     </p>
 
     <DocsRelated

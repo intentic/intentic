@@ -48,10 +48,10 @@ const paths = [
  * not started looking. Keyed by shelf label, and asserted below, so a renamed or added shelf fails the build
  * rather than quietly rendering a shelf with no question. */
 const questions: Record<string, string> = {
-    Understand: `“What actually is this, and is it built the way I'd want?”`,
-    "Run a sandbox": `“I want one running on my hardware, kept up to date, shared with my team.”`,
-    Integrations: `“I want it talking to my systems, my tools and my own computer.”`,
-    "Drive agents": `“It's running. How do I get real work out of it?”`,
+    Understand: `"What actually is this, and is it built the way I'd want?"`,
+    "Run a sandbox": `"I want one running on my hardware, kept up to date, shared with my team."`,
+    Integrations: `"I want it talking to my systems, my tools and my own computer."`,
+    "Drive agents": `"It's running. How do I get real work out of it?"`,
 };
 
 const missing = docsSections.filter((section) => questions[section.label] === undefined).map((section) => section.label);
@@ -168,7 +168,7 @@ const contentsOf = (label: string): string[] => {
         <a href="/developers/" class="group card block border-primary-600/25 p-5 no-underline transition-colors hover:border-primary-600/50">
             <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <span class="text-sm font-semibold text-content transition-colors group-hover:text-link">Building on it →</span>
-                <span class="text-sm text-muted">“I want to extend it, or drive it from my own code.”</span>
+                <span class="text-sm text-muted">"I want to extend it, or drive it from my own code."</span>
             </div>
             <p class="mt-2 text-xs leading-relaxed text-subtle">
                 Developer documentation for building and publishing extensions, writing a manifest and using the host or sandbox API.
