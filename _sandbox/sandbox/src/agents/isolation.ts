@@ -214,16 +214,31 @@ export const isolationScript = (plan: IsolationPlan, trailer: string = ANCHOR_TR
 export const ANCHOR_READY = "isolation-ready";
 const ANCHOR_TRAILER = `echo ${ANCHOR_READY}\nexec sleep infinity`;
 
-// The argv that runs `command args...` INSIDE an existing anchor's namespace. `--wd` puts the entrant at the
-// workspace root as the namespace sees it, the agent's own space, and the reason a bare `cd` never leaks.
+/* WHICH NAMESPACE THE WORKING DIRECTORY IS RESOLVED IN, and it is `--wdns`, never `--wd`.
+ *
+ * nsenter's `--wd=DIR` opens DIR **before** setns and fchdir()s to that descriptor after, which is the
+ * daemon's own /work: the SHARED checkout. The entrant then sits on a directory whose mount is not in the
+ * namespace it just joined, so every relative path it writes lands in the shared tree, invisibly, because
+ * that directory is shadowed by the worktree bind and has no path inside at all. The one enforcement layer
+ * the anchor exists to be was leaking through the flag that was supposed to apply it.
+ *
+ * It also produced a second, louder failure. A cwd unreachable from the task's root makes getcwd() answer
+ * `(unreachable)/work`, a RELATIVE path, and a runtime that resolves its config against it dies on the spot:
+ * the Codex app-server exited at startup with "error loading default config after config error: No such file
+ * or directory (os error 2)" before it ever reached the model.
+ *
+ * `--wdns=DIR` (util-linux 2.38+, `-W`) resolves DIR AFTER setns, in the target namespace, which is the only
+ * reading of "/work" that means the conversation's worktree. Verified both ways in the container: `--wd`
+ * lands in the shared checkout and kills app-server, `--wdns` lands in the worktree and starts clean.
+ */
 export const nsenterArgv = (anchorPid: number, cwd: string, command: string, args: readonly string[]): { command: string; args: string[] } => ({
     command: "nsenter",
-    args: [`--mount=/proc/${anchorPid}/ns/mnt`, `--wd=${cwd}`, "--", command, ...args],
+    args: [`--mount=/proc/${anchorPid}/ns/mnt`, `--wdns=${cwd}`, "--", command, ...args],
 });
 
 // The same thing as ONE shell word, for the callers that compose a command STRING rather than an argv, the
 // Bash tool's tmux rewrite, whose pane runs a shell line. Quoted so a path with a space can't split it.
-export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wd=${shellQuote(cwd)} -- `;
+export const nsenterPrefix = (anchorPid: number, cwd: string): string => `nsenter --mount=/proc/${anchorPid}/ns/mnt --wdns=${shellQuote(cwd)} -- `;
 
 /* THE ONE PROCESS THAT MUST NOT BE BORN INSIDE A TURN'S NAMESPACE, the tmux server.
  *
@@ -263,6 +278,12 @@ export const daemonMountNs = `/proc/${process.pid}/ns/mnt`;
  * everyone. It has to run on the filesystem the real upper layers will use, which is the one under
  * historyRoot. The probe dir is made and removed from OUT here, because the mount inside the namespace holds
  * it busy until that namespace dies.
+ *
+ * The THIRD gate is nsenter's own: `--wdns` is the only flag that resolves a working directory inside the
+ * target namespace (see nsenterArgv), and it is util-linux 2.38+. An older nsenter rejects it as an unknown
+ * option, which would fail every entrant of every isolated turn, so it is proved here for the same reason
+ * the overlay is: a container that can build the namespace but cannot enter it correctly must degrade to the
+ * redirect layer up front instead of breaking each turn one at a time.
  */
 const probeScript = (dir: string): string =>
     [
@@ -278,6 +299,9 @@ const isolationAvailable = async (historyRoot: string): Promise<boolean> => {
             await mkdir(join(dir, part), { recursive: true });
         }
         await execFileAsync("unshare", ["--mount", "--propagation", "private", "sh", "-c", probeScript(dir)], { timeout: 5_000 });
+        // Against the daemon's own namespace, the one every entrant targets, and `true` because the flag's
+        // acceptance is the whole question: an nsenter without it exits non-zero before running anything.
+        await execFileAsync("nsenter", [`--mount=${daemonMountNs}`, `--wdns=/`, "--", "true"], { timeout: 5_000 });
         return true;
     } catch {
         return false;

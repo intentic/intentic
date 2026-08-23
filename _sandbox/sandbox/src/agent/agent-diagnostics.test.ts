@@ -194,7 +194,7 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
     // The wrapper is what runs the compiler on the far side; without it the check reads a tree with nothing in it.
     expect(request?.placement?.enter("/usr/bin/env", ["-C", "/work", "tsgo", "--noEmit"])).toEqual({
         command: "nsenter",
-        args: ["--mount=/proc/4321/ns/mnt", "--wd=/work", "--", "/usr/bin/env", "-C", "/work", "tsgo", "--noEmit"],
+        args: ["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "/usr/bin/env", "-C", "/work", "tsgo", "--noEmit"],
     });
 });
 

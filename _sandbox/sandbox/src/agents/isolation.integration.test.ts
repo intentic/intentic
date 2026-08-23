@@ -117,14 +117,20 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
     expect(lines.at(-1)?.startsWith("exec ")).toBe(true);
 });
 
-test("entrants join the anchor's namespace by pid and start at the workspace root", () => {
+/* The flag is the assertion. `--wd` resolves before setns and lands the entrant on the daemon's own /work,
+ * the shared checkout, whose mount has no path at all inside the namespace: relative writes leak there
+ * silently, and getcwd answers `(unreachable)/work`, which is what killed the Codex app-server at startup.
+ * `--wdns` resolves after setns, so "/work" means the worktree. Pinning the spelling is what keeps the
+ * enforcement layer from being undone by a one-word change. */
+test("entrants join the anchor's namespace by pid and start at the workspace root AS THE NAMESPACE SEES IT", () => {
     const { command, args } = nsenterArgv(4321, WORKSPACE_ROOT, "/usr/bin/claude", ["--flag", "value"]);
     expect(command).toBe("nsenter");
-    expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wd=/work", "--", "/usr/bin/claude", "--flag", "value"]);
+    expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "/usr/bin/claude", "--flag", "value"]);
+    expect(args).not.toContain(`--wd=${WORKSPACE_ROOT}`);
 });
 
 test("the shell-string form quotes its working dir so a path with a space cannot split the command", () => {
-    expect(nsenterPrefix(7, "/work dir")).toBe(`nsenter --mount=/proc/7/ns/mnt --wd='/work dir' -- `);
+    expect(nsenterPrefix(7, "/work dir")).toBe(`nsenter --mount=/proc/7/ns/mnt --wdns='/work dir' -- `);
 });
 
 test("a path the agent reports is translated back to the worktree for the daemon", () => {

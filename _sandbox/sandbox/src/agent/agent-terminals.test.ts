@@ -114,7 +114,7 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
     // Without this, `sed -i` would rewrite the shared tree while the same turn's Edit tool wrote to the worktree.
     expect(command).toBe(
-        wrap("sed -i s/a/b/ x.ts", born(`nsenter --mount=/proc/4321/ns/mnt --wd=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`), "edit"),
+        wrap("sed -i s/a/b/ x.ts", born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`), "edit"),
     );
 });
 

@@ -84,7 +84,7 @@ benchmarking. Unknown tokens are ignored (fail-open).
 
 `command` on that row (and the command the cleaners are matched against) is the line **as the agent wrote it**,
 handed to the filter by `tmux-run -c`. By the time tmux-run runs it, the executed string carries the daemon's
-wrapping (`nsenter --mount=/proc/<pid>/ns/mnt --wd=… -- nice -n 10 ionice -c 2 -n 7 bash -c '…'`), which is ~100
+wrapping (`nsenter --mount=/proc/<pid>/ns/mnt --wdns=… -- nice -n 10 ionice -c 2 -n 7 bash -c '…'`), which is ~100
 characters of boilerplate before the agent's first word and a per-turn pid that makes every row unique. Recording
 that instead is what made the un-cleaned-commands report unreadable and ungroupable.
 
