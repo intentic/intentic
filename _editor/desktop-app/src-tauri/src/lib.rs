@@ -49,6 +49,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             sign_in,
             commands::desktop_info,
+            commands::docker_ready,
             commands::take_pending_setup,
             commands::take_pending_recreate,
             commands::setup_run,

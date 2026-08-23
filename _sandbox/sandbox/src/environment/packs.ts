@@ -29,9 +29,16 @@ import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 // (/opt/sandbox/packs) and from src/environment in a dev run alike, and keeps doing so if this file moves.
 const packsDir = join(packageRoot(import.meta.url), "packs");
 
-// Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp,
-// core image, dev run, or a pack newer than this base, reads as "not baked".
-const PACK_STAMPS_DIR = "/opt/packs";
+/* Where the image-compose splice stamps what the BASE image bakes (content hash per pack). An absent stamp,
+ * core image, dev run, or a pack newer than this base, reads as "not baked".
+ *
+ * THE ONE FACT IN THIS MODULE THAT COMES FROM THE MACHINE, so it is read per call and can be pointed
+ * elsewhere. `bakedPackHash` and `packFragment` take the directory as an argument for the same reason and
+ * suites that call them directly pass their own; a suite that reaches this code through `composeEnvironment`
+ * cannot, and read the HOST's stamps instead — which made it assert one thing on CI, where /opt/packs does not
+ * exist, and the opposite inside an agent sandbox, where it exists and matches the very packs the composed
+ * capabilities name. That is the ambient-machine reading AGENTS.md names: state the mode a test means. */
+const packStampsDir = (): string => process.env["INTENTIC_PACK_STAMPS_DIR"] ?? "/opt/packs";
 
 export interface Pack {
     readonly name: string;
@@ -67,13 +74,13 @@ export const listPacks = async (): Promise<Pack[]> => {
 
 // The hash the base image was stamped with for this pack, or undefined when the base doesn't bake it.
 // `stampsDir` is parameterized for tests only, every runtime caller reads the image's own stamps.
-export const bakedPackHash = async (name: string, stampsDir: string = PACK_STAMPS_DIR): Promise<string | undefined> =>
+export const bakedPackHash = async (name: string, stampsDir: string = packStampsDir()): Promise<string | undefined> =>
     (await readFile(join(stampsDir, name), "utf8").catch(() => undefined))?.trim();
 
 // The pack's overlay fragment: its content when the running BASE image doesn't already bake this exact
 // version, undefined when it does (or the pack is bake-only/unknown). One code path is what makes enabling a
 // feature instant on an image that bakes the pack and an ordinary owner-approved rebuild on one that doesn't.
-export const packFragment = async (name: string, stampsDir: string = PACK_STAMPS_DIR): Promise<string | undefined> => {
+export const packFragment = async (name: string, stampsDir: string = packStampsDir()): Promise<string | undefined> => {
     const pack = await readPack(name);
     if (pack === undefined || !pack.overlayable) {
         return undefined;

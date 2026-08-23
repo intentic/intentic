@@ -34,12 +34,14 @@ export interface SandboxStatus {
  * same three the web's Computers tab offers, which is the point of them being one list. */
 export type PowerAction = `start` | `stop` | `restart`;
 
+/* What the app is, and nothing about the machine — see the Rust side for why that line is drawn here. Every
+ * field is something the process already holds, so this read costs one IPC round trip and is safe to sit in
+ * front of everything the window does next. Whether Docker answers is `dockerReady` below, asked apart. */
 export interface DesktopInfo {
     version: string;
     os: string;
     appUrl: string;
     platformUrl: string;
-    dockerReady: boolean;
     /// This installation's own id, minted once and kept in the app's config dir. It is what this screen's
     /// analytics report under, and the same value the workspace window is marked with, the only thread
     /// between what the app did to the machine and what the user then did in the SPA (analytics.ts).
@@ -115,6 +117,13 @@ export type UpdateStage =
     | { kind: `manual`; version: string | null; reason: string; url: string };
 
 export const desktopInfo = (): Promise<DesktopInfo> => invoke(`desktop_info`);
+/* A Docker daemon answers right now. False covers both "not installed" and "not started" — the scripts tell
+ * those apart themselves (winget on Windows, get.docker.com on Linux), so this screen only needs the one bit.
+ *
+ * SLOW ON EXACTLY THE MACHINE THIS APP IS FOR, which is why it is its own call and why nothing waits on it:
+ * `docker info` against an installed-but-stopped daemon spends tens of seconds on the socket. See the Rust
+ * side for the frozen window that bought, and App.vue for what it means to draw a screen without the answer. */
+export const dockerReady = (): Promise<boolean> => invoke(`docker_ready`);
 /* Taken, not read, see the Rust side. Two callers race for a parked setup (the arrival event, and this
  * window's own read on mount) and only one of them may have it: the loser used to receive the same request a
  * second time, or a `null` it then wrote over its own state as "there is no setup here", which took a

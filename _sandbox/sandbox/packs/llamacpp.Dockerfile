@@ -41,6 +41,22 @@
 # mirrors whisper.Dockerfile, for its reasons — only cmake and ccache are purged after, because g++/make/git
 # are baked into this image on purpose and a pack that removes them breaks native installs in /work.
 #
+# THE JOB COUNT IS COMPUTED, AND THAT IS THE DIFFERENCE BETWEEN THIS BUILDING AND THIS KILLING THE MACHINE
+# IT BUILDS ON. `cmake --build -j` with no number forwards a bare `-j` to make, and a bare `-j` means
+# UNLIMITED — not "one per core". Checked, because it is the kind of thing everyone assumes the other way: a
+# 200-file library built with `-j` starts 200 compilers, and with `-j 4` it starts 4. whisper.Dockerfile
+# spells it the bare way and gets away with it, whisper.cpp being a handful of translation units. llama.cpp is
+# one per model, ~250 of them, all independent objects of the same target — so make starts the lot, each a g++
+# holding several hundred MB. What that did to the arm64 runner that shipped it is in the log: a wall of
+# `Building CXX object` inside 30 seconds, five minutes of silence, then `The runner has received a shutdown
+# signal`. The HOST died, not the build, so there is no compiler error to find and the job simply stops. A
+# 4-vCPU/16GB hosted arm runner cannot hold that, and neither can the laptop this same fragment composes an
+# environment overlay on.
+#
+# So: one job per core, and never more jobs than there is memory to hold them (2 GiB each, comfortably above
+# what the widest of these translation units takes). Both halves of that minimum earn their place — cores
+# alone still overcommits a small-memory machine, and memory alone would oversubscribe a big machine's cores.
+#
 # LAYOUT: everything lands in /opt/llamacpp together, because the prebuilt binary's RUNPATH is `$ORIGIN` — it
 # finds its own libraries next to itself, so no ld.so.conf entry and no LD_LIBRARY_PATH are needed.
 # /usr/local/bin holds a symlink, which resolves $ORIGIN to the real directory. The source build is static and
@@ -86,7 +102,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         && cmake -S /tmp/llama.cpp -B /tmp/llama.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
             -DGGML_NATIVE=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-        && cmake --build /tmp/llama.cpp/build -j --target llama-server \
+        && jobs="$(awk -v cpus="$(nproc)" '/^MemTotal:/ { fits = int($2 / (2 * 1024 * 1024)); if (fits < 1) fits = 1; print (fits < cpus ? fits : cpus) }' /proc/meminfo)" \
+        && echo "llamacpp pack: compiling llama.cpp with -j${jobs}" \
+        && cmake --build /tmp/llama.cpp/build -j "${jobs}" --target llama-server \
         && ccache --show-stats \
         && install -m 0755 /tmp/llama.cpp/build/bin/llama-server /opt/llamacpp/ \
         && install -m 0644 /tmp/llama.cpp/LICENSE /opt/llamacpp/LICENSE.llama.cpp \

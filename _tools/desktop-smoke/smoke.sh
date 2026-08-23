@@ -295,6 +295,20 @@ until_true 15 "stub workspace origin is serving" \
 # that registers the scheme and then drops every link it wins can sit in a release: correct in the archive,
 # correct once the app has run, dead for exactly the user who just installed it and clicked "set up".
 if [ "$KIND" = "deb" ]; then
+    # A DOCKER THAT IS THERE AND DOES NOT ANSWER, because that is the machine this whole section is about and
+    # a bare host is not it. Somebody installing Intentic and clicking "set up" overwhelmingly has Docker
+    # INSTALLED AND NOT RUNNING, and `docker info` against a daemon that is not listening does not fail: it
+    # sits on the socket for tens of seconds. On a host with no `docker` at all — which is what this image is
+    # everywhere else, deliberately, and rightly — the same probe returns instantly, so the wait it can impose
+    # was never once exercised here.
+    #
+    # It shipped, twice. The launcher used to ask that question before it drew anything, from a sync command
+    # (which Tauri dispatches on the main thread), so the window this link builds stayed empty and untitled
+    # for the length of the probe. Every assertion below passed anyway on a fast runner, where a stub-less
+    # `docker info` costs nothing, and failed on a slow one — a test that reports the runner's mood rather
+    # than the build's. With this, the wait is a property of the tier instead of a property of the day.
+    printf '#!/bin/sh\nsleep 60\nexit 1\n' >/usr/local/bin/docker
+    chmod +x /usr/local/bin/docker
     cold_link "the setup link started the app straight onto the setup screen"
     quit_app
 fi

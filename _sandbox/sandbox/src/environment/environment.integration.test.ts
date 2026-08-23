@@ -22,6 +22,15 @@ import {
     rejectEnvironment,
 } from "./environment.js";
 
+/* THE MODE EVERY COMPOSE BELOW MEANS: a base image that bakes NO feature pack, so a capability naming one
+ * contributes its fragment to the overlay. Stated, because the alternative is reading it off whichever machine
+ * happens to run this file — `/opt/packs` does not exist on CI and does exist inside an agent sandbox, where
+ * it holds the current hash of the very packs these capabilities name, and the suite then asserted the
+ * opposite of what it does on CI. Pointed at an empty directory rather than deleted from the assertions,
+ * because "the base does not bake it" is the case that makes composing a fragment the right answer; the stamp
+ * protocol's other two cases are packs.integration.test.ts's, with a stamps dir of its own. */
+process.env["INTENTIC_PACK_STAMPS_DIR"] = mkdtempSync(join(tmpdir(), "environment-stamps-"));
+
 // A proposal is custom-section content only: the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";
 

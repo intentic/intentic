@@ -19,9 +19,12 @@ import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
 import SetupProgress from "./components/SetupProgress.vue";
-import { advance, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
+import { advance, type PlanStep, progressView, setupPlan, startProgress, tick, type Progress } from "./setupPlan";
 import {
     desktopInfo,
+    // Aliased: the ref holding the answer wants the plain name, this being the one place that asks the
+    // question. See the ref's own comment for why the answer is a state of its own rather than a boolean.
+    dockerReady as dockerReadyProbe,
     expectedStop,
     forgetResumableSetup,
     machineReport,
@@ -91,6 +94,18 @@ import {
  * tab had a Restart and no log tail, and neither offered the rollback both of their backends could already do. */
 
 const info = ref<DesktopInfo | undefined>(undefined);
+/* WHETHER DOCKER ANSWERS, AND `undefined` UNTIL IT HAS BEEN ASKED — a third state this screen genuinely has
+ * and used to pretend it did not.
+ *
+ * It rode `info` until the probe behind it turned out to be the slowest thing this window does (desktop.ts,
+ * and the Rust command's own comment): tens of seconds on a machine where Docker is installed and stopped,
+ * which is the ordinary machine an `intentic://setup` link lands on. Waiting for it meant a window that drew
+ * nothing and was not even titled while the user who had just clicked "Set up" watched it.
+ *
+ * So it is asked apart and nothing waits for it. Everything that reads it below already had to say what it
+ * does when the answer is missing, because `info` was itself absent for the first tick; the difference now is
+ * that the gap is measured in the machine's terms rather than the window's, and is honest about it. */
+const dockerReady = ref<boolean | undefined>(undefined);
 const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
 // What desktop sync is doing here. Undefined = no agent on this computer, which is a fact about the machine and
@@ -339,6 +354,19 @@ const start = async (id: string, action: () => Promise<void>): Promise<string | 
     }
 };
 
+/* THE STEPS THIS INSTALL WILL TAKE, as one expression, because it is now built from two directions: when the
+ * run starts, and again if the Docker probe lands after it (`onMounted`). One conditional step depends on that
+ * answer, so a plan drawn before it arrives has to be able to be drawn again. */
+const planFor = (args: SetupArgs): readonly PlanStep[] =>
+    setupPlan({
+        // Optimistic while unknown, which is the reading that costs least: a plan missing the Docker step is
+        // corrected the moment the probe answers, where a plan that invented one would have to take a step
+        // away from a reader who had already read it.
+        dockerReady: dockerReady.value ?? true,
+        syncing: (args.syncDir ?? ``) !== ``,
+        os: info.value?.os ?? ``,
+    });
+
 const runSetup = async (): Promise<void> => {
     const args = pending.value;
     if (args === undefined || running.value) {
@@ -365,17 +393,10 @@ const runSetup = async (): Promise<void> => {
      * is not shown the step that installs it, and a setup that carries no folder is not shown the one that
      * pairs one: the list on screen is what WILL run here, so nothing on it is ever skipped in front of the
      * reader. Rebuilt per run, so "Try again" starts a clean bar rather than resuming a dead one's. */
-    progress.value = startProgress(
-        setupPlan({
-            dockerReady: info.value?.dockerReady ?? true,
-            syncing: (args.syncDir ?? ``) !== ``,
-            os: info.value?.os ?? ``,
-        }),
-        startedAt,
-    );
+    progress.value = startProgress(planFor(args), startedAt);
     now.value = startedAt;
     track(`desktop_install_started`, {
-        dockerReady: info.value?.dockerReady ?? null,
+        dockerReady: dockerReady.value ?? null,
         sync: (args.syncDir ?? ``) !== ``,
         consented: consented.value,
         resumed: resuming.value,
@@ -716,11 +737,32 @@ const paneLines = (group: MachineSandboxGroup): string[] => {
 
 let stop: Array<() => void> = [];
 onMounted(async () => {
+    // Awaited, and safe to await, because it asks this process what it is and nothing else — see desktop.ts.
+    // The question about the MACHINE used to be answered in the same breath, and that is what made this line
+    // the one everything below queued behind.
     info.value = await desktopInfo();
     // Before the parked work below, because the first thing this screen does is often the setup it was opened
     // to run, and an install that reports nothing is exactly what this is here to stop happening.
     initAnalytics(info.value);
-    track(`desktop_app_opened`, { dockerReady: info.value.dockerReady });
+    /* THE MACHINE, ASKED IN PARALLEL WITH DRAWING THE WINDOW rather than in front of it. This probe is slowest
+     * on the machine it matters most for — Docker installed and not running spends tens of seconds refusing to
+     * answer — and nothing between here and the setup screen depends on what it says.
+     *
+     * `desktop_app_opened` carries the answer and so rides along with it, keeping the event's shape: it is the
+     * property that says how many people open this app on a machine that is already ready, and reporting it as
+     * "not known yet" on precisely the machines that are not would empty it of meaning. The event is therefore
+     * as late as the probe, which on a normal machine is milliseconds. Nothing else waits: an install that
+     * starts first still reports, `initAnalytics` having already run above. */
+    void dockerReadyProbe().then((ready) => {
+        dockerReady.value = ready;
+        track(`desktop_app_opened`, { dockerReady: ready });
+        /* A plan already on screen was drawn without this answer. Redrawn only while the cursor has not moved
+         * (`index === -1`, setupPlan.ts): after the first phase marker the plan is something the reader has
+         * begun following, and swapping it under them would be worse than the one step it corrects. */
+        if (pending.value !== undefined && progress.value !== undefined && progress.value.index === -1) {
+            progress.value = startProgress(planFor(pending.value), progress.value.startedAt);
+        }
+    });
     /* Listeners BEFORE the parked work, not after: `loadPending` starts the handed-over setup the moment it
      * finds one, and a script reaches this screen only as events, so a run begun before `onRun` is listening
      * would show an empty log through its first, most informative seconds. */
@@ -837,9 +879,11 @@ onUnmounted(() => {
                     <Icon name="refresh" class="mt-0.5 shrink-0" />
                     <span>Picking up where the restart left off.</span>
                 </p>
-                <p v-if="info && !info.dockerReady && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
+                <!-- `=== false`, not `!`: unknown is a third state here now (see the ref), and a warning about
+                     this computer must not be drawn on a question nobody has answered yet. -->
+                <p v-if="dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2 text-2xs text-warning">
                     <Icon name="box" class="mt-0.5 shrink-0" />
-                    <span v-if="info.os === `windows`"
+                    <span v-if="info?.os === `windows`"
                         >Docker isn't running yet: this checks what your PC needs first, and asks before changing anything.</span
                     >
                     <span v-else>Docker isn't running yet: setup installs it first, so your system will ask for your password once.</span>

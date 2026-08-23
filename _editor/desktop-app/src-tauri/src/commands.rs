@@ -13,6 +13,12 @@ type CommandResult<T> = Result<T, String>;
 const CONTAINER_PREFIX: &str = "intentic-sandbox-";
 const TUNNEL_PREFIX: &str = "intentic-sandbox-tunnel-";
 
+/* WHAT THIS APP IS — and NOTHING ABOUT THE MACHINE IT IS ON, which is a boundary this struct is now drawn
+ * along rather than a list that happens to stop here.
+ *
+ * Every field is a value this process is already holding, so [`desktop_info`] answers in the time one IPC
+ * round trip takes and can stay a plain sync command. `dockerReady` used to be the sixth field, and it was
+ * the one that ran a subprocess: see [`docker_ready`] for what that cost and why it left. */
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopInfo {
@@ -20,10 +26,6 @@ pub struct DesktopInfo {
     pub os: String,
     pub app_url: String,
     pub platform_url: String,
-    /// A Docker daemon answers right now. False covers both "not installed" and "not started" — the scripts
-    /// tell those apart themselves (winget on Windows, get.docker.com on Linux), so the launcher only needs
-    /// to know whether setup will have to ask for elevation.
-    pub docker_ready: bool,
     /// This installation's own id, which the launcher's analytics send their events under — the same value the
     /// workspace window is marked with, so both faces report as one app (state.rs).
     pub install_id: String,
@@ -84,9 +86,35 @@ pub fn desktop_info(state: State<'_, AppState>) -> DesktopInfo {
         os: std::env::consts::OS.into(),
         app_url: state.app_url(),
         platform_url: state.platform_url(),
-        docker_ready: scripts::docker_ready(),
         install_id: state.install_id(),
     }
+}
+
+/* DOES A DOCKER DAEMON ANSWER RIGHT NOW — asked on its own, and off the main thread, because both of those
+ * were load-bearing and neither was true when this lived inside [`desktop_info`].
+ *
+ * `async`, and that is the whole of the second half. A `#[tauri::command] fn` is dispatched INLINE on the
+ * thread the IPC arrives on, which is the main thread — the one that pumps the window. Every other command
+ * here that spawns a process is already `async fn` for that reason; this probe was the one that was not, and
+ * it spawns `docker info`. On the machine this app exists to set up, Docker is often INSTALLED AND NOT
+ * RUNNING, and `docker info` against a daemon that is not there does not fail fast: it spends tens of seconds
+ * on the socket before giving up. For all of those seconds the launcher was frozen — no screen, no repaint,
+ * and not even the window's own title, since setting that is an IPC of its own queued behind this one.
+ *
+ * What that looked like from outside is the bug this split fixes: a first-time user answers "Set up" to a
+ * link from their browser and then watches an empty window for half a minute, on the one machine in the world
+ * where the answer to this question is slow, in the one flow where they know least about the app. Both
+ * desktop smoke tiers assert exactly that journey by window title and both caught it (smoke.sh section 4,
+ * desktop-smoke-windows tier 1) — on the CI machines slow enough to be that user.
+ *
+ * Asked separately, and NOT waited for: App.vue starts this at mount and draws whichever face it is without
+ * it. The answer only decides a step in the install plan and an analytics property, and the second caller of
+ * `scripts::docker_ready` — the elevation decision in [`SetupContext::of`] — is unchanged and still exact,
+ * being made inside an `async` command while the user watches the screen it belongs to.
+ */
+#[tauri::command]
+pub async fn docker_ready() -> bool {
+    scripts::docker_ready()
 }
 
 /* TAKEN, NOT READ — the same rule [`take_pending_recreate`] has always had, and for a sharper reason here.

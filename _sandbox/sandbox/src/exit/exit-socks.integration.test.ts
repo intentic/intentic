@@ -46,8 +46,15 @@ const proxy = async (port: number): Promise<SocksHandle> => {
     return handle;
 };
 
-// A deterministic-ish port in the ephemeral range, per test, so two tests never fight for one listener.
-let next = 38_400;
+/* A fixed port per test, so two tests in this file never fight for one listener — and BELOW the ephemeral
+ * range, which is the half that was wrong. These used to start at 38400, inside `ip_local_port_range`
+ * (32768–60999 on Linux), so the kernel was free to hand the very same number to any outbound socket on the
+ * machine: the exit then failed to bind with "local port N is already taken", which is a true statement about
+ * a port this test had no claim to. It only bites under load, so it passed run after run beside its own file
+ * and failed inside `pnpm verify`, where 40-odd suites are making connections at once — a gate that reports
+ * the machine's traffic rather than the code. The kernel never auto-assigns below the range's low bound, so
+ * these are ports nothing takes unless a service is deliberately bound to one. */
+let next = 21_000;
 const freePort = (): number => (next += 7);
 
 test("an IPv4 CONNECT is proxied end to end", async () => {

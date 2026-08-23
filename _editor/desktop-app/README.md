@@ -220,7 +220,10 @@ and how long, were both unanswerable. `setupPlan.ts` answers them:
 
 - **The whole plan is drawn before the first line of output**, and only the steps that will run on this
   machine are in it: no `Install Docker` row where Docker is already up, no `Set up folder sync` where the
-  setup link carried no folder. Nothing on the list is ever skipped in front of the reader.
+  setup link carried no folder. Nothing on the list is ever skipped in front of the reader. The one row that
+  needs an answer from the machine is the Docker one, and the probe behind it is deliberately not waited for
+  (see above): a plan drawn before it lands is drawn without that row and redrawn with it, but only while the
+  cursor has not moved yet: after the first phase marker the reader is following the list they were given.
 - **The bar is weighted by how long each step takes**, not by how many there are. A step counter alone sits at
   "6 of 10" through the longest part of an install and then finishes four steps in as many seconds.
 - **The image pull reports real progress.** Spawned without a terminal, `docker pull` cannot draw its bars and
@@ -369,9 +372,17 @@ path does not:
 - **Reading the url back in `setup()`.** `tauri-plugin-deep-link` captures argv during its own plugin setup and
   emits it there (before the app's `on_open_url` listener exists) and nothing replays it. `setup()` asks for
   what it captured (`deep_link().get_current()`) rather than waiting for an event that has already been sent.
+- **Nothing on the way to that screen may ask about the machine.** The launcher window is *built* by the
+  arriving link, so everything `App.vue` does on mount is between the user's *"Set up"* and the first thing
+  they see. `desktop_info` used to probe Docker in that stretch, and `docker info` against a daemon that is
+  installed and not running: the ordinary state of a PC that is about to be set up: takes tens of seconds to
+  refuse. Worse, it was a sync command, and those are dispatched on the main thread, so the window could not
+  even be titled while it ran. The probe is now `docker_ready`, its own `async` command, started on mount and
+  waited for by nobody; the one step of the install plan that depends on the answer is redrawn if it arrives
+  late. What the app *is* (`desktop_info`) is all values the process already holds, so it stays instant.
 
-Neither is exercised by firing a link at a running app, which is why the smoke tier fires one at a stopped one
-too.
+None of the three is exercised by firing a link at a running app, which is why the smoke tiers fire one at a
+stopped one too: and the last of them is invisible on a fast machine, so it was CI's slow ones that found it.
 
 ## What it reports about itself
 
@@ -382,7 +393,7 @@ install's outcome was invisible. It now sends named events of its own
 
 | Event | When | Carries |
 | --- | --- | --- |
-| `desktop_app_opened` | the launcher mounts | whether Docker already answers |
+| `desktop_app_opened` | the Docker probe started at mount answers | whether Docker already answers |
 | `desktop_install_started` / `_finished` | a handed-over setup runs | outcome, duration, exit code, and the step it stopped on |
 | `desktop_install_dismissed` | the setup card is closed | whether the run was still going, and how far it had got |
 | `desktop_install_stopped` | the user ends a run with **Stop** | how far it had got |
