@@ -152,7 +152,7 @@ test("defaults to measuring, and says on screen that nothing is being moved", as
 
     expect(settings.value.autoTier).toBe(`shadow`);
     expect(modeButton(host, `Measure`).getAttribute(`aria-selected`)).toBe(`true`);
-    expect(host.textContent).toContain(`every turn still runs on your own pick`);
+    expect(host.textContent).toContain(`still running on your pick`);
 });
 
 test("switching the mode writes it, and the row then describes what it actually does", async () => {
@@ -162,7 +162,7 @@ test("switching the mode writes it, and the row then describes what it actually 
 
     expect(patch).toHaveBeenCalledWith({ autoTier: `on` });
     await Promise.resolve();
-    expect(host.textContent).toContain(`runs on the cheaper model below`);
+    expect(host.textContent).toContain(`run on the cheaper model`);
 });
 
 test("off says the judgement stops too, not merely the routing", async () => {
@@ -172,14 +172,14 @@ test("off says the judgement stops too, not merely the routing", async () => {
     modeButton(host, `Off`).click();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`Nothing is judged and nothing is recorded`);
+    expect(host.textContent).toContain(`Nothing is judged or recorded`);
 });
 
 test("names the rule behind Auto, because which model it picks depends on a conversation this page cannot see", async () => {
     const host = mount();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`the cheapest model published by whichever provider the chat is already on`);
+    expect(host.textContent).toContain(`cheapest from the chat`);
 });
 
 test("a pinned cheap model is drawn as written, in its own list", async () => {
@@ -197,9 +197,9 @@ test("the judge's record renders its three numbers once turns have been judged",
 
     expect(host.textContent).toContain(`10 of 40`);
     expect(host.textContent).toContain(`$1.50`);
-    expect(host.textContent).toContain(`4 ran on the cheaper model, spending $0.25`);
-    expect(host.textContent).toContain(`1 of 10`);
-    expect(host.textContent).toContain(`vetoed outright: 2`);
+    expect(host.textContent).toContain(`4 routed at $0.25`);
+    expect(host.textContent).toContain(`Escalated: 1/10`);
+    expect(host.textContent).toContain(`vetoed: 2`);
 });
 
 test("no judged turns means no numbers at all: absence, not a row of zeros", async () => {
@@ -223,15 +223,13 @@ test("the dial defaults to balanced and writes the stop that was clicked", async
     expect(patch).toHaveBeenCalledWith({ autoTierEagerness: `eager` });
 });
 
-test("each stop says which turns it lets through, in an example rather than a number", async () => {
-    // The cutoff behind it is meaningless without the weights; a sentence a reader can check their own messages
-    // against is the only honest way to render this control.
-    settings.value = { ...settings.value, autoTierEagerness: `eager` };
+test("the eagerness dial goes away with the feature, not just the mode control", async () => {
     const host = mount();
     await Promise.resolve();
+    modeButton(host, `Off`).click();
+    await Promise.resolve();
 
-    expect(host.textContent).toContain(`explain what this file does`);
-    expect(host.textContent).toContain(`a turn still has to say something positively easy`);
+    expect(host.textContent).not.toContain(`Cautious`);
 });
 
 test("the dial goes away with the feature, rather than adjusting a judge that never runs", async () => {

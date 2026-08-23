@@ -8,6 +8,7 @@ import { expect, test } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
+import { packFragment } from "./packs.js";
 import {
     approvedPath,
     approveEnvironment,
@@ -20,7 +21,6 @@ import {
     readEnvironment,
     rejectEnvironment,
 } from "./environment.js";
-import { packFragment } from "./packs.js";
 
 // A proposal is custom-section content only: the daemon owns the FROM.
 const CUSTOM = "RUN apt-get update && apt-get install -y cowsay\n";

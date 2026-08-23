@@ -210,11 +210,6 @@ const eagernessOptions = [
     { label: `Balanced`, value: `balanced` },
     { label: `Eager`, value: `eager` },
 ];
-const eagernessNote: Record<string, string> = {
-    cautious: `Only the unmistakable: a plain question that names no file and asks for nothing else.`,
-    balanced: `The default, and what every earlier measurement was judged against.`,
-    eager: `An easy-worded question about real code counts too, like "explain what this file does".`,
-};
 
 // A pinned key is `${provider}:${model}` (quickModelKey): the provider prefix drives the row's brand mark.
 const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`:`)) as AgentProvider;
@@ -315,14 +310,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                                 @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"
                             />
                         </div>
-                        <!-- Who starts one, and how to deviate without coming back here. A setting that silently
-                             does not reach one of the surfaces it lists is worse than one that never claimed to:
-                             and the caret is the answer to the question this row otherwise raises, which is what
-                             to do when one particular failure wants a bigger model than the standing order. -->
-                        <p class="text-2xs text-subtle">
-                            Used by Fix with agent, Maintenance, Documentation, Acceptance and pre-push fixes: the caret beside each button overrides
-                            this for a single run.
-                        </p>
+                        <p class="text-2xs text-subtle">For automated runs. Override per run from each button's caret.</p>
                     </div>
                 </div>
             </template>
@@ -342,78 +330,41 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
             </template>
             <template #below>
                 <div class="flex flex-col gap-3">
-                    <!-- WHAT THE SETTING ACTUALLY DOES TODAY, one line per state, because the middle one is
-                         the default and does nothing visible: a control whose default has no observable effect
-                         reads as broken unless the screen says that IS the effect. -->
-                    <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">
-                        Every turn runs on the model you picked. Nothing is judged and nothing is recorded.
-                    </p>
+                    <p v-if="settings?.autoTier === `off`" class="text-2xs text-muted">Nothing is judged or recorded.</p>
                     <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
-                        A turn that looks simple runs on the cheaper model below, the chat says so on the turn it happens, and every conversation can
-                        veto it from the model picker. Follow-ups after hard work stay on your pick, and anything with a screenshot, a stack trace or
-                        a plan attached always does.
+                        Simple turns run on the cheaper model. Each conversation can veto it.
                     </p>
-                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                        <span class="text-content">Measuring</span>: every turn is judged and the verdict is recorded beside what it cost, but every
-                        turn still runs on your own pick. The record so far is below; switch to On once it says the judgement is worth acting on.
-                    </p>
+                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">Judging every turn, still running on your pick.</p>
 
-                    <!-- THE JUDGE'S RECORD, the numbers the row above keeps referring to, drawn where the
-                         switch is so the decision and its evidence share a screen. Three facts and a guardrail,
-                         nothing dressed as an experiment: what share of turns looked simple, what those turns
-                         cost (Measure) or saved population-free (On: what the moved turns cost on the cheap
-                         rung), and how often the user overruled the judge right afterwards, which is the number
-                         that says whether to trust it. Absent entirely until something was judged: "not
-                         measured" must not read as "measured, found nothing".
-                         Separated by spacing rather than a rule, the idiom this page moved to: a settings card
-                         that draws a line between every block reads as a stack of unrelated panels. -->
-                    <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="mt-3 flex flex-col gap-0.5">
+                    <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="flex flex-col gap-0.5">
                         <p class="text-2xs text-muted">
-                            <span class="text-content">Last {{ TIER_WINDOW_DAYS }} days</span>: {{ tierReport.fast }} of {{ tierReport.judged }} turns
-                            looked simple<template v-if="tierReport.judged > 0"> ({{ pct(tierReport.fast, tierReport.judged) }})</template>.
-                            <template v-if="tierReport.atStakeUsd > 0">
-                                The ones that stayed on your pick cost {{ usd(tierReport.atStakeUsd) }} there.
-                            </template>
+                            <span class="text-content">{{ TIER_WINDOW_DAYS }}d</span>:
+                            {{ tierReport.fast }} of {{ tierReport.judged }} simple<template v-if="tierReport.judged > 0">
+                                ({{ pct(tierReport.fast, tierReport.judged) }})</template
+                            ><template v-if="tierReport.atStakeUsd > 0"> · {{ usd(tierReport.atStakeUsd) }} on your pick</template>
                         </p>
                         <p v-if="tierReport.routed > 0" class="text-2xs text-muted">
-                            {{ tierReport.routed }} ran on the cheaper model, spending {{ usd(tierReport.routedUsd) }}.
+                            {{ tierReport.routed }} routed at {{ usd(tierReport.routedUsd) }}
                         </p>
                         <p class="text-2xs text-subtle">
-                            Bumped to a dearer model right after a simple-judged turn: {{ tierReport.escalated }} of {{ tierReport.fast
-                            }}<template v-if="tierReport.denied > 0"> · vetoed outright: {{ tierReport.denied }}</template
-                            >. Past a few percent, the judge costs more trust than it saves.
+                            Escalated: {{ tierReport.escalated }}/{{ tierReport.fast
+                            }}<template v-if="tierReport.denied > 0"> · vetoed: {{ tierReport.denied }}</template>
                         </p>
                     </div>
 
-                    <!-- THE DIAL, directly under the numbers it is the answer to: the share above says how many
-                         turns the judge is calling simple, and this is the only control that changes it. Offered
-                         while measuring as well as while routing, because trying a stop and reading the share it
-                         produces is exactly what the Measure mode is for. Hidden with the feature itself: a dial
-                         on a judge that never runs is furniture. -->
-                    <div v-if="settings?.autoTier !== `off`" class="mt-3 flex flex-col gap-1.5">
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-xs font-medium text-content">How readily</span>
-                            <SegmentedControl
-                                :model-value="settings?.autoTierEagerness ?? `balanced`"
-                                :options="eagernessOptions"
-                                @update:model-value="
-                                    (autoTierEagerness: string) =>
-                                        patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
-                                "
-                            />
-                        </div>
-                        <!-- What the chosen stop actually lets through, in an example rather than a threshold:
-                             the number behind it is meaningless without the weights, and the example is the
-                             thing a reader can check their own messages against. -->
-                        <p v-if="settings !== undefined" class="text-2xs text-muted">
-                            {{ eagernessNote[settings.autoTierEagerness ?? `balanced`] }}
-                        </p>
-                        <p class="text-2xs text-subtle">
-                            At every setting a turn still has to say something positively easy, so a short vague request is never moved.
-                        </p>
+                    <div v-if="settings?.autoTier !== `off`" class="flex items-center justify-between gap-3">
+                        <span class="text-xs font-medium text-content">How readily</span>
+                        <SegmentedControl
+                            :model-value="settings?.autoTierEagerness ?? `balanced`"
+                            :options="eagernessOptions"
+                            @update:model-value="
+                                (autoTierEagerness: string) =>
+                                    patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
+                            "
+                        />
                     </div>
 
-                    <div class="mt-3 flex flex-col gap-1.5">
+                    <div class="flex flex-col gap-1.5">
                         <div class="flex items-center justify-between gap-3">
                             <span class="text-xs font-medium text-content">Cheaper model</span>
                             <Picker
@@ -437,18 +388,8 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         >
                             <template #floor>Remove them all to go back to Auto.</template>
                         </ModelPinList>
-                        <!-- Auto cannot be spelled out as a ladder the way the quick model's is: which model
-                             it reaches for depends on the provider the CONVERSATION is on, which this page
-                             cannot know. So it names the rule instead, which is the part worth knowing. -->
                         <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                            <span class="text-content">Auto</span>: the cheapest model published by whichever provider the chat is already on. Add one
-                            to choose it yourself.
-                        </p>
-                        <!-- The constraint that shapes the whole feature, said plainly, because it is also the
-                             answer to the obvious question about why a pin on another provider is ignored. -->
-                        <p class="text-2xs text-subtle">
-                            Always the same provider as your pick: moving a conversation to another account starts its session over, which costs more
-                            than the swap saves.
+                            <span class="text-content">Auto</span>: cheapest from the chat's provider.
                         </p>
                     </div>
                 </div>
