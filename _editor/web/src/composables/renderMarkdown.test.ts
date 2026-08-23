@@ -90,8 +90,18 @@ describe(`code blocks`, () => {
  * the grammar we ship rather than left grey. Colour is what proves the mapping: it appears only once a real
  * Shiki grammar has run over the block. */
 describe(`fence infos mapped onto a shipped grammar`, () => {
-    // Highlighting is asynchronous (the grammar is imported on demand) and lands by invalidating the render, so
-    // this re-renders until colour shows up: false means it never did.
+    /* Highlighting is asynchronous (the grammar is imported on demand) and lands by invalidating the render, so
+     * this re-renders until colour shows up: false means it never did.
+     *
+     * The wait bounds a HANG and does not measure that latency. What the FIRST of these pays for is the whole
+     * colour stack arriving cold on its own clock: Shiki's core, both themes, the grammar, and the throwaway
+     * line useHighlighter tokenizes to compile the grammar's rules. That is a fraction of a second idle and
+     * roughly ten times that on a runner with every core busy, which is what a full run is (vitest.config.ts),
+     * so a one-second wait was a latency measurement wearing a timeout's clothes: it passed alone and lost the
+     * race in the suite, reporting as "the json grammar did not colour" rather than as the contention it was.
+     * Sized like the rest of this package now, and still under `testTimeout`, so a grammar that genuinely never
+     * loads fails on the assertion that names it. */
+    const DEADLINE_MS = 10_000;
     const colours = async (source: string): Promise<boolean> => {
         let html = ``;
         const stop = watchEffect(
@@ -100,7 +110,8 @@ describe(`fence infos mapped onto a shipped grammar`, () => {
             },
             { flush: `sync` },
         );
-        for (let attempt = 0; attempt < 40 && !html.includes(`--shiki-dark:`); attempt += 1) {
+        const until = performance.now() + DEADLINE_MS;
+        while (!html.includes(`--shiki-dark:`) && performance.now() < until) {
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
         stop();

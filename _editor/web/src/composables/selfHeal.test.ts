@@ -6,6 +6,18 @@
 // not loop) and the split across the reload (this page only MARKS the database wipe; the next boot performs
 // it before anything holds a connection open).
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
+/* Static, and it is the graph's COMPILE this buys as much as the binding. Reporting a wipe reaches the daemon's
+ * authenticated fetch, which drags the sandbox contract and vue-query in behind it, and compiling that cold
+ * costs ~10s idle: charged to whichever test entered the graph first, out of the 20s a test is allowed
+ * (vitest.config.ts), and on a runner with every core busy that is the whole budget. It duly passed alone and
+ * lost the race in the suite. Up here it is the file's load instead, paid during collection and bounded by the
+ * run, as in storageRule.test.ts and staleChunk.test.ts; the `load()` calls below then re-enter a warm graph.
+ * The browser globals it reads at module scope are already in place: vitest.setup.ts installs them for the
+ * package, before this file is loaded.
+ *
+ * The purge is also the half with no module state to reset (it reads a key and deletes what it finds), so the
+ * last two tests drive this instance directly; only the healing half needs a fresh module per test. */
+import { purgeIfMarked } from "./selfHeal";
 
 // jsdom's window.location is unforgeable (see staleChunk.test.ts): the reload is observed through a replaced
 // global, resolved from the global scope at call time.
@@ -72,7 +84,6 @@ it(`the marked boot deletes every database this origin holds, then retires the m
             return request;
         },
     });
-    const { purgeIfMarked } = await load();
     localStorage.setItem(`intentic.wipeOnBoot`, `1`);
     await purgeIfMarked();
     expect(deleted.toSorted()).toEqual([`intentic.chat`, `keyval-store`]);
@@ -82,7 +93,6 @@ it(`the marked boot deletes every database this origin holds, then retires the m
 it(`an unmarked boot touches no database`, async () => {
     const deleteDatabase = vi.fn();
     vi.stubGlobal(`indexedDB`, { databases: () => Promise.resolve([]), deleteDatabase });
-    const { purgeIfMarked } = await load();
     await purgeIfMarked();
     expect(deleteDatabase).not.toHaveBeenCalled();
 });

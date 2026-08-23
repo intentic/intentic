@@ -9,7 +9,7 @@
 // diagram draws at all is the entire point of the feature, and a mock that resolves with an <svg> string proves
 // only that v-html works. What the mock would have bought (a jsdom that can render SVG) costs three lines of
 // text metrics instead (below).
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp, h } from "vue";
 
 /* jsdom gaps. None of them is the code's fault, and each one left unstubbed fails in a way that reads as a
@@ -67,6 +67,20 @@ const settled = (host: HTMLElement, selector: string): Promise<void> =>
     );
 
 describe(`<Markdown> with a mermaid fence`, () => {
+    /* One throwaway diagram, drawn before anything is asserted, purely to pay for mermaid.
+     *
+     * The lazy import only fires at MOUNT, so unlike a heavy static import it cannot be moved to collection, and
+     * whichever test mounted first was charged the megabyte of grammars plus the first layout: a fraction of a
+     * second idle, and on a runner with every core busy enough of the 20s a test is allowed (vitest.config.ts)
+     * that the wait below never got to report what was missing, the test simply ran out. Paid here instead,
+     * against the roomier hook budget, once for the file; every diagram after this one draws from the registry
+     * at a tenth of the cost. Torn down so no assertion can see it. */
+    beforeAll(async () => {
+        const host = render('```mermaid\nflowchart LR\n    warm["Warm"] --> up["Up"]\n```');
+        await settled(host, `.md-mermaid svg`);
+        host.remove();
+    });
+
     it(`draws the diagram, and keeps the prose either side of it`, async () => {
         const host = render(`Before.\n\n\`\`\`mermaid\nflowchart LR\n    a["One"] --> b["Two"]\n\`\`\`\n\nAfter.`);
         await settled(host, `.md-mermaid svg`);
