@@ -407,7 +407,7 @@ describe("draft cards", () => {
     it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
-        vi.mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], rev: 2 } as never);
+        vi.mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], failed: [], rev: 2 } as never);
 
         await useAgents().archive([`a1`]);
 
@@ -673,7 +673,7 @@ describe("archive", () => {
         const { archive, notice, receipt, undoable, archivedFlash, lanes, archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         const flashes = archivedFlash.value;
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
 
         await archive([`a`]);
 
@@ -711,14 +711,14 @@ describe("archive", () => {
         it("takes the card off the board on the press, and leaves it off when the archive lands", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            const request = held<{ moved: AgentSummary[]; rev: number }>();
+            const request = held<{ moved: AgentSummary[]; failed: never[]; rev: number }>();
             post.mockReturnValueOnce(request.answer as never);
 
             const press = archive([`a`]);
 
             // Not awaited: the daemon has said nothing yet, and this is the whole point of the change.
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
-            request.give({ moved: [archivedAgent(`a`)], rev: 2 });
+            request.give({ moved: [archivedAgent(`a`)], failed: [], rev: 2 });
             await press;
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
         });
@@ -740,7 +740,7 @@ describe("archive", () => {
         it("hands back exactly what the daemon declined", async () => {
             const { archive, lanes, archived, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
 
             await archive([`a`, `b`]);
 
@@ -753,12 +753,49 @@ describe("archive", () => {
         it("puts the whole lane back when nothing moved", async () => {
             const { archive, lanes, receipt } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [], rev: 2 } as never);
+            post.mockResolvedValueOnce({ moved: [], failed: [], rev: 2 } as never);
 
             await archive();
 
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
             expect(receipt.value?.message).toContain(`Nothing to archive`);
+        });
+
+        /* THE REPORT THIS PAIR EXISTS FOR. A refusal (a checkout whose repository was deleted, a locked one)
+         * answers 200 with nothing moved, and the board used to read that as "there was nothing to archive" and
+         * say so, about the very card still sitting in front of the user, on every press. The daemon now names
+         * what it refused and why, and the strip that does not expire is where that belongs. */
+        it("says why the daemon refused, instead of claiming there was nothing to archive", async () => {
+            const { archive, lanes, notice, receipt } = useAgents();
+            setAgents([agent(`a`)], 1);
+            post.mockResolvedValueOnce({
+                moved: [],
+                failed: [{ id: `a`, reason: `fatal: not a git repository` }],
+                rev: 2,
+            } as never);
+
+            await archive([`a`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
+            expect(notice.value).toContain(`fatal: not a git repository`);
+            expect(receipt.value).toBeUndefined();
+        });
+
+        // A mixed answer: the cards that went are gone and the one that stayed keeps its explanation, which the
+        // "the archive worked, drop the stale strip" line used to wipe on its way past.
+        it("keeps the refusal on screen when the rest of the press succeeded", async () => {
+            const { archive, lanes, notice } = useAgents();
+            setAgents([agent(`a`), agent(`b`)], 1);
+            post.mockResolvedValueOnce({
+                moved: [archivedAgent(`b`)],
+                failed: [{ id: `a`, reason: `worktree busy` }],
+                rev: 2,
+            } as never);
+
+            await archive([`a`, `b`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
+            expect(notice.value).toContain(`worktree busy`);
         });
 
         /* The rollback withdraws only its OWN unanswered intent. Two presses can be open on one card: the card
@@ -768,11 +805,11 @@ describe("archive", () => {
         it("leaves a card another press did archive off the board when it rolls back", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            const first = held<{ moved: AgentSummary[]; rev: number }>();
+            const first = held<{ moved: AgentSummary[]; failed: never[]; rev: number }>();
             post.mockReturnValueOnce(first.answer as never);
             const failing = archive([`a`]);
             // The second press, made while the first is still open, is the one that lands.
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
             await archive([`a`]);
 
             first.refuse(new Error(`daemon went away`));
@@ -785,7 +822,7 @@ describe("archive", () => {
     it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
         const { archive, receipt } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 3 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 3 } as never);
 
         await archive();
 
@@ -797,10 +834,10 @@ describe("archive", () => {
     it("undo restores exactly what was archived, and takes the receipt with it", async () => {
         const { archive, receipt, undoable, lanes, archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 4 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 4 } as never);
         await archive();
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 5 } as never);
+        post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 5 } as never);
         await receipt.value?.undo?.();
 
         expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`, `b`] }) }));
@@ -815,10 +852,10 @@ describe("archive", () => {
     it("undoes a silent single archive from the keyboard", async () => {
         const { archive, undoArchive, undoable, lanes } = useAgents();
         setAgents([agent(`a`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 6 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 6 } as never);
         await archive([`a`]);
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 7 } as never);
+        post.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 7 } as never);
         await undoArchive();
 
         expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`] }) }));
@@ -841,10 +878,10 @@ describe("archive", () => {
     it("drops individually restored agents from the undo set", async () => {
         const { archive, restore, undoable } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 8 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 8 } as never);
         await archive();
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 9 } as never);
+        post.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 9 } as never);
         await restore([`a`]);
 
         expect(undoable.value).toEqual([`b`]);
@@ -856,7 +893,7 @@ describe("archive", () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a`), new Conversation(`b`)];
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 11 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
 
         await archive();
 
@@ -878,7 +915,7 @@ describe("archive", () => {
 
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {
         const { archive, receipt } = useAgents();
-        post.mockResolvedValueOnce({ moved: [], rev: 10 } as never);
+        post.mockResolvedValueOnce({ moved: [], failed: [], rev: 10 } as never);
 
         await archive();
 
@@ -921,13 +958,13 @@ describe("archive", () => {
             const archiveB = archive([`b`]);
             expect(busyIds.value.toSorted()).toEqual([`a`, `b`]);
 
-            first.resolve({ moved: [archivedAgent(`a`)], rev: 7 });
+            first.resolve({ moved: [archivedAgent(`a`)], failed: [], rev: 7 });
             await archiveA;
             // The bug: the first call's cleanup used to clear the shared in-flight list, so b's card went quiet
             // while its request was still open.
             expect(busyIds.value).toEqual([`b`]);
 
-            second.resolve({ moved: [archivedAgent(`b`)], rev: 8 });
+            second.resolve({ moved: [archivedAgent(`b`)], failed: [], rev: 8 });
             await archiveB;
             expect(busyIds.value).toEqual([]);
         });
@@ -943,11 +980,11 @@ describe("archive", () => {
             const constructorAgain = archive([`constructor`]);
             expect(busyIds.value.toSorted()).toEqual([`__proto__`, `constructor`]);
 
-            first.resolve({ moved: [], rev: 7 });
+            first.resolve({ moved: [], failed: [], rev: 7 });
             await both;
             expect(busyIds.value).toEqual([`constructor`]);
 
-            second.resolve({ moved: [], rev: 8 });
+            second.resolve({ moved: [], failed: [], rev: 8 });
             await constructorAgain;
             expect(busyIds.value).toEqual([]);
         });
@@ -962,9 +999,9 @@ describe("archive", () => {
             const archiveA = archive([`a`]);
             const archiveB = archive([`b`]);
             // b finishes first; a's response was composed when b was still on the board.
-            second.resolve({ moved: [archivedAgent(`b`)], rev: 9 });
+            second.resolve({ moved: [archivedAgent(`b`)], failed: [], rev: 9 });
             await archiveB;
-            first.resolve({ moved: [archivedAgent(`a`)], rev: 10 });
+            first.resolve({ moved: [archivedAgent(`a`)], failed: [], rev: 10 });
             await archiveA;
 
             expect(lanes.value.finished).toEqual([]);
@@ -974,14 +1011,14 @@ describe("archive", () => {
         it("merges consecutive archives into one undo that puts all of them back", async () => {
             const { archive, undoArchive, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 11 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
             await archive([`a`]);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], rev: 12 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], failed: [], rev: 12 } as never);
             await archive([`b`]);
 
             // Clicking down the lane is ONE intent, so the way back to `a` is not dropped by archiving `b`.
             expect(undoable.value).toEqual([`b`, `a`]);
-            post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], rev: 13 } as never);
+            post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 13 } as never);
             await undoArchive();
             expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`b`, `a`] }) }));
         });
@@ -1000,7 +1037,7 @@ describe("archive", () => {
         it("keeps an archived card off the board across a NEWER snapshot that predates the archive", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 9 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
             // A running turn ticks updatedAt about once a second, so a legitimately newer roster arrives that
@@ -1013,7 +1050,7 @@ describe("archive", () => {
         it("hands the board back to the daemon once it publishes the archive", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 9 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
             // The roster that reflects the archive retires the local intent, and the daemon is authoritative
@@ -1036,7 +1073,7 @@ describe("archive", () => {
         it("keeps the undo after the receipt that announced it is gone", async () => {
             const { archive, receipt, dismissReceipt, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], rev: 14 } as never);
+            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 14 } as never);
             await archive();
 
             dismissReceipt();
@@ -1089,7 +1126,7 @@ describe("the archive list", () => {
     it("stays quiet when the departure is this browser's own archive: both halves are already written", async () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], rev: 2 } as never);
+        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
         await archive([`a`]);
 
         // The daemon's own account of the archive, and a later unrelated frame: neither is news to the list.

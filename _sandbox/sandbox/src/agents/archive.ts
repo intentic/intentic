@@ -82,18 +82,39 @@ const pooled = async (count: number, worker: (index: number) => Promise<void>): 
     );
 };
 
+/* What an archive actually did, and what it could not do. The FAILURES are half the answer and used to be
+ * nowhere: a teardown that threw was warned to the log and dropped from the batch, so the press answered
+ * "nothing moved", which the board can only read as "there was nothing to archive". A user looking straight at
+ * the card it refused was told it was already gone, with the real reason (a repo that no longer exists, a
+ * locked checkout) visible only in the daemon's log. Whatever stopped it, the person who pressed the button is
+ * the one who has to hear it. */
+export interface AgentArchiveResult {
+    // Archived, in the order the caller named them: the undo reads better when it lists what the user picked.
+    readonly archived: string[];
+    readonly failed: { readonly id: string; readonly reason: string }[];
+}
+
+// The failing teardown's own sentence, for the strip the board raises. Trimmed to one line: git's stderr
+// arrives as a paragraph, and the strip is a sentence wide.
+const reasonOf = (error: unknown): string => {
+    const text = error instanceof Error ? error.message : String(error);
+    return text.split(`\n`).find((line) => line.trim() !== ``)?.trim() ?? `the checkout could not be released`;
+};
+
 // Retire the checkouts, then stamp the marker, in that order, so a failure mid-way leaves an agent that is
 // still ON the board with its worktree intact rather than one the board has forgotten but the disk has not.
-// An agent whose retire throws takes only itself out of the batch; the rest still archive.
+// An agent whose retire throws takes only itself out of the batch; the rest still archive, and it is REPORTED
+// (see AgentArchiveResult) rather than merely logged.
 //
 // The retires overlap: "Clear" on a lane of ten is ten independent teardowns that share nothing but the repo
 // locks their removal pass takes, and running them one after another made the wait scale with the size of the
 // lane. The marker is still ONE write at the end, one persist, one roster broadcast, one repaint.
-export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string[], now: number): Promise<string[]> => {
+export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string[], now: number): Promise<AgentArchiveResult> => {
     const pending = ids.filter((id) => deps.agents.entry(id) !== undefined);
     // Written by slot, not pushed: the workers finish out of order, and the caller's undo reads better when the
     // result still lists what the user picked in the order they picked it.
     const done: (string | undefined)[] = Array.from({ length: pending.length });
+    const refused: ({ id: string; reason: string } | undefined)[] = Array.from({ length: pending.length });
     const retire = async (index: number): Promise<void> => {
         const id = pending[index];
         const entry = id === undefined ? undefined : deps.agents.entry(id);
@@ -111,6 +132,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             done[index] = id;
         } catch (error) {
             deps.logger.warn({ err: error, id }, "agents: archive skipped, worktree retire failed");
+            refused[index] = { id, reason: reasonOf(error) };
         }
     };
     await pooled(pending.length, retire);
@@ -123,7 +145,7 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             await deps.reaper?.reapConversation(id, { force: true });
         }
     }
-    return archived;
+    return { archived, failed: refused.filter((entry) => entry !== undefined) };
 };
 
 /* EMPTY THE ARCHIVE, `discard` applied to everything already filed away, and the fleet's only irreversible
@@ -189,7 +211,7 @@ export const sweepAgedAgents = async (deps: AgentArchiveDeps, now: number, reten
     if (aged.length === 0) {
         return [];
     }
-    const archived = await archiveAgents(deps, aged, now);
-    deps.logger.info({ count: archived.length }, "agents: archived aged-out agents");
+    const { archived, failed } = await archiveAgents(deps, aged, now);
+    deps.logger.info({ count: archived.length, failed: failed.length }, "agents: archived aged-out agents");
     return archived;
 };

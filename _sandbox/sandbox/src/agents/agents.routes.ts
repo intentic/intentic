@@ -474,12 +474,17 @@ export const createAgentsRoutes = (services: Services) => {
                     .map((agent) => agent.id);
             };
             const targets = input.ids ?? (await archivableNow());
-            const archived = await archiveAgents(services, targets, Date.now());
+            const { archived, failed } = await archiveAgents(services, targets, Date.now());
             // Read AFTER the archive, so each summary carries the archivedAt the card dates itself by, and with
             // the revision that applied it, the browser holds these ids off the board until a roster at least
             // that new arrives, so an in-flight older snapshot can't put them back.
+            //
+            // `failed` rides along rather than becoming an error: an archive that moved nine cards and refused
+            // one is not a failed request, and the one it refused is not "nothing to archive" either, which is
+            // the only thing the board could say while the reason stayed in the log.
             return {
                 moved: archived.map((id) => services.agents.get(id)).filter((summary) => summary !== undefined),
+                failed,
                 rev: services.agents.revision(),
             };
         }),

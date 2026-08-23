@@ -855,16 +855,33 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
     // The cards leave here, not on the answer, see takeOffBoard for why, and for what `restore` puts back.
     const restore = takeOffBoard(aimed);
     try {
-        const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(
+        const { moved, failed, rev } = await sandboxJson<{ moved: AgentSummary[]; failed: { id: string; reason: string }[]; rev: number }>(
             `/agents/archive`,
             jsonBody(`POST`, ids === undefined ? {} : { ids }),
         );
+        /* WHAT THE DAEMON REFUSED, said in its own words, on the strip that does not expire. Releasing a working
+         * copy is git work and it can fail for good (the repository behind a checkout was deleted from the
+         * workspace, a checkout is locked), and those cards stay on the board. This branch is the fix to the
+         * report that sent people here: a refusal answered 200 with nothing moved, so the board read it as
+         * "there was nothing to archive" and said so, about the very card the user was looking at, every press,
+         * with the reason nowhere but the daemon's log. */
+        if (failed.length > 0) {
+            const first = failed[0];
+            notice.value =
+                failed.length === 1
+                    ? `Couldn't archive that one: ${first?.reason ?? `its working copy could not be released`}`
+                    : `Couldn't archive ${failed.length} of them: ${first?.reason ?? `their working copies could not be released`}`;
+        }
         if (moved.length === 0) {
             // A press that changed nothing always says so, however few cards it aimed at: silence is the one
             // reading the user can't distinguish from a broken button. And every card it took on spec goes back,
-            // because "nothing moved" is exactly the case the optimistic removal guessed wrong about.
+            // because "nothing moved" is exactly the case the optimistic removal guessed wrong about. The
+            // "already off the board" reading belongs to the press that found nothing to do and NOTHING ELSE:
+            // a refusal has already said its piece above, and it would be contradicted by it.
             restore();
-            receipt.value = { message: `Nothing to archive, every finished agent is already off the board.` };
+            if (failed.length === 0) {
+                receipt.value = { message: `Nothing to archive, every finished agent is already off the board.` };
+            }
             return;
         }
         // A DELTA, not the roster the daemon happens to hold now: two archives in flight would otherwise race,
@@ -897,8 +914,12 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         // them (see the archive note above). Driven off `moved` like every other effect here: a press that aimed
         // at an agent the daemon declined to archive must not close its chat.
         useChat().closeTabs(gone);
-        // The archive worked, so whatever failure the strip was still holding is stale.
-        notice.value = undefined;
+        // The archive worked, so whatever failure the strip was still holding is stale, unless THIS press is
+        // what put it there: a mixed answer (nine cards away, one refused) has to keep the sentence about the
+        // one that stayed, which is the only card on the board the user still has a question about.
+        if (failed.length === 0) {
+            notice.value = undefined;
+        }
         if (sweep) {
             const count = undoable.value.length;
             receipt.value = { message: `${count} agent${count === 1 ? `` : `s`} archived`, undo: undoArchive };

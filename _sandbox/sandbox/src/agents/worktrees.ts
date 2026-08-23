@@ -1,4 +1,4 @@
-import { access, lstat, mkdir, readdir, rm, rmdir, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, readFile, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
@@ -146,6 +146,30 @@ export const createAgentWorktrees = (
     const overlaysFor = (id: string): string => overlaysDir(historyRoot, id);
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
     const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
+
+    /* IS THERE STILL A REPOSITORY BEHIND THIS CHECKOUT? Asked before anything tries to PRESERVE what the
+     * checkout holds (retire's pass 1), because a worktree whose repository has gone cannot answer a single git
+     * command: its `.git` file is a pointer into `<main>/.git/worktrees/<name>`, and a repo the user deleted,
+     * re-cloned or renamed in /work takes that directory with it. Every command in the worktree then dies with
+     * "fatal: not a git repository", which is not a transient failure but a permanent one.
+     *
+     * That is exactly what stranded conversations on the board: archiving threw on the status probe, the daemon
+     * dropped the agent from the batch, and the card came back with nothing anyone could do about it, forever.
+     * There is nothing to preserve in this case and no way to preserve it, so the honest answer is to skip the
+     * commit and reclaim the directory, which is all archiving ever promised for a checkout. */
+    const repoBehind = async (worktree: string): Promise<boolean> => {
+        const pointer = join(worktree, ".git");
+        // A real .git DIRECTORY is a repository of its own (never a worktree pointer), so it needs no resolving.
+        const stats = await lstat(pointer).catch(() => undefined);
+        if (stats === undefined) {
+            return false;
+        }
+        if (stats.isDirectory()) {
+            return true;
+        }
+        const gitdir = (await readFile(pointer, "utf8").catch(() => ``)).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+        return gitdir !== undefined && (await exists(gitdir));
+    };
 
     // Per-repo op chains (the history.ts serialize pattern): worktree add/remove and land all touch the repo's
     // shared admin area (<gitdir>/worktrees/) and, for land, the main-tree index. Turns themselves never come
@@ -400,6 +424,12 @@ export const createAgentWorktrees = (
                     const worktree = worktreeDir(id, repo);
                     if (!(await exists(join(worktree, ".git")))) {
                         return; // Never created, or already retired: nothing to preserve.
+                    }
+                    // The repository this checkout belongs to is gone (see repoBehind): no git command can run
+                    // here, so there is nothing to commit and no way to commit it. Pass 2 still reclaims the dir.
+                    if (!(await repoBehind(worktree))) {
+                        logger.warn({ id, repo }, "agents: retiring a checkout whose repository is gone, nothing to preserve");
+                        return;
                     }
                     // ONE spawn to answer "is there anything to keep", which is the answer in the common case:
                     // a cleanly-landed agent's worktree is already clean, because land committed its remainder.

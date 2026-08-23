@@ -13,6 +13,7 @@ import {
     AgentResumeAfterOutageSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
+    AgentsArchivedSchema,
     AgentsListSchema,
     AgentsMovedSchema,
     AgentsRemovedSchema,
@@ -233,7 +234,7 @@ export const agentsContract = {
                 "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
         })
         .input(AgentArchiveSchema)
-        .output(AgentsMovedSchema),
+        .output(AgentsArchivedSchema),
     unarchive: oc
         .route({
             method: "POST",

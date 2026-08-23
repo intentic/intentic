@@ -93,9 +93,10 @@ describe("archiveAgents", () => {
         await agents.finish("c1", 2_000);
         const { worktrees, retire } = stubWorktrees();
 
-        const archived = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
+        const { archived, failed } = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
 
         expect(archived).toEqual(["c1"]);
+        expect(failed).toEqual([]);
         expect(retire).toHaveBeenCalledWith("c1", agents.entry("c1")?.repos, "Fix the login bug");
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
@@ -107,7 +108,7 @@ describe("archiveAgents", () => {
         await agents.finish("c1", 2_000);
         const { worktrees, retire } = stubWorktrees();
 
-        expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000)).toEqual(["c1"]);
+        expect((await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000)).archived).toEqual(["c1"]);
         expect(retire).not.toHaveBeenCalled();
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
@@ -126,10 +127,14 @@ describe("archiveAgents", () => {
         });
         const { worktrees } = stubWorktrees(retire as never);
 
-        const archived = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1", "c2"], 9_000);
+        const { archived, failed } = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1", "c2"], 9_000);
 
         // Better a card that outstayed its welcome than one the board forgot while the disk kept it.
         expect(archived).toEqual(["c2"]);
+        /* And the refusal is REPORTED, not merely logged. A press that answers "nothing moved" is read by the
+         * board as "there was nothing to archive", which is a lie told to a user looking straight at the card
+         * that stayed: this is the sentence that replaces it, in git's own words. */
+        expect(failed).toEqual([{ id: "c1", reason: "worktree busy" }]);
         expect(agents.get("c1")?.archivedAt).toBeUndefined();
         expect(agents.list().map((agent) => agent.id)).toEqual(["c1"]);
     });
@@ -138,7 +143,7 @@ describe("archiveAgents", () => {
         const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
         await agents.init();
         const { worktrees, retire } = stubWorktrees();
-        expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual([]);
+        expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual({ archived: [], failed: [] });
         expect(retire).not.toHaveBeenCalled();
     });
 });

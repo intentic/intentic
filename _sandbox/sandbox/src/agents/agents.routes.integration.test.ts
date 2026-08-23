@@ -456,6 +456,33 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
 });
 
+/* AN ARCHIVE THAT CANNOT RELEASE A WORKING COPY SAYS SO, on the wire, which is the whole of the report behind
+ * this: the failure was warned to the daemon's log and the answer carried nothing, so the board could only read
+ * it as "there was nothing to archive" and told the user exactly that, about a card still in front of them.
+ * Now the refusal travels with its own sentence and the card stays where it is. */
+test("archive answers with what it refused and why, and leaves those agents on the board", async () => {
+    const daemon = services({
+        agentWorktrees: {
+            ...services().agentWorktrees,
+            retire: async (id) => {
+                if (id === "conv1") {
+                    throw new Error("fatal: not a git repository: /work/vendor/.git/worktrees/vendor\n");
+                }
+            },
+        },
+    });
+    const client = clientFor(createApp(daemon));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+    await runAgentTurn(client, { prompt: "and this", conversationId: "conv2", isolated: true });
+
+    const answer = await client.agents.archive({ ids: ["conv1", "conv2"] });
+
+    expect(answer.moved.map((agent) => agent.id)).toEqual(["conv2"]);
+    // One line, not git's paragraph: this is what the board prints on its strip.
+    expect(answer.failed).toEqual([{ id: "conv1", reason: "fatal: not a git repository: /work/vendor/.git/worktrees/vendor" }]);
+    expect((await client.agents.list()).agents.map((agent) => agent.id)).toEqual(["conv1"]);
+});
+
 /* SPEAKING AS THE AGENT, end to end: the placed row lands in the record marked for human readers, the provider
  * session is retired rewind-style, and the NEXT turn (resuming nothing) is seeded from the record, where the
  * planted line reaches the model as its own prior words with the mark nowhere in sight. That last assertion is

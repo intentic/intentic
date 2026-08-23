@@ -1367,6 +1367,22 @@ export const AgentsMovedSchema = z.object({
         ),
 });
 export type AgentsMoved = z.infer<typeof AgentsMovedSchema>;
+/* AN ARCHIVE ALSO REPORTS WHAT IT COULD NOT DO, which is the half that used to go missing. Releasing a working
+ * copy is git work, and it can fail for reasons no press can fix: the repository behind a checkout was deleted
+ * from the workspace, a checkout is locked. Those agents stay on the board, so the answer carries them and the
+ * sentence each failed with, otherwise the only true thing the caller could say about an archive that moved
+ * nothing was "there was nothing to archive": to a user looking straight at the card it refused. */
+export const AgentsArchivedSchema = AgentsMovedSchema.extend({
+    failed: z
+        .array(
+            z.object({
+                id: z.string().describe("Which conversation stayed on the board."),
+                reason: z.string().describe("Why its working copy could not be released, in the words the failure came with."),
+            }),
+        )
+        .describe("The conversations this press could not put away, each with the reason, so the board can say it instead of reporting silence."),
+});
+export type AgentsArchived = z.infer<typeof AgentsArchivedSchema>;
 // What a purge actually deleted. Ids, not summaries: these agents no longer exist anywhere, there is nothing
 // left to show and nothing to put back, so the only thing the caller can do with the answer is drop those rows
 // and count them. No revision either: archived agents are already off the broadcast roster (see `list`), so a

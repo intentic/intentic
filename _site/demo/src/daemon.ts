@@ -346,7 +346,7 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/agents/{id}/land`, ({ param }) => land(param(`id`))],
     [`POST`, `/agents/{id}/discard`, () => refuse(`This is the demo workspace: there is no worktree to discard.`)],
     [`POST`, `/agents/archive`, archiveAgents],
-    [`POST`, `/agents/unarchive`, () => json({ agents: [], rev: roster.rev })],
+    [`POST`, `/agents/unarchive`, () => json({ moved: [], rev: roster.rev })],
 
     [`POST`, `/agent`, ({ request }) => startTurn(request)],
     [`POST`, `/agent/attach`, ({ request }) => attach(request)],
@@ -655,7 +655,9 @@ function archiveAgents({ request }: RouteContext): Promise<Response> {
         }
         roster.agents = roster.agents.filter((agent) => !ids.includes(agent.id));
         broadcastRoster();
-        return json({ agents: archived, rev: roster.rev });
+        // `moved`/`failed`, the daemon's own shape (AgentsArchivedSchema). Answering `agents` meant the board
+        // read every archive here as "nothing moved" and told the visitor the card was already off it.
+        return json({ moved: archived, failed: [], rev: roster.rev });
     });
 }
 

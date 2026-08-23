@@ -374,6 +374,40 @@ test("a retired agent's checkout comes back from its branch, with its work", asy
     expect(await readFile(join(restored.cwd, "intent", "deploy.config.ts"), "utf8")).toBe("v1\n");
 });
 
+/* THE CHECKOUT WHOSE REPOSITORY WENT AWAY, and the report this exists for: a nested repo deleted from the
+ * workspace takes `<repo>/.git/worktrees/<name>` with it, so the conversation's checkout of it is a dangling
+ * pointer and EVERY git command in it dies with "fatal: not a git repository".
+ *
+ * Retire used to die on that too, on its own status probe, which took the agent out of the archive batch and
+ * left the board answering "nothing to archive" about a card sitting right there, forever: the only exit a
+ * finished conversation has, closed for good by a repo the user removed months later.
+ *
+ * There is nothing to preserve here and no way to preserve it, so retiring reclaims what it can and says so in
+ * the log. The repos that still HAVE a repository behind them are preserved exactly as ever, which is the half
+ * that must not be traded away for the other. */
+test("retire reclaims a checkout whose repository was deleted from the workspace, and still preserves the rest", async () => {
+    const { work, worktrees } = await setup();
+    // A repo the USER cloned into the workspace, so its git dir lives inside it rather than on /history: that
+    // is the case that can dangle, because deleting the directory deletes the admin area too.
+    const vendor = join(work, "vendor");
+    await mkdir(vendor, { recursive: true });
+    await sh(work, "init", "-q", vendor);
+    await writeFile(join(vendor, "lib.ts"), "v1\n");
+    await sh(vendor, "add", "-A");
+    await sh(vendor, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "vendor v1");
+    const conversation = await worktrees.ensure("c1", []);
+    expect(conversation.repos.map(({ repo }) => repo)).toContain("vendor");
+    await writeFile(join(conversation.cwd, "new-file.md"), "agent file\n");
+    await writeFile(join(conversation.cwd, "vendor", "lib.ts"), "agent edit\n");
+    await rm(vendor, { recursive: true, force: true });
+
+    await worktrees.retire("c1", conversation.repos, "Fix the parser");
+
+    expect(existsSync(conversation.cwd)).toBe(false);
+    // Root's work still reached its branch: the dead nested repo cost the archive nothing but itself.
+    expect(await sh(work, "show", "agent/c1:new-file.md")).toBe("agent file");
+});
+
 test("retire is a no-op on a clean worktree beyond dropping the checkout", async () => {
     const { work, worktrees } = await setup();
     const conversation = await worktrees.ensure("c1", []);
