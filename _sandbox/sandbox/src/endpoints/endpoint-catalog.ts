@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { compareUnrankedModelIds, type EndpointConfig, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { localTolerantFetch } from "../platform/local-tls.js";
-import { endpointHeaders, versionedBase } from "./endpoint-config.js";
+import { endpointHeaders, unversionedBase, versionedBase } from "./endpoint-config.js";
 
 /* WHAT AN ENDPOINT SERVES, read from the server itself, and from nowhere else.
  *
@@ -45,7 +45,50 @@ const isChatModel = (model: Model): boolean => !/(embedding|embed|whisper|tts|au
  * REST catalog also follows (adding `display_name`). So one reader covers both, and a server that publishes a
  * display name gets a named row while one that publishes bare ids renders label-only. Nothing here is curated:
  * whatever the server says about a model is what the picker shows. */
-const ModelsResponseSchema = z.object({ data: z.array(z.object({ id: z.string().min(1), display_name: z.string().optional() })) });
+const ModelsResponseSchema = z.object({
+    data: z.array(
+        z.object({
+            id: z.string().min(1),
+            display_name: z.string().optional(),
+            // vLLM's own field, published per row because one vLLM process can serve several models. Where it is
+            // there it beats the server-wide probe below, being the number for THIS model.
+            max_model_len: z.number().positive().optional(),
+        }),
+    ),
+});
+
+/* WHAT THIS SERVER WILL ACTUALLY ACCEPT IN ONE REQUEST, asked of the server, because it is the only party that
+ * knows and the only party that enforces it.
+ *
+ * llama.cpp's `/props` reports `default_generation_settings.n_ctx`: the window one slot has, after the
+ * `--ctx-size` flag has been divided by the parallel slots and clamped to the KV cache the machine could
+ * allocate. That is the number its 400 quotes when a request is too big, and it is routinely a fraction of
+ * what the weights were trained for, so the GGUF's `n_ctx_train` (which the same server publishes on
+ * /v1/models) is deliberately NOT read: it describes what the model could hold, not what this process will take.
+ *
+ * OUTSIDE /v1 on purpose. `/props` sits at the server root, where llama.cpp puts its own non-OpenAI routes, so
+ * this is the one endpoint read that unversions the base rather than versioning it.
+ *
+ * A server that has no such route answers 404 and this returns undefined, which is the honest answer for every
+ * gateway that publishes nothing: unknown, and nothing downstream gates on unknown. The cost of asking is one
+ * request per discovery (a minute's TTL, concurrent with the models read), which is nothing on the loopback
+ * where local models live and a rounding error on a remote one. */
+const PropsSchema = z.object({
+    default_generation_settings: z.object({ n_ctx: z.number().positive().optional() }).optional(),
+    n_ctx: z.number().positive().optional(),
+});
+
+const servedWindow = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<number | undefined> => {
+    const response = await fetchImpl(`${unversionedBase(config.baseUrl)}/props`, {
+        headers: endpointHeaders(config),
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+    }).catch(() => undefined);
+    if (response === undefined || !response.ok) {
+        return undefined;
+    }
+    const parsed = PropsSchema.safeParse(await response.json().catch(() => undefined));
+    return parsed.success ? (parsed.data.default_generation_settings?.n_ctx ?? parsed.data.n_ctx) : undefined;
+};
 
 /* WHAT TO CALL A MODEL WHOSE SERVER PUBLISHED NO NAME. The id is what turns dial, so it is never touched; this
  * is only the row's text.
@@ -62,10 +105,15 @@ const labelFor = (id: string): string => {
 };
 
 const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promise<Model[]> => {
-    const response = await fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
-        headers: endpointHeaders(config),
-        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-    }).catch(() => undefined);
+    // Both reads at once: the window probe is independent of what the catalog says, and a server that answers
+    // neither should cost one timeout rather than two.
+    const [response, window] = await Promise.all([
+        fetchImpl(`${versionedBase(config.baseUrl)}/models`, {
+            headers: endpointHeaders(config),
+            signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+        }).catch(() => undefined),
+        servedWindow(config, fetchImpl),
+    ]);
     if (response === undefined || !response.ok) {
         return [];
     }
@@ -73,7 +121,17 @@ const discover = async (config: EndpointConfig, fetchImpl: typeof fetch): Promis
     if (!parsed.success) {
         return [];
     }
-    return parsed.data.data.map((entry) => ({ id: entry.id, label: entry.display_name ?? labelFor(entry.id) }));
+    return parsed.data.data.map((entry) => {
+        const model: Model = { id: entry.id, label: entry.display_name ?? labelFor(entry.id) };
+        // The row's own number first (vLLM publishes per model), then the server-wide one (llama.cpp serves one
+        // model per process, so its answer describes every row it lists). Set rather than spread: the field is
+        // absent when neither said anything, and absent is what "unknown" is read as downstream.
+        const contextWindow = entry.max_model_len ?? window;
+        if (contextWindow !== undefined) {
+            model.contextWindow = contextWindow;
+        }
+        return model;
+    });
 };
 
 const ordered = (models: readonly Model[]): { models: Model[]; default: string } => {

@@ -141,6 +141,17 @@ export class TurnFailures {
                 this.host.requeue(turn.userMessageId);
                 this.host.transcript.notice(`${message} Your message is held below: send it again and it goes as written.`);
                 return;
+            case `context-window-too-small`:
+                /* The model cannot hold a turn of this loop, and the daemon worked that out before sending, so
+                 * the words are still only in this window. Held, like the other refusals that ran nothing.
+                 *
+                 * Muted rather than red, though the user does have to act: the thing they act on is the model
+                 * picker, which is sitting directly above the composer with the held message in it, and the
+                 * daemon's sentence already names the three ways out. A red line here would report a broken
+                 * workspace for what is a model too small for the job. */
+                this.host.requeue(turn.userMessageId);
+                this.host.transcript.notice(`${message} Your message is held below: pick a bigger model and send it again.`);
+                return;
             case `session-not-found`:
                 /* The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
                  * send starts a fresh one instead of replaying the failure forever. A muted notice, not the error

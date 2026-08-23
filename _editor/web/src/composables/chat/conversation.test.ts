@@ -2609,6 +2609,38 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
     });
 
+    /* The model is too small to hold a turn of this loop and the daemon worked that out before sending, so the
+     * words are still only in this window. Held like the refusals above it, and muted like them: what the user
+     * acts on is the model picker sitting right over the held message, not a red line about a broken workspace. */
+    it(`holds the message when the model's own window cannot hold the turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                {
+                    kind: `error`,
+                    code: `context-window-too-small`,
+                    message: `This model accepts 16,384 tokens in one request and this turn needs about 22,004, so nothing was sent.`,
+                },
+            ]),
+        );
+
+        await conversation.send(`Are you there?`, {
+            agent: `endpoint/tiny`,
+            harness: `native`,
+            actsAs: undefined,
+            account: undefined,
+            model: `llama-3.2-3b`,
+            effort: `medium`,
+            thinking: false,
+            fast: false,
+            tierHold: false,
+        });
+
+        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Are you there?`]);
+        expect(conversation.error.value).toBeNull();
+    });
+
     /* THE REFUSAL THAT NEVER BECAME A TURN. The daemon turned the POST away at the door, so there is no error
      * FRAME to classify and none of the machinery above ran, which is exactly how this path came to do neither
      * of the two things every code up there does. What it left instead was a bare "Chat request failed (400)"

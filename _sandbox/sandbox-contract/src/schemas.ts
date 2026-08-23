@@ -2045,6 +2045,15 @@ export const ModelSchema = z.object({
             "What it is good for, in the provider's own words. Absent where the provider publishes only ids, which is the honest answer rather than something to paper over with a hand-written table.",
         ),
     badges: z.array(ModelBadgeSchema).optional().describe("What it is known for, where the provider says so."),
+    /* HOW MUCH THE SERVER WILL ACCEPT IN ONE REQUEST, where the server says so, and the one field here that a
+     * turn is refused against rather than merely rendered (agent/context-budget.ts).
+     *
+     * The SERVED window, never the weights' training length. An inference server takes its context size from a
+     * flag and then clamps it to the memory it actually has, so a 3B model whose GGUF advertises 131k can be
+     * serving 16k, and it is the 16k that refuses the request. Read from llama.cpp's /props and vLLM's
+     * `max_model_len`; absent for every provider that publishes no such number, which is most of them, and
+     * absent means unknown rather than unlimited: nothing gates on a window it was never told. */
+    contextWindow: z.number().optional().describe("How many tokens this model will accept in one request, where the server publishes it."),
 });
 export type Model = z.infer<typeof ModelSchema>;
 export const ModelsSchema = z.object({

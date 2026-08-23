@@ -201,7 +201,10 @@ const ROUTED_REQUIREMENT: Record<KeyedProvider, string> = {
 // translator's ChatGPT subscription does not serve (it re-serves the account's real ids) and rejects with a
 // non-SSE error body that breaks the harness stream; it needs no special case, and neither does Grok, whose
 // routed turns previously pinned a hardcoded `grok-4` that consulted no catalog at all.
-const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
+// Exported for the context check (context-budget.ts), which has to ask about the SAME model this will send:
+// a turn pinning a model the server has dropped runs on the catalog default, so budgeting against the pin
+// would read the window of a model nobody is about to dial.
+export const routedModel = (catalog: { models: readonly { id: string }[]; default: string }, model: string | undefined): string =>
     model !== undefined && model !== "" && catalog.models.some((entry) => entry.id === model) ? model : catalog.default;
 
 /* WHICH PROVIDERS THIS HARNESS COULD ACTUALLY RUN RIGHT NOW, the cheap predicate mirroring the resolution

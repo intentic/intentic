@@ -18,7 +18,12 @@ import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-pl
  * code the composer's connect gate keys off. */
 
 const credentials = vi.fn<() => Promise<Record<string, unknown>>>();
-vi.mock("./harness-credentials.js", () => ({ resolveHarnessCredentials: () => credentials() }));
+// Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
+// model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
+vi.mock("./harness-credentials.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("./harness-credentials.js")>()),
+    resolveHarnessCredentials: () => credentials(),
+}));
 const browserServers = vi.fn();
 vi.mock("../browser/browser-tools.js", () => ({
     ROUTED_BROWSER_SERVER: "browser",
@@ -126,6 +131,45 @@ test("an ACP provider whose capability is gone is refused by name", async () => 
 
     expect(plan.ok).toBe(false);
     expect((plan as { message: string }).message).toContain(`Unknown agent provider "gemini-cli"`);
+});
+
+/* A MODEL TOO SMALL TO HOLD THE LOOP is refused here rather than by the server, which is the one gate that reads
+ * the composed prompt instead of what is connected (context-budget.ts). The credential resolver is mocked to
+ * SUCCEED, so a refusal can only have come from the context check. */
+test("a local model whose served window cannot hold the loop is refused before anything is sent", async () => {
+    const tiny = {
+        id: "tiny",
+        kind: "localmodel" as const,
+        config: { model: "meta-llama/x/Llama-3.2-3B-Instruct-Q4_K_M.gguf", gpu: "off" as const },
+    };
+    const services = servicesWith({
+        logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [tiny], get: async () => tiny }),
+        endpointModels: {
+            models: async () => ({ models: [{ id: "llama-3.2-3b", label: "Llama 3.2 3B", contextWindow: 16_384 }], default: "llama-3.2-3b" }),
+            forget: async () => {},
+        },
+    });
+
+    const plan = await planTurn(services, turn({ agent: "endpoint/tiny", model: "llama-3.2-3b" }), context);
+
+    expect(plan).toMatchObject({ ok: false, code: "context-window-too-small" });
+    expect((plan as { message: string }).message).toContain("16,384 tokens");
+});
+
+test("the same endpoint serving a large window is planned normally", async () => {
+    const big = { id: "gpu-box", kind: "endpoint" as const, config: { baseUrl: "http://gpu.local:8000/v1", protocol: "openai" as const } };
+    const services = servicesWith({
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [big], get: async () => big }),
+        endpointModels: {
+            models: async () => ({ models: [{ id: "qwen3-coder", label: "Qwen3 Coder", contextWindow: 131_072 }], default: "qwen3-coder" }),
+            forget: async () => {},
+        },
+    });
+
+    const plan = await planTurn(services, turn({ agent: "endpoint/gpu-box", model: "qwen3-coder" }), context);
+
+    expect(plan.ok).toBe(true);
 });
 
 test("a harness refusal rides through with the credential resolver's own code", async () => {

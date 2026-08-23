@@ -47,6 +47,7 @@ import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
+import { contextShortfall } from "./context-budget.js";
 import { delegationNote } from "./delegation.js";
 import { subagentWaitServer } from "./subagent-wait.js";
 import { watchServer } from "./watch-server.js";
@@ -305,6 +306,26 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         base: honoured(services, shared, capabilities, setupNoticeFor(setup), persona, installed, terseArm, prompt, workspaceMapEligible),
         persona,
     };
+    /* CAN THE MODEL HOLD THIS TURN AT ALL, the last gate before an arm is asked to build a request, and the only
+     * one that reads what was composed rather than what is connected (agent/context-budget.ts).
+     *
+     * HERE, not in an arm, for the reason every other pre-dispatch check is here: the question is about the pair
+     * (this runtime's fixed cost, this model's window) and neither half belongs to a provider arm. And AFTER
+     * `planned`, because the thing being measured is the prompt as it will be SENT, notes and all, which is what
+     * `honoured` has just finished assembling. */
+    const shortfall = await contextShortfall(services, {
+        provider,
+        runtime: capabilities.runtime,
+        ...(input.model !== undefined ? { model: input.model } : { model: undefined }),
+        prompt: planned.base.prompt,
+    });
+    if (shortfall !== undefined) {
+        services.logger.warn(
+            { provider, model: input.model, window: shortfall.window, needed: shortfall.needed },
+            "context: the model's window cannot hold a turn of this loop, refused before sending",
+        );
+        return { ok: false, code: "context-window-too-small", message: shortfall.message };
+    }
     // The dispatch, through the registry rather than an if/else chain over the same union, so the set of
     // runtimes has one declaration, and the health probe the picker reads is written next to the arm it
     // predicts (see agent/adapter-registry.ts).

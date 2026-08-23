@@ -885,6 +885,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "unknown-command",
                 "grok-model-invalid",
                 "codex-model-invalid",
+                /* THE MODEL CANNOT HOLD A TURN OF THIS AGENT LOOP, so the daemon refused before sending
+                 * (agent/context-budget.ts). Its own code because none of the neighbours describes it: nothing is
+                 * disconnected, nothing is spent, nothing comes back on a clock, and re-sending the same request
+                 * at the same model fails identically forever. What changes the outcome is the model or the
+                 * server's context flag, so the message names both and the client HOLDS the words: they never
+                 * reached anything, and losing them to a configuration fact would be the one part of this that
+                 * was our fault. */
+                "context-window-too-small",
                 "subscription-required",
                 "agent-busy",
             ])
