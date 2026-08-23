@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Button, ui } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { ui } from "@intentic/ui";
+import { computed } from "vue";
 import { type AgentProvider, PROVIDER_VENDOR } from "@intentic/sandbox-contract";
-import { accessKnown, connectPitch } from "../composables/chat/access";
-import { requestModelPick } from "../composables/chat/hostModelPicker";
+import { accessKnown, connectPitch, trialExhausted } from "../composables/chat/access";
 import { providerDisplayLabel } from "../composables/chat/providerCatalog";
 import { useChat, usePaneView } from "../composables/chat/useChat";
 import ConnectFlow from "../pages/sandbox/ConnectFlow.vue";
+import ChatChooseModelButton from "./ChatChooseModelButton.vue";
 import ProviderLogo from "./ProviderLogo.vue";
 
 /* THE ONE STRIP ABOVE THE COMPOSER WHEN THIS CHAT HAS NOTHING TO SEND WITH, and what it deliberately is not.
@@ -30,10 +30,19 @@ import ProviderLogo from "./ProviderLogo.vue";
  * IT STILL CARRIES THE HANDSHAKE. Picking a locked model points the chat there, so the sign-in has to be
  * finishable from the chat it was started for, in place, rather than on a settings page the user has to find
  * their way back from. That is the ConnectFlow branch, and it takes the whole strip while it runs: a line
- * saying "not connected" over a live sign-in argues with its own state. */
+ * saying "not connected" over a live sign-in argues with its own state.
+ *
+ * AND IT DOES NOT SPEAK FOR THE SPENT TRIAL. "Cannot send" has two causes and this strip may only name one of
+ * them. A trial whose daily allowance is used up IS connected, it is metered, and saying it isn't left the user
+ * reading two strips that contradicted each other: "Free trial isn't connected in this sandbox" stacked on top
+ * of "Free trial used up for today", one of which is a lie and the other of which is the answer. So the strip
+ * stands down for that one state and the trial strip below (ChatPaneNotices) owns it alone, carrying this
+ * strip's own door to the list along with the sign-in that has no daily cap. */
 
 const view = usePaneView();
 const { connected, provider, harness } = view;
+// The one flavour of "cannot send" that is NOT a missing connection, so not this strip's to report.
+const trialSpent = computed(() => trialExhausted(provider.value));
 const { nativeConnectFlow, translatorConnectFlow, cancelConnect, cancelTranslatorConnect, setManagedProvider, startConnect, connectTranslator } =
     useChat();
 
@@ -61,34 +70,6 @@ const abandon = (): void => (live.value?.kind === `native` ? cancelConnect() : c
  * nothing to connect and no second control to draw. */
 const providerName = computed(() => PROVIDER_VENDOR[provider.value as keyof typeof PROVIDER_VENDOR] ?? providerDisplayLabel(provider.value));
 const pitch = computed(() => connectPitch(provider.value, harness.value));
-
-/* THE LIST, opened from here, anchored to this button. The shell's picker (App.vue's HostModelPicker) rather
- * than the composer's own: the composer is not rendered while this strip is up, so the model pill it anchors to
- * does not exist, and a desktop overlay with no anchor has nowhere to place itself.
- *
- * The answer is applied to THIS pane's conversation, which is what makes choosing a model here identical to
- * choosing one from the composer: a connected provider starts sending immediately, and a locked one points the
- * chat and leaves the handshake below. */
-// Button is a component, so the ref hands back its instance rather than an element; `$el` is its <button>, and
-// that element is what decides where the panel places itself and which window it opens in.
-const listButton = ref<{ $el?: unknown }>();
-const chooseModel = async (): Promise<void> => {
-    const anchor = listButton.value?.$el;
-    if (!(anchor instanceof HTMLElement)) {
-        return;
-    }
-    const choice = await requestModelPick({ anchor, provider: provider.value, model: view.model.value, harness: harness.value });
-    if (choice === undefined) {
-        return;
-    }
-    view.selectModel({ provider: choice.provider, value: choice.model });
-    if (choice.harness !== undefined) {
-        view.selectHarness(choice.harness);
-    }
-    if (choice.account !== undefined) {
-        view.selectAccount(choice.account);
-    }
-};
 
 /* Start the selected provider's sign-in, here. The provider is set on the account card too, because that card
  * is where the connection shows up afterwards and the two must not disagree about what was just connected.
@@ -128,12 +109,12 @@ const connect = async (): Promise<void> => {
          because it is the answer that costs nothing to look at and holds every free option; the selected
          provider's own sign-in follows it, for the user who pointed the chat here on purpose. -->
     <div
-        v-else-if="!connected"
+        v-else-if="!connected && !trialSpent"
         class="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-line bg-overlay/40 px-4 py-3 text-2xs text-muted"
     >
         <Icon name="lock" class="shrink-0 text-subtle" />
         <span class="min-w-0 flex-1 text-left">{{ providerName }} isn't connected in this sandbox.</span>
-        <Button ref="listButton" size="small" @click="chooseModel"> <Icon name="th-large" />Choose a model </Button>
+        <ChatChooseModelButton />
         <button
             v-if="pitch"
             type="button"

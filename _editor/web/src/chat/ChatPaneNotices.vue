@@ -10,6 +10,7 @@ import { formatWait } from "../composables/chat/usageStatus";
 import { loadTrialStatus, usePaneView } from "../composables/chat/useChat";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import ChatAccountPanel from "./ChatAccountPanel.vue";
+import ChatChooseModelButton from "./ChatChooseModelButton.vue";
 
 /* WHAT THIS CHAT'S STANDING IS, said above the composer: the strips that report a state the conversation
  * arrived at by itself, each with the one press that answers it.
@@ -65,11 +66,17 @@ const activeArchived = computed(() => {
  * and an agent turn makes several of them, so a first question can cost more than one. Saying so beside the
  * number is cheaper than letting somebody discover it by watching twelve become seven. */
 const trialHealthIssue = computed(() => trialStatus.value.health === `degraded` || trialStatus.value.health === `unavailable`);
+/* SPENT IS THIS STRIP'S ALONE TO SAY. The account gate above would otherwise be up at the same moment (a spent
+ * trial cannot send, and that gate reports every provider that cannot send) announcing that the trial "isn't
+ * connected in this sandbox", which is both false and an argument with the sentence directly under it. The gate
+ * now stands down here, so this strip takes on its door to the model list: used up, the two honest answers are
+ * the free Google sign-in and some other model, and both have to be one press away. */
+const trialSpent = computed(() => trialExhausted(provider.value));
 const trialNotice = computed(() => {
     if (!isTrialProvider(provider.value)) {
         return undefined;
     }
-    if (trialExhausted(provider.value)) {
+    if (trialSpent.value) {
         return `Free trial used up for today. Connect a Google account to keep going free: no subscription, no daily cap.`;
     }
     if (trialStatus.value.health === `unavailable`) {
@@ -170,12 +177,16 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
     <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing; this says it for as
          long as the choice is in force, because the person typing may not be the person who picked, and a
          conversation can outlive the click that started it. Exhausted, the same strip becomes the signpost to
-         the free Google sign-in: the next rung, and the one with no daily cap. -->
+         the free Google sign-in: the next rung, and the one with no daily cap.
+
+         Spent, it is also the ONLY thing on screen: the composer is behind `connected` and a used-up trial
+         cannot send, so the row centres on its button rather than hanging everything off the first text line. -->
     <div
         v-if="trialNotice"
-        class="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
+        class="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-line bg-overlay/40 px-3 py-2 text-left text-2xs text-muted"
+        :class="trialSpent ? `items-center` : `items-start`"
     >
-        <Icon name="sparkles" class="mt-0.5 shrink-0 text-link" />
+        <Icon name="sparkles" class="shrink-0 text-link" :class="trialSpent ? `` : `mt-0.5`" />
         <span class="min-w-0 flex-1">{{ trialNotice }}</span>
         <button
             v-if="trialHealthIssue"
@@ -186,6 +197,9 @@ const setOutageResume = async (resume: boolean): Promise<void> => {
         >
             Retry
         </button>
+        <!-- The door the account gate used to hold, here for as long as this strip is standing in its place:
+             spent, the list is where every other way to send is, and it costs nothing to look at. -->
+        <ChatChooseModelButton v-if="trialSpent" />
         <!-- A place, so a link: the sign-in has an address, and Ctrl/⌘-click starts it in another tab rather
              than taking away the conversation this strip is sitting above. -->
         <RouterLink

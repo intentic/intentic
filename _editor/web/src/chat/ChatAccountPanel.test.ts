@@ -10,8 +10,11 @@
  *
  * And it does not speak too early. "You have nothing connected" is TWO reads, the accounts and the endpoints,
  * and the endpoints land later. Voting on the accounts alone is what painted a wall over a free trial that was
- * already on its way. */
-import type { AgentProvider } from "@intentic/sandbox-contract";
+ * already on its way.
+ *
+ * Nor does it speak for a state that is not its own: a spent free trial cannot send either, but it IS connected,
+ * and this strip saying otherwise put two contradicting sentences on screen at once. */
+import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -70,6 +73,7 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 }));
 
 const { modelRequest, settleModelPick } = await import("../composables/chat/hostModelPicker");
+const { trialStatus } = await import("../composables/chat/providerCatalog");
 const { default: ChatAccountPanel } = await import("./ChatAccountPanel.vue");
 
 let app: App | undefined;
@@ -97,6 +101,7 @@ beforeEach(() => {
     accountsLoaded.value = true;
     endpointsLoaded.value = true;
     provider.value = `claude`;
+    trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
     nativeConnectFlow.value = undefined;
     selectModel.mockClear();
     startConnect.mockClear();
@@ -191,6 +196,26 @@ it(`starts the routed handshake for a provider that authenticates through the tr
     buttonNamed(element, `Connect Google sign-in`)!.click();
     expect(connectTranslator).toHaveBeenCalledWith(`gemini`);
     expect(startConnect).not.toHaveBeenCalled();
+});
+
+/* TWO STRIPS, TWO CONTRADICTING SENTENCES, one screen. A spent trial cannot send, so this gate went up saying
+ * "Free trial isn't connected in this sandbox" directly above the trial strip's "Free trial used up for today".
+ * One of those is false and the other is the answer, and a user reading both learns only that the product does
+ * not know which. The gate reports MISSING CONNECTIONS; a metered provider that ran out is not one, so it stands
+ * down and the strip that owns the state says it once. */
+it(`stands down for a spent trial instead of calling it unconnected`, () => {
+    provider.value = TRIAL_PROVIDER;
+    trialStatus.value = { available: true, allowance: 20, used: 20, remaining: 0, health: `healthy` };
+
+    expect(mount().textContent).toBe(``);
+});
+
+// The trial the platform has NOT confirmed is a different fact and still this gate's to report: nothing is
+// serving this chat, and standing down there would leave the pane silent about a chat that cannot send at all.
+it(`still speaks when the trial is absent rather than spent`, () => {
+    provider.value = TRIAL_PROVIDER;
+
+    expect(mount().textContent).toContain(`isn't connected in this sandbox`);
 });
 
 it(`goes on its own the moment this chat can send`, async () => {
