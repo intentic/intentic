@@ -131,12 +131,13 @@ it("returns to the chat already acting as that persona", async () => {
     expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
 });
 
-// The accounts under the name, because a name alone cannot tell `reddit-work` from `reddit-personal`, and
-// those being different accounts is the whole reason a persona exists.
-it("names the accounts a persona holds", async () => {
+// The account count under the name: the rail says how many accounts are connected without spelling out the raw
+// capability ids, which are internal slugs that read as noise on a list of people.
+it("shows an account count for a persona that holds accounts", async () => {
     withPersonas([{ id: `work`, label: `Work`, capabilities: [`reddit-work`] }], [`reddit-work`]);
     const el = await mountList();
-    expect(rowFor(el, `Work`)?.textContent).toContain(`reddit-work`);
+    expect(rowFor(el, `Work`)?.textContent).toContain(`1 account`);
+    expect(rowFor(el, `Work`)?.textContent).not.toContain(`reddit-work`);
 });
 
 /* A PERSONA HOLDING NO ACCOUNTS IS AN ORDINARY ROW, not a broken one. It still bounds what a chat can reach

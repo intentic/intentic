@@ -84,14 +84,7 @@ interface PersonaRow {
     readonly key: string;
     readonly id: string;
     readonly label: string;
-    /* The accounts under the name: a mark cannot tell `reddit-work` from `reddit-personal`, and those being
-     * different accounts is the entire reason a persona exists.
-     *
-     * EMPTY WHEN THERE ARE NONE, rather than a line saying so. A persona holding no accounts is a perfectly
-     * good persona: it still bounds what the chat can reach, it still names who is speaking, and it is
-     * something you talk to on day one. This rail used to write "No accounts yet" in that slot and mark the
-     * row, which turned the ordinary state of a new card into a defect on every row of the list. */
-    readonly detail: string;
+    readonly accounts: number;
     readonly bounds: string | undefined;
     readonly chats: number;
     readonly lastAt: number | undefined;
@@ -114,7 +107,7 @@ const rows = computed<PersonaRow[]>(() =>
             key: persona.id,
             id: persona.id,
             label: persona.label ?? persona.id,
-            detail: persona.capabilities.join(` · `),
+            accounts: persona.capabilities.length,
             bounds: persona.powers === undefined ? undefined : personaBounds(persona),
             chats: mine.length,
             lastAt: mine[0]?.agent?.updatedAt,
@@ -225,7 +218,7 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
 
         <template v-else>
             <template v-for="row in rows" :key="row.key">
-                <RailCard :title="row.label" :selected="row.open" :attention="row.needsYou" :aria-label="`Chat as ${row.label}`" @click="open(row)">
+                <RailCard :title="row.label" :selected="row.open" :attention="row.needsYou" :aria-label="`Chat as ${row.label}`" class="persona-rail-card" @click="open(row)">
                     <!-- THE FACE, at the card's own height rather than at a glyph's. This list is scanned for a
                      PERSON, and a name is what you read second, so the mark leads, big enough to be found
                      without reading, and the row's text sits beside it. Generated from the persona's id, so
@@ -260,9 +253,10 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
                     <template #meta>
                         <span class="flex min-h-4 min-w-0 flex-1 items-center gap-2 overflow-hidden">
                             <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                            <!-- The accounts, when there are any. A persona with none says nothing here rather than
-                             apologising for itself: see `detail`. -->
-                            <span v-if="row.detail !== ``" class="min-w-0 truncate text-subtle">{{ row.detail }}</span>
+                            <!-- The account count, when there are any. A persona with none says nothing here
+                             rather than apologising for itself. Shown as a count rather than the raw ids,
+                             because the ids are internal slugs that read as noise on a list of people. -->
+                            <span v-if="row.accounts > 0" class="min-w-0 truncate text-subtle">{{ row.accounts }} account{{ row.accounts === 1 ? `` : `s` }}</span>
                             <!-- What this window is holding for them, stated as what it is: the chats open HERE:
                              and the door to them. Absent at zero, where "0 chats" would only be saying that a
                              fresh persona is fresh, and where the card's own press already starts one.
@@ -327,3 +321,34 @@ const statusOf = (entry: { conversation: Conversation; agent: FleetAgent | undef
         </template>
     </div>
 </template>
+
+<style scoped>
+/* PERSONA CARDS HAVE NO LANE UNDER THEM, and that is the whole reason they read as flat rectangles rather than
+ * as objects. Every other list of session cards in the app sits on a `.lane` slab, and the slab is what does the
+ * work: a card is a step LIGHTER than the ground beneath it, so the ground is what makes the card visible (see
+ * the note on `.lane` in styles.css, which states that contract outright). These rows float directly on the
+ * rail's canvas, so the card has nothing to be a step lighter THAN.
+ *
+ * The default fill cannot close that on its own, because `--color-card` is not a colour this app chooses: it is
+ * mapped from the host theme's `sideBar.background`, and a great many themes set that to exactly the editor
+ * background. When they do, the fill EQUALS the canvas and the border is the only thing left of the card, which
+ * is the "transparent card" this rule exists to answer.
+ *
+ * So the fill is MIXED FROM THE INK INTO THE GROUND rather than named as a token — the same formula `.lane` uses,
+ * and for the same stated reason: a percentage of content over canvas is guaranteed to land off the canvas in
+ * both schemes, whatever the host theme did or did not provide. Six percent sits a step above the lane's three,
+ * which is where a card belongs relative to a slab; hover adds four more.
+ *
+ * ONLY THE UNSELECTED ROWS, which is not a nicety. A scoped style in a single-file component is UNLAYERED, and
+ * unlayered rules beat every rule in a layer no matter how specific — `.session-card` and all of its states live
+ * in `@layer components`. Without the `:not()` these two lines would silently outrank
+ * `.session-card.session-card-on` and repaint the selected persona's accent border grey, which is the one card in
+ * the list whose edge is carrying information. Excluded here, the selected row keeps its own fill, border, ring
+ * and lift untouched, and the border under the pointer still strengthens from the layered hover rule. */
+.persona-rail-card:not(.session-card-on) {
+    --card-fill: color-mix(in srgb, var(--color-content) 6%, var(--color-canvas));
+}
+.persona-rail-card:not(.session-card-on):hover {
+    --card-fill: color-mix(in srgb, var(--color-content) 10%, var(--color-canvas));
+}
+</style>
