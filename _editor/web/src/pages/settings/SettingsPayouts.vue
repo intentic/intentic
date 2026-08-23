@@ -124,7 +124,7 @@ const connect = async (): Promise<void> => {
                             <span class="skeleton block h-8 w-16" />
                         </div>
                     </div>
-                    <div class="flex flex-col gap-2 border-t border-line pt-3" aria-hidden="true">
+                    <div class="flex flex-col gap-2" aria-hidden="true">
                         <span class="skeleton block h-3 w-28" />
                         <span class="skeleton block h-2.5 w-72" />
                         <span class="skeleton block h-2.5 w-full max-w-md" />
@@ -183,7 +183,7 @@ const connect = async (): Promise<void> => {
                 <SettingsPublisherClaim @claimed="load" />
 
                 <!-- Where the money goes. -->
-                <div class="flex flex-col gap-2 border-t border-line pt-3">
+                <div class="flex flex-col gap-2">
                     <h3 class="text-xs font-semibold">Payout account</h3>
                     <p v-if="justReturned && !payouts?.payoutsEnabled" class="text-xs text-muted">
                         Thanks. Stripe is still finishing up. This page updates itself as soon as it's done.

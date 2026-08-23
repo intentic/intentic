@@ -100,11 +100,7 @@ const VALUE_TONE = { success: `text-success`, content: `text-content`, muted: `t
 
             <!-- Second readings of the same experiment: one line, one rank below the headline, so a
                  two-metric experiment reads as one answer with a footnote rather than as two answers. -->
-            <p
-                v-for="more in readings.slice(1)"
-                :key="more.verdict.unit"
-                class="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 border-t border-line pt-1.5"
-            >
+            <p v-for="more in readings.slice(1)" :key="more.verdict.unit" class="mt-2 flex flex-wrap items-baseline gap-x-1.5">
                 <span class="text-xs font-medium tabular-nums" :class="VALUE_TONE[more.verdict.tone]">{{ more.verdict.value }}</span>
                 <span class="min-w-0 text-2xs text-muted">{{ more.verdict.unit }}</span>
             </p>

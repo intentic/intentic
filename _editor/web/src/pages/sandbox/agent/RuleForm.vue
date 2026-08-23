@@ -292,7 +292,7 @@ const save = (): void => {
 
         <!-- The name, and the two buttons. Below the hairline because it is no longer part of writing the rule
             : it is what the activity feed will call this one when it fires, and it has already been written. -->
-        <div class="flex flex-col gap-2 border-t border-line/60 pt-3">
+        <div class="mt-3 flex flex-col gap-2">
             <label class="flex items-center gap-2">
                 <span :class="ui.sectionLabel(`shrink-0 text-2xs`)">Called</span>
                 <input

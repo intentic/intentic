@@ -177,7 +177,7 @@ const setAdvisories = (autoDisable: boolean): Promise<void> =>
             <p v-if="update.needsReview" class="mt-1.5 text-2xs text-warning">Held for your review: {{ update.needsReview }}.</p>
 
             <!-- The staged read: what this click would approve, mechanically. -->
-            <div v-if="preview" class="mt-2 flex flex-col gap-1.5 border-t border-line pt-2">
+            <div v-if="preview" class="mt-2 flex flex-col gap-1.5">
                 <p v-if="!preview.compatible" class="text-2xs text-warning">
                     It asks for app {{ preview.engines }}: this app can't run it yet, so updating would leave it inactive until the app updates.
                 </p>

@@ -203,7 +203,7 @@ defineExpose({ show, hide });
                 v-for="(message, index) in messages"
                 :key="index"
                 class="flex min-h-0 flex-col"
-                :class="index > 0 || placement.content.title || placement.content.label ? 'mt-1.5 border-t border-line pt-1.5' : ''"
+                :class="index > 0 || placement.content.title || placement.content.label ? 'mt-3' : ''"
             >
                 <!-- Which end of the conversation this is, when there is more than one end on the card. -->
                 <p v-if="message.label" class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ message.label }}</p>

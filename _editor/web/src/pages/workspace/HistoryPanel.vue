@@ -101,7 +101,10 @@ const confirmRestore = (id: string): void => {
             <p v-if="snapshots.length === 0" class="px-3 py-2 text-2xs text-subtle">
                 No restore points yet: file history is saved automatically as you and your agents work.
             </p>
-            <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row border-b border-line/50">
+            <!-- No hairline per row: a restore point is one line with a hover state, and a rule under every one
+                 of them turned a list somebody scans into a ledger. The OPEN one gets a tint instead, which is
+                 what actually needs a boundary: its file list has to end somewhere the eye can see. -->
+            <div v-for="snapshot in snapshots" :key="snapshot.id" class="cv-row" :class="selectedId === snapshot.id ? `bg-content/4` : ``">
                 <button
                     type="button"
                     class="flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-overlay max-md:min-h-11"

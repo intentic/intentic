@@ -357,7 +357,7 @@ const emptyNote = computed<string | undefined>(() => {
              already thinking about other people's extensions. -->
         <!-- One flowing paragraph rather than a row of flex items: the glyph and the two links belong INSIDE the
              sentence, and as siblings of it they each took a line of their own the moment the pane narrowed. -->
-        <p class="border-t border-line pt-4 text-2xs leading-relaxed text-muted">
+        <p class="text-2xs leading-relaxed text-muted">
             <Icon name="sparkles" class="mr-1 text-subtle" />
             Built one? Put the <code class="ui-code">intentic-extension</code> topic on its repository and a nightly job opens the listing for you. No
             account, no upload, no queue.

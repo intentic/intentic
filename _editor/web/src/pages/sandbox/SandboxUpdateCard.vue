@@ -123,7 +123,7 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
              changelog carries, not a second description written here. Absent whenever there is nothing to
              say (a release nobody outside the project would notice, a cold cache, no route to GitHub), and the
              card then reads exactly as it did before. -->
-        <div v-if="updateAvailable && updateNotes.length > 0" class="flex flex-col gap-1.5 border-t border-line pt-3">
+        <div v-if="updateAvailable && updateNotes.length > 0" class="mt-3 flex flex-col gap-1.5">
             <p class="text-xs font-medium text-content">What's new</p>
             <ul class="flex flex-col gap-1">
                 <li v-for="note in updateNotes" :key="note" class="flex gap-2 text-2xs text-muted">

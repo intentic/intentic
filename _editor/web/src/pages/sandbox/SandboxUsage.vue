@@ -390,7 +390,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                  sequential: the held-out commands were left raw at random, so this compares two
                                  populations rather than attributing within one. One line, because it is a
                                  second reading of the headline rather than a second subject. -->
-                            <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="border-t border-line pt-2 text-2xs text-muted">
+                            <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
                                 Holdout control
                                 <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span>: measured against
                                 {{ savings.input.holdout.heldOut }} of {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }} commands

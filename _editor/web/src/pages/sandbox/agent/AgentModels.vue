@@ -283,7 +283,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         Add a model to pin these runs to a tier of their own.
                     </p>
 
-                    <div class="flex flex-col gap-1.5 border-t border-line pt-3">
+                    <div class="mt-3 flex flex-col gap-1.5">
                         <!-- The effort scale belongs to the model, so it appears only once one of the pins is
                              reachable, and a model whose runtime forwards no effort at all publishes none,
                              which correctly draws just the footnote. The label is set in the content colour so
@@ -342,7 +342,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         turn still runs on your own pick. Switch to On once the spend history says the judgement is worth acting on.
                     </p>
 
-                    <div class="flex flex-col gap-1.5 border-t border-line pt-3">
+                    <div class="mt-3 flex flex-col gap-1.5">
                         <div class="flex items-center justify-between gap-3">
                             <span class="text-xs font-medium text-content">Cheaper model</span>
                             <Picker

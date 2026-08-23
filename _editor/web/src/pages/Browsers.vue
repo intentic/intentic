@@ -204,7 +204,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
                     v-for="session in queuedHelp"
                     :key="session.name"
                     :to="sessionAt(session.name)"
-                    class="flex items-center gap-2 border-b border-line/50 bg-warning/5 px-3 py-1.5 text-left text-xs transition-colors last:border-b-0 hover:bg-warning/10"
+                    class="flex items-center gap-2 bg-warning/5 px-3 py-1.5 text-left text-xs transition-colors hover:bg-warning/10"
                 >
                     <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
                     <span class="shrink-0 font-medium text-content">{{ session.label }}</span>

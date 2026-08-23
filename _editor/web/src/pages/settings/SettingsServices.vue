@@ -215,9 +215,9 @@ const copySecret = async (): Promise<void> => {
                 </div>
 
                 <!-- What you already hold. -->
-                <div v-if="services.length > 0" class="flex flex-col gap-3">
+                <div v-if="services.length > 0" class="flex flex-col gap-5">
                     <h3 class="text-xs font-semibold">Your listings</h3>
-                    <div v-for="service in services" :key="service.slug" class="flex flex-col gap-1.5 border-t border-line pt-3">
+                    <div v-for="service in services" :key="service.slug" class="flex flex-col gap-1.5">
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="text-sm font-medium">{{ service.name }}</span>
                             <span class="text-2xs text-muted">{{ STATUS_LABEL[service.status] }}</span>
@@ -273,7 +273,7 @@ const copySecret = async (): Promise<void> => {
                 </div>
 
                 <!-- Adding one. -->
-                <div v-if="ready" class="flex flex-col gap-2 border-t border-line pt-3">
+                <div v-if="ready" class="flex flex-col gap-2">
                     <h3 class="text-xs font-semibold">List a service</h3>
                     <input v-model="form.slug" placeholder="slug, e.g. acme-research" :class="ui.input()" />
                     <input v-model="form.publisher" placeholder="publisher name you've proved" :class="ui.input()" />

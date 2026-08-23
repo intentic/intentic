@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
             <Icon name="info-circle" class="text-sm text-muted" />
             <span class="flex-1 font-medium">
                 Nothing to upload<template v-if="skippedNotice > 0">
-                   , skipped {{ skippedNotice }} {{ skippedNotice === 1 ? `item` : `items` }} that couldn't be read (symlink or special
+                    , skipped {{ skippedNotice }} {{ skippedNotice === 1 ? `item` : `items` }} that couldn't be read (symlink or special
                     file)</template
                 >
             </span>
@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
             </ul>
 
             <!-- Failures spelled out (stays until dismissed) -->
-            <ul v-if="failures.length > 0" class="scrollbar-thin mt-2 max-h-24 space-y-1 overflow-auto border-t border-line pt-2">
+            <ul v-if="failures.length > 0" class="scrollbar-thin mt-3 max-h-24 space-y-1 overflow-auto">
                 <li v-for="file in failures" :key="file.path" class="text-2xs text-danger" v-tooltip.left="file.error">
                     <span class="truncate">{{ file.path }}</span>
                     <span class="text-subtle">: {{ file.error }}</span>
@@ -204,7 +204,7 @@ onBeforeUnmount(() => {
 
         <!-- Dependencies. Outside the branches above so it rides every phase of the import: the offer during
              scan + upload, the outcome after. Hidden entirely when the drop carries no project. -->
-        <div v-if="setupSummary.length > 0" class="mt-2 border-t border-line pt-2">
+        <div v-if="setupSummary.length > 0" class="mt-3">
             <!-- Still uploading: the offer, pre-checked. Unchecking is remembered as the default for next time. -->
             <template v-if="!finished">
                 <label class="flex cursor-pointer items-center gap-2">

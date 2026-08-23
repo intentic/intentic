@@ -503,7 +503,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             </template>
             <!-- Only once there is something to hunt through. Ports are matched too, because "which machine has
                  8788" is the question this tab is opened for and it used to be answerable only by reading. -->
-            <div v-if="!isLoading && showFilter" class="border-b border-line px-4 py-2.5">
+            <div v-if="!isLoading && showFilter" class="px-4 py-2.5">
                 <SearchBar
                     v-model="query"
                     variant="field"
@@ -526,7 +526,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             <!-- ONE GUTTER PER COMPUTER. The glyph sits in a column of its own and everything else: the name,
                  the facts, the machine's whole sandbox list: starts at the same x underneath it, so three
                  computers read as three entries rather than as nine indents. -->
-            <div v-for="row in shown" :key="row.computer.key" class="border-b border-line last:border-b-0">
+            <div v-for="row in shown" :key="row.computer.key">
                 <!-- WHO THIS IS, AND WHETHER ANYTHING UNDER IT WANTS YOU: the whole of a machine until it is
                      asked for. An offline computer used to cost a full block, a gutter and a 14px name to say
                      nothing was there; three of them pushed the machine you came for off the screen.

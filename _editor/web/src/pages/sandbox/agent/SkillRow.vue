@@ -174,7 +174,7 @@ watch(
 
                 <!-- BELOW WHICHEVER VIEW OPENED, and below the form's own Save/Cancel when that is the view: the
                      safe actions and the one that cannot be undone do not share a row. -->
-                <div v-if="skill.removable" class="mt-3 flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+                <div v-if="skill.removable" class="mt-3 flex flex-wrap items-center gap-3">
                     <Button
                         v-if="!confirmRemove"
                         size="small"

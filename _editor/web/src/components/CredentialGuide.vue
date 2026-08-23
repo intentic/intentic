@@ -105,7 +105,7 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
             :href="tokenUrl"
             target="_blank"
             rel="noreferrer"
-            class="inline-flex items-center gap-1 border-t border-line pt-3 text-xs text-link hover:underline"
+            class="mt-1 inline-flex items-center gap-1 text-xs text-link hover:underline"
         >
             {{ linkLabel }} <Icon name="external-link" />
         </a>

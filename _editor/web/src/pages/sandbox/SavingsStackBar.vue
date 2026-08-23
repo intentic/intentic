@@ -63,7 +63,7 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
                 <span class="min-w-0 flex-1 text-xs text-content">{{ segment.label }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-muted">~{{ formatCompact(segment.tokens) }}</span>
             </li>
-            <li v-if="reached !== undefined" class="mt-0.5 flex min-w-0 items-baseline gap-2 border-t border-line pt-2">
+            <li v-if="reached !== undefined" class="mt-1.5 flex min-w-0 items-baseline gap-2">
                 <span class="size-2 shrink-0 translate-y-px rounded-[2px]" :style="{ background: reached.color }" />
                 <span class="min-w-0 flex-1 text-xs text-muted">{{ reached.label }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-muted">~{{ formatCompact(reached.tokens) }}</span>

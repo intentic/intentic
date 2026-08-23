@@ -201,7 +201,7 @@ const open = async (door: `checkout` | `portal`): Promise<void> => {
                     </p>
                 </div>
 
-                <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
+                <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <p class="min-w-0 flex-1 text-xs text-muted">
                         {{ sharePercent }}% of every credit you spend reaches the creator of what you installed or ran, on a
                         <a :href="transparencyUrl" target="_blank" rel="noopener" class="text-link hover:underline">public ledger</a>.

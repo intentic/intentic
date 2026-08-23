@@ -358,9 +358,9 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                 </p>
             </div>
 
-            <!-- Identity, on its own hairline: the full id the collapsed row leaves off a baked-in extension,
+            <!-- Identity: the full id the collapsed row leaves off a baked-in extension,
                  with the version and commit that say WHICH code this is. -->
-            <p class="border-t border-line pt-2.5 text-2xs text-subtle">
+            <p class="text-2xs text-subtle">
                 <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
                 {{
                     entry.extension.source === `builtin`

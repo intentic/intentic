@@ -122,7 +122,7 @@ const savedTokens = computed(() => savedByCleaner(savings.value?.input));
 
                     <!-- Holdout: measurement control, a % of commands left raw so the savings report has a real
                          cleaned-vs-raw baseline instead of an estimate. -->
-                    <label class="mt-1 flex items-center justify-between gap-3 border-t border-line pt-3">
+                    <label class="mt-3 flex items-center justify-between gap-3">
                         <span class="flex min-w-0 flex-col">
                             <span class="text-xs text-content">Holdout control</span>
                             <span class="text-2xs text-muted">Leave this % of commands uncleaned to measure real savings.</span>

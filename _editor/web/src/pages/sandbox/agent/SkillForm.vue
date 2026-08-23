@@ -143,7 +143,7 @@ const save = (): void => {
             </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line/60 pt-3">
+        <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button
                 size="small"
                 :label="skill === undefined ? `Add skill` : `Save changes`"

@@ -159,7 +159,7 @@ onBeforeUnmount(hide);
                     <!-- WHAT THESE NUMBERS ARE, and HOW OLD. The age belongs in the header rather than at the
                          bottom: every figure below is a floor once the reading has been overtaken elsewhere, so
                          it qualifies the whole card. -->
-                    <div class="flex items-baseline justify-between gap-2 border-b border-line pb-2">
+                    <div class="flex items-baseline justify-between gap-2">
                         <span class="text-2xs font-medium uppercase tracking-wide text-subtle">Plan limits</span>
                         <span class="shrink-0 text-2xs text-subtle">measured {{ formatAge(headroom.measuredAt) }}</span>
                     </div>
@@ -189,9 +189,10 @@ onBeforeUnmount(hide);
                         <span v-if="pool.resetsAt !== undefined" class="text-2xs text-subtle">resets {{ formatReset(pool.resetsAt) }}</span>
                     </div>
 
-                    <!-- What this sandbox has spent on the account, kept visually apart from the pools above:
-                         those are the plan's allowances, this is our own history against it. -->
-                    <div v-if="activity" class="flex flex-col gap-1 border-t border-line pt-2">
+                    <!-- What this sandbox has spent on the account, kept apart from the pools above by the
+                         card's own rhythm and its own uppercase label: those are the plan's allowances, this is
+                         our own history against it. -->
+                    <div v-if="activity" class="mt-1 flex flex-col gap-1">
                         <span class="text-2xs font-medium uppercase tracking-wide text-subtle">This sandbox</span>
                         <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
                     </div>
@@ -201,7 +202,7 @@ onBeforeUnmount(hide);
                     <p v-if="headroom.pools.length === 0" class="text-xs text-muted">Every pool has reset: the full allowance is available.</p>
 
                     <!-- What the ≥ on each figure means, said only when there is one. -->
-                    <p v-if="headroom.stale" class="border-t border-line pt-2 text-2xs leading-relaxed text-subtle">
+                    <p v-if="headroom.stale" class="text-2xs leading-relaxed text-subtle">
                         ≥ these are floors: every device on the account spends the same pools.
                     </p>
                 </div>

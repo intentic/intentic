@@ -143,7 +143,7 @@ const assurances = computed(() => [
             </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-line pt-4">
+        <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
             <Button :label="props.joinLabel" :loading="props.working" class="ui-button-loud" @click="emit(`checkout`)" />
             <!-- The one way out that is not "leave", for a reader who wants to see behind the gate before
                  paying. Only offered inside the product: Discover is a shell route, and sending somebody with
