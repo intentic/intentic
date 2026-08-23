@@ -36,10 +36,10 @@ test("endpointConfigOf answers for both endpoint-minting kinds and nothing else"
 });
 
 test("a Hugging Face path splits into repo + path for hub's downloadFile, cached by file name", () => {
-    expect(localModelSource({ model: "unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", gpu: "off" })).toEqual({
-        repo: "unsloth/Qwen3-4B-Instruct-2507-GGUF",
-        path: "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
-        file: "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    expect(localModelSource({ model: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", gpu: "off" })).toEqual({
+        repo: "unsloth/Qwen3.5-9B-GGUF",
+        path: "Qwen3.5-9B-Q4_K_M.gguf",
+        file: "Qwen3.5-9B-Q4_K_M.gguf",
     });
     // A nested path keeps its directories on the repo side of the download and its basename as the cache key.
     expect(localModelSource({ model: "owner/repo/sub/dir/model.gguf", gpu: "off" })).toEqual({
@@ -78,6 +78,6 @@ test("a local model rides the translator list as its derived endpoint", () => {
 });
 
 test("the label is the file without its extension", () => {
-    expect(localModelLabel({ model: "owner/repo/Qwen3-4B-Q4_K_M.gguf", gpu: "off" })).toBe("Qwen3-4B-Q4_K_M");
+    expect(localModelLabel({ model: "owner/repo/Qwen3.5-9B-Q4_K_M.gguf", gpu: "off" })).toBe("Qwen3.5-9B-Q4_K_M");
     expect(localModelLabel({ model: "custom", gpu: "off", url: "https://example.com/m.gguf" })).toBe("m");
 });

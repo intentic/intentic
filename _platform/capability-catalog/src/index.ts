@@ -831,14 +831,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             {
                 key: "model",
                 label: "Model",
-                default: "unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+                default: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
                 options: [
-                    { value: "bartowski/Llama-3.2-3B-Instruct-GGUF/Llama-3.2-3B-Instruct-Q4_K_M.gguf", label: "Llama 3.2 3B, needs ~4 GB free RAM" },
-                    { value: "unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", label: "Qwen3 4B, needs ~6 GB free RAM" },
-                    { value: "ggml-org/gpt-oss-20b-GGUF/gpt-oss-20b-mxfp4.gguf", label: "GPT-OSS 20B, needs ~16 GB free RAM" },
+                    { value: "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf", label: "Phi-4-mini 3.8B, needs ~4 GB free RAM" },
+                    { value: "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf", label: "Qwen3.5 9B, needs ~6 GB free RAM" },
+                    { value: "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf", label: "Gemma 4 12B, needs ~16 GB free RAM" },
                     {
-                        value: "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
-                        label: "Qwen3 Coder 30B, needs ~24 GB free RAM",
+                        value: "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf",
+                        label: "Qwen3.8 27B, needs ~24 GB free RAM",
                     },
                     { value: "custom", label: "Custom GGUF (advanced)" },
                 ],

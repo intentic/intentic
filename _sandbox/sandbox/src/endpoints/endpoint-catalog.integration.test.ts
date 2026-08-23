@@ -16,12 +16,12 @@ const catalogOf = async (data: readonly { id: string; display_name?: string }[])
 };
 
 test("a weights path is labelled by the model, not by where the file sits", async () => {
-    const catalog = await catalogOf([{ id: "/work/.intentic/local/cache/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf" }]);
+    const catalog = await catalogOf([{ id: "/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf" }]);
     expect(catalog.models).toEqual([
-        { id: "/work/.intentic/local/cache/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", label: "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M" },
+        { id: "/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf", label: "Qwen3.8-27B-UD-Q4_K_M" },
     ]);
     // The id is what a turn dials, so it survives verbatim, including as the endpoint's default.
-    expect(catalog.default).toBe("/work/.intentic/local/cache/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf");
+    expect(catalog.default).toBe("/work/.intentic/local/cache/models/Qwen3.8-27B-UD-Q4_K_M.gguf");
 });
 
 test("a plain id stands as it is, and a published display name still wins", async () => {

@@ -77,6 +77,6 @@ export const localModelSource = (config: LocalModelConfig): LocalModelSource | u
 };
 
 // What the picker's rows and the card's status call the model: the file, shorn of its extension and quant
-// suffix noise only a download needs ("Qwen3-4B-Instruct-2507-Q4_K_M.gguf" → "Qwen3-4B-Instruct-2507-Q4_K_M").
+// suffix noise only a download needs ("Qwen3.5-9B-Q4_K_M.gguf" → "Qwen3.5-9B-Q4_K_M").
 export const localModelLabel = (config: LocalModelConfig): string =>
     (localModelSource(config)?.file ?? config.model).replace(/\.gguf$/i, "");

@@ -76,8 +76,8 @@ mechanisms above. Chosen. The rest of this document is D.
 
 1. Capabilities page → **Local model** card (category `extend`, beside "Model endpoint"). Or the agent asks
    for it mid-task through the capabilities gate and the owner approves the card in chat.
-2. One decision: **which model**, a curated select that states the cost in the label ("Qwen3 4B, needs
-   ~6 GB free RAM", "Qwen3 Coder 30B, needs ~24 GB"). One optional switch: **Use this machine's NVIDIA
+2. One decision: **which model**, a curated select that states the cost in the label ("Qwen3.5 9B, needs
+   ~6 GB free RAM", "Qwen3.8 27B, needs ~24 GB"). One optional switch: **Use this machine's NVIDIA
    GPU**, wearing the `rebuild` chip the field schema already has for exactly this
    (`extension-manifest/src/points/capabilities.ts` cites the docker card's pair of identical-looking
    switches, one costing five seconds and the other five minutes).
