@@ -186,7 +186,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <!-- `flat`, because this list is already inside the Environment card: a bordered group per section drew a
              frame around a surface painted in the card's own colour, so the section labels and the gap between
              them do the grouping and the card stays the only frame. -->
-        <RowGroup v-for="group in rowGroups" :key="group.origin" flat :label="group.label" :count="countLabel(group)">
+        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
             <Row
                 v-for="item in group.items"
                 :key="item.id"
@@ -362,7 +362,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             <!-- Two sections rather than the three that can appear: the outline promises the shape, and a
                  sandbox with nothing added on top has only the base group: over-promising sections is how a
                  placeholder ends up taller than the answer. -->
-            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat>
+            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
                 <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
                 <SkeletonRows :rows="section" density="compact" />
             </RowGroup>

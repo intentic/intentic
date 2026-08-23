@@ -21,7 +21,11 @@ import { ui } from "../lib/ui.js";
  * outline, whose heading is a bar like the rows under it. It exists so a skeleton can use this component rather
  * than re-typing its label box and row dividers, which is how an outline drifts from the group it stands in
  * for, the failure every other note in this file is about. */
-defineProps<{ label?: string; count?: string | number; caption?: string; flat?: boolean }>();
+/* `undivided` DROPS THE HAIRLINES BETWEEN ROWS. A divider separates rows that are read as one continuous list;
+ * where each row is its own openable entry with a mark, a name and its own spacing (the sandbox's environment
+ * contents), the lines are one more stroke on a surface that already has a frame, and the rhythm of the rows is
+ * what separates them. */
+defineProps<{ label?: string; count?: string | number; caption?: string; flat?: boolean; undivided?: boolean }>();
 </script>
 
 <template>
@@ -40,7 +44,12 @@ defineProps<{ label?: string; count?: string | number; caption?: string; flat?: 
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
             <div v-if="$slots[`actions`]" class="ml-auto flex items-center gap-2"><slot name="actions" /></div>
         </div>
-        <div class="divide-y divide-line" :class="flat === true ? `` : `overflow-hidden rounded-xl border border-line bg-card`">
+        <div
+            :class="[
+                undivided === true ? `` : `divide-y divide-line`,
+                flat === true ? `` : `overflow-hidden rounded-xl border border-line bg-card`,
+            ]"
+        >
             <slot />
         </div>
     </section>
