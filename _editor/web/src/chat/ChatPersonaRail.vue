@@ -204,16 +204,6 @@ const empty = computed(() => personas.value.length === 0);
  * which one it was. */
 const now = useNow();
 
-/* THE PRESS. The most recent chat already acting as them, or a new one pinned to them: see the note at the
- * top for why those are the same act from the reader's side ("put me in a chat with this persona"). */
-const open = (row: PersonaRow): void => {
-    const first = chatsOf(row.id)[0];
-    picked.value = first === undefined ? startAgent(undefined, row.id) : first.conversation.conversationId;
-    if (first !== undefined) {
-        emit(`select`, first.conversation.conversationId);
-    }
-};
-
 // Switching to one of a persona's other chats, and starting a fresh one, both land here: the ring follows
 // what this rail put on screen either way.
 const show = (conversationId: string): void => {
@@ -235,9 +225,18 @@ const startAs = (row: PersonaRow): void => {
  * name the persona by hand in the composer, which is the errand this whole list exists to remove. Both of
  * those are one disclosure: the chats appear, and the way to make the next one appears under them.
  *
- * IT OPENS FROM THE COUNT, not from the card. The card's press is the fast path ("talk to them") and it stays
- * one press; the disclosure is its own smaller target beside it. Offered from ONE chat rather than two: with
- * one there is nothing to choose between, but there is still a second chat to start. */
+ * THE CARD'S OWN PRESS IS THE DISCLOSURE, and nothing else. It used to put a chat on screen: the newest one
+ * acting as that persona, or a fresh one where there were none. That made the commonest press on this list the
+ * most destructive thing it could do: a reader scanning for who is busy, or reaching for the count, changed
+ * which conversation the window was showing, and on a persona with no chats it CREATED one. A list is scanned
+ * far more often than it is acted on, so its default press must be the reversible one.
+ *
+ * So pressing a person now opens the person: their chats appear under the card, and every way to put one on
+ * screen is inside that group, where it is a deliberate second press: a chat to switch to, or the button that
+ * starts a new one. The count beside the name still toggles the same group, because a reader who aims at "3
+ * chats" is asking exactly this question and must not have to notice that the whole card would have answered
+ * it. Offered from ONE chat rather than two: with one there is nothing to choose between, but there is still a
+ * second chat to start. */
 /* The persona you ARRIVED inside is open from the first frame, for the same reason its row is ringed: the chat
  * being highlighted is a row in that group, and a group shut over it would be pointing at something the reader
  * cannot see. Seeded rather than left to the watch below, which fires on CHANGE and so has nothing to say
@@ -278,7 +277,26 @@ const sessionsOf = (row: PersonaRow) =>
 </script>
 
 <template>
-    <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+    <!-- THE LIST LIES IN A WELL OF CANVAS, and that is the whole of why these cards are visible.
+         A `.session-card` fills with `--color-card`, and the chat panel this rail lives in is painted `bg-card`
+         too — the same token on both sides of the same edge. So the cards were the exact colour of the surface
+         behind them, the border was the only thing left of a card, and the row read as an outline of nothing.
+         The card is not the thing to change: it is the app's ONE card, worn by the fleet board, the chats rail
+         and this list alike (see .session-card in styles.css), and a fill invented for this one surface is how
+         the persona row ends up looking like a different component from every other card on screen — which is
+         exactly what a `color-mix` override here did, landing DARKER than its neighbours on themes whose card
+         token is brighter than the mix. So the GROUND moves instead, and the card is left alone.
+         CANVAS RATHER THAN A `.lane` SLAB, which is the other ground this app grounds cards on (RailLane, the
+         chats cut beside this one). The lane is canvas with 3% of the ink mixed back in, so on a panel already
+         painted `bg-card` it clears the card by three or four values: real, but a whisper. Canvas is the full
+         step, and it is the exact relationship the Agents view is read against — a page of canvas with cards a
+         plain `--color-card` above it — which is the look this list is meant to share.
+         The WELL does not scroll, its contents do: painting the ground on the scroller instead would slide the
+         rounded corners up out of view on the first wheel notch. Contents inset `p-2` with `gap-2` between
+         cards, the lane's own measurements to the pixel, because a card sitting nearer its ground's edge in one
+         list than in another reads as a different component rather than the same one at another width. -->
+    <div class="flex min-h-0 min-w-0 flex-col rounded-xl bg-canvas p-2">
+        <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         <template v-if="empty">
             <!-- A place, so it is a link: the sandbox hub has an address, and this tile is often the first
                  time somebody goes looking for it. -->
@@ -303,9 +321,9 @@ const sessionsOf = (row: PersonaRow) =>
                     tight
                     :selected="row.open"
                     :attention="row.needsYou"
-                    :aria-label="`Chat as ${row.label}`"
-                    class="persona-rail-card"
-                    @click="open(row)"
+                    :aria-expanded="isExpanded(row)"
+                    :aria-label="`Show ${row.label}'s chats`"
+                    @click="toggleExpanded(row)"
                 >
                     <!-- THE FACE, at the card's own height rather than at a glyph's. This list is scanned for a
                      PERSON, and a name is what you read second, so the mark leads, big enough to be found
@@ -356,19 +374,16 @@ const sessionsOf = (row: PersonaRow) =>
                              After the model rather than before it: this is standing configuration, read once
                              when you set the card up, while everything else on the line is live. -->
                             <StatusBadge v-if="row.bounds !== undefined" variant="neutral" size="xs">{{ row.bounds }}</StatusBadge>
-                            <!-- What this window is holding for them, stated as what it is: the chats open HERE:
-                             and the door to them. Absent at zero, where "0 chats" would only be saying that a
-                             fresh persona is fresh, and where the card's own press already starts one.
-                             `role="button"` rather than a nested <button>, which the card's own button element
-                             cannot legally contain; `.stop` so opening the list is not also opening the chat. -->
-                            <span
-                                v-if="row.chats > 0"
-                                role="button"
-                                :aria-expanded="isExpanded(row)"
-                                :aria-label="`Show ${row.label}'s chats`"
-                                class="-my-0.5 flex shrink-0 items-center gap-0.5 rounded px-1 py-0.5 text-muted transition-colors hover:bg-overlay hover:text-content"
-                                @click.stop="toggleExpanded(row)"
-                            >
+                            <!-- What this window is holding for them, and the state of the group under the card.
+                             Absent at zero, where "0 chats" would only be saying that a fresh persona is fresh.
+                             PLAIN TEXT AND A CHEVRON, not a control of its own any more. It used to be the only
+                             way to open the group, so it carried `role="button"`, its own label and a `.stop`
+                             to keep the card underneath from acting on the same click. Now that the whole card
+                             is the disclosure, a second control inside it doing the identical thing is a
+                             nested press for screen readers to announce twice and a `.stop` that can only ever
+                             disagree with its parent. The chevron stays, because it is what says which way the
+                             group is: it is now a picture of the card's state rather than a button. -->
+                            <span v-if="row.chats > 0" class="flex shrink-0 items-center gap-0.5 text-muted">
                                 {{ row.chats }} chat{{ row.chats === 1 ? `` : `s` }}
                                 <Icon :name="isExpanded(row) ? `chevron-up` : `chevron-down`" class="text-2xs" />
                             </span>
@@ -385,7 +400,7 @@ const sessionsOf = (row: PersonaRow) =>
                 <!-- The chats carry the SAME live readout the persona above them does, off the same turns: a
                      parent row saying "Bash 2m" over a child list of identically idle-looking rows is the one
                      arrangement that would make the disclosure misleading about what it just opened. -->
-                <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-1.5">
+                <div v-if="isExpanded(row)" class="ml-5 flex min-w-0 flex-col gap-2">
                     <RailCard
                         v-for="entry in sessionsOf(row)"
                         :key="entry.conversation.conversationId"
@@ -424,36 +439,6 @@ const sessionsOf = (row: PersonaRow) =>
                 Manage personas
             </RouterLink>
         </template>
+        </div>
     </div>
 </template>
-
-<style scoped>
-/* PERSONA CARDS HAVE NO LANE UNDER THEM, and that is the whole reason they read as flat rectangles rather than
- * as objects. Every other list of session cards in the app sits on a `.lane` slab, and the slab is what does the
- * work: a card is a step LIGHTER than the ground beneath it, so the ground is what makes the card visible (see
- * the note on `.lane` in styles.css, which states that contract outright). These rows float directly on the
- * rail's canvas, so the card has nothing to be a step lighter THAN.
- *
- * The default fill cannot close that on its own, because `--color-card` is not a colour this app chooses: it is
- * mapped from the host theme's `sideBar.background`, and a great many themes set that to exactly the editor
- * background. When they do, the fill EQUALS the canvas and the border is the only thing left of the card, which
- * is the "transparent card" this rule exists to answer.
- *
- * So the fill is MIXED FROM THE INK INTO THE GROUND rather than named as a token — the same formula `.lane` uses,
- * and for the same stated reason: a percentage of content over canvas is guaranteed to land off the canvas in
- * both schemes, whatever the host theme did or did not provide. Six percent sits a step above the lane's three,
- * which is where a card belongs relative to a slab; hover adds four more.
- *
- * ONLY THE UNSELECTED ROWS, which is not a nicety. A scoped style in a single-file component is UNLAYERED, and
- * unlayered rules beat every rule in a layer no matter how specific — `.session-card` and all of its states live
- * in `@layer components`. Without the `:not()` these two lines would silently outrank
- * `.session-card.session-card-on` and repaint the selected persona's accent border grey, which is the one card in
- * the list whose edge is carrying information. Excluded here, the selected row keeps its own fill, border, ring
- * and lift untouched, and the border under the pointer still strengthens from the layered hover rule. */
-.persona-rail-card:not(.session-card-on) {
-    --card-fill: color-mix(in srgb, var(--color-content) 6%, var(--color-canvas));
-}
-.persona-rail-card:not(.session-card-on):hover {
-    --card-fill: color-mix(in srgb, var(--color-content) 10%, var(--color-canvas));
-}
-</style>

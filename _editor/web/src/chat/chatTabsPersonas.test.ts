@@ -107,29 +107,45 @@ it("offers to set one up when the workspace has no personas", async () => {
     expect(rows(el)).toEqual([]);
 });
 
-// Pressing a persona you have never talked to opens a chat ALREADY PINNED to them: the rail's whole promise,
-// and the one thing that makes the pick something other than a manual step in the composer.
-it("starts a chat pinned to a persona you have not talked to yet", async () => {
+/* PRESSING A PERSON OPENS THE PERSON, NOT A CHAT, and this is the assertion that pins it. The card's press used
+ * to put the newest conversation acting as them on screen, and START one where there were none: so the
+ * commonest press on the list, the one a reader makes while scanning for who is busy, both changed which chat
+ * the window was showing and could create a conversation nobody asked for. A list is scanned far more often
+ * than it is acted on, so its default press is the reversible one: the group opens, and everything that puts a
+ * chat on screen is a deliberate second press inside it. */
+it("opens the persona's group rather than a chat when the card is pressed", async () => {
     const el = await mountList();
     rowFor(el, `Work`)?.click();
     await settle();
-    const pinned = useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`);
-    expect(pinned).toHaveLength(1);
+    expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(0);
+    expect(selected).toEqual([]);
+    // What it DID do: the group is open, so the way to a chat is now on screen.
+    expect(el.textContent).toContain(`New chat as Work`);
 });
 
-// ...and pressing one you HAVE talked to returns you to that conversation rather than opening a second one.
-it("returns to the chat already acting as that persona", async () => {
+// ...and pressing it again shuts the group, which is the other half of "the default press is reversible".
+it("shuts the group again on a second press", async () => {
     const el = await mountList();
     rowFor(el, `Work`)?.click();
     await settle();
-    const first = useChat().conversations.value.find((conversation) => conversation.actsAs.value === `work`);
-    selected = [];
-
     rowFor(el, `Work`)?.click();
     await settle();
-    expect(selected).toEqual([first?.conversationId]);
+    expect(el.textContent).not.toContain(`New chat as Work`);
+});
+
+// The chat still gets started from inside the group: the rail's whole promise (a conversation ALREADY PINNED to
+// this persona, with no manual step in the composer), now behind the press that says so.
+it("starts a chat pinned to the persona from inside the group", async () => {
+    const el = await mountList();
+    rowFor(el, `Work`)?.click();
+    await settle();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`New chat as Work`))?.click();
+    await settle();
     expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
 });
+
+// ...and a persona you HAVE talked to lists those chats to pick from rather than choosing one for you: the
+// switch itself is pinned by "lists a persona's chats and switches to the one you pick", further down.
 
 /* NEITHER THE ACCOUNT SLUGS NOR A COUNT OF THEM belongs under a person's name. The row spelled the raw
  * capability ids there first (`reddit-radarsuspam`), which are internal slugs, and then a tally of them, which
@@ -197,15 +213,15 @@ it("lists a persona's chats and switches to the one you pick", async () => {
     await settle();
     expect(sessionRows(el)).toHaveLength(2);
 
-    // A SESSION row, addressed by what it offers to do: the persona cards are also `.session-card`, and pressing
-    // one of those would start a chat rather than switch to one.
+    // A SESSION row, addressed by what it offers to do: the persona cards are also `.session-card`, and
+    // pressing one of those only opens or shuts its group.
     selected = [];
     el.querySelector(`[aria-label^="Open "]`)?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
     await settle();
     expect(selected).toHaveLength(1);
 });
 
-// The count is the door, and it closes as well as opens.
+// The card is the door, and it closes as well as opens.
 it("collapses the list again from the same control", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`, `second`]);
@@ -219,8 +235,8 @@ it("collapses the list again from the same control", async () => {
 });
 
 /* THE SEVENTH CHAT. Before this, a persona holding one chat could never be given another from the rail: the
- * card's press means "the latest, or a new one if there are none", so starting a second meant pressing New
- * agent and naming the persona by hand in the composer, which is the errand the rail exists to remove. */
+ * card's press went to the latest chat, so starting a second meant pressing New agent and naming the persona by
+ * hand in the composer, which is the errand the rail exists to remove. */
 it("offers a new chat as that persona once its existing ones are on screen", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`]);
@@ -229,17 +245,23 @@ it("offers a new chat as that persona once its existing ones are on screen", asy
     expect(el.textContent).toContain(`New chat as Work`);
 });
 
-// The disclosure only exists where it leads somewhere: a persona nobody has talked to yet has no list to open
-// and a card whose own press already starts the first chat.
-it("shows no disclosure on a persona with no chats", async () => {
+/* A PERSONA NOBODY HAS TALKED TO STILL OPENS, and opens onto the one thing there is to do with them. It used to
+ * have no disclosure at all, because the card's own press started that first chat; now that the press is the
+ * disclosure, a card that refused to open would be the one row on the list that answers nothing. It has no chats
+ * to list, so what the group holds is the offer to start one. */
+it("opens a chatless persona onto the offer to start its first chat", async () => {
     const el = await mountList();
-    expect(disclosureFor(el, `Work`)).toBeUndefined();
+    expect(disclosureFor(el, `Work`)).toBeDefined();
+    disclosureFor(el, `Work`)?.click();
+    await settle();
+    expect(sessionRows(el)).toEqual([]);
+    expect(el.textContent).toContain(`New chat as Work`);
 });
 
-/* THE PERSONA YOU OPENED FROM HERE expands itself, so the rail shows where the press landed. Keyed to this
- * rail's own pick rather than to the window's active chat, so once the list is up, a chat focused from
- * somewhere else never flings a group open under the reader. (Arrival is the one exception, and it is a
- * different act with its own tests above.) */
+/* ONE PERSON AT A TIME, AND ONLY THE ONE YOU PRESSED. The groups are independent, so pressing a card must not
+ * open anybody else's: a list of people that reshuffles around the row you touched is one you stop touching.
+ * (A chat opened from inside a group also expands its own persona, and arrival expands the one you walked in
+ * holding: both are separate acts with their own tests, above.) */
 it("expands the persona you press, and only then", async () => {
     const el = await mountList();
     await pinTo(`work`, [`first`]);
@@ -248,6 +270,7 @@ it("expands the persona you press, and only then", async () => {
     rowFor(el, `Work`)?.click();
     await settle();
     expect(sessionRows(el)).toHaveLength(1);
+    expect(el.textContent).not.toContain(`New chat as Inbox Manager`);
 });
 
 /* --- Arriving from the Agents cut --------------------------------------------------------------------------
@@ -293,7 +316,11 @@ it("leaves the Agents cut on the chat it was reading", async () => {
 
     useChatGrouping().set(`persona`);
     await settle();
-    rowFor(el, `Work`)?.click(); // opens a chat as Work — the transcript moves
+    // The card's press only opens the group now, so the transcript is moved the way it is moved for real:
+    // from inside that group, by starting a chat as Work.
+    rowFor(el, `Work`)?.click();
+    await settle();
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`New chat as Work`))?.click();
     await settle();
 
     selected = [];
