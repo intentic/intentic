@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { providerLabel } from "@intentic/sandbox-contract";
 import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../composables/agents/useAgents";
 import { relativeTime } from "../../composables/chat/catalog";
+import { providerDisplayLabel, providerGroup, providerGroupLabel } from "../../composables/chat/providerCatalog";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSavings } from "../../composables/sandbox/useSavings";
 import { useUsage } from "../../composables/sandbox/useUsage";
@@ -86,7 +86,7 @@ const window = computed(() => windowFor(preset.value, today.value));
 const scoped = computed(() =>
     rows.value.filter(
         (row) =>
-            (providerFilter.value === `all` || row.provider === providerFilter.value) &&
+            (providerFilter.value === `all` || providerGroup(row.provider) === providerFilter.value) &&
             (agentFilter.value === undefined || row.conversationId === agentFilter.value),
     ),
 );
@@ -96,11 +96,16 @@ const previous = computed(() => {
     return before === undefined ? undefined : inWindow(scoped.value, before);
 });
 
-// Provider pills list every provider the LEDGER has ever seen, not just the current window: a filter whose
-// options appear and vanish as you change the date range is unusable.
+/* Provider pills list every provider the LEDGER has ever seen, not just the current window: a filter whose
+ * options appear and vanish as you change the date range is unusable.
+ *
+ * Folded by `providerGroup`, so the locally-run models are ONE pill however many cards ever served a turn. This
+ * row is where the never-pruned ledger's cost lands hardest: a card deleted months ago still bills nothing and
+ * still owns a pill, and a sandbox that tried four sets of weights had four of them, each labelled with a raw
+ * `endpoint/<id>` provider id. */
 const providerOptions = computed(() => [
     { label: `All providers`, value: `all` },
-    ...providersIn(rows.value).map((provider) => ({ label: providerLabel(provider), value: provider })),
+    ...providersIn(rows.value, providerGroup).map((provider) => ({ label: providerGroupLabel(provider), value: provider })),
 ]);
 
 // ---- the figures ------------------------------------------------------------------------------------------
@@ -108,8 +113,8 @@ const providerOptions = computed(() => [
 const totals = computed(() => totalsOf(current.value));
 const previousTotals = computed(() => (previous.value === undefined ? undefined : totalsOf(previous.value)));
 
-const seriesProviders = computed(() => providersIn(current.value));
-const series = computed(() => usageSeries(current.value, window.value, seriesProviders.value));
+const seriesProviders = computed(() => providersIn(current.value, providerGroup));
+const series = computed(() => usageSeries(current.value, window.value, seriesProviders.value, providerGroup));
 
 const spendDelta = computed(() => deltaPercent(totals.value.costUsd, previousTotals.value?.costUsd));
 const turnsDelta = computed(() => deltaPercent(totals.value.turns, previousTotals.value?.turns));
@@ -136,10 +141,11 @@ const byModel = computed(() =>
         (row) => row.model,
         (key) => key,
         `Provider default`,
+        providerGroup,
     ),
 );
 const agentTitle = (id: string): string => fleet.value.find((agent) => agent.id === id)?.title ?? `${id.slice(0, 8)}…`;
-const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`));
+const byAgent = computed(() => rankByCost(current.value, (row) => row.conversationId, agentTitle, `Main tree`, providerGroup));
 
 // ---- savings ------------------------------------------------------------------------------------------------
 
@@ -299,9 +305,7 @@ const hasSpend = computed(() => current.value.length > 0);
                         <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
                             {{ formatPercent(cacheHitRate(totals)) }}
                         </div>
-                        <p class="mt-auto pt-2 text-2xs text-subtle">
-                            {{ formatCompact(totals.cacheReadTokens) }} prompt input cached
-                        </p>
+                        <p class="mt-auto pt-2 text-2xs text-subtle">{{ formatCompact(totals.cacheReadTokens) }} prompt input cached</p>
                     </Card>
                 </div>
 
@@ -482,10 +486,18 @@ const hasSpend = computed(() => current.value.length > 0);
                             <tbody class="tabular-nums text-muted">
                                 <tr v-for="(row, index) in tableRows.slice(0, TABLE_LIMIT)" :key="index" class="border-b border-line/50">
                                     <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
+                                    <!-- The swatch is the row's SERIES (so it matches the chart and legend the
+                                         reader just filtered with), the name is the CARD that billed it. This
+                                         is the reconciling surface: folding four local models into one word
+                                         here would hide which of them a figure came from, and the CSV below
+                                         carries the raw provider id for anyone going further. -->
                                     <td class="py-1.5 pr-3">
                                         <span class="flex items-center gap-1.5">
-                                            <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: providerColor(row.provider) }" />
-                                            {{ providerLabel(row.provider) }}
+                                            <span
+                                                class="size-2 shrink-0 rounded-[2px]"
+                                                :style="{ background: providerColor(providerGroup(row.provider)) }"
+                                            />
+                                            {{ providerDisplayLabel(row.provider) }}
                                         </span>
                                     </td>
                                     <td class="py-1.5 pr-3">{{ row.model ?? `—` }}</td>

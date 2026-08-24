@@ -1,7 +1,7 @@
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { customEntryFor, familyGroups, filterEntries, LOCAL_LANE, lanesOf, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
-import { endpointProviders } from "./providerCatalog";
+import { customEntryFor, familyGroups, filterEntries, lanesOf, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
+import { endpointProviders, LOCAL_MODELS_GROUP } from "./providerCatalog";
 
 /* The custom-model escape hatch. Everything else in modelPicker.ts is pure derivation over the live catalogs;
  * this is the one path that lets a user name a model NO catalog published, which is the only way to reach a
@@ -280,20 +280,20 @@ test("folds every locally-run card into one lane, so the rail draws one chip and
 
     expect(lanesOf([`claude`, `endpoint/ollama-a`, `endpoint/ollama-b`])).toEqual([
         { key: `claude`, label: providerLabel(`claude`), providers: [`claude`] },
-        { key: LOCAL_LANE, label: `Local models`, providers: [`endpoint/ollama-a`, `endpoint/ollama-b`] },
+        { key: LOCAL_MODELS_GROUP, label: `Local models`, providers: [`endpoint/ollama-a`, `endpoint/ollama-b`] },
     ]);
 });
 
 test("leaves a remote endpoint its own lane: a server the user pointed us at is not their machine", () => {
     withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/vllm`, label: `vLLM`, kind: `endpoint` });
 
-    expect(lanesOf([`endpoint/ollama-a`, `endpoint/vllm`]).map((lane) => lane.key)).toEqual([LOCAL_LANE, `endpoint/vllm`]);
+    expect(lanesOf([`endpoint/ollama-a`, `endpoint/vllm`]).map((lane) => lane.key)).toEqual([LOCAL_MODELS_GROUP, `endpoint/vllm`]);
 });
 
 test("draws one section holding every card's models, which is the group the rail chip now opens", () => {
     withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
 
-    const local = pickerSections(LOCAL, `claude`, undefined, readyOnly(`claude`)).find((section) => section.key === LOCAL_LANE);
+    const local = pickerSections(LOCAL, `claude`, undefined, readyOnly(`claude`)).find((section) => section.key === LOCAL_MODELS_GROUP);
 
     expect(local?.total).toBe(2);
     expect(local?.groups.map((group) => group.latest.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
@@ -313,5 +313,5 @@ test("keeps each card's families apart, so one machine's model never hides behin
 test("filters to the whole lane, so the one chip scopes the list to every card at once", () => {
     withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
 
-    expect(filterEntries(LOCAL, ``, LOCAL_LANE, readyOnly()).map((row) => row.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
+    expect(filterEntries(LOCAL, ``, LOCAL_MODELS_GROUP, readyOnly()).map((row) => row.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
 });

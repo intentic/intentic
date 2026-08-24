@@ -34,6 +34,11 @@ import {
  * the ones where a plausible implementation lies: a window that silently drops its edges, a delta with no
  * baseline, a rank whose bars sum to less than the headline, a CSV that shifts a column on a comma. */
 
+/* The tab injects its provider→series fold (providerGroup, which needs the live capability list). These are the
+ * two ends of it: no fold at all, and the one the tab actually applies, every locally-run model as one series. */
+const asIs = (provider: string): string => provider;
+const folded = (provider: string): string => (provider.startsWith(`endpoint/`) ? `local-models` : provider);
+
 const row = (over: Partial<UsageRollupRow> = {}): UsageRollupRow => ({
     day: `2026-07-20`,
     provider: `claude`,
@@ -144,7 +149,20 @@ describe(`series identity`, () => {
 
     it(`orders present providers by slot, unknowns last`, () => {
         const rows = [row({ provider: `gemini` }), row({ provider: `zed` }), row({ provider: `claude` }), row({ provider: `acme` })];
-        expect(providersIn(rows)).toEqual([`claude`, `gemini`, `acme`, `zed`]);
+        expect(providersIn(rows, asIs)).toEqual([`claude`, `gemini`, `acme`, `zed`]);
+    });
+
+    /* Every locally-run model is ONE series, however many cards ever billed a turn. The ledger is never pruned,
+     * so a sandbox that tried three sets of weights and deleted them keeps three provider ids for good, and
+     * without the fold each one took its own filter pill, its own legend entry and its own stack segment. */
+    it(`draws every locally-run model as one series`, () => {
+        const rows = [
+            row({ provider: `endpoint/llama-test` }),
+            row({ provider: `endpoint/qwen-3-8` }),
+            row({ provider: `claude` }),
+            row({ provider: `endpoint/qwen-3-8-200k` }),
+        ];
+        expect(providersIn(rows, folded)).toEqual([`claude`, `local-models`]);
     });
 });
 
@@ -152,14 +170,14 @@ describe(`usage series`, () => {
     const window = windowFor(`7d`, `2026-07-26`);
 
     it(`zero-fills idle days so a gap in spend is visible as a gap`, () => {
-        const series = usageSeries([row({ day: `2026-07-22`, costUsd: 5 })], window, [`claude`]);
+        const series = usageSeries([row({ day: `2026-07-22`, costUsd: 5 })], window, [`claude`], asIs);
         expect(series).toHaveLength(7);
         expect(series.map((bucket) => bucket.totals.costUsd)).toEqual([0, 0, 5, 0, 0, 0, 0]);
         expect(series[0]?.start).toBe(`2026-07-20`);
     });
 
     it(`carries every provider as a segment in every column, so the stack order never shifts`, () => {
-        const series = usageSeries([row({ day: `2026-07-21`, provider: `codex`, costUsd: 3 })], window, [`claude`, `codex`]);
+        const series = usageSeries([row({ day: `2026-07-21`, provider: `codex`, costUsd: 3 })], window, [`claude`, `codex`], asIs);
         expect(series.every((bucket) => bucket.segments.map((segment) => segment.key).join() === `claude,codex`)).toBe(true);
         expect(series[1]?.segments).toEqual([
             { key: `claude`, value: 0 },
@@ -167,24 +185,36 @@ describe(`usage series`, () => {
         ]);
     });
 
+    it(`sums two folded providers into their shared segment`, () => {
+        const rows = [
+            row({ day: `2026-07-26`, provider: `endpoint/qwen-3-8`, costUsd: 2 }),
+            row({ day: `2026-07-26`, provider: `endpoint/llama-test`, costUsd: 3 }),
+        ];
+        const series = usageSeries(rows, window, [`local-models`], folded);
+        expect(series.at(-1)?.segments).toEqual([{ key: `local-models`, value: 5 }]);
+    });
+
     it(`sums same-day rows of one provider into that column`, () => {
-        const series = usageSeries([row({ day: `2026-07-26`, costUsd: 1 }), row({ day: `2026-07-26`, costUsd: 2, model: `sonnet-5` })], window, [
-            `claude`,
-        ]);
+        const series = usageSeries(
+            [row({ day: `2026-07-26`, costUsd: 1 }), row({ day: `2026-07-26`, costUsd: 2, model: `sonnet-5` })],
+            window,
+            [`claude`],
+            asIs,
+        );
         expect(series.at(-1)?.totals.costUsd).toBe(3);
     });
 
     it(`spans the data itself when the window is unbounded`, () => {
-        const series = usageSeries([row({ day: `2026-07-24` }), row({ day: `2026-07-26` })], { to: `2026-07-26` }, [`claude`]);
+        const series = usageSeries([row({ day: `2026-07-24` }), row({ day: `2026-07-26` })], { to: `2026-07-26` }, [`claude`], asIs);
         expect(series.map((bucket) => bucket.start)).toEqual([`2026-07-24`, `2026-07-25`, `2026-07-26`]);
     });
 
     it(`is empty rather than a crash when an unbounded window has no rows at all`, () => {
-        expect(usageSeries([], { to: `2026-07-26` }, [])).toEqual([]);
+        expect(usageSeries([], { to: `2026-07-26` }, [], asIs)).toEqual([]);
     });
 
     it(`ignores a row outside the window instead of stretching the axis to reach it`, () => {
-        const series = usageSeries([row({ day: `2026-01-01`, costUsd: 99 })], window, [`claude`]);
+        const series = usageSeries([row({ day: `2026-01-01`, costUsd: 99 })], window, [`claude`], asIs);
         expect(series).toHaveLength(7);
         expect(series.reduce((sum, bucket) => sum + bucket.totals.costUsd, 0)).toBe(0);
     });
@@ -197,14 +227,14 @@ describe(`usage series`, () => {
 
     it(`anchors weekly buckets so the newest one ends on the window's last day`, () => {
         const long = { from: `2026-01-01`, to: `2026-07-26` };
-        const series = usageSeries([row({ day: `2026-07-26`, costUsd: 4 }), row({ day: `2026-07-20`, costUsd: 1 })], long, [`claude`]);
+        const series = usageSeries([row({ day: `2026-07-26`, costUsd: 4 }), row({ day: `2026-07-20`, costUsd: 1 })], long, [`claude`], asIs);
         // Both days land in the final 7-day bucket (Jul 20–26), which is the one ending on `to`.
         expect(series.at(-1)).toMatchObject({ start: `2026-07-20`, totals: { costUsd: 5 } });
         expect(series.every((bucket) => bucket.start <= long.to)).toBe(true);
     });
 
     it(`buckets by calendar month over multi-year spans`, () => {
-        const series = usageSeries([row({ day: `2024-03-15`, costUsd: 2 })], { from: `2024-01-01`, to: `2026-07-26` }, [`claude`]);
+        const series = usageSeries([row({ day: `2024-03-15`, costUsd: 2 })], { from: `2024-01-01`, to: `2026-07-26` }, [`claude`], asIs);
         const march = series.find((bucket) => bucket.start === `2024-03-01`);
         expect(march).toMatchObject({ totals: { costUsd: 2 }, label: `Mar 2024` });
     });
@@ -231,29 +261,34 @@ describe(`ranked bars`, () => {
 
     it(`ranks by cost, biggest first`, () => {
         const rows = [row({ model: `opus-5`, costUsd: 3 }), row({ model: `sonnet-5`, costUsd: 9 })];
-        expect(rankByCost(rows, (entry) => entry.model, label, `Provider default`).map((entry) => entry.label)).toEqual([`sonnet-5`, `opus-5`]);
+        expect(rankByCost(rows, (entry) => entry.model, label, `Provider default`, asIs).map((entry) => entry.label)).toEqual([`sonnet-5`, `opus-5`]);
     });
 
     it(`names rows with no value for the dimension instead of dropping their spend`, () => {
-        const ranked = rankByCost([row({ costUsd: 4 })], (entry) => entry.model, label, `Provider default`);
+        const ranked = rankByCost([row({ costUsd: 4 })], (entry) => entry.model, label, `Provider default`, asIs);
         expect(ranked).toEqual([{ key: undefined, kind: `unattributed`, label: `Provider default`, value: 4, providers: [`claude`] }]);
         expect(rankedKey(ranked[0]!)).toBe(`unattributed:`);
     });
 
     it(`slots a bar by its provider, and only when the bar has exactly one`, () => {
-        const [single] = rankByCost([row({ model: `opus-5` })], (entry) => entry.model, label, `default`);
+        const [single] = rankByCost([row({ model: `opus-5` })], (entry) => entry.model, label, `default`, asIs);
         expect(rankedAccent(single!)).toBe(`1`);
 
         // A dimension value served by two providers (a routed model, say) has no single identity to wear.
         const rows = [row({ model: `shared` }), row({ model: `shared`, provider: `codex` })];
-        const [mixed] = rankByCost(rows, (entry) => entry.model, label, `default`);
+        const [mixed] = rankByCost(rows, (entry) => entry.model, label, `default`, asIs);
         expect(mixed?.providers).toEqual([`claude`, `codex`]);
         expect(rankedAccent(mixed!)).toBe(`neutral`);
+
+        // Two cards folded to one series ARE one identity, so the bar keeps that series' colour rather than
+        // falling to the achromatic slot the way a genuinely mixed bar does.
+        const local = [row({ model: `qwen`, provider: `endpoint/qwen-3-8` }), row({ model: `qwen`, provider: `endpoint/qwen-3-8-200k` })];
+        expect(rankByCost(local, (entry) => entry.model, label, `default`, folded)[0]?.providers).toEqual([`local-models`]);
     });
 
     it(`keeps a dimension value literally named "other" distinct from the fold bucket`, () => {
         const rows = Array.from({ length: 10 }, (_, index) => row({ model: index === 0 ? `other` : `m${index}`, costUsd: 10 - index }));
-        const ranked = rankByCost(rows, (entry) => entry.model, label, `default`, 8);
+        const ranked = rankByCost(rows, (entry) => entry.model, label, `default`, asIs, 8);
         expect(ranked[0]).toMatchObject({ key: `other`, kind: `value`, value: 10 });
         expect(ranked.at(-1)).toMatchObject({ key: undefined, kind: `other` });
         expect(new Set(ranked.map(rankedKey)).size).toBe(ranked.length);
@@ -261,14 +296,14 @@ describe(`ranked bars`, () => {
 
     it(`folds the tail into one bucket so the bars still sum to the headline`, () => {
         const rows = Array.from({ length: 12 }, (_, index) => row({ model: `m${index}`, costUsd: 12 - index }));
-        const ranked = rankByCost(rows, (entry) => entry.model, label, `default`, 8);
+        const ranked = rankByCost(rows, (entry) => entry.model, label, `default`, asIs, 8);
         expect(ranked).toHaveLength(8);
         expect(ranked.at(-1)).toMatchObject({ label: `5 more`, value: 5 + 4 + 3 + 2 + 1 });
         expect(ranked.reduce((sum, entry) => sum + entry.value, 0)).toBe(totalsOf(rows).costUsd);
     });
 
     it(`drops a zero-cost dimension rather than drawing an invisible bar`, () => {
-        expect(rankByCost([row({ model: `free`, costUsd: 0 })], (entry) => entry.model, label, `default`)).toEqual([]);
+        expect(rankByCost([row({ model: `free`, costUsd: 0 })], (entry) => entry.model, label, `default`, asIs)).toEqual([]);
     });
 });
 

@@ -9,7 +9,7 @@ import {
     providerLabel,
 } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, providerDisplayLabel } from "./providerCatalog";
+import { type ModelOption, acpProviders, endpointProviders, modelOptionsFor, providerGroup, providerGroupLabel } from "./providerCatalog";
 
 /* The unified model-picker list: every provider's models flattened into one searchable entry set. Pure
  * derivation over the live catalogs (conversation.ts), the picker component owns only its transient UI state
@@ -89,17 +89,14 @@ const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {
  * user runs themselves are ONE thing to choose among, so the rail draws one chip for them and the list one
  * group, seated where the first card sat.
  *
+ * WHICH providers those are is `providerGroup` (providerCatalog.ts), shared with the Usage tab rather than
+ * decided twice: the two surfaces fold the same family for the same reason, and the ledger's copy of the rule
+ * had drifted into drawing a pill per card.
+ *
  * Folded for READING only. A row still carries the provider that vends it, so picking one routes to that card
  * exactly as before, and every other provider keeps its own lane. */
-export const LOCAL_LANE = `local-models`;
-const LOCAL_LANE_LABEL = `Local models`;
-
-// The lane a provider's rows are drawn in: itself, unless its capability runs the weights on this machine.
-export const laneOf = (provider: AgentProvider): string =>
-    endpointProviders.value.some((endpoint) => endpoint.id === provider && endpoint.kind === `localmodel`) ? LOCAL_LANE : provider;
-
 export interface PickerLane {
-    // The rail filter's value and the section's key: a provider id, or LOCAL_LANE for the folded one.
+    // The rail filter's value and the section's key: a provider id, or LOCAL_MODELS_GROUP for the folded one.
     readonly key: string;
     readonly label: string;
     // Every provider drawn in this lane, in the order given. Exactly one, except in the folded lane.
@@ -111,17 +108,13 @@ export interface PickerLane {
 export const lanesOf = (providers: readonly AgentProvider[]): readonly PickerLane[] => {
     const lanes: { key: string; label: string; providers: AgentProvider[] }[] = [];
     for (const provider of providers) {
-        const key = laneOf(provider);
+        const key = providerGroup(provider);
         const seated = lanes.find((lane) => lane.key === key);
         if (seated !== undefined) {
             seated.providers.push(provider);
             continue;
         }
-        lanes.push({
-            key,
-            label: key === LOCAL_LANE ? LOCAL_LANE_LABEL : providerDisplayLabel(provider),
-            providers: [provider],
-        });
+        lanes.push({ key, label: providerGroupLabel(key), providers: [provider] });
     }
     return lanes;
 };
@@ -137,7 +130,7 @@ export const filterEntries = (
     rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
 ): readonly PickerEntry[] => {
-    const scoped = rail === undefined ? entries : entries.filter((entry) => laneOf(entry.provider) === rail);
+    const scoped = rail === undefined ? entries : entries.filter((entry) => providerGroup(entry.provider) === rail);
     const tokens = query
         .split(/\s+/)
         .map(normalize)

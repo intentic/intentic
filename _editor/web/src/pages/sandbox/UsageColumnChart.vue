@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { providerLabel } from "@intentic/sandbox-contract";
 import { computed } from "vue";
+import { providerGroupLabel } from "../../composables/chat/providerCatalog";
 import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChart";
 
 /* Spend over time, as columns. One series when a single provider ran in the window (the card title names it:
@@ -11,6 +11,8 @@ import { formatUsd, niceMax, providerColor, type SpendBucket } from "./usageChar
  * custom property that flips with the theme for free. Four chart forms is well under the point where a library
  * pays for itself. */
 
+// `providers` are SERIES keys, not necessarily provider ids: the tab folds every locally-run model into one
+// (providerGroup), so the labels here go through the matching group label rather than the contract's.
 const { series, providers } = defineProps<{ series: readonly SpendBucket[]; providers: readonly string[] }>();
 
 // A clean axis top, so the gridline labels read as numbers a person would say. Never derived from the stacked
@@ -26,7 +28,7 @@ const stackOf = (bucket: SpendBucket): { key: string; value: number }[] => bucke
 const tooltipFor = (bucket: SpendBucket): string =>
     [
         `${bucket.label} · ${formatUsd(bucket.totals.costUsd)}`,
-        ...(stacked.value ? stackOf(bucket).map((segment) => `${providerLabel(segment.key)} ${formatUsd(segment.value)}`) : []),
+        ...(stacked.value ? stackOf(bucket).map((segment) => `${providerGroupLabel(segment.key)} ${formatUsd(segment.value)}`) : []),
         `${bucket.totals.turns} ${bucket.totals.turns === 1 ? `turn` : `turns`}`,
     ].join(` · `);
 
@@ -39,7 +41,7 @@ const PLOT_HEIGHT = `10rem`;
         <figcaption v-if="stacked" class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span v-for="provider in providers" :key="provider" class="flex items-center gap-1.5 text-2xs text-muted">
                 <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: providerColor(provider) }" />
-                {{ providerLabel(provider) }}
+                {{ providerGroupLabel(provider) }}
             </span>
         </figcaption>
 

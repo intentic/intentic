@@ -2,6 +2,8 @@ import {
     type AgentCommand,
     type AgentProvider,
     type CatalogOption,
+    endpointIdOf,
+    isEndpointProvider,
     isTrialProvider,
     type ModelBadge,
     modelsFor,
@@ -169,13 +171,48 @@ export const providerGlyph = (provider: AgentProvider): "gift" | "cpu" | "server
  * has to be retracted a second later is worse than a spinner, so both halves vote (see accessKnown). */
 export const endpointsLoaded = ref(false);
 
-// The display label for any provider: a capability-derived provider's own name when known (an ACP agent's
-// configured display name, an endpoint's capability id), else the shared static label, which itself falls back
-// to the raw id.
+/* The display label for any provider: a capability-derived provider's own name when known (an ACP agent's
+ * configured display name, an endpoint's capability id), then the capability id of an endpoint whose card is
+ * GONE, else the shared static label, which itself falls back to the raw id.
+ *
+ * That third rung exists for the spend ledger, the one surface that outlives a card: it names providers nobody
+ * can connect any more, and `endpoint/llama-test` is a provider id printed where a name goes. Stripping the
+ * prefix says the same thing in the words the user typed when they added it. */
 export const providerDisplayLabel = (provider: AgentProvider): string =>
     acpProviders.value.find((agent) => agent.id === provider)?.label ??
     endpointProviders.value.find((endpoint) => endpoint.id === provider)?.label ??
+    endpointIdOf(provider) ??
     providerLabel(provider);
+
+/* LOCALLY-RUN WEIGHTS ARE ONE PROVIDER TO A READER, however many cards mint them, and this is the single rule
+ * that says which providers those are. Two surfaces fold on it: the picker's rail and sections (one lane to
+ * choose among, see lanesOf) and the Usage tab's filter, chart and legend (one series to read a cost screen
+ * by). They agreed on the concept and disagreed on the answer before this was shared: the picker folded and
+ * the ledger drew a pill per card.
+ *
+ * A card that is GONE folds in too, and that is the deliberate part. The ledger keeps every provider it ever
+ * billed and is never pruned (money that shrinks is worse than money that is stale), so a sandbox that tried
+ * three sets of weights and deleted them carries three dead provider ids for good. Nothing in a ledger row says
+ * which KIND of card minted it, so the live capability list is the only thing that can tell a local model from
+ * a remote server, and for a deleted id it says nothing at all. Folding the unknown in with the local models is
+ * the reading that is right for what actually produces dead endpoint ids, weights you tried for an afternoon;
+ * a remote endpoint is a server you point at once and keep. It is a display grouping and nothing routes on it,
+ * so the cost of being wrong is a deleted gateway's spend sitting under the wrong heading.
+ *
+ * The trial is excluded by name: it is an endpoint the daemon provisioned, not a model on this machine. */
+export const LOCAL_MODELS_GROUP = "local-models";
+const LOCAL_MODELS_LABEL = "Local models";
+
+export const isLocalModelProvider = (provider: AgentProvider): boolean =>
+    isEndpointProvider(provider) &&
+    !isTrialProvider(provider) &&
+    (endpointProviders.value.find((endpoint) => endpoint.id === provider)?.kind ?? `localmodel`) === `localmodel`;
+
+// The group a provider is READ under: itself, unless it is one of the locally-run models.
+export const providerGroup = (provider: AgentProvider): string => (isLocalModelProvider(provider) ? LOCAL_MODELS_GROUP : provider);
+
+// What that group is called. Takes a group key, not a provider: the folded one belongs to no single card.
+export const providerGroupLabel = (group: string): string => (group === LOCAL_MODELS_GROUP ? LOCAL_MODELS_LABEL : providerDisplayLabel(group));
 
 // The display label for a selected model id, the option's label, else the raw id, else the provider name. The
 // raw-id rung is what a custom model rides on: it belongs to no catalog by definition, and naming the provider

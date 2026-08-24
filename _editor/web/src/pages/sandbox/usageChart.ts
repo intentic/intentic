@@ -131,10 +131,18 @@ const providerAccent = (key: string): FigureAccent => {
 
 export const providerColor = (key: string): string => seriesColor(providerAccent(key));
 
-// The providers actually present in these rows, in slot order (unknown providers last, alphabetical). Drives
-// both the stack order and the legend, so the two can never disagree.
-export const providersIn = (rows: readonly UsageRollupRow[]): string[] => {
-    const present = new Set(rows.map((row) => row.provider));
+/* WHICH SERIES A ROW BELONGS TO, injected rather than read here. A ledger row names the provider that billed
+ * it; whether two of those provider ids are ONE thing to a reader (every locally-run model is) depends on the
+ * live capability list, which this module deliberately cannot see: everything in here is a pure function over
+ * rows so the arithmetic a money readout stands on is testable without mounting anything. The tab passes
+ * `providerGroup` (providerCatalog.ts), the same fold the model picker's lanes use; a test passes identity or
+ * whatever fold it is asserting about. */
+export type ProviderGroup = (provider: string) => string;
+
+// The series actually present in these rows, in slot order (unknown providers last, alphabetical). Drives the
+// filter pills, the stack order and the legend, so none of the three can disagree.
+export const providersIn = (rows: readonly UsageRollupRow[], groupOf: ProviderGroup): string[] => {
+    const present = new Set(rows.map((row) => groupOf(row.provider)));
     const known = PROVIDER_SERIES.filter((provider) => present.has(provider));
     const unknown = [...present].filter((provider) => !PROVIDER_SERIES.includes(provider as (typeof PROVIDER_SERIES)[number])).toSorted();
     return [...known, ...unknown];
@@ -178,7 +186,12 @@ const bucketStart = (day: string, bucket: Bucket, window: { from: string; to: st
 
 // Usage over time, zero-filled: a period nothing ran is a gap in the columns, not a missing column, so the
 // shape tells the truth about idle stretches. `window.from` absent (All time) spans the data itself.
-export const usageSeries = (rows: readonly UsageRollupRow[], window: DayWindow, providers: readonly string[]): SpendBucket[] => {
+export const usageSeries = (
+    rows: readonly UsageRollupRow[],
+    window: DayWindow,
+    providers: readonly string[],
+    groupOf: ProviderGroup,
+): SpendBucket[] => {
     const from = window.from ?? rows.map((row) => row.day).toSorted()[0];
     if (from === undefined || from > window.to) {
         return [];
@@ -206,7 +219,7 @@ export const usageSeries = (rows: readonly UsageRollupRow[], window: DayWindow, 
             totals: totalsOf(bucketRows),
             segments: providers.map((key) => ({
                 key,
-                value: bucketRows.reduce((sum, row) => (row.provider === key ? sum + row.costUsd : sum), 0),
+                value: bucketRows.reduce((sum, row) => (groupOf(row.provider) === key ? sum + row.costUsd : sum), 0),
             })),
         }));
 };
@@ -236,9 +249,10 @@ export interface RankedEntry {
     readonly kind: "value" | "unattributed" | "other";
     readonly label: string;
     readonly value: number;
-    // The distinct providers whose turns make up this bar. A model or an agent almost always has exactly one,
-    // which lets the bar wear that provider's series colour, identity, not a value ramp on bar length. More
-    // than one (or none) falls back to the achromatic slot rather than picking a winner.
+    // The distinct series whose turns make up this bar (providers, folded by the tab's grouping). A model or an
+    // agent almost always has exactly one, which lets the bar wear that provider's series colour, identity, not
+    // a value ramp on bar length. More than one (or none) falls back to the achromatic slot rather than picking
+    // a winner.
     readonly providers: readonly string[];
 }
 
@@ -252,6 +266,7 @@ export const rankByCost = (
     keyOf: (row: UsageRollupRow) => string | undefined,
     labelOf: (key: string) => string,
     unattributedLabel: string,
+    groupOf: ProviderGroup,
     limit = 8,
 ): RankedEntry[] => {
     const totals = new Map<string | undefined, { value: number; providers: Set<string> }>();
@@ -259,7 +274,7 @@ export const rankByCost = (
         const key = keyOf(row);
         const current = totals.get(key) ?? { value: 0, providers: new Set<string>() };
         current.value += row.costUsd;
-        current.providers.add(row.provider);
+        current.providers.add(groupOf(row.provider));
         totals.set(key, current);
     }
     const ranked = [...totals.entries()]
