@@ -483,8 +483,9 @@ test("fast speed is withheld from every runtime that isn't the Claude Code loop"
 
 /* A runtime that can't enter the turn's mount namespace is cwd'd into its worktree and nothing more, so an
  * absolute /work path from a memory or an AGENTS.md reaches the SHARED checkout. The note is the only layer
- * left that can keep it inside its own branch: see turn-preamble.ts on why it is second-best. */
-test("a cwd-isolated runtime is told where its worktree is; a namespaced one needs no telling", async () => {
+ * left that can keep it inside its own branch: the full explanation opens the provider session, then a compact
+ * reminder preserves the invariant without accumulating the paragraph on every turn. */
+test("a cwd-isolated runtime gets one worktree explanation, then compact reminders; a namespaced one gets neither", async () => {
     const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
     // OpenCode is its own loop with no spawn seam of ours, so it stays on the cwd side of the axis. Codex is on
     // the namespace side with the Claude Code loop: its app-server is a child process nsenter can place.
@@ -499,6 +500,15 @@ test("a cwd-isolated runtime is told where its worktree is; a namespaced one nee
     const prompt = (grok as { request: AgentRequest }).request.prompt;
     expect(prompt).toContain("/history/worktrees/abc/work");
     expect(prompt).toContain("do the thing");
+
+    const followup = await planTurn(
+        grokServices,
+        turn({ agent: "grok" }),
+        { ...isolated, base: { ...isolated.base, sessionId: "session-1" } },
+    );
+    const followupPrompt = (followup as { request: AgentRequest }).request.prompt;
+    expect(followupPrompt).toContain("Use relative paths. `/nowhere/turn-plan` is the shared checkout, not this branch.");
+    expect(followupPrompt).not.toContain("/history/worktrees/abc/work");
 
     for (const namespaced of [
         await planTurn(harnessServices(), turn(), isolated),

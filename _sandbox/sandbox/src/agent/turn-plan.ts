@@ -52,7 +52,7 @@ import { subagentWaitServer } from "./subagent-wait.js";
 import { watchServer } from "./watch-server.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
-import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote } from "./turn-preamble.js";
+import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote, worktreeReminder } from "./turn-preamble.js";
 import { workspaceMapNote } from "./workspace-map.js";
 import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
@@ -351,6 +351,8 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  * The worktree note is the same idea pointed at the filesystem: a runtime that declares `isolation: "cwd"` gets
  * neither the mount namespace nor the tool-input rewrite, so the one thing left that can keep it inside its own
  * branch is telling it where the branch is (turn-preamble.ts explains why that is second-best and unavoidable).
+ * The full explanation opens a provider session; later turns repeat only the short invariant, which survives
+ * compaction without filling the session history with copies of the same paragraph.
  *
  * The SYNC note is here rather than in an arm because it is true of every runtime: the pre-turn rebase moved
  * the files under whichever model is about to read them (agents/sync.ts). This is the one point all four arms
@@ -454,7 +456,13 @@ const honoured = (
         // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
         // ahead of anything about the files or the tools it is about to use.
         ...(placement.userNotes ?? []),
-        ...(isolated && capabilities.isolation === "cwd" ? [worktreeNote(context.localCwd, services.workspace.root)] : []),
+        ...(isolated && capabilities.isolation === "cwd"
+            ? [
+                  context.base.sessionId === undefined
+                      ? worktreeNote(context.localCwd, services.workspace.root)
+                      : worktreeReminder(services.workspace.root),
+              ]
+            : []),
         ...(mapNote === undefined ? [] : [mapNote]),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.

@@ -48,7 +48,10 @@ export const LITERAL_SLASH_NOTE =
  * into main while their worktrees stayed empty.
  *
  * A note is second-best to a mechanism and says so in its own text; it is what these runtimes can be given
- * today. It names both trees, because "don't touch /work" without "your tree is HERE" just costs a retry. */
+ * today. The provider session gets the full explanation ONCE, naming both trees because "don't touch /work"
+ * without "your tree is HERE" just costs a retry. Follow-up turns get only the invariant the model can forget
+ * after compaction. Repeating the full paragraph made one safety fact consume context in proportion to the
+ * conversation's length. */
 const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
 
 export const worktreeNote = (worktree: string, root: string): string =>
@@ -57,6 +60,9 @@ export const worktreeNote = (worktree: string, root: string): string =>
     `it by working directory alone, so \`${root}\` is still the SHARED checkout every other agent is editing. ` +
     `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
     `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;
+
+export const worktreeReminder = (root: string): string =>
+    `${WORKTREE_NOTE_HEADER}\n\nUse relative paths. \`${root}\` is the shared checkout, not this branch.`;
 
 /* THE REBASE IS NOT NEWS THE MODEL NEEDS, which is why there is no note here and this comment stands where one
  * used to.
