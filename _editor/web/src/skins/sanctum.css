@@ -1525,17 +1525,22 @@
  * instead: turned forty-five degrees with its corner rounded off a hair, which is the same diamond every
  * section label in the app opens with, now drawn once and in the colour that means something.
  *
- * SCOPED TO `.lane > header`, NOT TO `.lane-header`. That class is only applied when the board is stacked
- * (AgentsView pins the header on a narrow board and leaves it unpinned on a wide one), so a rule hung on it
- * would fix the phone and leave the three-column desktop — the shape most people actually look at — untouched.
- * `.lane` is on the section in both.
+ * SCOPED TO `.lane > header` (RailLane) and `[data-drop] > header` (AgentsView's board lanes).
+ * AgentsView's sections carry `data-drop` but NOT `.lane` — `.lane` brings in the lane background and
+ * box-shadow rules (lines 534–541) that only belong on the sidebar's RailLane.
+ *
+ * NOT `.lane-header`: that class is only applied when the board is stacked (AgentsView pins the header on a
+ * narrow board and leaves it unpinned on a wide one), so a rule hung on it would fix the phone and leave the
+ * three-column desktop untouched.
  *
  * UNLAYERED, for the two reasons this file's other unlayered rules are: `rounded-full` is a utility and beats
  * any layer, and the `::before` it suppresses is itself unlayered. */
-[data-skin="sanctum"] .lane > header > .h-2.w-2 {
+[data-skin="sanctum"] .lane > header > .h-2.w-2,
+[data-skin="sanctum"] [data-drop] > header > .h-2.w-2 {
     border-radius: 1px;
     transform: rotate(45deg);
 }
-[data-skin="sanctum"] .lane > header .font-semibold.uppercase.tracking-wide::before {
+[data-skin="sanctum"] .lane > header .font-semibold.uppercase.tracking-wide::before,
+[data-skin="sanctum"] [data-drop] > header .font-semibold.uppercase.tracking-wide::before {
     content: none;
 }
