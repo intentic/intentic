@@ -67,12 +67,61 @@ export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 
 /* A LOCAL SANDBOX MUST NOT BE ABLE TO TAKE ITS WHOLE HOST DOWN. The workspace is deliberately broad inside
  * the container (compilers, browsers, local models), so an unbounded cgroup turns one accidental context or
- * parallel build into a WSL/desktop-wide swap storm. Fourteen GiB leaves a 20 GiB WSL guest enough room for
- * Docker, the editor and the sync agent; the four-GiB swap allowance absorbs a short build peak but still
- * forces the workload to fail before it can consume the VM's entire swap file. Hosted providers own their
- * machine sizing separately and opt out through their existing `init: false` shape. */
-export const LOCAL_SANDBOX_MEMORY = "14g";
-export const LOCAL_SANDBOX_MEMORY_SWAP = "18g";
+ * parallel build into a WSL/desktop-wide swap storm.
+ *
+ * SIZE THIS FOR SEVERAL SANDBOXES AT ONCE, NOT ONE. A cap is a per-container ceiling, and a host runs as many
+ * containers as the owner has sandboxes open, so the bound that matters is cap x count. An earlier 14 GiB was
+ * reasoned about as a single box on a 20 GiB WSL guest; with two open that is 28 GiB of ceiling against ~18 GiB
+ * of guest RAM, which bounds nothing. The guest then sat at its low-memory watermark during ordinary work,
+ * and the userspace OOM killer watching that watermark spent the day shooting the owner's dev server.
+ *
+ * THESE TWO ARE THE FALLBACK, for a caller that cannot measure its machine. Sized for the smallest host that
+ * plausibly runs several sandboxes: three of them stay under the ~14 GiB a 20 GiB WSL guest can give away while
+ * Docker, the editor, the sync agent and the OOM killer's own margin keep the rest. Every flow that CAN measure
+ * passes `memory`/`memorySwap` instead, from localSandboxMemory() below.
+ *
+ * Hosted providers own their machine sizing separately and opt out through their existing `init: false`
+ * shape, which is also why this cap only ever governs the local shape. */
+export const LOCAL_SANDBOX_MEMORY = "7g";
+export const LOCAL_SANDBOX_MEMORY_SWAP = "9g";
+
+const GIB = 1024 ** 3;
+/* The share of a machine ONE sandbox may cap at, and the bounds that share is held between.
+ *
+ * 35% lets two sandboxes run without the pair exceeding what a host can give away, while a third still fits
+ * inside the fallback's reasoning. The 4 GiB floor is the point below which the cap stops protecting anything
+ * and starts breaking the workload it applies to (the image carries compilers, a browser and local models). The
+ * 24 GiB ceiling is where a bigger cap stops buying safety: a runaway build does not need 40 GiB of rope to be
+ * caught, and headroom left unclaimed by the cap is headroom the desktop keeps. */
+const SANDBOX_MEMORY_SHARE = 0.35;
+const SANDBOX_MEMORY_FLOOR = 4 * GIB;
+const SANDBOX_MEMORY_CEILING = 24 * GIB;
+// Swap is an overflow allowance for a short build peak, not a second memory budget: a quarter of the cap, and
+// never more than 4 GiB, so two boxes paging at once still leave half of a modest VM swap file to the host.
+const SANDBOX_SWAP_SHARE = 0.25;
+const SANDBOX_SWAP_CEILING = 4 * GIB;
+
+/* THE PER-MACHINE CAP, as docker's `<n>g` strings, derived from the memory the docker engine actually has.
+ *
+ * Pure arithmetic on a byte count, deliberately: this module stays importable by a browser (see README), so it
+ * cannot read /proc/meminfo itself. The caller that can — `intentic sandbox run-command`, which runs INSIDE an
+ * uncapped probe container, where /proc/meminfo reports the engine's VM or host total — reads it and calls this,
+ * so the policy still lives in one place and is tested without a machine to measure.
+ *
+ * A total of 0 or less means the caller could not measure, and gets the fallback constants rather than a cap
+ * derived from a lie. The two figures round in OPPOSITE directions, both away from breaking something: the cap
+ * DOWN, since a cap that rounds up bounds the machine less than the reasoning above allows, and the swap
+ * allowance UP, since it exists to absorb a peak and rounding it away makes the container fail a build it had
+ * the headroom for. */
+export const localSandboxMemory = (totalBytes: number): { readonly memory: string; readonly memorySwap: string } => {
+    if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
+        return { memory: LOCAL_SANDBOX_MEMORY, memorySwap: LOCAL_SANDBOX_MEMORY_SWAP };
+    }
+    const share = Math.min(Math.max(totalBytes * SANDBOX_MEMORY_SHARE, SANDBOX_MEMORY_FLOOR), SANDBOX_MEMORY_CEILING);
+    const memoryGib = Math.max(1, Math.floor(share / GIB));
+    const swapGib = Math.max(1, Math.ceil(Math.min(memoryGib * GIB * SANDBOX_SWAP_SHARE, SANDBOX_SWAP_CEILING) / GIB));
+    return { memory: `${memoryGib}g`, memorySwap: `${memoryGib + swapGib}g` };
+};
 
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
 // (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's isolated nested engine needs
@@ -280,6 +329,11 @@ export interface SandboxRun {
     readonly runtime?: readonly string[];
     // Extra -v specs, verbatim: the /agent-auth replay, the dev flow's compiled-tree binds.
     readonly mounts?: readonly string[];
+    /* The local shape's cgroup cap, as docker `--memory`/`--memory-swap` strings, from localSandboxMemory()
+     * against the engine's real memory. Omitted by a caller that could not measure its machine, which then gets
+     * LOCAL_SANDBOX_MEMORY. Ignored entirely by the hosted shape (`init: false`), which carries no cap at all. */
+    readonly memory?: string;
+    readonly memorySwap?: string;
     // Hosted-provider extras: -p specs, --label key=values, --dns resolvers.
     readonly ports?: readonly string[];
     readonly labels?: readonly string[];
@@ -335,7 +389,9 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "max-size=10m",
         "--log-opt",
         "max-file=3",
-        ...(run.init === false ? [] : ["--memory", LOCAL_SANDBOX_MEMORY, "--memory-swap", LOCAL_SANDBOX_MEMORY_SWAP]),
+        ...(run.init === false
+            ? []
+            : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", run.memorySwap ?? LOCAL_SANDBOX_MEMORY_SWAP]),
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
         ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
         ...(run.ports ?? []).flatMap((port) => ["-p", port]),

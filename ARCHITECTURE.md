@@ -984,8 +984,15 @@ Who pays for scale is a design decision, not an accident:
   (the `workspace` provider), or a VM the setup wizard's cloud lane creates **in the user's own cloud
   account** (billed by their provider to them; the platform spends the pasted credential once and stores
   none of it). There is no intentic-operated fleet, scheduler, or capacity manager:
-  agent turns, dev servers, and builds cost intentic nothing. (Corollary: `connect.sh` sets no
-  `--memory`/`--cpus` caps; a runaway sandbox is the user's machine's problem.)
+  agent turns, dev servers, and builds cost intentic nothing. (Corollary: intentic sets no `--cpus` cap;
+  a sandbox that saturates the CPU is the user's machine's problem. Memory is the one exception, and it
+  is a narrow one: the local shape carries a `--memory`/`--memory-swap` cap, because user-owned compute
+  still means a runaway build must not be able to take the user's desktop down with it, and a cgroup is
+  the only thing that can stop it in time. It is a **share** of the machine, not a number — 35% held
+  between 4 and 24 GiB, so two sandboxes fit on any host big enough for two (`localSandboxMemory`,
+  `_sandbox/sandbox-run/src/index.ts`). The measurement rides for free: `intentic sandbox run-command`
+  answers from inside an uncapped probe container the flow was already starting, where `/proc/meminfo`
+  reports the docker engine's own total. Hosted shapes opt out via `init: false` and own their sizing.)
 - **The platform is off the hot path.** The browser drives the daemon directly; the daemon announces
   its URL on boot (not a heartbeat: platform traffic is proportional to boot events, not sandbox
   count × a tick); the SPA is static files. Steady-state platform traffic per active user is roughly

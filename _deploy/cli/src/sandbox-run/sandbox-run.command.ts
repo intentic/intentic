@@ -1,7 +1,32 @@
 import { readFileSync } from "node:fs";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { parseNulEnv, replayableEnv, runtimeDirectivesOf, sandboxNames, sandboxRunArgv, sandboxRunCommand } from "@intentic/sandbox-run";
+import {
+    localSandboxMemory,
+    parseNulEnv,
+    replayableEnv,
+    runtimeDirectivesOf,
+    sandboxNames,
+    sandboxRunArgv,
+    sandboxRunCommand,
+} from "@intentic/sandbox-run";
 import { buildCommand, type CommandContext } from "@stricli/core";
+
+/* HOW BIG THE MACHINE IS, read from where this verb happens to be standing.
+ *
+ * This CLI answers from inside a throwaway `docker run -i --rm` probe container that carries no --memory of its
+ * own, so /proc/meminfo here reports the docker ENGINE's total: the WSL guest on Windows, the Docker Desktop VM
+ * on macOS, the host itself on native Linux. In all three that is exactly the number the cap should be a share
+ * of, and it costs no round-trip to the machine, because the flow was already going to start this container.
+ *
+ * Unreadable or unparseable means we could not measure, and localSandboxMemory() falls back to its constants
+ * rather than sizing a cgroup off a guess. */
+const engineMemoryBytes = (): number => {
+    try {
+        return Number(/^MemTotal:\s+(\d+) kB$/mu.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) * 1024;
+    } catch {
+        return 0;
+    }
+};
 
 /* THE RUN CONTRACT, SPOKEN BY THE IMAGE, `intentic sandbox run-command`.
  *
@@ -98,10 +123,14 @@ export const sandboxRunCommandCli = buildCommand<{
         // container is already being handed, so no flow computes an address, and a recreate reproduces the
         // same port by replaying the same token. A run with no token (bare dev) publishes nothing.
         const sandboxId = sandboxIdFromToken(env.find(([name]) => name === "CONNECT_TOKEN")?.[1] ?? "");
+        // The local shape's cgroup cap, sized to this machine. The hosted shape drops it in the contract.
+        const { memory, memorySwap } = localSandboxMemory(engineMemoryBytes());
         const run = {
             names: sandboxNames(flags.slug),
             image: flags.image,
             baseImage: flags.baseImage,
+            memory,
+            memorySwap,
             ...(sandboxId !== undefined ? { sandboxId } : {}),
             localPublish: flags.noLocalPublish !== true,
             unsupported: (flags.unsupported ?? "").split(/\s+/).filter((token) => token !== ""),

@@ -10,8 +10,12 @@ app); this package is why they cannot disagree about what one is.
 
 - Define the container's identity: its name, image, labels and volumes.
 - Define its posture: which capabilities it gets, and which it is denied.
-- Bound a local workspace to 14 GiB RAM plus 4 GiB swap, so a runaway build or local model is killed inside
-  its cgroup instead of exhausting the desktop or WSL VM; hosted providers keep owning their machine limits.
+- Bound a local workspace to a share of its machine (35%, held between 4 and 24 GiB, plus a swap allowance),
+  so a runaway build or local model is killed inside its cgroup instead of exhausting the desktop or WSL VM.
+  A share rather than a number because the cap is per container and the host pays cap x count: two sandboxes
+  have to fit. `localSandboxMemory` is the policy, pure arithmetic on a byte count so this package stays
+  browser-importable; the caller that can measure passes the result as `memory`/`memorySwap`, and one that
+  cannot gets `LOCAL_SANDBOX_MEMORY`. Hosted providers keep owning their machine limits.
 - Define the environment allowlist: what is allowed to cross into the box.
 - Emit the `docker run` invocation, correctly quoted.
 

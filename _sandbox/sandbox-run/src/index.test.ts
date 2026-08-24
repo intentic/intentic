@@ -1,9 +1,12 @@
 import { expect, test } from "vitest";
 import {
     HEALTH,
+    LOCAL_SANDBOX_MEMORY,
+    LOCAL_SANDBOX_MEMORY_SWAP,
     localDaemonPort,
     localDaemonUrl,
     localDaemonUrlInsecure,
+    localSandboxMemory,
     OPTIONAL_DIRECTIVES,
     ORIGIN_HOST,
     parseNulEnv,
@@ -35,12 +38,53 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
         "--network", "intentic-workspace-abc-123", "--network-alias", ORIGIN_HOST,
         "--add-host", "host.docker.internal:host-gateway",
         "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
-        "--memory", "14g", "--memory-swap", "18g",
+        "--memory", "7g", "--memory-swap", "9g",
         "--cap-add=SYS_ADMIN", "--cap-add=SYS_PTRACE",
         "-v", "intentic-workspace-abc-123:/work", "-v", "intentic-history-abc-123:/history", "-v", "intentic-docker-abc-123:/var/lib/docker",
         "-e", "SANDBOX_NAME=intentic-sandbox-abc-123", "-e", "SANDBOX_IMAGE=img:1", "-e", "SANDBOX_BASE_IMAGE=img:1",
         "img:1",
     ]);
+});
+
+test("a measured caller's cap reaches the argv; an unmeasured one falls back to the constants", () => {
+    const measured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g", memorySwap: "26g" });
+    expect(measured.join(" ")).toContain("--memory 22g --memory-swap 26g");
+    const unmeasured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
+    expect(unmeasured.join(" ")).toContain(`--memory ${LOCAL_SANDBOX_MEMORY} --memory-swap ${LOCAL_SANDBOX_MEMORY_SWAP}`);
+});
+
+/* The cap is a SHARE of the machine, so the property that matters is that two sandboxes fit and the desktop
+ * still has room. Checked as arithmetic on real machine sizes rather than as remembered numbers. */
+test("the per-machine cap leaves room for a second sandbox on every machine size", () => {
+    const GIB = 1024 ** 3;
+    for (const totalGib of [8, 16, 20, 32, 64, 128]) {
+        const { memory, memorySwap } = localSandboxMemory(totalGib * GIB);
+        const memGib = Number(memory.replace("g", ""));
+        const swapTotalGib = Number(memorySwap.replace("g", ""));
+        // --memory-swap is docker's memory+swap TOTAL, so it must exceed the cap or docker refuses the run.
+        expect(swapTotalGib).toBeGreaterThan(memGib);
+        // Never so small the image's own toolchain cannot work, never so large one box owns the whole machine.
+        expect(memGib).toBeGreaterThanOrEqual(4);
+        expect(memGib).toBeLessThanOrEqual(24);
+        // Two concurrent sandboxes still leave the host something on any machine big enough to run two.
+        if (totalGib >= 16) expect(memGib * 2).toBeLessThan(totalGib);
+    }
+});
+
+/* The machine that prompted all of this, from its own /proc/meminfo rather than the round number its
+ * .wslconfig asks for: `memory=20GB` yields a guest that reports 20479632 kB, i.e. 19.53 GiB, because the
+ * kernel's own reservations come off the top. Pinned with the real figure precisely because the round one
+ * derives a different cap (7g), and the value that ships is the one the probe container actually measures. */
+test("the WSL guest that prompted the cap: measured, not the round number its config asks for", () => {
+    expect(localSandboxMemory(20479632 * 1024)).toEqual({ memory: "6g", memorySwap: "8g" });
+    // Two sandboxes at that cap still leave the desktop, docker and the sync agent the larger half.
+    expect(6 * 2).toBeLessThan(19.53);
+});
+
+test("an unmeasurable machine gets the fallback, never a cap derived from zero", () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        expect(localSandboxMemory(bad)).toEqual({ memory: LOCAL_SANDBOX_MEMORY, memorySwap: LOCAL_SANDBOX_MEMORY_SWAP });
+    }
 });
 
 test("the hosted-provider shape drops init/alias and adds ports, labels, dns: same posture, same volumes", () => {
