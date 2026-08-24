@@ -141,14 +141,20 @@ watch(
 
 /* "Matches", not "results": a row here is a matching LINE with all of its occurrences marked, which is also
  * what the engine counts, so the number is the number of rows the search found, and saying "results" would
- * promise the editor's per-occurrence count. The "+" is the per-file cap admitting itself: some file had more
- * matches than the engine keeps, so this is a floor. */
+ * promise the editor's per-occurrence count.
+ *
+ * The "+" is the search admitting that BOTH numbers are floors, and it has two causes now. One is the per-file
+ * cap: some file had more matches than the engine keeps from any single file. The other is the scan's own
+ * ceiling, which stops a broad query once it has more rows than this panel could show, and that one bounds the
+ * FILE count as well: files past the ceiling were never opened, so there are at least this many, not exactly
+ * this many. Marking only the matches would have been the more precise-looking of the two lies. */
 const shown = computed(() => groups.reduce((sum, group) => sum + group.hits.length, 0));
 const summary = computed(() => {
     // The "+" belongs to the NUMBER, not the noun: it says the count is a floor, and "4,211 matches+" reads as
     // a typo where "4,211+ matches" reads as the fact.
-    const matches = `${total.toLocaleString()}${partial ? `+` : ``} ${total === 1 && !partial ? `match` : `matches`}`;
-    const scope = `${matches} in ${files.toLocaleString()} ${files === 1 ? `file` : `files`}`;
+    const floor = partial ? `+` : ``;
+    const matches = `${total.toLocaleString()}${floor} ${total === 1 && !partial ? `match` : `matches`}`;
+    const scope = `${matches} in ${files.toLocaleString()}${floor} ${files === 1 && !partial ? `file` : `files`}`;
     return truncated ? `${scope} · showing ${shown.value.toLocaleString()}` : scope;
 });
 

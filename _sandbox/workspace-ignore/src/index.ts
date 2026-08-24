@@ -17,7 +17,16 @@ import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePat
 // they live in ./constants (no node deps) so the platform's browser bundle can import them via
 // `@intentic/workspace-ignore/constants`. Re-exported here so the daemon keeps importing from the package root,
 // and the node-based .gitignore scope layers on top.
-export { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isPublicPath, isReferencePath, PUBLIC_DIR, REFERENCE_DIR } from "./constants.js";
+export {
+    IGNORED_DIRS,
+    isAgentWorktreePath,
+    isBrowserProfilePath,
+    isPublicPath,
+    isReferencePath,
+    PUBLIC_DIR,
+    REFERENCE_DIR,
+    scannerPruneGlobs,
+} from "./constants.js";
 
 // A .gitignore matcher rooted at `base` (root-relative, forward-slash). Patterns in it apply to paths relative
 // to that directory.

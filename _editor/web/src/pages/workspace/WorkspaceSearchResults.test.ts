@@ -108,10 +108,14 @@ test(`scrolling swaps the window instead of adding to it`, async () => {
     expect(tokenized.length).toBeLessThan(80);
 });
 
-test(`the count line says a total is a floor, and which file made it one`, async () => {
+/* BOTH numbers are floors when the search says so, because the two things that make a total partial bound the
+ * file count as well: the scan's ceiling stops it before it has opened every matching file. A "+" on the
+ * matches and a bare number of files would read as "we know exactly how many files, just not how many lines",
+ * which is the one reading that is never true. */
+test(`the count line says both totals are floors, and which file made the matches one`, async () => {
     const groups = groupsOf(1, 50);
     const el = await mount({ groups: [{ ...groups[0]!, capped: true }], total: 4_211, files: 87, partial: true });
-    expect(el.textContent).toContain(`4,211+ matches in 87 files`);
+    expect(el.textContent).toContain(`4,211+ matches in 87+ files`);
     expect(el.textContent).toContain(`50+`);
 });
 

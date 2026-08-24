@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { rgSearch } from "./lexical.js";
 
 // What the lexical engine reports ABOUT a match, as opposed to which lines match: the spans a client marks. The
@@ -80,6 +80,110 @@ test("a file that stops exactly at the cap is not reported as capped", async () 
     const found = await rgSearch({ root, pattern: "needle", allowed: new Set([exact]), literal: true });
     expect(found.hits).toHaveLength(50);
     expect([...found.capped]).toEqual([]);
+});
+
+/* WHAT THE SCANNER IS ASKED TO WALK, which is a different question from what it is allowed to report.
+ *
+ * Every path here is in `allowed`, so the post-filter would let all of them through: anything missing from a
+ * result is missing because ripgrep never read it. That is the whole point of the assertion, because the bug
+ * these guard was exactly a subtree the sweep discarded and the scanner read anyway, at a cost of 1.4 GB of
+ * output and 67 seconds on a two-letter query. */
+describe("the prune list", () => {
+    let tree: string;
+    const everything = new Set(["top.md", "refs/shelf.md", "myrepo/refs/nested.md", "repo/.claude/worktrees/copy/dup.md"]);
+    const found = async (options: { ignored?: boolean } = {}) =>
+        (await rgSearch({ root: tree, pattern: "needle", literal: true, allowed: everything, ...options })).hits.map((hit) => hit.path);
+
+    beforeAll(async () => {
+        tree = await mkdtemp(join(tmpdir(), "iq-prune-"));
+        for (const path of everything) {
+            await mkdir(join(tree, path, ".."), { recursive: true });
+            await writeFile(join(tree, path), "needle\n");
+        }
+    });
+    afterAll(() => rm(tree, { recursive: true, force: true }));
+
+    test("the reference shelf is not walked, and a repo's own refs/ still is", async () => {
+        const paths = await found();
+        expect(paths).not.toContain("refs/shelf.md");
+        expect(paths).toContain("myrepo/refs/nested.md");
+        expect(paths).toContain("top.md");
+    });
+
+    test("agent worktrees are not walked: a throwaway checkout would duplicate every file in its repo", async () => {
+        expect(await found()).not.toContain("repo/.claude/worktrees/copy/dup.md");
+    });
+
+    test("--ignored lifts both, because the sweep admits both under it", async () => {
+        expect(await found({ ignored: true })).toEqual([...everything].toSorted());
+    });
+});
+
+/* THE SCAN'S CEILING. Two units because a panel pages in two units, and the flag because a count that stopped
+ * early is a floor and has to say so. */
+describe("the scan ceiling", () => {
+    let tree: string;
+    // Three files of 40 matching lines each, so a 50-hit ceiling has to land INSIDE the second one.
+    const allowed = new Set(["a.md", "b.md", "c.md"]);
+
+    beforeAll(async () => {
+        tree = await mkdtemp(join(tmpdir(), "iq-ceiling-"));
+        for (const name of allowed) {
+            await writeFile(join(tree, name), Array.from({ length: 40 }, (_, index) => `needle ${index}`).join("\n"));
+        }
+    });
+    afterAll(() => rm(tree, { recursive: true, force: true }));
+
+    const scan = (ceiling: { maxHits?: number; maxFiles?: number }) => rgSearch({ root: tree, pattern: "needle", literal: true, allowed, ...ceiling });
+
+    test("an uncapped scan reads everything and says its total is exact", async () => {
+        const result = await scan({});
+        expect(result.hits).toHaveLength(120);
+        expect(result.ceiling).toBe(false);
+    });
+
+    test("maxHits stops at the next file boundary, so no file comes back half-read", async () => {
+        const result = await scan({ maxHits: 50 });
+        expect(result.ceiling).toBe(true);
+        /* 80, not 50: the 50th hit lands inside b.md, and cutting THERE would hand back a file showing 10 of
+         * its 40 matches, which reads as a file that has 10. Worse, the caller pages by whole files, so its
+         * next page would start at c.md and b.md's other 30 would be in no page at all. So b.md is finished
+         * and the scan stops at c.md's boundary. The overshoot is bounded by MAX_PER_FILE. */
+        expect(result.hits).toHaveLength(80);
+        expect(result.hits.filter((hit) => hit.path === "a.md")).toHaveLength(40);
+        expect(result.hits.filter((hit) => hit.path === "b.md")).toHaveLength(40);
+        expect(result.hits.some((hit) => hit.path === "c.md")).toBe(false);
+        // Whole files only, so nothing here is a partially-shown file: `capped` stays about the per-file cap.
+        expect([...result.capped]).toEqual([]);
+    });
+
+    test("a ceilinged scan answers the same question the same way twice", async () => {
+        // Without --sort path this is thread scheduling, and a search box that shows two different result sets
+        // for one query is worse than a slow one.
+        const [first, second] = [await scan({ maxHits: 50 }), await scan({ maxHits: 50 })];
+        expect(first.hits).toEqual(second.hits);
+    });
+
+    test("maxFiles stops the scan at whole files", async () => {
+        const result = await scan({ maxFiles: 2 });
+        expect(result.hits).toHaveLength(80);
+        expect(result.ceiling).toBe(true);
+        expect([...new Set(result.hits.map((hit) => hit.path))]).toEqual(["a.md", "b.md"]);
+    });
+
+    /* A NARROWED search is handed the surviving paths instead of the tree, so that narrowing it makes it
+     * faster rather than merely smaller. These are the sweep's own entries, so the list can never admit what
+     * `allowed` would not. */
+    test("an explicit path list is the only thing walked", async () => {
+        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed, paths: ["b.md"] });
+        expect([...new Set(result.hits.map((hit) => hit.path))]).toEqual(["b.md"]);
+    });
+
+    test("an empty path list is answered without a scan, not read as the whole tree", async () => {
+        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed, paths: [] });
+        expect(result.hits).toEqual([]);
+        expect(result.ceiling).toBe(false);
+    });
 });
 
 test("offsets convert in one pass however many of them a line carries", async () => {

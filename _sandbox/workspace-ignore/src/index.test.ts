@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { createIgnoreScope, isAgentWorktreePath, isBrowserProfilePath, isReferencePath } from "./index.js";
+import { createIgnoreScope, IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, scannerPruneGlobs } from "./index.js";
 
 test("the browser-login profile subtree (auth cookies) is treated as ignored, but the rest of .intentic isn't", () => {
     expect(isBrowserProfilePath(".intentic/local/browser/reddit/Default/Cookies")).toBe(true);
@@ -59,6 +59,34 @@ test("IgnoreScope.isIgnored grays junk dirs (incl. .git) + browser profiles; lea
     // Ambiguous dirs are NOT on the denylist: left to .gitignore.
     expect(scope.isIgnored("build", "repo/build", true)).toBe(false);
     expect(scope.isIgnored("src", "repo/src", true)).toBe(false);
+});
+
+/* The scanner globs are the same rules as isIgnored, and the test is written as that claim rather than as a
+ * list of strings: every subtree isIgnored rejects has to be prunable, because the one that wasn't (the
+ * reference shelf) cost a two-letter query 1.4 GB of scanner output and 67 seconds. */
+test("scannerPruneGlobs covers every subtree isIgnored rejects by rule", () => {
+    const globs = scannerPruneGlobs(false);
+    for (const dir of IGNORED_DIRS) {
+        expect(globs).toContain(`!**/${dir}`);
+    }
+    // The shelf is ROOT-anchored, matching isReferencePath. A bare `!refs` would match the basename at any
+    // depth and prune a repo's own refs/ directory, which isIgnored admits (see the shelf test above).
+    expect(globs).toContain("!/refs");
+    expect(globs).not.toContain("!**/refs");
+    expect(globs).toContain("!**/.claude/worktrees");
+});
+
+// `--ignored` lifts the attention boundaries together, exactly as isIgnored does: the junk dirs, the shelf and
+// the worktrees all become searchable. `.git` is the one that never does, it is history rather than source.
+test("scannerPruneGlobs under includeIgnored keeps only .git", () => {
+    expect(scannerPruneGlobs(true)).toEqual(["!**/.git"]);
+});
+
+// The agent plane is deliberately absent: it is the search engine's own default-deny floor, derived from the
+// state table, not an attention boundary this package decides. Pruning it from here would put one half of that
+// floor in a package that cannot see the other half.
+test("scannerPruneGlobs leaves the agent plane to the engine's floor", () => {
+    expect(scannerPruneGlobs(false).some((glob) => glob.includes(".intentic"))).toBe(false);
 });
 
 // The pointer file a worktree/submodule/--separate-git-dir repo keeps in place of a .git dir is deliberately NOT

@@ -8,9 +8,12 @@ import { STATE_DIR } from "@intentic/constants";
 // coverage, out) are intentionally absent: .gitignore catches those accurately. `.tmp` is a scratch dir (e.g.
 // .intentic/secrets/auth/codex/.tmp) that can hold thousands of files. `.git` lives here too: a dir you browse as history, not
 // source, so it grays and lazy-loads like node_modules (its contents stay readable on demand).
+// Named because it is the one entry `includeIgnored` never lifts: see scannerPruneGlobs.
+const GIT_DIR = ".git";
+
 export const IGNORED_DIRS = new Set([
     "node_modules",
-    ".git",
+    GIT_DIR,
     ".tmp",
     "dist",
     ".cache",
@@ -81,7 +84,46 @@ export const isBrowserProfilePath = (path: string): boolean => {
 // name, the rest of .claude (skills, settings) is real config, but walking a checkout duplicates every
 // project in the tree, lets vitest-project detection list a stale copy of the whole monorepo, and burns the
 // walk's entry budget. Treated as ignored so the subtree grays + lazy-loads and the watcher skips its churn.
+// The two segments are named so the predicate and the scanner glob below cannot drift apart.
+const AGENT_WORKTREE_SEGMENTS = [".claude", "worktrees"] as const;
+
 export const isAgentWorktreePath = (path: string): boolean => {
     const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
-    return segments.some((segment, i) => segment === ".claude" && segments[i + 1] === "worktrees");
+    return segments.some((segment, i) => segment === AGENT_WORKTREE_SEGMENTS[0] && segments[i + 1] === AGENT_WORKTREE_SEGMENTS[1]);
 };
+
+/* THE SAME IGNORE MODEL, AS PRUNE GLOBS FOR A CONTENT SCANNER (ripgrep).
+ *
+ * A scanner that doesn't know what the sweep rejects reads the whole rejected subtree, reports every match in
+ * it, and has all of that thrown away by the post-filter. Measured on a workspace with a 14 GB reference
+ * shelf: 173 785 files walked to answer from 4 686, 1.4 GB of scanner JSON parsed to keep 42 MB, and 9.6 s
+ * spent on a query with ten hits. The prune list used to be hand-written next to the scanner, which is why it
+ * knew about IGNORED_DIRS and had never heard of the shelf or of agent worktrees.
+ *
+ * So it is derived HERE, from the same branches `isIgnored` tests, and the drift that caused this cannot
+ * recur: a rule added to the predicate without a glob added beside it is a visible omission in one file
+ * rather than an invisible one across two packages.
+ *
+ * AN OPTIMISATION, NEVER THE AUTHORITY. These globs may only ever prune what the sweep would have discarded
+ * anyway; the sweep's admitted set stays the thing results are filtered against. A glob that is too wide
+ * silently loses files, which is the worst failure a search has, so anything approximate (per-directory
+ * .gitignore, whose precedence here is deliberately not git's) is left out and paid for in the post-filter.
+ *
+ * `includeIgnored` lifts exactly what it lifts in the sweep: the junk dirs, the shelf and the worktrees all
+ * become searchable together. `.git` is the one that never lifts, it is browsed as history, not as source.
+ *
+ * The agent plane (`.intentic`) is absent on purpose: it is the ENGINE's security floor rather than an
+ * attention boundary, it is default-deny instead of default-allow, and it is derived from the state table.
+ * See the engine's own DENIED_GLOBS. */
+export const scannerPruneGlobs = (includeIgnored: boolean): string[] =>
+    includeIgnored
+        ? [`!**/${GIT_DIR}`]
+        : [
+              ...[...IGNORED_DIRS].map((dir) => `!**/${dir}`),
+              // ROOT-ANCHORED, matching isReferencePath's first-segment rule. A bare `!refs` would match the
+              // basename at any depth and prune a repo's own `refs/` directory, which is ordinary content.
+              // The anchor is relative to the scanner's working directory, so it only means "the shelf" when
+              // that directory is the workspace root, which is how the engine spawns it.
+              `!/${REFERENCE_DIR}`,
+              `!**/${AGENT_WORKTREE_SEGMENTS.join("/")}`,
+          ];

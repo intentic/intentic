@@ -58,6 +58,9 @@ interface VerbPlan {
     readonly related?: string[];
     // Whether the response opens with an `answer:` anchor, see RenderRequest.lead.
     readonly lead?: boolean;
+    // The scan was cut short by its own ceiling, so files past it were never looked at and every total here is
+    // a floor. Reported to callers through the same `partial` a per-file cap sets, because it is the same claim.
+    readonly ceiling?: boolean;
     readonly confidence?: "confident" | "ambiguous";
     // Whether the top groups should be delivered as code rather than as anchors (the `pack` stage).
     readonly pack?: boolean;
@@ -531,12 +534,49 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
     const on = (feature: Feature): boolean => context.features.has(feature);
     const allowed = new Set(entries.map((entry) => entry.path));
     const paths = entries.map((entry) => entry.path);
+    /* WHAT THE SCAN IS ALLOWED TO COST, for the two callers that pay differently.
+     *
+     * A GUI caller renders rows and asked for a page of them (RenderOptions.list), so the scan can stop one
+     * past that page: it is the only caller whose ceiling is known before the search runs, and the difference
+     * is 268 ms of scanning to show 1 000 rows versus 5 ms. One past, not exactly the page, so `renderList`
+     * can still tell a full page from a last page and keep its Load-more.
+     *
+     * Only the FIRST page, though. A continuation re-runs the verb and slices at the offset, so it needs
+     * everything up to that offset and a ceiling sized for page one would truncate page two out of existence.
+     * Re-running uncapped is what makes the two agree: the ceilinged first page is the path-order prefix of
+     * exactly the set the continuation walks.
+     *
+     * The text caller (an agent's `iq`) gets none of this on purpose. Its page is a token budget, not a row
+     * count, so nothing here knows where to stop; and measured, the sort a ceiling requires costs a narrow
+     * query more than the ceiling saves it (12 ms → 38 ms on a rare identifier, which is the shape agents
+     * search for most). With the shelf pruned its worst case is 268 ms, which is nobody's complaint. */
+    const ceiling =
+        request.render.list !== undefined && request.render.after === undefined
+            ? { maxHits: request.render.list.hits + 1, maxFiles: request.render.list.files + 1 }
+            : {};
+    /* A search the caller already narrowed is handed to rg as the surviving paths rather than as the whole
+     * tree: the sweep filtered them, so they cannot admit anything `allowed` would not, and the alternative
+     * (translating the scope's glob dialect into rg's) risks the two disagreeing in the direction that loses
+     * files silently. Without this, narrowing the search made it no faster at all, which is the one lever a
+     * user reaches for when a search is slow.
+     *
+     * Above the argv ceiling it falls back to walking the tree: at that size the path list stops paying for
+     * itself anyway (measured, the whole admitted set as arguments is slower than the prune globs). */
+    const NARROWED_PATHS_MAX = 5_000;
+    const narrowed =
+        request.scope.globs !== undefined ||
+        request.scope.notGlobs !== undefined ||
+        request.scope.paths !== undefined ||
+        request.scope.langs !== undefined ||
+        request.scope.repo !== undefined ||
+        request.scope.only !== undefined;
     const rgBase = {
         root: context.root,
         allowed,
         ...(request.scope.ignored ? { ignored: true } : {}),
         ...(context.rgPath !== undefined ? { rgPath: context.rgPath } : {}),
         ...(context.signal !== undefined ? { signal: context.signal } : {}),
+        ...(narrowed && paths.length <= NARROWED_PATHS_MAX ? { paths } : {}),
     };
 
     if (request.verb === "find") {
@@ -550,17 +590,17 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         let found: RgResult;
         let note: string | undefined;
         try {
-            found = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
+            found = await rgSearch({ ...rgBase, ...ceiling, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
         } catch (error) {
             if (request.options.literal || !(error instanceof Error) || !error.message.includes("regex parse error")) {
                 throw error;
             }
-            found = await rgSearch({ ...rgBase, pattern: request.query, ...modifiers, literal: true });
+            found = await rgSearch({ ...rgBase, ...ceiling, pattern: request.query, ...modifiers, literal: true });
             note = "pattern isn't valid rust regex: ran as literal text (--literal)";
         }
         if (found.hits.length === 0 && note === undefined && !request.options.literal && GREP_DIALECT.test(request.query)) {
             const rewritten = request.query.replaceAll(/\\([|+?(){}])/g, "$1");
-            const retried = await rgSearch({ ...rgBase, pattern: rewritten, ...modifiers }).catch(() => undefined);
+            const retried = await rgSearch({ ...rgBase, ...ceiling, pattern: rewritten, ...modifiers }).catch(() => undefined);
             if (retried !== undefined && retried.hits.length > 0) {
                 found = retried;
                 note = `grep-style escapes rewritten to rust regex, matched: ${rewritten}`;
@@ -585,6 +625,7 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             style: "hits",
             showTags: false,
             lead: true,
+            ...(found.ceiling ? { ceiling: true } : {}),
             ...(note !== undefined ? { headerNote: note } : {}),
         };
     }
@@ -824,9 +865,12 @@ const toResult = (
         groups: shownGroups,
         freshness,
         truncated: rendered.truncated,
-        // `total` is a floor whenever any file's matches ran past the per-file cap, over the WHOLE match set,
-        // not just this page, since that is what the number counts.
-        ...(plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
+        /* `total` is a floor whenever any file's matches ran past the per-file cap, over the WHOLE match set,
+         * not just this page, since that is what the number counts. A scan stopped by its own ceiling says the
+         * same thing one level up, files past the ceiling were never looked at, so it lands on the same flag:
+         * two ways of having found at least this many, and a reader only needs to be told which side of "at
+         * least" the number sits on. */
+        ...(plan.ceiling === true || plan.groups.some((group) => group.capped === true) ? { partial: true } : {}),
         ...(rendered.cursor !== undefined ? { cursor: rendered.cursor } : {}),
         ...(hint !== undefined ? { hint } : {}),
         ...(note !== undefined ? { note } : {}),
@@ -908,7 +952,7 @@ export const dispatch = async (context: DispatchContext, request: QueryRequest, 
     const capsuleNote = [note, plan.provenance, featureNote].filter((part) => part !== undefined).join(" · ") || undefined;
     const rendered =
         list !== undefined
-            ? renderList(plan.groups, offset, list, id)
+            ? renderList(plan.groups, offset, list, id, plan.ceiling === true)
             : renderText({
                   verb: request.verb,
                   echo: request.echo,

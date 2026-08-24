@@ -126,6 +126,51 @@ test("cursor: truncated result resumes exactly with --after", async () => {
     expect(first.result.total).toBe(next.result.total);
 });
 
+/* A NARROWED search is handed its surviving paths as the scan's arguments rather than the whole tree, so that
+ * narrowing makes it faster instead of merely smaller. The optimisation is only sound if it changes nothing
+ * about the answer, so that is what this asserts: the scoped run's hits are exactly the unscoped run's hits
+ * for the same files. A mistranslated scope would show up here as a missing file or a short group. */
+test("a scoped find answers with exactly the unscoped hits for the files in scope", async () => {
+    const scoped = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, scope: { globs: ["alpha/src/*.ts"] } }));
+    const unscoped = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 100_000 } }));
+
+    const paths = scoped.result.groups.map((group) => group.path);
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.every((path) => /^alpha\/src\/[^/]+\.ts$/.test(path))).toBe(true);
+    for (const group of scoped.result.groups) {
+        const same = unscoped.result.groups.find((candidate) => candidate.path === group.path);
+        expect(group.hits.map((hit) => hit.line)).toEqual(same?.hits.map((hit) => hit.line));
+    }
+    // And it did not quietly drop a file the scope admits: every in-scope file the unscoped run found is here.
+    const inScope = unscoped.result.groups.filter((group) => /^alpha\/src\/[^/]+\.ts$/.test(group.path)).map((group) => group.path);
+    expect(paths.toSorted()).toEqual(inScope.toSorted());
+});
+
+/* A list caller's first page stops the scan one past the page it asked for, which is the whole latency fix. The
+ * page after it re-runs UNCAPPED and slices at the offset, and these two have to agree: the ceilinged page is
+ * the path-order prefix of exactly the set the continuation walks, so pages cannot overlap or skip. */
+test("a ceilinged list page and the page after it are one continuous result", async () => {
+    const page = { hits: 2, files: 1 };
+    const first = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 1500, list: page } }));
+    expect(first.result.groups).toHaveLength(1);
+    expect(first.result.truncated).toBe(true);
+    expect(first.result.cursor).toBeDefined();
+    // The scan stopped early, so the counts beside it are floors and say so through the same flag a per-file
+    // cap sets. A panel renders this as "N+".
+    expect(first.result.partial).toBe(true);
+
+    const next = await engine.run(
+        request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 1500, list: page, after: first.result.cursor! } }),
+    );
+    expect(next.result.groups.length).toBeGreaterThan(0);
+    const seen = new Set(first.result.groups.map((group) => group.path));
+    expect(next.result.groups.filter((group) => seen.has(group.path))).toEqual([]);
+    // The continuation was not ceilinged, so ITS total is the real one, and it is at least what page one could
+    // see. This is the assertion that fails if a ceiling ever leaks onto a continuation.
+    expect(next.result.total).toBeGreaterThanOrEqual(first.result.total);
+    expect(next.result.partial ?? false).toBe(false);
+});
+
 test("index lifecycle: status counts files; drop resets", async () => {
     const status = await engine.indexStatus();
     expect(status.files).toBeGreaterThan(3);

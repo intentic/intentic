@@ -15,7 +15,7 @@ import type { Rendered } from "./text.js";
  * that says "showing the first 300" needs somewhere to go, but nothing is spooled behind it: the continuation
  * re-runs the verb and slices at the offset, which for `find` is one rg pass and always current, where a spool
  * is megabytes on disk per keystroke and stale the moment a file changes. */
-export const renderList = (groups: readonly RankedGroup[], offset: number, page: ListPage, cursorId: string): Rendered => {
+export const renderList = (groups: readonly RankedGroup[], offset: number, page: ListPage, cursorId: string, ceiling = false): Rendered => {
     let shownGroups = 0;
     let shownHits = 0;
     for (const group of groups.slice(offset)) {
@@ -27,7 +27,12 @@ export const renderList = (groups: readonly RankedGroup[], offset: number, page:
         shownGroups += 1;
         shownHits += group.hits.length;
     }
-    const truncated = offset + shownGroups < groups.length;
+    /* More than this page exists either because more groups were FOUND than fit, or because the scan stopped
+     * at its own ceiling and never looked further. The second one is invisible from the groups alone: a
+     * ceilinged scan hands back exactly the files it read, so a page that showed all of them would read as
+     * the last page and take the caller's Load-more away while matches remained. The ceiling stops on a file
+     * boundary, so the offset below still names a whole file and the next page resumes exactly there. */
+    const truncated = offset + shownGroups < groups.length || ceiling;
     const totalHits = groups.reduce((sum, group) => sum + group.hits.length, 0);
     return {
         text: "",
