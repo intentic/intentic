@@ -1,6 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
-import { customEntryFor, familyGroups, filterEntries, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
+import { afterEach, expect, test, vi } from "vitest";
+import { customEntryFor, familyGroups, filterEntries, LOCAL_SECTION_KEY, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
+import { endpointProviders } from "./providerCatalog";
 
 /* The custom-model escape hatch. Everything else in modelPicker.ts is pure derivation over the live catalogs;
  * this is the one path that lets a user name a model NO catalog published, which is the only way to reach a
@@ -254,4 +255,64 @@ test("ranks a runnable match above a locked one, however well the locked id matc
 
 test("leaves an unqueried list in access order too, so simply opening the picker leads with what can run", () => {
     expect(filterEntries(MIXED, ``, undefined, readyOnly(`gemini`)).map((row) => row.provider)).toEqual([`gemini`, `claude`, `codex`, `kimi`]);
+});
+
+/* LOCAL MODELS ARE ONE GROUP. Each `localmodel` card mints its own `endpoint/<id>` provider, so the section
+ * builder, left to its per-provider rule, drew a header per card with a single row beneath it: three headers to
+ * say what is really one shelf of models. A card that points at somebody else's server stays its own group. */
+
+const QWEN = `endpoint/qwen` as AgentProvider;
+const GEMMA = `endpoint/gemma` as AgentProvider;
+const REMOTE = `endpoint/office-box` as AgentProvider;
+
+const LOCAL: readonly PickerEntry[] = [
+    entry(QWEN, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`),
+    entry(GEMMA, `Gemma-4-12B-Q5_K_M`, `Gemma-4-12B-Q5_K_M`),
+    entry(REMOTE, `llama-70b`, `llama-70b`),
+];
+const installed = (...cards: { id: AgentProvider; kind: "endpoint" | "localmodel" }[]) => {
+    endpointProviders.value = cards.map((card) => ({ id: card.id, label: card.id, kind: card.kind }));
+};
+const localCards = () => installed({ id: QWEN, kind: `localmodel` }, { id: GEMMA, kind: `localmodel` }, { id: REMOTE, kind: `endpoint` });
+
+afterEach(() => {
+    endpointProviders.value = [];
+});
+
+test("seats every locally-run model in one group, rather than a header per card", () => {
+    localCards();
+
+    const sections = pickerSections(LOCAL, `claude`, undefined, readyOnly(QWEN, GEMMA, REMOTE));
+    const local = sections.find((section) => section.key === LOCAL_SECTION_KEY);
+
+    expect(local?.providers).toEqual([QWEN, GEMMA]);
+    expect(local?.groups.map((group) => group.latest.value)).toEqual([`Qwen3.5-9B-Q4_K_M`, `Gemma-4-12B-Q5_K_M`]);
+    // A card pointing at a server elsewhere is not that shelf: it keeps its own section, under its own name.
+    expect(sections.filter((section) => section.provider === REMOTE)).toHaveLength(1);
+});
+
+test("carries no provider on the local group, so its header offers no price and no handshake", () => {
+    // Every card is runnable by existing: whatever it takes to reach the server was configured with it.
+    localCards();
+
+    expect(
+        pickerSections(LOCAL, `claude`, undefined, readyOnly(QWEN, GEMMA, REMOTE)).find((s) => s.key === LOCAL_SECTION_KEY)?.provider,
+    ).toBeUndefined();
+});
+
+test("hoists the local group when the conversation is running on one of its cards", () => {
+    localCards();
+
+    expect(pickerSections(LOCAL, GEMMA, undefined, readyOnly(QWEN, GEMMA, REMOTE))[0]?.key).toBe(LOCAL_SECTION_KEY);
+});
+
+test("keeps two cards serving the same weights as two rows, since a card is a server and not a release", () => {
+    // Family grouping is a catalog's version timeline, which only means anything within ONE card. Across cards
+    // it would fold the second copy of a model into a "show older" disclosure, hiding a server the user started.
+    installed({ id: QWEN, kind: `localmodel` }, { id: GEMMA, kind: `localmodel` });
+    const twice = [entry(QWEN, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`), entry(GEMMA, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`)];
+
+    const local = pickerSections(twice, `claude`, undefined, readyOnly(QWEN, GEMMA)).find((section) => section.key === LOCAL_SECTION_KEY);
+
+    expect(pickerBlocks(local?.groups ?? [], undefined, false)[0]?.entries.map((row) => row.provider)).toEqual([QWEN, GEMMA]);
 });

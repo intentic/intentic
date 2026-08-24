@@ -5,7 +5,13 @@ import { RouterLink } from "vue-router";
 import { type AgentProvider, capabilitiesOf, PROVIDERS, TRIAL_NOTICE } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
-import { acpProviders, endpointProviders, providerDisplayLabel, providerModelsState } from "../composables/chat/providerCatalog";
+import {
+    acpProviders,
+    type CatalogLoadState,
+    endpointProviders,
+    providerDisplayLabel,
+    providerModelsState,
+} from "../composables/chat/providerCatalog";
 import { customEntryFor, filterEntries, type PickerEntry, pickerBlocks, pickerEntries, pickerSections } from "../composables/chat/modelPicker";
 import { loadAllProviderModels, loadProviderModels, refreshConnections } from "../composables/chat/useChat";
 import { useSandboxVersion } from "../composables/sandbox/useSandboxVersion";
@@ -57,10 +63,11 @@ const customEntry = computed<PickerEntry | undefined>(() =>
     searching.value ? customEntryFor(pickerEntries.value, query.value, rail.value ?? provider) : undefined,
 );
 
-// Which provider groups are showing their full catalog. Browse-only, and reset with the component like query
-// and rail: every open starts at the calm, newest-first view rather than inheriting the last session's sprawl.
-const expanded = ref<ReadonlySet<AgentProvider>>(new Set());
-const toggleExpanded = (target: AgentProvider): void => {
+// Which groups are showing their full catalog, by section key (a provider, or the shared local-models pack).
+// Browse-only, and reset with the component like query and rail: every open starts at the calm, newest-first
+// view rather than inheriting the last session's sprawl.
+const expanded = ref<ReadonlySet<string>>(new Set());
+const toggleExpanded = (target: string): void => {
     const next = new Set(expanded.value);
     if (!next.delete(target)) {
         next.add(target);
@@ -69,12 +76,18 @@ const toggleExpanded = (target: AgentProvider): void => {
 };
 
 // The visible list: while searching a single flat ranked section (provider identity rides on every row's
-// logo); browsing, one section per provider with the current provider hoisted first, each opening at one row
-// per model family. A section renders as BLOCKS: the latest band, then (expanded) each family's older versions
-// under its own header. Rows carry their index in visual order: the keyboard highlight's coordinate system.
+// logo); browsing, one section per provider (every local card sharing one) with the current provider's hoisted
+// first, each opening at one row per model family. A section renders as BLOCKS: the latest band, then
+// (expanded) each family's older versions under its own header. Rows carry their index in visual order: the
+// keyboard highlight's coordinate system.
 const sections = computed<
     readonly {
-        provider?: AgentProvider;
+        key: string;
+        // The group's header. Absent while searching, where the one flat section names nothing.
+        label: string | undefined;
+        // The provider this group's header speaks for, where one does: see PickerSection.
+        provider: AgentProvider | undefined;
+        providers: readonly AgentProvider[];
         blocks: { key: string; label: string | undefined; rows: { entry: PickerEntry; index: number }[] }[];
         rowCount: number;
         hidden: number;
@@ -99,6 +112,10 @@ const sections = computed<
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [
             {
+                key: `search`,
+                label: undefined,
+                provider: undefined,
+                providers: [],
                 blocks: [{ key: `search`, label: undefined, rows }],
                 rowCount: rows.length,
                 hidden: 0,
@@ -110,21 +127,24 @@ const sections = computed<
         ];
     }
     return pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
-        const isExpanded = expanded.value.has(section.provider);
-        // The selected model survives collapse only for the CURRENT provider: it's the only group whose current
+        const isExpanded = expanded.value.has(section.key);
+        // The selected model survives collapse only for the CURRENT group: it's the only one whose current
         // model is the one a checkmark would be claiming.
-        const blocks = pickerBlocks(section.groups, section.provider === provider ? model : undefined, isExpanded);
+        const blocks = pickerBlocks(section.groups, section.providers.includes(provider) ? model : undefined, isExpanded);
         const rowCount = blocks.reduce((count, block) => count + block.entries.length, 0);
         return {
+            key: section.key,
+            label: section.label,
             provider: section.provider,
+            providers: section.providers,
             blocks: blocks.map((block) => ({ key: block.key, label: block.label, rows: withRows(block.entries) })),
             rowCount,
             hidden: section.total - rowCount,
             expanded: isExpanded,
             // Offered only when it would actually change the list, so a short group never grows a dead control.
             collapsible: isExpanded || section.total > rowCount,
-            badge: accessBadge(section.provider),
-            trial: trialBadge(section.provider),
+            badge: section.provider === undefined ? undefined : accessBadge(section.provider),
+            trial: section.provider === undefined ? undefined : trialBadge(section.provider),
         };
     });
 });
@@ -227,10 +247,26 @@ const railTooltip = (target: AgentProvider): string =>
         ...(providerRuntimeIssue(target) !== undefined ? [providerRuntimeIssue(target)!] : []),
     ].join(` · `);
 
-// A group with no rows yet gets a state row (loading / error+retry: keyed off section.rowCount in the
-// template): the codex/grok catalogs have no static floor, so a pre-load/error would otherwise read as "this
-// provider has nothing". Claude's seed floor always renders, so it never qualifies.
-const stateFor = (target: AgentProvider) => providerModelsState.value[target];
+/* A group with no rows yet gets a state row (loading / error+retry: keyed off section.rowCount in the
+ * template): the codex/grok catalogs have no static floor, so a pre-load/error would otherwise read as "this
+ * provider has nothing". Claude's seed floor always renders, so it never qualifies.
+ *
+ * Read over the section's providers rather than one, because the local-models group is several endpoints and
+ * its state row speaks for all of them: a failure anywhere is what the row must offer to retry, and a catalog
+ * still arriving (a card whose weights are still downloading publishes nothing yet) outranks a finished one. */
+const stateFor = (targets: readonly AgentProvider[]): CatalogLoadState => {
+    const states = targets.map((target) => providerModelsState.value[target] ?? `idle`);
+    if (states.includes(`error`)) {
+        return `error`;
+    }
+    return states.every((state) => state === `loaded`) ? `loaded` : `loading`;
+};
+
+const retrySection = (targets: readonly AgentProvider[]): void => {
+    for (const target of targets) {
+        void loadProviderModels(target);
+    }
+};
 
 onMounted(() => {
     // The catalogs are daemon-owned and cached there: refresh on every open so search spans warm lists.
@@ -344,23 +380,23 @@ onMounted(() => {
             </div>
 
             <div id="model-picker-list" class="scrollbar-thin min-w-0 flex-1 overflow-y-auto py-1 max-md:max-h-80" role="listbox" aria-label="Models">
-                <template v-for="section in sections" :key="section.provider ?? `search`">
-                    <!-- The provider header doubles as the access line: what this group costs, and the way out of
+                <template v-for="section in sections" :key="section.key">
+                    <!-- The group header doubles as the access line: what this group costs, and the way out of
                          it. The chip is absent once connected: a usable provider should read as the plain
                          default, not as a state worth annotating. -->
                     <div
-                        v-if="section.provider !== undefined"
+                        v-if="section.label !== undefined"
                         class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
                         role="presentation"
                     >
-                        <span>{{ providerDisplayLabel(section.provider) }}</span>
+                        <span>{{ section.label }}</span>
                         <Icon
-                            v-if="providerNeedsReauth(section.provider)"
+                            v-if="section.provider !== undefined && providerNeedsReauth(section.provider)"
                             name="exclamation-triangle"
                             class="text-2xs text-warning"
                             v-tooltip.top="'This account needs to be reconnected'"
                         />
-                        <template v-if="section.badge !== undefined">
+                        <template v-if="section.provider !== undefined && section.badge !== undefined">
                             <span
                                 class="rounded px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal"
                                 :class="
@@ -450,27 +486,23 @@ onMounted(() => {
                          role=option: it selects nothing, so it stays out of the arrow-key model list, and the
                          keyboard path to a buried version is the search box, which never truncates. -->
                     <button
-                        v-if="section.provider !== undefined && section.collapsible"
+                        v-if="section.label !== undefined && section.collapsible"
                         type="button"
                         class="ui-row-select flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-2xs text-subtle max-md:min-h-11"
                         :aria-expanded="section.expanded"
-                        :aria-label="
-                            section.expanded
-                                ? `Show fewer ${providerDisplayLabel(section.provider)} models`
-                                : `Show ${section.hidden} older ${providerDisplayLabel(section.provider)} models`
-                        "
-                        @click="toggleExpanded(section.provider)"
+                        :aria-label="section.expanded ? `Show fewer ${section.label} models` : `Show ${section.hidden} older ${section.label} models`"
+                        @click="toggleExpanded(section.key)"
                     >
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                         <span>{{ section.expanded ? `Show fewer` : `Show ${section.hidden} older` }}</span>
                     </button>
                     <!-- Catalog state row (loading / error+retry): searching hides it. -->
-                    <template v-if="!searching && section.provider !== undefined && section.rowCount === 0">
-                        <div v-if="stateFor(section.provider) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
+                    <template v-if="!searching && section.providers.length > 0 && section.rowCount === 0">
+                        <div v-if="stateFor(section.providers) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
                             <span>Couldn't load models.</span>
-                            <button type="button" class="text-link" @click="loadProviderModels(section.provider)">Retry</button>
+                            <button type="button" class="text-link" @click="retrySection(section.providers)">Retry</button>
                         </div>
-                        <div v-else-if="stateFor(section.provider) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">No models discovered.</div>
+                        <div v-else-if="stateFor(section.providers) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">No models discovered.</div>
                         <div v-else class="flex items-center gap-2 px-3 py-1.5 text-2xs text-subtle">
                             <Icon name="spinner" spin /> Loading models…
                         </div>

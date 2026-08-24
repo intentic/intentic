@@ -156,8 +156,11 @@ runner offers, an optimization invisible to the card.
 No new turn path. `translatedEndpoints` grows to include `localmodel` capabilities, each expressed as the
 `EndpointConfig` it effectively is (`http://127.0.0.1:<port>/v1`, openai protocol, no key), so the
 translator, the catalog prober, the picker and `endpoint/<id>` quick-model pinning all engage untouched.
-The one deliberate divergence from a user-added endpoint: the daemon owns the URL, so the card never shows
-one.
+Two deliberate divergences from a user-added endpoint. The daemon owns the URL, so the card never shows one.
+And the picker gives every `localmodel` card one shared **Local models** section instead of the header per
+provider its rule gives everything else: one card is one server on one port, which is a routing fact, and
+spelling it out in the list drew three headers to say what a reader sees as one shelf (`modelPicker.ts`,
+`pickerSections`). The provider rail still filters card by card, since that axis IS "which server".
 
 The one seam that could **not** be inherited untouched is *when* the routing table is written. The capability
 routes sync it on add/update/rename/remove, and for a user-added endpoint that is right: the server it names is
