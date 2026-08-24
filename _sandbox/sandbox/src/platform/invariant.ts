@@ -1,5 +1,6 @@
 import type { InvariantCheck } from "../invariants/invariants.js";
 import { claimHolder, type ContainerRole, type DaemonRoots } from "./container-owner.js";
+import { processIdentity, type ProcessIdentity } from "./proc-stat.js";
 
 /* ONE CONTAINER, ONE DAEMON, still true, or no longer true.
  *
@@ -20,12 +21,12 @@ export interface ContainerClaimDeps {
     readonly roots: DaemonRoots;
     // Overridden only by tests; production reads the process's real HOME, which is where the claim lives.
     readonly home?: string;
-    readonly pid?: number;
+    readonly identity?: ProcessIdentity;
 }
 
 export const owner = "platform";
 
-export const checks = ({ role, roots, home, pid = process.pid }: ContainerClaimDeps): readonly InvariantCheck[] => [
+export const checks = ({ role, roots, home, identity = processIdentity() }: ContainerClaimDeps): readonly InvariantCheck[] => [
     {
         name: "container-claim-matches-role",
         // Boot too, not only the sweep: a claim taken during our own startup is the tightest race there is, and
@@ -34,24 +35,28 @@ export const checks = ({ role, roots, home, pid = process.pid }: ContainerClaimD
         run: ({ fail }) => {
             const held = claimHolder(home);
             if (role.container) {
+                if (identity === undefined) {
+                    return fail("this daemon holds the container role but its procfs identity is unavailable");
+                }
                 if (held === undefined) {
                     return fail(
-                        `this daemon (pid ${pid}) holds the container role but the claim file is gone: it is converging HOME and sweeping processes with nothing recording that it owns them`,
+                        `this daemon (pid ${identity.pid}) holds the container role but the claim file is gone: it is converging HOME and sweeping processes with nothing recording that it owns them`,
                     );
                 }
-                if (held.pid !== pid) {
+                if (held.pid !== identity.pid || held.startTimeTicks !== identity.startTimeTicks) {
                     return fail(
-                        `this daemon (pid ${pid}) holds the container role but the claim now names pid ${held.pid} (workspace ${held.workspaceRoot}, history ${held.historyRoot}): two daemons are converging one HOME`,
+                        `this daemon (pid ${identity.pid}) holds the container role but the claim now names process ${held.pid}:${held.startTimeTicks} (workspace ${held.workspaceRoot}, history ${held.historyRoot}): two daemons are converging one HOME`,
                     );
                 }
                 return;
             }
             /* The guest's half of the same promise, and the one that actually did the damage: a run that decided
              * it was a guest must not be holding the claim, because holding it is what tells the NEXT daemon the
-             * container is taken. A guest whose pid is in that file locks the real sandbox out of its own box. */
-            if (held?.pid === pid) {
+             * container is taken. A guest whose process identity is in that file locks the real sandbox out of
+             * its own box. */
+            if (identity !== undefined && held?.pid === identity.pid && held.startTimeTicks === identity.startTimeTicks) {
                 fail(
-                    `this daemon (pid ${pid}) is running as a guest but holds the container claim: the sandbox's own daemon will refuse to converge behind it`,
+                    `this daemon (pid ${identity.pid}) is running as a guest but holds the container claim: the sandbox's own daemon will refuse to converge behind it`,
                 );
             }
             // A guest on OTHER roots is ordinary and expected. A guest on OUR roots that is not the holder is

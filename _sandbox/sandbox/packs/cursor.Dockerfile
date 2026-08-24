@@ -6,8 +6,9 @@
 # subject to Cursor's Terms of Service", which grants no redistribution — so it must never ride a published
 # image, where pulling the image would redistribute it to everyone whether or not they have a Cursor account.
 # prepare-image-trees.sh prunes it and its platform packages out of the daemon tree, and this fragment puts one
-# copy back on the OWNER'S machine, in the overlay rebuild they approve after connecting a Cursor account
-# (environment/provider-packs.ts gates it on that credential being on disk). Deliberately absent from
+# copy back on the OWNER'S machine. The explicit Connect action bootstraps this exact pin into the running
+# container for login; once that writes a credential, the overlay rebuild they approve preserves the same
+# install (environment/provider-packs.ts gates it on that credential being on disk). Deliberately absent from
 # packs/profiles.json for the same reason: no profile may bake it.
 #
 # A PREFIX OF ITS OWN rather than an install into the daemon's deployed tree: that tree is pnpm's, laid out as

@@ -3,7 +3,14 @@ import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../sandbox/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
+vi.mock("../sandbox/sandboxClient", () => ({
+    sandboxRequest: vi.fn(),
+    sandboxJson: vi.fn(),
+    sandboxError: vi.fn(async (response: Response) => {
+        const body = (await response.json()) as { message?: string; error?: string };
+        return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
+    }),
+}));
 // Same window.env chain via analytics; send() only fires a milestone event through track.
 vi.mock("../analytics", () => ({ track: vi.fn() }));
 // Same window.env chain via useApi; the tab persistence only reads activeSandboxId + reachable.
@@ -281,6 +288,30 @@ describe(`account usage hydration`, () => {
         // The daemon's write is fire-and-forget, so a refresh can land between a frame and its persist:
         // the newer reading must win, or the chip would flicker backwards mid-session.
         expect(usageStatusByAccount.value[`a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 80 }], measuredAt: 9_000 });
+    });
+});
+
+describe(`native account connection`, () => {
+    beforeEach(() => {
+        storage.clear();
+        resetChat();
+    });
+
+    it(`starts Cursor on its dedicated login route and preserves the daemon's failure`, async () => {
+        const chat = useChat();
+        chat.setManagedProvider(`cursor`);
+        sandboxRequestMock.mockResolvedValue(
+            new Response(JSON.stringify({ message: `The Cursor SDK download failed: npm registry unavailable.` }), {
+                status: 412,
+                headers: { "content-type": `application/json` },
+            }),
+        );
+
+        await chat.startConnect();
+
+        expect(sandboxRequestMock).toHaveBeenCalledWith(`/cursor/login/start`, { method: `POST` });
+        expect(chat.error.value).toBe(`The Cursor SDK download failed: npm registry unavailable.`);
+        expect(chat.accountBusy.value).toBeUndefined();
     });
 });
 

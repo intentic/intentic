@@ -50,7 +50,7 @@ import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
 import { track } from "../analytics";
 import { withConcurrency } from "../concurrency";
-import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
@@ -2009,16 +2009,16 @@ const startConnect = async (): Promise<void> => {
     // "Connect" for a tick before the flow lands under it, the very blink this is here to remove.
     accountBusy.value = target;
     try {
+        const path = connectStartPath(target);
         let response: Response;
         try {
-            response = await sandboxRequest(connectStartPath(target), { method: `POST` });
+            response = await sandboxRequest(path, { method: `POST` });
         } catch (err) {
             error.value = errorMessage(err, `Could not start the ${providerLabel(target)} connection: is your sandbox online?`);
             return;
         }
         if (!response.ok) {
-            const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
-            error.value = body?.error ?? `Could not start the ${providerLabel(target)} connection: is your sandbox online?`;
+            error.value = (await sandboxError(response, { method: `POST`, path })).message;
             return;
         }
         if (target === `grok`) {

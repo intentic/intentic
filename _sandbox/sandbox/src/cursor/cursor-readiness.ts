@@ -10,8 +10,9 @@ import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
  *
  * THREE REASONS, AND THEY LOOK ALIKE FROM THE OUTSIDE. "Cursor doesn't work here" can mean the image carries no
  * Cursor runtime (a rebuild fixes it), no account is connected (a sign-in fixes it), or every connected
- * account's key has expired (a sign-in again fixes it, on a row that already exists). Sending someone to
- * connect an account they already connected is the failure this ordering is written to avoid. */
+ * account's key has expired (a sign-in again fixes it, on a row that already exists). The credential questions
+ * come first because an explicit sign-in can bootstrap the runtime; only a usable credential plus no runtime
+ * is truly the rebuild-only state. */
 
 export type CursorReadiness =
     | { readonly ok: true }
@@ -19,16 +20,11 @@ export type CursorReadiness =
           readonly ok: false;
           readonly detail: string;
           // Set only where connecting an account is what fixes it: this is what puts the connect gate in front
-          // of the user. A missing runtime is not that, and offering a sign-in for it would be a dead end.
+          // of the user. A missing runtime beside a usable credential is not that.
           readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
       };
 
 export const cursorReadiness = async (store: CursorStore): Promise<CursorReadiness> => {
-    // First, because it is true whatever the credential says: the runtime is a pack, and a published image
-    // does not carry it (see cursor-sdk.ts for why it cannot).
-    if ((await cursorSdk()) === undefined) {
-        return { ok: false, detail: CURSOR_SDK_MISSING };
-    }
     const accounts = await store.credentials();
     if (accounts.length === 0) {
         return { ok: false, code: "subscription-required", detail: "Connect your Cursor subscription in Sandbox ▸ Agent to run Cursor." };
@@ -38,6 +34,11 @@ export const cursorReadiness = async (store: CursorStore): Promise<CursorReadine
         // sign-in on a row the user can already see, and a connect gate offering to add a first account would
         // send them looking for something that is not the problem.
         return { ok: false, detail: "Your Cursor sign-in has expired. Connect it again in Sandbox ▸ Agent to keep running turns." };
+    }
+    // Only now is the pack absence the blocker. Connect itself installs a temporary copy, and a successful
+    // connection composes the persistent pack; this state means the credential outlived that running image.
+    if ((await cursorSdk()) === undefined) {
+        return { ok: false, detail: CURSOR_SDK_MISSING };
     }
     return { ok: true };
 };

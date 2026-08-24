@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { leftoverProcesses, ownerOf, parseProcStat, type ScannedProcess, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
+import { leftoverProcesses, ownerOf, type ScannedProcess, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
+import { parseProcStat } from "./proc-stat.js";
 
 const environ = (...pairs: string[]): string => `${pairs.join("\0")}\0`;
 
@@ -34,6 +35,12 @@ test("the owner is read out of a NUL-separated environ and ignores every other v
 test("ppid and pgrp are read from after the last paren, so an executable named with spaces and parens cannot shift them", () => {
     expect(parseProcStat("42 (node) S 7 9 42 0 -1 4194304")).toEqual({ ppid: 7, pgrp: 9 });
     expect(parseProcStat("42 (weird ) name) S 9 11 42 0 -1 4194304")).toEqual({ ppid: 9, pgrp: 11 });
+    expect(parseProcStat("42 (weird ) name) S 9 11 42 0 -1 4194304 0 0 0 0 13 17 0 0 20 0 1 0 12345")).toEqual({
+        ppid: 9,
+        pgrp: 11,
+        cpuTicks: 30,
+        startTimeTicks: 12345,
+    });
     expect(parseProcStat("garbage")).toBeUndefined();
 });
 

@@ -6,6 +6,7 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type Logger, pino } from "pino";
 import { expect, test } from "vitest";
 import { AGENT_SESSION_ENV, claimContainer } from "./container-owner.js";
+import { processIdentity, type ProcessIdentity } from "./proc-stat.js";
 
 const CONTAINER = { workspaceRoot: WORKSPACE_ROOT, historyRoot: HISTORY_ROOT };
 const DEV_RUN = { workspaceRoot: "/tmp/sbx/work", historyRoot: "/tmp/sbx/history" };
@@ -19,8 +20,15 @@ const setup = async (): Promise<{ home: string; lines: object[]; logger: Logger 
 
 const claimFile = (home: string): string => join(home, ".intentic-daemon.json");
 const claimOf = async (home: string): Promise<object> => JSON.parse(await readFile(claimFile(home), "utf8")) as object;
+const self = (): ProcessIdentity => {
+    const identity = processIdentity();
+    if (identity === undefined) {
+        throw new Error("procfs did not identify the test process");
+    }
+    return identity;
+};
 // This test process stands in as the live owner wherever a claim has to be one nobody may take.
-const heldBy = async (home: string, roots: object): Promise<void> => writeFile(claimFile(home), JSON.stringify({ pid: process.pid, ...roots }));
+const heldBy = async (home: string, roots: object): Promise<void> => writeFile(claimFile(home), JSON.stringify({ ...self(), ...roots }));
 
 // A pid that is certainly gone: a process that has already exited. `pid: 0`/a made-up number would test the
 // same branch by accident rather than by construction.
@@ -30,7 +38,7 @@ test("a fresh container is claimed quietly, whole", async () => {
     const { home, lines, logger } = await setup();
 
     expect(await claimContainer(CONTAINER, logger, { home, env: {} })).toEqual({ container: true, roots: true });
-    expect(await claimOf(home)).toEqual({ pid: process.pid, ...CONTAINER });
+    expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
     expect(lines).toEqual([]);
 });
 
@@ -41,7 +49,7 @@ test("a live daemon on other roots keeps the container: the guest still owns the
     expect(await claimContainer(DEV_RUN, logger, { home, env: {}, graceMs: 0 })).toEqual({ container: false, roots: true });
 
     // Refused means UNTOUCHED: the owner still holds the claim, so its next boot still converges HOME.
-    expect(await claimOf(home)).toEqual({ pid: process.pid, ...CONTAINER });
+    expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
     expect(JSON.stringify(lines[0])).toContain("another live daemon owns this container");
 });
 
@@ -59,7 +67,7 @@ test("a predecessor still shutting down is waited out rather than taken for a co
     setTimeout(() => void rm(claimFile(home)).catch(() => undefined), 150);
 
     expect(await claimContainer(CONTAINER, logger, { home, env: {}, graceMs: 5_000 })).toEqual({ container: true, roots: true });
-    expect(await claimOf(home)).toEqual({ pid: process.pid, ...CONTAINER });
+    expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
 });
 
 test("a daemon started from inside an agent session is a guest even with nobody to collide with", async () => {
@@ -77,10 +85,19 @@ test("a daemon started from inside an agent session is a guest even with nobody 
 
 test("a claim left by a daemon that is gone is taken over", async () => {
     const { home, logger } = await setup();
-    await writeFile(claimFile(home), JSON.stringify({ pid: deadPid(), ...DEV_RUN }));
+    await writeFile(claimFile(home), JSON.stringify({ pid: deadPid(), startTimeTicks: 1, ...DEV_RUN }));
 
     expect(await claimContainer(CONTAINER, logger, { home, env: {} })).toEqual({ container: true, roots: true });
-    expect(await claimOf(home)).toEqual({ pid: process.pid, ...CONTAINER });
+    expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
+});
+
+test("a recycled pid does not turn a dead daemon's claim into the new daemon's guest lock", async () => {
+    const { home, logger } = await setup();
+    const identity = self();
+    await writeFile(claimFile(home), JSON.stringify({ ...identity, startTimeTicks: identity.startTimeTicks - 1, ...CONTAINER }));
+
+    expect(await claimContainer(CONTAINER, logger, { home, env: {} })).toEqual({ container: true, roots: true });
+    expect(await claimOf(home)).toEqual({ ...identity, ...CONTAINER });
 });
 
 test("an unreadable claim never blocks a boot", async () => {
@@ -88,7 +105,7 @@ test("an unreadable claim never blocks a boot", async () => {
     await writeFile(claimFile(home), "{ not json");
 
     expect(await claimContainer(CONTAINER, logger, { home, env: {} })).toEqual({ container: true, roots: true });
-    expect(await claimOf(home)).toEqual({ pid: process.pid, ...CONTAINER });
+    expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
 });
 
 test("a HOME that cannot hold the claim converges nothing container-wide", async () => {

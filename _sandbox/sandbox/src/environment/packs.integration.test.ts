@@ -25,10 +25,10 @@ test("profiles name real packs, and placement/overlayability inference matches e
         expect(byName.get(name)?.postTrees, `${name} must splice above the tree COPYs`).toBe(false);
     }
     /* THE ONE PACK NO PROFILE MAY BAKE. @cursor/sdk is all-rights-reserved and grants no redistribution, so a
-     * published image carrying it would be redistributing it to everyone who pulls that image. It reaches a
-     * machine only through the overlay rebuild its owner approves after connecting a Cursor account
-     * (environment/provider-packs.ts). Asserted here rather than left to review, because the failure mode of
-     * someone adding it to a profile is a licence problem rather than a broken build. */
+     * published image carrying it would be redistributing it to everyone who pulls that image. An explicit
+     * Connect action downloads it onto the owner's running machine, and the resulting credential asks for the
+     * durable overlay rebuild (environment/provider-packs.ts). Asserted here rather than left to review,
+     * because someone adding it to a profile creates a licence problem rather than a broken build. */
     for (const profile of Object.values(profiles)) {
         expect(profile, "no profile may bake the cursor pack: its licence grants no redistribution").not.toContain("cursor");
     }

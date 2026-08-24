@@ -89,9 +89,10 @@ done
 # than a size one: "all rights reserved, use subject to Cursor's Terms of Service" grants no redistribution, and
 # a published image containing it would redistribute it to everyone who pulls that image, Cursor account or not.
 # It is a repo dependency so the daemon type-checks against it and a dev run works; packs/cursor.Dockerfile
-# installs the same pin into /opt/cursor-sdk on the OWNER's own machine once they connect a Cursor account, and
-# cursor/cursor-sdk.ts loads it dynamically so a tree without it still boots. Its ~15 MiB per-platform packages
-# go with it — nothing left behind can resolve them.
+# installs the same pin into /opt/cursor-sdk on the OWNER's own machine. The explicit Connect action bootstraps
+# that install for login; the resulting credential then keeps it in the durable overlay. cursor/cursor-sdk.ts
+# loads it dynamically so a tree without it still boots. Its ~15 MiB per-platform packages go with it — nothing
+# left behind can resolve them.
 rm -rf "$out"/sandbox/node_modules/.pnpm/onnxruntime-web@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@openai+codex@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk@*

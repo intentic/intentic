@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { parseProcStat } from "./proc-stat.js";
 
 /* LEFTOVERS, everything a turn started, reclaimed once nobody owns it any more.
  *
@@ -159,18 +160,6 @@ export const leftoverProcesses = (scanned: readonly ScannedProcess[], { group, o
  * A pid that vanishes between readdir and either read is the normal case, not an error, the sweep is looking at
  * a moving system and simply does not see that one this pass. */
 const NUMERIC = /^\d+$/u;
-
-// `stat`'s second field is the executable name in parentheses and may itself contain spaces and parentheses, so
-// the only safe split is after the LAST `)`: state, ppid and pgrp are the first three fields of what remains.
-export const parseProcStat = (stat: string): { ppid: number; pgrp: number } | undefined => {
-    const rest = stat
-        .slice(stat.lastIndexOf(")") + 1)
-        .trim()
-        .split(/\s+/u);
-    const ppid = Number(rest[1]);
-    const pgrp = Number(rest[2]);
-    return Number.isSafeInteger(ppid) && ppid >= 0 && Number.isSafeInteger(pgrp) && pgrp >= 0 ? { ppid, pgrp } : undefined;
-};
 
 // procfs hands back the environment NUL-separated, in the form it had at exec, which is what we want: a child
 // cannot edit its way out of the stamp it was born with.

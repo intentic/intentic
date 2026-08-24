@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { pidAlive } from "./pid-alive.js";
+import { processIdentity, type ProcessIdentity, sameProcess } from "./proc-stat.js";
 
 /* ONE CONTAINER, ONE DAEMON, and everything the second one must not do.
  *
@@ -30,9 +30,10 @@ import { pidAlive } from "./pid-alive.js";
  *     where this sandbox answers, the scheduled-work timer, the drafts publisher, the CI webhook reconciler.
  *     Two of any of them is two of everything they do, a post published twice, an automation fired twice.
  *
- * SO THE CONTAINER IS CLAIMED, in HOME's own file: it names the owning pid and the roots that run converged HOME
- * onto, and it dies with the container exactly like the state it guards. Two questions come back, because they
- * have different answers:
+ * SO THE CONTAINER IS CLAIMED, in HOME's own file: it names the owning pid plus its kernel start-time tick and
+ * the roots that run converged HOME onto, and it dies with the container exactly like the state it guards. The
+ * tick matters because the daemon commonly gets the same pid after a container restart. Two questions come
+ * back, because they have different answers:
  *
  *   `container`, may I take the surfaces above? Only when nobody live holds them, and never for a daemon
  *     started from inside an agent session: that one is a probe of the code, not a replacement for the sandbox,
@@ -58,9 +59,7 @@ export interface DaemonRoots {
     readonly historyRoot: string;
 }
 
-export interface ContainerClaim extends DaemonRoots {
-    readonly pid: number;
-}
+export interface ContainerClaim extends DaemonRoots, ProcessIdentity {}
 
 // What this run may take. Both false is a guest: it serves, and it owns nothing that was here before it.
 export interface ContainerRole {
@@ -72,7 +71,13 @@ const claimPath = (home: string): string => join(home, CLAIM_FILE);
 
 const readClaim = (home: string): ContainerClaim | undefined => {
     try {
-        return JSON.parse(readFileSync(claimPath(home), "utf8")) as ContainerClaim;
+        const claim = JSON.parse(readFileSync(claimPath(home), "utf8")) as Partial<ContainerClaim>;
+        return typeof claim.pid === "number" &&
+            typeof claim.startTimeTicks === "number" &&
+            typeof claim.workspaceRoot === "string" &&
+            typeof claim.historyRoot === "string"
+            ? (claim as ContainerClaim)
+            : undefined;
     } catch {
         // Nothing claimed it, or a claim nobody can parse, either way this run is free to take the container.
         return undefined;
@@ -96,7 +101,7 @@ const liveOwner = async (home: string, roots: DaemonRoots, graceMs: number): Pro
     const deadline = Date.now() + graceMs;
     for (;;) {
         const claim = readClaim(home);
-        if (claim === undefined || !pidAlive(claim.pid)) {
+        if (claim === undefined || !sameProcess(claim)) {
             return undefined;
         }
         if (!sameRoots(claim, roots) || Date.now() >= deadline) {
@@ -141,8 +146,13 @@ export const claimContainer = async (
         );
         return { container: false, roots: true };
     }
+    const identity = processIdentity();
+    if (identity === undefined) {
+        logger.warn("could not identify this process from procfs, not claiming container-wide state");
+        return { container: false, roots: true };
+    }
     try {
-        writeFileSync(claimPath(home), JSON.stringify({ pid: process.pid, ...roots }), { mode: 0o600 });
+        writeFileSync(claimPath(home), JSON.stringify({ ...identity, ...roots }), { mode: 0o600 });
     } catch (error) {
         logger.warn({ err: error }, "could not claim this container, not converging session state or ssh hosts onto it");
         return { container: false, roots: true };

@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { pidAlive } from "./pid-alive.js";
+import { processIdentity, type ProcessIdentity, sameProcess } from "./proc-stat.js";
 
 /* Make a daemon death loud AFTER the fact. The daemon has died silently many times a day, a V8 fatal error
  * or an outside kill goes to the container's stderr, which `docker rm -f` takes to the grave, and pino's
@@ -16,9 +16,8 @@ import { pidAlive } from "./pid-alive.js";
 
 const MARKER_FILE = "daemon-exit.json";
 
-interface ExitMarker {
+interface ExitMarker extends ProcessIdentity {
     readonly state: "running" | "exited";
-    readonly pid: number;
     readonly startedAt: number;
     readonly endedAt?: number;
     readonly exitCode?: number;
@@ -41,12 +40,12 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
     const path = join(logsDir, MARKER_FILE);
     try {
         const previous = JSON.parse(readFileSync(path, "utf8")) as ExitMarker;
-        /* A MARKER STILL SAYING RUNNING, WHOSE PID STILL IS. Not a death at all: another daemon has this history
-         * root open right now, and the certificate this function exists to write would be an obituary for the
-         * living, which is exactly what it wrote on 2026-08-11, naming the live daemon as OOM-killed while it
-         * served four turns. Nothing is claimed either: the marker belongs to that run, and overwriting it would
-         * lose the only record of how it ends. */
-        if (previous.state === "running" && pidAlive(previous.pid)) {
+        /* A MARKER STILL SAYING RUNNING, WHOSE PROCESS IDENTITY STILL IS. Not a death at all: another daemon has
+         * this history root open right now, and the certificate this function exists to write would be an
+         * obituary for the living, which is exactly what it wrote on 2026-08-11, naming the live daemon as
+         * OOM-killed while it served four turns. Nothing is claimed either: the marker belongs to that run, and
+         * overwriting it would lose the only record of how it ends. */
+        if (previous.state === "running" && sameProcess(previous)) {
             logger.warn({ ownerPid: previous.pid, logsDir }, "another live daemon owns this history root, leaving its boot marker alone");
             return { markExited: () => undefined };
         }
@@ -76,9 +75,13 @@ export const claimBootMarker = (logsDir: string, logger: Logger): { markExited: 
             // Best-effort by design.
         }
     };
+    const identity = processIdentity();
+    if (identity === undefined) {
+        return { markExited: () => undefined };
+    }
     const startedAt = Date.now();
-    write({ state: "running", pid: process.pid, startedAt });
+    write({ state: "running", ...identity, startedAt });
     return {
-        markExited: (code) => write({ state: "exited", pid: process.pid, startedAt, endedAt: Date.now(), exitCode: code }),
+        markExited: (code) => write({ state: "exited", ...identity, startedAt, endedAt: Date.now(), exitCode: code }),
     };
 };

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { OauthAccount } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { z } from "zod";
-import { CURSOR_SDK_MISSING, cursorSdk } from "./cursor-sdk.js";
+import { ensureCursorSdk } from "./cursor-sdk.js";
 
 /* CURSOR ACCOUNTS, AND THE SIGN-IN THAT MINTS THEM. The Claude store's shape (one JSON file per account under
  * the auth root, several accounts side by side, tokens never on the wire) with the whole refresh apparatus
@@ -106,41 +106,49 @@ export interface CursorStore {
     readonly logger: Logger;
 }
 
+const cursorCredentialPath = (dir: string, id: string): string => join(dir, `${id}.json`);
+
+const readCursorCredential = async (dir: string, id: string): Promise<StoredCursorAccount | undefined> => {
+    try {
+        const parsed = StoredAccountSchema.safeParse(JSON.parse(await readFile(cursorCredentialPath(dir, id), "utf8")));
+        return parsed.success ? parsed.data : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+/* The credential files that actually have Cursor's account shape. Shared with the provider-pack predicate so
+ * a cache or foreign JSON file in the same directory cannot make a disconnected sandbox retain the runtime. */
+export const readCursorCredentials = async (dir: string): Promise<StoredCursorAccount[]> => {
+    const entries = await readdir(dir).catch(() => [] as string[]);
+    const stored = await Promise.all(
+        entries.filter((name) => name.endsWith(".json")).map((name) => readCursorCredential(dir, name.slice(0, -5))),
+    );
+    return stored.filter((account): account is StoredCursorAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
+};
+
 // A JSON file store: one <id>.json per account under <workspace>/.intentic/secrets/auth/cursor/. That whole
 // tree is already classified `secret` by construction (workspace-state.ts), so a new provider directory under
 // it is fenced from search, export and the file routes without naming it anywhere.
 export const fileCursorStore = (dir: string, logger: Logger): CursorStore => {
-    const path = (id: string): string => join(dir, `${id}.json`);
-    const readStored = async (id: string): Promise<StoredCursorAccount | undefined> => {
-        try {
-            const parsed = StoredAccountSchema.safeParse(JSON.parse(await readFile(path(id), "utf8")));
-            return parsed.success ? parsed.data : undefined;
-        } catch {
-            return undefined;
-        }
-    };
-    const readAll = async (): Promise<StoredCursorAccount[]> => {
-        const entries = await readdir(dir).catch(() => [] as string[]);
-        const stored = await Promise.all(entries.filter((name) => name.endsWith(".json")).map((name) => readStored(name.slice(0, -5))));
-        return stored.filter((account): account is StoredCursorAccount => account !== undefined).toSorted((a, b) => a.connectedAt - b.connectedAt);
-    };
     return {
         logger,
-        read: readStored,
+        read: (id) => readCursorCredential(dir, id),
         // Atomic, the Claude precedent: a reader (this daemon, the account list, another sandbox on a shared
         // auth dir) must never observe a half-written file, because an unparseable read degrades to "no such
         // account", which looks to the user like a credential that disconnected itself.
         write: async (account) => {
             await mkdir(dir, { recursive: true });
-            const temp = `${path(account.id)}.${randomUUID()}.tmp`;
+            const path = cursorCredentialPath(dir, account.id);
+            const temp = `${path}.${randomUUID()}.tmp`;
             await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
-            await rename(temp, path(account.id));
+            await rename(temp, path);
         },
         clear: async (id) => {
-            await rm(path(id), { force: true });
+            await rm(cursorCredentialPath(dir, id), { force: true });
         },
-        list: async () => (await readAll()).map(toAccount),
-        credentials: readAll,
+        list: async () => (await readCursorCredentials(dir)).map(toAccount),
+        credentials: () => readCursorCredentials(dir),
     };
 };
 
@@ -167,6 +175,9 @@ export interface CursorLoginDeps {
     readonly store: CursorStore;
     // Names the minted key in Cursor's dashboard, so an owner can tell this sandbox's key from their laptop's.
     readonly keyName: string;
+    // Recompose after the credential lands: on every published image this is what makes the just-bootstrapped
+    // SDK durable across the next container recreation.
+    readonly connected: () => Promise<unknown>;
 }
 
 export interface StartedLogin {
@@ -182,10 +193,7 @@ export interface StartedLogin {
  * answered — so every outcome is either a written account or a logged line, and the cancelled case is not
  * logged as a failure because a person closing a tab is not an error. */
 export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLogin> => {
-    const sdk = await cursorSdk();
-    if (sdk === undefined) {
-        throw new Error(CURSOR_SDK_MISSING);
-    }
+    const sdk = await ensureCursorSdk();
     const handshake = randomUUID();
     const abort = new AbortController();
     const expiresAt = Date.now() + LOGIN_WINDOW_MS;
@@ -213,6 +221,7 @@ export const startCursorLogin = async (deps: CursorLoginDeps): Promise<StartedLo
                     apiKeyExpiresAtMs: result.apiKeyExpiresAtMs,
                     connectedAt: Date.now(),
                 });
+                await deps.connected();
                 deps.store.logger.info({ account: handshake }, "cursor: account connected");
             })
             .catch((error: unknown) => {

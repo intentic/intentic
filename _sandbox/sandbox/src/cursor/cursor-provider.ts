@@ -1,4 +1,3 @@
-import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
@@ -12,7 +11,7 @@ import type { Services } from "../composition.js";
 import { turnPersona } from "../personas/personas.js";
 import { createCursorAgent } from "./cursor-agent.js";
 import { type CursorCatalog, createCursorCatalog } from "./cursor-catalog.js";
-import { type CursorStore, fileCursorStore, usableCursorAccount } from "./cursor-credentials.js";
+import { type CursorStore, fileCursorStore, readCursorCredentials, usableCursorAccount } from "./cursor-credentials.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
@@ -161,19 +160,6 @@ const CURSOR_ADAPTER: AgentAdapter<"cursor"> = {
     },
 };
 
-/* A Cursor turn needs `@cursor/sdk`, which is the one runtime that can NEVER be baked into a published image:
- * its licence grants no redistribution (see packs/cursor.Dockerfile). So this predicate is not merely how the
- * pack arrives on a core image, as it is for codex and opencode — it is the ONLY way the pack ever arrives
- * anywhere, and a user who connects a Cursor account and is not offered the rebuild has no other route.
- *
- * Read off the credential DIRECTORY rather than through the store's parser, the provider-packs rule: a live
- * probe would need the very module the pack installs. A directory with an account file in it is the fact on
- * disk, and it survives the binary being absent. */
-const cursorConnected = async (services: Services): Promise<boolean> => {
-    const entries = await readdir(join(services.authRoot, "cursor")).catch(() => [] as string[]);
-    return entries.some((name) => name.endsWith(".json"));
-};
-
 export const cursorProvider: ProviderModule = {
     id: "cursor",
     adapters: [CURSOR_ADAPTER],
@@ -194,7 +180,11 @@ export const cursorProvider: ProviderModule = {
             void services.cursorHooks.start().catch((error: unknown) => logger.warn({ err: error }, "cursor command gate not started"));
         }
     },
-    packs: async (services) => ((await cursorConnected(services)) ? ["cursor"] : []),
+    /* A Cursor turn needs `@cursor/sdk`, which can never be baked into a published image: its licence grants
+     * no redistribution (see packs/cursor.Dockerfile). Connect may bootstrap the same pin into the running
+     * container, but this is what keeps it across recreation. Read the file-backed store, not a live SDK probe:
+     * the store needs no runtime, rejects cache/foreign JSON by shape, and survives the module being absent. */
+    packs: async (services) => ((await readCursorCredentials(join(services.authRoot, "cursor"))).length > 0 ? ["cursor"] : []),
     secretEntries: async (services) =>
         (await services.cursorStore.list()).map((account) =>
             providerAccountEntry("cursor", "Cursor", account.id, account.label, authStateRelPath("cursor", `${account.id}.json`)),

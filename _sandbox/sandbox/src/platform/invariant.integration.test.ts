@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 
 import { checks } from "./invariant.js";
+import type { ProcessIdentity } from "./proc-stat.js";
 
 /* 2026-07-31, from the survivor's side. A second daemon booted, took the claim, converged HOME onto its own
  * roots, and the daemon that had been running went on believing the answer it got at ITS boot: converging,
@@ -22,7 +23,7 @@ afterEach(() => {
     }
 });
 
-const homeWith = (claim?: { pid: number }): string => {
+const homeWith = (claim?: ProcessIdentity): string => {
     const home = mkdtempSync(join(tmpdir(), "claim-"));
     homes.push(home);
     if (claim !== undefined) {
@@ -31,31 +32,43 @@ const homeWith = (claim?: { pid: number }): string => {
     return home;
 };
 
-const run = (role: { container: boolean; roots: boolean }, home: string, pid: number): void => {
-    const [check] = checks({ role, roots: ROOTS, home, pid });
+const run = (role: { container: boolean; roots: boolean }, home: string, identity: ProcessIdentity): void => {
+    const [check] = checks({ role, roots: ROOTS, home, identity });
     check?.run({ moment: "sweep", fail });
 };
 
 test("the holder still naming this process reports nothing", () => {
-    expect(() => run({ container: true, roots: true }, homeWith({ pid: 4242 }), 4242)).not.toThrow();
+    expect(() => run({ container: true, roots: true }, homeWith({ pid: 4242, startTimeTicks: 10 }), { pid: 4242, startTimeTicks: 10 })).not.toThrow();
 });
 
 test("the claim taken by another daemon is reported, with the pid that took it", () => {
-    expect(() => run({ container: true, roots: true }, homeWith({ pid: 9001 }), 4242)).toThrow(/claim now names pid 9001/);
+    expect(() =>
+        run({ container: true, roots: true }, homeWith({ pid: 9001, startTimeTicks: 20 }), { pid: 4242, startTimeTicks: 10 }),
+    ).toThrow(/claim now names process 9001:20/);
 });
 
 test("the claim file disappearing under a container owner is reported too", () => {
-    expect(() => run({ container: true, roots: true }, homeWith(), 4242)).toThrow(/claim file is gone/);
+    expect(() => run({ container: true, roots: true }, homeWith(), { pid: 4242, startTimeTicks: 10 })).toThrow(/claim file is gone/);
 });
 
 test("a guest holding the claim is the finding that locks the real sandbox out of its own box", () => {
-    expect(() => run({ container: false, roots: true }, homeWith({ pid: 4242 }), 4242)).toThrow(/running as a guest but holds the container claim/);
+    expect(() =>
+        run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 10 }), { pid: 4242, startTimeTicks: 10 }),
+    ).toThrow(/running as a guest but holds the container claim/);
 });
 
 test("a guest beside the daemon that does hold it is ordinary and silent", () => {
-    expect(() => run({ container: false, roots: false }, homeWith({ pid: 9001 }), 4242)).not.toThrow();
+    expect(() =>
+        run({ container: false, roots: false }, homeWith({ pid: 9001, startTimeTicks: 20 }), { pid: 4242, startTimeTicks: 10 }),
+    ).not.toThrow();
 });
 
 test("a guest with no claim file at all is silent: there is nothing for it to be wrong about", () => {
-    expect(() => run({ container: false, roots: true }, homeWith(), 4242)).not.toThrow();
+    expect(() => run({ container: false, roots: true }, homeWith(), { pid: 4242, startTimeTicks: 10 })).not.toThrow();
+});
+
+test("a guest with the holder's recycled pid is not itself the holder", () => {
+    expect(() =>
+        run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 9 }), { pid: 4242, startTimeTicks: 10 }),
+    ).not.toThrow();
 });

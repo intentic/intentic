@@ -1,5 +1,6 @@
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
+import { parentPid } from "../platform/proc-stat.js";
 
 // Discovers every listening TCP socket in the sandbox by reading procfs directly, no lsof/ss dependency, a
 // handful of file reads per scan, cheap enough to run on demand per /ports request. This is the generic
@@ -39,17 +40,6 @@ export interface ListeningPort {
  * natural stop, but a stat file racing a dying process must not be able to spin here.
  */
 const ANCESTRY_LIMIT = 64;
-
-// The ppid out of /proc/<pid>/stat. `comm` sits in parentheses and may itself contain spaces AND parentheses,
-// so the fields are read after the LAST `)`, splitting the line on whitespace mis-indexes on `(node (old))`.
-export const parentPid = (stat: string): number | undefined => {
-    const fields = stat
-        .slice(stat.lastIndexOf(")") + 1)
-        .trim()
-        .split(/\s+/);
-    const ppid = Number(fields[1]);
-    return Number.isInteger(ppid) && ppid > 0 ? ppid : undefined;
-};
 
 // Each listener annotated with the tmux session it descends from. `panes` maps a pane's root pid to its session
 // (terminal/terminal-session.ts panePids); an empty map, no tmux server, annotates nothing.

@@ -235,7 +235,9 @@ reports the profile.
   claim: or finds `INTENTIC_AGENT_SESSION` on itself, the badge
   [src/agent/agent-terminals.ts](src/agent/agent-terminals.ts) puts on every command a conversation runs, which
   everything forked from one inherits, comes up a GUEST: it serves its own routes, converges only roots nobody
-  else holds, and sweeps nothing. Two incidents wrote this: 2026-07-31, where a dev run took the live sandbox's
+  else holds, and sweeps nothing. A claim binds the pid to its kernel start-time tick: container restarts commonly
+  reuse pid 7, and the new daemon must take over that dead process's claim rather than locking itself into the
+  guest posture. Two incidents wrote this: 2026-07-31, where a dev run took the live sandbox's
   git access down, and 2026-08-11, where one killed four agent turns mid-answer and did it again 26 minutes
   later from roots that were safely under `/tmp`.
 - The four change feeds that keep the browser fresh without it ever asking twice, all riding the one `/events`
@@ -338,8 +340,10 @@ one out twice over. First on shape: there is no child process, so there is no mo
 (its worktree is enforced by working directory) and no environment to hand a credential to (the selected
 account's key rides the request instead, so the account a turn was planned against is the account it spends).
 Second on distribution: `@cursor/sdk` is the one dependency here whose licence grants no redistribution, so it
-is pruned out of every published image and arrives only through the overlay rebuild an owner approves after
-connecting a Cursor account; the module is loaded dynamically and the daemon boots cleanly without it.
+is pruned out of every published image. An explicit Connect press downloads the pack's pinned copy onto that
+owner's running sandbox so sign-in can bootstrap itself; once the credential lands, the daemon composes the
+same pack into the owner-approved overlay for the next recreation. The module stays dynamically loaded, so a
+sandbox that has never asked for Cursor boots cleanly without it.
 
 What that buys is the second-richest capability row in the catalog. The daemon's own functions can BE tools
 (`customTools`), so a Cursor turn gets a real question card while Cursor's own `askQuestion` is withheld — in

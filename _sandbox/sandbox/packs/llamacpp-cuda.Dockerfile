@@ -24,6 +24,14 @@
 # source, yet it sits above it in the overlay, so it re-ran in full on every rebuild — 19 minutes of a
 # 40-minute one. The apt mounts keep the toolkit bytes and the ccache mount keeps the object files, so a
 # re-run after an image update recompiles almost nothing. ccache understands nvcc, hence the CUDA launcher.
+#
+# THE JOB COUNT IS A SAFETY BOUNDARY. CMake forwards a bare `-j` to GNU Make, where it means UNLIMITED jobs,
+# not one job per CPU. llama.cpp's CUDA target has hundreds of independently schedulable translation units;
+# on a 20GB/16-core WSL guest the unbounded build launched enough nvcc/cicc/cudafe++ processes to consume all
+# RAM and all 8GB of swap, after which the kernel killed Docker, WSLg and journald. Arch's earlyoom cannot save
+# this build because Docker Desktop's processes live in a different WSL PID namespace. Use available memory,
+# not total memory, so running sandboxes keep their headroom; budget 2GiB per job and cap at eight even on a
+# large host. ccache makes the safer concurrency cheap on repeat builds.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
@@ -37,7 +45,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache \
         -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
-    && cmake --build /tmp/llama.cpp/build -j --target llama-server \
+    && jobs="$(awk -v cpus="$(nproc)" '/^MemAvailable:/ { fits = int($2 / (2 * 1024 * 1024)); if (fits < 1) fits = 1; if (fits > cpus) fits = cpus; if (fits > 8) fits = 8; print fits }' /proc/meminfo)" \
+    && echo "llamacpp CUDA pack: compiling llama.cpp with -j${jobs}" \
+    && cmake --build /tmp/llama.cpp/build -j "${jobs}" --target llama-server \
     && ccache --show-stats \
     && rm -f /usr/local/bin/llama-server \
     && install /tmp/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server \

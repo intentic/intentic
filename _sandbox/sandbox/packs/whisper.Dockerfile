@@ -9,6 +9,8 @@
 # linux prebuild, so any in-sandbox `pnpm install` compiles it from source), and purging them here left this
 # pack silently breaking native installs in /work. git stays for the same reason. libgomp1 is whisper's
 # OpenMP runtime, installed explicitly so it survives.
+# Keep the build bounded by the same memory/CPU rule as the CUDA pack. Whisper is smaller, but bare `-j` still
+# means unlimited jobs under GNU Make and image fragments must not make host survival depend on project size.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.cache/ccache \
@@ -16,7 +18,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && git clone --depth 1 --branch v1.9.1 https://github.com/ggml-org/whisper.cpp /tmp/whisper.cpp \
     && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    && cmake --build /tmp/whisper.cpp/build -j --target whisper-cli \
+    && jobs="$(awk -v cpus="$(nproc)" '/^MemAvailable:/ { fits = int($2 / (2 * 1024 * 1024)); if (fits < 1) fits = 1; if (fits > cpus) fits = cpus; if (fits > 8) fits = 8; print fits }' /proc/meminfo)" \
+    && echo "whisper pack: compiling whisper.cpp with -j${jobs}" \
+    && cmake --build /tmp/whisper.cpp/build -j "${jobs}" --target whisper-cli \
     && ccache --show-stats \
     && install /tmp/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli \
     && rm -rf /tmp/whisper.cpp \

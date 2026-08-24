@@ -32,6 +32,9 @@
  *      cacache keeps the registry's already-gzipped tarballs, 420 MiB of them in the published image, for a
  *      cache nothing reads at runtime. A mount is never committed, so it keeps the image just as small AND
  *      keeps the tarballs for the next build; cleaning it now would only empty the mount.
+ *   5. A cmake build MUST NOT use bare `-j` or `--parallel`.
+ *      CMake forwards that to GNU Make as unlimited concurrency. The CUDA pack demonstrated the failure:
+ *      hundreds of compiler processes exhausted a 20GB WSL guest plus 8GB swap and crashed the distro.
  *
  * Deliberately NOT checked: the core `Dockerfile`s of the platform's own services (api, web, ci-base, …). They
  * are separate images with separate bases and no overlay above them; the contract here is specifically about
@@ -52,6 +55,7 @@ const CCACHE = /--mount=type=cache,target=\/root\/\.cache\/ccache\b/;
 const NPM_CACHE = /--mount=type=cache,target=\/root\/\.npm\b/;
 const APT_INSTALL = /\bapt-get\s+(?:-\S+\s+)*install\b/;
 const CMAKE_BUILD = /\bcmake\s+--build\b/;
+const UNBOUNDED_CMAKE_PARALLELISM = /(?:^|\s)(?:-j|--parallel)(?=\s*(?:\\\s*\n\s*)?(?:--[a-z]|&&|;|$))/m;
 const COMPILER_LAUNCHER = /-DCMAKE_(?:C|CXX|CUDA)_COMPILER_LAUNCHER=ccache\b/;
 const NPM_FETCH = /\b(?:npm\s+(?:-\S+\s+)*install\b|npx\s)/;
 const DELETES_LISTS = /rm\s+(?:-\S+\s+)*[^\n]*\/var\/lib\/apt\/lists/;
@@ -151,6 +155,13 @@ for (const path of files) {
                     where,
                     line,
                     message: "compiles with cmake but sets no -DCMAKE_<LANG>_COMPILER_LAUNCHER=ccache, so the ccache mount stays empty",
+                });
+            }
+            if (UNBOUNDED_CMAKE_PARALLELISM.test(code)) {
+                findings.push({
+                    where,
+                    line,
+                    message: "runs cmake with unbounded parallelism; give -j/--parallel an explicit CPU- and memory-bounded job count",
                 });
             }
         }

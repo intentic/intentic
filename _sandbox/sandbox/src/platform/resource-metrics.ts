@@ -6,6 +6,7 @@ import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
 import type { Logger } from "pino";
 import { logsRoot } from "../logs/log-files.js";
 import { parsePressure, type PressureSnapshot } from "./loop-watchdog.js";
+import { parseProcStat } from "./proc-stat.js";
 
 /* A regular, durable account of the sandbox's resources. The stall watchdog answers only after the event loop
  * has already disappeared; this series answers what was growing BEFORE that point, including healthy periods
@@ -88,12 +89,6 @@ export const classifyProcess = (command: string): ProcessRole => {
     return "other";
 };
 
-const cpuTicksOf = (stat: string): number => {
-    // `comm` is parenthesized and may contain spaces or `)`, so split only after its LAST closing paren.
-    const tail = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    return Number(tail[11] ?? 0) + Number(tail[12] ?? 0);
-};
-
 const readProcess = async (pidText: string): Promise<ProcessRow | undefined> => {
     try {
         const [statusRaw, commandRaw, stat] = await Promise.all([
@@ -102,15 +97,19 @@ const readProcess = async (pidText: string): Promise<ProcessRow | undefined> => 
             readFile(`/proc/${pidText}/stat`, "utf8"),
         ]);
         const status = parseProcStatus(statusRaw);
+        const proc = parseProcStat(stat);
+        if (proc?.cpuTicks === undefined) {
+            return undefined;
+        }
         const command = `${status.name} ${commandRaw.replaceAll("\0", " ")}`;
         return {
             pid: Number(pidText),
-            ppid: status.ppid,
+            ppid: proc.ppid,
             role: classifyProcess(command),
             rssBytes: status.rssBytes,
             swapBytes: status.swapBytes,
             threads: status.threads,
-            cpuTicks: cpuTicksOf(stat),
+            cpuTicks: proc.cpuTicks,
         };
     } catch {
         // A process exiting between readdir and read is the ordinary case during a sample.

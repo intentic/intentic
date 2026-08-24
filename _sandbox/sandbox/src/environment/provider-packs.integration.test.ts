@@ -3,15 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { unstubbed } from "@intentic/testing";
-import type { Services } from "../composition.js";
-import { packFragment } from "./packs.js";
 import { codexConnected } from "../codex/codex-provider.js";
+import type { Services } from "../composition.js";
+import { fileCursorStore } from "../cursor/cursor-credentials.js";
+import { createLogger } from "../logger.js";
+import { packFragment } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
 
 /* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. The
  * assertions compare against packFragment() through the same default stamp dir the source itself reads, so
  * they hold wherever the suite runs: in a dev checkout every wanted pack is a real fragment; inside a
  * standard image (stamped base) both sides collapse to "nothing to compose", which is itself the contract. */
+
+const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 
 const services = (openaiApiKey: string, xai: boolean, authRoot: string): Services =>
     unstubbed<Services>("services", {
@@ -35,6 +39,20 @@ test("an OPENAI_API_KEY alone wants the codex pack, and only it", async () => {
 test("an xAI sign-in wants the opencode pack, and only it", async () => {
     const fragments = await providerPackFragments(services("", true, emptyAuth()));
     expect(fragments).toEqual([await packFragment("opencode")].filter((fragment) => fragment !== undefined));
+});
+
+test("a Cursor sign-in wants the Cursor pack, and only it", async () => {
+    const authRoot = emptyAuth();
+    await fileCursorStore(join(authRoot, "cursor"), logger).write({ id: "account", apiKey: "cursor-test", connectedAt: 1 });
+    const fragments = await providerPackFragments(services("", false, authRoot));
+    expect(fragments).toEqual([await packFragment("cursor")].filter((fragment) => fragment !== undefined));
+});
+
+test("Cursor's model cache is not mistaken for a connected account", async () => {
+    const authRoot = emptyAuth();
+    mkdirSync(join(authRoot, "cursor"), { recursive: true });
+    writeFileSync(join(authRoot, "cursor", "models.json"), JSON.stringify({ models: [{ id: "auto" }] }));
+    expect(await providerPackFragments(services("", false, authRoot))).toEqual([]);
 });
 
 // One subscription on disk answers twice: the translator has something to serve (its pack), and a codex-type
