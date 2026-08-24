@@ -6,7 +6,11 @@
 # failure (native-harness turns never touch it).
 # CLIProxyAPI names its arm build `linux_aarch64` where dpkg (and every other asset) says `arm64` — mapped
 # below, verified against the release's asset list.
-RUN version=7.2.132 \
+# 7.2.140 is the floor for a REASON, not a routine bump: every earlier pin strips `prompt_cache_retention` in
+# each Codex executor separately and misses the compaction call, which is the one request a long turn makes at
+# its very end. Upstream moved the strip into the shared request converter, so no Codex path can forward a
+# parameter this sandbox never sets. Never pin below it.
+RUN version=7.2.140 \
     && arch="$(dpkg --print-architecture)" \
     && case "$arch" in arm64) arch="aarch64" ;; esac \
     && mkdir -p /tmp/cliproxy \

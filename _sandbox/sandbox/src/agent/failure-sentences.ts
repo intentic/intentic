@@ -133,3 +133,30 @@ export const mentionsSpentAllowance = (text: string): boolean =>
 const NOT_ENTITLED_PHRASES = ["disabled claude subscription access", "claude code is not available"];
 
 export const isEntitlementRefusalText = (text: string): boolean => NOT_ENTITLED_PHRASES.some((phrase) => text.toLowerCase().includes(phrase));
+
+/* A PARAMETER NOBODY HERE SENT, refused as though the turn had asked for it, and the reason a 400 is not always
+ * the request's fault.
+ *
+ * `400 prompt_cache_retention is not supported on this model` killed a ten-minute Codex turn at its last
+ * request. Nothing in this sandbox sets that parameter: the CLI's own outgoing body was captured and does not
+ * carry it, the field name appears nowhere in this repo, and the upstream answer to a request WITHOUT it comes
+ * back carrying `"prompt_cache_retention":"24h"` anyway, which is the provider applying its own default and
+ * then, for whichever model route it picked that minute, rejecting it. The proxy in front of it can do the same
+ * on a path that forgets to strip the field (packs/translator.Dockerfile pins past that bug).
+ *
+ * SO IT IS A PROVIDER FAULT WEARING A CLIENT ERROR'S STATUS CODE, and that is the whole point of reading it
+ * here. Every other 4xx is uncoded on purpose, because re-sending a malformed request on a timer is a loop
+ * rather than a recovery. This one has no request to fix: the rejected parameter is not ours to remove, the same
+ * send goes through moments later, and leaving it uncoded means a red line and a dead tab over a condition that
+ * cleared by itself. Coded as an outage, it rides the breaker every transient provider failure already uses.
+ *
+ * NARROW BY CONSTRUCTION, both halves required: a parameter from the list below AND the shape of a refusal. The
+ * list holds only parameters this sandbox demonstrably never sends, so a matching sentence cannot be about
+ * anything the turn did; the shape test keeps a model that merely MENTIONS one (the CLI's own prompts discuss
+ * prompt caching) from being read as a refusal. A wording not covered here falls through to the plain uncoded
+ * failure it is today. */
+const UNSENT_PARAMETERS = ["prompt_cache_retention", "prompt_cache_options"];
+const PARAMETER_REFUSAL_SHAPE = /invalid_parameter|invalid_request_error|unsupported parameter|unknown parameter|is not supported/i;
+
+export const isUnsentParameterRefusalText = (text: string): boolean =>
+    UNSENT_PARAMETERS.some((parameter) => text.toLowerCase().includes(parameter)) && PARAMETER_REFUSAL_SHAPE.test(text);

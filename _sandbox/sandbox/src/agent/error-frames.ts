@@ -2,7 +2,7 @@ import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
-import { isAuthFailureText, isEntitlementRefusalText, mentionsSpentAllowance } from "./failure-sentences.js";
+import { isAuthFailureText, isEntitlementRefusalText, isUnsentParameterRefusalText, mentionsSpentAllowance } from "./failure-sentences.js";
 import { opt } from "./opt.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
@@ -128,6 +128,20 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
         `the endpoint is turning the request away rather than having a bad minute: check the model and endpoint on its card.`,
 });
 
+/* A PARAMETER THE TURN NEVER ASKED FOR, refused as if it had (failure-sentences.ts holds the evidence and the
+ * narrowing). Coded `provider-outage` for the same reason every 5xx is: the request is not what is wrong, so the
+ * breaker owns the waiting and the turn is re-run from the session it already built rather than dying on a red
+ * line. Exported because three adapters reach it by different routes (the Claude harness's API error text, the
+ * Codex app-server's turn.failed, OpenCode's session.error) and one sentence for one condition is the point:
+ * the provider's own words first, then the only fact the reader cannot check for themselves. */
+export const unsentParameterFrame = (explained: string): ErrorEvent => ({
+    kind: "error",
+    code: "provider-outage",
+    message:
+        `${explained} Nothing this sandbox sends carries that parameter, so it was added above us: there is no request of yours to fix, ` +
+        `and the same send usually goes through moments later. Whatever the turn had already done is kept.`,
+});
+
 /* WHICH CONDITION an API failure actually is, the frame the client branches on.
  *
  * Two of these read the CATEGORY the SDK filed, and two read the SENTENCE, and the split is not arbitrary. A
@@ -201,6 +215,12 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
     // fault" treatment a spent allowance gets.
     if (isAuthFailureText(explained)) {
         return { kind: "error", code: "claude-token-refused", message: explained };
+    }
+    // The 4xx that is not the request's fault, and the only one: see unsentParameterFrame. Last, so a refusal
+    // that ALSO reads as a spent allowance, a dead seat or a refused token keeps the code whose recovery is
+    // specific, and this catches only what would otherwise have gone out uncoded.
+    if (isUnsentParameterRefusalText(explained)) {
+        return unsentParameterFrame(explained);
     }
     return { kind: "error", message: explained };
 };
