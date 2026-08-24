@@ -245,9 +245,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                     warn-thinking
                     @promote="quick.promote"
                     @remove="quick.remove"
-                >
-                    <template #floor>Remove them all to go back to Auto.</template>
-                </ModelPinList>
+                />
                 <!-- AUTO, SPELLED OUT. Naming the ladder rather than the word is what makes this row readable
                      without opening anything: you can see which account your commit messages come from and
                      which one catches it, and decide whether that order is the one you wanted. -->
@@ -265,57 +263,46 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
              them, but BELOW rather than in the description, because the description column is 14rem wide and
              a five-item list read there as six lines of prose beside a one-line dropdown. The same names on
              the full-width row underneath are one line, and read as the list they are. -->
-        <Row icon="bolt" title="Agent runs" description="Model tier for runs started in a worktree.">
+        <Row icon="bolt" title="Agent runs" description="Model tier for runs started in a worktree." wide-control>
             <template #control>
-                <Picker
-                    v-model="runs.adding.value"
-                    :options="agentRunPickerOptions"
-                    :disabled="settings === undefined || agentRunModelGroups.length === 0"
-                    placeholder="Add a model…"
-                    class="w-56 py-1.5 text-xs"
-                    aria-label="Add a model for agent runs"
-                >
-                    <template #icon="{ option }">
-                        <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                    </template>
-                </Picker>
-            </template>
-            <!-- TWO BLOCKS, and a hairline between them: the list of models, then the effort those models run
-                 at. Without the divider the list's floor caption, the effort label and the footnote underneath
-                 it stacked into one run of grey lines, and a control sandwiched between two captions in the
-                 same size and colour read as more prose rather than as a setting. Each caption sits directly
-                 under the thing it describes, in the smaller, dimmer type, so the eye gets list, then setting,
-                 never three unrelated lines. -->
-            <template #below>
-                <div class="flex flex-col gap-3">
-                    <ModelPinList v-if="runs.entries.value.length > 0" :entries="runs.entries.value" @promote="runs.promote" @remove="runs.remove">
-                        <template #floor>Remove them all to run on whatever your chat composer is set to.</template>
-                    </ModelPinList>
-                    <!-- The floor, named. Unlike the row above there is no ladder to spell out: deliberately,
-                         since nothing here can judge which tier a whole session is worth, so what this has to
-                         say is simply which model answers while the list is empty, and that it follows the
-                         composer. -->
-                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">
-                        <span class="text-content">Composer default</span>: whatever your chat is set to, which keeps following it as you change it.
-                        Add a model to pin these runs to a tier of their own.
-                    </p>
-
-                    <div class="mt-3 flex flex-col gap-1.5">
-                        <!-- The effort scale belongs to the model, so it appears only once one of the pins is
-                             reachable, and a model whose runtime forwards no effort at all publishes none,
-                             which correctly draws just the footnote. The label is set in the content colour so
-                             it reads as the setting it is, not as another caption. -->
-                        <div v-if="agentRunEffortOptions.length > 0" class="flex items-center justify-between gap-3">
-                            <span class="text-xs font-medium text-content">Reasoning effort</span>
-                            <SegmentedControl
-                                :model-value="agentRunEffort"
-                                :options="agentRunEffortOptions"
-                                @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"
-                            />
-                        </div>
-                        <p class="text-2xs text-subtle">For automated runs. Override per run from each button's caret.</p>
+                <div class="flex flex-wrap items-center justify-end gap-2">
+                    <div
+                        v-if="agentRunEffortOptions.length > 0"
+                        class="flex shrink-0 items-center"
+                        role="group"
+                        aria-label="Reasoning effort"
+                    >
+                        <SegmentedControl
+                            :model-value="agentRunEffort"
+                            :options="agentRunEffortOptions"
+                            wrap
+                            @update:model-value="(agentRunEffort: string) => patch({ agentRunEffort })"
+                        />
                     </div>
+                    <Picker
+                        v-model="runs.adding.value"
+                        :options="agentRunPickerOptions"
+                        :disabled="settings === undefined || agentRunModelGroups.length === 0"
+                        placeholder="Add a model…"
+                        class="w-56 py-1.5 text-xs"
+                        aria-label="Add a model for agent runs"
+                    >
+                        <template #icon="{ option }">
+                            <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
+                        </template>
+                    </Picker>
                 </div>
+            </template>
+            <template #below>
+                <ModelPinList v-if="runs.entries.value.length > 0" :entries="runs.entries.value" @promote="runs.promote" @remove="runs.remove" />
+                <!-- The floor, named. Unlike the row above there is no ladder to spell out: deliberately,
+                     since nothing here can judge which tier a whole session is worth, so what this has to
+                     say is simply which model answers while the list is empty, and that it follows the
+                     composer. -->
+                <p v-else-if="settings !== undefined" class="text-2xs text-muted">
+                    <span class="text-content">Composer default</span>: whatever your chat is set to, which keeps following it as you change it.
+                    Add a model to pin these runs to a tier of their own.
+                </p>
             </template>
         </Row>
 
@@ -387,9 +374,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                             :entries="fast.entries.value"
                             @promote="fast.promote"
                             @remove="fast.remove"
-                        >
-                            <template #floor>Remove them all to go back to Auto.</template>
-                        </ModelPinList>
+                        />
                         <p v-else-if="settings !== undefined" class="text-2xs text-muted">
                             <span class="text-content">Auto</span>: cheapest from the chat's provider.
                         </p>

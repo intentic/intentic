@@ -12,9 +12,8 @@ import ProviderLogo from "../../../chat/ProviderLogo.vue";
  * summarised in the 14rem trigger beside it. What a click is about to bill, and which account catches it when
  * that one is spent, are both facts you should be able to read without opening anything.
  *
- * THE ROWS' OWN DIFFERENCES STAY WITH THE ROWS, as slots and one flag: what emptying the list falls back to is
- * different copy per row (Auto up there, the composer's pick down here), and only the quick model cares whether
- * a pin thinks before it answers. */
+ * THE ROWS' OWN DIFFERENCES STAY WITH THE ROWS, as one flag: only the quick model cares whether a pin thinks
+ * before it answers. What emptying the list falls back to is spelled out by each row's own empty state. */
 
 const { entries, warnThinking = false } = defineProps<{
     // The list AS THE USER WROTE IT, described, not the resolved chain. A pin whose account was disconnected
@@ -77,9 +76,5 @@ const emit = defineEmits<{ promote: [number]; remove: [number] }>();
                 <Icon name="times" class="text-2xs" />
             </button>
         </li>
-        <!-- What emptying the list does, stated rather than implied: with a list on screen it is not obvious
-             that removing the last row hands the choice back to something. The two rows fall back to different
-             things, so the sentence belongs to the caller. -->
-        <li class="text-2xs text-subtle"><slot name="floor" /></li>
     </ol>
 </template>
