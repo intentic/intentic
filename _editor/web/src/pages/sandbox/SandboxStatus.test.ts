@@ -111,6 +111,16 @@ it(`keeps waiting when only one of the two reads has landed`, async () => {
     expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
 });
 
+// When id and kind are the same word (docker/docker), the subtitle would repeat the title for no reason.
+it(`does not repeat the kind when it matches the id`, async () => {
+    const el = mount();
+    capabilitiesLoading.value = false;
+    panelsLoading.value = false;
+    capabilities.value = [{ id: `docker`, kind: `docker`, status: { state: `active` }, config: {} } as CapabilitySummary];
+    await nextTick();
+    expect(el.textContent?.match(/docker/g)?.length).toBe(1);
+});
+
 // And once it is true, it is said: the empty state is not lost, only deferred until it is honest.
 it(`says nothing is running once both reads land empty`, async () => {
     const el = mount();

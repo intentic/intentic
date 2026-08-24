@@ -85,7 +85,8 @@ const stateVariant = (state: string): StatusVariant =>
                      here: they have their own card above, with the detail and the controls a tunnel needs. -->
                 <Row v-for="service in activeServices" :key="service.id" icon="server">
                     <template #title>
-                        {{ service.id }}<span class="ml-2 text-2xs font-normal text-subtle">{{ service.kind }}</span>
+                        {{ service.id
+                        }}<span v-if="service.kind !== service.id" class="ml-2 text-2xs font-normal text-subtle">{{ service.kind }}</span>
                     </template>
                     <template #control>
                         <StatusBadge
