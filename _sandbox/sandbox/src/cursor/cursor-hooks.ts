@@ -43,12 +43,14 @@ import { type CommandGate, consultWith, vendorSubject } from "../guard/command-g
 const enterpriseHooksPath = (): string => process.env["INTENTIC_CURSOR_HOOKS_FILE"] ?? "/etc/cursor/hooks.json";
 const GATE_SCRIPT_NAME = "intentic-command-gate.mjs";
 
-/* One live turn's gate. Registered for as long as the turn runs, looked up by whichever id the hook payload
- * carries. `push` is the turn's own event sink, so the permission card lands in the conversation that raised
- * it rather than anywhere else. */
+/* One live turn's hook context. Registered for as long as the turn runs, looked up by whichever id the hook
+ * payload carries. `push` is the turn's own event sink, so the permission card lands in the conversation that
+ * raised it rather than anywhere else. */
 export interface CursorGateTurn {
     // Cursor's id for the agent this turn is running on, the correlation key the payload carries back.
     readonly conversationId: string;
+    // Capability credentials and persona values projected into this turn, never the daemon's ambient env.
+    readonly cliEnv?: Record<string, string>;
     readonly gate: CommandGate;
     readonly push: (event: AgentEvent) => void;
 }
@@ -69,50 +71,60 @@ export interface CursorHookService {
  * image (the daemon is running on it), where `curl` is a build-time tool that need not survive into the
  * runtime layer.
  *
- * FAILS OPEN, ON PURPOSE, and every path that can fail does so silently. This hook fires for every command
- * Cursor runs anywhere on the machine, including a `cursor-agent` the owner started by hand in their own
- * terminal — which is the owner acting directly, not an agent acting for them, and is exactly the case the
- * daemon has no turn registered for. Blocking those would make the sandbox's own agent policy break the
- * owner's manual work. A deny only ever comes from the daemon actually saying deny.
+ * FAILURE POSTURE. Environment lookup fails empty; the command gate fails open, and every path does so
+ * silently. The latter fires for every command Cursor runs anywhere on the machine, including a
+ * `cursor-agent` the owner started by hand in their own terminal — which is the owner acting directly, not an
+ * agent acting for them, and is exactly the case the daemon has no turn registered for. Blocking those would
+ * make the sandbox's own agent policy break the owner's manual work. A deny only ever comes from the daemon
+ * actually saying deny.
  *
  * `failClosed` in the hooks entry still guards the case this cannot: the script itself being unrunnable. */
 const gateScript = (socketPath: string): string =>
     [
         `// managed by intentic: overwritten on daemon boot (src/cursor/cursor-hooks.ts).`,
-        `// Asks the daemon whether a command Cursor is about to run passes the owner's command rules`,
-        `// (src/guard/command-gate.ts). Answers "allow" for anything it cannot ask about, so a hand-run`,
-        `// cursor-agent is never blocked by a sandbox that has no turn for it.`,
+        `// Asks the daemon for either the current turn's environment or a command-gate verdict.`,
+        `// Missing session environment is always empty; a missing gate verdict is always allow.`,
         `import { request } from "node:http";`,
         ``,
-        `const allow = () => { process.stdout.write(JSON.stringify({ permission: "allow" })); process.exit(0); };`,
+        `const mode = process.argv[2] === "session-env" ? "session-env" : "gate";`,
+        `const fallback = () => {`,
+        `    process.stdout.write(JSON.stringify(mode === "session-env" ? {} : { permission: "allow" }));`,
+        `    process.exit(0);`,
+        `};`,
         `const chunks = [];`,
         `process.stdin.on("data", (chunk) => chunks.push(chunk));`,
-        `process.stdin.on("error", allow);`,
+        `process.stdin.on("error", fallback);`,
         `process.stdin.on("end", () => {`,
         `    const body = Buffer.concat(chunks);`,
-        `    if (body.length === 0) { allow(); return; }`,
+        `    if (body.length === 0) { fallback(); return; }`,
         `    const call = request(`,
-        `        { socketPath: ${JSON.stringify(socketPath)}, path: "/gate", method: "POST", headers: { "content-type": "application/json" } },`,
+        `        {`,
+        `            socketPath: ${JSON.stringify(socketPath)},`,
+        `            path: mode === "session-env" ? "/session-env" : "/gate",`,
+        `            method: "POST",`,
+        `            headers: { "content-type": "application/json" },`,
+        `        },`,
         `        (response) => {`,
         `            const parts = [];`,
         `            response.on("data", (part) => parts.push(part));`,
-        `            response.on("error", allow);`,
+        `            response.on("error", fallback);`,
         `            response.on("end", () => {`,
         `                const text = Buffer.concat(parts).toString("utf8");`,
-        `                // Anything but a well-formed verdict is treated as no answer at all.`,
-        `                try { JSON.parse(text); } catch { allow(); return; }`,
+        `                // Anything but a well-formed answer is treated as no answer at all.`,
+        `                try { JSON.parse(text); } catch { fallback(); return; }`,
         `                process.stdout.write(text);`,
         `                process.exit(0);`,
         `            });`,
         `        },`,
         `    );`,
-        `    call.on("error", allow);`,
+        `    call.on("error", fallback);`,
         `    call.end(body);`,
         `});`,
         ``,
     ].join("\n");
 
-/* The hooks file. Only `beforeShellExecution` is wired, and the omissions are deliberate rather than pending.
+/* The hooks file. `sessionStart` projects the exact turn's capability environment into Cursor's session;
+ * `beforeShellExecution` enforces the command rulebook. The remaining omissions are deliberate.
  *
  * `beforeMCPExecution` would gate the MCP tools, but those are the daemon's OWN servers on this runtime (the
  * browser stack and the host callbacks it registers), already fenced where they are built, so gating them here
@@ -129,7 +141,8 @@ const hooksJson = (scriptPath: string): string =>
         {
             version: 1,
             hooks: {
-                beforeShellExecution: [{ command: `node ${JSON.stringify(scriptPath)}`, failClosed: true }],
+                sessionStart: [{ command: `node ${JSON.stringify(scriptPath)} session-env`, failClosed: false }],
+                beforeShellExecution: [{ command: `node ${JSON.stringify(scriptPath)} gate`, failClosed: true }],
             },
         },
         undefined,
@@ -142,6 +155,10 @@ interface GateRequest {
     readonly command?: unknown;
     readonly conversation_id?: unknown;
     readonly cwd?: unknown;
+}
+
+interface SessionStartRequest {
+    readonly conversation_id?: unknown;
 }
 
 const asString = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
@@ -195,6 +212,17 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
         return { permission: "deny", agent_message: outcome.reason, user_message: outcome.reason };
     };
 
+    /* Credentials never use the command gate's single-live-turn fallback. A sessionStart hook can also come
+     * from an owner's hand-run Cursor process, and handing that unrelated session the only Intentic turn's
+     * environment would cross the capability boundary. No exact id means no environment. */
+    const environmentFor = (payload: SessionStartRequest): { env: Record<string, string> } => {
+        const conversationId = asString(payload.conversation_id);
+        if (conversationId === undefined) {
+            return { env: {} };
+        }
+        return { env: turns.get(conversationId)?.cliEnv ?? {} };
+    };
+
     return {
         start: async () => {
             if (server !== undefined) {
@@ -206,26 +234,34 @@ export const createCursorHookService = (socketDir: string, logger: Logger): Curs
             // gate comes back after a hard kill.
             await rm(socketPath, { force: true });
             const created = createServer((request, response) => {
-                if (request.method !== "POST") {
+                if (request.method !== "POST" || (request.url !== "/gate" && request.url !== "/session-env")) {
                     response.writeHead(405).end();
                     return;
                 }
+                const sessionEnvironment = request.url === "/session-env";
                 const chunks: Buffer[] = [];
                 request.on("data", (chunk: Buffer) => chunks.push(chunk));
                 request.on("end", () => {
                     void (async () => {
-                        let payload: GateRequest;
+                        let payload: GateRequest | SessionStartRequest;
                         try {
-                            payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as GateRequest;
+                            payload = JSON.parse(Buffer.concat(chunks).toString("utf8")) as GateRequest | SessionStartRequest;
                         } catch {
-                            response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ permission: "allow" }));
+                            const fallback = sessionEnvironment ? {} : { permission: "allow" };
+                            response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(fallback));
+                            return;
+                        }
+                        if (sessionEnvironment) {
+                            response
+                                .writeHead(200, { "content-type": "application/json" })
+                                .end(JSON.stringify(environmentFor(payload as SessionStartRequest)));
                             return;
                         }
                         // A gate that throws must not leave Cursor waiting on a socket forever: the script's own
                         // timeout would eventually fire, but the turn would have stalled for it. Answering
                         // `allow` on an internal error matches the guard's own "never be the reason a turn
                         // breaks" posture for this transport.
-                        const verdict = await verdictFor(payload).catch((error: unknown) => {
+                        const verdict = await verdictFor(payload as GateRequest).catch((error: unknown) => {
                             logger.error({ err: error }, "cursor: command gate failed, allowing the command");
                             return { permission: "allow" as const };
                         });

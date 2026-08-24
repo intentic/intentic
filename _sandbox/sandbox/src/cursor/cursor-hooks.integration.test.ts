@@ -9,10 +9,10 @@ import type { CommandGate } from "../guard/command-gate.js";
 import { createLogger } from "../logger.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 
-/* THE COMMAND RULEBOOK ON CURSOR'S RUNTIME, END TO END: the gate script Cursor would spawn, run as a real
- * child process, talking to the real socket, over the real HTTP-over-Unix transport. Stubbing any of that
- * would leave the one part most likely to be wrong untested — this is a protocol between a generated script
- * and a server, and the whole claim behind `rulebook: "hooks"` rests on the round trip working.
+/* CURSOR'S TURN HOOKS, END TO END: the script Cursor would spawn, run as a real child process, talking to the
+ * real socket, over the real HTTP-over-Unix transport. Stubbing any of that would leave the one part most
+ * likely to be wrong untested — both capability environment projection and the command rulebook rest on this
+ * protocol between a generated script and a server.
  *
  * The one thing NOT exercised here is Cursor itself reading /etc/cursor/hooks.json, which no test in this
  * repository can reach. What is pinned instead is the file's content, so the shape Cursor is promised is the
@@ -43,9 +43,9 @@ const started = async (): Promise<{ service: CursorHookService; dir: string }> =
     return { service: created, dir };
 };
 
-// Run the generated script the way Cursor runs it: a child process, the payload on stdin, the verdict on stdout.
-const askGate = async (dir: string, payload: unknown): Promise<unknown> => {
-    const child = execFile("node", [join(dir, "intentic-command-gate.mjs")]);
+// Run the generated script the way Cursor runs it: a child process, the payload on stdin, the answer on stdout.
+const askHook = async (dir: string, mode: "gate" | "session-env", payload: unknown): Promise<unknown> => {
+    const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), mode]);
     child.stdin?.end(JSON.stringify(payload));
     const stdout = await new Promise<string>((settle) => {
         let out = "";
@@ -54,6 +54,8 @@ const askGate = async (dir: string, payload: unknown): Promise<unknown> => {
     });
     return JSON.parse(stdout);
 };
+const askGate = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "gate", payload);
+const askSessionEnv = (dir: string, payload: unknown): Promise<unknown> => askHook(dir, "session-env", payload);
 
 // A gate that refuses everything, with the sentence the model and the user are both supposed to receive.
 const denying = (reason: string): CommandGate => ({
@@ -88,6 +90,33 @@ test("an allowed command comes back as a bare allow", async () => {
     const { service: hooks, dir } = await started();
     hooks.register({ conversationId: "agent-1", gate: allowing(), push: () => {} });
     expect(await askGate(dir, { command: "ls", conversation_id: "agent-1" })).toEqual({ permission: "allow" });
+});
+
+test("a registered turn receives its exact capability environment", async () => {
+    const { service: hooks, dir } = await started();
+    hooks.register({
+        conversationId: "agent-1",
+        cliEnv: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_PERSONA: "release-editor" },
+        gate: allowing(),
+        push: () => {},
+    });
+    expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({
+        env: { DISCORD_BOT_TOKEN_DISCORD: "fake-token", INTENTIC_PERSONA: "release-editor" },
+    });
+});
+
+test("session environment requires an exact conversation id even with one turn running", async () => {
+    const { service: hooks, dir } = await started();
+    hooks.register({ conversationId: "agent-1", cliEnv: { SECRET: "fake-secret" }, gate: allowing(), push: () => {} });
+    expect(await askSessionEnv(dir, { conversation_id: "someone-elses-agent" })).toEqual({ env: {} });
+    expect(await askSessionEnv(dir, {})).toEqual({ env: {} });
+});
+
+test("retiring a turn removes its capability environment", async () => {
+    const { service: hooks, dir } = await started();
+    const retire = hooks.register({ conversationId: "agent-1", cliEnv: { SECRET: "fake-secret" }, gate: allowing(), push: () => {} });
+    retire();
+    expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({ env: {} });
 });
 
 /* THE CASE THAT MUST NOT BLOCK. This hook fires for every command Cursor runs anywhere on the machine,
@@ -160,16 +189,17 @@ test("frames the gate yields are pushed to the turn's own stream", async () => {
 
 // The script answers for itself when it cannot reach anyone, so a socket that has gone away costs a turn
 // nothing. `failClosed` in the hooks file covers the case this cannot: the script being unrunnable at all.
-test("a script that cannot reach the daemon allows rather than hanging", async () => {
+test("a script that cannot reach the daemon fails safely rather than hanging", async () => {
     const { service: hooks, dir } = await started();
     await hooks.close();
     service = undefined;
     expect(await askGate(dir, { command: "ls", conversation_id: "agent-1" })).toEqual({ permission: "allow" });
+    expect(await askSessionEnv(dir, { conversation_id: "agent-1" })).toEqual({});
 });
 
 test("a payload that is not JSON is allowed rather than crashing the turn", async () => {
     const { dir } = await started();
-    const child = execFile("node", [join(dir, "intentic-command-gate.mjs")]);
+    const child = execFile("node", [join(dir, "intentic-command-gate.mjs"), "gate"]);
     child.stdin?.end("not json at all");
     const out = await new Promise<string>((settle) => {
         let text = "";
@@ -180,8 +210,7 @@ test("a payload that is not JSON is allowed rather than crashing the turn", asyn
 });
 
 /* The one half no test here can drive: Cursor reading the file. So the file's CONTENT is pinned instead —
- * the schema version, the single event wired, and failClosed, which is the guard for a script that cannot
- * run at all. */
+ * the schema version, both events, and each event's failure posture. */
 test("the hooks file promises exactly the shape Cursor is documented to read", async () => {
     const { dir } = await started();
     const script = join(dir, "intentic-command-gate.mjs");
@@ -189,9 +218,11 @@ test("the hooks file promises exactly the shape Cursor is documented to read", a
     const installed = readFileSync(hooksFile, "utf8").trim();
     const parsed = JSON.parse(installed) as { version: number; hooks: Record<string, { command: string; failClosed?: boolean }[]> };
     expect(parsed.version).toBe(1);
-    expect(Object.keys(parsed.hooks)).toEqual(["beforeShellExecution"]);
+    expect(Object.keys(parsed.hooks)).toEqual(["sessionStart", "beforeShellExecution"]);
+    expect(parsed.hooks["sessionStart"]?.[0]?.failClosed).toBe(false);
+    expect(parsed.hooks["sessionStart"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} session-env`);
     expect(parsed.hooks["beforeShellExecution"]?.[0]?.failClosed).toBe(true);
-    expect(parsed.hooks["beforeShellExecution"]?.[0]?.command).toContain(script);
+    expect(parsed.hooks["beforeShellExecution"]?.[0]?.command).toBe(`node ${JSON.stringify(script)} gate`);
 });
 
 test("restarting over a socket a dead daemon left behind still binds", async () => {

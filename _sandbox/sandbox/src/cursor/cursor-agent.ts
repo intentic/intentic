@@ -293,7 +293,12 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
          * genuinely parks on a card here rather than refusing — the hook process waiting on the socket is what
          * Cursor is blocked on meanwhile (cursor-hooks.ts). */
         const { gate, release } = createTurnGate(request);
-        const retire = deps.hooks.register({ conversationId: agent.agentId, gate, push });
+        const retire = deps.hooks.register({
+            conversationId: agent.agentId,
+            ...(request.cliEnv !== undefined ? { cliEnv: request.cliEnv } : {}),
+            gate,
+            push,
+        });
 
         try {
             const live = agent;
