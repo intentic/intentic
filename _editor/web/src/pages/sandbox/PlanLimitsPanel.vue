@@ -170,12 +170,7 @@ const roster = computed(() => {
 <template>
     <!-- A @container over the whole section: every column below thins out against the PANEL, which is a hub
          section inside the workspace pane and never the width of the window. -->
-    <RowGroup
-        v-if="rows.length > 0"
-        id="accounts"
-        class="@container"
-        label="Plan limits"
-    >
+    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" label="Plan limits">
         <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
              on" is the question, and it survives having 31 of them. -->
         <div class="flex flex-col gap-2 px-4 py-3">
@@ -215,129 +210,175 @@ const roster = computed(() => {
             </div>
         </div>
 
-        <!-- 2 · PROVIDERS. One row per provider: the axis a person actually chooses along. -->
-        <div v-for="group in groups" :key="group.provider" class="flex flex-col gap-2.5 px-4 py-3">
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <ProviderLogo :provider="group.provider" class="shrink-0 self-center text-sm text-muted" />
-                <span class="text-sm text-content">{{ providerLabel(group.provider) }}</span>
-                <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
-                <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
-                <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
-                    read {{ formatAge(single(group)!.measuredAt!) }}
-                </span>
-                <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
-            </div>
+        <!-- 2 · PROVIDERS. The provider is the CHOICE a reader makes here — the translator balances turns
+             across a provider's accounts, so "which of my 31 Google accounts" is nobody's decision — which
+             makes it the tier that has to be separated, and the separator is ALIGNMENT rather than a frame.
+             Each provider's mark sits in a rail of its own; its NAME is the only thing on the column beside
+             that rail; everything the provider holds hangs off a spine under the mark, one step further in.
+             Read down the left edge and you get the list of providers, and nothing else on the panel.
 
-            <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
-                 refusedRowId): named with its account where the daemon knew one, because a bare provider-wide
-                 refusal over 24 bars answers "which of these do I go and fix?" with nothing.
-                 It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
-                 this is an observation, so a green bar under a fresh refusal means the poll is stale, not that
-                 there is room. Once something taken since has answered it, it drops to a footnote saying so and
-                 the provider's own sentence moves to the hover. Two lines at most: the vendors' sentences run to
-                 a paragraph with a pricing URL on the end, and the part that matters is at the front. -->
-            <p
-                v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
-                class="line-clamp-2 text-2xs"
-                :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                v-tooltip.top="group.refusal.detail"
-            >
-                {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
-            </p>
+             A BORDERED CARD PER PROVIDER IS WHAT THIS REPLACED, and it blended the tiers rather than parting
+             them. The panel is already one bordered surface (RowGroup), so a card per provider is a second
+             frame inside it and an inset panel per account a third — and at three accounts those inner panels
+             read as cards in their own right, directly under cards they were nested in: an email came out
+             looking exactly like a provider, which is the confusion the boxes were drawn to fix. The tint
+             doing that work (`bg-overlay`) is also `bg-card`'s own colour in the LIGHT scheme, so half of it
+             was invisible there. Whitespace and a left edge cost no ink, work in both schemes, and cannot be
+             mistaken for one another. -->
+        <div class="flex flex-col gap-6 px-4 py-4">
+            <div v-for="group in groups" :key="group.provider" class="flex gap-2">
+                <!-- THE RAIL: the mark, and under it the line that says how far this provider reaches. The
+                     chip is the meter track's own tint of the TEXT colour, because that is the one inset that
+                     exists in both schemes — `bg-overlay` and `bg-canvas` are within a percent of `bg-card` in
+                     light, which is a grouping cue that disappears for half the app's readers. -->
+                <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
+                    <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
+                        <ProviderLogo :provider="group.provider" class="text-xs" />
+                    </span>
+                    <span class="w-px flex-1 bg-line-strong" aria-hidden="true" />
+                </div>
 
-            <!-- Small provider: the meters themselves, exactly as before. Nothing that fits is folded away. -->
-            <template v-if="isInline(group)">
-                <!-- A hairline between accounts, and none above the first: three accounts of three pools each is
-                     nine meters in one column, and without a break the reader has to count rows to know which
-                     account a "95%" belongs to. -->
-                <div
-                    v-for="(row, index) in group.rows"
-                    :key="row.id"
-                    class="flex flex-col gap-1.5"
-                    :class="index > 0 && single(group) === undefined ? `border-t border-line/60 pt-2.5` : ``"
-                >
-                    <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over the
-                         pools it heads. It used to be set exactly like a pool label, same size and same colour,
-                         directly above three of them: an email read as a fourth pool that happened to have no
-                         meter, and the eye had nothing to group the meters by. -->
-                    <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span class="min-w-0 truncate text-xs text-content">{{ row.label }}</span>
-                        <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
-                             user's to rename and starts as whatever the provider offered, so one row reads
-                             "Claude" beside two emails and identifies nothing: the same rule, and the same
-                             answer, as the Agent tab's identity note. -->
-                        <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ row.identity }}</span>
-                        <span v-if="row.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs" :class="row.stale ? `text-muted` : `text-subtle`">
-                            read {{ formatAge(row.measuredAt) }}
+                <div class="flex min-w-0 flex-1 flex-col gap-2">
+                    <!-- `min-h-5` is the mark's own height, so the name keeps its line beside the mark however
+                         the metadata after it wraps. -->
+                    <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
+                        <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
+                        <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
+                        <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
+                            read {{ formatAge(single(group)!.measuredAt!) }}
                         </span>
+                        <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
                     </div>
 
-                    <!-- This account's own refusal, under its own name: see refusedRowId. -->
-                    <p
-                        v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
-                        class="line-clamp-2 text-2xs"
-                        :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                        v-tooltip.top="group.refusal.detail"
-                    >
-                        {{ group.refusal.line }}
-                    </p>
+                    <!-- ONE STEP IN FROM THE PROVIDER'S NAME. The name then owns its column outright, and an
+                         account heading — set smaller and lighter, and with no mark of its own — cannot be
+                         read as another provider, which is exactly what three emails under "Claude Code" used
+                         to be read as. -->
+                    <div class="flex flex-col gap-3 pb-1 pl-3">
+                        <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
+                             refusedRowId): named with its account where the daemon knew one, because a bare provider-wide
+                             refusal over 24 bars answers "which of these do I go and fix?" with nothing.
+                             It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
+                             this is an observation, so a green bar under a fresh refusal means the poll is stale, not that
+                             there is room. Once something taken since has answered it, it drops to a footnote saying so and
+                             the provider's own sentence moves to the hover. Two lines at most: the vendors' sentences run to
+                             a paragraph with a pricing URL on the end, and the part that matters is at the front. -->
+                        <p
+                            v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
+                            class="line-clamp-2 text-2xs"
+                            :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                            v-tooltip.top="group.refusal.detail"
+                        >
+                            {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
+                        </p>
 
-                    <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
-                        {{ row.readable ? `No reading yet.` : `This plan publishes no limits, spend is all this sandbox can tell you.` }}
-                    </p>
-
-                    <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is the
-                         number this is opened for: by wrapping the meter onto its own full-width line; with room,
-                         everything sits on one line in fixed columns so rows align. Measured on the panel, not the
-                         window: this is a hub section inside the workspace pane. -->
-                    <div v-for="pool in row.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap">
-                        <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
-                        <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a pool
-                             this screen has no reading for, and those mean opposite things. -->
-                        <div class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0">
+                        <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
+                        <template v-if="isInline(group)">
+                            <!-- A hairline between accounts, and none above the first: three accounts of three pools each
+                                 is nine meters in one column, and without a break the reader has to count rows to know
+                                 which account a "95%" belongs to. It is the FAINT line and it starts inside the indent,
+                                 where the panel's own section dividers are full-bleed: a separator that is subordinate
+                                 has to look subordinate, or the panel reads as nine sections instead of four. -->
                             <div
-                                class="h-full rounded-full bg-current"
-                                :class="usageTone(pool.percent)"
-                                :style="{ width: `${Math.max(pool.percent, 1)}%` }"
-                            />
-                        </div>
-                        <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
-                            {{ formatUtilization(pool.percent, row.stale) }}
-                        </span>
-                        <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                            {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
-                        </span>
+                                v-for="(row, index) in group.rows"
+                                :key="row.id"
+                                class="flex flex-col gap-1.5"
+                                :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
+                            >
+                                <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over
+                                     the pools it heads. It used to be set exactly like a pool label, same size and same
+                                     colour, directly above three of them: an email read as a fourth pool that happened
+                                     to have no meter, and the eye had nothing to group the meters by. -->
+                                <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                    <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
+                                    <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
+                                         user's to rename and starts as whatever the provider offered, so one row reads
+                                         "Claude" beside two emails and identifies nothing: the same rule, and the same
+                                         answer, as the Agent tab's identity note. -->
+                                    <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ row.identity }}</span>
+                                    <span
+                                        v-if="row.measuredAt !== undefined"
+                                        class="ml-auto shrink-0 text-2xs"
+                                        :class="row.stale ? `text-muted` : `text-subtle`"
+                                    >
+                                        read {{ formatAge(row.measuredAt) }}
+                                    </span>
+                                </div>
+
+                                <!-- This account's own refusal, under its own name: see refusedRowId. -->
+                                <p
+                                    v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
+                                    class="line-clamp-2 text-2xs"
+                                    :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                                    v-tooltip.top="group.refusal.detail"
+                                >
+                                    {{ group.refusal.line }}
+                                </p>
+
+                                <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
+                                    {{ row.readable ? `No reading yet.` : `This plan publishes no limits, spend is all this sandbox can tell you.` }}
+                                </p>
+
+                                <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is
+                                     the number this is opened for: by wrapping the meter onto its own full-width line;
+                                     with room, everything sits on one line in fixed columns so rows align. Measured on
+                                     the panel, not the window: this is a hub section inside the workspace pane. -->
+                                <div v-for="pool in row.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap">
+                                    <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
+                                    <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
+                                         pool this screen has no reading for, and those mean opposite things. -->
+                                    <div
+                                        class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
+                                    >
+                                        <div
+                                            class="h-full rounded-full bg-current"
+                                            :class="usageTone(pool.percent)"
+                                            :style="{ width: `${Math.max(pool.percent, 1)}%` }"
+                                        />
+                                    </div>
+                                    <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                        {{ formatUtilization(pool.percent, row.stale) }}
+                                    </span>
+                                    <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
+                                        {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
+                                    </span>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track
+                             and never a zero-height bar: "0% used" and "we have no idea" are opposite claims, and the
+                             second one is what is true. -->
+                        <template v-else>
+                            <div class="flex h-5 items-end gap-0.5">
+                                <span
+                                    v-for="row in barsOf(group)"
+                                    :key="row.id"
+                                    v-tooltip.top="barTooltip(row)"
+                                    class="flex h-full w-1.5 items-end rounded-[2px] bg-content/10"
+                                >
+                                    <span
+                                        v-if="row.percent !== undefined"
+                                        class="w-full rounded-[2px] bg-current"
+                                        :class="usageTone(row.percent)"
+                                        :style="{ height: `${Math.max(row.percent, 4)}%` }"
+                                    />
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+                                <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
+                                    View accounts
+                                </button>
+                                <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
+                                <span v-if="group.rows.length > MAX_BARS" class="text-subtle">
+                                    showing the {{ MAX_BARS }} most constrained of {{ group.rows.length }}
+                                </span>
+                            </div>
+                        </template>
                     </div>
                 </div>
-            </template>
-
-            <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track and
-                 never a zero-height bar: "0% used" and "we have no idea" are opposite claims, and the second
-                 one is what is true. -->
-            <template v-else>
-                <div class="flex h-5 items-end gap-0.5">
-                    <span
-                        v-for="row in barsOf(group)"
-                        :key="row.id"
-                        v-tooltip.top="barTooltip(row)"
-                        class="flex h-full w-1.5 items-end rounded-[2px] bg-content/10"
-                    >
-                        <span
-                            v-if="row.percent !== undefined"
-                            class="w-full rounded-[2px] bg-current"
-                            :class="usageTone(row.percent)"
-                            :style="{ height: `${Math.max(row.percent, 4)}%` }"
-                        />
-                    </span>
-                </div>
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-                    <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">View accounts</button>
-                    <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
-                    <span v-if="group.rows.length > MAX_BARS" class="text-subtle">
-                        showing the {{ MAX_BARS }} most constrained of {{ group.rows.length }}
-                    </span>
-                </div>
-            </template>
+            </div>
         </div>
 
         <!-- 3 · ATTENTION. One condition, so the FIX IS STATED ONCE and the list is nothing but accounts.
