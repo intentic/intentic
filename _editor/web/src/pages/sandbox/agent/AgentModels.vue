@@ -53,7 +53,6 @@ const TIER_WINDOW_DAYS = 30;
 const tierWindow = computed(() => ({ from: new Date(Date.now() - TIER_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) }));
 const { savings } = useSavings(tierWindow);
 const tierReport = computed(() => savings.value?.tier);
-const usd = (value: number): string => `$${value.toFixed(2)}`;
 const pct = (part: number, whole: number): string => `${Math.round((part / whole) * 100)}%`;
 
 /* BOTH ROWS ARE THE SAME LIST WIDGET over two different settings, so the editing is written once. It became
@@ -335,15 +334,11 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                                 · last {{ TIER_WINDOW_DAYS }} days
                             </span>
                         </p>
-                        <p v-if="tierReport.atStakeUsd > 0" class="mt-1 text-2xs text-subtle">
-                            {{ usd(tierReport.atStakeUsd) }} spent on simple turns on your model
-                        </p>
                         <p
                             v-if="tierReport.routed > 0 || tierReport.escalated > 0 || tierReport.denied > 0"
-                            class="mt-0.5 text-2xs tabular-nums text-subtle"
+                            class="mt-1 text-2xs tabular-nums text-subtle"
                         >
-                            <template v-if="tierReport.routed > 0"
-                                >{{ tierReport.routed }} down-routed · {{ usd(tierReport.routedUsd) }} spent on cheaper model</template
+                            <template v-if="tierReport.routed > 0">{{ tierReport.routed }} down-routed</template
                             ><template v-if="tierReport.escalated > 0"
                                 ><template v-if="tierReport.routed > 0"> · </template>{{ tierReport.escalated }}/{{ tierReport.fast }} bumped up</template
                             ><template v-if="tierReport.denied > 0"> · {{ tierReport.denied }} vetoed</template>
