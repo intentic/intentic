@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { type Ref } from "vue";
+import { definePreference } from "@intentic/ui/preference";
 
 /* HOW THE CHAT LIST IS CUT INTO GROUPS, by where a chat STANDS, or by who it is ACTING AS.
  *
@@ -13,10 +14,12 @@ import { ref } from "vue";
  * chat has both a lane and a persona at all times, so the switch changes the headings and the order under
  * them, and nothing else.
  *
- * PERSISTED AND MODULE-WIDE, unlike the list's filter (which is per-instance on purpose, so a query typed in
- * one window cannot narrow another). Grouping is not a search: it is how this reader reads the list, so it
- * holds across the docked sheet, the rail in a floating window, and reloads, the same treatment the diff layout and the
- * workspace sidebar's panel get. */
+ * AN ACCOUNT PREFERENCE (composables/preference.ts), unlike the list's filter (which is per-instance on purpose,
+ * so a query typed in one window cannot narrow another). Grouping is not a search: it is how this reader reads
+ * the list, so it holds across the docked sheet, the rail in a floating window, and reloads, the same treatment
+ * the diff layout and the workspace sidebar's panel get. The floating window is the reason it is declared as a
+ * preference rather than as a persisted ref: "holds in a floating window" was a claim this file made and could
+ * not keep, since that window is a whole other copy of the app and nothing told it the grouping had changed. */
 
 export type ChatGrouping = "lane" | "persona";
 
@@ -25,23 +28,14 @@ const STORAGE_KEY = `ui-chat-grouping`;
 // Anything that is not the stored `persona` reads as the lanes: an unset key, a value from a later build, a
 // Storage that throws. The lanes are the safe default, they are the grouping that never has an empty answer,
 // since every chat has a lane whether or not this workspace uses personas at all.
-const read = (): ChatGrouping => {
-    try {
-        return localStorage.getItem(STORAGE_KEY) === `persona` ? `persona` : `lane`;
-    } catch {
-        return `lane`;
-    }
-};
-
-const grouping = ref<ChatGrouping>(read());
+const grouping: Ref<ChatGrouping> = definePreference<ChatGrouping>({
+    key: STORAGE_KEY,
+    read: (raw) => (raw === `persona` ? `persona` : `lane`),
+    write: (value) => value,
+});
 
 const set = (value: ChatGrouping): void => {
     grouping.value = value;
-    try {
-        localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds for this session.
-    }
 };
 
 export function useChatGrouping() {

@@ -1,35 +1,19 @@
-import { ref, watch, type Ref } from "vue";
+import { type Ref } from "vue";
 import { explorerStyles, type ExplorerStyle } from "../icons/explorerStyle.js";
+import { definePreference } from "./preference.js";
 
 const STORAGE_KEY = `ui-explorer-style`;
 
-/* Owns the active file-tree setup as a module-level singleton, mirroring useTheme. Drives no <html>
- * attribute, the workspace tree reads this ref directly, so switching setups repaints every row
- * reactively. Persisted to localStorage; reads fall back to the default until a choice is stored. */
+/* Owns the active file-tree setup as an account preference (composables/preference.ts), mirroring useTheme, so
+ * every window of the app agrees on it. Drives no <html> attribute, the workspace tree reads this ref directly,
+ * so switching setups repaints every row reactively. Reads fall back to the default until a choice is stored. */
 
 const isExplorerStyle = (value: unknown): value is ExplorerStyle => explorerStyles.includes(value as ExplorerStyle);
 
-const read = (): ExplorerStyle => {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (isExplorerStyle(stored)) {
-            return stored;
-        }
-    } catch {
-        // Storage may be unavailable (private mode); fall back to the default.
-    }
-    return `colorful`;
-};
-
-const explorerStyle: Ref<ExplorerStyle> = ref(read());
-
-// Persist every change (including direct writes from the Settings picker), so no page needs a setter.
-watch(explorerStyle, (value) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
+const explorerStyle: Ref<ExplorerStyle> = definePreference<ExplorerStyle>({
+    key: STORAGE_KEY,
+    read: (raw) => (isExplorerStyle(raw) ? raw : `colorful`),
+    write: (value) => value,
 });
 
 export function useExplorerStyle() {

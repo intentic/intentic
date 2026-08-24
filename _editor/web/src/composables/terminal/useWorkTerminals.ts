@@ -1,4 +1,5 @@
-import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
+import { computed, type ComputedRef, ref, type Ref } from "vue";
+import { definePreference } from "@intentic/ui/preference";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 
 /* The surfaces WORK runs on, the agent's shells (`agent-<sdk session>`) and the daemon's job sessions
@@ -22,30 +23,18 @@ import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
  * and the sessions themselves age out in the daemon's own sweep (terminal-session.ts reapFinishedSessions),
  * which is what keeps them openable for a while from the surfaces that name one directly.
  *
- * Per-browser (localStorage), like every other panel preference (terminalMeta, the panel height): which tabs
- * you want in front of you is a property of the seat you are sitting at, not of the sandbox. */
+ * An account preference (composables/preference.ts), like every other panel preference (terminalMeta, the panel
+ * height): which tabs you want in front of you is a property of the seat you are sitting at, not of the sandbox,
+ * and it holds for every window of the app at that seat, the popped-out terminal included. */
 
 const STORAGE_KEY = `ui-work-terminals`;
 
-const read = (): boolean => {
-    try {
-        return localStorage.getItem(STORAGE_KEY) === `on`;
-    } catch {
-        // Storage may be unavailable (private mode); fall back to the default.
-        return false;
-    }
-};
-
 // Default off, see the note above. Written directly by every surface that toggles it (the Settings row's
 // v-model, the panel's bar menu, the palette command), so nothing needs a setter.
-export const showWorkTerminals: Ref<boolean> = ref(read());
-
-watch(showWorkTerminals, (value) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, value ? `on` : `off`);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
+export const showWorkTerminals: Ref<boolean> = definePreference<boolean>({
+    key: STORAGE_KEY,
+    read: (raw) => raw === `on`,
+    write: (value) => (value ? `on` : `off`),
 });
 
 /* Which conversation each agent terminal belongs to, so a row can read "Redesign the chat rail" rather than

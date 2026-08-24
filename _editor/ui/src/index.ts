@@ -252,6 +252,10 @@ export { useNow } from "./composables/useNow.js";
  * every extension that grew a placeholder drew it ungated, three of them, all flashing. */
 export { useLoadingReveal } from "./composables/loadingReveal.js";
 export { errorMessage, noticeFrom, noticeOf, useAsyncAction } from "./composables/useAsyncAction.js";
+/* HOW AN ACCOUNT PREFERENCE IS DECLARED, and the only way one should be: read, write, apply and hear it change
+ * in another window are one definition, so a setting cannot be live in the window it was changed in and stale in
+ * the popped-out panel on the second screen. See composables/preference.ts. */
+export { definePreference, type PreferenceOptions, receivePreferenceChange, storedPreference } from "./composables/preference.js";
 export { type ColorScheme, useTheme } from "./composables/useTheme.js";
 // The one colour the app wears, as a control. The maths behind it stays inside the kit (themeColor.ts turns
 // the picked colour into the ramps every surface, border and link resolves through), a caller only ever

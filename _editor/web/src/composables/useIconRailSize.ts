@@ -1,4 +1,5 @@
-import { ref, watch, type Ref } from "vue";
+import { type Ref } from "vue";
+import { definePreference } from "@intentic/ui/preference";
 
 export type IconRailSize = "compact" | "comfortable";
 
@@ -12,32 +13,17 @@ export const iconRailScreenPx = (size: IconRailSize): number => ICON_RAIL_WIDTH_
 
 const STORAGE_KEY = `ui-icon-rail-size`;
 
-/* Owns the desktop icon rail's width and control spacing as a module-level singleton. The shell reads the
- * ref directly, so switching sizes repaints the chrome live. Persisted to localStorage; compact is the
- * default because the rail should yield as much room as possible to the workspace. */
+/* Owns the desktop icon rail's width and control spacing as an account preference
+ * (composables/preference.ts), so every window of the app draws the same chrome. The shell reads the ref
+ * directly, so switching sizes repaints live. Compact is the default because the rail should yield as much room
+ * as possible to the workspace. */
 
 const isIconRailSize = (value: unknown): value is IconRailSize => value === `compact` || value === `comfortable`;
 
-const read = (): IconRailSize => {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (isIconRailSize(stored)) {
-            return stored;
-        }
-    } catch {
-        // Storage may be unavailable (private mode); fall back to the default.
-    }
-    return `compact`;
-};
-
-const iconRailSize: Ref<IconRailSize> = ref(read());
-
-watch(iconRailSize, (value) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
+const iconRailSize: Ref<IconRailSize> = definePreference<IconRailSize>({
+    key: STORAGE_KEY,
+    read: (raw) => (isIconRailSize(raw) ? raw : `compact`),
+    write: (value) => value,
 });
 
 export function useIconRailSize() {

@@ -102,6 +102,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // a registry row is allowed to paint, which is a claim worth a test, and one that must not need a DOM, a
     // network, or <BrandMark> itself to be asked.
     "@intentic/ui/brand-mark": fromRoot("_editor/ui/src/components/brandMark.ts"),
+    // And again, for what every one of those settings is DECLARED with: the preference primitive is reached by
+    // plain state modules all over the app (every `ui-*` key in web/composables goes through it), and it is
+    // itself nothing but vue and localStorage. Through the barrel, asking which theme is on would cost mermaid.
+    "@intentic/ui/preference": fromRoot("_editor/ui/src/composables/preference.ts"),
     // And again, for the app's base text size: it is the knob that column widths, editor font sizes and the
     // terminal's grid all convert against (uiScale.ts), so it is reached from plain modules the shell loads on
     // every boot, and through the barrel, asking a column how wide it should be would boot Picker.vue.

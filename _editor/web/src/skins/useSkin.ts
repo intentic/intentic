@@ -1,7 +1,9 @@
-import { ref, type Ref } from "vue";
-// The scheme singleton off its own entry point rather than the barrel: this file is plain state on two
-// attributes, and reaching it through @intentic/ui would drag the whole component graph (and mermaid, shiki
-// and vue-flow behind it) into every module and unit test that only wants to know which skin is on.
+import { type Ref } from "vue";
+// The scheme singleton and the preference primitive off their own entry points rather than the barrel: this file
+// is plain state on two attributes, and reaching them through @intentic/ui would drag the whole component graph
+// (and mermaid, shiki and vue-flow behind it) into every module and unit test that only wants to know which skin
+// is on.
+import { definePreference } from "@intentic/ui/preference";
 import { useTheme } from "@intentic/ui/theme";
 
 /* THE SKIN, which whole-interface look the workspace wears, as opposed to which COLOUR it is painted in.
@@ -46,19 +48,6 @@ const FONT_HREF: Partial<Record<Skin, string>> = {
 
 const isSkin = (value: unknown): value is Skin => value === `none` || value === `hud` || value === `sanctum`;
 
-const read = (): Skin => {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (isSkin(stored)) {
-            return stored;
-        }
-    } catch {
-        // Storage may be unavailable (private mode); fall back to whatever the anti-flash script left on <html>.
-    }
-    const attribute = document.documentElement.getAttribute(ATTRIBUTE);
-    return isSkin(attribute) ? attribute : `none`;
-};
-
 /** Point the skin webfont <link> at `value`'s face, or drop it when the skin wants none. */
 const applyFont = (value: Skin): void => {
     const href = FONT_HREF[value];
@@ -91,19 +80,29 @@ const apply = (value: Skin): void => {
     applyFont(value);
 };
 
-const skin: Ref<Skin> = ref(read());
-apply(skin.value); // restore the saved skin on load (index.html only beats the flash)
+/* The skin the app opens in: whatever index.html's anti-flash script left on <html>, read ONCE before anything
+ * here writes it. That script reads this same key, so nothing stored means no attribute and no skin. Captured
+ * rather than consulted on demand, for the reason useTheme's own boot value gives: after the first change the
+ * attribute states what this window is WEARING, not what is stored. */
+const bootAttribute = document.documentElement.getAttribute(ATTRIBUTE);
+const BOOT_SKIN: Skin = isSkin(bootAttribute) ? bootAttribute : `none`;
+
+const skin: Ref<Skin> = definePreference<Skin>({
+    key: STORAGE_KEY,
+    read: (raw) => (isSkin(raw) ? raw : BOOT_SKIN),
+    write: (value) => value,
+    apply,
+});
 
 const setSkin = (value: Skin): void => {
     skin.value = value;
-    apply(value);
+    /* THE SCHEME GOES DARK WITH THE SKIN, in the window the skin was CHOSEN in, and only there. Every other
+     * window learns the scheme the same way it learns the skin: `useTheme().set` is itself a preference write, so
+     * the note that carries "the skin is now hud" is followed by the note that carries "the scheme is now dark",
+     * and a window adopting them needs no rule of its own to connect the two. Putting the rule in `apply` above
+     * would have every window that hears about a skin re-decide the scheme and write it back. */
     if (value !== `none`) {
         useTheme().set(`dark`);
-    }
-    try {
-        localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
     }
 };
 

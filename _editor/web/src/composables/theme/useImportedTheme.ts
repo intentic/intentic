@@ -1,5 +1,9 @@
-import { ref } from "vue";
+import { type Ref } from "vue";
 import { useTheme } from "@intentic/ui";
+// The preference primitive off its own entry point rather than the barrel, the same reason skins/useSkin.ts
+// does: declaring a piece of state should not drag the kit's component graph (and mermaid, shiki and vue-flow
+// behind it) into every module that holds some.
+import { definePreference } from "@intentic/ui/preference";
 import { THEME_TOKEN_VARS, vscodeThemeToTokens, type ImportedTheme } from "./vscodeTheme";
 
 /* Apply an imported VSCode/OpenVSX theme to the live app, the user-facing half of the theme-import lever (the
@@ -7,8 +11,8 @@ import { THEME_TOKEN_VARS, vscodeThemeToTokens, type ImportedTheme } from "./vsc
  * direct "familiar for developers" win. The imported theme's tokens are written as inline `--color-*` overrides on
  * <html>: these are the CHROME tokens, one tier below which the picked accent writes its own primitive ramps on
  * the same element, so an import layers cleanly over whatever colour the app is wearing, and over the scheme,
- * without forking @intentic/ui. Persisted to localStorage (per the
- * useLayout/useKeymap client-preference idiom) and re-applied on load.
+ * without forking @intentic/ui. An account preference (composables/preference.ts), so an import applied on the
+ * settings page recolors every window the account has open, the popped-out chat included.
  *
  * Scope (honest): this maps the ~13 chrome IDENTITY tokens, not the full primary/surface RAMPS, and does not yet
  * re-theme Monaco syntax from `tokenColors` (Shiki consumes those natively, a follow-on). It's a recognizable
@@ -29,13 +33,12 @@ const STORAGE_KEY = `ui-imported-theme`;
 // never collides with a stale, same-named theme still loaded in the core.
 let sequence = 0;
 
-const read = (): StoredTheme | undefined => {
+const parse = (raw: string | null): StoredTheme | undefined => {
+    if (raw === null) {
+        return undefined;
+    }
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored === null) {
-            return undefined;
-        }
-        const parsed: unknown = JSON.parse(stored);
+        const parsed: unknown = JSON.parse(raw);
         // Trust only a well-shaped blob; a corrupt/hand-edited one reverts to the built-in theme.
         if (
             typeof parsed === `object` &&
@@ -48,44 +51,47 @@ const read = (): StoredTheme | undefined => {
             return parsed as StoredTheme;
         }
     } catch {
-        // Storage unavailable or bad JSON, no imported theme.
+        // Bad JSON, no imported theme.
     }
     return undefined;
 };
 
-const write = (value: StoredTheme | undefined): void => {
-    try {
-        if (value === undefined) {
-            localStorage.removeItem(STORAGE_KEY);
-        } else {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-        }
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds for this session.
-    }
-};
+/* THE OVERRIDES ON <html>, SET TO EXACTLY THIS THEME, whichever theme was there before. Cleared first rather
+ * than diffed: the token list is fixed and short (THEME_TOKEN_VARS), and a second import that happens to name
+ * fewer tokens than the first must not inherit the difference from it. This is also what makes "no theme" an
+ * ordinary value of this preference rather than a separate teardown path.
+ *
+ * It clears only what it has actually SET, which is what keeps "no theme" free of the DOM entirely: these
+ * properties exist on that element because this module put them there, so with none put there there is nothing
+ * to take away. The app with no import (almost everyone) therefore touches nothing on load, and so does a plain
+ * state module imported somewhere without a document at all. */
+let painted = false;
 
-const applyTokens = (theme: StoredTheme): void => {
-    const root = document.documentElement.style;
-    for (const [cssVar, color] of Object.entries(theme.tokens)) {
-        root.setProperty(cssVar, color);
+const applyTokens = (theme: StoredTheme | undefined): void => {
+    if (!painted && theme === undefined) {
+        return;
     }
-    // Flip the color scheme so PrimeVue's dark preset and the role tokens match the imported theme's mode.
-    useTheme().set(theme.mode);
-};
-
-const removeTokens = (): void => {
     const root = document.documentElement.style;
     for (const cssVar of THEME_TOKEN_VARS) {
         root.removeProperty(cssVar);
     }
+    painted = false;
+    if (theme === undefined) {
+        return;
+    }
+    for (const [cssVar, color] of Object.entries(theme.tokens)) {
+        root.setProperty(cssVar, color);
+    }
+    painted = true;
 };
 
-const active = ref<StoredTheme | undefined>(read());
-// Restore a saved import when the app loads (mirrors useTheme applying the saved scheme on module load).
-if (active.value !== undefined) {
-    applyTokens(active.value);
-}
+const active: Ref<StoredTheme | undefined> = definePreference<StoredTheme | undefined>({
+    key: STORAGE_KEY,
+    read: parse,
+    // `undefined` removes the key, which is what "no imported theme" means in storage as well as in memory.
+    write: (value) => (value === undefined ? null : JSON.stringify(value)),
+    apply: applyTokens,
+});
 
 // Parse a pasted/loaded VSCode theme JSON, map it, apply + persist. Throws on invalid JSON so the caller can show
 // the parse error inline, the raw error propagates unchanged (CLAUDE.md: don't wrap).
@@ -96,16 +102,16 @@ const importThemeJson = (json: string): void => {
     const name = typeof rawName === `string` && rawName.length > 0 ? rawName : `Imported theme`;
     const imported = vscodeThemeToTokens(parsed as Parameters<typeof vscodeThemeToTokens>[0]);
     sequence += 1;
-    const stored: StoredTheme = { name, mode: imported.mode, tokens: imported.tokens, raw: source, shikiName: `imported-${sequence}` };
-    active.value = stored;
-    applyTokens(stored);
-    write(stored);
+    active.value = { name, mode: imported.mode, tokens: imported.tokens, raw: source, shikiName: `imported-${sequence}` };
+    /* An imported theme PINS a scheme, and flipping it is a second preference write, made here in the window the
+     * import happened in. Every other window hears that write as its own note and needs no rule connecting the
+     * two (the same split useSkin makes): a scheme decided inside `apply` would be re-decided, and re-written, by
+     * every window that merely heard about the import. */
+    useTheme().set(imported.mode);
 };
 
 const clearImportedTheme = (): void => {
     active.value = undefined;
-    removeTokens();
-    write(undefined);
 };
 
 export function useImportedTheme() {

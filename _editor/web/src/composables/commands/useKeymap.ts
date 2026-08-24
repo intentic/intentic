@@ -1,11 +1,14 @@
-import { ref } from "vue";
+import { type Ref } from "vue";
+import { definePreference } from "@intentic/ui/preference";
 
 /* The user keymap: per-command chord OVERRIDES layered over each command's declared default. A developer expects to
  * remap shortcuts, the single biggest "familiar" gap once bindings exist, so this is the store that makes them
- * rebindable. It mirrors useLayout's client-preference idiom (a module-level singleton persisted to localStorage,
- * Storage-failure tolerant): a keymap is per-machine, exactly like VSCode's keybindings.json, so localStorage is the
- * honest home for it. The store is deliberately isolated behind `useKeymap` + `effectiveKeybinding`, so a later run
- * can promote it to daemon-synced settings (keymap-follows-you) by swapping only the read/write here.
+ * rebindable. An account preference (composables/preference.ts), the same idiom useLayout's settings use: a keymap
+ * is per-machine, exactly like VSCode's keybindings.json. Being a preference is what makes a rebind reach the
+ * POPPED-OUT windows, which install the dispatcher for themselves (pages/FloatingArea.vue) and would otherwise
+ * keep answering to yesterday's chords, including the F9 that docks them. The store is deliberately isolated
+ * behind `useKeymap` + `effectiveKeybinding`, so a later run can promote it to daemon-synced settings
+ * (keymap-follows-you) by swapping only the declaration here.
  *
  * An entry maps a command id to either a chord string (remapped) or `null` (explicitly UNBOUND, the user removed
  * the default and wants no shortcut). A command ABSENT from the map keeps its declared default. That three-state
@@ -15,13 +18,12 @@ const STORAGE_KEY = `ui-keymap-overrides`;
 
 type Overrides = Readonly<Record<string, string | null>>;
 
-const read = (): Overrides => {
+const read = (raw: string | null): Overrides => {
+    if (raw === null) {
+        return {};
+    }
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored === null) {
-            return {};
-        }
-        const parsed: unknown = JSON.parse(stored);
+        const parsed: unknown = JSON.parse(raw);
         if (typeof parsed !== `object` || parsed === null) {
             return {};
         }
@@ -38,16 +40,12 @@ const read = (): Overrides => {
     }
 };
 
-const write = (value: Overrides): void => {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds for this session.
-    }
-};
-
 // Exported so the palette/dispatcher read it reactively and tests can seed it directly (the useCommands.test idiom).
-export const keymapOverrides = ref<Overrides>(read());
+export const keymapOverrides: Ref<Overrides> = definePreference<Overrides>({
+    key: STORAGE_KEY,
+    read,
+    write: (value) => JSON.stringify(value),
+});
 
 // The command's active chord: an override wins over the declared default; a `null` override means "unbound" (no
 // shortcut); no override falls through to `declared`. This is the ONE resolver the dispatcher and palette share.
@@ -62,26 +60,22 @@ export const effectiveKeybinding = (command: string, declared: string | undefine
 // Remap a command to a new chord.
 const setKeybinding = (command: string, chord: string): void => {
     keymapOverrides.value = { ...keymapOverrides.value, [command]: chord };
-    write(keymapOverrides.value);
 };
 
 // Explicitly remove a command's shortcut (distinct from reverting to its default).
 const unbindKeybinding = (command: string): void => {
     keymapOverrides.value = { ...keymapOverrides.value, [command]: null };
-    write(keymapOverrides.value);
 };
 
 // Drop the override so the command falls back to its declared default.
 const resetKeybinding = (command: string): void => {
     const { [command]: _removed, ...rest } = keymapOverrides.value;
     keymapOverrides.value = rest;
-    write(keymapOverrides.value);
 };
 
 // Clear every override, the whole keymap returns to declared defaults.
 const resetKeymap = (): void => {
     keymapOverrides.value = {};
-    write(keymapOverrides.value);
 };
 
 export function useKeymap() {

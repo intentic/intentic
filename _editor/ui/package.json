@@ -58,6 +58,10 @@
             "types": "./src/components/seriesAccent.ts",
             "default": "./src/components/seriesAccent.ts"
         },
+        "./preference": {
+            "types": "./src/composables/preference.ts",
+            "default": "./src/composables/preference.ts"
+        },
         "./text-size": {
             "types": "./src/composables/useTextSize.ts",
             "default": "./src/composables/useTextSize.ts"

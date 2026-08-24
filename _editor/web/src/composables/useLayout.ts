@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
+import { definePreference } from "@intentic/ui/preference";
 import { activeSandboxId } from "./sandbox/activeSandbox";
 import { iconRailScreenPx, useIconRailSize } from "./useIconRailSize";
 import { toAppPx } from "./uiScale";
@@ -96,10 +97,8 @@ const NARROW_DEFAULT_REVIEW_LIST_WIDTH = 240;
 const MIN_REVIEW_LIST_WIDTH = 180;
 const MAX_REVIEW_LIST_WIDTH = 800;
 
-const defaultSidebarWidth = (): number =>
-    isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH;
-const defaultReviewListWidth = (): number =>
-    isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH;
+const defaultSidebarWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH);
+const defaultReviewListWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH);
 
 // The global terminal, the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
 // terminal button + Ctrl+` toggle it); its height belongs to the shared TerminalPanel, persisted per surface.
@@ -167,11 +166,21 @@ const DIFF_OPEN_KEY = `ui-diff-open`;
 // settings above, not a property of the file, so it holds as they walk from README to README. Persists.
 const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 
-/* Owns shell-layout state shared across areas (module-level singleton): where the chat panel sits relative to
- * the workspace (bound onto a `data-chat-position` attribute whose CSS grid swaps
- * off it, mirroring how useTheme drives `data-mode`), the chat panel width, the workspace explorer
- * sidebar width/collapse, and the workspace terminal panel open/height. App-local because these are
- * application layout concepts, not generic @intentic/ui primitives. */
+/* Owns shell-layout state shared across areas: where the chat panel sits relative to the workspace (bound onto a
+ * `data-chat-position` attribute whose CSS grid swaps off it, mirroring how useTheme drives `data-mode`), the chat
+ * panel width, the workspace explorer sidebar width/collapse, and the workspace terminal panel open/height.
+ * App-local because these are application layout concepts, not generic @intentic/ui primitives.
+ *
+ * TWO KINDS OF STATE LIVE HERE, and the line between them is which window is entitled to differ.
+ *
+ * Everything below is an ACCOUNT PREFERENCE (composables/preference.ts): one answer per seat, live in every
+ * window at that seat. Three of them are on /settings/appearance (the explorer's two filters and where a diff
+ * opens) and the rest are set from the surfaces they govern, but all of them were already one localStorage key
+ * for the whole origin, so a second window has always been entitled to the same answer and merely had no way to
+ * hear it until it reloaded.
+ *
+ * `terminalOpen` is the exception, and deliberately: it is WINDOW state, per sandbox, held through windowStore.ts
+ * so two windows can sit on different work. It is not declared as a preference and must not be. */
 
 // Clamp chat width to a floor and to ~95% of the viewport (leaving a sliver of workspace); otherwise unlimited.
 // The viewport is the one bound that arrives in screen pixels, so it converts before it is compared, and the
@@ -189,49 +198,31 @@ const clampSidebarWidth = (px: number): number => Math.round(Math.max(MIN_SIDEBA
 
 const clampReviewListWidth = (px: number): number => Math.round(Math.max(MIN_REVIEW_LIST_WIDTH, Math.min(px, MAX_REVIEW_LIST_WIDTH)));
 
-// Shared localStorage readers. Storage may be unavailable (private mode); helpers catch and fall back.
+/* THE THREE SHAPES EVERY PREFERENCE BELOW TAKES, as `read`/`write` pairs handed to definePreference. Storage
+ * access, the DOM, and telling the other windows are all the primitive's, so what is left here is only what
+ * differs between these settings: what a stored string means. */
+
 // `fallback` is what an unset key reads as, so a setting that ships ON is still one line here; anything stored
 // is the reader's own answer, and only the exact `1` this file writes counts as true.
-const readBool = (key: string, fallback = false): boolean => {
-    try {
-        const stored = localStorage.getItem(key);
-        return stored === null ? fallback : stored === `1`;
-    } catch {
-        return fallback;
-    }
-};
+const boolPref = (key: string, fallback = false): Ref<boolean> =>
+    definePreference<boolean>({ key, read: (raw) => (raw === null ? fallback : raw === `1`), write: (value) => (value ? `1` : `0`) });
 
-const readEnum = <T extends string>(key: string, valid: readonly T[], fallback: T): T => {
-    try {
-        const stored = localStorage.getItem(key);
-        return valid.includes(stored as T) ? (stored as T) : fallback;
-    } catch {
-        return fallback;
-    }
-};
+const enumPref = <T extends string>(key: string, valid: readonly T[], fallback: T): Ref<T> =>
+    definePreference<T>({ key, read: (raw) => (valid.includes(raw as T) ? (raw as T) : fallback), write: (value) => value });
 
-// A stored px width, clamped by the column's own bounds, a stale value from a wider screen (or a bounds change
-// in a later build) must never restore a column the viewport can't hold.
-const readWidth = (key: string, clamp: (px: number) => number, fallback: number): number => {
-    try {
-        const stored = localStorage.getItem(key);
-        const parsed = stored === null ? Number.NaN : Number.parseInt(stored, 10);
-        if (Number.isFinite(parsed)) {
-            return clamp(parsed);
-        }
-    } catch {
-        // ignore
-    }
-    return fallback;
-};
-
-const write = (key: string, value: string): void => {
-    try {
-        localStorage.setItem(key, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
-};
+/* A px width, clamped by the column's own bounds: a stale value from a wider screen (or a bounds change in a
+ * later build) must never restore a column the viewport can't hold. The clamp is why the primitive does not write
+ * back what it adopts, a narrow window echoing its own reading would ratchet the wide window's column down to fit
+ * a screen it isn't on. `fallback` is a thunk because it measures the viewport, which is not known at import. */
+const widthPref = (key: string, clamp: (px: number) => number, fallback: () => number): Ref<number> =>
+    definePreference<number>({
+        key,
+        read: (raw) => {
+            const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+            return Number.isFinite(parsed) ? clamp(parsed) : fallback();
+        },
+        write: (value) => String(value),
+    });
 
 const terminalOpen = ref<boolean>(false);
 
@@ -248,25 +239,24 @@ export const resetTerminalOpen = (): void => {
     restoreTerminalOpen();
 };
 
-const position = ref<ChatPosition>(readEnum(STORAGE_KEY, [`left`, `right`] as const, `left`));
-const chatHome = ref<ChatHome>(readEnum(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`));
-const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, defaultChatWidth()));
-const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth()));
-const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth()));
-const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
-const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
-const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
-const hideTests = ref<boolean>(readBool(HIDE_TESTS_KEY));
-const editMode = ref<boolean>(readBool(EDIT_MODE_KEY));
-const showComments = ref<boolean>(readBool(SHOW_COMMENTS_KEY));
-const hideFileComments = ref<boolean>(readBool(HIDE_FILE_COMMENTS_KEY));
-const diffLayout = ref<DiffLayout>(readEnum(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`));
-const diffOpen = ref<DiffOpen>(readEnum(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`));
-const markdownOutline = ref<boolean>(readBool(MARKDOWN_OUTLINE_KEY, true));
+const position = enumPref(STORAGE_KEY, [`left`, `right`] as const, `left`);
+const chatHome = enumPref(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`);
+const chatWidth = widthPref(WIDTH_KEY, clampWidth, defaultChatWidth);
+const sidebarWidth = widthPref(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth);
+const reviewListWidth = widthPref(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth);
+const sidebarCollapsed = boolPref(SIDEBAR_COLLAPSED_KEY);
+const sidebarPanel = enumPref(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`);
+const showIgnored = boolPref(SHOW_IGNORED_KEY);
+const hideTests = boolPref(HIDE_TESTS_KEY);
+const editMode = boolPref(EDIT_MODE_KEY);
+const showComments = boolPref(SHOW_COMMENTS_KEY);
+const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
+const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
+const diffOpen = enumPref(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
+const markdownOutline = boolPref(MARKDOWN_OUTLINE_KEY, true);
 
 const set = (value: ChatPosition): void => {
     position.value = value;
-    write(STORAGE_KEY, value);
 };
 
 const toggle = (): void => {
@@ -277,13 +267,12 @@ const toggle = (): void => {
 // edge the user had it on rather than resetting a second preference along the way.
 const setChatHome = (value: ChatHome): void => {
     chatHome.value = value;
-    write(CHAT_HOME_KEY, value);
 };
 
+// The clamp is here as well as in the preference's own read, and for a different reason: this is a width the
+// reader DRAGGED, so it arrives as a pointer position rather than as a stored string.
 const setChatWidth = (px: number): void => {
-    const width = clampWidth(px);
-    chatWidth.value = width;
-    write(WIDTH_KEY, String(width));
+    chatWidth.value = clampWidth(px);
 };
 
 const resetChatWidth = (): void => {
@@ -291,9 +280,7 @@ const resetChatWidth = (): void => {
 };
 
 const setSidebarWidth = (px: number): void => {
-    const width = clampSidebarWidth(px);
-    sidebarWidth.value = width;
-    write(SIDEBAR_WIDTH_KEY, String(width));
+    sidebarWidth.value = clampSidebarWidth(px);
 };
 
 const resetSidebarWidth = (): void => {
@@ -301,9 +288,7 @@ const resetSidebarWidth = (): void => {
 };
 
 const setReviewListWidth = (px: number): void => {
-    const width = clampReviewListWidth(px);
-    reviewListWidth.value = width;
-    write(REVIEW_LIST_WIDTH_KEY, String(width));
+    reviewListWidth.value = clampReviewListWidth(px);
 };
 
 const resetReviewListWidth = (): void => {
@@ -312,7 +297,6 @@ const resetReviewListWidth = (): void => {
 
 const setSidebarCollapsed = (collapsed: boolean): void => {
     sidebarCollapsed.value = collapsed;
-    write(SIDEBAR_COLLAPSED_KEY, collapsed ? `1` : `0`);
 };
 
 const toggleSidebar = (): void => {
@@ -332,7 +316,6 @@ const toggleTerminalVisibility = (): void => {
 
 const setSidebarPanel = (panel: SidebarPanel): void => {
     sidebarPanel.value = panel;
-    write(SIDEBAR_PANEL_KEY, panel);
     // A badge/banner deep-link into changes/history must never land on a collapsed sidebar.
     if (panel !== `files`) {
         setSidebarCollapsed(false);
@@ -341,42 +324,34 @@ const setSidebarPanel = (panel: SidebarPanel): void => {
 
 const toggleShowIgnored = (): void => {
     showIgnored.value = !showIgnored.value;
-    write(SHOW_IGNORED_KEY, showIgnored.value ? `1` : `0`);
 };
 
 const toggleHideTests = (): void => {
     hideTests.value = !hideTests.value;
-    write(HIDE_TESTS_KEY, hideTests.value ? `1` : `0`);
 };
 
 const setEditMode = (on: boolean): void => {
     editMode.value = on;
-    write(EDIT_MODE_KEY, on ? `1` : `0`);
 };
 
 const toggleShowComments = (): void => {
     showComments.value = !showComments.value;
-    write(SHOW_COMMENTS_KEY, showComments.value ? `1` : `0`);
 };
 
 const toggleHideFileComments = (): void => {
     hideFileComments.value = !hideFileComments.value;
-    write(HIDE_FILE_COMMENTS_KEY, hideFileComments.value ? `1` : `0`);
 };
 
 const setDiffLayout = (value: DiffLayout): void => {
     diffLayout.value = value;
-    write(DIFF_LAYOUT_KEY, value);
 };
 
 const setDiffOpen = (value: DiffOpen): void => {
     diffOpen.value = value;
-    write(DIFF_OPEN_KEY, value);
 };
 
 const toggleMarkdownOutline = (): void => {
     markdownOutline.value = !markdownOutline.value;
-    write(MARKDOWN_OUTLINE_KEY, markdownOutline.value ? `1` : `0`);
 };
 
 export function useLayout() {

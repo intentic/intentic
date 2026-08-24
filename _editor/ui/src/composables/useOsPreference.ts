@@ -1,13 +1,14 @@
-import { ref, watch, type Ref } from "vue";
+import { type Ref } from "vue";
 import type { ShikiLang } from "../lib/shikiLangs.js";
+import { definePreference } from "./preference.js";
 
 export type CommandOs = "unix" | "windows";
 
 const STORAGE_KEY = `ui-command-os`;
 
-/* Owns the preferred OS for command examples as a module-level singleton, so the Linux/Windows toggle
- * stays in sync across every screen that shows a command. Seeded from the browser platform, then persisted
- * once the user picks one, reads fall back to detection until a choice is stored. */
+/* Owns the preferred OS for command examples as an account preference (composables/preference.ts), so the
+ * Linux/Windows toggle stays in sync across every screen that shows a command and every window showing one.
+ * Seeded from the browser platform, then persisted once the user picks one. */
 
 // `startsWith`, not a /win/ match, "Darwin" contains "win".
 const detect = (): CommandOs => {
@@ -15,27 +16,10 @@ const detect = (): CommandOs => {
     return platform.toLowerCase().startsWith(`win`) ? `windows` : `unix`;
 };
 
-const read = (): CommandOs => {
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored === `unix` || stored === `windows`) {
-            return stored;
-        }
-    } catch {
-        // Storage may be unavailable (private mode); fall back to platform detection.
-    }
-    return detect();
-};
-
-const cmdOs: Ref<CommandOs> = ref(read());
-
-// Persist every change, including `SegmentedControl` v-model writes, so no page needs an explicit setter.
-watch(cmdOs, (value) => {
-    try {
-        localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
+const cmdOs: Ref<CommandOs> = definePreference<CommandOs>({
+    key: STORAGE_KEY,
+    read: (raw) => (raw === `unix` || raw === `windows` ? raw : detect()),
+    write: (value) => value,
 });
 
 export function useOsPreference() {
