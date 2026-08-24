@@ -169,18 +169,32 @@ pub struct SetupContext {
 impl SetupContext {
     fn of(app: &AppHandle, consented: bool) -> SetupContext {
         let state = app.state::<AppState>();
+        let host = Host::current();
         SetupContext {
             platform_url: state.platform_url(),
             app_url: state.app_url(),
-            docker_ready: scripts::docker_ready(),
+            // Only Unix uses this answer, to decide whether the whole script must be elevated. On Windows the
+            // script is never elevated: `ic docker prepare` checks and raises each prerequisite itself. Asking
+            // `docker info` here can spend tens of seconds waiting for a stopped daemon, after the setup face
+            // has appeared but before its first command starts.
+            docker_ready: setup_docker_ready(host, scripts::docker_ready),
             sandbox_image: std::env::var("INTENTIC_SANDBOX_IMAGE")
                 .ok()
                 .filter(|image| !image.is_empty()),
-            host: Host::current(),
+            host,
             version: VERSION.to_string(),
             consented,
         }
     }
+}
+
+/// Whether this setup needs the Docker probe before it can select its launch shape.
+///
+/// Windows always delegates the decision to `ic docker prepare`, which can report requirements and raise only
+/// the individual operations that need administrator approval. Keeping the probe out of this synchronous path
+/// lets a setup begin promptly when Docker Desktop is installed but its daemon is stopped.
+fn setup_docker_ready(host: Host, probe: impl FnOnce() -> bool) -> bool {
+    host == Host::Unix && probe()
 }
 
 /* THE WHOLE ONBOARDING, as an argument vector: connect.sh / connect.ps1 with the setup code the SPA minted.
@@ -755,6 +769,19 @@ mod tests {
             // about the second one says so.
             consented: false,
         }
+    }
+
+    #[test]
+    fn windows_setup_does_not_wait_for_a_docker_probe_before_starting() {
+        let mut probed = false;
+        assert!(!setup_docker_ready(Host::Windows, || {
+            probed = true;
+            true
+        }));
+        assert!(!probed, "Windows delegates prerequisites to ic docker prepare");
+
+        assert!(setup_docker_ready(Host::Unix, || true));
+        assert!(!setup_docker_ready(Host::Unix, || false));
     }
 
     fn setup_args(code: &str) -> SetupArgs {

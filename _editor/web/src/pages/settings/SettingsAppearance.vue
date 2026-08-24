@@ -137,15 +137,18 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
             </Row>
-            <!-- The colour the rest of the workspace is built out of. In #below rather than #control because it
-                 is two rails and a row of swatches, and because the app around it repaints as they move, a
-                 control this wide beside a title would push the description into a column. -->
+            <!-- The colour the rest of the workspace is built out of, beside its title like every other choice
+                 in this group. It used to sit under the row, from when it was two rails and a swatch row and
+                 genuinely too wide to stand beside anything; what is left is one control, and a row of circles
+                 parked on its own line read as a second setting with no name. `wide-control` is what lets it
+                 wrap onto a second line in a narrow pane instead of stretching the row past it. -->
             <Row
                 icon="palette"
                 title="Colour"
+                wide-control
             >
-                <template #below>
-                    <ColorPicker :model-value="accent" @update:model-value="setAccent" />
+                <template #control>
+                    <ColorPicker :model-value="accent" class="justify-end" @update:model-value="setAccent" />
                 </template>
             </Row>
             <!-- Above the rail row on purpose: this one moves the whole workspace, that one moves a column of it. -->

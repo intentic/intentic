@@ -42,6 +42,7 @@ const {
     density = `comfortable`,
     selected = false,
     flush = false,
+    wideControl = false,
 } = defineProps<{
     icon?: IconName;
     title?: string;
@@ -72,6 +73,23 @@ const {
     spin?: boolean;
     /** Drops the tier's padding, for a row whose container already provides it: see the note above. */
     flush?: boolean;
+    /* LETS THE TRAILING CLUSTER GIVE UP WIDTH, for the row whose control is a SET rather than a button.
+     *
+     * The cluster is `shrink-0` for everything else, and has to be: a size, a time or a badge squeezed to fit
+     * is unreadable, and a button squeezed is unclickable, so a row with one of those in it stays as wide as
+     * that fact needs and the title truncates instead. A dozen colour swatches obey the opposite rule. They
+     * are one control drawn as a row of parts, each part already the size it must be, and the way it fits a
+     * narrow pane is by taking a second line: the alternative is a control that pushes the row wider than the
+     * pane it sits in, which is what sent it under the title in the first place.
+     *
+     * So the cluster takes the space LEFT OVER by the title (`basis-0 grow`) rather than claiming its own
+     * width and then arguing about the shortfall. That distinction is the whole of it: made to shrink from its
+     * natural width instead, flexbox divides the shortfall in proportion to base widths, so a dozen swatches
+     * against one word still clip the word by a few pixels before they have wrapped once. From a zero basis
+     * there is no shortfall to divide, and the title keeps its width until it is the thing that cannot fit.
+     *
+     * The control inside still has to be a wrapping one (`flex-wrap`) for the second line to happen. */
+    wideControl?: boolean;
 }>();
 
 /* One table, so a tier is read in one place rather than reassembled from five ternaries down the template.
@@ -146,7 +164,11 @@ const picked = as === `button`;
                     </p>
                 </div>
             </div>
-            <div v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined" class="flex shrink-0 items-center gap-2">
+            <div
+                v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
+                class="flex items-center gap-2"
+                :class="wideControl ? `grow basis-0 flex-wrap justify-end` : `shrink-0`"
+            >
                 <!-- Facts, not controls: tabular so a column of sizes or times lines up down the list, and muted
                      so the row's name stays the thing the eye lands on. -->
                 <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
