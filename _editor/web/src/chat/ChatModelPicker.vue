@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { limitationsOf } from "@intentic/sandbox-contract";
+import { InfoHint } from "@intentic/ui";
 import type { Conversation } from "../composables/chat/conversation";
 import type { PickerEntry } from "../composables/chat/modelPicker";
 import { usePickerAccounts } from "../composables/chat/pickerAccounts";
@@ -31,8 +32,8 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
  * on editing the previous one. Remount, don't rebind. */
 const { provider, harness, model, thinking, fast, fastOffered, fastMode, tierHold, tierAnswer, streaming, account, capabilities } = conversation;
 
-// The sandbox-wide automatic-tier mode, which decides whether the per-conversation veto below is worth a row
-// at all: with the feature off there is nothing to veto, and a dead control is worse than none.
+// The sandbox-wide automatic-tier mode, which decides what the tier block below is allowed to show: a dead
+// control is worse than none, and this feature has two modes that can produce one (see tierHoldOffered).
 const { settings } = useSandboxSettings();
 const tierMode = computed(() => settings.value?.autoTier ?? `shadow`);
 
@@ -97,11 +98,20 @@ const fastSpeedNotice = computed<string | undefined>(() => {
         : (FAST_MODE_REASONS[state.reason] ?? `The last turn ran at standard speed (${state.reason}).`);
 });
 
+/* Whether the veto is worth a row. `on` only, not "not off": in Measure mode nothing is ever substituted, so a
+ * hold has nothing to hold back, and the switch would sit there flipping between two words that describe the
+ * same non-event. It is the rule the composer's chip now follows too (tierPreview's header), for the same
+ * reason — the mode that changes nothing is the mode that should show nothing. */
+const tierHoldOffered = computed(() => tierMode.value === `on`);
+
 /* The one line under the tier control, fastSpeedNotice's twin, and under the same discipline: only when the
  * judge's answer DISAGREES with what the pick alone would predict. A standard verdict ran the pick, which is
  * what the picker already says, so it renders nothing; the three states worth a sentence are the substitution
- * that happened, the substitution the user's veto stopped, and measure mode's "would have" — the last one shown
- * because awareness is that mode's entire product. */
+ * that happened, the substitution the user's veto stopped, and measure mode's "would have".
+ *
+ * MEASURE'S LINE SURVIVES HERE while the composer's chip is gone, and the difference is what each one is: this
+ * reports a turn that already ran, inside a panel someone opened to think about models, and it is the honest
+ * way to discover the feature at all. The chip was a standing label on a turn that had not happened yet. */
 const tierNotice = computed<string | undefined>(() => {
     const answer = tierAnswer.value;
     if (answer === undefined || answer.tier !== `fast`) {
@@ -122,7 +132,9 @@ const tierNotice = computed<string | undefined>(() => {
 /* Whether the footer earns the border and padding it draws. The shared block answers for the account list, the
  * routed subscriptions, the harness axis and a standing refusal; everything after it is this conversation's own
  * runtime, and a rule drawn above nothing is what this check exists to prevent. */
-const footerVisible = computed(() => hasContent.value || provider.value === `claude` || limitations.value.length > 0 || tierMode.value !== `off`);
+const footerVisible = computed(
+    () => hasContent.value || provider.value === `claude` || limitations.value.length > 0 || tierHoldOffered.value || tierNotice.value !== undefined,
+);
 </script>
 
 <template>
@@ -200,11 +212,18 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                 </div>
 
                 <!-- AUTOMATIC TIER, this conversation's word against the sandbox setting: the toggle is the
-                     standing veto (AgentTurn.tierHold), offered only while the feature can do anything, and the
-                     line under it reports what the judge actually decided about the last turn, which is the one
-                     fact the routing would otherwise change silently. -->
-                <div v-if="tierMode !== `off`" class="flex flex-col gap-1">
-                    <div class="flex items-center justify-between gap-2">
+                     standing veto (AgentTurn.tierHold), offered only where a hold can actually stop something,
+                     and the line under it reports what the judge decided about the last turn, which is the one
+                     fact the routing would otherwise change silently.
+
+                     THE WAY OUT ENTIRELY IS NAMED HERE, not only in Settings. The veto above it is per
+                     conversation on purpose (that is the honest blast radius of a click made inside one chat),
+                     but "stop doing this to me" is a thing people want the moment they first see a model they
+                     did not pick, and a feature whose off switch can only be found by guessing which settings
+                     page owns it is a feature that gets sworn at instead of configured. One link, worded for
+                     the reach it has. -->
+                <div v-if="tierHoldOffered || tierNotice !== undefined" class="flex flex-col gap-1">
+                    <div v-if="tierHoldOffered" class="flex items-center justify-between gap-2">
                         <span class="text-2xs font-medium uppercase tracking-wide text-muted">Simple turns may run cheaper</span>
                         <button
                             type="button"
@@ -219,18 +238,37 @@ const footerVisible = computed(() => hasContent.value || provider.value === `cla
                         </button>
                     </div>
                     <span v-if="tierNotice !== undefined" class="text-2xs text-subtle">{{ tierNotice }}</span>
+                    <RouterLink
+                        v-if="tierHoldOffered"
+                        to="/sandbox/agent#models"
+                        class="text-2xs text-link hover:underline"
+                        @click="emit(`selected`)"
+                    >
+                        Turn it off for every chat
+                    </RouterLink>
                 </div>
 
                 <!-- The honest half of the choice: what this runtime can't do, named before the user relies on it.
-                     Chips rather than prose: the list is short, unordered, and each item is a control that would
-                     otherwise appear to work. -->
-                <div v-if="limitations.length > 0" class="flex flex-col gap-1">
+                     ONE ROW, on the footer's own label-left/control-right grammar, with the list itself behind a
+                     hover card. It used to be a wall of chips, and on the weaker runtimes that is a dozen of
+                     them: eight lines of standing prose under the four controls, which pushed the model list
+                     that the panel exists for into a third of its own height and read as a warning screen
+                     rather than a footnote. The count carries what a bare (i) would hide: how much there is to
+                     read is the part worth seeing without hovering, and it is what makes the difference between
+                     the Claude Code loop (no row at all) and a routed one glanceable. -->
+                <div v-if="limitations.length > 0" class="flex items-center justify-between gap-2">
                     <span class="text-2xs font-medium uppercase tracking-wide text-muted">Not available here</span>
-                    <div class="flex flex-wrap gap-1">
-                        <span v-for="limit in limitations" :key="limit" class="rounded border border-line px-1.5 py-0.5 text-2xs text-subtle">{{
-                            limit
-                        }}</span>
-                    </div>
+                    <InfoHint label="What isn't available here" :text="`${limitations.length}`" class="shrink-0">
+                        <!-- The card states its own heading: it is teleported to the tooltip tier and may land
+                             clear of the row that raised it, so it cannot lean on that label for what it is. -->
+                        <span class="block text-xs font-medium text-content">Not available here</span>
+                        <ul class="mt-1 flex flex-col gap-1 text-xs">
+                            <li v-for="limit in limitations" :key="limit" class="flex items-start gap-1.5">
+                                <span class="mt-[0.4rem] h-1 w-1 shrink-0 rounded-full bg-line-strong" aria-hidden="true"></span>
+                                <span class="text-muted">{{ limit }}</span>
+                            </li>
+                        </ul>
+                    </InfoHint>
                 </div>
             </div>
         </template>

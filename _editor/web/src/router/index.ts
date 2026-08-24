@@ -232,10 +232,7 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: `Sandbox` },
                 // The hub titles itself with the active sandbox's NAME once mounted; the outline says what the
                 // page is rather than guessing which box, and the description is the hub's own (SandboxHub.vue).
-                component: asyncView(
-                    () => import(`../pages/SandboxHub.vue`),
-                    hubOutline(`Sandbox`, ``, 7),
-                ),
+                component: asyncView(() => import(`../pages/SandboxHub.vue`), hubOutline(`Sandbox`, ``, 7)),
             },
             // Splat param: the open file's path lives in the URL (`/workspace/src/foo.ts`) so a reload or a
             // shared link reopens it. Optional/repeatable, so bare `/workspace` still matches (path === "").
@@ -262,10 +259,7 @@ const routes: RouteRecordRaw[] = [
                 name: `settings`,
                 meta: { title: `Settings` },
                 // Mirrors the page's own heading (pages/SettingsHub.vue).
-                component: asyncView(
-                    () => import(`../pages/SettingsHub.vue`),
-                    hubOutline(`Settings`, ``, 5),
-                ),
+                component: asyncView(() => import(`../pages/SettingsHub.vue`), hubOutline(`Settings`, ``, 5)),
             },
         ],
     },
@@ -333,6 +327,17 @@ export const router = createRouter({
      * interactive demo (@intentic-dev/demo) builds the same source under `/demo/` and is what surfaced it. */
     history: createWebHistory(import.meta.env.BASE_URL),
     routes,
+    /* DEEP LINKS INTO A SETTINGS PAGE ACTUALLY LAND, and that is ALL this does. Without it vue-router does
+     * nothing with a fragment — the browser honours one only on a real document load, and every navigation
+     * here is a pushState — so `/sandbox/usage#accounts` and `/sandbox/agent#models` dropped the reader at the
+     * top of a long page of groups and left them to hunt for the row the link had just promised them.
+     *
+     * `{ el }` rather than a `top`, because that is what works inside the app's own scroll containers:
+     * vue-router calls `scrollIntoView` on the element, so whichever pane owns the scrollbar does the
+     * scrolling. Everything else returns `false` — no hash means no opinion, which is exactly the behaviour
+     * this app has always had, and a blanket "scroll to top on every navigation" is a different change that
+     * every route in the shell would have to be re-checked against. */
+    scrollBehavior: (to) => (to.hash === `` ? false : { el: to.hash, behavior: `smooth` }),
 });
 
 /* The stale-window recovery's ROUTER half (staleChunk.ts owns the shared detection and the one-reload guard;

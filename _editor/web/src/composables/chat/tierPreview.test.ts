@@ -44,14 +44,20 @@ afterEach(() => {
     settings.value = SandboxSettingsSchema.parse({});
 });
 
-test("measuring says only that the turn looks simple, because that is all that will happen", () => {
-    expect(preview(`what is a closure?`)).toEqual({ kind: `measure` });
+test("measuring previews nothing, because nothing is going to happen to the turn", () => {
+    /* Measure is the DEFAULT (SandboxSettingsSchema), so this is the state most people are in, and it used to
+     * be the state that put an inert "Looks simple" on the composer with its only explanation on a hover
+     * title. The mode judges and records; the composer is not where a non-event gets announced. */
+    expect(settings.value.autoTier).toBe(`shadow`);
+    expect(preview(`what is a closure?`)).toBeUndefined();
 });
 
-test("switched on, it names the model the turn will actually run", () => {
+test("switched on, it names both models: what the turn runs, and what it was going to", () => {
+    // Both, because each of the chip's two sentences needs the other's model — "runs on Haiku instead of
+    // Opus", "kept on Opus rather than Haiku".
     settings.value = { ...settings.value, autoTier: `on` };
 
-    expect(preview(`what is a closure?`)).toEqual({ kind: `route`, label: `claude-haiku-4-5` });
+    expect(preview(`what is a closure?`)).toEqual({ kind: `route`, cheap: `claude-haiku-4-5`, pick: `claude-opus-5` });
 });
 
 test("a standing hold reads as the veto it is, still naming what it declined", () => {
@@ -59,7 +65,11 @@ test("a standing hold reads as the veto it is, still naming what it declined", (
     // the user unable to tell whether it was doing anything.
     settings.value = { ...settings.value, autoTier: `on` };
 
-    expect(preview(`what is a closure?`, chatWith({ tierHold: ref(true) }))).toEqual({ kind: `held`, label: `claude-haiku-4-5` });
+    expect(preview(`what is a closure?`, chatWith({ tierHold: ref(true) }))).toEqual({
+        kind: `held`,
+        cheap: `claude-haiku-4-5`,
+        pick: `claude-opus-5`,
+    });
 });
 
 test("nothing at all when the feature is off, when the box is empty, or when the draft looks like work", () => {
@@ -82,7 +92,7 @@ test("the last turn's verdict reaches the preview, so a deceptive follow-up is n
     // carrying the whole weight of the task before them.
     settings.value = { ...settings.value, autoTier: `on` };
 
-    expect(preview(`list the exports`)).toEqual({ kind: `route`, label: `claude-haiku-4-5` });
+    expect(preview(`list the exports`)).toEqual({ kind: `route`, cheap: `claude-haiku-4-5`, pick: `claude-opus-5` });
     expect(preview(`list the exports`, chatWith({ lastTier: ref(`standard`) }))).toBeUndefined();
 });
 

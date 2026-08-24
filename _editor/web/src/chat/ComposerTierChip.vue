@@ -1,23 +1,28 @@
-<!-- THE COMPOSER SAYING WHAT THE TIER JUDGE WILL SAY, before send: a small chip beside the model pill that
-     appears only when the draft judges simple AND the sandbox's automatic-tier mode gives that a consequence
-     (useTierPreview owns the rule). Three states, one chip:
+<!-- THE ONE CONTROL ON THE COMPOSER THAT SAYS YOUR MODEL IS ABOUT TO BE SWAPPED, and the press that stops it.
+     It appears only when a swap is really going to happen (useTierPreview owns that rule, and its header says
+     why Measure mode now draws nothing at all). Two states:
 
-       measure — awareness only, the whole product of the Measure mode: "this is a turn the judge would move".
-                 Inert, because nothing will happen and a button that does nothing teaches people not to press.
-       route   — this turn WILL run on the named cheaper model. The press is the veto: one click keeps this
-                 conversation on the picked model (Conversation.tierHold), the same standing hold the picker's
-                 toggle and the routed-turn notice flip.
-       held    — the veto is standing and just declined a substitution. The press lifts it again.
+       route — this turn WILL run on the named cheaper model. The chip reads "→ Haiku 4.5" beside a pill that
+               says "Opus 4.5", so the contradiction is the message: something is replacing your pick. One
+               press keeps the pick for this conversation (Conversation.tierHold).
+       held  — that press has been taken, or a hold from an earlier turn is standing, and it is declining a
+               swap right now. The chip reads "Kept on Opus 4.5 · Undo" and the same press lifts it.
 
-     The chip is the pre-send half of the awareness story; the tier frame and the picker notice are the
-     post-send half, and the daemon's answer always outranks this preview.
+     THE ACTION IS IN THE WORDS, not in a tooltip. The old chip's entire explanation lived in `title`: delayed
+     on a mouse, absent on a touch screen, unreachable from a keyboard, and gone the moment the pane narrowed.
+     A control that quietly substitutes the model you chose cannot be explained by hover alone, so the held
+     state spells its press out ("Undo") and both states carry the full sentence on `aria-label` as well as
+     `title`. Ghost styling in both, not the row's lit `composer-active`: the accent is spent on the action
+     word, because that word is what makes this legible.
+
+     THE WHOLE CHIP IS THE PRESS, including the "Undo". One target rather than a word-sized one inside a pill
+     that is already only 32px tall — and the trailing word then reads as the label of the thing under the
+     cursor, which is exactly what it is.
 
      IT NEVER DISAPPEARS WITH THE PANE, only its words do. The composer's other controls hide their LABEL on a
-     narrow pane and keep their mark, and this one has more reason to than any of them: it is the only control
-     there that says something is about to happen to the model you chose, so a width that hid it would make a
-     substitution silent on exactly the layout (a split pane, a phone) where the model row is hardest to read.
-     The icon carries the state on its own — muted for measuring, lit for a hold — and the hover text says the
-     whole sentence. -->
+     narrow pane and keep their mark, and this one has more reason to than any of them: a width that hid it
+     would make a substitution silent on exactly the layout (a split pane, a phone) where the model row is
+     hardest to read. The icon carries the state on its own — an arrow for a swap, a lock for a hold. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Conversation } from "../composables/chat/conversation";
@@ -30,63 +35,46 @@ const preview = useTierPreview(
     () => props.conversation.draft.value,
 );
 
-const label = computed(() => {
+/* The whole sentence, on `title` AND `aria-label`, because the chip's own words are deliberately short enough
+ * to fit a composer row: they name the models, this names what is being done to them and what the press does. */
+const title = computed(() => {
     const state = preview.value;
     if (state === undefined) {
         return undefined;
     }
-    if (state.kind === `measure`) {
-        return `Looks simple`;
-    }
-    return state.kind === `route` ? `Cheaper: ${state.label ?? ``}` : `My pick`;
+    return state.kind === `route`
+        ? `This turn looks simple, so it runs on ${state.cheap} instead of ${state.pick}. Press to keep ${state.pick} for this chat.`
+        : `Simple turns are kept on ${state.pick} in this chat. Press to let them run on ${state.cheap} again.`;
 });
 
-const title = computed(() => {
-    switch (preview.value?.kind) {
-        case `measure`:
-            return `Measuring: this turn looks simple enough for the cheaper tier. It still runs on your pick.`;
-        case `route`:
-            return `This turn looks simple, so it will run on ${preview.value.label ?? `the cheaper model`}. Click to keep your pick for this conversation.`;
-        case `held`:
-            return `Held: simple turns stay on your pick in this conversation. Click to allow the cheaper model again.`;
-        default:
-            return undefined;
-    }
-});
-
+// One press, both directions: it is the same standing veto the picker's toggle and the routed-turn notice flip.
 const press = (): void => {
     const state = preview.value;
-    if (state?.kind === `route`) {
-        props.conversation.setTierHold(true);
-    } else if (state?.kind === `held`) {
-        props.conversation.setTierHold(false);
+    if (state !== undefined) {
+        props.conversation.setTierHold(state.kind === `route`);
     }
 };
 </script>
 
 <template>
-    <!-- Inert in measure mode (a span), a real button when the press means something: the distinction IS the
-         affordance, a cursor that invites a click must have a click to give. -->
-    <span
-        v-if="preview?.kind === `measure`"
-        class="composer-ghost pointer-events-none h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-        :title="title"
-    >
-        <Icon name="credit-card" class="text-2xs text-subtle" />
-        <!-- The words go on a narrow pane, the mark stays: see the note at the top of this file for why this
-             control in particular must never vanish with the width. -->
-        <span class="text-subtle @max-lg:hidden">{{ label }}</span>
-    </span>
     <button
-        v-else-if="preview !== undefined"
+        v-if="preview !== undefined"
         type="button"
         class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-        :class="{ 'composer-active': preview.kind === `held` }"
         :title="title"
         :aria-label="title"
         @click="press"
     >
-        <Icon name="credit-card" class="text-2xs" />
-        <span class="@max-lg:hidden">{{ label }}</span>
+        <Icon :name="preview.kind === `route` ? `arrow-right` : `lock`" class="text-2xs" />
+        <!-- The words go on a narrow pane, the mark stays: see the note at the top of this file for why this
+             control in particular must never vanish with the width. -->
+        <template v-if="preview.kind === `route`">
+            <span class="@max-lg:hidden">{{ preview.cheap }}</span>
+        </template>
+        <template v-else>
+            <span class="@max-lg:hidden">Kept on {{ preview.pick }}</span>
+            <span class="text-subtle @max-lg:hidden" aria-hidden="true">·</span>
+            <span class="text-link @max-lg:hidden">Undo</span>
+        </template>
     </button>
 </template>

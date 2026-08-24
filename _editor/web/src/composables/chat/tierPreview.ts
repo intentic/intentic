@@ -15,19 +15,30 @@ import { modelLabelFor, providerModels } from "./providerCatalog";
  * moment the turn starts. This is the design's own constraint ("the composer's pre-send label is never wrong in
  * the expensive direction", docs/model-routing-design.md §3.3) landing where it was always meant to.
  *
- * NOTHING IS PREVIEWED unless the verdict is fast AND the mode gives the verdict a consequence: a chip
- * confirming that nothing will happen is noise. Measure mode shows "looks simple" as awareness (that is the
- * mode's whole product); on mode names the model the turn will actually run, or the veto that stops it. */
+ * NOTHING IS PREVIEWED UNLESS THE TURN IS REALLY ABOUT TO MOVE. The judge runs in Measure mode too, and this
+ * used to say so on the composer ("Looks simple", inert, explained only by a hover title). That is the state
+ * most people are in — Measure is the default — so the feature's whole public face was a label with no
+ * consequence, no press, and no sentence a mouse-less or touch reader could ever reach. A control that reports
+ * a non-event teaches people to stop reading the row it sits in, and that row is where the model, the mode and
+ * the persona also announce themselves. Measure's product is the ledger, and the ledger is read where it can be
+ * acted on (Settings › Models: "62 of 100 simple · $4.20 on your pick"), plus the picker's own after-the-fact
+ * line. So the preview answers only in `on`, where there are exactly two things worth a chip: the substitution
+ * that is about to happen, and this conversation's veto declining one. */
 
 // The image extensions the attachment strip itself previews. An approximation of the daemon's own MIME read,
 // erring toward "image", which errs the verdict toward standard, the safe direction.
 const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|bmp|svg|avif|heic)$/i;
 
 export interface TierPreview {
-    // What the chip says: measuring awareness, an actual substitution, or the user's own standing veto.
-    readonly kind: "measure" | "route" | "held";
-    // The cheap model's display label, present on "route"/"held" when one is resolvable client-side.
-    readonly label?: string;
+    // A substitution about to happen, or this conversation's standing veto declining one. No third state: a
+    // mode that changes nothing draws nothing (see the header).
+    readonly kind: "route" | "held";
+    // The cheaper rung: what the turn runs on instead ("route"), or what the veto just declined ("held").
+    readonly cheap: string;
+    /* The model the user actually picked. BOTH labels, always, because the chip's two sentences each need the
+     * other's model: "runs on Haiku instead of Opus", "kept on Opus rather than Haiku". Reading the pick off
+     * the pill next door is not the same thing — the pill is a separate control that truncates its own name. */
+    readonly pick: string;
 }
 
 /* The preview for one composer. GETTERS, not captured instances: the chat pane swaps its conversation prop in
@@ -37,8 +48,9 @@ export const useTierPreview = (conversation: () => Conversation, draft: () => st
     const { settings } = useSandboxSettings();
     return computed<TierPreview | undefined>(() => {
         const chat = conversation();
-        const mode = settings.value?.autoTier;
-        if (mode === undefined || mode === `off`) {
+        // `on` only. Off judges nothing; Measure judges everything and moves nothing, and a chip for a
+        // non-event is the thing this preview stopped drawing (see the header).
+        if (settings.value?.autoTier !== `on`) {
             return undefined;
         }
         const text = draft();
@@ -63,9 +75,6 @@ export const useTierPreview = (conversation: () => Conversation, draft: () => st
         if (verdict.tier !== `fast`) {
             return undefined;
         }
-        if (mode === `shadow`) {
-            return { kind: `measure` };
-        }
         const provider = chat.provider.value;
         const model = fastTierModel({
             provider,
@@ -78,7 +87,8 @@ export const useTierPreview = (conversation: () => Conversation, draft: () => st
             // would be confirming a control that did nothing.
             return undefined;
         }
-        const label = modelLabelFor(provider, model);
-        return chat.tierHold.value ? { kind: `held`, label } : { kind: `route`, label };
+        const cheap = modelLabelFor(provider, model);
+        const pick = modelLabelFor(provider, chat.model.value);
+        return chat.tierHold.value ? { kind: `held`, cheap, pick } : { kind: `route`, cheap, pick };
     });
 };

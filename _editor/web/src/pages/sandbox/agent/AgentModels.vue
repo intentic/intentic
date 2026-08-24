@@ -216,7 +216,10 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
 </script>
 
 <template>
-    <RowGroup label="Models">
+    <!-- `id` so the chat can send someone straight here: the model picker's "Turn it off for every chat" is the
+         only route out of automatic tier selection that reaches beyond one conversation, and a link that lands
+         on the top of a long settings page has not answered the question that was asked. -->
+    <RowGroup id="models" label="Models">
         <!-- The order is drawn IN FULL below the row, because the useful thing to know here is not that a
              default exists but which model a click is about to bill, and, the day that one is spent, which
              one catches it. A trigger 14rem wide can say one of those; the full-width area under the row can
@@ -338,8 +341,8 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
 
                     <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="flex flex-col gap-0.5">
                         <p class="text-2xs text-muted">
-                            <span class="text-content">{{ TIER_WINDOW_DAYS }}d</span>:
-                            {{ tierReport.fast }} of {{ tierReport.judged }} simple<template v-if="tierReport.judged > 0">
+                            <span class="text-content">{{ TIER_WINDOW_DAYS }}d</span>: {{ tierReport.fast }} of
+                            {{ tierReport.judged }} simple<template v-if="tierReport.judged > 0">
                                 ({{ pct(tierReport.fast, tierReport.judged) }})</template
                             ><template v-if="tierReport.atStakeUsd > 0"> · {{ usd(tierReport.atStakeUsd) }} on your pick</template>
                         </p>
@@ -358,8 +361,7 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                             :model-value="settings?.autoTierEagerness ?? `balanced`"
                             :options="eagernessOptions"
                             @update:model-value="
-                                (autoTierEagerness: string) =>
-                                    patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
+                                (autoTierEagerness: string) => patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
                             "
                         />
                     </div>

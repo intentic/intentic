@@ -1506,13 +1506,15 @@ watch(
                                             label-class="@max-lg:hidden"
                                         />
 
-                                        <!-- The tier judge's pre-send answer, only when it has one: the draft
-                                             looks simple and automatic tier selection will (or would) act. Sits
-                                             with the "which brain" group because it is a sentence about exactly
-                                             that. It keeps its mark at every width and drops only its words
-                                             (the chip owns that rule): a control announcing that your model is
-                                             about to be substituted is the last thing a narrow pane should
-                                             hide. -->
+                                        <!-- The tier judge's pre-send answer, and ONLY when the turn is really
+                                             about to move: the draft looks simple, automatic tier selection is
+                                             switched on, and there is a cheaper rung to move it to. Measure
+                                             mode draws nothing here (tierPreview's header says why). Sits with
+                                             the "which brain" group because it is a sentence about exactly
+                                             that — it contradicts the pill next to it on purpose. It keeps its
+                                             mark at every width and drops only its words (the chip owns that
+                                             rule): a control announcing that your model is about to be
+                                             substituted is the last thing a narrow pane should hide. -->
                                         <ComposerTierChip :conversation="conversation" />
                                     </div>
 
