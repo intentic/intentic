@@ -31,6 +31,9 @@
 #   * boot.ready is true                      — every step in main.ts's BOOT_STEPS converged
 #   * no boot step is in state "failed"       — checked separately, and NOT retried: a failed step is terminal,
 #                                               so waiting out the timeout would only delay the same verdict
+#   * the starter site is baked AND seeded     — the first screen of a new sandbox, which fails silently on both
+#                                               sides (see the probe); this container has a new box's exact
+#                                               shape, so it is the cheapest place in the pipeline to read it
 #
 # The probe runs INSIDE the container via the image's own node — no curl, no jq, no assumption about what the
 # runner has. Node is the daemon's runtime, so it is the one interpreter the image is guaranteed to carry.
@@ -63,6 +66,8 @@ trap 'for leftover in $STARTED; do docker rm -f "$leftover" >/dev/null 2>&1 || t
 # the shell on its way into the container.
 PROBE="$(
     cat <<'JS'
+const { existsSync } = require("node:fs");
+const { join } = require("node:path");
 const fail = (code, why) => { console.error(why); process.exit(code); };
 (async () => {
     let res;
@@ -93,7 +98,42 @@ const fail = (code, why) => { console.error(why); process.exit(code); };
         fail(1, `still converging: ${pending.join(", ") || "(no step detail)"}`);
         return;
     }
-    console.log(`ok · profile=${health.profile} · ${steps.length} boot step(s) done`);
+    /* THE STARTER SITE, THE ONE THING A NEW USER SEES, and until this ran neither half of it was guarded.
+     *
+     * It is half image (the Dockerfile bakes the monorepo at /opt/starter) and half daemon (the first boot
+     * copies it into the workspace and starts its dev server, src/scaffold/starter-site.ts), and the two halves
+     * fail silently in opposite directions: a bake that stops landing leaves a daemon with nothing to copy, and
+     * a daemon that decides "this workspace is not fresh" leaves a perfectly good bake untouched. Both open an
+     * empty sandbox and neither fails anything. The desktop installs of 2026-08-24 shipped the second one for a
+     * day, with a green pipeline the whole time.
+     *
+     * This container is exactly the shape that first boot has: no volumes, so /work is empty and the daemon
+     * owns it. Terminal (exit 2) rather than retried, the seed is awaited inside the boot chain, so once
+     * boot.ready is true the answer will not change by looking again.
+     *
+     * Names come from the image's own contract module, never from a copy in this script: the browser, the
+     * daemon and the Dockerfile all read them from there, and a fourth spelling here would be the one that
+     * rots. */
+    let starter;
+    try {
+        starter = require("/opt/sandbox/node_modules/@intentic/sandbox-contract/dist/starter.js");
+    } catch (error) {
+        // Terminal and named: an unreadable contract module is a moved path, not a slow boot, and retrying it
+        // until the timeout would report "still not healthy" over a daemon that is perfectly alive.
+        fail(2, `cannot read the starter contract from the image: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+    }
+    const { STARTER_APP, STARTER_REPO } = starter;
+    if (!existsSync(join("/opt/starter/_apps", STARTER_APP))) {
+        fail(2, `the image bakes no starter site: /opt/starter/_apps/${STARTER_APP} is absent`);
+        return;
+    }
+    const seeded = join(process.env.WORKSPACE_ROOT ?? "/work", STARTER_REPO, "_apps", STARTER_APP);
+    if (!existsSync(seeded)) {
+        fail(2, `the daemon converged but seeded no starter site: ${seeded} is absent (a fresh workspace must open with one)`);
+        return;
+    }
+    console.log(`ok · profile=${health.profile} · ${steps.length} boot step(s) done · starter site seeded`);
 })();
 JS
 )"

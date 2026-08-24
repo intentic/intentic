@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Services } from "../composition.js";
-import { seedStarterSite, STARTER_BAKED_DIR } from "./starter-site.js";
+import { seedStarterSite, STARTER_BAKED_DIR, workspaceArrivedEmpty } from "./starter-site.js";
 
 const exec = promisify(execFile);
 
@@ -38,9 +38,12 @@ const bakeStarter = async (dir: string): Promise<void> => {
     await writeFile(join(dir, "_apps", "landing", "src", "index.astro"), "<h1>hello</h1>\n");
 };
 
-const services = (): Services =>
+// `arrivedEmpty` is the verdict composition took before the daemon wrote anything (composition.ts). It is a
+// composed fact rather than a live look at the directory, which is exactly what the tests below lean on.
+const services = (arrivedEmpty = true): Services =>
     ({
         workspace: { root },
+        workspaceArrivedEmpty: arrivedEmpty,
         config: { historyRoot: history, zone: "sbx.test", connectToken: "", sandbox: { publicUrl: "" } },
         processes: { start: vi.fn((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
         ensurePreviewRoutes: vi.fn((labels: readonly string[]) => Promise.resolve(void routes.push([...labels]))),
@@ -66,7 +69,7 @@ afterEach(async () => {
 
 describe("seedStarterSite", () => {
     it("lands the baked site as its own repo and starts its dev server", async () => {
-        expect(await seedStarterSite(services(), baked)).toBe("site");
+        expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
 
         const repo = join(root, "site");
         // The site itself, node_modules included: what makes the preview instant is that nothing installs here.
@@ -97,7 +100,7 @@ describe("seedStarterSite", () => {
         await writeFile(join(root, "site", "_apps", "landing", "src", "index.astro"), "<h1>mine now</h1>\n");
         started = [];
 
-        expect(await seedStarterSite(services(), baked)).toBeUndefined();
+        expect(await seedStarterSite(services(), baked)).toEqual({ skipped: "a site repo is already there" });
         expect(readFileSync(join(root, "site", "_apps", "landing", "src", "index.astro"), "utf8")).toContain("mine now");
         expect(started).toEqual([]);
     });
@@ -110,7 +113,7 @@ describe("seedStarterSite", () => {
         await mkdir(join(stage, "_apps"), { recursive: true });
         await writeFile(join(stage, "half-written"), "");
 
-        expect(await seedStarterSite(services(), baked)).toBe("site");
+        expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
         expect(existsSync(join(root, "site", "half-written"))).toBe(false);
         expect(existsSync(join(root, "site", "_apps", "landing", "package.json"))).toBe(true);
         expect(existsSync(stage)).toBe(false);
@@ -122,22 +125,31 @@ describe("seedStarterSite", () => {
     it("leaves a workspace that already has somebody's work in it alone", async () => {
         await mkdir(join(root, "my-project"), { recursive: true });
 
-        expect(await seedStarterSite(services(), baked)).toBeUndefined();
+        expect(await seedStarterSite(services(false), baked)).toEqual({ skipped: "the workspace arrived with content" });
         expect(existsSync(join(root, "site"))).toBe(false);
         expect(started).toEqual([]);
     });
 
-    // The daemon's own furniture is not somebody's work: it converges .intentic, the reference shelf and the
-    // agent config into a workspace that is still, to the user, completely empty.
-    it("seeds past the daemon's own furniture", async () => {
+    /* THE DESKTOP INSTALL'S OWN BUG, as a test. The seed used to take the "did anything arrive here" reading
+     * itself, at the moment it ran, which put it in a race with the daemon's own boot-time writes. The desktop
+     * path lost that race every time: the setup computer's card is seeded detached, ahead of the boot chain, and
+     * converging its skill files splices the managed index into AGENTS.md, a file that is not dotted. So the
+     * seed read the daemon's own AGENTS.md as the user's work and every desktop install opened empty.
+     *
+     * The verdict is now composed before the daemon writes anything, so a file that appeared afterwards cannot
+     * change it: that is what this asserts, with the racing writes already on disk. */
+    it("seeds past files the daemon itself wrote after the workspace was read", async () => {
         await mkdir(join(root, ".intentic", "config"), { recursive: true });
+        await mkdir(join(root, ".agents", "skills", "radarsu-rog"), { recursive: true });
         await mkdir(join(root, "refs"), { recursive: true });
+        await writeFile(join(root, "AGENTS.md"), "<!-- intentic:skills -->\n## Skills\n<!-- /intentic:skills -->\n");
 
-        expect(await seedStarterSite(services(), baked)).toBe("site");
+        expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
+        expect(existsSync(join(root, "site", "_apps", "landing", "package.json"))).toBe(true);
     });
 
     it("does nothing when the image baked no starter: an older image simply opens empty", async () => {
-        expect(await seedStarterSite(services(), join(baked, "absent"))).toBeUndefined();
+        expect(await seedStarterSite(services(), join(baked, "absent"))).toEqual({ skipped: "no baked starter in this image" });
         expect(existsSync(join(root, "site"))).toBe(false);
         expect(started).toEqual([]);
     });
@@ -146,5 +158,38 @@ describe("seedStarterSite", () => {
     // touches only one of them leaves every new sandbox opening empty, with nothing failing anywhere.
     it("reads the tree from the path the image bakes", () => {
         expect(STARTER_BAKED_DIR).toBe("/opt/starter");
+    });
+});
+
+/* THE READING ITSELF, which is only correct when it is taken before the daemon writes. Its job is to tell the
+ * daemon's own furniture from the user's work, and the cases below are the three shapes a workspace can be in
+ * when composition asks: empty but for the daemon's dotted state, holding somebody's project, or holding a file
+ * whose name the daemon also writes later, which at THIS moment can only be the user's. */
+describe("workspaceArrivedEmpty", () => {
+    it("reads the daemon's own dotted state and the reference shelf as empty", async () => {
+        await mkdir(join(root, ".intentic", "config"), { recursive: true });
+        await mkdir(join(root, ".claude"), { recursive: true });
+        await mkdir(join(root, "refs"), { recursive: true });
+
+        expect(workspaceArrivedEmpty(root)).toBe(true);
+    });
+
+    it("reads anything else at all as somebody's work", async () => {
+        await mkdir(join(root, "my-project"), { recursive: true });
+
+        expect(workspaceArrivedEmpty(root)).toBe(false);
+    });
+
+    // Before the daemon has run, an AGENTS.md is the user's own operating notes, handed in with their folder.
+    // It only becomes the daemon's file once the skills index is converged into it, which is why this question
+    // is asked at composition and never again.
+    it("reads an AGENTS.md that was already there as somebody's work", async () => {
+        await writeFile(join(root, "AGENTS.md"), "# how I work\n");
+
+        expect(workspaceArrivedEmpty(root)).toBe(false);
+    });
+
+    it("reads a root it cannot list as no workspace to seed into", () => {
+        expect(workspaceArrivedEmpty(join(root, "absent"))).toBe(false);
     });
 });

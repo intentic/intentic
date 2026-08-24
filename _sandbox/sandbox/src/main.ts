@@ -574,13 +574,23 @@ const main = async (): Promise<void> => {
         if (!role.roots || !freshRoot || !traits.ownsWorkspaceConfig) {
             return;
         }
-        const seeded = await seedStarterSite(services).catch((error: unknown) => {
+        const outcome = await seedStarterSite(services).catch((error: unknown) => {
             logger.warn({ err: error }, "starter site not seeded, the workspace opens empty");
             return undefined;
         });
-        if (seeded !== undefined) {
-            logger.info({ repo: seeded }, "starter site seeded");
+        if (outcome === undefined) {
+            return;
         }
+        if ("repo" in outcome) {
+            logger.info({ repo: outcome.repo }, "starter site seeded");
+            return;
+        }
+        /* A SKIP SAYS WHY, and only here. The gate above already narrowed this to the first boot of a workspace
+         * the daemon owns, so this is one line on the one boot that was supposed to seed, not noise on every
+         * later start. It is worth the line because the evidence is otherwise gone: the boot happens once, and
+         * a sandbox that opened empty because of a wrong verdict looks identical to one that opened empty
+         * because the user brought their own code. */
+        logger.info({ why: outcome.skipped }, "starter site not seeded, the workspace opens as it arrived");
     });
 
     // The reference shelf (REFERENCE_DIR, @intentic/workspace-ignore): furniture, like .intentic, its presence

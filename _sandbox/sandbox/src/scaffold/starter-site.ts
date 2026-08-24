@@ -49,13 +49,23 @@ const STAGE_DIR = ".starter-site.incoming";
 // ready-to-run site on disk must not wait on GitHub to find out how to start it.
 const STARTER_DEV = "pnpm --filter {pkg} dev";
 
-/* IS THIS WORKSPACE ACTUALLY NEW, asked of the disk rather than of the git dir. A fresh root repo is not the
+/* DID THIS WORKSPACE ARRIVE EMPTY, asked of the disk rather than of the git dir. A fresh root repo is not the
  * same fact: a sandbox started over somebody's own checkout (their project handed in as the workspace) has no
  * history on /history either, so it reads as fresh on its first boot while being the one workspace a seeded
  * site would be pure litter in. Content is the honest signal, and the only content here yet is the daemon's
  * own: `.intentic`, the reference shelf, git's pointer, the agent config it converges later. Dotted entries are
- * therefore skipped and anything else at all means somebody brought their own work. */
-const workspaceIsUntouched = (root: string): boolean => {
+ * therefore skipped and anything else at all means somebody brought their own work.
+ *
+ * ASKED ONCE, AT COMPOSITION, BEFORE THIS DAEMON HAS WRITTEN A BYTE INTO /work (composition.ts), and the
+ * timing is the whole contract rather than a detail. The daemon writes into /work while it boots, and one of
+ * those writes is NOT dotted: converging the skills index splices a managed block into `AGENTS.md`
+ * (settings/loaded-skills.ts). On the desktop install path that convergence starts before the boot chain does,
+ * off the setup computer's own card (main.ts seeds it detached, so the machine that ran the installer can
+ * enroll), which on a real install landed AGENTS.md 40ms before this question was asked from inside the seed.
+ * The seed then read the daemon's own file as "somebody brought their own work" and skipped the starter site,
+ * silently, on every desktop install. Reading the answer before anything can write is what makes the verdict
+ * about the USER's content instead of about who won a race. */
+export const workspaceArrivedEmpty = (root: string): boolean => {
     try {
         return readdirSync(root).every((entry) => entry.startsWith(".") || entry === REFERENCE_DIR);
     } catch {
@@ -63,6 +73,12 @@ const workspaceIsUntouched = (root: string): boolean => {
         return false;
     }
 };
+
+/* WHAT THE SEED DID, in the caller's log. A skip used to be silent, and silence on a once-per-sandbox step is
+ * unrecoverable evidence: the boot that was meant to seed happens once, cannot be re-run, and leaves nothing
+ * behind that says why it didn't. Every skip is a sentence a reader can act on instead. */
+export type StarterSkipped = "no baked starter in this image" | "a site repo is already there" | "the workspace arrived with content";
+export type StarterOutcome = { readonly repo: string } | { readonly skipped: StarterSkipped };
 
 // The `pnpm --filter` target: the baked app package's real name, which belongs to the template's scope and is
 // the one thing here that must be read rather than assumed.
@@ -75,18 +91,26 @@ const starterPackage = (appDir: string): string | undefined => {
     }
 };
 
-/* Put the baked starter into the workspace and start it. Returns the repo name when a site was seeded, so the
- * caller can log it; undefined every other time (not fresh, not this profile, no baked tree, already there).
+/* Put the baked starter into the workspace and start it. Answers the repo name when a site was seeded and the
+ * reason when it was not, so the one boot where this matters says which of the three it was.
  *
  * Failures are the caller's to log and swallow: a sandbox with no starter site is a working sandbox with an
  * empty workspace, which is where every sandbox stood before this existed. Nothing here may take the boot
  * down.
  *
  * `bakedDir` is where the image put the tree, a parameter only so the tests can point it at one they built. */
-export const seedStarterSite = async (services: Services, bakedDir: string = STARTER_BAKED_DIR): Promise<string | undefined> => {
+export const seedStarterSite = async (services: Services, bakedDir: string = STARTER_BAKED_DIR): Promise<StarterOutcome> => {
     const target = join(services.workspace.root, STARTER_REPO);
-    if (!existsSync(bakedDir) || existsSync(target) || !workspaceIsUntouched(services.workspace.root)) {
-        return undefined;
+    if (!existsSync(bakedDir)) {
+        return { skipped: "no baked starter in this image" };
+    }
+    if (existsSync(target)) {
+        return { skipped: "a site repo is already there" };
+    }
+    // The verdict the daemon took before it wrote anything of its own, never a fresh look at the directory:
+    // see workspaceArrivedEmpty above for the race that reading it here loses.
+    if (!services.workspaceArrivedEmpty) {
+        return { skipped: "the workspace arrived with content" };
     }
     /* Copied ASIDE, then renamed into place. The seed's own existence gate is "is the repo there", so a boot
      * that died mid-copy (a killed machine, a full volume) would leave a half-written site that every later
@@ -113,7 +137,7 @@ export const seedStarterSite = async (services: Services, bakedDir: string = STA
     const appDir = join(target, "_apps", STARTER_APP);
     const pkg = starterPackage(appDir);
     if (pkg === undefined) {
-        return STARTER_REPO;
+        return { repo: STARTER_REPO };
     }
     // The preview hostname before the dev server, and unawaited: a hostname must predate the first browser
     // lookup (an early NXDOMAIN is negative-cached for the zone's SOA TTL), and the platform round-trip that
@@ -133,5 +157,5 @@ export const seedStarterSite = async (services: Services, bakedDir: string = STA
             sandboxId: sandboxIdFromToken(services.config.connectToken),
         }),
     );
-    return STARTER_REPO;
+    return { repo: STARTER_REPO };
 };

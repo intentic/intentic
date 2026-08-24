@@ -190,6 +190,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
 import { type SecretKeyResolver, vaultExtensionSettingSecrets } from "./extensions/extension-settings.js";
 import { installedExtensions } from "./extensions/installed-extensions.js";
+import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 import { type WorkspacePaths, workspacePaths } from "./workspace/workspace.js";
 import {
     copyWorkspacePath,
@@ -261,6 +262,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // proves the daemon started, this proves somebody can reach it.
     readonly reach: ReachReporter;
     readonly workspace: WorkspacePaths;
+    /* Was /work empty when this daemon started, i.e. is anything in it somebody's own work rather than the
+     * daemon's furniture? Composed rather than asked on demand BECAUSE OF WHEN IT HAS TO BE ASKED: services
+     * are built before this process writes anything into the workspace, and every later boot step, detached
+     * seed and capability convergence writes into a workspace that is no longer as it arrived. The starter
+     * site is the reader (scaffold/starter-site.ts), and asking this question one boot step too late is
+     * exactly how the desktop install path stopped seeding it. */
+    readonly workspaceArrivedEmpty: boolean;
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only, see panels/panels.ts).
     readonly processes: ManagedProcesses;
@@ -1126,6 +1134,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
         announcer: createAnnouncer(config, logger),
         reach: createReachReporter(config, logger),
         workspace,
+        // Read HERE, at composition, and read once: this is the last moment /work still looks the way the user
+        // handed it over. Everything after this line, the boot chain, the detached setup seeds, the capability
+        // cards that converge skill files and splice the AGENTS.md index, writes into it.
+        workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
         processes,
         dependencies,
         extensionBackend: createExtensionBackend(

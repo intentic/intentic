@@ -43,7 +43,10 @@ reports the profile.
   the first visit. It is a file COPY, not a scaffold: the image bakes the whole monorepo with its dependencies
   already installed, so the wait is a few seconds rather than the minute or two an install costs. Fresh
   workspaces only, and only where the daemon owns the workspace, a local daemon runs over a folder the user
-  chose and never seeds anything into it.
+  chose and never seeds anything into it. "Fresh" is decided ONCE, in `createServices`, before this process has
+  written a byte into `/work` (`workspaceArrivedEmpty`): the boot chain, the detached setup seeds and the
+  capability cards all write there, and one of those writes is not dotted, so a verdict taken any later is a
+  race rather than a reading. Losing it is what stopped every desktop install from seeding.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Turn the composer's voice into text without the audio leaving the box: the browser records and segments
   utterances itself and posts each one's WAV to `/speech/transcribe`, where whisper.cpp answers
