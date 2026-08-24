@@ -778,7 +778,10 @@ mod tests {
             probed = true;
             true
         }));
-        assert!(!probed, "Windows delegates prerequisites to ic docker prepare");
+        assert!(
+            !probed,
+            "Windows delegates prerequisites to ic docker prepare"
+        );
 
         assert!(setup_docker_ready(Host::Unix, || true));
         assert!(!setup_docker_ready(Host::Unix, || false));
