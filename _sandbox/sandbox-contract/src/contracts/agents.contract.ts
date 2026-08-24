@@ -165,6 +165,27 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentSummarySchema),
+    /* DISARM EVERY CONDITION WATCH THIS CONVERSATION IS PARKED ON (AgentSummary.watches), the way off the one
+     * standing arrangement an agent can enter into on the user's behalf without being asked again.
+     *
+     * ALL OF THEM, NOT ONE. The id of an individual watch is on the card, but the press a person makes about a
+     * card means "stop this conversation waking itself up", and picking watches off a submenu one at a time is a
+     * chore invented by the data shape rather than wanted by anybody. A conversation that should go on watching
+     * one thing and not another can be told so in the chat, which is where the watches were armed.
+     *
+     * No wake fires for what this disarms, which is the whole point: a watch left armed keeps a hosted machine
+     * awake and eventually starts a turn nobody is expecting. Nothing else about the conversation moves, so the
+     * card it hands back differs only by having lost its watches. */
+    stopWatching: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/stop-watching",
+            summary: "Stop every condition watch a conversation is parked on",
+            description:
+                "Disarms all of this conversation's outside-condition watches, so none of them will wake it. All of them rather than one, because that is what the press means when it is made about a card. Nothing else about the conversation changes.",
+        })
+        .input(AgentIdSchema)
+        .output(AgentSummarySchema),
     seenAll: oc
         .route({
             method: "POST",

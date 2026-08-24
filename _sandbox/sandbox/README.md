@@ -35,7 +35,11 @@ reports the profile.
   conversation exactly once: on the check passing or on the deadline, whichever first, with the check's own
   output: so the agent writes no sleep loop and holds no turn open. The CLI's own scheduling tools
   (ScheduleWakeup, the Cron family) are disallowed on every turn: they live in a process that dies with the
-  turn, so they accept schedules that can never fire.
+  turn, so they accept schedules that can never fire. What is armed rides the fleet card
+  (src/agent/watch-state.ts → `AgentSummary.watches`), which is what stops a watch from being a promise made
+  in silence: the conversation reads as finished on every screen, keeps a hosted machine awake, and then
+  starts working by itself hours later. A card carrying one sits in the board's Active lane and can be
+  disarmed from there (`agents.stopWatching`).
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
   screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
   first boot now seeds a one-page starter site as its own repo and starts its dev server

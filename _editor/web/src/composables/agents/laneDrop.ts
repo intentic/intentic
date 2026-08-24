@@ -1,4 +1,4 @@
-import { awaitingUser, laneOf, type FleetLane, turnInFlight, unregistered } from "./agentStatus";
+import { awaitingUser, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
@@ -12,7 +12,7 @@ import type { FleetAgent } from "./useAgents";
 
 // `discard` is not a lane, it's the drop zone the board reveals while a card is in flight.
 export type DropTarget = FleetLane | "discard";
-export type DropAction = "land" | "resolve" | "stop" | "discard";
+export type DropAction = "land" | "resolve" | "stop" | "discard" | "unwatch";
 
 /* WHAT A CARD IS WAITING ON, every action the board can have in flight against one agent, not just the ones a
  * drop invokes: a card is equally busy while this browser's archive or restore is out.
@@ -44,6 +44,24 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
     }
     if (agent.status === `running`) {
         return `stop`;
+    }
+    /* AN ARMED WATCH IS WHAT KEEPS THIS CARD OUT OF FINISHED, so disarming it is the action the drop invokes,
+     * exactly as a running turn's drop invokes the stop that ends it. Without this the gesture had no answer
+     * at all for the one kind of card the lane change put in its way, and refused it with a sentence about
+     * answering an agent that had asked nothing.
+     *
+     * Ahead of the branch guard, because a watch has nothing to do with a worktree: a workspace conversation
+     * arms them exactly as readily as an isolated one, and has no land, resolve or discard to be refused for.
+     *
+     * The guard is "the watch is the ONLY reason this card is in Active", spelled through the lane machine
+     * rather than re-derived here: a watching agent that also errored, conflicted or is holding a question
+     * sits in Attention, and the rules below already know what each of those is worth. Asking `blocked()`
+     * instead reads almost the same and is wrong on one card, a bare `conflict` status with no flag raised,
+     * which laneOf files under Attention and `blocked` does not (see laneOf). One projection, no second
+     * opinion. The in-flight exclusion covers `resuming`: that turn is coming back to this worktree on its
+     * own, which is what the drop should be refused for, watch or no watch. */
+    if (watching(agent) && laneOf(agent) === `active` && !turnInFlight(agent)) {
+        return `unwatch`;
     }
     // Workspace conversations can be stopped and archived, but have no branch to resolve, land or discard.
     if (agent.branch === undefined) {
@@ -119,4 +137,8 @@ export const dropActionLabel = (action: DropAction): string =>
           ? `Land the work`
           : action === `resolve`
             ? `Ask the agent to resolve it`
-            : `Discard this agent`;
+            : // Names what it ends, not what it "cancels": the promise was to wake this conversation, and the
+              // drop is the user withdrawing it. Same words as the card menu's row, one vocabulary per action.
+              action === `unwatch`
+              ? `Stop watching`
+              : `Discard this agent`;

@@ -22,7 +22,7 @@ import { useAgents, type FleetAgent } from "./useAgents";
 // Far enough that a click with a shaky hand still opens the card.
 const DRAG_THRESHOLD_PX = 5;
 
-const { fleet, refresh, notice } = useAgents();
+const { fleet, refresh, notice, stopWatching } = useAgents();
 
 const draggedId = ref<string | undefined>(undefined);
 const dragging = ref(false);
@@ -88,6 +88,11 @@ const perform = async (id: string, chosen: PendingAction): Promise<void> => {
     try {
         if (chosen === `stop`) {
             await stopAgent(id);
+        } else if (chosen === `unwatch`) {
+            // The store's own optimistic write moves the card out of Active the moment this is pressed
+            // (useAgents.stopWatching), so the drop needs nothing here beyond the call: no report to read, and
+            // nothing that can half-succeed.
+            await stopWatching(id);
         } else if (chosen === `land` || chosen === `reland`) {
             // One runner for both spans, because a re-land IS a land in every way the board cares about, same
             // busy flag, same refusal notice, same refresh. What differs is the rung it measures from, and
@@ -123,10 +128,12 @@ const perform = async (id: string, chosen: PendingAction): Promise<void> => {
     }
 };
 
-/* WHY THE RESOLVE DROP ASKS FIRST, and the other three don't.
+/* WHY THE RESOLVE DROP ASKS FIRST, and none of the others do.
  *
- * Stop, land and discard all act on state this browser already has: what they will do is fully described by
- * the card and the drag hint, and each is either reversible or already carries its own confirmation elsewhere.
+ * Stop, land, discard and unwatch all act on state this browser already has: what they will do is fully
+ * described by the card and the drag hint, and each is either reversible or already carries its own
+ * confirmation elsewhere. Unwatch is the cheapest of them to undo, since the agent can be told to watch the
+ * same thing again in a sentence, and the card names the condition it is ending before the drop is made.
  * `resolve` STARTS A TURN, it spends the agent's time and the user's money on work nobody has seen the shape
  * of yet, and a drag is the easiest gesture here to make by accident: a card grabbed to be read, released a
  * few pixels into the wrong lane. So it stops at a dialog naming the agent, and the board performs it only

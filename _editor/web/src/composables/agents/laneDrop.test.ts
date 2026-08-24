@@ -22,6 +22,8 @@ describe("dropActionFor", () => {
         unsent: false,
         ...over,
     });
+    // One armed condition watch, as the roster carries it. Only its PRESENCE matters to any rule here.
+    const watch = { id: `watch-1`, note: `CI run 316`, intervalSeconds: 60, deadlineAt: 2 };
 
     it("stops a running turn dropped on finished", () => {
         expect(dropActionFor(agent({ status: `running` }), `finished`)).toBe(`stop`);
@@ -78,6 +80,37 @@ describe("dropActionFor", () => {
         expect(dropActionFor(agent({ status: `idle` }), `finished`)).toBeUndefined();
     });
 
+    /* AN ARMED WATCH IS WHAT KEEPS THE CARD OUT OF FINISHED, so disarming it is the action the drop invokes,
+     * exactly as a running turn's drop invokes the stop that ends it. Without this the gesture had no answer
+     * for the one card the lane change put in its way, and refused it with a sentence about answering an agent
+     * that had asked nothing. */
+    it("stops the watches of a card dropped on finished", () => {
+        expect(dropActionFor(agent({ status: `idle`, watches: [watch] }), `finished`)).toBe(`unwatch`);
+    });
+
+    // A watch is a timer, not a worktree: a conversation working in the shared tree arms them exactly as
+    // readily, and has no land, resolve or discard for the branch guard to be protecting.
+    it("stops the watches of a workspace conversation too, which has no branch to act on", () => {
+        expect(dropActionFor(agent({ status: `idle`, branch: undefined, watches: [watch] }), `finished`)).toBe(`unwatch`);
+    });
+
+    // Something more pressing is behind the drop on any card that is BLOCKED, and the rules already know what
+    // each of those is worth. A watch never gets to speak over an unanswered question or a refused land.
+    it("yields to whatever else the card is blocked on", () => {
+        expect(dropActionFor(agent({ status: `error`, watches: [watch] }), `finished`)).toBe(`land`);
+        expect(dropActionFor(agent({ status: `conflict`, watches: [watch] }), `finished`)).toBe(`resolve`);
+        expect(dropActionFor(agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch] }), `finished`)).toBeUndefined();
+    });
+
+    // And the running turn still outranks it: the stop is what that drop has always meant, and the watch is
+    // still armed underneath it afterwards. A turn the daemon is putting back on its feet is refused outright,
+    // watch or no watch, which is what it was refused for before any of this.
+    it("yields to a live turn, whose drop is still the stop or a refusal", () => {
+        expect(dropActionFor(agent({ status: `running`, watches: [watch] }), `finished`)).toBe(`stop`);
+        expect(dropActionFor(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBeUndefined();
+        expect(dropRejection(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBe(`This turn is picking itself back up`);
+    });
+
     it("discards anything that isn't running, the daemon refuses a running turn's worktree", () => {
         expect(dropActionFor(agent({ status: `idle` }), `discard`)).toBe(`discard`);
         expect(dropActionFor(agent({ status: `awaiting` }), `discard`)).toBe(`discard`);
@@ -120,6 +153,9 @@ describe("dropActionFor", () => {
             agent({ status: `idle` }),
             agent({ status: `idle`, attention: { ...none, plan: true } }),
             agent({ status: `idle`, attention: { ...none, conflict: true } }),
+            agent({ status: `idle`, watches: [watch] }),
+            agent({ status: `idle`, branch: undefined, watches: [watch] }),
+            agent({ status: `idle`, attention: { ...none, question: true }, watches: [watch] }),
         ];
         for (const card of cases) {
             for (const target of [`attention`, `active`, `finished`, `discard`] as const) {
@@ -132,8 +168,8 @@ describe("dropActionFor", () => {
     // The hint is the ghost's whole promise, so an action with no verb of its own would silently borrow
     // another's, which is how "Discard this agent" came to be the fallback for anything unnamed.
     it("names every action it can return", () => {
-        const labels = ([`land`, `resolve`, `stop`, `discard`] as const satisfies readonly DropAction[]).map(dropActionLabel);
-        expect(labels).toEqual([`Land the work`, `Ask the agent to resolve it`, `Stop the turn`, `Discard this agent`]);
+        const labels = ([`land`, `resolve`, `stop`, `discard`, `unwatch`] as const satisfies readonly DropAction[]).map(dropActionLabel);
+        expect(labels).toEqual([`Land the work`, `Ask the agent to resolve it`, `Stop the turn`, `Discard this agent`, `Stop watching`]);
         expect(new Set(labels).size).toBe(labels.length);
     });
 });

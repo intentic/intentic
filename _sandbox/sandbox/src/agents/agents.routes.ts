@@ -1,6 +1,7 @@
 import { agentsContract, type AgentChange, type AgentRepoChanges, capabilitiesOf } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
+import { cancelWatchersFor } from "../agent/watchers.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
@@ -306,6 +307,30 @@ export const createAgentsRoutes = (services: Services) => {
             await services.agents.markAllSeen(Date.now());
             return { agents: services.agents.list(), rev: services.agents.revision() };
         }),
+        /* THE USER'S HAND ON THE AGENT'S STANDING ARRANGEMENT. Everything else that ends a watch is the
+         * daemon's or the agent's: it fires, it times out, or a later turn calls `watch stop`. This is the
+         * press for the case none of those cover, the user reading a card that says it is waiting for
+         * something they no longer want waited for.
+         *
+         * Legal in every state, deliberately, including mid-turn. A watch is not the turn's working state (it
+         * is a timer with an env snapshot), nothing is half-written by disarming one, and the moment a person
+         * most wants this press is while the conversation is awake and busy doing the thing they have decided
+         * against.
+         *
+         * The disarm itself republishes the card (watchers.ts `discard` → the projection → a roster
+         * broadcast), so by the time the summary below is read it has already lost its watches. */
+        stopWatching: i.stopWatching.handler(({ input }) => {
+            const entry = entryOf(input.id);
+            cancelWatchersFor(entry.id);
+            // Read back through `get` rather than off the live roster: an ARCHIVED conversation can hold armed
+            // watches (archiving takes a card off the board, it does not disarm anything), and it is the one
+            // that most needs this press, since its watch would wake it straight back onto the board.
+            const summary = services.agents.get(entry.id);
+            if (summary === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+            }
+            return summary;
+        }),
         // The review shows the agent's CUMULATIVE output (anchor → worktree), so work stays inspectable after
         // it lands, which is the normal case, clean turn completions auto-landing within ms of finishing.
         // What landing changes is per-file: a second pass from `landedTip` names the remainder still waiting
@@ -436,6 +461,11 @@ export const createAgentsRoutes = (services: Services) => {
         discard: i.discard.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             notRunning(input.id);
+            /* Its armed watches go with it, and they have to go FIRST, while the conversation they would wake
+             * still exists. A watch outliving its conversation is not a stale readout, it is a timer that will
+             * eventually try to start a turn on an id nothing answers to, hours after the user threw the agent
+             * away. The registry can only forget the card's copy (see its `remove`); this is the disarm. */
+            cancelWatchersFor(entry.id);
             // Resources first, worktree second: a shell or dev server the conversation left running must not
             // be mid-write in a tree that is being deleted under it (platform/reaper.ts).
             await services.reaper.reapConversation(entry.id, { force: true });
@@ -510,6 +540,12 @@ export const createAgentsRoutes = (services: Services) => {
          * this press is about, even if the retention sweep filed some of its steps away on their own.
          */
         purge: i.purge.handler(async () => {
+            // Same disarm-before-delete as `discard` one route up, and the same reason: an archived
+            // conversation can be sitting on armed watches, and a timer that outlives the agent it belongs to
+            // eventually tries to start a turn on an id nothing answers to.
+            for (const summary of services.agents.listArchived()) {
+                cancelWatchersFor(summary.id);
+            }
             const removed = await purgeArchived(services);
             for (const run of (await services.workflowRuns.list()).filter((candidate) => candidate.archivedAt !== undefined)) {
                 await services.workflowRuns.forget(run.runId);

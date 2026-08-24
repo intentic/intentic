@@ -23,6 +23,7 @@ import {
     turnInFlight,
     unreadBadge,
     unregistered,
+    watchLine,
 } from "../composables/agents/agentStatus";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
 import { sessionCategory } from "../composables/sessionCategory";
@@ -232,6 +233,16 @@ const dated = computed(() => props.agent.archivedAt !== undefined || (!turnInFli
  * else, so a card with no numbers, no date and nothing to drill into opens no empty strip of padding. */
 const summary = computed(() => stats.value || review.value !== undefined || completed.value || dated.value || turnInFlight(props.agent));
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
+/* WHAT THIS CARD IS WAITING FOR, when it is waiting for something outside the sandbox (agentStatus.watchLine).
+ * Recomputed against the ticking `now` like the elapsed beside it, so the countdown moves without a timer of
+ * its own.
+ *
+ * Suppressed while a turn is IN FLIGHT, which is the whole of why this needs no line of its own on the card. A
+ * running card's corner already answers "what is it doing and for how long", and that answer outranks this one
+ * while it exists: an agent working right now is not, in any sense the reader cares about, waiting. The moment
+ * the turn ends the watch takes the corner back, which is exactly when the card would otherwise start claiming
+ * to be finished. */
+const watch = computed(() => (turnInFlight(props.agent) ? undefined : watchLine(props.agent, props.now)));
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
  * provider nowhere: so the provider lands here, and only then. */
@@ -758,7 +769,31 @@ const grab = (event: PointerEvent): void => {
                          "last active 3d ago" is the same fact its neighbours already show and answers a question
                          nobody in an archive is asking. -->
                     <span v-if="agent.archivedAt !== undefined" class="shrink-0"> Archived {{ relativeTime(agent.archivedAt) }} </span>
-                    <span v-else-if="!turnInFlight(agent) && agent.updatedAt > 0" class="shrink-0">{{ relativeTime(agent.updatedAt) }}</span>
+                    <span v-else-if="watch === undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="shrink-0">{{
+                        relativeTime(agent.updatedAt)
+                    }}</span>
+
+                    <!-- WHAT IT IS WAITING FOR, in the corner the running card puts its tool and the settled one
+                         puts its date: the same slot, the same grammar (glyph · what · clock), because a card is
+                         never more than one of those three things and a board is scanned down one column, not
+                         three. It costs this card no height at all, which is the point: an armed watch is a fact
+                         about a card, not a section of it.
+                         IT TAKES THE DATE'S PLACE rather than sitting beside it. "Last active 3h ago" and "wakes
+                         or gives up in 42m" are the same question asked backwards, and of the two only the
+                         second tells the reader anything they can act on. An ARCHIVED card keeps its own date
+                         and shows this as well: that pair is the one combination worth two readouts, because a
+                         watch is precisely what will drag a filed-away agent back onto the board.
+                         Link-blue, the hue this board spends on work in flight and on offers to act: nothing
+                         here is wrong, and an agent keeping a promise it made is not a warning. -->
+                    <span
+                        v-if="watch !== undefined"
+                        class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link"
+                        v-tooltip.top="watch.hint"
+                    >
+                        <Icon name="eye" class="shrink-0 text-2xs" />
+                        <span class="min-w-0 truncate">{{ watch.text }}</span>
+                        <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
+                    </span>
 
                     <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, at the end of the line the settled
                          card ends with its date: the running card's clock in the same corner as the stopped

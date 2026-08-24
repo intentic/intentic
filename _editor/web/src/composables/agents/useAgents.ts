@@ -1099,6 +1099,33 @@ const setResumeAfterOutage = async (id: string, resumeAfterOutage: boolean | nul
     }
 };
 
+/* DISARM EVERY OUTSIDE CONDITION THIS CONVERSATION IS PARKED ON (AgentSummary.watches), the user's way out of
+ * an arrangement the agent entered into on their behalf.
+ *
+ * Optimistic like its two neighbours above, and for a sharper reason than symmetry: this press moves the card
+ * across the board. Dropping the watches is what takes the conversation out of Active (agentStatus.laneOf), so
+ * a press that waited on the round trip would leave the card sitting in the lane it was pressed out of, wearing
+ * a readout that says it is still waiting. Reverted the same way if the daemon refuses, since a card that
+ * quietly stopped mentioning a watch that is still armed is the exact failure this whole feature exists to
+ * remove. */
+const stopWatching = async (id: string): Promise<void> => {
+    const previous = registry.value.find((agent) => agent.id === id);
+    const revert = previous?.watches;
+    if (previous !== undefined) {
+        previous.watches = undefined;
+    }
+    try {
+        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/stop-watching`, jsonBody(`POST`, {}));
+        registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
+    } catch (error) {
+        const target = registry.value.find((agent) => agent.id === id);
+        if (target !== undefined) {
+            target.watches = revert;
+        }
+        throw error;
+    }
+};
+
 // Open (or focus) an agent's conversation tab and mark it seen. Takes just the identity fields so registry
 // cards and client-only draft cards both route through it.
 // A card, as the seed every window can rebuild its tab from (useChat.agentTabOf takes it from here).
@@ -1172,6 +1199,7 @@ export function useAgents() {
         rename,
         setAutoLand,
         setResumeAfterOutage,
+        stopWatching,
         agentById,
         archived,
         archiveLoading,

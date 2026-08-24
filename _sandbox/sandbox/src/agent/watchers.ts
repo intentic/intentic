@@ -5,6 +5,7 @@ import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import { steerTurn } from "./agent-steering.js";
 import { startConversationTurn } from "./turn-resume.js";
+import { watchProjection } from "./watch-state.js";
 
 /* "WAKE ME WHEN THE WORLD CHANGES", the daemon-owned condition watch that replaces hand-rolled polling loops.
  *
@@ -180,6 +181,21 @@ export const cancelWatcher = (conversationId: string, id: string): boolean => {
     return true;
 };
 
+/* DISARM THE LOT, the user's own way out (agents.stopWatching), and the only one that exists off the agent's
+ * `watch stop`, which needs a turn to be running before it can be reached.
+ *
+ * It is here rather than in the route because the records map is here: everything that ends a watch has to walk
+ * the same `discard`, which is what clears the timer and republishes the card. Answers how many it took, so the
+ * caller can tell "disarmed three" from "there was nothing armed" without reading the map itself. */
+export const cancelWatchersFor = (conversationId: string): number => {
+    // Snapshotted before the loop: `discard` deletes from the map being iterated.
+    const own = [...records.values()].filter((record) => record.spec.conversationId === conversationId);
+    for (const record of own) {
+        discard(record);
+    }
+    return own.length;
+};
+
 const discard = (record: WatcherRecord): void => {
     record.cancelled = true;
     if (record.timer !== undefined) {
@@ -187,7 +203,29 @@ const discard = (record: WatcherRecord): void => {
         record.timer = undefined;
     }
     records.delete(record.id);
+    publish(record.spec.conversationId);
 };
+
+/* Tell the fleet card what this conversation is now parked on (watch-state.ts), on every transition and
+ * nowhere else: arming one, and each of the four ways one ends (fired, timed out, stopped by the agent,
+ * stopped by the user). The check TICK deliberately publishes nothing, a roster broadcast every ten seconds to
+ * advance a counter no surface draws would be the busy-loop this module exists to retire, wearing a different
+ * hat.
+ *
+ * The empty array is published like any other value: it is how the last watch ending takes the readout off the
+ * card, and the registry is what turns it back into an absent field. */
+const publish = (conversationId: string): void =>
+    watchProjection.set(
+        conversationId,
+        [...records.values()]
+            .filter((record) => record.spec.conversationId === conversationId)
+            .map((record) => ({
+                id: record.id,
+                note: record.spec.note,
+                intervalSeconds: Math.round(record.intervalMs / 1000),
+                deadlineAt: record.deadlineAt,
+            })),
+    );
 
 const elapsed = (record: WatcherRecord): string => {
     const seconds = Math.round((Date.now() - record.armedAt) / 1000);
@@ -338,6 +376,9 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
     };
     records.set(record.id, record);
     schedule(live, record);
+    // The card learns about the watch in the same breath the map does: this is the moment the conversation
+    // stops being finished, and the board has to stop saying that it is.
+    publish(spec.conversationId);
     live.logger.info({ watch: record.id, conversationId: spec.conversationId, intervalSeconds, timeoutSeconds, note: spec.note }, "watch: armed");
     return { kind: "armed", id: record.id, intervalSeconds, timeoutSeconds, firstCheck };
 };

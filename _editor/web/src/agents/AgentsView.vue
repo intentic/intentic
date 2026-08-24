@@ -13,7 +13,7 @@ import { synthesizeSessions, synthesizing } from "../composables/agents/synthesi
 import { dropActionLabel, dropRejection, type PendingAction } from "../composables/agents/laneDrop";
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
-import { type FleetLane, reviewAction, unregistered } from "../composables/agents/agentStatus";
+import { type FleetLane, reviewAction, unregistered, watching } from "../composables/agents/agentStatus";
 import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
@@ -90,6 +90,7 @@ const {
     loadArchived,
     archive,
     restore,
+    stopWatching,
     purgeArchived,
     undoArchive,
     undoable,
@@ -897,6 +898,23 @@ const cardMenuItems = computed<MenuItem[]>(() => {
         /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints: the
            other forms of the name are labelled and visible before the press, on the agent's own page. */
         branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
+        /* THE WAY OFF A WATCH, and the one row here that is not already a press the card offers somewhere else
+           (see the menu's header). It cannot be: an armed watch is a fact the card REPORTS, in four characters
+           in its corner, and a control sitting mid-card in the path of the press that focuses the agent is the
+           mistake the session name already made once.
+           So it lives behind the gesture that means "about this one", which is also the right weight for it.
+           Rare, deliberate, and never in the way: nearly every card on this board has no watch and shows no
+           row. One row for however many are armed, because that is what the press means about a card, and the
+           daemon disarms them together (agents.stopWatching). */
+        watching(agent)
+            ? [
+                  {
+                      label: (agent.watches?.length ?? 0) === 1 ? `Stop watching` : `Stop watching (${agent.watches?.length})`,
+                      icon: `eye`,
+                      command: () => void stopWatching(agent.id),
+                  },
+              ]
+            : [],
         [
             ...(agent.archivedAt !== undefined
                 ? [{ label: `Restore`, icon: `history`, command: () => restore([agent.id]) }]

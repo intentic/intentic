@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, LoopState } from "@intentic/sandbox-contract";
+import type { AgentAttention, AgentOrigin, AgentStatus, AgentSummary, AgentWatch, LoopState } from "@intentic/sandbox-contract";
 
 /* WHERE AN AGENT STANDS, and how each surface draws it. Every projection of a fleet agent's state lives here,
  * the lane machine, the "why does this need me" label, the drill-in verb, the glyphs, and NOTHING else in the
@@ -51,7 +51,21 @@ export type ClientAgentStatus = "draft" | "starting" | "failed" | "resumed";
 export interface AgentStanding {
     readonly status: AgentStatus | ClientAgentStatus;
     readonly attention: AgentAttention;
+    /* The outside conditions this conversation is parked on (AgentSummary.watches). A THIRD half of the state,
+     * beside the turn lifecycle and the attention flags, and it belongs in the standing for exactly the reason
+     * the header gives about the other two: `laneOf` reads it, so anything answering "is this session done?"
+     * from `status` alone would contradict the board on screen. Absent for nearly every conversation. */
+    readonly watches?: readonly AgentWatch[];
 }
+
+/* THIS CONVERSATION WILL RUN AGAIN BY ITSELF, with nobody pressing anything. The narrowest reading of a watch,
+ * and the one the lane machine below is really asking for.
+ *
+ * A watching agent's last turn ENDED: the daemon files it `idle` (or `landed`, or `ready`), which is true and
+ * is why the status is left alone. What the status cannot carry is that the conversation is not over, and that
+ * is the difference between a board a user can trust overnight and one that announces work as finished hours
+ * before it wakes up and carries on. */
+export const watching = (agent: AgentStanding): boolean => (agent.watches?.length ?? 0) > 0;
 
 /* NO REGISTRY ENTRY BEHIND THIS CARD, the guard every fleet mutation needs and the one question both
  * client-only standings answer the same way. Archiving, reviewing, landing, discarding and dropping all address
@@ -269,6 +283,21 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (turnInFlight(agent) || agent.status === `draft`) {
         return `active`;
     }
+    /* AN ARMED WATCH IS ACTIVE, and it is the `resuming` argument stretched from seconds to hours. Nothing is
+     * running, so every reading below would file this card under Finished; then the daemon's check passes at
+     * 3am and the same conversation starts working, in front of somebody who was told it was done.
+     *
+     * Active rather than Attention, because nothing is owed by the USER: the agent is waiting on the world, not
+     * on a person, and a board that says "needs you" about a card needing nobody is how the word stops meaning
+     * anything (see `blocked`). Active is also what keeps "Clear finished" honest: sweeping a watching agent
+     * into the archive used to be a press that appeared to end it and did not, the watch stayed armed and
+     * dragged the card back onto the board when it fired.
+     *
+     * Below the in-flight readings on purpose: an agent that armed a watch and is now running again is running,
+     * and both facts stay true on the card (the watch line draws either way). */
+    if (watching(agent)) {
+        return `active`;
+    }
     // landed | idle, the work is in the workspace (or there was none), and `ready`, work HELD on the branch
     // because auto-land is off. Ready is finished, not attention: the turn is over and nothing is failing,
     // the user opted into a deliberate land, and the card carries that press itself. `resumed` lands here too,
@@ -350,7 +379,11 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
         return undefined;
     }
     return lane === `active`
-        ? { dot: `bg-link ring-2 ring-link/30`, label: `Still working` }
+        ? // "Working" would be wrong for the one active card that is not: an agent parked on a watch has
+          // finished its turn and is waiting for the world, so the mark says which kind of unfinished it is.
+          watching(agent) && !turnInFlight(agent)
+            ? { dot: `bg-link ring-2 ring-link/30`, label: `Waiting on a condition` }
+            : { dot: `bg-link ring-2 ring-link/30`, label: `Still working` }
         : // Named by the same reason the board's chip wears. The fallback covers a bare `awaiting`, a turn
           // parked with no flag yet raised, which has nothing more specific to say than that it stopped.
           { dot: `bg-primary-500`, label: attentionReason(agent) ?? `Waiting on you` };
@@ -556,4 +589,58 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
         error: { text: `Loop failed after ${loop.iteration}`, class: `text-danger` },
     };
     return { ...ended[loop.state], spin: false };
+};
+
+// A watch's pacing, in the fewest characters that stay true: seconds up to two minutes, whole minutes above.
+// Only ever read inside the watch hint, which is why it is not exported beside the time words above.
+const everyOf = (seconds: number): string => (seconds < 120 ? `${seconds}s` : `${Math.round(seconds / 60)}m`);
+
+/* HOW AN ARMED WATCH READS ON A CARD: three short parts, and the whole story kept behind them.
+ *
+ * The card gets a GLYPH, a phrase and a clock, which is the shape its live readout already uses for a running
+ * turn (`Bash · 1m 12s`) and the shape the rail repeats. That is deliberate: a board is scanned, and one
+ * grammar for "what is this card doing, and for how long" is what makes it scannable. The parts stay separate
+ * rather than pre-joined into a sentence so the phrase can truncate under a narrow lane while the clock, which
+ * is four characters and the more perishable fact, never does.
+ *
+ * THE NOTE IS THE PHRASE, not the word "Watching". The agent wrote one line about what it is waiting for
+ * precisely so somebody could read it here, and "Watching" alone tells a user nothing they could act on: it is
+ * the glyph's job, and the glyph is already saying it. Several watches collapse to a count instead, because
+ * three truncated notes in a 280px column are three things nobody reads.
+ *
+ * That is the OPPOSITE of what `activityLine` does one screen up, where the tool's target is deliberately
+ * dropped and only `Bash` survives, and the difference between the two cases is churn rather than length. A
+ * running turn's target is a fragment of shell that changes every second or two: never enough to act on,
+ * always enough to pull the eye off whatever the reader came to the board for. A watch note is written once
+ * and stands for hours, so it costs the scan nothing and is the only thing on the card that distinguishes
+ * this wait from any other.
+ *
+ * THE CLOCK COUNTS DOWN TO THE DEADLINE, which is the fact a person actually needs: every watch has one, and
+ * reaching it wakes the conversation anyway, so this is not "how long until it maybe does something" but "how
+ * long until this card moves, at the latest". The soonest deadline leads when there are several, for the same
+ * reason: it is the next time this conversation comes back to life.
+ *
+ * THE HINT IS ONE FLOWING LINE, not a list, and that is a fact about the box rather than a preference: the
+ * tooltip is written with `textContent` into a 17rem strip clamped at five lines (ui/styles/tooltip.css), so a
+ * newline renders as a space and a fourth watch would push the sentence that matters off the bottom. It
+ * carries the three things the readout could not: every note in full, the pacing, and what reaching the end of
+ * the wait actually DOES, which is the half nobody can guess. The point of a watch is not that something is
+ * being polled; it is that this agent starts working again by itself. */
+export const watchLine = (agent: AgentStanding, now: number): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
+    const watches = agent.watches;
+    if (watches === undefined || watches.length === 0) {
+        return undefined;
+    }
+    const soonest = watches.reduce((first, next) => (next.deadlineAt < first.deadlineAt ? next : first));
+    // formatElapsed measures the second argument FROM the first, so now→deadline is the time left. One time
+    // vocabulary on this card: the same words its running turn's elapsed is printed in, in the same corner.
+    const countdown = formatElapsed(now, soonest.deadlineAt);
+    const detail = watches
+        .map((watch) => `${watch.note} (checked every ${everyOf(watch.intervalSeconds)}, gives up in ${formatElapsed(now, watch.deadlineAt)})`)
+        .join(`; `);
+    return {
+        text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
+        countdown,
+        hint: `Watching for ${detail}. The first of those to happen wakes this conversation, and it carries on by itself.`,
+    };
 };

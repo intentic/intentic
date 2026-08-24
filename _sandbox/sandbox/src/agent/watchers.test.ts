@@ -1,10 +1,12 @@
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { watchProjection } from "./watch-state.js";
 import {
     armWatcher,
     armedWatcherCount,
     cancelWatcher,
+    cancelWatchersFor,
     type CheckResult,
     listWatchers,
     MAX_PER_CONVERSATION,
@@ -84,6 +86,11 @@ describe("watchers", () => {
     });
     afterEach(() => {
         harness.stop();
+        /* The card projection is module state, exactly as it is in a live daemon, and `stop` leaves an EMPTY
+         * entry behind for every conversation that held a watch (that is how the readout comes off the card).
+         * Empty and never-published are different answers to "what is this conversation waiting for", so a
+         * test that asserts the second one has to start from a projection nobody has written to. */
+        watchProjection.forget(["conv-1", "conv-2", "conv-3"]);
         vi.useRealTimers();
     });
 
@@ -195,5 +202,76 @@ describe("watchers", () => {
         harness.stop();
         const outcome = await armWatcher(specOf());
         expect(outcome).toMatchObject({ kind: "refused" });
+    });
+
+    /* WHAT THE FLEET CARD IS TOLD, and when. Everything a watch does happens between turns, so the projection
+     * (watch-state.ts) is the only channel by which any surface learns that this conversation is not finished
+     * after all: an unpublished arm is a card that reads `idle` right up until the wake turn appears out of
+     * nowhere hours later. */
+    describe("what the card is told", () => {
+        it("publishes the note, the cadence and the deadline the moment a watch is armed", async () => {
+            await armWatcher(specOf({ intervalSeconds: 30, timeoutSeconds: 600 }));
+            const published = watchProjection.of("conv-1");
+            expect(published).toHaveLength(1);
+            expect(published?.[0]).toMatchObject({ note: "CI run 316 on intentic/intentic", intervalSeconds: 30 });
+            // A deadline, not a duration: the card counts down against its own clock, so it needs the instant.
+            expect(published?.[0]?.deadlineAt).toBe(Date.now() + 600_000);
+            // The check COMMAND is deliberately absent: shell text nobody can act on from a board, and the one
+            // field that could carry a secret reference onto a screen read over shoulders.
+            expect(published?.[0]).not.toHaveProperty("command");
+        });
+
+        // Nothing armed, nothing published: a conversation that never watched anything must not acquire an
+        // empty readout just because somebody asked it a question that already held.
+        it("publishes nothing at all for a first check that already passes", async () => {
+            harness.check = { exitCode: 0, output: "done" };
+            await armWatcher(specOf());
+            expect(watchProjection.of("conv-1")).toBeUndefined();
+        });
+
+        /* FIRING CLEARS IT, which is the half a card cannot get wrong: the promise has been kept, the wake is
+         * a turn in the transcript, and a card still naming the condition would be advertising a wait that is
+         * over. Empty rather than deleted, because empty is what the registry turns back into an absent field. */
+        it("clears the card when the watch fires", async () => {
+            await armWatcher(specOf());
+            harness.check = { exitCode: 0, output: "conclusion: success" };
+            await vi.advanceTimersByTimeAsync(10_000);
+            expect(watchProjection.of("conv-1")).toEqual([]);
+        });
+
+        it("clears the card when the deadline passes without the condition", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 60 }));
+            await vi.advanceTimersByTimeAsync(70_000);
+            expect(watchProjection.of("conv-1")).toEqual([]);
+        });
+
+        // The agent's own `watch stop`, and only the watch it names: the others are still promises.
+        it("republishes what is left when the agent stops one of several", async () => {
+            const first = await armWatcher(specOf({ note: "CI" }));
+            await armWatcher(specOf({ note: "deploy" }));
+            expect(watchProjection.of("conv-1")).toHaveLength(2);
+            cancelWatcher("conv-1", first.kind === "armed" ? first.id : "");
+            expect(watchProjection.of("conv-1")?.map((entry) => entry.note)).toEqual(["deploy"]);
+        });
+
+        /* THE USER'S OWN PRESS (agents.stopWatching), which takes the lot: what a person means by "stop
+         * watching" about a card is "stop this conversation waking itself up". It answers how many it took, so
+         * the caller can tell a disarm from a no-op, and it never reaches across conversations. */
+        it("disarms every watch of one conversation and leaves the others alone", async () => {
+            await armWatcher(specOf({ note: "CI" }));
+            await armWatcher(specOf({ note: "deploy" }));
+            await armWatcher(specOf({ conversationId: "conv-2", note: "release" }));
+            expect(cancelWatchersFor("conv-1")).toBe(2);
+            expect(watchProjection.of("conv-1")).toEqual([]);
+            expect(watchProjection.of("conv-2")).toHaveLength(1);
+            expect(armedWatcherCount()).toBe(1);
+            // Disarmed means no wake, ever: the whole point of the press.
+            await vi.advanceTimersByTimeAsync(120_000);
+            expect(harness.started.filter((turn) => turn.conversationId === "conv-1")).toHaveLength(0);
+        });
+
+        it("reports nothing disarmed when a conversation was watching nothing", () => {
+            expect(cancelWatchersFor("conv-3")).toBe(0);
+        });
     });
 });

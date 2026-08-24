@@ -1322,6 +1322,42 @@ export const AgentSummarySchema = z.object({
         .describe(
             "The workflow run this conversation is a step of. Without it, a four-step run reads as four unrelated conversations that happen to have started together.",
         ),
+    /* THE OUTSIDE CONDITIONS THIS CONVERSATION IS PARKED ON, the armed condition watches (the daemon's
+     * agent/watchers.ts), projected onto the card for the same reason the loop and the workflow above are.
+     *
+     * IT IS THE ONE PROMISE THE BOARD USED TO KEEP SILENTLY. An agent that arms a watch ends its turn: nothing
+     * is running, nothing is owed to the user, so every surface filed it under finished and drew the resting
+     * `idle`. Then, some hours later, the daemon's check exits 0 and that same conversation starts working
+     * again, on its own, in front of somebody who had been told it was done. The wake is the feature; the card
+     * saying nothing about it beforehand is what made it read as the sandbox acting unasked.
+     *
+     * It also has a bill attached, which no other projection here does. An armed watch keeps a hosted machine
+     * awake (system/idle-stop.ts counts them, deliberately: stopping the box is how a watch silently never
+     * fires), so an invisible watch is invisible compute. A user looking at a board of finished agents,
+     * wondering why the machine will not go quiet, could not have found the answer anywhere.
+     *
+     * WHAT IS ON THE WIRE IS WHAT A CARD CAN ACT ON, and nothing else. The note (the agent's own line on what
+     * it is waiting for), the cadence, and the deadline, which is what turns "waiting" into a countdown with an
+     * end. Deliberately NOT the check command: it is shell text the reader cannot run, judge or fix from a
+     * board, and it is the one field that could carry a secret reference into a surface that is read over
+     * shoulders. Deliberately NOT the check COUNT either, which would move every interval and buy a whole
+     * roster broadcast to advance a number nobody is reading.
+     *
+     * Absent ⇒ nothing armed, which is nearly every conversation. Empty is never sent: the daemon clears the
+     * projection instead, so the field's PRESENCE is the signal. */
+    watches: z
+        .array(
+            z.object({
+                id: z.string().describe("The daemon's handle for this watch, the same one the agent was given when it armed it."),
+                note: z.string().describe("The agent's own line on what it is waiting for."),
+                intervalSeconds: z.number().int().min(1).describe("How often the check runs."),
+                deadlineAt: z.number().describe("When it gives up and wakes the conversation anyway, in milliseconds. Every watch has one."),
+            }),
+        )
+        .optional()
+        .describe(
+            "Outside conditions this conversation is parked on, each of which will wake it. Absent means none, which is nearly every conversation: an armed watch is why a finished-looking agent starts working by itself, and why a hosted machine will not go idle.",
+        ),
     // When the agent was ARCHIVED (ms epoch), off the board, but nothing lost: its checkout was retired
     // (worktree removed) while the agent/<id> branch, the transcript, and every counter stayed. Absent ⇒ live
     // on the board. Archived agents are excluded from the roster the fleet renders; `agents.archived` lists
@@ -1334,6 +1370,9 @@ export const AgentSummarySchema = z.object({
         ),
 });
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
+// One armed condition watch as a card carries it (AgentSummarySchema.watches). Named off the summary rather
+// than declared beside it, so the shape the daemon publishes and the shape the wire promises cannot drift.
+export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
 // AgentsListSchema lives further down, after AutomationApprovalSchema, the fleet list carries the held wakes,
 // and zod declaration order forces the ride-along to be declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });

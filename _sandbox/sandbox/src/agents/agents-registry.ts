@@ -2,6 +2,7 @@ import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, type L
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
+import { watchProjection } from "../agent/watch-state.js";
 import { loopProjection } from "../loops/loop-state.js";
 import { workflowProjection } from "../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
@@ -435,6 +436,10 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const subagents = { running: subagentCountsOf(entry.id).running, total: (entry.subagents ?? 0) + (state?.pendingSubagents ?? 0) };
         const loop = loopProjection.of(entry.id);
         const workflow = workflowProjection.of(entry.id);
+        // The outside conditions this conversation is parked on. Empty is the cleared state watchers.ts
+        // publishes when the last one ends, and it is turned back into an ABSENT field below, so a card that
+        // once watched something is indistinguishable from one that never did, which is the truth.
+        const watches = watchProjection.of(entry.id);
         // Read for branch-backed agents only, for the same reason a standing is: a workspace conversation
         // reaches the main tree by typing in it, never through a land, so it has no landing to be missing.
         const landedPresence = entry.branch === undefined ? undefined : presences.of(entry.id);
@@ -512,6 +517,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // subagent counts are read off theirs, one projection, no second copy to go stale.
             ...(loop !== undefined ? { loop } : {}),
             ...(workflow !== undefined ? { workflow } : {}),
+            // Presence is the signal (AgentSummarySchema.watches): an empty list means every watch has ended,
+            // and a card wearing `watches: []` would have to be read before it could be dismissed.
+            ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
         };
     };
 
@@ -534,6 +542,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
      * watching it. Never unsubscribed: the registry outlives the process. */
     loopProjection.onChange(broadcast);
     workflowProjection.onChange(broadcast);
+    /* The watches are the strongest case this notification has. EVERY transition of a watch happens between
+     * turns, that is what a watch IS: armed as one turn ends, fired or given up on hours later with nothing
+     * else moving on the board. Left to ride the next unrelated frame, a card would advertise a condition that
+     * was met at 3am until some other agent happened to broadcast. */
+    watchProjection.onChange(broadcast);
 
     /* Only the live, branch-backed roster is probed, see LandStandings.refresh on why an archived agent keeps
      * its last answer, and why a workspace conversation has no standing to probe at all.
@@ -1274,6 +1287,11 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             presences.forget(ids);
             loopProjection.forget(ids);
             workflowProjection.forget(ids);
+            /* The projection only. DISARMING the watches themselves is the caller's, and has to be: the timers
+             * live in agent/watchers.ts, which reaches the steering registry and the detached-turn door, so
+             * this module cannot see them without closing a cycle. The routes that remove an agent stop its
+             * watches first (agents.routes discard/purge), which is also the honest order, a watch is
+             * cancelled while the conversation it would wake still exists. */
             await persist();
             broadcast();
         },
