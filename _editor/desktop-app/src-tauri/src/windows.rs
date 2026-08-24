@@ -315,7 +315,7 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
                 if stays_in_webview(url, &app_origin) {
                     return true;
                 }
-                open_in_browser(&link_handler, &url.to_string());
+                open_in_browser(&link_handler, url.as_str());
                 false
             }
         })
