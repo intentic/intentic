@@ -70,10 +70,10 @@ const worthIt = computed(() => outline.headings.value.length >= OUTLINE_MIN);
 
 /* ROOM FOR A RAIL, MEASURED OFF THE PANE AND NEVER THE WINDOW: this view renders between the file tree and a
  * chat panel the reader can drag to half the screen, so a wide monitor routinely hands it 500px. The number is
- * what the two columns need together: 13rem of rail, the gutter either side, and enough left for prose to keep
+ * what the two columns need together: 18rem of rail, the gutter either side, and enough left for prose to keep
  * a measure worth reading at. Under it the rail does not dock at all: the outline is still one press away in
  * the toolbar, which is the whole reason that control exists. */
-const RAIL_AT_REM = 52;
+const RAIL_AT_REM = 57;
 const root = ref<HTMLElement>();
 const narrow = useNarrow(root, RAIL_AT_REM);
 
@@ -170,7 +170,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 <div
                     ref="scroller"
                     class="ui-softscroll h-full min-w-0 flex-1 overflow-auto bg-canvas py-5 pl-6"
-                    :class="docked ? `pr-[13.5rem]` : `pr-6`"
+                    :class="docked ? `pr-[18.5rem]` : `pr-6`"
                     @click="openFileRefFromEvent"
                 >
                     <Markdown :source="source" :decorate="decorate" class="mx-auto max-w-3xl" />
@@ -186,7 +186,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                      canvas colour because content wider than the reading column scrolls underneath it. -->
                 <aside
                     v-if="docked"
-                    class="absolute inset-y-0 flex w-52 flex-col bg-canvas py-5 pl-2 pr-2"
+                    class="absolute inset-y-0 flex w-72 flex-col bg-canvas py-5 pl-2 pr-2"
                     :style="{ right: `${outline.gutter.value}px` }"
                 >
                     <MarkdownOutline :headings="outline.headings.value" :active="outline.active.value" @jump="outline.jump" />
