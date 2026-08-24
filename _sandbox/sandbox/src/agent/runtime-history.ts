@@ -16,14 +16,15 @@ export interface RuntimeHistoryMessage {
 const HEADER = "This conversation continues from another AI runtime. Prior transcript (oldest first): treat it as your own conversation history:";
 const SEPARATOR = "\n\n---\n\n";
 const MESSAGE_CHAR_CAP = 8_000;
-/* What the whole preamble may spend, in characters, roughly 30k tokens.
+/* What the whole preamble may spend, in characters, roughly 8k tokens. A handoff is orientation, not an archive:
+ * tool output is already excluded and the newest turns carry the decisions the next runtime needs. The old
+ * 120k cap let this optional note consume ~30k tokens before the current request, enough to crowd out small
+ * models and to make a runtime switch more expensive than continuing the old session.
  *
- * Fixed rather than derived from the incoming model's context window, because the daemon does not know that
- * window until a turn has run: it is read off the SDK's own usage frames and kept on the registry entry. On the
- * one path that matters here, a switch, that reading describes the runtime being LEFT, so sizing against it
- * would budget the new session by the old model's ceiling. Every provider the picker offers has at least a 200k
- * window, so this is a low single-digit percentage of the smallest of them and leaves the agent its room. */
-const HISTORY_CHAR_CAP = 120_000;
+ * Fixed rather than derived from the incoming model's context window because the switch happens before that
+ * runtime has produced a usage frame. Context-window preflight still owns the total request; this local ceiling
+ * prevents history from claiming an unbounded share of it. */
+const HISTORY_CHAR_CAP = 32_000;
 // Tool calls are carried as a trailing one-line index per assistant turn. WHAT the agent did, never the tool
 // output, which is the bulk of a transcript and is re-readable from the workspace itself.
 const TOOLS_PER_MESSAGE = 8;

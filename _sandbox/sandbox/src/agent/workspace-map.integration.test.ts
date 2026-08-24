@@ -221,6 +221,7 @@ test("the note names where the run stands and marks it in the list", async () =>
     const note = workspaceMapNote({ root, cwd: join(root, "app/billing") });
 
     expect(note?.startsWith("## Map of this project")).toBe(true);
+    expect(note).toContain("Do not `ls` or `tree` the workspace root");
     expect(note).toContain("You are here: `app/billing`");
     expect(note).toMatch(/billing.*← you are here/);
     expect(note).not.toMatch(/mailer.*← you are here/);

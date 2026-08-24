@@ -59,5 +59,6 @@ test("spends its budget on the end of a long conversation, not its opening", () 
     const envelope = withRuntimeHistory("carry on", history);
     expect(envelope).toContain("message 39:");
     expect(envelope).not.toContain("message 0:");
+    expect(envelope.length).toBeLessThan(33_000);
     expect(envelope.endsWith("carry on")).toBe(true);
 });

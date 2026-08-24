@@ -69,6 +69,42 @@ test("the index lists every skill, name-ordered, and re-writing converges rather
     expect(index.match(/## Skills/g)).toHaveLength(1);
 });
 
+test("converging removes duplicate indexes and superseded marker spellings", async () => {
+    const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
+    await writeFile(
+        join(root, "AGENTS.md"),
+        [
+            "# My rules",
+            "",
+            "<!-- intentic:skills — managed by the sandbox; edits between these markers are overwritten -->",
+            "## Skills",
+            "",
+            "- stale legacy index",
+            "<!-- /intentic:skills -->",
+            "",
+            "Keep this sentence.",
+            "",
+            "<!-- intentic:skills: managed by the sandbox; edits between these markers are overwritten -->",
+            "## Skills",
+            "",
+            "- stale current index",
+            "<!-- /intentic:skills -->",
+            "",
+        ].join("\n"),
+    );
+
+    await writeLoadedSkill(FILES, root, "quill", SKILL);
+
+    const index = await readFile(join(root, "AGENTS.md"), "utf8");
+    expect(index).toContain("# My rules");
+    expect(index).toContain("Keep this sentence.");
+    expect(index).toContain("**quill**");
+    expect(index).not.toContain("stale legacy index");
+    expect(index).not.toContain("stale current index");
+    expect(index.match(/## Skills/g)).toHaveLength(1);
+    expect(index.match(/<!-- intentic:skills/g)).toHaveLength(1);
+});
+
 // A real directory under .claude/skills is something a person put there for Claude specifically: the projection
 // must not fight them for the name.
 test("a real directory in .claude/skills is never replaced by the projection", async () => {

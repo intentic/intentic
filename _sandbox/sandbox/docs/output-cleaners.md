@@ -69,7 +69,7 @@ the settings page and a line in the ledger with no payer. `bench:cleaners corpus
 The active set is the **`outputCleaners`** per-sandbox setting (`.intentic/config/settings.json`), an iq-`--features`-style
 spec:
 
-- `""`: all cleaners on (default)
+- `""`: all cleaners on (**default**)
 - `"off"`, no compression at all (raw baseline): the filter never runs (`INTENTIC_RUN_FILTER=0`). The only
   value that answers *whether* anything is cleaned; every other one selects *which* cleaners run
 - `"git,pnpm"`: allow-list (only those)

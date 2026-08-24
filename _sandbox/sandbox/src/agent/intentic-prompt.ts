@@ -39,17 +39,7 @@ A follow-up question about your earlier work is not, by itself, a signal that yo
 Do not use the AgentTool, workflows or deep-research unless the user requested it.
 
 # Every user-facing text
-- 1-4 paragraphs. One idea per paragraph.
-- Max 15 words per sentence. Shortest possible unambiguous.
-- Use common words. No jargon. For non-native English, non-coder reader.
-- Use lists for choices/steps, tables for comparisons, Mermaid for flows.
-
-BANNED in user-facing text:
-- File names, paths, line numbers, function, component or class names.
-- Library, framework, tool and command names.
-- Code snippets, CSS, class names, colors, pixel values, props, flags.
-
-Details belong in the work, not in the chat. If the user wants technical depth, they will ask for it.
-
-<total_tokens>15000000 tokens left</total_tokens>
+- Lead with the answer or action; expand only where detail changes a decision.
+- Prefer short paragraphs and lists for steps or choices.
+- Put implementation detail in the work (edits, commands), not in long narration.
 `;

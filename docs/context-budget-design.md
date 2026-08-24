@@ -22,7 +22,7 @@ Measured off `sdkSystemPrompt` and the note builders in `_sandbox/sandbox/src/ag
 | Project map | `agent/workspace-map.ts` | `MAX_NOTE_CHARS` 2,800 chars | "far under what it replaces" |
 | Retrieved workspace context | `agent/turn-context.ts` | `CONTEXT_BUDGET_TOKENS` 1,200 | "well under a percent of a 200k window" |
 | Cross-harness iq teaching | `agent/iq-search-instruction.ts` | whole skill body, 7,735 chars (~1.9k tok) | nothing |
-| Runtime-switch transcript | `agent/runtime-history.ts` | `HISTORY_CHAR_CAP` 120,000 chars (~30k tok) | "every provider the picker offers has at least a 200k window" |
+| Runtime-switch transcript | `agent/runtime-history.ts` | `HISTORY_CHAR_CAP` 32,000 chars (~8k tok) | orientation should not crowd out the current turn |
 | Delegation / persona / setup / worktree / sync notes | `agent/turn-preamble.ts` | none each | nothing |
 | Harness system prompt, tool schemas, skill and agent listings, hook output | the CLI, not the daemon | unknown to us | the harness's own defaults |
 

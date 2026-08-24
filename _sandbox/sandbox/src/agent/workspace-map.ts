@@ -427,7 +427,8 @@ const render = (map: WorkspaceMap): string => {
     const head = [
         WORKSPACE_MAP_NOTE_HEADER,
         "",
-        "This is current filesystem context. It maps project areas, not file locations; search for exact paths as needed.",
+        "This is current filesystem context. It maps project areas, not file locations; use `iq files` or Read for exact paths.",
+        "Do not `ls` or `tree` the workspace root to orient yourself — the map above is that orientation.",
         "",
         map.cwd === map.project ? `You are at the top of ${project}.` : `You are here: \`${map.cwd}\``,
         "",

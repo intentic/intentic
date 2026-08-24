@@ -2373,8 +2373,8 @@ export const SkillRemoveSchema = z.object({
 //   workspaceMap     , computes an AREA index of the project a run starts in and prepends it to the
 //                        conversation's opening message, so the turn does not have to buy its own orientation
 //                        with a directory listing. Generated from the filesystem every time, never stored.
-//   outputCleaners   , the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled (default),
-//                        "" = all cleaners on, else an iq-style allow-list / default-minus
+//   outputCleaners   , the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled,
+//                        "" = all cleaners on (default), else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
 //   outputHoldout    , measurement control: a fraction [0,1] of Bash commands whose output bypasses cleaning
 //                        (recorded raw as `heldOut`), so the savings report compares a real cleaned-vs-raw
@@ -2386,8 +2386,8 @@ export const SkillRemoveSchema = z.object({
 //                        firing forever; 0 (default) ⇒ never.
 //   subagentsAtOnce / subagentsPerTurn / subagentDepth, the harness's own ceilings on delegation, raised or
 //                        lowered from one place; each defaults to what the CLI enforces on its own.
-// The booleans default off, outputCleaners defaults "off" (cleaning off) and outputHoldout 0, a fresh sandbox
-// starts with cleaning and iq off until the owner enables them. `skills` is the exception and defaults to the
+// The booleans default off, outputCleaners defaults "" (cleaning on) and outputHoldout 0; iqSearch stays off
+// until the owner enables it. `skills` is the exception and defaults to the
 // baked tools worth having on: a skill file is the ONLY thing that tells the agent a baked binary exists, and
 // with the list empty `lsp` went used once in 866 sessions, not declined, never learned about.
 //
@@ -2498,7 +2498,7 @@ export const SandboxSettingsSchema = z.object({
         ),
     outputCleaners: z
         .string()
-        .default("off")
+        .default("")
         .describe("Which command outputs to trim before the agent reads them, cutting the noise a build tool prints without cutting what it said."),
     outputHoldout: z
         .number()

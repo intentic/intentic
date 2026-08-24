@@ -89,6 +89,10 @@ const skillDirNames = async (dir: string): Promise<string[]> => {
  * block is theirs, and the block regenerates in place wherever they left it. */
 const INDEX_START = "<!-- intentic:skills: managed by the sandbox; edits between these markers are overwritten -->";
 const INDEX_END = "<!-- /intentic:skills -->";
+// Older daemon versions used slightly different prose and punctuation in the opening marker. Match ownership,
+// not one spelling, and consume every complete managed block: otherwise each marker revision becomes a block
+// the next revision cannot replace, which is how an always-on index grows once per reconcile.
+const MANAGED_INDEX = /<!-- intentic:skills\b[\s\S]*?<!-- \/intentic:skills -->\n?/gu;
 
 const indexSection = (skills: readonly { name: string; description: string }[]): string =>
     [
@@ -111,18 +115,20 @@ const spliceIndex = (existing: string | undefined, section: string | undefined):
     if (existing === undefined) {
         return block === undefined ? undefined : `${block}\n`;
     }
-    const start = existing.indexOf(INDEX_START);
-    const end = existing.indexOf(INDEX_END);
-    if (start === -1 || end === -1 || end < start) {
+    if (!MANAGED_INDEX.test(existing)) {
+        MANAGED_INDEX.lastIndex = 0;
         return block === undefined ? existing : `${existing.trimEnd()}\n\n${block}\n`;
     }
-    const before = existing.slice(0, start);
-    const after = existing.slice(end + INDEX_END.length).replace(/^\n/, "");
-    if (block === undefined) {
-        const rest = `${before}${after}`;
-        return rest.trim() === "" ? undefined : rest;
-    }
-    return `${before}${block}\n${after}`;
+    MANAGED_INDEX.lastIndex = 0;
+    let inserted = false;
+    const next = existing.replace(MANAGED_INDEX, () => {
+        if (inserted || block === undefined) {
+            return "";
+        }
+        inserted = true;
+        return `${block}\n`;
+    });
+    return next.trim() === "" ? undefined : next;
 };
 
 const convergeIndex = async (files: SkillFiles, root: string, names: readonly string[]): Promise<void> => {
