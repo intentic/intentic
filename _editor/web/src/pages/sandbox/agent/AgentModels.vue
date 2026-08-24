@@ -329,20 +329,21 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                         <p class="flex flex-wrap items-baseline gap-x-1.5">
                             <span class="text-sm font-semibold tabular-nums text-content">{{ tierReport.fast }}</span>
                             <span class="min-w-0 text-2xs text-muted">
-                                of {{ tierReport.judged }} judged simple<template v-if="tierReport.judged > 0">
+                                of {{ tierReport.judged }} turns judged simple<template v-if="tierReport.judged > 0">
                                     ({{ pct(tierReport.fast, tierReport.judged) }})</template
                                 >
+                                · last {{ TIER_WINDOW_DAYS }} days
                             </span>
                         </p>
                         <p v-if="tierReport.atStakeUsd > 0" class="mt-1 text-2xs text-subtle">
-                            {{ usd(tierReport.atStakeUsd) }} on your pick · last {{ TIER_WINDOW_DAYS }}d
+                            {{ usd(tierReport.atStakeUsd) }} spent on simple turns on your model
                         </p>
-                        <p v-else class="mt-1 text-2xs text-subtle">Last {{ TIER_WINDOW_DAYS }}d</p>
                         <p
                             v-if="tierReport.routed > 0 || tierReport.escalated > 0 || tierReport.denied > 0"
                             class="mt-0.5 text-2xs tabular-nums text-subtle"
                         >
-                            <template v-if="tierReport.routed > 0">{{ tierReport.routed }} down-routed · {{ usd(tierReport.routedUsd) }}</template
+                            <template v-if="tierReport.routed > 0"
+                                >{{ tierReport.routed }} down-routed · {{ usd(tierReport.routedUsd) }} spent on cheaper model</template
                             ><template v-if="tierReport.escalated > 0"
                                 ><template v-if="tierReport.routed > 0"> · </template>{{ tierReport.escalated }}/{{ tierReport.fast }} bumped up</template
                             ><template v-if="tierReport.denied > 0"> · {{ tierReport.denied }} vetoed</template>

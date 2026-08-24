@@ -195,8 +195,8 @@ test("the judge's record renders its three numbers once turns have been judged",
     await Promise.resolve();
 
     expect(host.textContent).toContain(`10 of 40`);
-    expect(host.textContent).toContain(`$1.50`);
-    expect(host.textContent).toContain(`4 down-routed · $0.25`);
+    expect(host.textContent).toContain(`$1.50 spent on simple turns on your model`);
+    expect(host.textContent).toContain(`4 down-routed · $0.25 spent on cheaper model`);
     expect(host.textContent).toContain(`1/10 bumped up`);
     expect(host.textContent).toContain(`2 vetoed`);
 });
