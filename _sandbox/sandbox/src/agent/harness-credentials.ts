@@ -2,7 +2,6 @@ import {
     type AgentProvider,
     endpointIdOf,
     type KeyedProvider,
-    NATIVE_PROVIDERS,
     type NativeProvider,
     PROVIDER_VENDOR,
     TRIAL_ENDPOINT_ID,
@@ -13,6 +12,7 @@ import { unversionedBase } from "../endpoints/endpoint-config.js";
 import { endpointModelId } from "../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../endpoints/local-model.js";
 import type { Services } from "../composition.js";
+import { providerReadiness } from "./provider-registry.js";
 import { accountWithHeadroom } from "../usage/account-usage.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
 
@@ -216,28 +216,11 @@ export const routedModel = (catalog: { models: readonly { id: string }[]; defaul
  * facts: a store listing, the translator's account map (fetched once here), a config string. Every route below
  * still resolves the real credential for the provider it settles on, so this being optimistic in some corner
  * costs an error message rather than a wrong turn. */
-export const harnessReadyProviders = async (services: Services): Promise<Record<NativeProvider, boolean>> => {
-    const translator = services.config.translator.url === "" ? undefined : await services.cliProxy.accounts();
-    const routed = (provider: KeyedProvider): boolean => (translator?.[provider].length ?? 0) > 0;
-    const ready: Record<NativeProvider, boolean> = {
-        // A stored account, else the container's own credential, the same two rungs the claude branch takes.
-        claude:
-            (await services.claudeStore.list()).length > 0 || services.config.claudeCodeOauthToken !== "" || services.config.anthropicApiKey !== "",
-        codex: routed("codex"),
-        grok: routed("grok"),
-        kimi: routed("kimi"),
-        gemini: routed("gemini"),
-        /* Cursor is the only row here that is NOT a translator question, because there is no translator route
-         * to Cursor at all: its own SDK is the one door, and the credential is a stored key this sandbox owns
-         * outright. A key past its expiry reads as not-ready, since the turn that used it would be refused. */
-        cursor: (await services.cursorStore.credentials()).some(
-            (account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now(),
-        ),
-    };
-    // Named rather than returned raw so a provider added to NATIVE_PROVIDERS without a rung here fails the
-    // type-check instead of silently reading back `undefined` (AgentProvider is a bare string on the wire).
-    return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready[provider]])) as Record<NativeProvider, boolean>;
-};
+// DERIVED from the provider modules rather than kept as a record here: each module's `ready` rung is the
+// provider's own statement of the same cheap facts, the translator's account map is read once per sweep
+// through the shared memo, and the registry's init guard is what makes the derived record complete over
+// NATIVE_PROVIDERS (agent/provider-registry.ts).
+export const harnessReadyProviders = (services: Services): Promise<Record<NativeProvider, boolean>> => providerReadiness(services);
 
 /* AN `endpoint` CAPABILITY'S TURN, a model API the user configured, which is the same problem as a routed
  * subscription with one fork in it, and the fork is about the WIRE rather than about where the server runs.

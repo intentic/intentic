@@ -14,7 +14,8 @@ vi.mock("../platform/on-path.js", async (importOriginal) => ({
     onPath: async () => true,
 }));
 
-const { ADAPTERS, adapterFor } = await import("./adapter-registry.js");
+const { allAdapters, adapterFor } = await import("./adapter-registry.js");
+const ADAPTERS = allAdapters();
 
 /* The guard the registry's own comment promises, and the counterpart to agent-catalog.test.ts: that file
  * demands every (provider, harness) pair have a capability record, this one demands the runtime that record

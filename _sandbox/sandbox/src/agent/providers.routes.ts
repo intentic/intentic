@@ -9,7 +9,8 @@ export type ProvidersRoutesDeps = Pick<Services, "providerCatalogs">;
 // The provider in the path is closed to NATIVE_PROVIDERS by the contract, so the lookup below cannot miss,
 // which is the point of closing it there rather than validating here.
 //
-// No error arm: each catalog resolves down to a seed floor and is never empty (see provider-catalogs.ts), so
+// No error arm: each catalog resolves down to a seed floor and is never empty (each provider module's own
+// catalog says how), so
 // there is no "this provider has nothing" state to report. An endpoint's catalog CAN be empty and CAN name a
 // capability that does not exist, which is why it kept its own route.
 export const createProvidersRoutes = (services: ProvidersRoutesDeps) => {

@@ -7,7 +7,6 @@ import {
     type Rule,
     type SandboxSettings,
     type SystemPromptMode,
-    PI_PROVIDER,
     SandboxSettingsSchema,
     capabilitiesOf,
     envSuffix,
@@ -19,8 +18,6 @@ import { fetchEmailCode } from "../browser/email-codes.js";
 import { openBrowserAccount } from "../capabilities/open-account.js";
 import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
-import { usableCursorAccount } from "../cursor/cursor-credentials.js";
-import { cursorReadiness } from "../cursor/cursor-readiness.js";
 import { personaKitPlugin, readPersonaPrompt } from "../personas/persona-kit.js";
 import {
     type TurnPersona,
@@ -535,241 +532,12 @@ const honoured = (
     };
 };
 
-// Codex has no sandbox-owned OAuth: it authenticates through the translator on the user's ChatGPT SUBSCRIPTION
-// (the same connection the claude-code harness rides), or the container OPENAI_API_KEY on a bare dev run with no
-// translator. Its app-server accepts process-backed MCP servers in the per-thread config, so the browser servers
-// are built from the same persona-filtered manifest the Claude Code path reads. Daemon-side SDK servers and
-// plugins still belong to that richer harness and stay absent here. Mid-turn steering rides through like Pi's:
-// the queue is real (`turn/steer`), so the arm hands it over rather than dropping it.
-export const planCodexTurn = async (
-    services: Services,
-    input: AgentTurn,
-    context: TurnContext,
-    granted: readonly Capability[],
-): Promise<TurnPlan> => {
-    // The subscription (via the translator) is the credential; the container OPENAI_API_KEY is the only fallback
-    // (a bare dev run with no translator baked).
-    const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-    if (!translatorReady && services.config.openaiApiKey === "") {
-        return {
-            ok: false,
-            code: "subscription-required",
-            message:
-                services.config.translator.url === ""
-                    ? "This sandbox has no model translator, so Codex can't run here. Run a sandbox built from the published image."
-                    : "Connect your ChatGPT subscription in Sandbox ▸ Agent to run Codex.",
-        };
-    }
-    // Resolve a concrete model so app-server never falls back to the Codex CLI's built-in default
-    // (gpt-5-codex), which the subscription can reject. An explicit selection rides through (a stale one
-    // self-heals via codex-model-invalid); an empty one resolves the catalog default (discovery → persisted →
-    // seed floor, never empty, see codex-catalog).
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    const [model, browser] = await Promise.all([
-        input.model !== undefined && input.model !== ""
-            ? Promise.resolve(input.model)
-            : services.codexModels.models().then((catalog) => catalog.default),
-        /* Codex plan emulation closes its app-server while a person reviews the plan, then starts a fresh one
-         * for execution. The router spec is restartable, a fresh process rereads the same manifest and the
-         * same persisted profiles, so both phases drive the same browsers. */
-        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
-    ]);
-    const withModel = { ...context.base, model, ...(context.steering !== undefined ? { steering: context.steering } : {}) };
-    // A subscription-served turn rides the translator's OpenAI-compatible endpoint on the fixed local bearer (the
-    // adapter builds the provider block); the dev api-key path uses Codex's own OPENAI_API_KEY default. The
-    // default CODEX_HOME (createCodexAgent) serves every turn, no per-turn home. Codex takes attachments
-    // structurally: images ride as native local_image inputs, the rest as a file list in the prompt.
-    const withAuth = translatorReady
-        ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
-        : withModel;
-    const withBrowser =
-        Object.keys(browser.servers).length === 0
-            ? withAuth
-            : {
-                  ...withAuth,
-                  sdkServers: browser.servers,
-                  browserOutputDir: browserOutputDir(services.workspace.root),
-                  browserPorts: browser.ports,
-                  browserPasskeys: browser.passkeys,
-                  browserAccounts: browser.accounts,
-              };
-    return {
-        ok: true,
-        run: services.codexAgent,
-        // Attribution key: the shared subscription serving all Codex turns, else undefined for the api-key fallback.
-        ...(translatorReady ? { account: "codex-subscription" } : {}),
-        request: withAttachments(withBrowser, context.attachmentPaths),
-    };
-};
-
-// Grok rides OpenCode with xAI subscription OAuth (OpenCode owns the credential). Gate on OpenCode's own
-// connection view. Claude-only fields (plugins, MCP tools, thinking) don't apply.
-export const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
-    if (!(await services.openCode.connected("xai"))) {
-        return {
-            ok: false,
-            message: "No Grok account connected, sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
-        };
-    }
-    // Grok MUST ride an explicit, live-valid xAI model id: OpenCode's own default is a retired models.dev id
-    // (grok-code-fast-1) xAI rejects, and its catalog is empty for xai, so an omitted model makes the turn fall
-    // back to that same retired default. Resolve from the daemon's catalog (never empty, live discovery with a
-    // persisted/seed floor): keep the pinned model when it's offered, else the default. If the resolved id turns
-    // out stale, the runner self-heals it mid-turn from xAI's "Did you mean" rejection (grok-agent).
-    const catalog = await services.openCode.xaiModels();
-    const valid = new Set(catalog.models.map((entry) => entry.id));
-    const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
-    return {
-        ok: true,
-        run: services.grokAgent,
-        // OpenCode holds one xAI auth, so the single Grok account is "xai" (see grok.routes.ts).
-        account: "xai",
-        // Override base's input.model with the validated id; the adapter folds attachment paths into the prompt
-        // (OpenCode's tools read them from disk).
-        request: withAttachments({ ...context.base, model }, context.attachmentPaths),
-    };
-};
-
-/* CURSOR ON ITS OWN RUNTIME, which is the only route to it: no translator serves Cursor, and Cursor publishes
- * no model endpoint a subscription can reach, so unlike codex/grok there is no harness fork to make here and
- * `capabilitiesOf` answers the same record either way.
- *
- * THE CREDENTIAL IS PICKED HERE AND CARRIED ON THE REQUEST, which is unlike every neighbour and is forced by
- * the runtime being IN-PROCESS. Codex gets a CODEX_HOME and OpenCode holds its own auth, because both are
- * separate processes with their own environments; Cursor's loop runs inside this daemon, where an environment
- * variable is a daemon-wide fact. So the account a turn was planned against rides the request as a key, and
- * every SDK call the adapter makes takes it explicitly.
- *
- * BROWSER SERVERS COME ALONG, which no other foreign runtime here manages: Cursor takes stdio MCP servers per
- * agent, so the same specs the Claude Code loop is handed are projected into its own config (cursor-tools.ts).
- * That is the difference between `mcp: "tools"` and Codex's `"browser"` being a real one rather than a claim. */
-export const planCursorTurn = async (
-    services: Services,
-    input: AgentTurn,
-    context: TurnContext,
-    granted: readonly Capability[],
-): Promise<TurnPlan> => {
-    // One resolver, shared with the health probe, so the greyed-out tooltip and the refusal can never name
-    // different reasons (cursor/cursor-readiness.ts).
-    const readiness = await cursorReadiness(services.cursorStore);
-    if (!readiness.ok) {
-        return { ok: false, ...(readiness.code !== undefined ? { code: readiness.code } : {}), message: readiness.detail };
-    }
-    const account = await usableCursorAccount(services.cursorStore, input.account);
-    if (account === undefined) {
-        // Reachable only when the named account was disconnected between the readiness check and here, or when
-        // the client pinned an id that never existed. Both are "pick another one", not "connect one".
-        return { ok: false, message: "That Cursor account is no longer connected. Pick another one, or connect it again in Sandbox ▸ Agent." };
-    }
-    const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
-    // The catalog is never empty, so this always resolves: keep the pinned model while the catalog still offers
-    // it, else take the catalog's default. The SDK has no default of its own for a local agent, which makes
-    // resolving here mandatory rather than merely tidy.
-    const [catalog, browser] = await Promise.all([
-        services.cursorModels.models(),
-        browserServersOf(granted, services.workspace.root, persona.powers.browser, input.conversationId),
-    ]);
-    const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
-    const withAuth = {
-        ...context.base,
-        model,
-        cursorApiKey: account.apiKey,
-        ...(context.steering !== undefined ? { steering: context.steering } : {}),
-    };
-    const withBrowser =
-        Object.keys(browser.servers).length === 0
-            ? withAuth
-            : {
-                  ...withAuth,
-                  sdkServers: browser.servers,
-                  browserOutputDir: browserOutputDir(services.workspace.root),
-                  browserPorts: browser.ports,
-                  browserPasskeys: browser.passkeys,
-                  browserAccounts: browser.accounts,
-              };
-    return {
-        ok: true,
-        run: services.cursorAgent,
-        // A real account id, unlike the routed providers' shared marker: this sandbox stores the credential
-        // itself, so the usage and rate-limit frames can name exactly which connection paid.
-        account: account.id,
-        // The adapter folds attachment paths into the prompt as a file list; Cursor's read tool takes them off
-        // disk, which is the same treatment OpenCode and Pi get.
-        request: withAttachments(withBrowser, context.attachmentPaths),
-    };
-};
-
-/* GEMINI ON ITS NATIVE RUNTIME, the same OpenCode loop Grok runs on, pointed at the translator instead of at
- * xAI. The credential question is therefore the one a ROUTED turn asks, not the one planGrokTurn asks: OpenCode
- * holds nothing for Gemini, CLIProxyAPI holds every Google auth file and balances the fleet behind them.
- *
- * It exists because the Claude Code loop can no longer reach Google. That CLI prepends its own identity line to
- * every request and bakes it into the binary; Google's Antigravity channel refuses on that exact sentence, and
- * reports it as a quota error, so the translator walked all 31 accounts looking for headroom none of them
- * lacked, ~60s a turn. This loop sends OpenCode's prompt, which the block has nothing to match in.
- *
- * The model is resolved from the same catalog the Claude Code path uses, so a pin survives a harness switch. */
-export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
-    if (services.config.translator.url === "") {
-        return {
-            ok: false,
-            message: "This sandbox has no model translator, so Gemini can't run here. Run a sandbox built from the published image.",
-        };
-    }
-    if ((await services.cliProxy.accounts()).gemini.length === 0) {
-        return { ok: false, message: "Connect your Google account in Sandbox ▸ Agent to run Gemini here." };
-    }
-    // Never empty (discovery → persisted → seed floor), so this always resolves: keep the pinned model while the
-    // catalog still offers it, else take the catalog's default, the same rule routedModel applies.
-    const catalog = await services.providerCatalogs.gemini.models();
-    const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
-    return {
-        ok: true,
-        run: services.geminiAgent,
-        request: withAttachments({ ...context.base, model }, context.attachmentPaths),
-    };
-};
-
-// Pi: the reserved `pi` agent-kind capability, spawned and driven over Pi's own RPC protocol. Harness doesn't
-// apply (Pi is its own loop). Unlike the ACP floor it takes the steering queue (Pi's `steer` command is real
-// mid-turn injection) and the effort tier (set_thinking_level); it has no MCP seam, so no tools are passed.
-export const planPiTurn = async (services: Services, _input: AgentTurn, context: TurnContext, granted: readonly Capability[]): Promise<TurnPlan> => {
-    const capability = granted.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
-    if (capability === undefined || capability.kind !== "agent") {
-        return { ok: false, message: "Pi is not installed, add the Pi Agent capability first." };
-    }
-    return {
-        ok: true,
-        run: (turnRequest) => services.piAgent(capability.config, turnRequest),
-        request: withAttachments(
-            context.steering !== undefined ? { ...context.base, steering: context.steering } : context.base,
-            context.attachmentPaths,
-        ),
-    };
-};
-
-// An ACP provider: the id of an installed `agent`-kind capability, spawned and driven over the Agent Client
-// Protocol. Harness doesn't apply (the agent IS its own loop) and neither do the Claude-only request fields; the
-// adapter passes http MCP tools through when the agent advertises support.
-export const planAcpTurn = async (
-    services: Services,
-    input: AgentTurn,
-    context: TurnContext,
-    granted: readonly Capability[],
-    provider: string,
-): Promise<TurnPlan> => {
-    const capability = granted.find((entry) => entry.kind === "agent" && entry.id === provider);
-    if (capability === undefined || capability.kind !== "agent") {
-        return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
-    }
-    const acpConfig = capability.config;
-    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
-    return {
-        ok: true,
-        run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),
-        request: withAttachments(tools.length > 0 ? { ...context.base, tools } : context.base, context.attachmentPaths),
-    };
-};
+/* THE PROVIDER ARMS LIVE WITH THEIR PROVIDERS NOW. planCodexTurn, planGrokTurn, planCursorTurn and
+ * planGeminiTurn each sit in their provider's directory beside the adapter row that points at them
+ * (`<provider>/<provider>-provider.ts`, aggregated by agent/provider-registry.ts); planAcpTurn and planPiTurn
+ * sit beside their runtimes (acp/acp-adapter.ts, pi/pi-adapter.ts). What stays here is what serves EVERY
+ * provider: planTurn's dispatch, and planHarnessTurn below — the Claude Code loop's arm, which no provider may
+ * own because it also serves Kimi, the routed subscriptions and every endpoint capability. */
 
 /* WHAT AN UNTOUCHED SETTING LOOKS LIKE, so a cap the owner never moved can be told from one they set to the
  * same number, the difference decides whether the harness is handed an env var at all (see the subagent caps
@@ -1183,8 +951,3 @@ const delegationEnv = async (
         ...(note !== undefined ? { note } : {}),
     };
 };
-
-// Attachments ride as absolute paths on the request; every adapter takes them the same way and decides for
-// itself whether they become native image inputs or a file list in the prompt.
-const withAttachments = (request: AgentRequest, paths: readonly string[]): AgentRequest =>
-    paths.length > 0 ? { ...request, attachments: [...paths] } : request;

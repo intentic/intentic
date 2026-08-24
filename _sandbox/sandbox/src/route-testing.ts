@@ -485,6 +485,18 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Held directly too, exactly as in composition, the native Codex turn's model resolution and its
         // self-heal both read it, and neither goes through the table above.
         codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
+        /* The direct per-provider catalogs the provider modules read (each module's `catalog`, and the arms
+         * that resolve a concrete model). Mirrors testProviderCatalogs row for row: `providerCatalogs` above is
+         * the DOUBLE for the record the registry would derive from these, so a suite that overrides one
+         * without the other is overriding exactly the seam it means to. */
+        claudeModels: { models: async () => ({ models: [{ id: "opus", label: "Opus" }], default: "opus" }) },
+        geminiModels: {
+            models: async () => ({
+                models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text"] }],
+                default: "gemini-pro-agent",
+            }),
+        },
+        kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
         /* NOTHING CONNECTED by default, which is the opposite of the Claude double above and deliberately so.
          * Claude's is populated because the /agent guard short-circuits every turn without it, so an empty one
          * would break suites that are not about accounts at all. Nothing guards on Cursor, so the honest

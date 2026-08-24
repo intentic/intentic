@@ -37,7 +37,6 @@ import {
     rejectForbidden,
     runAgentTurn,
     services,
-    testProviderCatalogs,
     withTranslator,
 } from "./route-testing.js";
 
@@ -750,7 +749,8 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
         models: async () => [],
     };
     // Read off the NATIVE runner, which is the only one a Gemini turn reaches now: the catalog-membership rule
-    // itself is unchanged, and it is the rule this test is about.
+    // itself is unchanged, and it is the rule this test is about. Overridden on the DIRECT member the arm
+    // reads (the gemini module resolves through its own slice, not through the derived record).
     const run = async (model: string): Promise<string | undefined> => {
         let seen: { model?: string } | undefined;
         const client = clientFor(
@@ -758,9 +758,11 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                 services({
                     config: withTranslator,
                     cliProxy: geminiConnected,
-                    providerCatalogs: {
-                        ...testProviderCatalogs,
-                        gemini: { models: async () => ({ models: models.map((id) => ({ id, label: id })), default: models[0]! }) },
+                    geminiModels: {
+                        models: async () => ({
+                            models: models.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
+                            default: models[0]!,
+                        }),
                     },
                     geminiAgent: async function* (request) {
                         seen = request;

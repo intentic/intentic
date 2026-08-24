@@ -29,6 +29,32 @@ import type { TurnContext, TurnPlan } from "./turn-plan.js";
  * `capabilities` is the contract's own record for the pair, carried here so a registration cannot claim an
  * ability its runtime does not have, see how the declarations below use it. */
 
+/* The health vocabulary's constructors and the probe wrapper, HERE beside the type they build rather than in
+ * the registry that used to own them, because the adapters now live in their provider directories
+ * (provider-module.ts) and every one of them speaks this vocabulary. One `now` per answer, so `checkedAt` is
+ * the probe's own moment. */
+const now = (): number => Date.now();
+export const healthReady = (): AdapterHealth => ({ state: "ready", checkedAt: now() });
+export const healthUnavailable = (detail: string): AdapterHealth => ({ state: "unavailable", detail, checkedAt: now() });
+// A probe that could not run at all. NOT "unavailable": a network blip on an account listing must not grey out
+// a provider the user can in fact use, see AdapterHealth.state.
+export const healthUnknown = (): AdapterHealth => ({ state: "unknown", checkedAt: now() });
+
+/* Run a probe's one fallible call, mapping ANY failure to undefined, which every caller reads as "unknown".
+ *
+ * A try/catch rather than `.catch()` on the returned promise, because the two do not catch the same things: a
+ * store that throws SYNCHRONOUSLY (a bad path, a mock, a getter that blows up before it can return a promise)
+ * never produces a promise for `.catch` to attach to, and the throw escapes into the caller. Here that caller
+ * is a background timer, so it would surface as an unhandled rejection every five minutes rather than as the
+ * "unknown" this is all built to answer with. */
+export const attemptProbe = async <T>(fn: () => Promise<T> | T): Promise<T | undefined> => {
+    try {
+        return await fn();
+    } catch {
+        return undefined;
+    }
+};
+
 export interface AdapterHealth {
     /* Can this runtime serve a turn right now?
      *

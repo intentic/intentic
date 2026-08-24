@@ -1,233 +1,37 @@
-import { access } from "node:fs/promises";
-import { type AgentHarness, type AgentProvider, capabilitiesOf, PI_PROVIDER } from "@intentic/sandbox-contract";
-import { codexReadiness } from "../codex/codex-readiness.js";
-import { cursorReadiness } from "../cursor/cursor-readiness.js";
-import { cursorSdk } from "../cursor/cursor-sdk.js";
-import { openCodeBinaryMissing } from "../grok/opencode.js";
-import { onPath } from "../platform/on-path.js";
-import type { AdapterHealth, AgentAdapter } from "./adapter.js";
-import { planAcpTurn, planCodexTurn, planCursorTurn, planGeminiTurn, planGrokTurn, planHarnessTurn, planPiTurn } from "./turn-plan.js";
+import { type AgentHarness, type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
+import { ACP_ADAPTER } from "../acp/acp-adapter.js";
+import { PI_ADAPTER } from "../pi/pi-adapter.js";
+import type { AgentAdapter } from "./adapter.js";
+import { PROVIDER_ADAPTERS } from "./provider-registry.js";
 
-/* RUNTIME → ADAPTER. The whole dispatch, in one table, so adding a runtime is a row rather than a fifth arm
- * grown onto an if/else chain, and so the question "which runtimes exist" has an answer a reader can see.
+/* RUNTIME → ADAPTER. The whole dispatch, in one table, so the question "which runtimes exist" has an answer a
+ * reader can see — but the ROWS live with their providers now (each `<provider>-provider.ts`, aggregated by
+ * agent/provider-registry.ts), so adding a runtime is a module in its provider's directory rather than an arm
+ * grown onto this file. The two rows that are NOT a provider module's are appended here: ACP and Pi serve
+ * installed capabilities, not native providers, and their adapters live beside their runtimes
+ * (acp/acp-adapter.ts, pi/pi-adapter.ts).
  *
  * Keyed by RUNTIME rather than by provider, because that is what actually serves the turn: a `codex` provider
  * on the `claude-code` harness is served by the Claude Code loop pointed at the translator, and filing it under
  * a codex adapter would send it somewhere it never runs. `capabilitiesOf` already answers "which runtime" for
  * a (provider, harness) pair, and going through it here is what keeps the arm that serves a turn and the
- * abilities the rest of the daemon gates on reading the same row.
- *
- * The health probes below are the cheap, off-turn-path version of the question each adapter's `preflight`
- * answers expensively and at the worst moment. They deliberately do NOT resolve models or build requests: a
- * probe that did would be a turn, and the point is to answer before there is one. */
+ * abilities the rest of the daemon gates on reading the same row. */
 
-const now = (): number => Date.now();
-const ready = (): AdapterHealth => ({ state: "ready", checkedAt: now() });
-const unavailable = (detail: string): AdapterHealth => ({ state: "unavailable", detail, checkedAt: now() });
-// A probe that could not run at all. NOT "unavailable": a network blip on an account listing must not grey out
-// a provider the user can in fact use, see AdapterHealth.state.
-const unknown = (): AdapterHealth => ({ state: "unknown", checkedAt: now() });
+/* LAZY, and it has to be: this module sits inside a genuine import cycle. The provider modules' arms call
+ * shared turn machinery, turn-plan dispatches through adapterFor here, and this table is built FROM those
+ * modules — so whichever module the entry point touches first, one of the others is still initializing when
+ * it is reached. A top-level spread read the registry's binding before its module finished and crashed every
+ * boot whose entry happened to start at a provider module. Function bodies run at CALL time, when every
+ * module has long since initialized, so the table is assembled on first use and cached. */
+let table: Map<AgentAdapter["runtime"], AgentAdapter> | undefined;
+const byRuntime = (): Map<AgentAdapter["runtime"], AgentAdapter> =>
+    (table ??= new Map([...PROVIDER_ADAPTERS, ACP_ADAPTER, PI_ADAPTER].map((adapter) => [adapter.runtime, adapter])));
 
-/* Run a probe's one fallible call, mapping ANY failure to undefined, which every caller below reads as
- * "unknown".
- *
- * A try/catch rather than `.catch()` on the returned promise, because the two do not catch the same things: a
- * store that throws SYNCHRONOUSLY (a bad path, a mock, a getter that blows up before it can return a promise)
- * never produces a promise for `.catch` to attach to, and the throw escapes into the caller. Here that caller
- * is a background timer, so it would surface as an unhandled rejection every five minutes rather than as the
- * "unknown" this is all built to answer with. */
-const attempt = async <T>(fn: () => Promise<T> | T): Promise<T | undefined> => {
-    try {
-        return await fn();
-    } catch {
-        return undefined;
-    }
-};
-
-const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
-    runtime: "claude-code",
-    preflight: (services, input, context, installed) => planHarnessTurn(services, input, context, installed),
-    /* The Claude Code loop is in-process (the Agent SDK, not a CLI), so there is no binary to look for and the
-     * only thing that can be missing is the credential. Which credential depends on where the turn is pointed,
-     * a routed provider rides the translator, a native Claude turn its own OAuth, and resolving that needs the
-     * turn. So this answers the weaker question the picker actually needs: is ANY way in configured. */
-    health: async (services) => {
-        if (services.config.anthropicApiKey !== "" || services.config.translator.url !== "") {
-            return ready();
-        }
-        const accounts = await attempt(() => services.claudeStore.list());
-        if (accounts === undefined) {
-            return unknown();
-        }
-        return accounts.length > 0 ? ready() : unavailable("Connect your Claude subscription in Sandbox ▸ Agent.");
-    },
-    holdsSession: (services, sessionId, cwd) => services.sessions.exists(cwd, sessionId),
-};
-
-const CODEX_ADAPTER: AgentAdapter<"codex"> = {
-    runtime: "codex",
-    preflight: (services, input, context, granted) => planCodexTurn(services, input, context, granted),
-    // The same question planCodexTurn refuses on, asked without building a turn, one resolver, so the tooltip
-    // and the refusal can never name different reasons (codex/codex-readiness.ts).
-    health: async (services) => {
-        const readiness = await attempt(() => codexReadiness(services));
-        if (readiness === undefined) {
-            return unknown();
-        }
-        return readiness.ok ? ready() : unavailable(readiness.detail);
-    },
-    // One sandbox-wide CODEX_HOME serves every turn (see planCodexTurn), so a thread is looked up without a cwd.
-    holdsSession: (services, sessionId) => services.codexThreadExists(sessionId),
-};
-
-const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
-    runtime: "opencode",
-    preflight: (services, input, context) => planGrokTurn(services, input, context),
-    health: async (services) => {
-        const connected = await attempt(() => services.openCode.connected("xai"));
-        if (connected === undefined) {
-            return unknown();
-        }
-        if (!connected) {
-            return unavailable("Sign in with your xAI (SuperGrok/X Premium) account in Setup.");
-        }
-        // Signed in, but OpenCode is a feature pack and this image may not carry it, a state the credential
-        // cannot explain and only a rebuild fixes.
-        return (await onPath("opencode")) ? ready() : unavailable(openCodeBinaryMissing("Grok"));
-    },
-    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
-};
-
-/* Gemini's native runtime, the same OpenCode loop, a different model backend and an entirely different
- * credential question. It is its own row rather than a second provider on OPENCODE_ADAPTER because health is
- * keyed by runtime (adapter-health.ts): sharing one entry would let a missing xAI sign-in grey Gemini out of the
- * picker, and a missing Google account grey out Grok.
- *
- * OpenCode stores nothing for Gemini. CLIProxyAPI holds Google's auth files and balances them, so the
- * credential half asks the translator, exactly as a routed turn does. The binary half is Grok's, unchanged: one
- * `opencode serve` serves both, so if it is missing neither can run. */
-const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
-    runtime: "opencode-gemini",
-    preflight: (services, input, context) => planGeminiTurn(services, input, context),
-    health: async (services) => {
-        if (services.config.translator.url === "") {
-            return unavailable("This sandbox has no model translator: run one built from the published image to use Gemini.");
-        }
-        const accounts = await attempt(() => services.cliProxy.accounts());
-        if (accounts === undefined) {
-            return unknown();
-        }
-        if (accounts.gemini.length === 0) {
-            return unavailable("Connect your Google account in Sandbox ▸ Agent.");
-        }
-        return (await onPath("opencode")) ? ready() : unavailable(openCodeBinaryMissing("Google"));
-    },
-    holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
-};
-
-/* Cursor's own runtime, in this daemon's process. The one adapter here with nothing to probe on PATH and no
- * server to reach: what can be missing is the SDK module (a pack, see cursor/cursor-sdk.ts) or a usable
- * credential, and cursorReadiness answers both in the order that names the right fix. */
-const CURSOR_ADAPTER: AgentAdapter<"cursor"> = {
-    runtime: "cursor",
-    preflight: (services, input, context, granted) => planCursorTurn(services, input, context, granted),
-    health: async (services) => {
-        const readiness = await attempt(() => cursorReadiness(services.cursorStore));
-        if (readiness === undefined) {
-            return unknown();
-        }
-        return readiness.ok ? ready() : unavailable(readiness.detail);
-    },
-    /* A Cursor session is a row in the SDK's own local agent store, so the question is whether that store still
-     * has it. Asked of the SDK rather than of the filesystem, because the store is pluggable (SQLite or JSONL,
-     * and replaceable) and the daemon does not own its layout.
-     *
-     * LISTED RATHER THAN FETCHED, which looks like the long way round and is the only correct one: `Agent.get`
-     * is documented cloud-only, so on a local id it does not answer "no such agent", it fails for a different
-     * reason entirely — and a resume that IS possible would be reported as impossible on every turn.
-     *
-     * An image with no Cursor pack answers false, which is right rather than merely convenient: without the
-     * runtime the resume could not happen whatever the store says. */
-    holdsSession: async (_services, sessionId, cwd) => {
-        const sdk = await cursorSdk();
-        if (sdk === undefined) {
-            return false;
-        }
-        return sdk.Agent.list({ runtime: "local", cwd })
-            .then((result) => result.items.some((agent) => agent.agentId === sessionId))
-            .catch(() => false);
-    },
-};
-
-const ACP_ADAPTER: AgentAdapter<"acp"> = {
-    runtime: "acp",
-    preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
-    /* An ACP agent carries its own credentials, installed IS runnable, so the only thing that can be wrong is
-     * that nothing is installed. Per-agent liveness (does its binary still spawn) is deliberately not probed
-     * here: it would mean spawning every installed agent on a timer, and the pool already reports a spawn
-     * failure as the turn's own coded refusal. */
-    health: async (services) => {
-        const installed = await attempt(() => services.capabilities.list());
-        if (installed === undefined) {
-            return unknown();
-        }
-        return installed.some((capability) => capability.kind === "agent")
-            ? ready()
-            : unavailable("Add an Agent capability to run an ACP agent here.");
-    },
-    /* An ACP session lives inside the agent's own process and there is no store to ask from out here, so this
-     * answers for the only case that reaches a turn: the pool spawns the agent, and it either replays the
-     * session or says it cannot (acp/acp-agent.ts asks it directly, at resume time). Answering "gone" from
-     * here would retire every ACP session on a daemon that simply cannot see them. */
-    holdsSession: async () => true,
-};
-
-const PI_ADAPTER: AgentAdapter<"pi"> = {
-    runtime: "pi",
-    preflight: (services, input, context, installed) => planPiTurn(services, input, context, installed),
-    /* Two things have to hold, and each is a different fix: the reserved `pi` capability must be installed
-     * (Setup ▸ Extend), and its command must resolve on PATH. Pi ships as an npm package the capability's
-     * image fragment bakes in, so a card added before the rebuild is exactly the state this names. Probed on
-     * the command's head, the OpenCode precedent. */
-    health: async (services) => {
-        const installed = await attempt(() => services.capabilities.list());
-        if (installed === undefined) {
-            return unknown();
-        }
-        const capability = installed.find((entry) => entry.kind === "agent" && entry.id === PI_PROVIDER);
-        if (capability === undefined || capability.kind !== "agent") {
-            return unavailable("Add the Pi Agent capability to run Pi here.");
-        }
-        const head = capability.config.command.trim().split(/\s+/)[0] ?? "";
-        return (await onPath(head)) ? ready() : unavailable(`\`${head}\` is not on PATH, rebuild the sandbox so the Pi install lands in the image.`);
-    },
-    /* A Pi session is a JSONL file (the id on the wire IS its path, pi/pi-agent.ts), so whether a resume can
-     * still happen is whether the file is still there. Asked of the filesystem rather than of Pi, because
-     * there is no process between turns to ask. */
-    holdsSession: async (_services, sessionId) => {
-        try {
-            await access(sessionId);
-            return true;
-        } catch {
-            return false;
-        }
-    },
-};
-
-export const ADAPTERS: readonly AgentAdapter[] = [
-    CLAUDE_CODE_ADAPTER,
-    CODEX_ADAPTER,
-    CURSOR_ADAPTER,
-    OPENCODE_ADAPTER,
-    OPENCODE_GEMINI_ADAPTER,
-    ACP_ADAPTER,
-    PI_ADAPTER,
-];
-
-const BY_RUNTIME = new Map(ADAPTERS.map((adapter) => [adapter.runtime, adapter]));
+// Every adapter, for the surfaces that iterate them (the health sweep, the registry's own test).
+export const allAdapters = (): readonly AgentAdapter[] => [...byRuntime().values()];
 
 /* The adapter serving a (provider, harness) pair. Total by construction: `runtime` is a closed union on the
  * contract's own record, and the table above covers it, adapter-registry.test.ts walks every pair and demands
  * one, the same guard agent-catalog.test.ts applies to the records themselves. */
 export const adapterFor = (provider: AgentProvider, harness: AgentHarness): AgentAdapter =>
-    BY_RUNTIME.get(capabilitiesOf(provider, harness).runtime) as AgentAdapter;
+    byRuntime().get(capabilitiesOf(provider, harness).runtime) as AgentAdapter;

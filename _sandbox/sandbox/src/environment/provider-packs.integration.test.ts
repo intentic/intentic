@@ -5,7 +5,8 @@ import { expect, test } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { packFragment } from "./packs.js";
-import { codexConnected, providerPackFragments } from "./provider-packs.js";
+import { codexConnected } from "../codex/codex-provider.js";
+import { providerPackFragments } from "./provider-packs.js";
 
 /* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. The
  * assertions compare against packFragment() through the same default stamp dir the source itself reads, so

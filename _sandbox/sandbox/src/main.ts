@@ -26,12 +26,11 @@ import { onPath } from "./platform/on-path.js";
 import { DOCKER_PANEL_KEY, startDockerdIfEnabled } from "./capabilities/handlers/docker.js";
 import { localModelPanelKey, startLocalModelsIfEnabled } from "./capabilities/handlers/localmodel.js";
 import { writeAgentToken } from "./auth/agent-token.js";
-import { startClaudeRefresh } from "./claude/claude-credentials.js";
 import { createCiPoller } from "./ci/poller.js";
 import { restoreExits } from "./exit/exit-links.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
-import { writeCodexConfig } from "./codex/codex-config.js";
 import { AGENT_SIGNALS_DIR, watchDelegationSignals } from "./agent/delegation-signals.js";
+import { startProviderBoot } from "./agent/provider-registry.js";
 import { createServices } from "./composition.js";
 import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
@@ -281,34 +280,13 @@ const main = async (): Promise<void> => {
         );
     });
 
-    /* The sandbox-wide CODEX_HOME's config.toml: privacy hardening plus, when a translator is baked, the
-     * `translator` model_provider on the ChatGPT subscription, the default that serves the Claude agent's shell
-     * delegation (its freeform `codex exec` can't pass per-turn overrides). Best-effort; authoritative overwrite.
-     *
-     * "Baked" is the BINARY, not TRANSLATOR_URL. The runner sets that URL on every image, so on a core one it
-     * would select a model_provider nothing is listening on and every delegated `codex exec` would fail against
-     * a dead port. Empty instead ⇒ Codex's own OPENAI_API_KEY provider, which is the one credential such a
-     * sandbox may still have. */
-    void (async () => {
-        if (!role.roots) {
-            return;
-        }
-        const translatorUrl = (await onPath("cli-proxy-api")) ? config.translator.url : "";
-        await writeCodexConfig(join(services.authRoot, "codex"), translatorUrl, AGENT_SIGNALS_DIR);
-    })().catch((error: unknown) => logger.warn({ err: error }, "codex config not written"));
-
-    /* Cursor's command gate: the socket its runtime calls back into before running a shell command, and the
-     * machine-wide hooks file that points at it (cursor/cursor-hooks.ts).
-     *
-     * Started unconditionally rather than gated on the Cursor pack being present, unlike the translator above,
-     * and the asymmetry is deliberate. The translator gate exists because spawning a missing BINARY fails
-     * ENOENT into a restart ladder; there is no process here, only a listening socket and two files, so the
-     * cost of arming it on an image with no Cursor is a few kilobytes. What it buys is that the gate is
-     * already in place the moment a pack IS installed, rather than only after the next daemon restart —
-     * and an installed pack whose rules silently did not apply until a restart is the worst version of this. */
-    if (role.container) {
-        void services.cursorHooks.start().catch((error: unknown) => logger.warn({ err: error }, "cursor command gate not started"));
-    }
+    /* Every provider's boot tasks — the Codex config write, Cursor's command-gate socket, Claude's refresh
+     * timers, the OpenCode warm-up — declared by each provider's own module and iterated here
+     * (agent/provider-registry.ts). One loop instead of four blocks scattered through this function, so a new
+     * provider's boot is a field on its module rather than a block a reviewer has to find the right place for.
+     * Each task is fire-and-forget and best-effort by the seam's contract: a provider that cannot start is its
+     * own log line, never a failed daemon. */
+    startProviderBoot(services, role, logger);
 
     // The other end of those hooks: fold what delegated CLIs report (their session id, blocked, their last
     // words) into the subagent roster. Best-effort like the config write above, a sandbox without the spool
@@ -1147,48 +1125,12 @@ const main = async (): Promise<void> => {
     // it, and its stranded checkouts are reclaimed (agents/vanished-repos.ts explains what leaving them costs).
     shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
 
-    // Rotate Claude subscription tokens on a quiet timer rather than letting a burst of turn starts discover the
-    // expiry together. Anthropic rotates refresh tokens and revokes the whole family on a replay, so the goal is
-    // for a turn to never be the thing that triggers a refresh, the locking in claude-credentials is the
-    // backstop for when it is anyway.
-    if (role.roots) {
-        startClaudeRefresh(services.claudeStore);
-    }
-
-    // Read every Claude account's plan limits now, and every few minutes after. The account list waits on its
-    // own sweep, so this is for the readings nobody is looking at: which account an unattributed turn runs on is
-    // decided by what is on file (accountWithHeadroom), and before this the file only ever knew about accounts
-    // that had recently run a turn, so an account another Claude Code had spent all week still looked like the
-    // one with the most room.
-    services.claudeUsage.start();
-
     // Warm the resident search engine (sweep + symbols + the embedding backlog) so the first search hits a ready
     // index. Incremental, a valid on-disk index survives boot instead of being dropped and rebuilt, and it runs
     // on the engine's own worker thread: this used to be minutes of parse/chunk/SQLite work on THIS loop, which
     // put every browser request behind it (seconds each, for 0.4 kB reads) for as long as a boot re-index took.
     // Awaiting it is just an observation point; nothing here blocks on it.
     void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"));
-
-    /* Warm the Grok provider's OpenCode server at boot instead of lazily on the first /grok/oauth/start. The cold
-     * `opencode serve` spawn is CPU-heavy; in a constrained container it can deschedule the daemon long enough to
-     * stall the /events heartbeat past the browser's watchdog, flashing the UI to "connecting" mid-session, which
-     * unmounts the account page and aborts the in-flight Grok connect. At boot that spike hides behind the initial
-     * connect screen. Best-effort: ensure() is idempotent, so the first interactive call reuses this warm client.
-     *
-     * Warming is for a provider somebody USES, so it waits on the xAI credential OpenCode itself persists, a
-     * sandbox that has never connected Grok was paying a ~175 MB bun spawn on every boot to hold a server for a
-     * provider with no account behind it. And on a core image the binary is a pack away (packs/opencode.Dockerfile),
-     * where the spawn only ever ends in the SDK's start timeout; the lazy path a connect takes says so properly. */
-    void (async () => {
-        if (!(await services.openCode.connected("xai"))) {
-            return;
-        }
-        if (!(await onPath("opencode"))) {
-            logger.info("opencode: the binary is not in this image, add it by rebuilding from the Environment card");
-            return;
-        }
-        await services.openCode.client();
-    })().catch((error: unknown) => logger.warn({ err: error }, "opencode warmup failed, first grok connect boots it lazily"));
 
     /* Nothing to enumerate: every subsystem registered itself where it was created. The store keeps going past
      * a member that throws and reports the failures together, so one misbehaving stop cannot strand the ports

@@ -11,21 +11,12 @@ import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { bearerFrom, ForbiddenError } from "../auth/auth.js";
 import { secretsContract } from "@intentic/sandbox-contract";
+import { providerSecretEntries } from "../agent/provider-registry.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { stateRelPath } from "../workspace/state-paths.js";
 
 // One connected provider account as an inventory entry (never a value, provider tokens are not revealable).
-const providerAccountEntry = (provider: string, providerName: string, id: string, label: string, storedAt: string): SecretInventoryEntry => ({
-    key: `${provider}:${id}`,
-    kind: "provider",
-    label: `${providerName} · ${label}`,
-    status: "connected",
-    requiredBy: [],
-    storedAt,
-    revealable: false,
-});
-
 /* Upsert KEY=value into a .env's text. Parsed and re-serialized with Node's own env parser (the same one the
  * CLI loads the file with), so multi-line secrets (SSH private keys) survive the round-trip. The file is
  * machine-managed (only the daemon writes it), so re-serializing is lossless.
@@ -56,10 +47,11 @@ export const removeEnv = (content: string, key: string): string => {
 // The KEYS present in a .env's text (for the UI's "✓ set" badges), never the values.
 export const envKeys = (content: string): string[] => Object.keys(parseEnv(content));
 
-export type SecretsRoutesDeps = Pick<
-    Services,
-    "auth" | "capabilities" | "claudeStore" | "cliProxy" | "config" | "files" | "intentic" | "logger" | "openCode" | "secretUses" | "workspace"
->;
+/* The whole Services, no longer a Pick: the inventory hands `services` on to every provider module's
+ * secretEntries (provider-registry.ts), and the composition header's own rule applies — take the whole thing
+ * where you pass the whole thing on; a Pick of whatever the six modules happen to read would be a
+ * transcription that goes stale with every module edit. */
+export type SecretsRoutesDeps = Services;
 
 /* The use ledger's newest row for one inventory entry. Env/generated entries are keyed by the exact name a
  * reference carries; a capability entry is ONE row for a vault that may hold several named fields
@@ -142,13 +134,14 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             return { ok: true } as const;
         }),
         inventory: i.inventory.handler(async () => {
-            const [repoEntries, capabilities, connectors, claudeAccounts, translatorAccounts, grokConnected, uses] = await Promise.all([
+            const [repoEntries, capabilities, connectors, providerEntries, uses] = await Promise.all([
                 existsSync(desiredState()) ? collectSecretInventory(desiredState()) : [],
                 services.capabilities.list(),
                 contributionRegistry(services),
-                services.claudeStore.list(),
-                services.cliProxy.accounts(),
-                services.openCode.connected("xai"),
+                // Every provider's connected-account rows, from the modules themselves (provider-registry.ts).
+                // This list was hand-kept here and wrong twice — Kimi's rows never existed and Cursor's were
+                // forgotten the week it landed — which is the exact omission the registry exists to end.
+                providerSecretEntries(services),
                 services.secretUses.all().catch(() => [] as const),
             ]);
             const capabilityEntries: SecretInventoryEntry[] = capabilities
@@ -166,21 +159,6 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                     storedAt: stateRelPath(".intentic/secrets/auth/", "capability-secrets.json"),
                     revealable: true,
                 }));
-            // One entry per connected account.
-            const providerEntries: SecretInventoryEntry[] = [
-                ...claudeAccounts.map((a) =>
-                    providerAccountEntry("claude", "Claude", a.id, a.label, stateRelPath(".intentic/secrets/auth/", "claude", `${a.id}.json`)),
-                ),
-                // Codex and Gemini authenticate through the translator on subscriptions, one auth file per
-                // connected account in the cliproxy auth-dir, its name doubling as the entry id.
-                ...translatorAccounts.codex.map((a) =>
-                    providerAccountEntry("codex", "ChatGPT", a.name, a.label, stateRelPath(".intentic/secrets/auth/", "cliproxy")),
-                ),
-                ...translatorAccounts.gemini.map((a) =>
-                    providerAccountEntry("gemini", "Gemini", a.name, a.label, stateRelPath(".intentic/secrets/auth/", "cliproxy")),
-                ),
-                ...(grokConnected ? [providerAccountEntry("grok", "Grok", "xai", "Grok", stateRelPath(".intentic/secrets/auth/", "opencode"))] : []),
-            ];
             // The use ledger's newest row per entry, joined in, the inventory is where "when did the agent
             // last spend this" is answered, so the ledger never needs its own surface.
             const lastByName = lastUseByName(uses);

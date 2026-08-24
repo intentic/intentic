@@ -48,7 +48,6 @@ import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AgentRequest, runAgent } from "./agent/agent.js";
-import { createProviderCatalogs, type ProviderCatalog } from "./agent/provider-catalogs.js";
 import { cliProxyAuthDir, type CliProxyClient, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/translator.js";
 import { type ApprovalsStore, fileApprovalsStore } from "./automations/approvals-store.js";
 import { type AutomationsStore, fileAutomationsStore } from "./automations/automations-store.js";
@@ -82,19 +81,9 @@ import {
 import { fileBrowserAccess } from "./auth/browser-access.js";
 import { createAuthConnections, type AuthConnections } from "./auth/connections.js";
 import { createSessions, type MintedSession } from "./auth/session.js";
-import { createClaudeCatalog } from "./claude/claude-models.js";
-import { type ClaudeStore, fileClaudeStore } from "./claude/claude-credentials.js";
-import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude/claude-seats.js";
+
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
-import { type ClaudeUsageRefresher, createClaudeUsageRefresher } from "./usage/claude-usage.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
-import { createCodexAgent } from "./codex/codex-agent.js";
-import { type CodexCatalog, createCodexCatalog } from "./codex/codex-catalog.js";
-import { createCursorAgent } from "./cursor/cursor-agent.js";
-import { createCursorCatalog, type CursorCatalog } from "./cursor/cursor-catalog.js";
-import { type CursorStore, fileCursorStore } from "./cursor/cursor-credentials.js";
-import { createCursorHookService, type CursorHookService } from "./cursor/cursor-hooks.js";
-import { codexThreadExists } from "./sessions/codex-sessions.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
@@ -146,10 +135,14 @@ import { fetchRemote, pullRemote, pushBranch, remoteState } from "./git/remote.j
 import { remoteProjectOf } from "./git/remote-urls.js";
 import { publishFile } from "./git/publish-file.js";
 import { type EndpointCatalog, createEndpointCatalog } from "./endpoints/endpoint-catalog.js";
-import { createGeminiCatalog } from "./gemini/gemini-catalog.js";
-import { createGrokAgent, createGrokRunner } from "./grok/grok-agent.js";
-import { createOpenCodeService, OPENCODE_GEMINI_PROVIDER, type OpenCodeService } from "./grok/opencode.js";
-import { createKimiCatalog } from "./kimi/kimi-catalog.js";
+import { createOpenCodeService, type OpenCodeService } from "./grok/opencode.js";
+import { type ClaudeSlice, createClaudeSlice } from "./claude/claude-provider.js";
+import { type CodexSlice, createCodexSlice } from "./codex/codex-provider.js";
+import { createCursorSlice, type CursorSlice } from "./cursor/cursor-provider.js";
+import { createGeminiSlice, type GeminiSlice } from "./gemini/gemini-provider.js";
+import { createGrokSlice, type GrokSlice } from "./grok/grok-provider.js";
+import { createKimiSlice, type KimiSlice } from "./kimi/kimi-provider.js";
+import { type ProviderCatalog, providerCatalogsOf } from "./agent/provider-registry.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -233,7 +226,12 @@ import { createDependencyCoordinator, type DependencyCoordinator } from "./works
  * onward to machinery that legitimately reaches most of it. A `Pick` of forty members there would be a
  * transcription of `Services` that goes stale, which is the exact failure this file's fakes used to have. Take
  * the whole thing where you pass the whole thing on; name what you use where you use a few. */
-export interface Services {
+/* The daemon's whole wiring, one interface. The per-provider members arrive by EXTENSION: each provider
+ * directory declares the slice of Services it contributes (its stores, catalogs, gates and runtime entry
+ * point) beside the code that implements them, and composition merely spreads the slices in. Adding a
+ * provider therefore adds an `extends` clause and a spread here, never a block of members whose docs live a
+ * package away from their owners (agent/provider-module.ts is the seam). */
+export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlice, GeminiSlice, KimiSlice {
     readonly config: Config;
     readonly logger: Logger;
     /* The sink for what the BROWSER reports about itself (logs/client.jsonl), separate from `logger` above
@@ -436,35 +434,21 @@ export interface Services {
     // Sends those notifications. `notifyIfAway` (the turn/approval triggers) is suppressed while anyone is
     // actively watching; `notify` (the settings test button) always fires.
     readonly pushSender: PushSender;
-    // Claude subscription accounts (one <id>.json per account under .intentic/secrets/auth/claude), several per sandbox.
-    readonly claudeStore: ClaudeStore;
-    // Which of those accounts an organization has switched Claude Code off for (claude/seats.json, beside them).
-    // Kept apart from the account record because that record is rewritten whole on every token rotation, by every
-    // sandbox sharing the auth dir, see claude-seats.ts. The picker skips a refused seat outright.
-    readonly claudeSeats: ClaudeSeatStore;
     // The latest plan-limit snapshot per account of ANY provider (historyRoot/account-usage.json). streamAgent
     // records what a Claude turn's stream reports and the translator client records what it pulls for the
     // routed subscriptions; /claude/accounts and /translator/accounts each merge it into their own rows, so
     // every account the user can see reports its headroom from one place.
     readonly accountUsage: AccountUsageStore;
-    // Keeps the Claude half of that store current for accounts NO turn is running on, the native counterpart
-    // to cliProxy.refreshUsage. /claude/accounts waits on it (briefly) so a Usage tab reports what claude.ai
-    // would report at that moment rather than what was true at the end of the last turn.
-    readonly claudeUsage: ClaudeUsageRefresher;
     // The last time each PROVIDER refused a turn outright (historyRoot/provider-refusals.json), a spent plan or
     // a credential the API would not take. The observed counterpart to the polled snapshot above: streamAgent
     // records it from the turn that was refused, and /agent/refusals serves it to the account surfaces, which
     // read the two together (a healthy meter beside a fresh refusal means the meter is stale).
     readonly providerRefusals: ProviderRefusalStore;
     // Every native provider's live model catalog, keyed by provider, what /providers/{provider}/models serves
-    // the picker, what the quick model compares over, and what a routed turn validates its pick against. One
-    // table rather than a field per provider, so those three readers do a lookup instead of each growing its own
-    // chain over the five; see provider-catalogs.ts for what a catalog owes and what stays provider-specific.
+    // the picker, what the quick model compares over, and what a routed turn validates its pick against.
+    // ASSEMBLED from the provider modules (agent/provider-registry.ts), so those readers do a lookup instead
+    // of each keeping its own enumeration of the providers.
     readonly providerCatalogs: Record<NativeProvider, ProviderCatalog>;
-    // OpenAI/Codex's catalog is ALSO held directly, unlike the other four: a native Codex turn resolves its model
-    // here so it never sends the SDK's rejected gpt-5-codex default, and a turn's self-heal `record`s the ids the
-    // subscription proved valid. Neither is a question the shared table asks.
-    readonly codexModels: CodexCatalog;
     // What each `endpoint` capability's own server publishes, the user's model APIs, wherever they run. Keyed by
     // capability id because these are user-created and unbounded, unlike the fixed native catalogs above, and
     // there is no seed floor: only the server can say what it serves. Read by the picker route, by the capability
@@ -474,24 +458,6 @@ export interface Services {
     // (codex → ChatGPT, grok → SuperGrok, kimi → Kimi Code, gemini → Google). Codex, Kimi and Gemini have no
     // other credential. /translator drives the connect; streamAgent reads `accounts` to gate a routed turn.
     readonly cliProxy: CliProxyClient;
-    // The sandbox-wide CODEX_HOME (sessions + the config.toml selecting the translator provider). The codex
-    // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
-    readonly codexHome: string;
-    // Whether a Codex thread's rollout still exists in the sandbox-wide CODEX_HOME, so a resume of a
-    // deleted/lost thread opens a fresh thread seeded from the record instead of failing opaquely mid-turn.
-    readonly codexThreadExists: (threadId: string) => Promise<boolean>;
-    // Cursor subscription accounts (one <id>.json per account under .intentic/secrets/auth/cursor), several
-    // per sandbox. The sandbox owns the credential outright here: Cursor's sign-in mints a user API key and
-    // this store is the only copy, so there is no vendor-side auth file the way OpenCode holds xAI's.
-    readonly cursorStore: CursorStore;
-    // Cursor's live model catalog, held directly as well as in the table above for the reason Codex's is: a
-    // Cursor turn MUST resolve a concrete model (the SDK has no default of its own) and it needs the vendor's
-    // own parameter record for that id to translate an effort tier. Neither is a question the shared table asks.
-    readonly cursorModels: CursorCatalog;
-    // The socket-backed command gate Cursor's own runtime calls out to before it runs a shell command, and the
-    // registry of which live turn each consult belongs to (cursor/cursor-hooks.ts). One per daemon, because the
-    // hooks file that names it is machine-global.
-    readonly cursorHooks: CursorHookService;
     // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
     // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
     readonly openCode: OpenCodeService;
@@ -501,16 +467,11 @@ export interface Services {
     // Daemon-owned workspace snapshots on /history (outside the agent's reach): auto-captured per turn + on an
     // interval, diffed and restored through the /history routes.
     readonly history: WorkspaceHistory;
-    // The provider adapters, one function shape, four native agent runtimes. streamAgent picks per turn.
+    /* The Claude Code loop, the one adapter that is NOT a provider slice's: it serves native Claude turns,
+     * Kimi (which has no runtime of its own), every routed provider under the claude-code harness, and every
+     * endpoint capability, so no single provider may own it. The other native runtimes' entry points arrive
+     * through the slices this interface extends (see the provider modules). */
     readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    readonly codexAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    readonly grokAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    // Gemini's native runtime: the SAME OpenCode loop grokAgent runs on, bound to a different model backend,
-    // which is why it is built from the same factory rather than being a fourth adapter file.
-    readonly geminiAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
-    // Cursor's runtime, run IN THIS PROCESS through @cursor/sdk rather than as a child, which is why it takes
-    // no spawner and why its worktree isolation is by working directory (see the capability record).
-    readonly cursorAgent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
     // The generic ACP adapter serving every `agent`-kind capability (any provider id outside NATIVE_PROVIDERS);
     // streamAgent resolves the capability and passes it in. The pool keeps one warm subprocess per agent.
     readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
@@ -752,9 +713,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // concurrent sandboxes can race a token refresh (recoverable: reconnect once), split auth.json out /
     // per-provider locks if either bites.
     const authRoot = config.agentAuthDir !== "" ? config.agentAuthDir : statePath(workspace.root, ".intentic/secrets/auth/");
-    // Base dir under which each Codex account gets its own CODEX_HOME (`<authRoot>/codex/<id>`); also the
-    // adapter's default (the OPENAI_API_KEY fallback home when a turn resolved no account).
-    const codexBase = join(authRoot, "codex");
     // Hoisted because two services share it: the turn stream records Claude's readings into it, and the
     // translator client both reads and records the routed subscriptions' through the same file.
     const accountUsage = fileAccountUsageStore(join(config.historyRoot, "account-usage.json"));
@@ -767,16 +725,18 @@ export const createServices = (config: Config, logger: Logger): Services => {
         authDir: cliProxyAuthDir(authRoot),
         usageStore: accountUsage,
     });
-    // Hoisted above the OpenCode service (it is also a row in the provider table below): Gemini's NATIVE runtime
-    // is that same OpenCode loop pointed at the translator, and OpenCode fixes provider config at spawn, so the
-    // model ids have to be readable by the time it boots.
-    const geminiModels = createGeminiCatalog(config, join(authRoot, "gemini", "models.json"));
-    // Referenced twice below: as the openCode service field and to build the Grok adapter's runner. Its data dir
-    // (OpenCode's XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts.
-    //
-    // Gemini brings no credential of its own here, the translator holds Google's, exactly as it does for a
-    // Gemini turn on the Claude Code harness. An unbaked translator (the dev profile) leaves the config absent
-    // and the loop serves Grok alone.
+    /* The OpenCode server and the Gemini slice hold references to EACH OTHER, and the knot is real rather
+     * than an ordering accident: OpenCode's spawn config re-serves Gemini's model ids as an OpenAI-compatible
+     * backend, and Gemini's runtime is the OpenCode loop. The model read below is lazy (it runs when the
+     * server boots, in main's provider boot pass, long after this function returned), so the forward
+     * reference is safe — the extensionBackend holder two pages down is the same pattern for the same reason.
+     *
+     * OpenCode itself stays CORE rather than becoming Grok's: one warm server serves Grok's turns, Gemini's
+     * native runtime and the delegation watchers, so no single provider may own it. Its data dir (OpenCode's
+     * XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts. Gemini brings no
+     * credential of its own here — the translator holds Google's, exactly as for a routed turn; an unbaked
+     * translator (the dev profile) leaves the config absent and the loop serves Grok alone. */
+    let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
         // Where a non-isolated conversation delegates from, and so the one directory whose delegation watcher is
         // worth opening at boot, event streams are per-directory, and a turn registers its own worktree itself.
@@ -788,10 +748,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
                       baseUrl: config.translator.url,
                       token: config.translator.token,
                       models: async () =>
-                          (await geminiModels.models()).models.map((model) => ({ id: model.id, inputModalities: model.inputModalities })),
+                          (await gemini.geminiModels.models()).models.map((model) => ({ id: model.id, inputModalities: model.inputModalities })),
                   },
               }),
     });
+    gemini = createGeminiSlice({ config, authRoot, openCode });
     const info =
         config.sandbox.name !== "" && config.sandbox.image !== ""
             ? {
@@ -834,33 +795,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
           }
         : undefined;
 
-    const claudeStore = fileClaudeStore(join(authRoot, "claude"), logger);
-    const claudeSeats = fileClaudeSeatStore(join(authRoot, "claude", "seats.json"), logger);
-    // Reads each Claude account's plan limits into the store above. Hoisted here because two callers share it:
-    // /claude/accounts waits on a sweep before answering, and main.ts keeps one running on a timer.
-    const claudeUsage = createClaudeUsageRefresher({ store: claudeStore, usage: accountUsage });
-
-    // Hoisted because it is BOTH a row in the provider table below and a member in its own right: a native Codex
-    // turn resolves its model from it, and a turn's self-heal records the ids the subscription proved valid.
-    // Claude's, Kimi's and Gemini's are locals, the table is the only thing that reads them.
-    const codexModels = createCodexCatalog(config, join(codexBase, "models.json"));
-    // Hoisted for the same two reasons Codex's catalog is, and one more: the catalog needs the STORE, because
-    // Cursor's model list is an entitlement rather than a public list, so it can only be read through a
-    // connected account's own key.
-    const cursorStore = fileCursorStore(join(authRoot, "cursor"), logger);
-    const cursorModels = createCursorCatalog(cursorStore, join(authRoot, "cursor", "models.json"));
-    // The command gate Cursor's runtime calls back into. Sited beside the credentials rather than in a temp
-    // dir: the socket is the authority to answer a permission card, so it belongs in the one tree this
-    // workspace already treats as secret.
-    const cursorHooks = createCursorHookService(join(authRoot, "cursor"), logger);
-    const providerCatalogs = createProviderCatalogs({
-        claude: createClaudeCatalog(claudeStore, config, workspace.root, join(authRoot, "claude", "models.json")),
-        codex: codexModels,
-        cursor: cursorModels,
-        gemini: geminiModels,
-        kimi: createKimiCatalog(cliProxy),
-        openCode,
-    });
+    /* The provider slices: each provider directory builds its own Services members (agent/provider-module.ts
+     * is the seam), and this function's whole part in it is these calls and the spreads in the literal below.
+     * The Gemini slice is built beside OpenCode above, whose knot it is part of. */
+    const claude = createClaudeSlice({ config, logger, authRoot, workspaceRoot: workspace.root, accountUsage });
+    const codex = createCodexSlice({ config, authRoot });
+    const cursor = createCursorSlice({ authRoot, logger });
+    const grok = createGrokSlice(openCode);
+    const kimi = createKimiSlice(cliProxy);
 
     // Hoisted: the members below that measure themselves (the worktree op chains, the git routes' Changes scan)
     // must file into the SAME tracker the summary line reads, or each would rank its own slice in isolation.
@@ -1024,7 +966,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
         turnAnchors,
         root: workspace.root,
-        codexHome: codexBase,
+        codexHome: codex.codexHome,
         sessionIdOf: agents.sessionIdOf,
         readClaudeSession: readWorkspaceSession,
     };
@@ -1256,30 +1198,29 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
-        claudeStore,
-        claudeSeats,
+        // The provider slices, whole: their members' docs live on the slice interfaces, beside the code.
+        ...claude,
+        ...codex,
+        ...cursor,
+        ...grok,
+        ...gemini,
+        ...kimi,
         accountUsage,
-        claudeUsage,
         providerRefusals: fileProviderRefusalStore(join(config.historyRoot, "provider-refusals.json")),
-        providerCatalogs,
-        codexModels,
+        // Assembled from the provider modules, LATE-BOUND through the same holder the extension backend uses:
+        // the record is a member of the object its thunks read from, and the thunks only run per request.
+        providerCatalogs: providerCatalogsOf(() => {
+            if (servicesHolder.current === undefined) {
+                throw new Error("provider catalog read before services finished composing");
+            }
+            return servicesHolder.current;
+        }),
         endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
         cliProxy,
-        codexHome: codexBase,
-        codexThreadExists: (threadId) => codexThreadExists(codexBase, threadId),
         openCode,
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
         agent: runAgent,
-        codexAgent: createCodexAgent({ codexHome: codexBase }),
-        cursorStore,
-        cursorModels,
-        cursorHooks,
-        cursorAgent: createCursorAgent({ catalog: cursorModels, hooks: cursorHooks, logger }),
-        grokAgent: createGrokAgent(createGrokRunner(openCode)),
-        // One warm OpenCode server serves both, so the runner is the same shape, only the model backend the
-        // prompt names differs (opencode.ts registers it as an OpenAI-compatible provider on the translator).
-        geminiAgent: createGrokAgent(createGrokRunner(openCode), OPENCODE_GEMINI_PROVIDER),
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,
         // Pi sessions sit beside the other AI-provider state under authRoot, so a dev sandbox pointing

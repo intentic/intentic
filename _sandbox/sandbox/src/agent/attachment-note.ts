@@ -46,3 +46,10 @@ export const stripAttachmentNote = (text: string): { text: string; attachments: 
     }
     return { text: at === 0 ? "" : text.slice(0, at), attachments: lines.map((line) => line.slice(2)) };
 };
+
+// Attachments ride as absolute paths on the request; every adapter takes them the same way and decides for
+// itself whether they become native image inputs or a file list in the prompt. Here rather than in turn-plan
+// because the provider arms live in their provider directories now, and this file is already the one home for
+// "how attachments reach a runtime".
+export const withAttachments = <R extends { readonly attachments?: readonly string[] }>(request: R, paths: readonly string[]): R =>
+    paths.length > 0 ? { ...request, attachments: [...paths] } : request;

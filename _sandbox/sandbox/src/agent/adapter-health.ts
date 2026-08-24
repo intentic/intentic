@@ -1,7 +1,7 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import type { AdapterHealth } from "./adapter.js";
-import { ADAPTERS } from "./adapter-registry.js";
+import { allAdapters } from "./adapter-registry.js";
 
 /* CAN EACH RUNTIME SERVE A TURN, asked on a timer, answered from cache.
  *
@@ -34,7 +34,7 @@ export const runtimeHealth = (): RuntimeHealth | undefined => cached;
  * logs an unhandled rejection every five minutes. */
 const refreshRuntimeHealth = async (services: Services): Promise<void> => {
     const entries = await Promise.all(
-        ADAPTERS.map(async (adapter) => {
+        allAdapters().map(async (adapter) => {
             // try/catch, not `.catch()`: an adapter that threw before returning a promise would have nothing to
             // attach to and the throw would escape into this background timer, see adapter-registry's attempt.
             let health: AdapterHealth;
