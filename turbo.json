@@ -218,5 +218,17 @@
     "remoteCache": {
         "enabled": false
     },
-    "concurrency": "200%"
+    /* AN ABSOLUTE TASK COUNT, never a percentage: turbo resolves a percentage against the HOST's logical
+     * processor count, and a container bounds memory, not cpus. Inside the sandbox "200%" therefore read as 32
+     * parallel tasks against a 16-core host while the cgroup capped RAM alone, so one `typecheck` fanned out 15
+     * concurrent `vue-tsc` at ~700 MiB each. That peak does not fit any cap localSandboxMemory hands out: the box
+     * pinned at its memory ceiling, logged 5.3M allocation stalls, spent 87% of wall-clock inside reclaim, and
+     * every agent session sharing it livelocked while the host's own OOM killer shot the owner's dev server.
+     *
+     * Four holds the fan-out peak near 2.8 GiB, inside the 6 GiB floor that a 20 GiB WSL guest yields, which is
+     * the binding constraint on every machine this repo builds on. It is deliberately NOT tuned to the roomiest
+     * host: the number has to be safe where the box is smallest, and a `typecheck` that finishes slowly beats one
+     * that thrashes forever. A machine with headroom to spare raises it for one run through TURBO_CONCURRENCY
+     * rather than by loosening the default here. */
+    "concurrency": "4"
 }
