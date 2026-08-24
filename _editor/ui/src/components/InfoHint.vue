@@ -119,11 +119,16 @@ onBeforeUnmount(hide);
         </span>
         <!-- Into the TRIGGER's document, which is not this module's when the app has drawn the hint elsewhere. -->
         <Teleport v-if="trigger !== undefined" :to="trigger.ownerDocument.body">
+            <!-- THE TOOLTIP TIER (1200), not a page-level z-50, and for the reason tooltip.css states: this is a
+                 hover card, so it is raised BY a control, and controls live inside overlays (1000) and modals
+                 (1100) as readily as on a page. At z-50 a hint on a control in either one teleported correctly,
+                 clamped correctly, and then painted BEHIND the panel that raised it, which looks exactly like a
+                 hint that never opened. Nothing in the app sits above this tier. -->
             <span
                 v-if="open"
                 ref="card"
                 role="tooltip"
-                class="pointer-events-none fixed z-50 w-72"
+                class="pointer-events-none fixed z-[1200] w-72"
                 :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
             >
                 <span class="block rounded-xl border border-line-strong bg-overlay p-4 text-left shadow-xl shadow-black/30">
