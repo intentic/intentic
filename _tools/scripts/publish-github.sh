@@ -23,7 +23,6 @@
 set -euo pipefail
 VERSION="${1:?usage: publish-github.sh <version>}"
 . "$(dirname "$0")/repo-root.sh"
-DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(repo_root)"
 
 REPO="${GITHUB_REPOSITORY:-intentic/intentic}"

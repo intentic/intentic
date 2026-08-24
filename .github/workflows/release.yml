@@ -370,6 +370,11 @@ jobs:
       actions: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Read by post-release-discord.sh, which .releaserc.json's successCmd runs once a release has actually
+      # shipped: user-facing highlights to the community server's #announcements. Optional — unset, the script
+      # says it skipped and the release is unaffected. The channel and this webhook were created by
+      # _tools/scripts/discord-community-setup.mjs.
+      DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
       # Not for signing — that happened where the installers were built. The assemble step reads it as the
       # switch that says "this release is signed", requiring both .sig files and writing latest.json.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
