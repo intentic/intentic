@@ -1,7 +1,9 @@
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
 };
+use tauri::webview::NewWindowResponse;
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
@@ -210,6 +212,29 @@ fn workspace_init_script(install_id: &str, update: Option<&str>) -> String {
     )
 }
 
+/// Whether a URL should stay inside the workspace webview. Everything else — a provider's token page, docs,
+/// mailto — is opened in the user's default browser instead.
+fn stays_in_webview(url: &Url, app_origin: &Url) -> bool {
+    match url.scheme() {
+        "http" | "https" => url.origin() == app_origin.origin(),
+        // intentic:// is handled before this is called.
+        "about" | "blob" | "data" | "javascript" => true,
+        _ => false,
+    }
+}
+
+/// Open a link in the default browser, off the webview thread. The workspace webview has no IPC surface, so
+/// this is the only way out for external links the SPA renders with target="_blank".
+fn open_in_browser(app: &AppHandle, url: &str) {
+    let app = app.clone();
+    let url = url.to_string();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = app.opener().open_url(&url, None::<&str>) {
+            eprintln!("could not open link in browser: {url} ({error})");
+        }
+    });
+}
+
 /// Open the workspace window, optionally at a path under the app origin rather than its root — which is how
 /// the sign-in handoff lands (`/desktop-auth/complete?handoff=…`): the webview does an ordinary HTTP round
 /// trip and the platform sets its session cookie on that origin, so no cookie is ever injected from Rust.
@@ -248,6 +273,11 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             .expect("static app url parses"),
     };
     let link_handler = app.clone();
+    let app_origin: Url = state.app_url().parse().unwrap_or_else(|_| {
+        crate::state::APP_URL
+            .parse()
+            .expect("static app url parses")
+    });
     let screen = work_area(app);
     let (size, min) = opening_bounds(screen.map(|screen| screen.size));
     let builder = WebviewWindowBuilder::new(app, WORKSPACE, WebviewUrl::External(url))
@@ -267,19 +297,34 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
             &install_id,
             crate::update::stage(app).ready_version(),
         ))
-        .on_navigation(move |url| {
-            if url.scheme() == "intentic" {
-                // Handle off the navigation callback — creating a window inside the webview's navigation
-                // event would re-enter the webview (WebView2 COM re-entrancy).
-                let app = link_handler.clone();
-                let link = url.to_string();
-                tauri::async_runtime::spawn(async move {
-                    // The one direction that is this app's own window navigating — the SPA's button.
-                    crate::handle_intentic_link(&app, &link, Source::App);
-                });
-                return false;
+        .on_navigation({
+            let link_handler = link_handler.clone();
+            let app_origin = app_origin.clone();
+            move |url| {
+                if url.scheme() == "intentic" {
+                    // Handle off the navigation callback — creating a window inside the webview's navigation
+                    // event would re-enter the webview (WebView2 COM re-entrancy).
+                    let app = link_handler.clone();
+                    let link = url.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        // The one direction that is this app's own window navigating — the SPA's button.
+                        crate::handle_intentic_link(&app, &link, Source::App);
+                    });
+                    return false;
+                }
+                if stays_in_webview(url, &app_origin) {
+                    return true;
+                }
+                open_in_browser(&link_handler, &url.to_string());
+                false
             }
-            true
+        })
+        .on_new_window({
+            let link_handler = link_handler.clone();
+            move |url, _features| {
+                open_in_browser(&link_handler, url.as_str());
+                NewWindowResponse::Deny
+            }
         });
     match builder.build() {
         Ok(window) => {
@@ -644,6 +689,52 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
                 park_setup(&handle, args);
             }
         });
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    fn origin(url: &str) -> Url {
+        url.parse().unwrap()
+    }
+
+    #[test]
+    fn same_origin_http_stays_in_the_webview() {
+        let app = origin("https://app.intentic.dev");
+        assert!(stays_in_webview(
+            &origin("https://app.intentic.dev/capabilities/github"),
+            &app
+        ));
+    }
+
+    #[test]
+    fn a_provider_token_page_leaves_the_webview() {
+        let app = origin("https://app.intentic.dev");
+        assert!(!stays_in_webview(
+            &origin("https://github.com/settings/tokens/new"),
+            &app
+        ));
+    }
+
+    #[test]
+    fn localhost_dev_origin_matches_itself() {
+        let app = origin("http://localhost:47146");
+        assert!(stays_in_webview(
+            &origin("http://localhost:47146/capabilities/github"),
+            &app
+        ));
+        assert!(!stays_in_webview(
+            &origin("https://github.com/settings/tokens/new"),
+            &app
+        ));
+    }
+
+    #[test]
+    fn mailto_leaves_the_webview() {
+        let app = origin("https://app.intentic.dev");
+        assert!(!stays_in_webview(&origin("mailto:support@intentic.dev"), &app));
+    }
 }
 
 #[cfg(test)]
