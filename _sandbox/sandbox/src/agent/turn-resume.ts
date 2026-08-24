@@ -72,6 +72,10 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
  * so the counter survives the death it is guarding against. */
 const MAX_RESUME_ATTEMPTS = 1;
 
+// What an interrupted turn that will not be re-run leaves in the durable transcript. The prompt itself comes
+// from the journal; this line makes the otherwise one-sided chat explain why there is no answer underneath it.
+const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.";
+
 /* HOW LONG A CARD MAY SAY "COMING BACK" BEFORE IT HAS TO STOP SAYING IT.
  *
  * The auth failure frame promises the client a renewal (autoResume: "scheduled"), and the fleet card holds
@@ -699,6 +703,27 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
         const spent = entry.attempts >= MAX_RESUME_ATTEMPTS;
         const stale = now - entry.startedAt > RESUME_MAX_AGE_MS;
         if (!autoResumeOnRestart || spent || stale) {
+            if (entry.kind === "turn") {
+                /* The shipped default is not to spend another turn automatically. That must not mean deleting
+                 * the only durable copy of the user's prompt: a first turn has no settled transcript yet and
+                 * native runtimes may not have reported a provider session id, so clearing the journal first
+                 * made the interrupted card impossible to open. Record the prompt and an honest ending, then
+                 * clear. If the append fails, keep the journal for the next boot instead of converting a
+                 * transient disk error into permanent loss. */
+                const recovered = await recordTurnTranscript(
+                    services,
+                    entry.turn,
+                    [{ kind: "error", message: RESTART_INTERRUPTED }],
+                    entry.startedAt,
+                );
+                if (!recovered) {
+                    services.logger.warn(
+                        { conversationId: entry.turn.conversationId },
+                        "interrupted turn transcript could not be recovered; journal entry was retained",
+                    );
+                    continue;
+                }
+            }
             await clearJournalled(services, entry);
             services.logger.info(
                 { entry: entry.kind, spent, stale, autoResumeOnRestart },

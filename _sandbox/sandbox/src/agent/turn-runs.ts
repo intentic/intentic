@@ -165,7 +165,7 @@ export interface RunOptions {
     // frame log: what a turn READS BACK as is the caller's shape to decide, not this pump's.
     // `startedAt` rides along because this pump is the only thing that knows it by the time the turn settles,
     // and the record stamps the user's message with when it was SENT rather than when its answer finished.
-    readonly transcript?: (events: readonly AgentEvent[], startedAt: number) => Promise<void>;
+    readonly transcript?: (events: readonly AgentEvent[], startedAt: number) => Promise<unknown>;
     // Side-channel preparation that must precede the provider (the transcript record's legacy adoption). A
     // caller passes a guarded promise: its failure may cost persistence, never the turn itself.
     readonly before?: Promise<unknown>;
@@ -315,7 +315,10 @@ export function startTurnRun(
              * finished. The cost is one turn missing from a conversation's history. */
             if (transcript !== undefined) {
                 try {
-                    void transcript(run.events, run.startedAt).catch(() => undefined);
+                    // Journal deletion is the commit point for a turn. Await the transcript before crossing it:
+                    // fire-and-forget opened a window where a crash could lose both the still-running journal
+                    // and the not-yet-appended transcript even though each file was durable on its own.
+                    await transcript(run.events, run.startedAt).catch(() => undefined);
                 } catch {
                     // Nothing to do and nowhere to report it, the turn is the thing that matters.
                 }

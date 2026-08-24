@@ -238,6 +238,26 @@ describe(`turn runs`, () => {
         await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
     });
 
+    it(`does not clear the recovery journal until the transcript append has committed`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const { calls, journal } = fakeJournal();
+        let commit!: () => void;
+        const transcript = vi.fn(
+            () =>
+                new Promise<boolean>((resolve) => {
+                    commit = () => resolve(true);
+                }),
+        );
+        startTurnRun(turnFn, turn(`c-transcript-commit`), { journal, transcript });
+        push({ kind: `done` });
+        close();
+
+        await vi.waitFor(() => expect(transcript).toHaveBeenCalledOnce());
+        await vi.waitFor(() => expect(calls).toEqual([`record`]));
+        commit();
+        await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-transcript-commit`]));
+    });
+
     /* THE PARKED CARDS ride the journal entry while they are up: they are what a boot restores when the daemon
      * dies under a park (turn-resume.ts), and their content exists nowhere else once the frame log dies with
      * the process. Every rewrite carries the whole live state (session AND cards), so neither update can erase

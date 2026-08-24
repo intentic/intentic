@@ -1,7 +1,8 @@
-import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentOriginSchema, AgentTurnSchema, ParkedCardSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import { writeJsonFile } from "../store/json-file.js";
 
 /* THE TURN JOURNAL, what is in flight right now, written down where the process cannot take it with it.
  *
@@ -94,8 +95,10 @@ export interface TurnJournal {
 // distinct prefixes, so a conversation and an automation of the same name cannot collide.
 export const fileTurnJournal = (dir: string): TurnJournal => {
     const write = async (file: string, entry: JournalEntry): Promise<void> => {
-        await mkdir(dir, { recursive: true });
-        await writeFile(join(dir, `${file}.json`), `${JSON.stringify(entry, undefined, 2)}\n`);
+        // A WSL/container crash can stop a plain writeFile after it truncated the previous entry. The journal is
+        // precisely the file we need after that crash, so give it the same sibling-temp + atomic-rename write as
+        // every manifest store rather than leaving an unparseable half-entry that list() can only skip.
+        await writeJsonFile(join(dir, `${file}.json`), entry);
     };
     // A clear that finds nothing has nothing to do: the turn settled twice, or a boot pass already took it.
     const drop = async (file: string): Promise<void> => {

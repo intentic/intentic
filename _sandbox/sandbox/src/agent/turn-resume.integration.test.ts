@@ -691,7 +691,8 @@ test("an entry older than the staleness cap is dropped: a sandbox off for the we
 test("autoResumeOnRestart off records the interruption and re-runs nothing", async () => {
     // Off is the shipped default (SandboxSettingsSchema), so this is what an owner who never opened the setting
     // gets: the journal is drained and the interruption stands on the record, but nothing spends a turn.
-    const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")), false);
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const services = await journalServices(root, false);
 
     await services.turnJournal.recordTurn(journalled("rs-off"));
     await services.automations.upsert({ id: "nightly", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "sweep", enabled: true });
@@ -707,8 +708,36 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
+    // The journal was the only durable copy of a first turn's prompt. It becomes a readable transcript before
+    // the entry is removed, with an explicit ending instead of an apparently unanswered message.
+    expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-off")).toEqual([
+        { role: "user", text: "finish the report", sentAt: 10_000 },
+        {
+            role: "notice",
+            text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+        },
+    ]);
     // Nothing re-ran, but nothing is silently lost either: the row still says the fire was cut off.
     expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
+});
+
+test("a failed interrupted-transcript append retains the journal for a later boot", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const base = await journalServices(root, false);
+    const services = unstubbed<Services>("services", {
+        ...base,
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+            ...base.transcripts,
+            append: async () => {
+                throw new Error("disk unavailable");
+            },
+        }),
+    });
+    await services.turnJournal.recordTurn(journalled("rs-retry"));
+
+    await resumeInterruptedTurns(services, fakeWake([]), BOOT_AT);
+
+    expect((await services.turnJournal.list()).map((entry) => entry.kind === "turn" && entry.turn.conversationId)).toEqual(["rs-retry"]);
 });
 
 test("an interrupted fire records `interrupted`, then re-fires with its snapshotted payload through the guard", async () => {

@@ -312,15 +312,21 @@ export const handoffHistory = async (
  * to the workspace root the turn actually saw.
  *
  * Never rejects. A transcript is a side-channel of a turn that has already finished, the cost of a failed
- * write is one turn missing from a history, which must not become the cost of the turn itself. */
+ * write is one turn missing from a history, which must not become the cost of the turn itself. The boolean lets
+ * the restart recovery path keep an interrupted journal entry until this write really landed; ordinary settled
+ * turns use the awaited call only as an ordering boundary. */
 export const recordTurnTranscript = async (
     services: Pick<Services, "transcripts" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     events: readonly AgentEvent[],
     // When the turn started, for the user row's stamp, every caller runs a turn and therefore knows it.
     sentAt: number,
-): Promise<void> => {
-    await services.transcripts
-        .append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root, sentAt))
-        .catch((error: unknown) => services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed"));
+): Promise<boolean> => {
+    try {
+        await services.transcripts.append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root, sentAt));
+        return true;
+    } catch (error) {
+        services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed");
+        return false;
+    }
 };
