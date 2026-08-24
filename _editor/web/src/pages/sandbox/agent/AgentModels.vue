@@ -324,50 +324,64 @@ const providerOfKey = (key: string): AgentProvider => key.slice(0, key.indexOf(`
                     <p v-else-if="settings?.autoTier === `on`" class="text-2xs text-muted">
                         Simple turns run on the cheaper model. Each conversation can veto it.
                     </p>
-                    <p v-else-if="settings !== undefined" class="text-2xs text-muted">Judging every turn, still running on your pick.</p>
 
-                    <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="flex flex-col gap-0.5">
-                        <p class="text-2xs text-muted">
-                            <span class="text-content">{{ TIER_WINDOW_DAYS }}d</span>: {{ tierReport.fast }} of
-                            {{ tierReport.judged }} simple<template v-if="tierReport.judged > 0">
-                                ({{ pct(tierReport.fast, tierReport.judged) }})</template
-                            ><template v-if="tierReport.atStakeUsd > 0"> · {{ usd(tierReport.atStakeUsd) }} on your pick</template>
+                    <div v-if="settings?.autoTier !== `off` && tierReport !== undefined" class="rounded-lg bg-canvas px-3 py-2.5">
+                        <p class="flex flex-wrap items-baseline gap-x-1.5">
+                            <span class="text-sm font-semibold tabular-nums text-content">{{ tierReport.fast }}</span>
+                            <span class="min-w-0 text-2xs text-muted">
+                                of {{ tierReport.judged }} judged simple<template v-if="tierReport.judged > 0">
+                                    ({{ pct(tierReport.fast, tierReport.judged) }})</template
+                                >
+                            </span>
                         </p>
-                        <p v-if="tierReport.routed > 0" class="text-2xs text-muted">
-                            {{ tierReport.routed }} routed at {{ usd(tierReport.routedUsd) }}
+                        <p v-if="tierReport.atStakeUsd > 0" class="mt-1 text-2xs text-subtle">
+                            {{ usd(tierReport.atStakeUsd) }} on your pick · last {{ TIER_WINDOW_DAYS }}d
                         </p>
-                        <p class="text-2xs text-subtle">
-                            Escalated: {{ tierReport.escalated }}/{{ tierReport.fast
-                            }}<template v-if="tierReport.denied > 0"> · vetoed: {{ tierReport.denied }}</template>
+                        <p v-else class="mt-1 text-2xs text-subtle">Last {{ TIER_WINDOW_DAYS }}d</p>
+                        <p
+                            v-if="tierReport.routed > 0 || tierReport.escalated > 0 || tierReport.denied > 0"
+                            class="mt-0.5 text-2xs tabular-nums text-subtle"
+                        >
+                            <template v-if="tierReport.routed > 0">{{ tierReport.routed }} down-routed · {{ usd(tierReport.routedUsd) }}</template
+                            ><template v-if="tierReport.escalated > 0"
+                                ><template v-if="tierReport.routed > 0"> · </template>{{ tierReport.escalated }}/{{ tierReport.fast }} bumped up</template
+                            ><template v-if="tierReport.denied > 0"> · {{ tierReport.denied }} vetoed</template>
                         </p>
-                    </div>
-
-                    <div v-if="settings?.autoTier !== `off`" class="flex items-center justify-between gap-3">
-                        <span class="text-xs font-medium text-content">How readily</span>
-                        <SegmentedControl
-                            :model-value="settings?.autoTierEagerness ?? `balanced`"
-                            :options="eagernessOptions"
-                            @update:model-value="
-                                (autoTierEagerness: string) => patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
-                            "
-                        />
                     </div>
 
                     <div class="flex flex-col gap-1.5">
-                        <div class="flex items-center justify-between gap-3">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
                             <span class="text-xs font-medium text-content">Cheaper model</span>
-                            <Picker
-                                v-model="fast.adding.value"
-                                :options="fastModelPickerOptions"
-                                :disabled="settings === undefined || quickModelGroups.length === 0"
-                                placeholder="Add a model…"
-                                class="w-56 py-1.5 text-xs"
-                                aria-label="Add a model for automatic tier selection"
-                            >
-                                <template #icon="{ option }">
-                                    <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
-                                </template>
-                            </Picker>
+                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                <div
+                                    v-if="settings?.autoTier !== `off`"
+                                    class="flex shrink-0 items-center"
+                                    role="group"
+                                    aria-label="How readily"
+                                >
+                                    <SegmentedControl
+                                        :model-value="settings?.autoTierEagerness ?? `balanced`"
+                                        :options="eagernessOptions"
+                                        wrap
+                                        @update:model-value="
+                                            (autoTierEagerness: string) =>
+                                                patch({ autoTierEagerness: autoTierEagerness as `cautious` | `balanced` | `eager` })
+                                        "
+                                    />
+                                </div>
+                                <Picker
+                                    v-model="fast.adding.value"
+                                    :options="fastModelPickerOptions"
+                                    :disabled="settings === undefined || quickModelGroups.length === 0"
+                                    placeholder="Add a model…"
+                                    class="w-56 py-1.5 text-xs"
+                                    aria-label="Add a model for automatic tier selection"
+                                >
+                                    <template #icon="{ option }">
+                                        <ProviderLogo :provider="providerOfKey(option.value)" class="shrink-0 text-xs text-muted" />
+                                    </template>
+                                </Picker>
+                            </div>
                         </div>
                         <ModelPinList
                             v-if="fast.entries.value.length > 0"

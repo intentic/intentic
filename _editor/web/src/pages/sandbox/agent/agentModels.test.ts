@@ -146,13 +146,12 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
 const modeButton = (host: HTMLElement, label: string): HTMLButtonElement =>
     [...host.querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)].find((button) => button.textContent?.trim() === label)!;
 
-test("defaults to measuring, and says on screen that nothing is being moved", async () => {
+test("defaults to measuring", async () => {
     const host = mount();
     await Promise.resolve();
 
     expect(settings.value.autoTier).toBe(`shadow`);
     expect(modeButton(host, `Measure`).getAttribute(`aria-selected`)).toBe(`true`);
-    expect(host.textContent).toContain(`still running on your pick`);
 });
 
 test("switching the mode writes it, and the row then describes what it actually does", async () => {
@@ -197,9 +196,9 @@ test("the judge's record renders its three numbers once turns have been judged",
 
     expect(host.textContent).toContain(`10 of 40`);
     expect(host.textContent).toContain(`$1.50`);
-    expect(host.textContent).toContain(`4 routed at $0.25`);
-    expect(host.textContent).toContain(`Escalated: 1/10`);
-    expect(host.textContent).toContain(`vetoed: 2`);
+    expect(host.textContent).toContain(`4 down-routed · $0.25`);
+    expect(host.textContent).toContain(`1/10 bumped up`);
+    expect(host.textContent).toContain(`2 vetoed`);
 });
 
 test("no judged turns means no numbers at all: absence, not a row of zeros", async () => {
