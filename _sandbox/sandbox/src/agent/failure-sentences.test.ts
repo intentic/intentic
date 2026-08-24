@@ -4,6 +4,7 @@ import {
     isDeclinedAnswer,
     isEntitlementRefusalText,
     isFailureSentence,
+    isUnsentParameterRefusalText,
     isUsageLimitText,
     mentionsSpentAllowance,
 } from "./failure-sentences.js";
@@ -94,6 +95,33 @@ test("catches the shapes a decline arrives in, not one provider's wording", () =
     // And a flat declarative decline, which neither of the two tests above would catch.
     expect(isDeclinedAnswer("Not enough information to write a commit message.")).toBe(true);
     expect(isDeclinedAnswer("Please provide the file contents.")).toBe(true);
+});
+
+/* A FIFTH READING, THE 4xx THAT IS NOT THE REQUEST'S FAULT. A ten-minute Codex turn died on `400
+ * prompt_cache_retention is not supported on this model`, a parameter no layer in this sandbox sets: the CLI's
+ * outgoing body was captured without it, and the provider's own successful answers come back carrying it, so it
+ * is the provider's default being refused by the provider. Uncoded, that is a red line and a dead tab over a
+ * condition that cleared by itself minutes later. */
+const UNSENT_PARAMETER_400 =
+    '{"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
+
+test("reads a refused parameter nothing here sends as the provider's fault, not the turn's", () => {
+    expect(isUnsentParameterRefusalText(UNSENT_PARAMETER_400)).toBe(true);
+    // Plain prose carries it too: the same refusal reaches the Claude harness as the API error's sentence alone.
+    expect(isUnsentParameterRefusalText("API Error: 400 prompt_cache_retention is not supported on this model")).toBe(true);
+    // The conditions it must not be confused with: no credential to re-mint, no allowance to wait out.
+    expect(isAuthFailureText(UNSENT_PARAMETER_400)).toBe(false);
+    expect(mentionsSpentAllowance(UNSENT_PARAMETER_400)).toBe(false);
+});
+
+/* BOTH HALVES REQUIRED, which is what keeps this from swallowing ordinary 4xx. A parameter the turn DID ask for
+ * (a model, an effort, a tool schema) stays uncoded, because re-sending it on a timer is a loop, and a reply
+ * that merely discusses prompt caching, which the CLI's own instructions do, is not a refusal at all. */
+test("refuses to read a request's own bad parameter, or a mention of caching, as an outage", () => {
+    expect(isUnsentParameterRefusalText("API Error: 400 output_config.effort 'max' is not supported when thinking is disabled")).toBe(false);
+    expect(isUnsentParameterRefusalText("Preserve prompt_cache_key when the application already uses it.")).toBe(false);
+    expect(isUnsentParameterRefusalText("I set prompt_cache_retention to 24h in the client config.")).toBe(false);
+    expect(isUnsentParameterRefusalText("Sure — I've updated the config and the tests pass.")).toBe(false);
 });
 
 // The direction that would do real damage: refusing a good answer leaves a session wearing a cut sentence and a

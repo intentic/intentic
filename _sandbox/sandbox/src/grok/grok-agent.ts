@@ -4,7 +4,8 @@ import type { Event, FilePartInput } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
-import { mentionsSpentAllowance } from "../agent/failure-sentences.js";
+import { unsentParameterFrame } from "../agent/error-frames.js";
+import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../agent/tool-calls.js";
 import type { CommandGate } from "../guard/command-gate.js";
@@ -500,15 +501,21 @@ async function* streamTurn(
             };
         } else if (event.type === "session.error") {
             const message = errorText(event.properties.error);
-            yield {
-                kind: "error",
-                message,
-                ...(MODEL_INVALID.test(message)
-                    ? { code: "grok-model-invalid" as const }
-                    : isRateLimited(message)
-                      ? { code: "rate_limit" as const }
-                      : {}),
-            };
+            /* A parameter this sandbox never sent, refused above us, reads FIRST for the reason codex-agent.ts
+             * spells out: the sentence ends in "on this model", so the model-invalid branch would otherwise
+             * throw away the user's pinned model over a fault that was never theirs. Every routed provider
+             * shares the proxy that can produce it, so every adapter that codes failures reads it. */
+            yield isUnsentParameterRefusalText(message)
+                ? unsentParameterFrame(message)
+                : {
+                      kind: "error",
+                      message,
+                      ...(MODEL_INVALID.test(message)
+                          ? { code: "grok-model-invalid" as const }
+                          : isRateLimited(message)
+                            ? { code: "rate_limit" as const }
+                            : {}),
+                  };
             capture.errored = true;
             // Terminal: OpenCode does not reliably emit session.idle after an error, so ending here (rather than
             // waiting for an idle that never comes) is what lets runGrokAgent reach its `done`.

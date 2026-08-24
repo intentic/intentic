@@ -879,11 +879,16 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                  * is, so nothing is re-run and nothing asks the user to reconnect, the one recovery that looks
                  * plausible and is guaranteed to waste their time. */
                 "claude-not-entitled",
-                // The model provider itself failed transiently: 500/502/503, a 529 at capacity, a dropped
-                // socket, and the harness's own in-turn retries did not outlast it. Nothing about the workspace
-                // or the request is wrong, so the daemon remembers the turn and re-runs it on an escalating
-                // backoff (provider-health.ts): the frame is a notice about a turn that is coming back, and
-                // reaches the client as a plain failure only once the attempts are spent.
+                /* The model provider itself failed transiently: 500/502/503, a 529 at capacity, a dropped
+                 * socket, and the harness's own in-turn retries did not outlast it. Nothing about the workspace
+                 * or the request is wrong, so the daemon remembers the turn and re-runs it on an escalating
+                 * backoff (provider-health.ts): the frame is a notice about a turn that is coming back, and
+                 * reaches the client as a plain failure only once the attempts are spent.
+                 *
+                 * ONE 4xx JOINS THEM, the provider refusing a request PARAMETER nothing here sends (its own
+                 * cache-retention default, or one a proxy added). It wears a client error's status code and is
+                 * still a provider fault: there is no request of the user's to fix, and the same send goes
+                 * through moments later, so it recovers the same way (agent/failure-sentences.ts). */
                 "provider-outage",
                 // The platform-owned free-trial pool failed after its bounded key walk. Unlike provider-outage,
                 // this is never auto-resumed: failed calls are refunded and the user's message is held to retry.

@@ -20,7 +20,11 @@ const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: 
 </script>
 
 <template>
-    <section class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4 md:p-5">
+    <!-- The design system's own plate (`.ui-card`: radius, rule and fill from the tokens), never a hand-rolled
+         copy of it. A card that spells its own chrome is a card a SKIN cannot dress: sanctum styles `.ui-card`
+         (stone, a gold rule, a ledge of caught light) and leaves an open-coded `rounded-2xl border bg-card`
+         beside it as a flat rectangle. Padding stays a utility, because it is the one part that is responsive. -->
+    <section class="ui-card flex flex-col gap-3 p-4 md:p-5">
         <div class="flex items-center gap-2.5">
             <div class="flex min-w-0 flex-1 items-center gap-2.5">
                 <span

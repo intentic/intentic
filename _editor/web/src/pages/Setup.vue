@@ -50,12 +50,9 @@ import { hostedWaitView } from "./hostedWait";
 import type { HostedStatus } from "@intentic-app/api-contract";
 import AppBrand from "../components/AppBrand.vue";
 
-/* The setup gate's destination (outside the workspace shell). THERE ARE TWO STEPS, and the first asks for
- * NOTHING: the sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts) and its
- * address is provisioned right behind it, so step 1 opens already done and reports one fact: the name, with a
- * pencil. It was two cards before it was one line: a numbered card whose whole body was a rename link, above a
- * numbered card whose whole body was a hostname, is a spine that counts to three to say the machine is ready
- * to be started.
+/* The setup gate's destination (outside the workspace shell). Setup asks for no identity decisions: the
+ * sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts), and that name stays
+ * out of onboarding. It can be changed later in the workspace, where it is useful for telling machines apart.
  *
  * THE ADDRESS IS REPORTED BY STEP 2 rather than by step 1, because it is a consequence of the rung rather than
  * a fact about the sandbox, and because a hex hostname in the page's first position is three lines a stranger
@@ -91,14 +88,11 @@ import AppBrand from "../components/AppBrand.vue";
  * records it: no tunnel to provision, no command to run, no announce to wait for, so step 2 never renders.
  * `lane` decides which spine step 1 is the head of.
  *
- * The two lanes SHARE their state rather than mirroring it. Everything a lane owns is genuinely lane-specific
- * (the reachability target, the command, the sync opt-in vs. the domain and the probe outcome); everything about
- * the sandbox itself (its `name` and its `created` row) is one value read by both. That is what makes a lane
- * switch lossless in either direction at any point: a name typed before switching survives, and a row created by
- * an attach whose probe passed but whose attach then failed continues as the provision lane's sandbox instead of
- * being stranded. The attach lane shows that name as a field and the provision lane behind a pencil, but
- * both edit the same buffer and commit it the same way (saveName). `targetKey` is gated on the lane for the same reason in reverse: minting is what buys the
- * Cloudflare tunnel, and an attached sandbox is reached over the user's own domain, so it must not mint. */
+ * The two lanes SHARE the same `created` row rather than mirroring it. That is what makes a lane switch lossless
+ * in either direction: a row created by an attach whose probe passed but whose attach then failed continues as
+ * the provision lane's sandbox instead of being stranded. `targetKey` is gated on the lane for the same reason
+ * in reverse: minting is what buys the Cloudflare tunnel, and an attached sandbox is reached over the user's own
+ * domain, so it must not mint. */
 
 const sandbox = useSandbox();
 const router = useRouter();
@@ -120,14 +114,9 @@ const resuming = ref(false);
  * A resumed sandbox predates the visit and is somebody's unfinished errand; only a row this page created out of
  * nothing is a draft nobody has agreed to yet. */
 const createdHere = ref(false);
-// The reader typed a name over the one we picked. The cheapest possible signal of intent, and enough on its own
-// to keep the draft: nobody renames a machine they are about to walk away from.
-const renamed = ref(false);
 // Setup ran to the end: the daemon reported in, or an attach bound one. Set on the way out, because both exits
 // navigate and the row's own `lastSeenAt` in `created` can still be the pre-announce copy at that moment.
 const finished = ref(false);
-// The name on screen: the created row's, until the user edits it in the rename box (or the attach lane's field).
-const name = ref(``);
 const creating = ref(false);
 const error = ref<NoticeModel | null>(null);
 /* Has the arrival read answered yet. `created === null && !creating` is the shape of a FAILED create, and it is
@@ -135,12 +124,6 @@ const error = ref<NoticeModel | null>(null);
  * corrects itself a round-trip later. Set once, in a finally, so a mount read that throws still lands on a card
  * that offers the retry rather than spinning forever. */
 const loaded = ref(false);
-
-// The rename box, open only when asked for. The name is a default nobody typed, so changing it has to be one
-// click away, and it must never be a gate: setup runs to completion whether or not this is ever touched.
-const renaming = ref(false);
-const savingName = ref(false);
-const nameInput = ref<HTMLInputElement | null>(null);
 
 // Is there a workspace to go BACK to: some sandbox other than the one being set up here that has actually
 // reported in. Both halves matter: a row this page created moments ago is not somewhere to return to, and
@@ -193,12 +176,12 @@ const syncEnabled = ref(true);
 const syncDir = computed(() => (created.value && setup.value ? syncFolder(created.value.name, setup.value.hostname) : ``));
 
 // --- attach lane (step 1's one-step alternative) ---
-// Which spine step 1 heads: `provision` (name + address, then run and wait in step 2) or `attach` (paste the domain
+// Which spine step 1 heads: `provision` (address, then run and wait) or `attach` (paste the domain
 // the sandbox is ALREADY reachable at → verify → workspace), which finishes inside step 1 itself.
 //
-// Both lanes work on the SAME `name` and the SAME `created` row: a sandbox's name and identity are facts about
-// the sandbox, not about how the user chose to reach it. Duplicating either into lane-local state is what makes
-// a lane switch lose typing, so there is deliberately no `attachName`/`attachRow` here.
+// Both lanes work on the SAME `created` row: a sandbox's identity is a fact about the sandbox, not about how the
+// user chose to reach it. Duplicating it into lane-local state is what makes a lane switch strand a row, so
+// there is deliberately no `attachRow` here.
 const lane = ref<"provision" | "attach">(`provision`);
 /* The one "reach it some other way" disclosure, open. Both ways off the default address: your own Cloudflare
  * zone, and a domain the sandbox already answers on: used to be their own link in their own place, and
@@ -295,14 +278,14 @@ const desktop = computed(() => desktopVersion() !== undefined);
  * installer is the same handoff wearing an installer's affordances (a publisher, a file, an uninstaller),
  * which is the whole of what the two switches under the command were groping for.
  *
- * The command is one labelled click away and loses nothing: it is the same disclosure the app and the phone
- * already fold it behind, and the reader who wants a terminal is the one reader guaranteed to recognise the
- * link. Where there is no build (macOS today) this is `undefined` and the command stays the path, because a
+ * The command is one labelled click away and loses nothing: it is the direct terminal option the app and phone
+ * already carry, and the reader who wants it is guaranteed to recognise the label. Where there is no build
+ * (macOS today) this is `undefined` and the command stays the path, because a
  * button pointing at a downloads page that has nothing for you is worse than the pipe it replaced. */
 const installer = computed(() => (desktop.value || mobile.value ? undefined : desktopInstaller()));
 const appFirst = computed(() => installer.value !== undefined);
 
-/* THE COMMAND IS FOLDED AWAY WHEREVER IT IS NOT THE PATH, behind the same one-line disclosure everywhere: in
+/* THE COMMAND IS FOLDED AWAY WHEREVER IT IS NOT THE PATH, behind the same direct option everywhere: in
  * the app the button above already runs it (a server is still an ordinary place to want the sandbox, and the
  * app cannot run it there), on a phone there is no shell to paste into: the handoff is the step there, and
  * the command under it was six controls of scenery around a clipboard write that leads nowhere, and in a
@@ -338,11 +321,22 @@ const machine = ref<"hosted" | "mine" | "cloud">(mobile.value ? `cloud` : `mine`
  * be worse than not offering it.
  *
  * So: local stays the loud default in the app, unchanged and preselected, and the other rungs sit behind one
- * quiet line. `elsewhere` is what opens them: set by the link from the requirements screen, or by that line.
+ * quiet link. `elsewhere` is what opens them: set by the link from the requirements screen, or by that link.
  */
 const elsewhere = ref(route.query[`elsewhere`] === `1`);
 // Inside the app the other rungs are one click away rather than on screen; outside it, nothing is hidden.
 const elsewhereOffered = computed(() => !desktop.value || elsewhere.value);
+
+/* The picker's own row, and the one reason it needs a handle: the link that reveals it sits UNDER the card, and
+ * the rungs it reveals appear ABOVE it. Opened silently, all the reader sees is the page growing and the button
+ * they were reading sliding down: a click whose entire effect happened off the part of the screen they were
+ * looking at. So the reveal takes them to what it revealed. */
+const ladderRow = ref<HTMLElement | null>(null);
+const showOtherMachines = async (): Promise<void> => {
+    elsewhere.value = true;
+    await nextTick();
+    ladderRow.value?.scrollIntoView({ behavior: `smooth`, block: `center` });
+};
 const cloudOffered = computed(() => addressed.value && elsewhereOffered.value);
 /* The pasted command is an address away from being useless: the script it runs redeems a setup code, and a
  * platform that mints none has nothing for it to redeem. So this rung stands on the same offer the cloud one
@@ -356,9 +350,9 @@ const commandOffered = computed(() => addressed.value);
  * redirects the moment the daemon reports in, exactly as it does for a pasted run. With the other rungs one click away.
  *
  * A LANE MOVES A MACHINE, NOT THE SANDBOX. Every lane works on the row created on arrival, so choosing this
- * one attaches a machine and choosing another hands it back (sandbox.hostedRelease): the name, the address
- * and the row itself survive the switch. The first version deleted and re-created the sandbox on every
- * crossing, which is how a mis-click cost a person their typed name and their place in the flow. */
+ * one attaches a machine and choosing another hands it back (sandbox.hostedRelease): the row and its address
+ * survive the switch. The first version deleted and re-created the sandbox on every crossing, which is how a
+ * mis-click cost a person their place in the flow. */
 // The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
 const hostedOffer = ref<HostedOffer | null>(null);
 const hostedOffered = computed(() => hostedOffer.value?.enabled === true && elsewhereOffered.value);
@@ -369,10 +363,9 @@ const provisionOffered = computed(() => addressed.value || hostedOffered.value);
 // Provisioning/releasing a machine is a round-trip with a provider at the end of it, so the card it was
 // clicked on says so rather than freezing.
 const hostedBusy = ref(false);
-// Why the hosted lane could not be taken, rendered ON the run step where the click happened. Separate from
-// the page-level `error` (which belongs to the sandbox card above and is cleared by any create) precisely
-// because the first version let a failed hosted attempt bounce the user to the command lane with the reason
-// wiped: a silent lane switch that read as the page breaking.
+// Why the hosted lane could not be taken, rendered ON the run step where the click happened. Separate from the
+// arrival `error` precisely because the first version let a failed hosted attempt bounce the user to the
+// command lane with the reason wiped: a silent lane switch that read as the page breaking.
 const hostedError = ref<NoticeModel | undefined>(undefined);
 // The created row IS a hosted one: the wait card renders off this rather than off the picker, so a resumed
 // hosted sandbox narrates correctly however the page was entered.
@@ -551,19 +544,10 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
     machine.value === `hosted` ? `hosted` : addressless.value ? `none` : mode.value === `intentic` ? `intentic` : `own`,
 );
 
-/* The label in front of each of step 1's two facts. Label and value are ONE size: the field size, since the
- * name becomes a field, and colour alone separates them: the name used to sit in the step's own heading, in
- * the heading's weight and the heading's colour, where the one word on the card worth changing read as the
- * label in front of it. The rows' shared grid column, rather than padding on either label, lines the two
- * values up. */
+// The quiet label on the address row: the hostname is supporting information, never the card's heading.
 const factLabel = `shrink-0 text-sm text-muted`;
 
-/* …and the slot each value sits in. It looks like an empty box because it IS one: the name has to be able to
- * turn into a text field without moving, which means the idle name already wears the field's height, padding
- * and (transparent) border. The address wears the same slot for one reason: otherwise the field's padding
- * would start the name a few pixels right of an address that has none, and the two facts on this card would
- * be out of line down the only column that carries meaning. Paying that back with a negative margin was the
- * first attempt and it hard-codes a spacing token the theme is free to change. */
+// A stable value slot keeps every address state—text, spinner, or failure—on the same baseline.
 const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-sm text-content`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
@@ -1004,7 +988,7 @@ const check = async (): Promise<void> => {
  * before anything has been seen, and the seconds of tunnel provisioning that cannot start until a row exists.
  * Naming it here starts the address mint immediately, so the first screen a new account sees is the command.
  *
- * The name is still the user's (setupName.ts picks it, the summary renames it), it is simply no longer a gate.
+ * setupName.ts picks a stable default; setup deliberately does not expose naming as another decision.
  */
 const autoCreate = async (): Promise<void> => {
     if (creating.value) {
@@ -1013,12 +997,8 @@ const autoCreate = async (): Promise<void> => {
     creating.value = true;
     error.value = null;
     try {
-        // A name already in the box wins: the attach lane offers one before any row exists, and this is also
-        // the retry after a failed create, where re-picking the default would throw that typing away.
-        const typed = name.value.trim();
-        const row = await sandbox.create(typed === `` ? autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)) : typed);
+        const row = await sandbox.create(autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)));
         created.value = row;
-        name.value = row.name;
         // Minted here, agreed to by nobody: from this instant it is a draft the discard rule below owns.
         createdHere.value = true;
     } catch (err) {
@@ -1117,10 +1097,10 @@ const restartHosted = async (): Promise<void> => {
 
 /* The ladder's switch: it moves a MACHINE, never the sandbox. Choosing the hosted rung provisions one for
  * the row already on screen; choosing another rung hands the machine back (it has never been connected to,
- * so there is nothing on it to lose) and the row carries on into that lane with its name and address intact.
+ * so there is nothing on it to lose) and the row carries on into that lane with its identity and address intact.
  * A failure in either direction leaves the reader where they were, with a reason on the card: the previous
- * design deleted and recreated the sandbox around every crossing, so one mis-click threw away a typed name
- * and, when the provision then failed, silently landed them in a different lane with no explanation. */
+ * design deleted and recreated the sandbox around every crossing, so one mis-click threw away the row and,
+ * when the provision then failed, silently landed them in a different lane with no explanation. */
 const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> => {
     const prev = machine.value;
     if (creating.value || hostedBusy.value) {
@@ -1156,46 +1136,6 @@ const chooseMachine = async (next: "hosted" | "mine" | "cloud"): Promise<void> =
         }
     }
     machine.value = next;
-};
-
-// Open the rename box on the row's own name, selected: the name was chosen for the user, so the likeliest
-// next keystroke is a replacement rather than an edit.
-const startRename = async (): Promise<void> => {
-    name.value = created.value?.name ?? ``;
-    error.value = null;
-    renaming.value = true;
-    await nextTick();
-    nameInput.value?.select();
-};
-
-// Commit the rename box (and the attach lane's Name field, which is the same edit under a different roof).
-// Writing the row back is what keeps everything derived from the name honest: the step title, and the sync
-// folder the install command carries.
-const saveName = async (): Promise<void> => {
-    const row = created.value;
-    const trimmed = name.value.trim();
-    if (row === null || savingName.value || trimmed === `` || trimmed === row.name) {
-        renaming.value = false;
-        return;
-    }
-    savingName.value = true;
-    error.value = null;
-    try {
-        created.value = await sandbox.update(row.id, { name: trimmed });
-        renamed.value = true;
-        renaming.value = false;
-    } catch (err) {
-        error.value = noticeFrom(err, `Could not rename your sandbox.`);
-    } finally {
-        savingName.value = false;
-    }
-};
-
-// Leaving the rename box puts the row's own name back in it, so an abandoned edit doesn't sit there looking saved.
-const cancelRename = (): void => {
-    name.value = created.value?.name ?? ``;
-    renaming.value = false;
-    error.value = null;
 };
 
 // Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
@@ -1235,9 +1175,6 @@ const connectDomain = async (): Promise<void> => {
         if (row === null) {
             return;
         }
-        // The Name field is the same edit the summary's rename box makes, so it is committed on the way through
-        // rather than left in a box the user is one line away from navigating out of.
-        await saveName();
         await sandbox.attach(row.id, url);
         // Same milestone as the provision lane's announce: the user has a live sandbox in the workspace, and
         // the workspace has to open on THAT one (see check()).
@@ -1252,9 +1189,8 @@ const connectDomain = async (): Promise<void> => {
     }
 };
 
-// Flip which lane step 1 heads. Nothing is copied across because nothing is duplicated: the typed name and any
-// row already created stay exactly where they were, so a switch in either direction is lossless: including
-// back out of a half-finished attach, whose created row simply continues as the provision lane's sandbox.
+// Flip which lane step 1 heads. Nothing is copied across because nothing is duplicated: any row already created
+// stays exactly where it was, including when backing out of a half-finished attach.
 const setLane = (next: "provision" | "attach"): void => {
     lane.value = next;
     attachOutcome.value = undefined;
@@ -1458,7 +1394,6 @@ const arrive = async (): Promise<void> => {
         return;
     }
     sandbox.select(found.id);
-    name.value = found.name;
     created.value = found;
     resuming.value = true;
     // A resumed sandbox that was provisioned last visit continues as the story it is: hosted machines may
@@ -1498,7 +1433,6 @@ onMounted(async () => {
  *   • a machine exists (ours or the reader's cloud account): there is hardware behind this row now
  *   • a machine redeemed the code, or reported on its run: the sandbox is being built as we speak
  *   • the daemon checked in, or an attach bound one: it is a workspace, not a draft
- *   • the name was typed over the one we picked: nobody renames a machine they are about to abandon
  *
  * Deliberately NOT in the list: which lane or rung is selected, an expanded disclosure, a pasted Cloudflare
  * token, a typed domain that was never verified. Those are all still looking. */
@@ -1508,7 +1442,6 @@ const committed = computed(
         copied.value ||
         launched.value ||
         emailed.value ||
-        renamed.value ||
         claimedAt.value !== null ||
         report.value !== null ||
         announced.value ||
@@ -1546,8 +1479,6 @@ const startFresh = (): void => {
     discardDraft();
     resuming.value = false;
     created.value = null;
-    renamed.value = false;
-    name.value = ``;
     error.value = null;
     setup.value = null;
     mintedFor.value = undefined;
@@ -1573,7 +1504,6 @@ const startFresh = (): void => {
     domain.value = ``;
     attachToken.value = ``;
     attachOutcome.value = undefined;
-    renaming.value = false;
     void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
     // There is no blank form to drop to any more: the replacement is created here, exactly as it is on arrival.
     void autoCreate();
@@ -1713,12 +1643,10 @@ watch(commandReady, (ready) => {
                 >
                     <template #icon><Icon name="arrow-left" /></template>
                 </Button>
-                <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5 shadow-md md:h-12 md:w-12"
-                    aria-label="intentic platform"
-                >
-                    <AppBrand shape="mark" class="text-base md:text-lg" />
-                </span>
+                <!-- The site's mark, unboxed. A gradient tile and drop shadow put an app-icon treatment around
+                     a drawing that already carries the brand, and Sanctum's material language is deliberately
+                     flat wherever words sit. -->
+                <AppBrand shape="mark" class="shrink-0 text-2xl md:text-3xl" />
                 <!-- `contents` on a phone: the h1 becomes the logo's row-mate and the subtitle a full-width row
                      of its own, so the promise gets the whole width instead of a 200px column. From md up the
                      wrapper is a normal block again and the two stack beside the logo as before. -->
@@ -1788,7 +1716,7 @@ watch(commandReady, (ready) => {
                              feel live while a probe is in flight. -->
                                 <Button
                                     label="Connect"
-                                    class="w-full justify-center md:w-auto"
+                                    class="w-full justify-center md:w-fit"
                                     :loading="attaching"
                                     :disabled="attaching || normalizedDomain === undefined"
                                     @click="connectDomain"
@@ -1802,22 +1730,6 @@ watch(commandReady, (ready) => {
                                 >.</span
                             >
                             <span v-else class="text-xs text-muted">The https address your sandbox already answers on (https:// is optional).</span>
-                        </label>
-
-                        <!-- The SAME `name` the rename box binds, so switching lanes never loses what was typed.
-                     It arrives filled in: the row was created on the way in, and Connect commits whatever
-                     is in it, so this lane asks for a domain and nothing else unless the user wants to. -->
-                        <label class="ui-field">
-                            <span class="ui-field-label">Name</span>
-                            <input
-                                v-model="name"
-                                autocomplete="off"
-                                spellcheck="false"
-                                placeholder="e.g. work, staging, my-laptop"
-                                :class="ui.input('w-full text-base md:text-sm')"
-                                @keydown.enter="connectDomain"
-                            />
-                            <span class="text-xs text-muted">Just so you can tell it apart in the switcher.</span>
                         </label>
 
                         <!-- Each probe failure names the one thing the user can do about it. -->
@@ -1902,34 +1814,13 @@ watch(commandReady, (ready) => {
                         </button>
                     </StepSection>
 
-                    <!-- THE SANDBOX, AS A FACT RATHER THAN A STEP: what it is called. Already true when the card
-                         renders: created on arrival, so it asks for nothing, and a card that asks for nothing
-                         has no business wearing a step number or a heading. "Your sandbox" above a row labelled
-                         "Name" was a title that only restated the label under it.
-                         THE ADDRESS USED TO SIT HERE TOO, and moving it is what this card is now short for. A
-                         hostname nobody typed, nobody can parse and nobody is deciding held the page's most
-                         valuable position: first thing a stranger reads, above the only choice on the page:
-                         and its escape hatch ("Use a different address") put an advanced path there with it.
-                         It is a CONSEQUENCE of the rung, so it now reports itself on the run card, above the
-                         command whose hostname it is. What is left here is the one line that is genuinely
-                         about the sandbox rather than about the machine under it.
-                         The card chrome is StepSection's own, spelled out here because this is the one card on
-                         the page that is deliberately not a step, and it is deliberately SHALLOWER than one:
-                         a fact on a line does not need a step's padding around it, and every pixel this card
-                         spends is pushing the only decision on the page further down it. -->
-                    <section v-else class="flex flex-col gap-2 rounded-2xl border border-line bg-card px-4 py-3 md:px-5 md:py-4">
-                        <!-- BEFORE THE MOUNT READ HAS ANSWERED there is no story to tell yet, and telling the
-                             one below would be telling the wrong one: `created` is null and `creating` is false
-                             on the first frame of every visit, which is the shape of a create that FAILED. So
-                             the card opened on "Try again" for the fraction of a second the list took to land:
-                             an error the reader saw, could not read, and never had. A spinner with no words on
-                             it is the honest thing to show while the answer is in flight. -->
+                    <!-- Naming belongs inside the workspace, where it helps distinguish real machines. The
+                         ordinary path therefore has no identity card at all: only exceptional arrival state
+                         occupies this space, unframed, before the actual machine choice. -->
+                    <div v-else-if="!loaded || created === null || resuming" class="flex flex-col items-start gap-2 py-1">
                         <p v-if="!loaded" class="flex items-center gap-2 text-xs text-muted">
                             <Icon name="spinner" spin class="text-info" />
                         </p>
-                        <!-- No row yet, which on this lane means the arrival create is in flight or has failed:
-                             never a form waiting to be filled in. Both states are one line, because neither is
-                             something the user has to do anything about. -->
                         <template v-else-if="created === null">
                             <p v-if="creating" class="flex items-center gap-2 text-xs text-muted">
                                 <Icon name="spinner" spin class="text-info" />
@@ -1937,7 +1828,7 @@ watch(commandReady, (ready) => {
                             </p>
                             <template v-else>
                                 <Notice v-if="error" :of="error" />
-                                <Button label="Try again" class="w-full justify-center md:w-auto" @click="autoCreate">
+                                <Button label="Try again" class="w-full justify-center md:w-fit" @click="autoCreate">
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
                             </template>
@@ -1947,123 +1838,17 @@ watch(commandReady, (ready) => {
                                 Already running a sandbox somewhere? Connect it by domain →
                             </button>
                         </template>
-                        <template v-else>
-                            <!-- Two different histories, and only one of them is a reconnect. A sandbox that ran
-                                 before was torn down locally; one that was made here and never started is simply
-                                 where the user left off: telling them a container was cleared would be describing
-                                 a machine that never existed.
-                                 ONE LINE, WITH THE WAY OUT INSIDE IT. It was a two-line paragraph ending in "or
-                                 create a new sandbox instead", above a link that said "Not this one? Create a new
-                                 sandbox instead": the same sentence twice, three lines tall, at the top of the
-                                 page, to report something the reader had not asked about.
-                                 The two histories are ONE interpolation rather than two `<template v-if>`
-                                 branches, because the space before the link would then be a text node between two
-                                 elements, and the compiler condenses those away: the sentence ran straight into
-                                 the link. -->
-                            <p v-if="resuming" class="text-xs text-muted">
-                                {{
-                                    neverStarted
-                                        ? `Picking up where you left off: nothing has run yet.`
-                                        : `Still on the platform, the cleanup only cleared its local container.`
-                                }}
-                                <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
-                                    Use a new sandbox instead</button
-                                >.
-                            </p>
-                            <!-- A LABEL COLUMN FOR ONE ROW, kept because the address row on the run card wears the
-                                 same one: the two facts are read minutes apart now, and a label that changes width
-                                 between them makes the second read as a different kind of thing from the first. -->
-                            <div class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
-                                <!-- THE NAME, AS A LINE RATHER THAN A HEADING. Nobody typed it, so the row that reports
-                                 it is also where it is changed, and the change is a pencil, not a sentence: the
-                                 card used to spend a paragraph explaining that the name was a default and a link
-                                 saying so again, which is three lines of apology for a word the user can simply
-                                 overwrite. The label is muted, so the value is the thing the
-                                 eye lands on. Never a gate: the command below is ready whether or not this is
-                                 ever touched.
-                                 STRICTLY IN PLACE, the way the sandbox settings header renames: pressing the pencil
-                                 used to replace this row with a stacked field and two labelled buttons, which moved
-                                 every glyph on the card and shoved the run step down the page: a jump, on a card
-                                 whose whole job is to sit still while you read it. -->
-                                <span :class="factLabel">Name</span>
-                                <div class="flex min-w-0 items-center">
-                                    <!-- The name and the field it becomes share ONE grid cell at one type scale, one
-                                     height and one padding, so switching modes paints a border and nothing else.
-                                     The hidden sizer gives the field the width of the text it holds instead of the
-                                     whole row, with `size="1"` on the input, which is what lets it: an input
-                                     carries an intrinsic width of about twenty characters, and in a `w-fit` cell
-                                     THAT is what decided the column, so the field opened ~100px wider than the
-                                     name and shoved the two buttons beside it sideways. Same jump, last axis.
-                                     THE ADDRESS WEARS THE SAME EMPTY SLOT (`factSlot`), so the two values sit at
-                                     one height and one padding however the name is being read: as a word or as
-                                     a field it has just become. -->
-                                    <div class="grid w-fit max-w-full min-w-0 grid-cols-1 grid-rows-1">
-                                        <template v-if="renaming">
-                                            <span aria-hidden="true" :class="`${factSlot} invisible col-start-1 row-start-1 whitespace-pre`">{{
-                                                name === `` ? ` ` : name
-                                            }}</span>
-                                            <input
-                                                ref="nameInput"
-                                                v-model="name"
-                                                aria-label="Sandbox name"
-                                                autocomplete="off"
-                                                size="1"
-                                                spellcheck="false"
-                                                :class="`${factSlot} col-start-1 row-start-1 w-full border-line-strong bg-canvas outline-none`"
-                                                @keydown.enter="saveName"
-                                                @keydown.esc="cancelRename"
-                                            />
-                                        </template>
-                                        <span v-else :class="`${factSlot} col-start-1 row-start-1`"
-                                            ><span class="truncate">{{ created.name }}</span></span
-                                        >
-                                    </div>
-                                    <!-- Pencil and the commit pair stack in one cell too, so the cell is as wide as the
-                                     wider of them and revealing Save cannot push anything sideways. The idle layer
-                                     is `invisible`, which keeps its size while leaving the tab order.
-                                     32px rather than the recipe's 24: these are not in a toolbar of their peers,
-                                     they are alone beside a line of text on a card people reach on a phone. And a
-                                     step dimmer than the recipe's muted: the name is the thing being read here,
-                                     and an affordance beside one word should not compete with it. -->
-                                    <div class="grid grid-cols-1 grid-rows-1 items-center">
-                                        <div class="col-start-1 row-start-1 flex items-center" :class="renaming ? `invisible` : ``">
-                                            <button
-                                                type="button"
-                                                :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                                aria-label="Rename sandbox"
-                                                v-tooltip.bottom="`Rename sandbox`"
-                                                v-action="startRename"
-                                            >
-                                                <Icon name="pencil" class="text-xs" />
-                                            </button>
-                                        </div>
-                                        <div class="col-start-1 row-start-1 flex items-center gap-1" :class="renaming ? `` : `invisible`">
-                                            <button
-                                                type="button"
-                                                :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
-                                                aria-label="Save name"
-                                                v-tooltip.bottom="`Save · Enter`"
-                                                v-action="saveName"
-                                            >
-                                                <Icon :name="savingName ? `spinner` : `check`" :spin="savingName" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :class="ui.iconButton(`h-8 w-8 text-subtle`)"
-                                                aria-label="Cancel rename"
-                                                v-tooltip.bottom="`Cancel · Esc`"
-                                                @click="cancelRename"
-                                            >
-                                                <Icon name="times" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <Notice v-if="error" :of="error" />
-                        </template>
-                    </section>
+                        <p v-else class="text-xs text-muted">
+                            {{
+                                neverStarted
+                                    ? `Picking up where you left off: nothing has run yet.`
+                                    : `Still on the platform, the cleanup only cleared its local container.`
+                            }}
+                            <button type="button" class="cursor-pointer text-link hover:underline" @click="startFresh">
+                                Use a new sandbox instead</button
+                            >.
+                        </p>
+                    </div>
 
                     <!-- Step 2: run the sandbox, and the whole reason this page loses people. A copy-paste command is
                  no more dangerous than an .msi, but it arrives without any of an installer's affordances: no
@@ -2094,15 +1879,10 @@ watch(commandReady, (ready) => {
                  service of a clipboard the target machine cannot read. It is now one line's worth of
                  disclosure, addressed to the one reader it is true for: someone holding an SSH session. -->
 
-                    <!-- No number on the badge. The card above it reports facts and asks for nothing, so it is not
-                         a step and does not wear one, which leaves this as the only thing on the page anybody has
-                         to DO, and a lone "2" beside an unnumbered card counts a spine that isn't there. The icon
-                         says which kind of card this is instead, exactly as the attach lane's does. -->
                     <!-- WHERE THE SANDBOX RUNS, AND THEN THE ONE THING THAT MAKES IT RUN. No step chrome and no
                          heading: the heading could only name ONE of the three answers below it ("Run this on
                          your computer" over a chooser that also offers a machine you never touch), and the
-                         chooser says what this card is about better than a title could. Same bare-section
-                         shape as the sandbox card above it, for the same reason. -->
+                         chooser says what this card is about better than a title could. -->
                     <!-- THE LADDER: ITS OWN ROW, OUTSIDE EVERY CARD. It answers "which machine", and what
                          follows is the consequence of that answer: nesting it inside the run card put a
                          three-column picker inside a bordered surface inside a column, and the choice read as
@@ -2110,7 +1890,7 @@ watch(commandReady, (ready) => {
                          and each rung is its own card, which is also what stopped the rungs from needing a
                          card around them to look like objects.
                          Hidden in the desktop app, where "this computer" is the whole point of being in it. -->
-                    <div v-if="created && lane === `provision` && ladderShown" class="flex flex-col gap-2">
+                    <div v-if="created && lane === `provision` && ladderShown" ref="ladderRow" class="flex flex-col gap-2">
                         <!-- One column per rung, so two rungs are two halves rather than two thirds of a row
                              with a hole where the third would be. -->
                         <div
@@ -2144,10 +1924,8 @@ watch(commandReady, (ready) => {
                                      machine is being started there is nothing to choose, and a spinner pinned
                                      to a picture reads as an illustration that has broken. The two stack in one
                                      grid cell and the drawing goes `invisible` rather than away, so the cell
-                                     keeps the artwork's exact height and the row cannot jump: the same trick
-                                     the name row above uses for its pencil and its Save pair, and for the same
-                                     reason. A hand-written height here would be a second copy of a number the
-                                     drawing already owns. -->
+                                     keeps the artwork's exact height and the row cannot jump. A hand-written
+                                     height here would be a second copy of a number the drawing already owns. -->
                                 <span class="mb-1 grid w-full grid-cols-1 grid-rows-1">
                                     <SetupRungArt
                                         :kind="option.value"
@@ -2175,7 +1953,7 @@ watch(commandReady, (ready) => {
                         </div>
                     </div>
 
-                    <section v-if="created && lane === `provision`" class="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4 md:p-5">
+                    <section v-if="created && lane === `provision`" class="ui-card flex flex-col gap-4 p-4 md:p-5">
                         <!-- WHERE THIS MACHINE WILL ANSWER: the rung's consequence, reported by the card the rung
                              chose. It spent a release as the second line of the sandbox card, which put a hex
                              hostname above the only decision on the page and made a stranger skip it to reach the
@@ -2187,9 +1965,8 @@ watch(commandReady, (ready) => {
                              row in it.
                              It leads the card in every lane, so "the token above", "the address above" and the
                              lock's "Preparing your intentic domain…" all point at something on screen. -->
-                        <div class="flex flex-col gap-2 border-b border-line pb-3">
-                            <!-- The same label column the name row wears, so the two facts line up down the page.
-                                 ONE GROUP IN EVERY STATE (announced, minted, still minting, failed, or never
+                        <div class="flex flex-col gap-2">
+                            <!-- ONE GROUP IN EVERY STATE (announced, minted, still minting, failed, or never
                                  offered) so the escape hatch beside it is reachable in all of them. It used to
                                  hang off the success branch alone, which left a reader whose mint had just
                                  errored with no way to choose a different address at all. -->
@@ -2322,9 +2099,8 @@ watch(commandReady, (ready) => {
                             </template>
                         </div>
 
-                        <!-- Whatever went wrong on THIS step, said on this step. The page-level notice belongs to
-                             the sandbox card above and is cleared by every create, which is how a failed hosted
-                             attempt used to bounce the reader into another lane with the reason already erased. -->
+                        <!-- Whatever went wrong on THIS step, said on this step. Keeping it separate from the
+                             arrival notice prevents a lane change from erasing the reason. -->
                         <Notice v-if="hostedError" :of="hostedError" />
 
                         <!-- THE HOSTED WAIT. Nothing to run and nothing to copy: the platform is doing the work
@@ -2350,7 +2126,7 @@ watch(commandReady, (ready) => {
                                     <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
                                     <Button
                                         label="Start it over"
-                                        class="w-full justify-center md:w-auto"
+                                        class="w-full justify-center md:w-fit"
                                         :disabled="hostedBusy"
                                         @click="restartHosted"
                                     >
@@ -2399,7 +2175,7 @@ watch(commandReady, (ready) => {
                             <template v-else>
                                 <Button
                                     :label="hostedError ? `Try again` : `Start my machine`"
-                                    class="w-full justify-center md:w-auto"
+                                    class="w-full justify-center md:w-fit"
                                     :disabled="hostedSpent"
                                     @click="provisionHosted"
                                 >
@@ -2427,11 +2203,14 @@ watch(commandReady, (ready) => {
                         <template v-else-if="!commandReady">
                             <template v-if="setupError">
                                 <Notice :of="setupError" />
-                                <Button label="Try again" class="w-full justify-center md:w-auto" @click="remint">
+                                <Button label="Try again" class="w-full justify-center md:w-fit" @click="remint">
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
                             </template>
-                            <div v-else class="flex items-start gap-2 rounded-lg border border-dashed border-line px-3 py-4 text-xs text-muted">
+                            <!-- The theme's own "a place for something rather than a thing" surface
+                                 (`ui-card-dashed`), not a hand-drawn dashed rectangle: one waiting-room look,
+                                 dressed by whichever skin is on. -->
+                            <div v-else class="ui-card ui-card-dashed flex items-start gap-2 p-3 text-xs text-muted">
                                 <Icon name="lock" class="mt-0.5 shrink-0" />
                                 <span>{{ lockedReason }}</span>
                             </div>
@@ -2472,27 +2251,9 @@ watch(commandReady, (ready) => {
                                         Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it
                                         answers. No terminal.
                                     </p>
-                                    <Button label="Set it up now" class="self-start" @click="runHere">
+                                    <Button label="Set it up now" class="w-full justify-center md:w-fit" @click="runHere">
                                         <template #icon><Icon name="bolt" /></template>
                                     </Button>
-                                    <!-- THE OTHER RUNGS, ONE CLICK AWAY RATHER THAN ABSENT.
-                                         They were hidden here on the argument that the app IS the computer, which
-                                         is true until this computer cannot run it, and the readers who meet that are
-                                         precisely the ones with no WSL2, no Docker and no administrator. The app's
-                                         requirements screen links straight to this with `?elsewhere=1`, so the
-                                         rungs are already open when somebody arrives that way; this is the same
-                                         door for the reader who worked it out before the install stopped them.
-                                         One muted line, under the loud default, exactly like the command below. -->
-                                    <button
-                                        v-if="!elsewhere && (addressed || hostedOffer?.enabled)"
-                                        type="button"
-                                        :class="ui.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
-                                        @click="elsewhere = true"
-                                    >
-                                        <Icon name="cloud" class="shrink-0" />
-                                        <span class="min-w-0">Can't run it on this computer? See the other options</span>
-                                        <Icon name="chevron-down" class="shrink-0 text-subtle" />
-                                    </button>
                                 </template>
 
                                 <!-- …and in a browser, the same answer one install earlier: the app, for the
@@ -2500,13 +2261,19 @@ watch(commandReady, (ready) => {
                                      would sell it is the sentence the reader is already deciding without, and the
                                      app's own first screen is the branch above, where the button finishes the job.
                                      `secondary` is deliberately NOT used here: this is the step, and the only
-                                     other thing on the card is a muted link. -->
+                                     other thing on the card is a muted link.
+                                     `w-fit` AND NOT `w-auto`, which every primary on this page now shares: the
+                                     card is a flex COLUMN, so a child whose cross size is `auto` is stretched to
+                                     its width no matter what `w-auto` asks for, and the button meant to be as
+                                     wide as its label came out as a 760px bar of accent across the card. A
+                                     definite width opts out of the stretch; `self-start` also would, but it
+                                     silently top-aligns the same class used in a flex row. -->
                                 <Button
                                     v-if="appFirst && installer"
                                     as="a"
                                     :href="installer.href"
                                     :label="`Download for ${installer.label}`"
-                                    class="self-start"
+                                    class="w-full justify-center md:w-fit"
                                 >
                                     <template #icon><Icon name="download" /></template>
                                 </Button>
@@ -2518,30 +2285,40 @@ watch(commandReady, (ready) => {
                                  command is the thing folded behind it. -->
                                 <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
 
-                                <!-- ONE LINE WHERE THERE USED TO BE A SECTION. Every reader who doesn't run the command
-                                 here gets the same offer, worded for the one who takes it: a server the app can't
-                                 reach, a shell app on the phone (Termius, Blink, a tmux session someone never
-                                 closed), or simply somebody who would rather type than install. Everything the
-                                 command needs (its tabs, its options, its dev note) lives inside the disclosure,
-                                 so a phone that isn't driving a server never sees any of it.
-                                 The browser wording is the shortest of the three on purpose: the reader it is for
-                                 recognises "the command" from those two words, and anyone who doesn't is exactly
-                                 the reader the button above it is for. -->
-                                <button
+                                <!-- ONE ROW OF ALTERNATIVES, NOT A STACK OF DISCLOSURES. There were two, one under
+                                     the other, each opening with a question: "Can't run it on this computer? See
+                                     the other options" over "Running it on a server instead? Show the command".
+                                     Two chevrons under the one button that matters, asking the reader to work out
+                                     which of two overlapping questions was theirs (a server IS another computer),
+                                     and each promising only to reveal something rather than naming it.
+                                     They are not the same KIND of thing, which is why folding them into one
+                                     disclosure would have been wrong too: the first changes WHERE the sandbox runs
+                                     (a machine we host, or one in the reader's own cloud account), the second
+                                     changes HOW this one is started (a command instead of a button). So: one quiet
+                                     line saying these are the alternatives, and each alternative named by its
+                                     outcome. Nothing to open to find out what is on offer, and neither one wearing
+                                     the weight of a second call to action. -->
+                                <nav
                                     v-if="desktop || mobile || appFirst"
-                                    type="button"
-                                    :class="ui.linkButton(`gap-2 text-muted hover:text-content hover:no-underline`)"
-                                    @click="showCommand = !showCommand"
+                                    aria-label="Other ways to set up"
+                                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted"
                                 >
-                                    <Icon name="terminal" class="shrink-0" />
-                                    <span class="min-w-0">
+                                    <span>Other ways to set up:</span>
+                                    <!-- The rungs the app keeps folded away, opened by name. Only in the app: in a
+                                         browser they are already on screen, and a link offering what the reader can
+                                         already see sends them looking for something else. -->
+                                    <template v-if="desktop && !elsewhere && (addressed || hostedOffer?.enabled)">
+                                        <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
+                                            Use a hosted or cloud machine
+                                        </button>
+                                        <span aria-hidden="true" class="text-subtle">·</span>
+                                    </template>
+                                    <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">
                                         <template v-if="showCommand">Hide the command</template>
-                                        <template v-else-if="desktop">Running it on a server instead? Show the command</template>
-                                        <template v-else-if="mobile">Have a terminal here? Show the command</template>
-                                        <template v-else>Prefer a terminal? Show the command</template>
-                                    </span>
-                                    <Icon :name="showCommand ? `chevron-up` : `chevron-down`" class="shrink-0 text-subtle" />
-                                </button>
+                                        <template v-else-if="desktop">Show the command for a server</template>
+                                        <template v-else>Show the command</template>
+                                    </button>
+                                </nav>
 
                                 <div v-if="commandVisible" class="flex flex-col gap-2">
                                     <!-- One line, because the title already gave the instruction and nobody reads the second
@@ -2685,7 +2462,7 @@ watch(commandReady, (ready) => {
                      button re-asked a question already being asked and bought nothing but its own presence:
                      and because the poll shares `checking`, it spent every third second flipping itself to
                      "Checking…" and back, which is a card that looks broken while it works perfectly. -->
-                        <div v-if="waiting" class="flex flex-col gap-2 border-t border-line pt-3">
+                        <div v-if="waiting" class="flex flex-col gap-2">
                             <!-- The spinner is a promise that something is moving, so it does not survive a failure
                                  report: a spinner beside "here is what broke" is the page contradicting itself. -->
                             <p
@@ -2818,7 +2595,7 @@ watch(commandReady, (ready) => {
                     v-if="created && lane === `provision` && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
                 >
-                    <div class="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
+                    <div class="ui-card flex flex-col gap-3 p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" :downloads="!appFirst" />
                         <!-- Sync belongs with what the command DOES, not with the reader's path to running it:
                              it is on by default, and the only thing anyone needs from it here is to see that it
@@ -2827,7 +2604,7 @@ watch(commandReady, (ready) => {
                              Gated on the command existing, exactly as that twin is by the branch it sits in: the
                              folder it names is derived from the address the mint provisions, so before there is
                              a command there is nothing here to be true. -->
-                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="border-t border-line pt-3" />
+                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" class="pt-1" />
                     </div>
                     <!-- …and the correction as the second card in this column, once the wait has gone on long
                          enough to be a misunderstanding rather than a wait. It belongs beside the command, and

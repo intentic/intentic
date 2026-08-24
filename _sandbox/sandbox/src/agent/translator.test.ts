@@ -1,6 +1,13 @@
 import { type AccountUsage, TranslatorAccountsSchema } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createCliProxyClient, nextRestartDelay, renderConfig, RESTART_DELAY_BASE_MS, RESTART_DELAY_CAP_MS, TRANSLATOR_BINARY_MISSING } from "./translator.js";
+import {
+    createCliProxyClient,
+    nextRestartDelay,
+    renderConfig,
+    RESTART_DELAY_BASE_MS,
+    RESTART_DELAY_CAP_MS,
+    TRANSLATOR_BINARY_MISSING,
+} from "./translator.js";
 
 /* The shared account-usage store, in memory. Every client in this file gets one: `accounts` reads it on every
  * call now that a row's headroom travels with the row, so a test that skipped it would be exercising a client
@@ -51,6 +58,25 @@ test("bounds how many accounts one request may be retried on", () => {
     const config = renderConfig({ port: 8789, authDir: "/agent-auth/cliproxy", token: "t", compat: "" });
 
     expect(config).toContain("max-retry-credentials: 5");
+});
+
+/* THE FIELD THAT KILLED A TEN-MINUTE TURN, filtered at the proxy's edge rather than trusted to it.
+ *
+ * `400 prompt_cache_retention is not supported on this model` ended a Codex turn at its last request. Nothing
+ * here sends that parameter; the proxy's own Codex paths each strip it separately, and the compaction call, which
+ * is exactly the request a long turn makes at the end, did not. A filter rule runs ahead of all of those paths,
+ * so the guarantee holds whatever version is pinned and whoever else points a client at this loopback endpoint.
+ *
+ * Asserted on the rendered file for the same reason as the walk above: the stripping happens inside a separate
+ * binary that reads it, so the file IS the surface. `prompt_cache_key` must survive, it is what keeps a session's
+ * cache warm, and filtering it would turn a fix into a bill. */
+test("strips the cache-retention parameter nothing here sends, for every model the proxy serves", () => {
+    const config = renderConfig({ port: 8789, authDir: "/agent-auth/cliproxy", token: "t", compat: "" });
+
+    expect(config).toContain(`payload:`);
+    expect(config).toContain(`        - "prompt_cache_retention"`);
+    expect(config).toContain(`        - name: "*"`);
+    expect(config).not.toContain(`- "prompt_cache_key"`);
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -145,7 +171,9 @@ test("completes Google's redirect login via oauth-callback", async () => {
         usageStore: memoryStore().store,
     });
 
-    await expect(client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc&state=xyz", state: "xyz" })).resolves.toBeUndefined();
+    await expect(
+        client.complete({ provider: "gemini", redirectUrl: "http://localhost:51121/oauth-callback?code=abc&state=xyz", state: "xyz" }),
+    ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/oauth-callback", {
         method: "POST",
         headers: { authorization: "Bearer local", "content-type": "application/json" },

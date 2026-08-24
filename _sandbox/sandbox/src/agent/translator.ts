@@ -153,6 +153,22 @@ export const cliProxyManagementUrl = (config: Config): string => `${config.trans
  * request inside one of them. */
 const MAX_RETRY_CREDENTIALS = 5;
 
+/* THE PARAMETER NO REQUEST FROM THIS SANDBOX MAY CARRY, removed at the proxy's own edge, for every model and
+ * every route it serves.
+ *
+ * `prompt_cache_retention` is the provider's own knob, not ours: nothing in this repo sets it, and a captured
+ * Codex request body does not contain it. It still ended a ten-minute turn with `400 prompt_cache_retention is
+ * not supported on this model`, because the proxy's Codex paths each strip the field SEPARATELY and one of them,
+ * the conversation-compaction call a long turn makes at its very end, forgot to. The pin in
+ * packs/translator.Dockerfile is past that bug; this rule is what makes the guarantee independent of the pin,
+ * since a `payload.filter` runs before every one of those paths, compaction included, on any version.
+ *
+ * Belt and braces on purpose. A pin can be bumped by someone reading a changelog, and a client we do not control
+ * (a user's own tool pointed at the same loopback endpoint) can send the field at any time; neither should be
+ * able to cost somebody a turn's work. `prompt_cache_key` is deliberately NOT filtered: the proxy sets it itself
+ * to keep a session's cache warm, which is the saving this parameter family exists for. */
+const FILTERED_PARAMETERS = ["prompt_cache_retention", "prompt_cache_options"];
+
 // Exported for the test alone: the bounded walk above is a behaviour nothing else in this repo can observe (the
 // proxy is a separate binary reading a file), so the rendered file IS the assertable surface.
 export const renderConfig = (opts: { port: number; authDir: string; token: string; compat: string }): string =>
@@ -170,6 +186,12 @@ export const renderConfig = (opts: { port: number; authDir: string; token: strin
         `  switch-preview-model: true`,
         `  antigravity-credits: false`,
         `max-retry-credentials: ${MAX_RETRY_CREDENTIALS}`,
+        `payload:`,
+        `  filter:`,
+        `    - models:`,
+        `        - name: "*"`,
+        `      params:`,
+        ...FILTERED_PARAMETERS.map((parameter) => `        - ${JSON.stringify(parameter)}`),
         ...(opts.compat === "" ? [] : [opts.compat]),
         ``,
     ].join("\n");
@@ -650,7 +672,9 @@ export const createCliProxyClient = (params: {
         complete,
         disconnect,
         models: async (provider) => {
-            const response = await fetchFn(`${managementUrl}/model-definitions/${CLIPROXY_PROVIDER[provider]}`, { headers: auth }).catch(() => undefined);
+            const response = await fetchFn(`${managementUrl}/model-definitions/${CLIPROXY_PROVIDER[provider]}`, { headers: auth }).catch(
+                () => undefined,
+            );
             if (response === undefined || !response.ok) {
                 throw new Error(`${provider} model catalog unavailable (${response?.status ?? "unreachable"})`);
             }

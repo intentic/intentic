@@ -730,6 +730,24 @@ test("a server_error is coded as a provider outage, keeping the provider's own s
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "provider-outage", message: outage }, { kind: "done" }]);
 });
 
+/* THE ONE 4xx THAT JOINS THEM, and the exception is deliberate: every other 4xx stays uncoded because
+ * re-sending a malformed request on a timer is a loop. This one names a parameter no request from this sandbox
+ * carries (the provider's own cache-retention default, or one a proxy added), so there is nothing of the user's
+ * to fix and the next send goes through: an outage in everything but its status code. It killed a long routed
+ * turn, uncoded, with no resume and nothing for the user to act on. */
+test("a refused parameter nothing here sends is coded as an outage, though it arrives as a 400", async () => {
+    const refusal =
+        'API Error: 400 {"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: refusal }] } }),
+    );
+    const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
+    expect(failure?.code).toBe("provider-outage");
+    // The provider's own sentence survives: our clause only adds the fact the reader cannot check themselves.
+    expect(failure?.message).toContain("prompt_cache_retention is not supported on this model");
+});
+
 test("a 529 at capacity is the same condition as a 500: one code covers both", async () => {
     const overloaded = "API Error: Repeated 529 Overloaded errors. The API is at capacity — this is usually temporary. Try again in a moment.";
     const events = await collect(

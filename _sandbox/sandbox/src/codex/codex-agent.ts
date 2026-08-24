@@ -2,6 +2,8 @@ import type { AgentEvent, AgentReply, AskQuestion, ToolCallLocation } from "@int
 import { createRequest } from "../agent/agent-requests.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
+import { unsentParameterFrame } from "../agent/error-frames.js";
+import { isUnsentParameterRefusalText } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
 import { openBrowserSession } from "../browser/browser-sessions.js";
@@ -299,6 +301,25 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     // An advisory shares this channel with real failures but is not one, the turn answers normally after it. So
     // it must not mark the phase errored: a plan turn that hit one still has a plan to propose (CODEX_ADVISORY).
     return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
+};
+
+/* WHAT A TERMINAL CODEX FAILURE IS CODED AS, for both channels that can carry one (turn.failed and the
+ * top-level error, plus the process-exit wrapper below).
+ *
+ * The parameter refusal is read FIRST, and the order is the point rather than tidiness. `400
+ * prompt_cache_retention is not supported on this model` ends in the words "this model", which is the shape
+ * CODEX_MODEL_INVALID exists to catch, and that code has a side effect: the client reloads the catalog and drops
+ * the user's pinned model. Filing a provider's own bad default as a bad PICK would therefore punish the pick,
+ * fail again on the next model, and leave the user re-choosing a model that was never the problem. The refusal
+ * this sandbox never authored is an outage instead, and the turn comes back on the breaker. */
+const codexFailureFrame = (event: Extract<AgentEvent, { kind: "error" }>): AgentEvent => {
+    if (isUnsentParameterRefusalText(event.message)) {
+        return unsentParameterFrame(event.message);
+    }
+    // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned model,
+    // mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing to re-prompt with
+    // here, the reloaded default serves the next turn).
+    return CODEX_MODEL_INVALID.test(event.message) ? { ...event, code: "codex-model-invalid" as const } : event;
 };
 
 // What phase-1 of a plan turn holds back: the thread id (to resume for execution) and the trailing
@@ -739,10 +760,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
                         continue;
                     }
                     surfacedError = true;
-                    // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned
-                    // model, mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing
-                    // to re-prompt with here, the reloaded default serves the next turn).
-                    yield CODEX_MODEL_INVALID.test(event.message) ? { ...event, code: "codex-model-invalid" as const } : event;
+                    yield codexFailureFrame(event);
                     continue;
                 }
                 yield event;
@@ -750,7 +768,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         } catch (error) {
             if (!surfacedError) {
                 const message = error instanceof Error ? error.message : "codex agent failed";
-                yield { kind: "error", message, ...(CODEX_MODEL_INVALID.test(message) ? { code: "codex-model-invalid" as const } : {}) };
+                yield codexFailureFrame({ kind: "error", message });
             }
         } finally {
             // The app-server this channel fed is gone; a message still riding the queue has nowhere to land, and

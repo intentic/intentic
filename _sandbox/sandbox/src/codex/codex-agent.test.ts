@@ -274,6 +274,30 @@ test("a plan turn that fails after holding a message emits the error and NO plan
     expect(calls).toHaveLength(1);
 });
 
+/* THE FAILURE THAT COST A TEN-MINUTE TURN. The provider refused its OWN cache-retention default at the end of a
+ * long run, in a sentence ending "on this model", and the turn died with a red line: nothing was resumed,
+ * because a 400 reads as the request's fault, and nothing here sends that parameter to fix. Coded as the outage
+ * it is, the daemon's breaker re-runs the turn from the session it already built (turn-resume.ts).
+ *
+ * The sentence ending in "this model" is also why the ORDER is pinned here: the model-invalid branch would have
+ * claimed it and made the client drop the user's pinned model over a fault that was never the pick's. */
+const UNSENT_PARAMETER_400 =
+    '{"error":{"type":"invalid_request_error","code":"invalid_parameter","message":"prompt_cache_retention is not supported on this model","param":"prompt_cache_retention"}}';
+
+test("a parameter the turn never sent is coded as an outage, so the turn comes back instead of dying", async () => {
+    const { runner } = fakeCodexRunner([
+        { type: "thread.started", thread_id: "thr-9" },
+        { type: "turn.failed", error: { message: UNSENT_PARAMETER_400 } },
+    ]);
+    const events = await collect(createTestAgent(runner), request);
+    const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
+    expect(failure?.code).toBe("provider-outage");
+    // The provider's own words are kept, so the reader sees what was refused, not just our gloss on it.
+    expect(failure?.message).toContain("prompt_cache_retention is not supported on this model");
+    // NOT the bad-pick code: that one makes the client throw away a pinned model that had nothing to do with it.
+    expect(failure?.code).not.toBe("codex-model-invalid");
+});
+
 // Codex's fallback-metadata warning lands before turn.started, after which the turn answers normally. Every
 // model the subscription serves but the pinned CLI has no compiled-in metadata for emits one.
 const ADVISORY = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";

@@ -2,9 +2,10 @@
 //
 // WHAT SETUP ASKS FOR ON ARRIVAL, which is the whole subject: nothing. Step 1 used to be a form, an empty field
 // and a Create button that stayed dead until a word was typed, and the word bought nothing, since a name only
-// tells sandboxes apart in a switcher the visitor has not seen yet. These mount the real page and read the first
-// frame: that a sandbox exists without anyone naming it, that arriving on one already made does NOT make a
-// second, and that the name it was given is still the user's to change.
+// tells sandboxes apart in a switcher the visitor has not seen yet. Naming is not on this page at all any more,
+// in any form: no field, no pencil, nothing to press to grow one. It belongs in the workspace, where there are
+// several machines to tell apart. These mount the real page and read the first frame: that a sandbox exists
+// without anyone naming it, and that arriving on one already made does NOT make a second.
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -38,13 +39,12 @@ vi.mock(import(`@intentic/ui`), async (importOriginal) => {
 });
 
 // The sandbox registry, as the page sees it. `sandboxes` is what the auto-name counts against, `list` is the
-// read on mount, and `create`/`update` are the two writes these tests are about.
+// read on mount, and `create` is the one write this page makes to the row itself.
 const sandboxes = ref<SandboxSummary[]>([]);
 const list = vi.fn<() => Promise<SandboxSummary[]>>();
 const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
 const hostedProvision = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
 const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
-const update = vi.fn<(id: string, input: { name?: string }) => Promise<SandboxSummary>>();
 // The 3s poll's read. Named (rather than inline) because the wait card is driven entirely by what it returns:
 // what the sandbox has said about its own boot, and whether we have been refusing its check-ins.
 const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
@@ -60,7 +60,6 @@ vi.mock(`../composables/sandbox/useSandbox`, () => ({
         create,
         hostedProvision,
         hostedRelease,
-        update,
         refresh,
         remove,
         select: vi.fn(),
@@ -174,31 +173,15 @@ const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
 const linkLabelled = (text: string): HTMLAnchorElement | undefined =>
     [...document.querySelectorAll(`a`)].find((link) => link.textContent?.trim() === text);
 
-// The rename affordances are icons now, so they are found the way a screen reader finds them.
-const renamePencil = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Rename sandbox"]`)!;
-const saveName = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`[aria-label="Save name"]`)!;
+// Anything on the page whose whole text is this: the leaf that holds a value, rather than every ancestor that
+// contains it. Used to ask WHERE something is, which is a question about one element and not about a subtree.
+const nodeWithText = (text: string): Element =>
+    [...document.querySelectorAll(`*`)].find((node) => node.children.length === 0 && node.textContent?.trim() === text)!;
 
-// The row that reports the name: climbed to from the pencil rather than read off a class, since the pencil and
-// the value sit in separate cells of it (the in-place edit stacks each control over the one it replaces).
-// Asserting on the row rather than the page keeps "workspace" from matching the page's own title, "Set up your
-// workspace".
-const nameRow = (): string => {
-    let node: HTMLElement | null = renamePencil();
-    while (node !== null && node.textContent?.includes(`Name`) !== true) {
-        node = node.parentElement;
-    }
-    return node?.textContent ?? ``;
-};
-
-// The card that reports the sandbox itself: climbed to from the pencil, because it is the one card on the page
-// with no heading to find it by. What is IN it is the subject of the address test below.
-const factsCard = (): HTMLElement => {
-    let node: HTMLElement | null = renamePencil();
-    while (node !== null && node.tagName !== `SECTION`) {
-        node = node.parentElement;
-    }
-    return node!;
-};
+// Does it sit after the rung picker in the page's own order? The picker is the landmark this page is measured
+// against: what a stranger reads BEFORE the only choice on it is what decides whether they reach the choice.
+const afterThePicker = (text: string): boolean =>
+    (document.querySelector(`[role="radiogroup"]`)!.compareDocumentPosition(nodeWithText(text)) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 // A settled mint, so the run card gets past its lock and renders the thing the reader came for. The tests that
 // predate this one deliberately leave the mint hanging, which is what keeps them about step 1.
@@ -222,7 +205,6 @@ beforeEach(() => {
         sandboxes.value = [...sandboxes.value, row];
         return row;
     });
-    update.mockReset().mockImplementation(async (id: string, input: { name?: string }) => sandboxRow({ id, name: input.name ?? `` }));
     remove.mockReset().mockResolvedValue(undefined);
     push.mockReset();
 });
@@ -241,11 +223,14 @@ afterEach(() => {
 });
 
 // The regression this file is named for: a fresh account gets a sandbox by arriving, and is never shown a field.
+// Asserted by SHAPE rather than against the label the field used to wear: there is nothing to type into on this
+// page, and no control that grows one, whatever such a thing would be called.
 it(`creates the sandbox on arrival, with no name asked for`, async () => {
-    await mount();
+    const el = await mount();
     expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(nameRow()).toContain(`workspace`);
     expect(buttonLabelled(`Create`)).toBeUndefined();
+    expect(el.querySelector(`input`)).toBeNull();
+    expect([...el.querySelectorAll(`button`)].some((button) => /name/i.test(button.getAttribute(`aria-label`) ?? ``))).toBe(false);
 });
 
 /* THE DRAFT RULE: the price of creating on arrival, paid back.
@@ -262,24 +247,8 @@ it(`discards the sandbox it made when the reader leaves without committing`, asy
     expect(remove).toHaveBeenCalledWith(`new`);
 });
 
-// …and the acts that keep it are acts, never guesses. Typing a name over the one we picked is the cheapest of
-// them and the easiest to get wrong: nobody renames a machine they are about to walk away from.
-it(`keeps the sandbox once its name has been typed`, async () => {
-    const el = await mount();
-    renamePencil().click();
-    await nextTick();
-    const field = el.querySelector<HTMLInputElement>(`input`)!;
-    field.value = `shop`;
-    field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    saveName().click();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
-    leave();
-    expect(remove).not.toHaveBeenCalled();
-});
-
-// A machine exists now: there is hardware behind this row, and deleting it on the way past would be throwing
-// away the thing the reader just started.
+// …and the acts that keep it are acts, never guesses. A machine exists now: there is hardware behind this row,
+// and deleting it on the way past would be throwing away the thing the reader just started.
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
@@ -327,7 +296,7 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     await vi.waitFor(() => expect(create).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
-    expect(nameRow()).toContain(`workspace`);
+    expect(el.querySelector(`[role="radiogroup"]`)).not.toBeNull();
 });
 
 // "Add sandbox" from a shell that already has one: the default counts past the names the account holds rather
@@ -345,25 +314,10 @@ it(`resumes an unfinished sandbox rather than making a second`, async () => {
     const unfinished = sandboxRow({ id: `s1`, name: `my-laptop` });
     sandboxes.value = [unfinished];
     list.mockResolvedValue([unfinished]);
-    await mount();
-    expect(create).not.toHaveBeenCalled();
-    expect(nameRow()).toContain(`my-laptop`);
-});
-
-// The name is a default, not a decision taken away: changing it is one click from the step that reports it, and
-// it goes to the row this page created: never to whichever sandbox happens to be selected.
-it(`renames the sandbox it created, from the step itself`, async () => {
     const el = await mount();
-    renamePencil().click();
-    await nextTick();
-    const field = el.querySelector<HTMLInputElement>(`input`)!;
-    field.value = `shop`;
-    field.dispatchEvent(new Event(`input`));
-    await nextTick();
-    saveName().click();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledWith(`new`, { name: `shop` }));
-    await nextTick();
-    expect(nameRow()).toContain(`shop`);
+    expect(create).not.toHaveBeenCalled();
+    // Said as where the reader left off rather than as bookkeeping about a row they never knowingly made.
+    expect(el.textContent).toContain(`Picking up where you left off`);
 });
 
 /* ON A PLATFORM THAT HOSTS, A FRESH SANDBOX DEFAULTS TO THE READER'S OWN COMPUTER.
@@ -423,12 +377,10 @@ it(`reports the address on the run card rather than above the choice`, async () 
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
     await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
-    // The card that opens the page has the name and nothing else to skip past.
-    expect(factsCard().textContent).toContain(`workspace`);
-    expect(factsCard().textContent).not.toContain(MINTED.hostname);
-    expect(factsCard().textContent).not.toContain(`Use a different address`);
-    // …and the run card, which is where somebody who has already picked a rung is reading.
-    expect(el.textContent).toContain(`Use a different address`);
+    // Both the address and the way off it are read by somebody who has already picked a rung: neither is
+    // something a stranger has to get past to reach the choice.
+    expect(afterThePicker(MINTED.hostname)).toBe(true);
+    expect(afterThePicker(`Use a different address`)).toBe(true);
 });
 
 /* THE OWN-COMPUTER LANE LEADS WITH AN INSTALLER wherever we ship a build for the machine reading the page.
@@ -447,8 +399,11 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     // …and the wait under it names the move it is actually waiting on.
     expect(el.textContent).toContain(`Nothing runs until you install the app above`);
 
-    const disclosure = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Prefer a terminal?`));
-    disclosure!.click();
+    // The alternatives are NAMED on screen rather than folded behind a question ("Prefer a terminal?"), and the
+    // one that opens the command says what it opens.
+    expect(el.textContent).toContain(`Other ways to set up`);
+    const showCommand = [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Show the command`);
+    showCommand!.click();
     await nextTick();
     expect(el.textContent).toContain(`Paste it into a terminal`);
 });
@@ -461,7 +416,9 @@ it(`keeps the command first where there is no build for the reader's machine`, a
     await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
     expect(linkLabelled(`Download for Windows`)).toBeUndefined();
     expect(linkLabelled(`Download for Linux`)).toBeUndefined();
-    expect(el.textContent).not.toContain(`Prefer a terminal?`);
+    // Nothing to offer as an alternative here: the command IS the path, so the row of other ways is absent
+    // rather than pointing at what is already on screen.
+    expect(el.textContent).not.toContain(`Other ways to set up`);
 });
 
 /* A refused provision (allowance spent, capacity weather, a misconfigured platform) must not strand the first
@@ -477,8 +434,9 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     await nextTick();
     buttonLabelled(`Start my machine`)!.click();
     await vi.waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
-    expect(create).toHaveBeenCalledWith(`workspace`);
-    expect(nameRow()).toContain(`workspace`);
+    // The row the page made on arrival carries on: not deleted, not made again in another lane.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
     // The way out is the same button, now saying what pressing it would be.
     expect(buttonLabelled(`Try again`)).toBeDefined();
 });
@@ -586,8 +544,7 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     mine().click();
     await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
     expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
-    await nextTick();
-    expect(nameRow()).toContain(`workspace`);
+    expect(remove).not.toHaveBeenCalled();
 });
 
 /* …AND THE RUNG IT CAME OFF IS STILL TAKEABLE. The allowance is the server's count of the machines this

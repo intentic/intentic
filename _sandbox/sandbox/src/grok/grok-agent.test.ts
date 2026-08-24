@@ -353,6 +353,15 @@ test("a spent allowance is coded rate_limit, whatever wording the provider refus
         { kind: "error", message: "connection reset" },
         { kind: "done" },
     ]);
+    /* A PARAMETER NOTHING HERE SENDS, refused above us: every routed provider shares the proxy and the upstream
+     * defaults that can produce it, so this adapter reads it too. Coded as an outage (the turn is worth making
+     * again and there is no request of the user's to fix) and NOT as a bad model pick, which the sentence's own
+     * "on this model" would otherwise earn it, at the cost of dropping a pinned model that was never at fault. */
+    const unsent = "400 prompt_cache_retention is not supported on this model";
+    const failure = (await collect(createGrokAgent(fakeRunner(...refusal(unsent)).runner), request)).find((event) => event.kind === "error") as
+        { code?: string; message: string } | undefined;
+    expect(failure?.code).toBe("provider-outage");
+    expect(failure?.message).toContain(unsent);
 });
 
 /* THE WAIT THAT USED TO LOOK LIKE A HANG. OpenCode rides out a refused request inside the turn and says so

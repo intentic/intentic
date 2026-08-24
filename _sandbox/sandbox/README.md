@@ -394,6 +394,18 @@ conversation's worktree instead of a path that still reaches the shared checkout
   kind that arrives in bursts. `rollup` keeps the money honest by summing only turns the provider counted, and
   the experiment readers drop failed and cancelled turns, whose zero prose and zero searches are arithmetic
   rather than behaviour.
+- **One 4xx is the provider's fault, and it is classified as such.** A turn that runs for ten minutes and then
+  dies on `400 prompt_cache_retention is not supported on this model` was refused over a parameter nothing here
+  sends: the CLI's outgoing body was captured without it, the field appears nowhere in this repo, and the same
+  provider's successful answers come back carrying it, so what was rejected was its own default (a proxy in front
+  of it can add one too, which is why `packs/translator.Dockerfile` pins past the release whose compaction path
+  forgot to strip the field). Every other 4xx stays uncoded on purpose, because re-sending a malformed request on
+  a timer is a loop rather than a recovery; this one has no request of the user's to fix and goes through moments
+  later, so `isUnsentParameterRefusalText` (`src/agent/failure-sentences.ts`) codes it `provider-outage` and the
+  existing breaker re-runs the turn from the session it already built. Read by every adapter that codes failures
+  (the Claude harness's API error text, Codex's `turn.failed`, OpenCode's `session.error`) and read BEFORE the
+  bad-model-pick branch in each: the sentence ends in "on this model", so the older branch would have thrown away
+  a pinned model that was never at fault.
 - **Automatic tier selection is judged in one place, said out loud, and refusable.** Every turn passes a pure
   keyword-and-weights judge before it is planned (`src/agent/turn-tier.ts` over the contract's
   `prompt-complexity.ts`), which costs no call and, in the default `shadow` mode, no I/O either: the verdict is
