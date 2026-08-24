@@ -1,10 +1,10 @@
-use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, WindowEvent,
-};
 use tauri::webview::NewWindowResponse;
-use tauri_plugin_opener::OpenerExt;
+use tauri::{
+    AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
+};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::setup_link::{parse_link, Link, SetupArgs, Source};
 use crate::state::CloseAction;
@@ -733,7 +733,10 @@ mod link_tests {
     #[test]
     fn mailto_leaves_the_webview() {
         let app = origin("https://app.intentic.dev");
-        assert!(!stays_in_webview(&origin("mailto:support@intentic.dev"), &app));
+        assert!(!stays_in_webview(
+            &origin("mailto:support@intentic.dev"),
+            &app
+        ));
     }
 }
 

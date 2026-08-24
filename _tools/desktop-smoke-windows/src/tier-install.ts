@@ -60,7 +60,9 @@ export interface InstallTierOptions {
 
 const WINDOW_SETTLE_SECONDS = 60;
 const LINK_SECONDS = 45;
-const SCREEN_SECONDS = 30;
+// A cold first launch also initializes WebView2's user-data directory. The failed release reached the setup
+// screen just after the old 30-second deadline, while the already-warm second launch took under three seconds.
+const SCREEN_SECONDS = 60;
 
 /* The single-instance plugin's own window, which the app owns for its whole life and nobody ever sees: 15×15
  * pixels at the origin, kept mapped because handing a second launch's argv to the first is a window message.
