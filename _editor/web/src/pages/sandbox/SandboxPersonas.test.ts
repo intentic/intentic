@@ -251,6 +251,14 @@ it(`says nothing about a persona that holds no accounts`, () => {
     expect(rendered).not.toContain(`can't post`);
 });
 
+// Closed rows name the persona, not the accounts: those live in the open card (and as marks on the right).
+it(`does not list account names under a closed persona`, () => {
+    personas.value = [{ id: `work`, capabilities: [`reddit-work`, `x-company`] }];
+    const rendered = text(mount());
+    expect(rendered).not.toContain(`reddit-work`);
+    expect(rendered).not.toContain(`x-company`);
+});
+
 // ...and a sandbox that has connected nothing at all can still make one. The page used to open with a warning
 // and disable this button, which is the same claim enforced rather than merely written.
 it(`offers to add a persona when this sandbox has no accounts at all`, () => {

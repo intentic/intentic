@@ -394,28 +394,15 @@ const confirmRemove = async (): Promise<void> => {
                         </button>
                     </template>
 
-                    <!-- THE ACCOUNTS BY NAME, under the persona's own. The marks on the right say which
-                         platforms at a glance, but a mark cannot tell `reddit-work` from `reddit-personal`: those
-                         two being different is the entire problem this feature exists to solve, so the names
-                         are not something the row can leave to a tooltip.
+                    <!-- The name sits alone on the row: accounts live in the open card, and the marks on the
+                         right already say which platforms. A description slot would sit the title on the first
+                         line of a two-line block and make it look top-heavy against the face.
 
-                         A CARD HOLDING NONE LEAVES THE SLOT EMPTY rather than filling it with a warning. This
-                         wrote "No accounts: this persona can't post anywhere" there, which painted the most
-                         ordinary card there is (one made to work in a folder, one made a minute ago) as a
-                         defect, in the warning colour, on the very page you come to to look at your personas. -->
-                    <template #description>
-                        <span v-if="rename.error !== undefined && renamingId === persona.id" class="text-danger">{{ rename.error }}</span>
-                        <!-- Separated, because two account names running together read as one. A signed-out
-                             account is dimmed rather than struck through: a line through it says REMOVED, and
-                             what is true is that it is listed and cannot act yet, which the badge names. -->
-                        <span v-else class="flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                            <template v-for="(mark, at) in marks(persona)" :key="mark.id">
-                                <span v-if="at > 0" class="text-subtle">·</span>
-                                <span :class="mark.signedIn ? `` : `text-subtle`" :title="mark.signedIn ? undefined : `Not signed in yet`">
-                                    {{ mark.id }}
-                                </span>
-                            </template>
-                        </span>
+                         A rename failure still uses this slot, because that is the one moment the row has
+                         something to say under the name. The slot is omitted otherwise so Row does not reserve
+                         a blank line for it. -->
+                    <template v-if="rename.error !== undefined && renamingId === persona.id" #description>
+                        <span class="text-danger">{{ rename.error }}</span>
                     </template>
 
                     <template #meta>
