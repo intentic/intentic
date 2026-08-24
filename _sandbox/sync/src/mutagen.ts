@@ -265,6 +265,34 @@ export const existingSyncSessions = (mutagen: string, names: readonly string[]):
     return names.filter((name) => listed.has(name));
 };
 
+/* Stop spending CPU on a sandbox that has stayed unreachable for an hour, without confusing that with a
+ * person's deliberate pause. Both sessions are always paused/resumed as a pair. A pairing with no sessions is
+ * already idle, and one whose sessions are both manually paused is left alone so the watcher never later undoes
+ * the owner's choice. */
+export const pauseUnreachableSync = (mutagen: string, pairing: Pairing): boolean => {
+    if (pairing.mode !== "sync") {
+        return false;
+    }
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    if (names.length === 0 || names.every((name) => readSessionState(mutagen, name).paused === true)) {
+        return false;
+    }
+    const result = spawnSync(mutagen, ["sync", "pause", ...names], { stdio: "ignore", windowsHide: true });
+    return result.status === 0;
+};
+
+export const resumeAutoPausedSync = (mutagen: string, pairing: Pairing): boolean => {
+    if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true) {
+        return false;
+    }
+    const names = existingSyncSessions(mutagen, syncSessionNames(pairing.sandboxId));
+    if (names.length === 0) {
+        return false;
+    }
+    const result = spawnSync(mutagen, ["sync", "resume", ...names], { stdio: "ignore", windowsHide: true });
+    return result.status === 0;
+};
+
 // Whether what's running is what THIS build would create. Both endpoints and the WHOLE ignore set count:
 // Mutagen freezes a session's configuration at `sync create` and has no verb that edits it afterwards, so an
 // ignore list that no longer matches is a session that will never behave like this version says it does.
