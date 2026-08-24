@@ -258,7 +258,7 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     expect(offered).toMatchObject({ account: "xai" });
 });
 
-test("iq search teaching reaches native Codex and OpenCode from the same shipped skill as Claude", async () => {
+test("iq search teaching reaches native Codex and OpenCode as the shipped nudge, not the full skill Claude loads", async () => {
     const settings = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
         get: async () => SandboxSettingsSchema.parse({ iqSearch: true }),
     });
@@ -273,7 +273,8 @@ test("iq search teaching reaches native Codex and OpenCode from the same shipped
         context,
     );
     expect((codex as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
-    expect((codex as { request: AgentRequest }).request.prompt).toContain("iq def createIgnoreScope");
+    expect((codex as { request: AgentRequest }).request.prompt).toContain(".agents/skills/iq/SKILL.md");
+    expect((codex as { request: AgentRequest }).request.prompt).not.toContain("iq def createIgnoreScope");
 
     const grok = await planTurn(
         servicesWith({
@@ -289,7 +290,8 @@ test("iq search teaching reaches native Codex and OpenCode from the same shipped
         context,
     );
     expect((grok as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
-    expect((grok as { request: AgentRequest }).request.prompt).toContain("iq def createIgnoreScope");
+    expect((grok as { request: AgentRequest }).request.prompt).toContain(".agents/skills/iq/SKILL.md");
+    expect((grok as { request: AgentRequest }).request.prompt).not.toContain("iq def createIgnoreScope");
 });
 
 test("iq search holdout assigns one balanced arm deterministically per conversation", () => {

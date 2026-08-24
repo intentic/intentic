@@ -254,6 +254,12 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
         .title("Intentic")
         .inner_size(size.0, size.1)
         .min_inner_size(min.0, min.1)
+        /* Tauri's native drag-drop handler and the webview's HTML5 drag-drop API are mutually exclusive on
+         * Windows (and the same on Linux): with the handler on, OS files never reach the SPA's drop handlers
+         * (WorkspaceDesktop.vue, WorkspaceTree.vue), so drag-and-drop from Explorer works in the browser but
+         * not here. The workspace upload pipeline is built on DataTransfer/webkitGetAsEntry, so the handler
+         * stays off on this window. */
+        .disable_drag_drop_handler()
         // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
         // a finished setup hands the window back, and the workspace must appear where the setup was standing.
         .visible(false)
