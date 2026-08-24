@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { InfoHint, Row } from "@intentic/ui";
-import { computed, nextTick, ref, useTemplateRef } from "vue";
+import { nextTick, ref, useTemplateRef } from "vue";
 import UsageRing from "../../components/UsageRing.vue";
 import type { PlanHeadroom } from "../../composables/chat/usageStatus";
 
@@ -57,8 +57,10 @@ const {
     headroom?: PlanHeadroom;
     /* What this sandbox has spent on the connection. It belongs INSIDE the ring's card, not on the row: the
      * row answers "which account is this and can I use it", and a permanent line of turns/tokens/dollars under
-     * every row answered a question nobody had while making that one harder to read. Falls back to the row's
-     * own description only when there is no ring to park it behind, so the figures are never simply lost. */
+     * every row answered a question nobody had while making that one harder to read. When there is no ring
+     * (providers whose plan limits cannot be read, such as Cursor and Grok), the figures are omitted here:
+     * the Usage tab holds that history, and printing it under every connection row was the clutter this split
+     * was meant to remove. */
     activity?: string;
     // Whether this account is exhausted (≥90% utilization). Dims the row so active accounts stand out.
     exhausted?: boolean;
@@ -93,9 +95,6 @@ const commit = (): void => {
 const cancel = (): void => {
     editing.value = false;
 };
-
-// No ring means no card to park the spend line in, so the row prints it after all rather than dropping it.
-const fallbackActivity = computed(() => (headroom === undefined ? activity : undefined));
 
 const DOT_TONE: Record<string, string> = {
     connected: `bg-success`,
@@ -167,11 +166,11 @@ const DOT_TONE: Record<string, string> = {
         <!-- Indented to the title's x, not the glyph's: the description belongs to the name above it. A bar of
              the same line's height stands in while the read behind it is still out, so the row is its final
              height from the first frame. -->
-        <template v-if="description || descriptionPending || fallbackActivity" #description>
+        <template v-if="description || descriptionPending" #description>
             <span v-if="descriptionPending" class="flex min-h-[1lh] items-center pl-7" aria-hidden="true">
                 <span class="skeleton block h-2.5 w-56" />
             </span>
-            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description ?? fallbackActivity }}</span>
+            <span v-else class="block pl-7" :class="tone === `warning` ? `text-warning` : ``">{{ description }}</span>
         </template>
         <template v-if="$slots[`control`]" #control><slot name="control" /></template>
         <template v-if="$slots[`below`]" #below><slot name="below" /></template>
