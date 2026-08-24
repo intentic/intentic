@@ -59,7 +59,11 @@ reports the profile.
   make: the cache costs roughly a gigabyte of RAM per 16k of window, and a window under what a turn of the agent
   loop costs on its own serves fine as a quick-model pin and refuses everything else — so the resolved number is
   quoted back wherever the entry is shown, and `src/endpoints/local-model.ts` is the one place the card's two
-  fields become the one `--ctx-size` the server is started with. To everything downstream it is an
+  fields become the one `--ctx-size` the server is started with. Only one local-model server owns the machine at
+  a time: the last restored or updated entry becomes active, a late download cannot steal that slot, and the
+  others remain cached in standby. Before launch, their weights plus priced KV cache are checked against a
+  reserved GPU/container budget, then llama.cpp's own auto-fit decides the exact layer split. To everything
+  downstream it is an
   `endpoint/<id>` provider like any user-added model API: src/endpoints/local-model.ts is the one place the
   two kinds are joined, and src/capabilities/handlers/localmodel.ts owns the download, the panel session, the
   boot restore, and the one moment this kind does not share with a user-added endpoint. The translator's

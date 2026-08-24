@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
@@ -123,6 +123,8 @@ const downloads = new Map<string, { received: number; total: number }>();
 const fetches = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const jobs = new Map<string, { readonly promise: Promise<void>; readonly abort: AbortController }>();
 const failures = new Map<string, string>();
+let selectedModelId: string | undefined;
+let serverSwitch = Promise.resolve();
 
 const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
 
@@ -279,11 +281,89 @@ const ensureWeights = (source: LocalModelSource, destination: string): Promise<v
  * sentence in the entry's panel rather than serving something wrong.
  *
  * --jinja because the modern instruct models the card curates carry their chat/tool template in the GGUF and
- * serve tool calls only through it; -ngl offloads every layer exactly when the GPU actually rode (the stamp,
- * not the ask). */
-const serverCommand = (path: string, port: number, window: number): string => {
-    const layers = gpuState() === "all" ? " -ngl 999" : "";
-    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja${layers}`;
+ * serve tool calls only through it. GPU layers stay on llama.cpp's auto fitter exactly when the GPU actually
+ * rode (the stamp, not the ask), so an oversized model spills layers to host memory instead of blindly claiming
+ * every layer and aborting the fit. */
+export const serverCommand = (path: string, port: number, window: number): string => {
+    const gpuFit = gpuState() === "all" ? " --gpu-layers auto --fit on" : "";
+    return `llama-server -m '${path}' --host 127.0.0.1 --port ${port} --ctx-size ${window} --parallel 1 --cache-type-k q8_0 --cache-type-v q8_0 --jinja${gpuFit}`;
+};
+
+/* A CHEAP ADMISSION ESTIMATE, before llama.cpp commits the machine. The card already prices q8 KV at about
+ * 2 GB per 32k; the GGUF's own byte size is the other large term, and one gigabyte covers graph/scratch/runtime
+ * allocations. GPU and container memory are one effective pool here because auto-fit moves layers between
+ * them. The 20% reserve belongs to the daemon, compiler, browser and the host page cache: a model that fits
+ * only by consuming those is exactly the workload this gate exists to refuse.
+ *
+ * It is deliberately conservative rather than pretending to decode every architecture's GGUF metadata. The
+ * upstream fitter remains the exact per-device authority; this gate catches the order-of-magnitude mistake
+ * before it can push the whole WSL VM into swap. */
+const KV_BYTES_PER_32K = 2_000_000_000;
+const MODEL_RUNTIME_BYTES = 1_000_000_000;
+const MODEL_CAPACITY_SHARE = 0.8;
+
+export const estimatedModelMemory = (weightsBytes: number, window: number): number =>
+    weightsBytes + (window / 32_768) * KV_BYTES_PER_32K + MODEL_RUNTIME_BYTES;
+
+const hostMemoryCapacity = async (): Promise<number> => {
+    const cgroup = (await readFile("/sys/fs/cgroup/memory.max", "utf8").catch(() => "max")).trim();
+    if (/^\d+$/.test(cgroup)) {
+        return Number(cgroup);
+    }
+    const meminfo = await readFile("/proc/meminfo", "utf8");
+    return Number(/^MemTotal:\s+(\d+) kB$/m.exec(meminfo)?.[1] ?? 0) * 1024;
+};
+
+const gpuMemoryCapacity = async (): Promise<number> => {
+    if (gpuState() !== "all") {
+        return 0;
+    }
+    const result = await exec("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"]).catch(() => undefined);
+    if (result === undefined) {
+        return 0;
+    }
+    const devices = result.stdout
+        .split("\n")
+        .map((line) => Number(line.trim()))
+        .filter(Number.isFinite);
+    return Math.max(0, ...devices) * 1024 * 1024;
+};
+
+const admitModel = async (path: string, window: number): Promise<void> => {
+    const [weightsBytes, hostBytes, gpuBytes] = await Promise.all([fileSize(path), hostMemoryCapacity(), gpuMemoryCapacity()]);
+    const estimated = estimatedModelMemory(weightsBytes, window);
+    const budget = (hostBytes + gpuBytes) * MODEL_CAPACITY_SHARE;
+    if (budget > 0 && estimated > budget) {
+        throw new Error(
+            `model start refused before it could exhaust the sandbox: ${gb(estimated)} estimated for weights + ${localModelWindowLabel(window)} KV cache, but the safe GPU/container budget is ${gb(budget)}. Reduce the conversation window or choose smaller weights.`,
+        );
+    }
+};
+
+const serializeServerSwitch = async (work: () => Promise<void>): Promise<void> => {
+    const previous = serverSwitch;
+    let release!: () => void;
+    serverSwitch = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await previous;
+    try {
+        await work();
+    } finally {
+        release();
+    }
+};
+
+const stopOtherServers = async (ctx: CapabilityCtx, id: string): Promise<void> => {
+    const others = (await ctx.capabilities.list()).filter((capability) => capability.kind === "localmodel" && capability.id !== id);
+    for (const other of others) {
+        stopWatching(other.id);
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one GPU owner at a time is the invariant this loop establishes
+        await ctx.panels.stop(localModelPanelKey(other.id));
+        // A stopped local endpoint must not remain routable merely because its last catalog survived on disk.
+        // oxlint-disable-next-line eslint/no-await-in-loop -- paired with the panel stop above
+        await ctx.endpointModels.forget(other.id);
+    }
 };
 
 // llama-server's own readiness: /health answers 503 while the model loads, 200 once it serves. Short timeout:
@@ -390,6 +470,9 @@ const stopWatching = (id: string): void => {
  * than racing a second writer onto the same part file. The abort check before the server starts is the removal
  * case, a card deleted while its weights were arriving must not leave a process serving it. */
 const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSource, destination: string, window: number): void => {
+    // The most recently restored or explicitly updated entry owns the one local-model slot. On boot the
+    // manifest order makes this deterministic; on Update it makes the card the owner just touched active.
+    selectedModelId = id;
     if (jobs.has(id)) {
         return;
     }
@@ -402,8 +485,17 @@ const startInBackground = (ctx: CapabilityCtx, id: string, source: LocalModelSou
         if (abort.signal.aborted) {
             return;
         }
-        await startServer(ctx, id, destination, window);
-        syncWhenServing(ctx, id);
+        await serializeServerSwitch(async () => {
+            // Another entry was selected while these weights were arriving. Keep the bytes cached, but never
+            // let a late download steal the GPU from the newer choice.
+            if (selectedModelId !== id) {
+                return;
+            }
+            await admitModel(destination, window);
+            await stopOtherServers(ctx, id);
+            await startServer(ctx, id, destination, window);
+            syncWhenServing(ctx, id);
+        });
     })()
         .catch((error: unknown) => {
             // A job stopped on purpose is not a fault to report: the card that would have shown it is the one
@@ -573,6 +665,9 @@ export const localModelHandler: CapabilityHandler = {
         if (jobs.has(id) || ctx.panels.running(localModelPanelKey(id))) {
             return { state: "pending", detail: held ? "loading the model" : "fetching the model, gigabytes, leave it running" };
         }
+        if (selectedModelId !== undefined && selectedModelId !== id) {
+            return { state: "pending", detail: "standby; press Update to make this the active local model" };
+        }
         if (!held) {
             return { state: "pending", detail: "weights not downloaded, press Update to fetch them" };
         }
@@ -588,6 +683,9 @@ export const localModelHandler: CapabilityHandler = {
      * What must NOT survive the removal is work still running for it. The job is stopped in every case; the
      * download only when no other card is fed by the same file. */
     remove: async (ctx, id, config) => {
+        if (selectedModelId === id) {
+            selectedModelId = undefined;
+        }
         jobs.get(id)?.abort.abort();
         stopWatching(id);
         failures.delete(id);

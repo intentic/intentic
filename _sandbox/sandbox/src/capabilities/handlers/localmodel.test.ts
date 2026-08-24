@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { packFragment, readPack } from "../../environment/packs.js";
+import { estimatedModelMemory, serverCommand } from "./localmodel.js";
 import { registry } from "../registry.js";
 
 // The environment-dependent paths (the download, the panel session, the health probe) are exercised
@@ -34,6 +35,27 @@ test("the gpu option adds the passthrough directive and the CUDA build", async (
 test("gpu off leaves no directive in the fragment", async () => {
     const fragment = (await registry.localmodel.fragment?.({ model: "owner/repo/m.gguf" })) ?? "";
     expect(fragment).not.toContain("intentic:runtime");
+});
+
+test("llama-server leaves GPU layers on auto-fit instead of forcing every layer into VRAM", () => {
+    const before = process.env["SANDBOX_GPU"];
+    process.env["SANDBOX_GPU"] = "all";
+    try {
+        const command = serverCommand("/models/m.gguf", 12_345, 100_000);
+        expect(command).toContain("--gpu-layers auto --fit on");
+        expect(command).not.toContain("-ngl 999");
+    } finally {
+        if (before === undefined) {
+            delete process.env["SANDBOX_GPU"];
+        } else {
+            process.env["SANDBOX_GPU"] = before;
+        }
+    }
+});
+
+test("the admission estimate accounts for weights, q8 KV cache and runtime headroom", () => {
+    expect(estimatedModelMemory(16_000_000_000, 32_768)).toBe(19_000_000_000);
+    expect(estimatedModelMemory(16_000_000_000, 98_304)).toBe(23_000_000_000);
 });
 
 // The echo is the vault's complement: nothing on this card is a credential (public weights, an unauthenticated
