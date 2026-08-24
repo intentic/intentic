@@ -35,6 +35,7 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
         "--network", "intentic-workspace-abc-123", "--network-alias", ORIGIN_HOST,
         "--add-host", "host.docker.internal:host-gateway",
         "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
+        "--memory", "14g", "--memory-swap", "18g",
         "--cap-add=SYS_ADMIN", "--cap-add=SYS_PTRACE",
         "-v", "intentic-workspace-abc-123:/work", "-v", "intentic-history-abc-123:/history", "-v", "intentic-docker-abc-123:/var/lib/docker",
         "-e", "SANDBOX_NAME=intentic-sandbox-abc-123", "-e", "SANDBOX_IMAGE=img:1", "-e", "SANDBOX_BASE_IMAGE=img:1",
@@ -55,6 +56,8 @@ test("the hosted-provider shape drops init/alias and adds ports, labels, dns: sa
     });
     expect(argv).not.toContain("--init");
     expect(argv).not.toContain("--network-alias");
+    expect(argv).not.toContain("--memory");
+    expect(argv).not.toContain("--memory-swap");
     // /history rides every shape: the hosted flavor once skipped it, and each update wiped the fleet,
     // the transcripts and every repo's real git dir while "your files are kept" stayed technically true.
     expect(argv.join(" ")).toContain("intentic-history-abc-123:/history");

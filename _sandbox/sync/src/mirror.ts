@@ -14,6 +14,7 @@ import {
     type Pairing,
     readState,
     removePairing,
+    setFileSyncAutoPaused,
     type SkippedPort,
     updateState,
 } from "./config.js";
@@ -24,7 +25,9 @@ import {
     forwardSessionName,
     mutagenForwardArgs,
     ourForwardSessions,
+    pauseUnreachableSync,
     retireOrphanSessions,
+    resumeAutoPausedSync,
     runMutagenAsync,
 } from "./mutagen.js";
 import { machineReport, scopedReport } from "./report.js";
@@ -85,6 +88,12 @@ const WATCHER_EXIT_POLL_MS = 50;
 // ("Disable sync" in the browser, or a recreated sandbox that lost the enrollment) and drops it. Revocation never
 // heals on its own, so three polls (~15s) is already generous slack against a freak one-off.
 const REVOKED_POLLS = 3;
+
+// A sleeping/rebuilding sandbox is ordinary, so transient failures retain their sessions. One uninterrupted
+// hour is different: Mutagen otherwise keeps two SSH reconnect loops alive forever for a deleted sandbox. Pause
+// them, retain the pairing, and resume automatically on the first healthy ports response.
+const UNREACHABLE_PAUSE_POLLS = Math.ceil((60 * 60_000) / POLL_MS);
+export const shouldAutoPauseFileSync = (failedPolls: number): boolean => failedPolls >= UNREACHABLE_PAUSE_POLLS;
 
 // The daemon's definitive "this token is not enrolled" answer (401/403), distinct from transient failures so
 // the watcher can tell revocation (drop the pairing) from a tunnel blip (retry next tick).
@@ -470,6 +479,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     // Per-pairing, keyed by sandbox id: consecutive token rejections, and the cached repo list its git bridge
     // walks. A pairing that comes and goes takes its entries with it.
     const rejectedPolls = new Map<string, number>();
+    const unreachablePolls = new Map<string, number>();
     const repos = new Map<string, readonly string[]>();
     // Sandboxes whose daemon has no machine-report route, retired from reporting for this watcher's lifetime, so
     // an older sandbox costs one request rather than one every REPORT_EVERY_TICKS forever.
@@ -517,10 +527,18 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
             const claimedBy = new Map<number, string>();
             for (const pairing of state.pairings) {
+                let pausedThisPass = false;
                 try {
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time keeps the log readable and the tunnels unhammered
                     const mirrored = await servePairing(mutagen, pairing, claimedBy, log);
                     rejectedPolls.delete(pairing.sandboxId);
+                    unreachablePolls.delete(pairing.sandboxId);
+                    if (resumeAutoPausedSync(mutagen, pairing)) {
+                        // oxlint-disable-next-line eslint/no-await-in-loop -- targeted state mutation for the pairing that just recovered
+                        await setFileSyncAutoPaused(pairing.sandboxId, false);
+                        sessionsPending.delete(pairing.sandboxId);
+                        log(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
+                    }
                     for (const port of mirrored) {
                         claimedBy.set(port.port, pairing.sandboxId);
                     }
@@ -542,9 +560,25 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                             await dropRevokedPairing(mutagen, pairing.sandboxId, log);
                             continue;
                         }
+                    } else {
+                        const failed = (unreachablePolls.get(pairing.sandboxId) ?? 0) + 1;
+                        unreachablePolls.set(pairing.sandboxId, failed);
+                        if (pairing.fileSyncAutoPaused !== true && shouldAutoPauseFileSync(failed) && pauseUnreachableSync(mutagen, pairing)) {
+                            // oxlint-disable-next-line eslint/no-await-in-loop -- one persistent marker for the pairing whose sessions were just paused
+                            await setFileSyncAutoPaused(pairing.sandboxId, true);
+                            pausedThisPass = true;
+                            log(
+                                `  ${pairing.sandboxId}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
+                            );
+                        }
                     }
                     // A transient tunnel blip must not kill the loop, log and try again next tick.
                     log(`  ${pairing.sandboxId}: reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
+                }
+                // An auto-paused pairing still gets the cheap HTTPS liveness probe above; do not immediately
+                // defeat the pause with the SSH-heavy git bridge below.
+                if (pairing.fileSyncAutoPaused === true || pausedThisPass) {
+                    continue;
                 }
                 // The bridge gets its OWN catch. It rides ssh; the ports read above rides https, through
                 // Cloudflare, which 502s a sandbox's /ports often enough to matter while the tunnel underneath is

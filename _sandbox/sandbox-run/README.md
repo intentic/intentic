@@ -10,6 +10,8 @@ app); this package is why they cannot disagree about what one is.
 
 - Define the container's identity: its name, image, labels and volumes.
 - Define its posture: which capabilities it gets, and which it is denied.
+- Bound a local workspace to 14 GiB RAM plus 4 GiB swap, so a runaway build or local model is killed inside
+  its cgroup instead of exhausting the desktop or WSL VM; hosted providers keep owning their machine limits.
 - Define the environment allowlist: what is allowed to cross into the box.
 - Emit the `docker run` invocation, correctly quoted.
 

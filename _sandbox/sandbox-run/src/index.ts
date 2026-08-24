@@ -65,6 +65,15 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 // its own daemon, and an owner-authored overlay still may not ask for it.
 export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 
+/* A LOCAL SANDBOX MUST NOT BE ABLE TO TAKE ITS WHOLE HOST DOWN. The workspace is deliberately broad inside
+ * the container (compilers, browsers, local models), so an unbounded cgroup turns one accidental context or
+ * parallel build into a WSL/desktop-wide swap storm. Fourteen GiB leaves a 20 GiB WSL guest enough room for
+ * Docker, the editor and the sync agent; the four-GiB swap allowance absorbs a short build peak but still
+ * forces the workload to fail before it can consume the VM's entire swap file. Hosted providers own their
+ * machine sizing separately and opt out through their existing `init: false` shape. */
+export const LOCAL_SANDBOX_MEMORY = "14g";
+export const LOCAL_SANDBOX_MEMORY_SWAP = "18g";
+
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
 // (the vpn's WireGuard needs tun + NET_ADMIN; the docker capability's isolated nested engine needs
 // --privileged, and its optional GPU passthrough needs --gpus), allowlisted hard so an overlay can't smuggle
@@ -326,6 +335,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "max-size=10m",
         "--log-opt",
         "max-file=3",
+        ...(run.init === false ? [] : ["--memory", LOCAL_SANDBOX_MEMORY, "--memory-swap", LOCAL_SANDBOX_MEMORY_SWAP]),
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
         ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
         ...(run.ports ?? []).flatMap((port) => ["-p", port]),

@@ -71,7 +71,10 @@ export type SyncMode = "sync" | "mirror";
  * why a pairing without one can do nothing but exist. localDir is set only for mode "sync" (mirror-only has no
  * file sync). mirroredPorts is the set of Mutagen forward sessions the last reconcile left alive, the baseline,
  * so vanished ports get terminated; skippedPorts is its negative, the ports that same reconcile wanted and could
- * not have.
+ * not have. fileSyncAutoPaused marks a pairing the watcher paused after an hour continuously unreachable: it
+ * suppresses Mutagen's permanent reconnect loop while retaining enough intent to resume automatically when the
+ * sandbox answers again. It is distinct from a person's `pause`, which carries no marker and is never undone by
+ * the watcher.
  *
  * There is no sshHostname any more. The daemon used to answer enrollment with a tunnel host for Mutagen to dial;
  * the transport now runs over the sandbox's own HTTPS surface, so the address is derived from sandboxUrl and the
@@ -84,6 +87,7 @@ export interface Pairing {
     readonly syncToken?: string;
     readonly mirroredPorts?: readonly MirroredPort[];
     readonly skippedPorts?: readonly SkippedPort[];
+    readonly fileSyncAutoPaused?: boolean | undefined;
 }
 
 /* Every pairing this machine holds, a LIST, because one machine legitimately runs a fleet of sandboxes.
@@ -134,3 +138,8 @@ export const upsertPairing = async (pairing: Pairing): Promise<void> =>
 
 export const removePairing = async (sandboxId: string): Promise<void> =>
     await updateState((state) => ({ pairings: state.pairings.filter((held) => held.sandboxId !== sandboxId) }));
+
+export const setFileSyncAutoPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, fileSyncAutoPaused: paused ? true : undefined } : held)),
+    }));

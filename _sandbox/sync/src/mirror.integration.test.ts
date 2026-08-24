@@ -19,6 +19,7 @@ const {
     readLiveWatcherPid,
     retirePairingMirror,
     runMirrorWatch,
+    shouldAutoPauseFileSync,
     signalExitCode,
     stopWatcher,
     SyncAuthError,
@@ -26,6 +27,11 @@ const {
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/sync when it writes the state; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(mirrorPidPath), { recursive: true });
+
+it("auto-pauses only after an hour of uninterrupted failed polls", () => {
+    expect(shouldAutoPauseFileSync(719)).toBe(false);
+    expect(shouldAutoPauseFileSync(720)).toBe(true);
+});
 
 afterEach(() => {
     vi.restoreAllMocks();

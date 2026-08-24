@@ -16,6 +16,8 @@ to carry raw TCP. It also means nothing but this agent has to be installed.
 - Enrol: one call that exchanges a code for the connection details.
 - Serve the SSH transport on loopback, and carry it to the sandbox over its own web address.
 - Drive Mutagen: create the session, watch it, report what it is doing.
+- Pause Mutagen sessions after their sandbox remains unreachable for an hour, avoiding permanent reconnect and
+  rescan load while retaining the pairing; resume them automatically when the sandbox returns.
 - Bridge git, so operations behave sanely across the mirror.
 - Install itself as an autostarting background agent.
 
