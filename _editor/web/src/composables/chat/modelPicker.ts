@@ -80,18 +80,64 @@ const rankFor = (entry: PickerEntry, tokens: readonly string[]): number => {
     return 2;
 };
 
+/* LANES: WHAT THIS PICKER GROUPS BY, one per provider, except that every locally-run model shares one.
+ *
+ * A localmodel capability is a provider like any other to whatever ROUTES a turn: its own id, its own server,
+ * its own catalog. To someone reading the picker it is not one. A sandbox with two cards drew two identical cpu
+ * chips down the rail, and each opened a header over a group holding exactly one model, so the rail said
+ * nothing (both chips look the same) and the list said nothing (a group of one is not a grouping). Weights the
+ * user runs themselves are ONE thing to choose among, so the rail draws one chip for them and the list one
+ * group, seated where the first card sat.
+ *
+ * Folded for READING only. A row still carries the provider that vends it, so picking one routes to that card
+ * exactly as before, and every other provider keeps its own lane. */
+export const LOCAL_LANE = `local-models`;
+const LOCAL_LANE_LABEL = `Local models`;
+
+// The lane a provider's rows are drawn in: itself, unless its capability runs the weights on this machine.
+export const laneOf = (provider: AgentProvider): string =>
+    endpointProviders.value.some((endpoint) => endpoint.id === provider && endpoint.kind === `localmodel`) ? LOCAL_LANE : provider;
+
+export interface PickerLane {
+    // The rail filter's value and the section's key: a provider id, or LOCAL_LANE for the folded one.
+    readonly key: string;
+    readonly label: string;
+    // Every provider drawn in this lane, in the order given. Exactly one, except in the folded lane.
+    readonly providers: readonly AgentProvider[];
+}
+
+// Providers folded into the lanes they are drawn in, each seated where its first provider sat, so the rail and
+// the list stay the same set of groups in whatever order each of them reads its providers in.
+export const lanesOf = (providers: readonly AgentProvider[]): readonly PickerLane[] => {
+    const lanes: { key: string; label: string; providers: AgentProvider[] }[] = [];
+    for (const provider of providers) {
+        const key = laneOf(provider);
+        const seated = lanes.find((lane) => lane.key === key);
+        if (seated !== undefined) {
+            seated.providers.push(provider);
+            continue;
+        }
+        lanes.push({
+            key,
+            label: key === LOCAL_LANE ? LOCAL_LANE_LABEL : providerDisplayLabel(provider),
+            providers: [provider],
+        });
+    }
+    return lanes;
+};
+
 // Case-insensitive substring search, multi-token AND: every whitespace-separated token must match somewhere
-// in the entry's label/id/provider/badges. `rail` scopes to one provider first (the rail filter persists
+// in the entry's label/id/provider/badges. `rail` scopes to one lane first (the rail filter persists
 // while searching). Descriptions are deliberately not matched, copy produces baffling hits. `isReady` is the
 // same connection predicate the browse view sorts on (access.ts): a model the user can send to outranks one
 // they'd have to connect a subscription for, however well the id matched.
 export const filterEntries = (
     entries: readonly PickerEntry[],
     query: string,
-    rail: AgentProvider | undefined,
+    rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
 ): readonly PickerEntry[] => {
-    const scoped = rail === undefined ? entries : entries.filter((entry) => entry.provider === rail);
+    const scoped = rail === undefined ? entries : entries.filter((entry) => laneOf(entry.provider) === rail);
     const tokens = query
         .split(/\s+/)
         .map(normalize)
@@ -196,7 +242,9 @@ export const pickerBlocks = (groups: readonly FamilyGroup[], selected: string | 
     if (expanded) {
         return [
             { key: `latest`, entries: latest },
-            ...groups.filter((group) => group.older.length > 0).map((group) => ({ key: group.key, label: group.label, entries: group.older })),
+            // Keyed by the family's newest ROW, not by the family: a folded lane holds several cards, and two of
+            // them can publish the same family, which as a bare family key would be one key drawn twice.
+            ...groups.filter((group) => group.older.length > 0).map((group) => ({ key: group.latest.key, label: group.label, entries: group.older })),
         ];
     }
     const pinned =
@@ -220,104 +268,52 @@ const accessRank = (provider: AgentProvider): number => {
     return access === undefined ? Object.keys(ACCESS_COST).length : ACCESS_COST[access.kind];
 };
 
-/* LOCALLY RUN MODELS ARE ONE GROUP, not one per card. Every `localmodel` capability mints its own
- * `endpoint/<id>` provider, which is right for routing, each card is its own llama-server on its own port, and
- * wrong for reading: a card publishes ONE model, so the per-provider rule drew a header per card with a single
- * row under it, three headers to present what a user thinks of as one shelf. They share a section, in card
- * order. The rail still filters card by card, since that axis is precisely "which server", which is what a
- * card is. */
-export const LOCAL_SECTION_KEY = `localmodel`;
-const LOCAL_SECTION_LABEL = `Local models`;
-
-const localProviders = (): readonly AgentProvider[] =>
-    endpointProviders.value.filter((endpoint) => endpoint.kind === `localmodel`).map((endpoint) => endpoint.id);
-
-export interface PickerSection {
-    // What the component keys its per-section expansion on: a provider id, or the local pack's own key.
-    readonly key: string;
-    readonly label: string;
-    // The provider whose header affordances this section carries: the access chip, the Connect link, the
-    // reconnect warning. Undefined on the local pack, which spans providers and needs none of them, a card is
-    // runnable by existing, so there is no price to state and nothing to connect.
-    readonly provider: AgentProvider | undefined;
-    // Every provider the rows come from: one, or every local card. The component reads it for the catalog
-    // state row, which is per endpoint even when the section is not.
-    readonly providers: readonly AgentProvider[];
+export interface PickerSection extends PickerLane {
     readonly groups: readonly FamilyGroup[];
     readonly total: number;
 }
 
-interface SectionUnit {
-    readonly key: string;
-    readonly label: string;
-    readonly provider: AgentProvider | undefined;
-    readonly providers: AgentProvider[];
-}
-
-// The providers of the list, folded into the units that will become sections: every local card into one pack,
-// seated where the first of them sat, everything else standing alone.
-const sectionUnits = (providers: readonly AgentProvider[]): readonly SectionUnit[] => {
-    const local = new Set(localProviders());
-    const units: SectionUnit[] = [];
-    let pack: SectionUnit | undefined;
-    for (const provider of providers) {
-        if (!local.has(provider)) {
-            units.push({ key: provider, label: providerDisplayLabel(provider), provider, providers: [provider] });
-            continue;
-        }
-        if (pack === undefined) {
-            pack = { key: LOCAL_SECTION_KEY, label: LOCAL_SECTION_LABEL, provider: undefined, providers: [] };
-            units.push(pack);
-        }
-        pack.providers.push(provider);
-    }
-    return units;
-};
-
-// Browse-mode grouping: one section per provider (respecting the rail filter) with every local card sharing
-// one, the active provider's section hoisted first, the models pickable without a session restart sit nearest,
-// then every CONNECTED provider, then the ones that still need a credential, cheapest first. Sorting on
-// `isReady` is what stops the list from opening on models the user cannot send to: every provider's catalog is
-// non-empty by construction (the daemon serves a seed floor), so without it an unconnected Kimi outranks a
-// connected Claude purely by sitting earlier in PROVIDERS. Empty sections are kept: the component renders their
-// loading/error/empty state row under the header.
+// Browse-mode grouping: one section per lane (respecting the rail filter), the active provider's lane hoisted
+// first, the models pickable without a session restart sit nearest, then every CONNECTED provider, then the
+// ones that still need a credential, cheapest first. Sorting on `isReady` is what stops the list from opening on
+// models the user cannot send to: every provider's catalog is non-empty by construction (the daemon serves a
+// seed floor), so without it an unconnected Kimi outranks a connected Claude purely by sitting earlier in
+// PROVIDERS. Empty sections are kept: the component renders their loading/error/empty state row under the
+// header.
 export const pickerSections = (
     entries: readonly PickerEntry[],
     activeProvider: AgentProvider,
-    rail: AgentProvider | undefined,
+    rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
 ): readonly PickerSection[] => {
     const providers: AgentProvider[] = [
         ...PROVIDERS.map((option) => option.value),
         ...endpointProviders.value.map((endpoint) => endpoint.id),
         ...acpProviders.value.map((agent) => agent.id),
-    ].filter((provider) => rail === undefined || provider === rail);
-    const units = sectionUnits(providers);
-    /* The active provider's section leads whether or not it is connected, it holds the model the composer will
-     * send on, so burying it under the connected band would hide the selection the user is actually sitting on.
+    ];
+    /* The active provider leads whether or not it is connected, it is the one the composer will send on, so
+     * burying it under the connected band would hide the selection the user is actually sitting on.
      *
      * Then: connected first, and WITHIN the locked band, cheapest first. The cost only ever separates locked
      * rows, a connected provider costs the user nothing to pick whatever its badge would have said, so ranking
-     * the connected band by price would reorder working providers for no reason a reader could see. A unit's
-     * readiness and price are its first member's; the pack's members are local cards, which are alike in both. */
-    const active = units.find((unit) => unit.providers.includes(activeProvider));
-    const rest = units
-        .filter((unit) => unit !== active)
+     * the connected band by price would reorder working providers for no reason a reader could see. */
+    const rest = providers
+        .filter((provider) => provider !== activeProvider)
         .toSorted((a, b) => {
-            const ready = Number(isReady(b.providers[0]!)) - Number(isReady(a.providers[0]!));
-            return ready !== 0 || isReady(a.providers[0]!) ? ready : accessRank(a.providers[0]!) - accessRank(b.providers[0]!);
+            const ready = Number(isReady(b)) - Number(isReady(a));
+            return ready !== 0 || isReady(a) ? ready : accessRank(a) - accessRank(b);
         });
-    return (active === undefined ? rest : [active, ...rest]).map((unit) => {
-        const owned = entries.filter((entry) => unit.providers.includes(entry.provider));
-        return {
-            key: unit.key,
-            label: unit.label,
-            provider: unit.provider,
-            providers: unit.providers,
-            // Families are grouped WITHIN a card, never across: a family is one catalog's version timeline, and
-            // two cards serving the same weights are two servers a user configured on purpose, not two releases.
-            groups: unit.providers.flatMap((provider) => familyGroups(owned.filter((entry) => entry.provider === provider))),
-            total: owned.length,
-        };
-    });
+    const order = providers.includes(activeProvider) ? [activeProvider, ...rest] : rest;
+    // Fold AFTER ordering, so the local lane is seated by the best-placed card it holds: the one the composer
+    // is sending on leads the list whichever of the cards it is.
+    return lanesOf(order)
+        .filter((lane) => rail === undefined || lane.key === rail)
+        .map((lane) => {
+            const owned = entries.filter((entry) => lane.providers.includes(entry.provider));
+            // Families are derived per CARD and never across them: two local endpoints serving qwen3-8 and
+            // qwen3-32 are two machines, not two releases of one model, and grouping them together would file
+            // one of the user's own models behind the other's "show older" disclosure.
+            const groups = lane.providers.flatMap((provider) => familyGroups(owned.filter((entry) => entry.provider === provider)));
+            return { key: lane.key, label: lane.label, providers: lane.providers, groups, total: owned.length };
+        });
 };

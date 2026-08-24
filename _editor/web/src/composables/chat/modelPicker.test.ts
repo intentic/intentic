@@ -1,6 +1,6 @@
-import type { AgentProvider } from "@intentic/sandbox-contract";
+import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { customEntryFor, familyGroups, filterEntries, LOCAL_SECTION_KEY, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
+import { customEntryFor, familyGroups, filterEntries, LOCAL_LANE, lanesOf, type PickerEntry, pickerBlocks, pickerSections } from "./modelPicker";
 import { endpointProviders } from "./providerCatalog";
 
 /* The custom-model escape hatch. Everything else in modelPicker.ts is pure derivation over the live catalogs;
@@ -219,13 +219,13 @@ test("seats connected providers above the ones that still need a credential", ()
     // PROVIDERS order alone put Kimi (with no Kimi Code subscription) above a connected Gemini purely by position.
     const sections = pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`, `gemini`));
 
-    expect(sections.slice(0, 3).map((section) => section.provider)).toEqual([`claude`, `gemini`, `codex`]);
+    expect(sections.slice(0, 3).map((section) => section.key)).toEqual([`claude`, `gemini`, `codex`]);
 });
 
 test("keeps the ACTIVE provider first even when it is the locked one", () => {
     // It is the provider the composer will send on, so burying it hides the selection the user is sitting on:
     // and picking a locked model is how they reach the connect gate in the first place.
-    expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.provider).toBe(`kimi`);
+    expect(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`))[0]?.key).toBe(`kimi`);
 });
 
 /* AND THE CHEAPEST WAY IN LEADS THE LOCKED BAND, which is this list's whole share of a job that used to be done
@@ -243,7 +243,7 @@ test("leads the locked band with the provider that costs nothing", () => {
     // which keep PROVIDERS order among themselves: equal cost, so nothing here has an opinion about them.
     // `grok` and `cursor` ride along with no rows of their own: an empty section still renders its header and
     // state row, which is how a provider nobody has connected is discovered at all.
-    expect(sections.map((section) => section.provider)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`]);
+    expect(sections.map((section) => section.key)).toEqual([`codex`, `claude`, `gemini`, `grok`, `kimi`, `cursor`]);
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {
@@ -257,62 +257,61 @@ test("leaves an unqueried list in access order too, so simply opening the picker
     expect(filterEntries(MIXED, ``, undefined, readyOnly(`gemini`)).map((row) => row.provider)).toEqual([`gemini`, `claude`, `codex`, `kimi`]);
 });
 
-/* LOCAL MODELS ARE ONE GROUP. Each `localmodel` card mints its own `endpoint/<id>` provider, so the section
- * builder, left to its per-provider rule, drew a header per card with a single row beneath it: three headers to
- * say what is really one shelf of models. A card that points at somebody else's server stays its own group. */
-
-const QWEN = `endpoint/qwen` as AgentProvider;
-const GEMMA = `endpoint/gemma` as AgentProvider;
-const REMOTE = `endpoint/office-box` as AgentProvider;
+/* THE LOCAL LANE. Each card the user runs weights on is its own provider, and drawn as one it gave the rail a
+ * column of identical cpu chips, each filtering to a header over a single model: a grouping that grouped
+ * nothing, and a rail whose chips could not be told apart. They are one lane now, in both places. */
 
 const LOCAL: readonly PickerEntry[] = [
-    entry(QWEN, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`),
-    entry(GEMMA, `Gemma-4-12B-Q5_K_M`, `Gemma-4-12B-Q5_K_M`),
-    entry(REMOTE, `llama-70b`, `llama-70b`),
+    entry(`endpoint/ollama-a`, `qwen3-8`, `qwen3-8`),
+    entry(`endpoint/ollama-b`, `qwen3-5-64k`, `qwen3-5-64k`),
+    entry(`claude`, `claude-opus-5`, `Claude Opus 5`),
 ];
-const installed = (...cards: { id: AgentProvider; kind: "endpoint" | "localmodel" }[]) => {
-    endpointProviders.value = cards.map((card) => ({ id: card.id, label: card.id, kind: card.kind }));
+
+const withCards = (...cards: { id: string; label: string; kind: "endpoint" | "localmodel" }[]): void => {
+    endpointProviders.value = cards;
 };
-const localCards = () => installed({ id: QWEN, kind: `localmodel` }, { id: GEMMA, kind: `localmodel` }, { id: REMOTE, kind: `endpoint` });
 
 afterEach(() => {
     endpointProviders.value = [];
 });
 
-test("seats every locally-run model in one group, rather than a header per card", () => {
-    localCards();
+test("folds every locally-run card into one lane, so the rail draws one chip and the list one group", () => {
+    withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
 
-    const sections = pickerSections(LOCAL, `claude`, undefined, readyOnly(QWEN, GEMMA, REMOTE));
-    const local = sections.find((section) => section.key === LOCAL_SECTION_KEY);
-
-    expect(local?.providers).toEqual([QWEN, GEMMA]);
-    expect(local?.groups.map((group) => group.latest.value)).toEqual([`Qwen3.5-9B-Q4_K_M`, `Gemma-4-12B-Q5_K_M`]);
-    // A card pointing at a server elsewhere is not that shelf: it keeps its own section, under its own name.
-    expect(sections.filter((section) => section.provider === REMOTE)).toHaveLength(1);
+    expect(lanesOf([`claude`, `endpoint/ollama-a`, `endpoint/ollama-b`])).toEqual([
+        { key: `claude`, label: providerLabel(`claude`), providers: [`claude`] },
+        { key: LOCAL_LANE, label: `Local models`, providers: [`endpoint/ollama-a`, `endpoint/ollama-b`] },
+    ]);
 });
 
-test("carries no provider on the local group, so its header offers no price and no handshake", () => {
-    // Every card is runnable by existing: whatever it takes to reach the server was configured with it.
-    localCards();
+test("leaves a remote endpoint its own lane: a server the user pointed us at is not their machine", () => {
+    withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/vllm`, label: `vLLM`, kind: `endpoint` });
 
-    expect(
-        pickerSections(LOCAL, `claude`, undefined, readyOnly(QWEN, GEMMA, REMOTE)).find((s) => s.key === LOCAL_SECTION_KEY)?.provider,
-    ).toBeUndefined();
+    expect(lanesOf([`endpoint/ollama-a`, `endpoint/vllm`]).map((lane) => lane.key)).toEqual([LOCAL_LANE, `endpoint/vllm`]);
 });
 
-test("hoists the local group when the conversation is running on one of its cards", () => {
-    localCards();
+test("draws one section holding every card's models, which is the group the rail chip now opens", () => {
+    withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
 
-    expect(pickerSections(LOCAL, GEMMA, undefined, readyOnly(QWEN, GEMMA, REMOTE))[0]?.key).toBe(LOCAL_SECTION_KEY);
+    const local = pickerSections(LOCAL, `claude`, undefined, readyOnly(`claude`)).find((section) => section.key === LOCAL_LANE);
+
+    expect(local?.total).toBe(2);
+    expect(local?.groups.map((group) => group.latest.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
 });
 
-test("keeps two cards serving the same weights as two rows, since a card is a server and not a release", () => {
-    // Family grouping is a catalog's version timeline, which only means anything within ONE card. Across cards
-    // it would fold the second copy of a model into a "show older" disclosure, hiding a server the user started.
-    installed({ id: QWEN, kind: `localmodel` }, { id: GEMMA, kind: `localmodel` });
-    const twice = [entry(QWEN, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`), entry(GEMMA, `Qwen3.5-9B-Q4_K_M`, `Qwen3.5-9B-Q4_K_M`)];
+test("keeps each card's families apart, so one machine's model never hides behind another's disclosure", () => {
+    // qwen3-8 and qwen3-32 share a family by id, and folding the cards would have filed the second one under
+    // the first as an older version: two machines read as two releases.
+    withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
+    const twins = [entry(`endpoint/ollama-a`, `qwen3-8`, `qwen3-8`), entry(`endpoint/ollama-b`, `qwen3-32`, `qwen3-32`)];
 
-    const local = pickerSections(twice, `claude`, undefined, readyOnly(QWEN, GEMMA)).find((section) => section.key === LOCAL_SECTION_KEY);
+    const [local] = pickerSections(twins, `endpoint/ollama-a`, undefined, readyOnly());
 
-    expect(pickerBlocks(local?.groups ?? [], undefined, false)[0]?.entries.map((row) => row.provider)).toEqual([QWEN, GEMMA]);
+    expect(pickerBlocks(local!.groups, undefined, false)[0]?.entries.map((row) => row.value)).toEqual([`qwen3-8`, `qwen3-32`]);
+});
+
+test("filters to the whole lane, so the one chip scopes the list to every card at once", () => {
+    withCards({ id: `endpoint/ollama-a`, label: `Ollama A`, kind: `localmodel` }, { id: `endpoint/ollama-b`, label: `Ollama B`, kind: `localmodel` });
+
+    expect(filterEntries(LOCAL, ``, LOCAL_LANE, readyOnly()).map((row) => row.value)).toEqual([`qwen3-8`, `qwen3-5-64k`]);
 });

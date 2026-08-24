@@ -157,10 +157,11 @@ No new turn path. `translatedEndpoints` grows to include `localmodel` capabiliti
 `EndpointConfig` it effectively is (`http://127.0.0.1:<port>/v1`, openai protocol, no key), so the
 translator, the catalog prober, the picker and `endpoint/<id>` quick-model pinning all engage untouched.
 Two deliberate divergences from a user-added endpoint. The daemon owns the URL, so the card never shows one.
-And the picker gives every `localmodel` card one shared **Local models** section instead of the header per
-provider its rule gives everything else: one card is one server on one port, which is a routing fact, and
-spelling it out in the list drew three headers to say what a reader sees as one shelf (`modelPicker.ts`,
-`pickerSections`). The provider rail still filters card by card, since that axis IS "which server".
+And the chat picker draws every `localmodel` card as ONE lane, in the rail and in the list alike
+(`modelPicker.ts`, `lanesOf`): one card is one server on one port, a routing fact the pick still carries,
+while a rail of identical cpu chips each opening a group of one model is not a grouping a reader can use.
+Families are still derived per card inside that lane, so two machines serving `qwen3-8` and `qwen3-32` stay
+two rows rather than one with an older version behind it.
 
 The one seam that could **not** be inherited untouched is *when* the routing table is written. The capability
 routes sync it on add/update/rename/remove, and for a user-added endpoint that is right: the server it names is
