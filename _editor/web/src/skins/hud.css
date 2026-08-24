@@ -450,6 +450,12 @@
         box-shadow: inset 2px 0 0 var(--hud-glow);
     }
 
+    [data-skin="hud"] .ui-row-select-horizontal.ui-row-select-on,
+    [data-skin="hud"] .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
+        background: color-mix(in oklab, var(--color-primary-500) 15%, transparent);
+        box-shadow: none;
+    }
+
     [data-skin="hud"] .ui-row-select:hover:not(:disabled) {
         background: color-mix(in oklab, var(--color-primary-300) 9%, transparent);
     }

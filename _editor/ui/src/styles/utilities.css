@@ -164,6 +164,15 @@
     .ui-row-select-on:hover:not(:disabled) {
         background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
     }
+
+    /* A compact HORIZONTAL strip keeps selection to its tint and icon colour. Structural edge marks work on a
+       full-width list row, but inside a small rounded button they compete with corner badges and read as part of
+       the glyph. Keep this as a modifier so skins can suppress their own list edge without the caller knowing
+       what that edge is made from. */
+    .ui-row-select-horizontal.ui-row-select-on,
+    .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
+        box-shadow: none;
+    }
 }
 
 /* THE SEARCH ROW — the one filter field, wherever it is worn: the command palette's top band, the model

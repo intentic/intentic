@@ -1182,6 +1182,11 @@
         box-shadow: inset 2px 0 0 rgba(201, 160, 92, 0.6);
     }
 
+    [data-skin="sanctum"] .ui-row-select-horizontal.ui-row-select-on,
+    [data-skin="sanctum"] .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
+        box-shadow: none;
+    }
+
     [data-skin="sanctum"] .ui-row-select:hover:not(:disabled) {
         background: rgba(201, 160, 92, 0.055);
     }

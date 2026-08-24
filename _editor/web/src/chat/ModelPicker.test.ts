@@ -91,6 +91,7 @@ it(`keeps the provider filters from adding a second vertical scroller beside the
 
     expect(rail.classList).toContain(`overflow-x-auto`);
     expect(rail.classList).not.toContain(`overflow-y-auto`);
+    expect([...rail.querySelectorAll(`button`)].every((button) => button.classList.contains(`ui-row-select-horizontal`))).toBe(true);
     expect(list.classList).toContain(`overflow-y-auto`);
 });
 
