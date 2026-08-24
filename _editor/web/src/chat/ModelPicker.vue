@@ -327,25 +327,27 @@ onMounted(() => {
             @keydown.esc="onEsc"
         />
 
-        <!-- Fixed height on desktop so the panel's overall size never changes as the rail filters between
+        <!-- Fixed height on desktop so the panel's overall size stays stable as the rail filters between
              sparse and dense providers: a variable height makes a bottom-anchored popover grow upward and the
-             rail icons jump under the cursor. It lives on the row rather than the list so the rail is bounded by
-             the same height. Mobile keeps its flexible height inside the sheet.
+             filter buttons jump under the cursor. Provider filters sit in a horizontal strip above the catalog,
+             the same pattern the mobile sheet uses: the catalog is therefore the panel's only vertical scroller
+             instead of competing with a second, narrow scroller in a provider rail. Extra custom providers move
+             sideways in that strip, an orthogonal and local gesture that never captures catalog scrolling.
 
-             THE FLOOR IS WHY THIS IS `min-h-32` AND NOT `min-h-0`. The row gives way when the host is shorter
-             than 320px: that part is unchanged and is what lets the panel fit above its own pill on a short
-             window, but it may no longer give way to NOTHING. It could: the footer below is a session panel
-             whose height belongs to whatever the provider happens to have connected, and a sandbox holding
-             thirty-four sign-ins drew them all, took the whole column, and left the model catalog at zero rows.
-             A picker with no models in it is not a degraded picker, it is a different panel, so four rows of
-             catalog are reserved before the footer gets any of the height at all. -->
-        <div class="flex h-80 min-h-32 max-md:h-auto max-md:flex-col">
-            <!-- Provider rail: a filter, never a switcher, scoping the list to one provider must stay a
+             THE FLOOR IS WHY THIS IS `min-h-40` AND NOT `min-h-0`. The column gives way when the host is shorter
+             than 320px, which is what lets the panel fit above its own pill on a short window, but it may no
+             longer give way to NOTHING. It could: the footer below is a session panel whose height belongs to
+             whatever the provider happens to have connected. The 160px floor reserves the 44px filter strip
+             plus four compact model rows before the footer gets any of the height at all. A picker with no
+             models in it is not a degraded picker, it is a different panel. Mobile lets the sheet own vertical
+             scrolling, so its content-height column needs no floor or nested catalog scroller. -->
+        <div class="flex h-80 min-h-40 flex-col max-md:h-auto max-md:min-h-0">
+            <!-- Provider strip: a filter, never a switcher, scoping the list to one provider must stay a
                  safe exploratory glance, so switching only ever happens by picking a model row. -->
             <div
                 role="radiogroup"
                 aria-label="Filter by provider"
-                class="scrollbar-thin flex w-10 shrink-0 flex-col items-center gap-1 border-r border-line py-1.5 md:overflow-y-auto max-md:w-full max-md:flex-row max-md:overflow-x-auto max-md:border-b max-md:border-r-0 max-md:px-1.5"
+                class="scrollbar-thin flex w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-1.5 py-1.5"
             >
                 <button
                     type="button"
@@ -353,13 +355,13 @@ onMounted(() => {
                     :aria-checked="rail === undefined"
                     class="ui-row-select flex h-8 w-8 shrink-0 items-center justify-center rounded-lg max-md:h-11 max-md:w-11"
                     :class="{ 'ui-row-select-on': rail === undefined }"
-                    v-tooltip.right="'All providers'"
+                    v-tooltip.bottom="'All providers'"
                     aria-label="All providers"
                     @click="railTo(undefined)"
                 >
                     <Icon name="th-large" class="text-sm" :class="rail === undefined ? 'text-primary-500' : 'text-subtle'" />
                 </button>
-                <div class="mx-auto my-0.5 h-px w-5 shrink-0 bg-line max-md:mx-0.5 max-md:my-auto max-md:h-5 max-md:w-px" aria-hidden="true"></div>
+                <div class="mx-0.5 my-auto h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
                 <button
                     v-for="lane in railLanes"
                     :key="lane.key"
@@ -368,7 +370,7 @@ onMounted(() => {
                     :aria-checked="rail === lane.key"
                     class="ui-row-select relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg max-md:h-11 max-md:w-11"
                     :class="{ 'ui-row-select-on': rail === lane.key }"
-                    v-tooltip.right="railTooltip(lane)"
+                    v-tooltip.bottom="railTooltip(lane)"
                     :aria-label="railTooltip(lane)"
                     @click="railTo(lane.key)"
                 >
@@ -396,7 +398,12 @@ onMounted(() => {
                 </button>
             </div>
 
-            <div id="model-picker-list" class="scrollbar-thin min-w-0 flex-1 overflow-y-auto py-1 max-md:max-h-80" role="listbox" aria-label="Models">
+            <div
+                id="model-picker-list"
+                class="scrollbar-thin min-h-0 min-w-0 flex-1 overflow-y-auto py-1 max-md:overflow-visible"
+                role="listbox"
+                aria-label="Models"
+            >
                 <template v-for="section in sections" :key="section.key">
                     <!-- The group header doubles as the access line: what this group costs, and the way out of
                          it. The chip is absent once connected: a usable provider should read as the plain

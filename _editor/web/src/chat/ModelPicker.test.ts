@@ -84,6 +84,16 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
+it(`keeps the provider filters from adding a second vertical scroller beside the catalog`, () => {
+    const element = mount();
+    const rail = element.querySelector<HTMLElement>(`[role="radiogroup"]`)!;
+    const list = element.querySelector<HTMLElement>(`#model-picker-list`)!;
+
+    expect(rail.classList).toContain(`overflow-x-auto`);
+    expect(rail.classList).not.toContain(`overflow-y-auto`);
+    expect(list.classList).toContain(`overflow-y-auto`);
+});
+
 it(`leads the locked rows with the way in that costs nothing, and prices the rest`, () => {
     const element = mount();
 
