@@ -1,4 +1,4 @@
-import { type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
+import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
@@ -10,8 +10,8 @@ import { useSandbox } from "./useSandbox";
  * for `enrolled`, the "enabled" signal. No Google sign-in on the laptop.
  *
  * Pairings carry a MODE: "sync" (file sync + port mirroring, single holder) or "mirror" (ports only, unlimited
- * machines). The daemon grants per role, an owner gets what they ask for, a member is always downgraded to
- * "mirror", so pairMode reflects the daemon's ANSWER, and the one-liner/copy follow it, never the request. */
+ * machines). The daemon grants full sync to the operating tier and mirror-only below it, so pairMode reflects
+ * the daemon's ANSWER, and the one-liner/copy follow it, never the request. */
 
 type SyncMode = `sync` | `mirror`;
 
@@ -30,10 +30,7 @@ const toWindowsPath = (path: string): string => path.replace(/^~(?=[\\/]|$)/, `$
 export function useDesktopSync() {
     const { active, daemonUrl } = useSandbox();
 
-    // Whether the signed-in user owns the active sandbox. Members get the mirror-only experience (the daemon
-    // enforces it; this just keeps the card honest up front). Defaults to the owner rendering until the list
-    // loads, the same assumption the card always made, and the daemon corrects a wrong guess at mint time.
-    const isOwner = computed(() => (active.value?.role ?? `owner`) === `owner`);
+    const canOperate = computed(() => roleAtLeast(active.value?.role ?? `owner`, `maintainer`));
 
     const enrolled = ref(false);
     // The machine currently holding sync (the enrolled key's comment), or undefined when none, for the
@@ -193,7 +190,7 @@ export function useDesktopSync() {
     };
 
     return {
-        isOwner,
+        canOperate,
         enrolled,
         syncingFrom,
         syncingPath,

@@ -6,7 +6,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { bundleDownloadUrl, useBundleExports } from "../../composables/sandbox/useBundleExports";
-import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useRole } from "../../composables/sandbox/useRole";
 
 /* MOVING A SANDBOX: export this one's environment to a file, or restore one into this sandbox.
  *
@@ -21,7 +21,7 @@ import { useSandbox } from "../../composables/sandbox/useSandbox";
  * image the overlay describes is built by the machine running the container.
  */
 
-const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+const { canShip: canOperate } = useRole();
 const { exports, packing, start, remove, error: listError } = useBundleExports();
 // The query carries a raw message and no idea what the user was after; the card does, so the card writes
 // the sentence and keeps the message underneath as evidence.
@@ -72,7 +72,7 @@ const sizeLabel = (bytes: number): string => {
             title="Move this sandbox"
         />
 
-        <template v-if="isOwner">
+        <template v-if="canOperate">
             <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
                  inset, which read as a second card inside the first for a border that said nothing the hairline
                  doesn't. The lock is the state at a glance: it opens and goes warning-coloured the moment the
@@ -171,7 +171,7 @@ const sizeLabel = (bytes: number): string => {
                         <Icon name="download" class="text-sm" />
                     </button>
                     <button
-                        v-if="isOwner && entry.status !== 'packing'"
+                        v-if="canOperate && entry.status !== 'packing'"
                         type="button"
                         :class="ui.iconButton(`hover:text-danger`)"
                         aria-label="Delete export"
@@ -184,7 +184,7 @@ const sizeLabel = (bytes: number): string => {
             </Row>
         </RowGroup>
 
-        <p v-if="isOwner" class="text-2xs text-subtle">
+        <p v-if="canOperate" class="text-2xs text-subtle">
             Exports stay on the sandbox until you delete them, so you can come back for one later. Restore onto a FRESH sandbox: it overwrites files
             this workspace already has.
         </p>

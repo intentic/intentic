@@ -157,12 +157,12 @@ describe(`rail glyphs`, () => {
 });
 
 describe(`ext-activity`, () => {
-    it(`activates a sandbox-hub section only when a discord cli capability is connected`, () => {
+    it(`always activates a sandbox-hub section, independent of privileged capability facts`, () => {
         const view = activateAndCapture(activity);
         expect(view.id).toBe(`activity`);
         // A hub section, not a rail tile: the feed never badges, so it could not earn a permanent icon seat.
         expect(view.surface).toBe(`sandbox`);
-        expect(view.detect(noRepos, [])).toEqual([]);
+        expect(view.detect(noRepos, [])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
         expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
     });
 });

@@ -13,7 +13,7 @@ import { useSandbox } from "./useSandbox";
  *
  * Two derived lines instead of exposing rank arithmetic at every call site:
  *   canDrive, collaborator and up: start/steer agents, review, comment. A viewer watches.
- *   canShip , maintainer and up: land/discard, approve drafts, the terminal, what leaves the sandbox.
+ *   canShip , maintainer and up: full operating authority. Only ownership and its access roster stay separate.
  */
 export function useRole(): {
     role: ComputedRef<MemberRole>;

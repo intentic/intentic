@@ -4,7 +4,7 @@ import { extensionIdOf, type ProcessContribution } from "@intentic/extension-man
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
-import { bearerFrom } from "../auth/auth.js";
+import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import { premiumStatus } from "../platform/pool-status.js";
@@ -38,17 +38,16 @@ export const createExtensionsRoutes = (services: Services) => {
     const root = services.workspace.root;
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
-    // The same gate the capabilities add route holds over installing an extension, because update, revert and
-    // the unattended-update policy are the same decision: whose code runs here. Loopback mode has no auth and
-    // skips it like every other route.
-    const authorizeOwner = async (context: OrpcContext): Promise<void> => {
+    // The same operating-tier gate the capabilities add route holds over installing an extension, because
+    // update, revert and unattended-update policy are the same decision: whose code runs here.
+    const authorizeOperator = async (context: OrpcContext): Promise<void> => {
         if (services.auth === undefined) {
             return;
         }
         try {
-            await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+            await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
         } catch {
-            throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can do this" });
+            throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can do this" });
         }
     };
     // Every id-addressed route resolves through here, against the FULL list, a disabled extension still
@@ -248,7 +247,7 @@ export const createExtensionsRoutes = (services: Services) => {
         // installing they are the owner's decision alone (mirrors the capabilities add route's gate; loopback
         // mode has no auth and skips it like every other route).
         applyUpdate: i.applyUpdate.handler(async ({ input, context }) => {
-            await authorizeOwner(context);
+            await authorizeOperator(context);
             try {
                 const applied = await applyExtensionUpdate(services, input.id, input.ref);
                 return { ok: true, ref: applied.ref, ...(applied.rebuildNeeded ? { rebuildNeeded: true } : {}) } as const;
@@ -257,7 +256,7 @@ export const createExtensionsRoutes = (services: Services) => {
             }
         }),
         revert: i.revert.handler(async ({ input, context }) => {
-            await authorizeOwner(context);
+            await authorizeOperator(context);
             try {
                 const reverted = await revertExtensionUpdate(services, input.id);
                 return { ok: true, ref: reverted.ref } as const;
@@ -265,9 +264,9 @@ export const createExtensionsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: error instanceof Error ? error.message : String(error) });
             }
         }),
-        // The policy decides what may happen UNATTENDED, owner-gated for the same reason the verbs above are.
+        // The policy decides what may happen UNATTENDED, operating-tier gated for the same reason the verbs above are.
         setUpdatePolicy: i.setUpdatePolicy.handler(async ({ input, context }) => {
-            await authorizeOwner(context);
+            await authorizeOperator(context);
             const extension = await find(input.id);
             if (extension.source !== "installed") {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "only a git-installed extension has an update lifecycle" });

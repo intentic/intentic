@@ -64,7 +64,6 @@ test("redeemTicket holds the ticket to the socket's floor, and a refused ticket 
     expect(() => redeemTicket(services, urlWith(ticket), "maintainer")).toThrow(/maintainer access required/);
     expect(() => redeemTicket(services, urlWith(ticket), "viewer")).toThrow(/invalid or expired/);
     const maintainer = { email: "m@x.com", role: "maintainer" as const };
-    expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(maintainer)), "owner")).toThrow(/owner access required/);
     expect(() => redeemTicket(services, urlWith(services.wsTickets.mint(maintainer)), "maintainer")).not.toThrow();
 });
 

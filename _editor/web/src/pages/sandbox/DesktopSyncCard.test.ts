@@ -16,7 +16,7 @@ const syncingPath = ref<string | undefined>(`/home/ada/intentic/work`);
 const disable = vi.fn(async () => {});
 vi.mock(`../../composables/sandbox/useDesktopSync`, () => ({
     useDesktopSync: () => ({
-        isOwner: ref(true),
+        canOperate: ref(true),
         enrolled: ref(true),
         syncingFrom: ref(`radarsu-rog`),
         syncingPath,

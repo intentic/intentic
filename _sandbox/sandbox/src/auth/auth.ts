@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { GrantedRole, MemberRole } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // The sandbox authenticates the END USER directly against Google, the platform never holds or signs this
@@ -160,6 +160,16 @@ export interface Authorizer {
     // access is disabled, but only to disable it again; every ordinary route stays behind authorize().
     authorizeRetirement(bearer: string): Promise<void>;
 }
+
+/* The highest revokable grant has the owner's operating authority. Ownership remains a separate identity fact:
+ * only authorizeOwner can change the access roster or retire the sandbox, so a maintainer can still be revoked
+ * and can never revoke or replace the bound owner. */
+export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string): Promise<void> => {
+    const caller = await authorizer.authorize(bearer, undefined);
+    if (!roleAtLeast(caller.role, "maintainer")) {
+        throw new ForbiddenError("not a sandbox maintainer");
+    }
+};
 
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;

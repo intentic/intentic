@@ -17,7 +17,7 @@ import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 const { highlight = false } = defineProps<{ highlight?: boolean }>();
 
 const {
-    isOwner,
+    canOperate,
     enrolled,
     syncingFrom,
     syncingPath,
@@ -41,7 +41,7 @@ const {
 // The owner's opt-in to the ports-only flow (skip file sync on a fresh enable, or add a mirror machine while
 // another holds sync). Members don't need the toggle: portsOnly is forced for them.
 const mirrorOnly = ref(false);
-const portsOnly = computed(() => !isOwner.value || mirrorOnly.value);
+const portsOnly = computed(() => !canOperate.value || mirrorOnly.value);
 
 // Takeover and mirror setup are mutually exclusive forms: entering one leaves the other.
 const startTakeover = (): void => {
@@ -148,7 +148,7 @@ onUnmounted(stop);
                         is missing.
                     </p>
                 </div>
-                <div v-if="isOwner" class="flex items-center justify-between gap-2">
+                <div v-if="canOperate" class="flex items-center justify-between gap-2">
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <button
                             v-if="!takeover && pairToken === undefined"
@@ -186,7 +186,7 @@ onUnmounted(stop);
                     This takes over from {{ syncingFrom ?? "the other computer" }}. Its sync stops when you run the command below.
                 </p>
                 <p v-if="portsOnly && pairToken === undefined" class="text-2xs text-subtle">
-                    <template v-if="isOwner">
+                    <template v-if="canOperate">
                         Ports only: the sandbox's dev servers appear on the enrolling computer's localhost. No files are synced.
                     </template>
                     <template v-else>
@@ -210,7 +210,7 @@ onUnmounted(stop);
                             <template #icon><Icon name="desktop" /></template>
                         </Button>
                         <button
-                            v-if="isOwner && !takeover && !mirrorOnly && !enrolled"
+                            v-if="canOperate && !takeover && !mirrorOnly && !enrolled"
                             type="button"
                             class="text-2xs text-link hover:underline"
                             @click="startMirror"
@@ -218,7 +218,7 @@ onUnmounted(stop);
                             Mirror ports only (skip file sync)
                         </button>
                         <button
-                            v-else-if="isOwner && mirrorOnly"
+                            v-else-if="canOperate && mirrorOnly"
                             type="button"
                             class="text-2xs text-link hover:underline"
                             @click="mirrorOnly = false"

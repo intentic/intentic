@@ -67,11 +67,10 @@ afterEach(async () => {
     }
 });
 
-test("a member may not list, start, delete or restore: every direction is owner-gated", async () => {
-    // The member's exact position: the bearer verifies, the owner check refuses. A verified non-owner is 403.
+test("a collaborator may not list, start, delete or restore: every direction is operating-tier gated", async () => {
     const app = createApp(
         services({
-            auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => ({ email: "member@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
         }),
     );
     expect((await app.request("/bundles")).status).toBe(403);

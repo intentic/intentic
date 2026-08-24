@@ -44,7 +44,7 @@ import { type DiscoverListing, listingSections, toListing } from "./discoverList
 
 const route = useRoute();
 const router = useRouter();
-const { isOwner } = useRole();
+const { canShip: canOperate } = useRole();
 const { entries, registryName, url, token, isOfficial, isLoading, isFetching, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const outline = useSandboxOutline(isLoading);
 const { extensions } = useExtensions();
@@ -379,7 +379,7 @@ const emptyNote = computed<string | undefined>(() => {
             v-if="opened"
             v-model="detailOpen"
             :listing="opened"
-            :can-install="isOwner"
+            :can-install="canOperate"
             :installing="installing === opened.entry.name"
             :failure="failure"
             @install="install(opened)"

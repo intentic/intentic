@@ -99,11 +99,9 @@ const BUILT_IN = new Set([...boxRows(0), ...configurationRows(0), ...reachRows(0
 const DEFAULT = `overview`;
 
 const sandbox = useSandbox();
-/* The credentials tier is the owner's alone, and it is ABSENT for everyone else rather than locked: a lock on
- * a secrets tab is an invitation to ask for the values; absence is a boundary. Environment and Extensions stay
- *: members see state there and the owner-only writes are gated in place. Usage joins the ship tier (spend is
- * the operator's reading). The daemon floors all of it regardless; this only keeps the index honest. */
-const { canShip, isOwner } = useRole();
+/* Operating surfaces belong to the highest revokable grant as well as the owner. The daemon independently
+ * enforces the same maintainer floor; this only keeps the index honest for lower roles. */
+const { canShip } = useRole();
 const { runningCount } = useRunning();
 // The one fact in this index that is looked FOR rather than looked at: the free /system/sync read the sandbox
 // chip already polls, so badging the row it belongs to costs no request.
@@ -141,9 +139,9 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
     {
         key: `configuration`,
         label: `Configuration`,
-        items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || isOwner.value),
+        items: configurationRows(updatable.value).filter((tab) => (tab.slug !== `secrets` && tab.slug !== `agent`) || canShip.value),
     },
-    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `computers` || isOwner.value) },
+    { key: `reach`, label: `Reach`, items: reachRows(contendedPorts.value.length).filter((tab) => tab.slug !== `computers` || canShip.value) },
     ...(contributed.value.length === 0 ? [] : [{ key: `contributed`, label: `Added by extensions`, items: contributed.value.map(contributedRow) }]),
 ]);
 </script>

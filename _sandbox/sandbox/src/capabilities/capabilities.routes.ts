@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { type Capability, capabilitiesContract, CapabilitySchema, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { bearerFrom } from "../auth/auth.js";
+import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
@@ -148,14 +148,13 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
-            // Extensions ship code that runs trusted in the browser shell and the agent's turns, installing
-            // one IS the trust decision, so only the owner may make it (mirrors /environment/approve; loopback
-            // mode has no auth and skips the gate like every other route).
+            // Extensions ship code that runs trusted in the browser shell and the agent's turns, so installing
+            // one requires the operating tier (mirrors /environment/approve).
             if (input.kind === "extension" && services.auth !== undefined) {
                 try {
-                    await services.auth.authorizeOwner(bearerFrom(context.headers.get("authorization") ?? undefined));
+                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
                 } catch {
-                    throw new ORPCError("FORBIDDEN", { message: "only the sandbox owner can install extensions" });
+                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can install extensions" });
                 }
             }
             const active = await services.capabilities.list();

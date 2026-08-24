@@ -411,18 +411,28 @@ test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll: n
     expect(sync).not.toHaveProperty("syncingFrom");
 });
 
-test("POST /system/sync/pair: the owner may mint a sync pairing, a member is capped to mirror", async () => {
+test("POST /system/sync/pair: the operating tier may mint sync, lower roles are capped to mirror", async () => {
     // Owner (loopback = owner): default sync, or mirror on request.
     const owner = createApp(services());
     expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
     expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
-    // Member (authorized but not owner): forced to mirror even when asking for sync.
-    const member = createApp(
+    const maintainer = createApp(
         services({ auth: { authorize: async () => ({ email: "m@x.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }),
     );
-    const asMember = (query = "") => member.request(`/system/sync/pair${query}`, { method: "POST", headers: { authorization: "Bearer m" } });
-    expect(await (await asMember()).json()).toMatchObject({ mode: "mirror" });
-    expect(await (await asMember("?mode=sync")).json()).toMatchObject({ mode: "mirror" });
+    expect(
+        await (
+            await maintainer.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer m" } })
+        ).json(),
+    ).toMatchObject({ mode: "sync" });
+
+    const collaborator = createApp(
+        services({ auth: { authorize: async () => ({ email: "c@x.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden } }),
+    );
+    expect(
+        await (
+            await collaborator.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer c" } })
+        ).json(),
+    ).toMatchObject({ mode: "mirror" });
 });
 
 test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {

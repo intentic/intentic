@@ -67,7 +67,12 @@ const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
         icon: `users`,
         hint: `Can drive agents and review work. Landing and publishing become requests.`,
     },
-    { label: `Maintainer`, value: `maintainer`, icon: `wrench`, hint: `Can ship and operate: land work, approve drafts, use the terminal.` },
+    {
+        label: `Maintainer`,
+        value: `maintainer`,
+        icon: `wrench`,
+        hint: `Can operate everything the owner can. The owner can revoke this access; the owner can't be revoked.`,
+    },
 ];
 const roleHint = (role: GrantedRole): string => ROLE_OPTIONS.find((option) => option.value === role)?.hint ?? ``;
 const roleLabel = (role: MemberRole): string => role.charAt(0).toUpperCase() + role.slice(1);

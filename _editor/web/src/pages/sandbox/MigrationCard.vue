@@ -14,7 +14,7 @@ import Checkbox from "primevue/checkbox";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
-import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useRole } from "../../composables/sandbox/useRole";
 import { helpTopics, SOURCE_GUIDES } from "./migrationGuide";
 
 /* ARRIVING FROM ANOTHER ASSISTANT: a Hermes or OpenClaw setup read in, previewed as a ticked checklist, and
@@ -33,10 +33,10 @@ import { helpTopics, SOURCE_GUIDES } from "./migrationGuide";
  *      actually goes wrong (a server, a container, a moved folder) folded underneath, each answered in place.
  *
  * PREVIEW-FIRST SURVIVES BOTH DOORS. Whichever way the setup arrives it becomes a plan, never a change: every
- * item carries the adapter's default tick, the owner edits, and only the apply writes. Secrets are a second,
+ * item carries the adapter's default tick, the operator edits, and only the apply writes. Secrets are a second,
  * separate consent. The report at the end is the deliverable, exactly as a bundle restore's is. */
 
-const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+const { canShip: canOperate } = useRole();
 
 const hosts = ref<MigrationHost[]>([]);
 const picked = ref<MigrationSource | undefined>(undefined);
@@ -57,7 +57,7 @@ const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 const probed = ref(false);
 const probing = ref(false);
 const probe = async (): Promise<void> => {
-    if (!isOwner.value || probing.value) {
+    if (!canOperate.value || probing.value) {
         return;
     }
     probing.value = true;
@@ -151,7 +151,7 @@ const cancel = (): Promise<void> =>
             title="Arrive from another assistant"
         />
 
-        <template v-if="isOwner">
+        <template v-if="canOperate">
             <template v-if="plan === undefined">
                 <!-- THE OFFER THAT DELETES THE INSTRUCTIONS. A connected computer needs no archive, no
                      transfer and no file dialog, so it goes above everything and reads as the answer rather

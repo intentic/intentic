@@ -83,10 +83,8 @@ export const createBrowserProfileRoute = (services: Services) =>
             onOpen: async (_event, ws) => {
                 const url = new URL(c.req.url);
                 try {
-                    // Signing a live Chromium into a service ADDS a credential, and browsing it is acting AS the
-                    // owner in their own account, the owner's tier alone, like everything else on the
-                    // capabilities surface.
-                    const caller = redeemTicket(services, url, "owner");
+                    // Signing a live Chromium into a service adds a credential, so it takes the operating tier.
+                    const caller = redeemTicket(services, url, "maintainer");
                     if (caller !== undefined) {
                         unregisterAccess = services.auth?.connections.register(caller, () => ws.close(1008, "authorization revoked"));
                     }

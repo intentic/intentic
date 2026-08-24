@@ -16,7 +16,7 @@ import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import { bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
+import { authorizeMaintainer, bearerFrom, ForbiddenError, tokenEquals } from "./auth/auth.js";
 import { CONTROL_SCOPES } from "./auth/control-tokens.js";
 import { routeFloor } from "./auth/role-floor.js";
 import { grantsOf } from "./auth/grants.js";
@@ -814,14 +814,20 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // owner's install diagnostic, so it takes the ordinary bearer middleware like every other app route.
     app.get("/webchat/:id/installs", webchat.installs);
 
-    // Owner-only management of the sandbox's shared-access list, the emails the auth check above admits besides
-    // the owner. The owner's browser calls these when inviting/removing collaborators; the platform mirrors the
-    // grants for discovery, but THIS list is the enforced one. Loopback mode (no auth) skips the owner gate, like
-    // every other route. The bearer middleware already ran (caller is at least a member); the owner gate narrows it.
-    // Returns the denial response, or undefined when the caller is the owner: 403 for a verified non-owner
-    // (ForbiddenError), 401 for authentication failures, the latter matters on the middleware-exempt
-    // /system/authorized-key routes, where this gate is the only auth at all.
+    // The operating gate used by privileged sandbox controls. Maintainer is deliberately owner-equivalent here;
+    // ownership itself is kept separate below for the one thing a revokable grant cannot control: membership.
     const ownerDenied = async (c: Context): Promise<Response | undefined> => {
+        if (services.auth === undefined) {
+            return undefined;
+        }
+        try {
+            await authorizeMaintainer(services.auth, bearerFrom(c.req.header("authorization")));
+            return undefined;
+        } catch (error) {
+            return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
+        }
+    };
+    const ownershipDenied = async (c: Context): Promise<Response | undefined> => {
         if (services.auth === undefined) {
             return undefined;
         }
@@ -832,18 +838,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return error instanceof ForbiddenError ? c.json({ error: error.message }, 403) : c.json({ error: "unauthorized" }, 401);
         }
     };
-    // Whether the caller is the owner (vs a member). Loopback/test mode (no auth) counts as owner. Used to gate
-    // what a pairing may grant: the owner can mint a full "sync" pairing, a member only "mirror".
-    const isOwner = async (c: Context): Promise<boolean> => (await ownerDenied(c)) === undefined;
+    const canOperate = async (c: Context): Promise<boolean> => (await ownerDenied(c)) === undefined;
     app.get("/members", async (c) => {
-        const denied = await ownerDenied(c);
+        const denied = await ownershipDenied(c);
         if (denied !== undefined) {
             return denied;
         }
         return c.json({ members: await services.members.list() });
     });
     app.post("/members", async (c) => {
-        const denied = await ownerDenied(c);
+        const denied = await ownershipDenied(c);
         if (denied !== undefined) {
             return denied;
         }
@@ -859,7 +863,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return c.json({ members: await services.members.list() });
     });
     app.delete("/members", async (c) => {
-        const denied = await ownerDenied(c);
+        const denied = await ownershipDenied(c);
         if (denied !== undefined) {
             return denied;
         }
@@ -1283,7 +1287,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // the oRPC catch-all, like /members and /workspace/raw.
     app.post("/system/sync/pair", async (c) => {
         const requested = c.req.query("mode") === "mirror" ? "mirror" : "sync";
-        const mode: SyncMode = (await isOwner(c)) ? requested : "mirror";
+        const mode: SyncMode = (await canOperate(c)) ? requested : "mirror";
         return c.json({ ...mintPairing(mode), mode });
     });
 

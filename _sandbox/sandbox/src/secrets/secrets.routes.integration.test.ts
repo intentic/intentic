@@ -114,15 +114,14 @@ test("secrets.inventory answers pre-scaffold with capability/provider entries on
     expect(entries.map((entry) => entry.key)).toEqual(["claude:default"]);
 });
 
-test("secrets.reveal returns env and generated values, 404s unknown keys, and is owner-gated", async () => {
+test("secrets.reveal returns values to the operating tier and refuses lower roles", async () => {
     const workspace = secretsWorkspace();
     const client = clientFor(createApp(services({ workspace })));
     expect(await client.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem" });
     expect(await client.secrets.reveal({ key: "FORGEJO_ADMIN_PASSWORD" })).toEqual({ value: "pw1" });
     expect(await errorCode(client.secrets.reveal({ key: "GHOST" }))).toBe("NOT_FOUND");
 
-    // A verified member who is not the owner is refused the value (the rest of the secrets surface stays open).
-    const memberClient = clientFor(
+    const maintainerClient = clientFor(
         createApp(
             services({
                 workspace,
@@ -130,7 +129,17 @@ test("secrets.reveal returns env and generated values, 404s unknown keys, and is
             }),
         ),
     );
-    expect(await errorCode(memberClient.secrets.reveal({ key: "HOST_SSH_KEY" }))).toBe("FORBIDDEN");
+    expect(await maintainerClient.secrets.reveal({ key: "HOST_SSH_KEY" })).toEqual({ value: "pem" });
+
+    const collaboratorClient = clientFor(
+        createApp(
+            services({
+                workspace,
+                auth: { authorize: async () => ({ email: "c@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
+            }),
+        ),
+    );
+    expect(await errorCode(collaboratorClient.secrets.reveal({ key: "HOST_SSH_KEY" }))).toBe("FORBIDDEN");
 });
 
 test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` for the CI copy", async () => {

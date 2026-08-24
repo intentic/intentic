@@ -40,10 +40,10 @@ describe("routeFloor", () => {
         expect(routeFloor("GET", "/capabilities")).toBe("maintainer");
     });
 
-    test("the secrets surface is the owner's whole, reads included", () => {
-        expect(routeFloor("GET", "/secrets")).toBe("owner");
-        expect(routeFloor("POST", "/secrets")).toBe("owner");
-        expect(routeFloor("GET", "/secrets/inventory")).toBe("owner");
+    test("the secrets surface belongs to the operating tier, reads included", () => {
+        expect(routeFloor("GET", "/secrets")).toBe("maintainer");
+        expect(routeFloor("POST", "/secrets")).toBe("maintainer");
+        expect(routeFloor("GET", "/secrets/inventory")).toBe("maintainer");
     });
 
     test("an unclassified route falls to the fail-safe defaults: viewer for reads, maintainer for mutations", () => {

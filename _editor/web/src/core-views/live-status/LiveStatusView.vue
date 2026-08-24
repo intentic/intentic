@@ -11,7 +11,7 @@ import { sandboxRequest } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { useDeployments } from "../../composables/extensions/useDeployments";
 import { useWorkspaceState } from "../../composables/extensions/useWorkspaceState";
-import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useRole } from "../../composables/sandbox/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
 
@@ -84,8 +84,8 @@ const envList = (deployment: Deployment): { key: string; label: string }[] =>
 
 // Provisioned-services access: URLs + admin logins from the last apply (status.json, value-free), the "how do
 // I log into what's live" companion to the deployments board. A generated password's value is fetched on click
-// through the daemon's owner-gated reveal; members see the secret's name instead.
-const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+// through the daemon's operating-tier reveal; lower roles see the secret's name instead.
+const { canShip: canOperate } = useRole();
 const access = computed(() => state.value?.access ?? []);
 const revealedAccess = reactive(new Map<string, string>());
 const accessError = ref<NoticeModel | undefined>(undefined);
@@ -281,7 +281,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                     >user: <span class="font-mono text-content">{{ entry.username }}</span></span
                                 >
                                 <template v-if="entry.password !== undefined">
-                                    <template v-if="entry.password.source === `generated` && isOwner">
+                                    <template v-if="entry.password.source === `generated` && canOperate">
                                         <span v-if="revealedAccess.has(entry.password.key)" class="inline-flex items-center gap-1">
                                             password: <span class="font-mono text-content">{{ revealedAccess.get(entry.password.key) }}</span>
                                             <CopyButton :text="revealedAccess.get(entry.password.key) ?? ``" />

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createAuthorizer, ForbiddenError, type IdTokenVerifier, type Member, type MembersStore, type OwnerStore } from "./auth.js";
+import { authorizeMaintainer, createAuthorizer, ForbiddenError, type IdTokenVerifier, type Member, type MembersStore, type OwnerStore } from "./auth.js";
 
 // In-memory owner store so the TOFU branching is exercised without touching disk.
 const memOwner = (initial?: string): OwnerStore => {
@@ -145,6 +145,21 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         await expect(authz.authorizeOwner("")).rejects.toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /missing bearer/.test(error.message),
         );
+    });
+
+    test("the highest revokable grant has operating authority but not ownership", async () => {
+        const authz = createAuthorizer({
+            verify: verifierFor({ "tok-a": "a@x.com", "tok-m": "m@x.com", "tok-c": "c@x.com" }),
+            owner: memOwner("a@x.com"),
+            members: memMembers([
+                { email: "m@x.com", role: "maintainer" },
+                { email: "c@x.com", role: "collaborator" },
+            ]),
+        });
+        await expect(authorizeMaintainer(authz, "tok-a")).resolves.toBeUndefined();
+        await expect(authorizeMaintainer(authz, "tok-m")).resolves.toBeUndefined();
+        await expect(authorizeMaintainer(authz, "tok-c")).rejects.toThrow(/sandbox maintainer/);
+        await expect(authz.authorizeOwner("tok-m")).rejects.toBeInstanceOf(ForbiddenError);
     });
 
     test("permanently disabled browser access refuses ordinary calls but lets the owner repeat retirement", async () => {

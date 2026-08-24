@@ -168,20 +168,18 @@ test("/system/ws-ticket 404s in loopback mode: no identity to bind, and the upgr
     expect((await postJson(createApp(services({})), "/system/ws-ticket")).status).toBe(404);
 });
 
-/* Sign-out-everywhere rotates future request credentials AND ends transports which have no future middleware
- * pass. It is the owner's alone: a member who could rotate it would be able to sign the owner out. */
-test("POST /system/sessions/revoke re-keys sessions, closes live access, drops tickets, and is owner-only", async () => {
+test("POST /system/sessions/revoke re-keys sessions, closes live access, drops tickets, and requires the operating tier", async () => {
     let rotations = 0;
     const close = vi.fn();
     const connections = createAuthConnections();
     connections.register({ email: "owner@x.com", role: "owner" }, close);
     const auth = {
-        authorize: async () => ({ email: "member@x.com", role: "maintainer" as const }),
+        authorize: async () => ({ email: "member@x.com", role: "collaborator" as const }),
         authorizeOwner: rejectForbidden,
         rotateSessions: async () => void (rotations += 1),
         connections,
     };
-    // A verified non-owner is a 403 (the browser's "no access" shape), and nothing rotates.
+    // A verified lower role is a 403, and nothing rotates.
     expect((await postJson(createApp(services({ auth })), "/system/sessions/revoke")).status).toBe(403);
     expect(rotations).toBe(0);
 
@@ -1118,7 +1116,7 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     expect(await errorCode(client.agent.stop({ conversationId: "conv1" }))).toBe("NOT_FOUND");
 });
 
-test("environment: members read the state, approve/reject are owner-gated, approve maps failures to statuses", async () => {
+test("environment: lower roles read state, maintainers approve/reject, and failures map to statuses", async () => {
     const disk = new Map<string, string>();
     const memoryFiles = fakeFiles({
         read: async (path) => disk.get(path),
@@ -1134,12 +1132,11 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     const hash = sha256Hex(proposal);
     disk.set(`${WORKSPACE_ROOT}/${STATE_DIR}/config/environment.Dockerfile`, proposal);
 
-    // A member (bearer passes, owner check refuses as Forbidden) sees the state but can't approve or reject:
-    // a verified non-owner is 403, not 401.
+    // A collaborator sees the state but cannot approve or reject.
     const memberApp = createApp(
         services({
             files: memoryFiles,
-            auth: { authorize: async () => ({ email: "member@example.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden },
+            auth: { authorize: async () => ({ email: "member@example.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden },
         }),
     );
     const seen = await memberApp.request("/environment");
@@ -1147,7 +1144,7 @@ test("environment: members read the state, approve/reject are owner-gated, appro
     expect(await seen.json()).toEqual({ proposal: { content: proposal, hash } });
     const approveDenied = await postJson(memberApp, "/environment/approve", { hash });
     expect(approveDenied.status).toBe(403);
-    expect(await approveDenied.json()).toEqual({ error: "not the sandbox owner" });
+    expect(await approveDenied.json()).toEqual({ error: "not a sandbox maintainer" });
     expect((await postJson(memberApp, "/environment/reject")).status).toBe(403);
 
     // Loopback (no auth) is the owner, like every other route.

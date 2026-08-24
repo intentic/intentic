@@ -20,8 +20,8 @@ export const OkSchema = z.object({
 
 // The trust tiers of everyone who can open this sandbox, ordered. `owner` is the one bound identity
 // (auth/auth.ts); the other three are granted per email on the daemon's /members list. viewer watches,
-// collaborator drives agents (outward actions become requests), maintainer ships and operates. The daemon
-// enforces these as route floors (auth/role-floor.ts); the platform's invite records mirror them.
+// collaborator drives agents (outward actions become requests), maintainer has the owner's operating authority
+// while remaining revokable. Ownership itself is not a grant and controls the access roster.
 export const MemberRoleSchema = z.enum(["viewer", "collaborator", "maintainer", "owner"]);
 export type MemberRole = z.infer<typeof MemberRoleSchema>;
 // The roles an invite can grant, everything but `owner`, which is bound at first sign-in, never granted.

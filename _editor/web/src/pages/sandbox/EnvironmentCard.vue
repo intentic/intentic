@@ -8,7 +8,7 @@ import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { ENVIRONMENT_KEY, useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useEnvironmentContents } from "../../composables/sandbox/useEnvironmentContents";
-import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useRole } from "../../composables/sandbox/useRole";
 import HostRecreate from "../../components/HostRecreate.vue";
 import EnvironmentContents from "./EnvironmentContents.vue";
 import DiffToolbar from "../workspace/viewers/DiffToolbar.vue";
@@ -23,7 +23,7 @@ import DiffView from "../workspace/viewers/DiffView.vue";
  * hatch behind a pill. The decision itself (and the rebuild that applies it) sits below BOTH views, because it
  * is about the state of the environment rather than about how the environment is being displayed.
  *
- * The OWNER approves or rejects; capability fragments recompose automatically and are not up for review.
+ * The operating tier approves or rejects; capability fragments recompose automatically and are not up for review.
  * Approval pins the content's hash; the rebuild itself runs OUTSIDE the container (see HostRecreate): a button
  * in the desktop app or a copyable one-liner in a browser, whose hash argument guarantees only the reviewed
  * content is built, or the next `intentic deploy apply` for a server-managed sandbox. Hidden until there is an
@@ -31,18 +31,14 @@ import DiffView from "../workspace/viewers/DiffView.vue";
 
 const queryClient = useQueryClient();
 const { busy, notice, run } = useAsyncAction();
-/* The daemon's owner-gate refusal is not a fault, so it is not reported as one: a member pressing Approve is
- * being told how the sandbox is arranged, which is a warning at most, and the daemon's own four words are no
- * use to them. Everything else keeps the sentence the action wrote for it. */
+/* A role-gate refusal is not a fault, so it is not reported as one. */
 const actionNotice = computed<NoticeModel | undefined>(() =>
-    notice.value?.detail === `not the sandbox owner`
-        ? { tone: `warning`, title: `Only the sandbox owner can decide on environment changes.` }
+    notice.value?.detail === `not a sandbox maintainer`
+        ? { tone: `warning`, title: `Only a sandbox maintainer can decide on environment changes.` }
         : notice.value,
 );
 
-// Only the owner can decide on a proposal: the daemon is the real gate (it 403s a non-owner approve), but we
-// hide the buttons for members so a diff they can't act on isn't presented as actionable.
-const isOwner = computed(() => useSandbox().active.value?.role === `owner`);
+const { canShip: canOperate } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
 const { state, query, proposal, pending, applied, serverManaged, slug } = useEnvironment();
@@ -138,7 +134,7 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 
         <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
         <template v-if="proposal">
-            <div v-if="isOwner" class="flex items-center justify-end gap-2">
+            <div v-if="canOperate" class="flex items-center justify-end gap-2">
                 <Button label="Reject" size="small" severity="danger" :text="true" :loading="busy" @click="reject">
                     <template #icon><Icon name="times" /></template>
                 </Button>

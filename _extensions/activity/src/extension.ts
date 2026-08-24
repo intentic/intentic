@@ -1,9 +1,9 @@
 import type { ExtensionContext, IntenticApi } from "@intentic/extension-api";
 import { bindHost } from "./host";
 
-/* ext-activity activation: bind the host handle, then register the "Activity" view. It is capability-driven,
- * not repo-driven, the audit feed surfaces when a monitored provider is connected, detected purely from the
- * public capability facts.
+/* ext-activity activation: bind the host handle, then register the "Activity" view. The feed is part of the
+ * sandbox for every role that may read it; activation must not depend on the privileged capability inventory,
+ * or a member can read /activity but has no route to the view.
  *
  * A SANDBOX SECTION, NOT A RAIL TILE, the same move logs made, and Activity is the closer relative of the two:
  * it is the record of what reached this box and what it did about it, which is the sandbox hub's own subject.
@@ -13,11 +13,6 @@ import { bindHost } from "./host";
  * automation's row, and a wake held for approval is a card on the fleet board. This is where you come to read
  * the whole record afterwards, on your own initiative, which is a hub section's job, not a rail seat's. */
 
-// The providers whose traffic the daemon actually audits: a gateway pushes their connection health, and the
-// outbound sniffer parses their skill's curl calls. A connector with neither (github, sentry) would give the
-// rail an empty feed, which is why this is a list and not "any cli capability".
-const MONITORED = new Set([`discord`, `slack`]);
-
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
     bindHost(api);
     context.subscriptions.push(
@@ -25,10 +20,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             id: `activity`,
             label: `Activity`,
             surface: `sandbox`,
-            detect: (_repos, capabilities) =>
-                capabilities.some((capability) => capability.kind === `cli` && MONITORED.has(String(capability.config[`provider`])))
-                    ? [{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]
-                    : [],
+            detect: () => [{ key: `activity`, title: `Activity`, icon: `wave-pulse` }],
             view: async () => (await import(`./ActivityView.vue`)).default,
         }),
     );

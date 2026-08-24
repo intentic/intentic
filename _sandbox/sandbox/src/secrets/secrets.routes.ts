@@ -9,7 +9,7 @@ import { lastUseByName, type SecretUse } from "./secret-uses.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import type { SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { bearerFrom, ForbiddenError } from "../auth/auth.js";
+import { authorizeMaintainer, bearerFrom, ForbiddenError } from "../auth/auth.js";
 import { secretsContract } from "@intentic/sandbox-contract";
 import { providerSecretEntries } from "../agent/provider-registry.js";
 import type { Services } from "../composition.js";
@@ -76,7 +76,7 @@ const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByNam
 // straight from the browser to the daemon (never the platform); `apply` reloads .env each run so a freshly set
 // secret is picked up with no restart. set/remove/list/reveal refuse until DevOps has scaffolded the
 // desired-state repo; `inventory` always answers (capability/provider entries exist pre-scaffold).
-// `reveal` is the single value-returning route, owner-only. After every set/remove the daemon fires
+// `reveal` is the single value-returning route and remains operating-tier gated in-route. After every set/remove the daemon fires
 // `intentic deploy secrets push` best-effort so an adopted workspace's Forgejo Actions copy never goes silently stale.
 export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
     const i = implement(secretsContract).$context<OrpcContext>();
@@ -94,12 +94,12 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             return "";
         }
     };
-    const ensureOwner = async (headers: Headers): Promise<void> => {
+    const ensureMaintainer = async (headers: Headers): Promise<void> => {
         if (services.auth === undefined) {
             return;
         }
         try {
-            await services.auth.authorizeOwner(bearerFrom(headers.get("authorization") ?? undefined));
+            await authorizeMaintainer(services.auth, bearerFrom(headers.get("authorization") ?? undefined));
         } catch (error) {
             if (error instanceof ForbiddenError) {
                 throw new ORPCError("FORBIDDEN", { message: error.message });
@@ -171,7 +171,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
             return { entries: [...repoEntries, ...capabilityEntries, ...providerEntries].map(withUse) };
         }),
         reveal: i.reveal.handler(async ({ input, context }) => {
-            await ensureOwner(context.headers);
+            await ensureMaintainer(context.headers);
             // Capability credentials first (key = capability id), they exist pre-scaffold, before ensureActive.
             const capability = await services.capabilities.get(input.key);
             if (capability !== undefined) {
