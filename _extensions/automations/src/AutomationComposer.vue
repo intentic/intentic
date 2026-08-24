@@ -274,7 +274,7 @@ const finish = (id: string): void => {
 
             <AutomationFields ref="fields" :state="state" :recipe-note="template?.title" />
 
-            <div :class="['flex justify-end gap-2 border-t border-line pt-3', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
+            <div :class="['flex justify-end gap-2 border-t border-line-subtle pt-3', shaking ? 'ui-shake' : '']" @animationend="shaking = false">
                 <Button label="Cancel" severity="secondary" :text="true" @click="emit(`close`)" />
                 <Button type="submit" label="Create" :loading="save.isPending.value">
                     <template #icon><Icon name="check" /></template>

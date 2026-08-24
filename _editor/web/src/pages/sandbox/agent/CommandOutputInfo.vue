@@ -92,7 +92,7 @@ const GLOBAL_CLEANERS = [
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">On a real command</h3>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">What pnpm printed</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">What pnpm printed</p>
                 <!-- truncate, not wrap: a wrapped line looks like two, and the whole point of the pane is that
                      you can count the rows on each side. -->
                 <div class="flex flex-col gap-1 px-2.5 py-2 font-mono text-[0.65rem] leading-tight">
@@ -107,7 +107,7 @@ const GLOBAL_CLEANERS = [
                 </div>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">
                     What the assistant read
                 </p>
                 <div class="flex flex-col gap-1 px-2.5 py-2 font-mono text-[0.65rem] leading-tight">

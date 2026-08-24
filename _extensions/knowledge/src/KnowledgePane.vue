@@ -155,7 +155,7 @@ const onProseClick = (event: MouseEvent): void => {
                  letter. It also belongs here on the merits: the switch is about the body underneath it, not
                  about the note the header names. -->
             <template #strips>
-                <div class="flex items-center gap-2 border-b border-line px-4 py-1.5">
+                <div class="flex items-center gap-2 border-b border-line-subtle px-4 py-1.5">
                     <SegmentedControl
                         v-model="view"
                         size="xs"

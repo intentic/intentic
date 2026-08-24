@@ -122,7 +122,7 @@ const logoFailed = reactive(new Set<string>());
         </div>
 
         <!-- Live reality join: is the planned resource actually running, and on what image. -->
-        <div v-if="deployment" class="border-t border-line pt-2">
+        <div v-if="deployment" class="border-t border-line-subtle pt-2">
             <div class="flex items-center gap-2">
                 <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">Running now</h4>
                 <StatusBadge :variant="deployment.live ? 'success' : 'neutral'" :label="deployment.live ? 'Live' : 'Not deployed'" size="xs" dot />

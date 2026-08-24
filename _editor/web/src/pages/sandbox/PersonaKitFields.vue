@@ -234,7 +234,7 @@ watch(
                 <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
                 Its own skills
             </span>
-            <div class="divide-y divide-line overflow-hidden rounded-lg border border-line">
+            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle">
                 <!-- The invitation is a ROW inside the list, not a line above it: the Skills page's shape. Above
                      it, an empty list said the same thing twice: a paragraph explaining there is nothing, and a
                      bordered box holding nothing but the button that would fix it. -->
@@ -266,7 +266,7 @@ watch(
                         <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
                         <span class="text-sm font-medium text-content">New skill</span>
                     </div>
-                    <div class="border-t border-line py-3 pl-9 pr-3">
+                    <div class="border-t border-line-subtle py-3 pl-9 pr-3">
                         <SkillForm :disabled="busy" @save="save" @cancel="close" />
                     </div>
                 </div>

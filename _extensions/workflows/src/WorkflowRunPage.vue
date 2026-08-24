@@ -78,7 +78,7 @@ const chatLink = (conversationId: string) => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
+        <header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line-subtle px-4 py-2.5">
             <button type="button" :class="ui.iconButton()" aria-label="Back to workflows" @click="emit(`close`)"><Icon name="arrow-left" /></button>
             <span class="text-sm font-medium text-content">{{ run.workflow.name }}</span>
             <span class="text-2xs font-medium" :class="run.state === `done` ? `text-success` : run.state === `running` ? `text-link` : `text-subtle`">
@@ -131,8 +131,8 @@ const chatLink = (conversationId: string) => {
 
                 <!-- The declared output, as a table. The reason `json` exists: a step's conclusion as data you
                      can read at a glance and the next step can act on, rather than a paragraph about it. -->
-                <div v-if="dataRows.length > 0" class="overflow-hidden rounded-md border border-line">
-                    <div v-for="row in dataRows" :key="row.key" class="flex gap-3 border-b border-line px-2.5 py-1.5 last:border-b-0">
+                <div v-if="dataRows.length > 0" class="overflow-hidden rounded-md border border-line-subtle">
+                    <div v-for="row in dataRows" :key="row.key" class="flex gap-3 border-b border-line-subtle px-2.5 py-1.5 last:border-b-0">
                         <span class="w-28 shrink-0 font-mono text-2xs text-subtle">{{ row.key }}</span>
                         <span class="min-w-0 flex-1 whitespace-pre-wrap text-xs text-content">{{ asText(row.value) }}</span>
                     </div>

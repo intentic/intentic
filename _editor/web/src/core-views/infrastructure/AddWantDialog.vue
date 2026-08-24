@@ -169,7 +169,7 @@ const submit = async (): Promise<void> => {
                 </div>
             </div>
 
-            <div class="mb-4 border-t border-line"></div>
+            <div class="mb-4 border-t border-line-subtle"></div>
 
             <Notice v-if="error" :of="error" class="mb-3" />
 

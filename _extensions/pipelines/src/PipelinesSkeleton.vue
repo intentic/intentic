@@ -45,7 +45,7 @@ const ROWS = [
                 <span class="skeleton h-3 w-32"></span>
             </div>
 
-            <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
+            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle bg-card">
                 <!-- Wraps exactly as the real row does (PipelineRunRow), so a narrow pane does not re-flow the
                      list the moment the runs land. -->
                 <div

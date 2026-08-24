@@ -306,7 +306,7 @@ const frontDesk = computed(() => {
         </div>
 
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
-        <div v-if="expanded" class="flex flex-col gap-2.5 border-t border-line bg-canvas/40 px-3 py-2.5 pl-8">
+        <div v-if="expanded" class="flex flex-col gap-2.5 border-t border-line-subtle bg-canvas/40 px-3 py-2.5 pl-8">
             <!-- EDITING HAPPENS HERE, not in a dialog. Same argument the acceptance rows make: a modal hides the
                  list you are comparing against, and at 32rem it turned a form with a Front Desk's worth of fields
                  into a column you scrolled twice. The row has the whole page width and the automation's own
@@ -314,7 +314,7 @@ const frontDesk = computed(() => {
             <div v-if="editing" class="flex flex-col gap-3 pr-3">
                 <Notice v-if="editError" :of="noticeOf(editError)" />
                 <AutomationFields :state="editForm" :name-locked="true" />
-                <div class="flex items-center justify-end gap-2 border-t border-line pt-2.5">
+                <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-2.5">
                     <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
                     <Button label="Save" :loading="saving" @click="saveEdit">
                         <template #icon><Icon name="check" /></template>
@@ -356,7 +356,7 @@ const frontDesk = computed(() => {
                 <!-- The run history, and, where the run reached a turn: a way INTO it. "It failed at 3am and I
                  can't see why" is answered by a transcript, so a run with a conversation is a button that opens
                  one; a guard-skip has nothing behind it and stays plain text. -->
-                <div class="flex flex-col gap-1 border-t border-line pt-2">
+                <div class="flex flex-col gap-1 border-t border-line-subtle pt-2">
                     <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
                     <component
                         :is="run.conversationId ? `button` : `div`"

@@ -75,7 +75,7 @@ const lastOutput = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `runn
                 <Icon name="arrow-up-right" class="shrink-0 text-2xs text-muted" />
             </button>
             <!-- The preference, where the terminals it hides are being looked for. -->
-            <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line px-2 pb-1 pt-2">
+            <label class="mt-1 flex cursor-pointer items-center gap-2.5 border-t border-line-subtle px-2 pb-1 pt-2">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs text-content">Always show as tabs</div>
                     <div class="text-2xs text-muted">Give every agent shell and job its own tab in this panel.</div>

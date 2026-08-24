@@ -88,7 +88,7 @@ const VALUE_TONE = { success: `text-success`, content: `text-content`, muted: `t
         <!-- WHAT IT HAS SAID SO FAR. Three ranks, one fact each: the answer, what qualifies it, what it was
              measured over. Nothing on this side of the rule is a control, so nothing on it is at control
              weight. -->
-        <div v-if="readings[0] !== undefined" class="mt-2.5 border-t border-line pt-2.5">
+        <div v-if="readings[0] !== undefined" class="mt-2.5 border-t border-line-subtle pt-2.5">
             <p class="flex flex-wrap items-baseline gap-x-1.5">
                 <span class="text-sm font-semibold tabular-nums" :class="VALUE_TONE[readings[0].verdict.tone]">{{ readings[0].verdict.value }}</span>
                 <span class="min-w-0 text-2xs text-muted">{{ readings[0].verdict.unit }}</span>

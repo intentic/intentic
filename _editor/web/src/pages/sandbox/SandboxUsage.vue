@@ -471,7 +471,7 @@ const hasSpend = computed(() => current.value.length > 0);
                     <div v-if="tableOpen" class="scrollbar-thin mt-3 overflow-x-auto">
                         <table class="w-full text-2xs">
                             <thead class="text-left text-subtle">
-                                <tr class="border-b border-line">
+                                <tr class="border-b border-line-subtle">
                                     <th class="py-1.5 pr-3 font-medium">Day</th>
                                     <th class="py-1.5 pr-3 font-medium">Provider</th>
                                     <th class="py-1.5 pr-3 font-medium">Model</th>

@@ -33,7 +33,7 @@ const ROWS = [{ name: `w-32` }, { name: `w-44` }, { name: `w-24` }, { name: `w-4
                 <span class="skeleton h-1.5 w-12 rounded-full"></span>
             </div>
 
-            <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
+            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle bg-card">
                 <div v-for="(row, index) in ROWS" :key="index" class="flex w-full items-center gap-3 border-l-4 border-line px-4 py-3">
                     <span class="skeleton h-4 w-4 shrink-0 rounded-full"></span>
 

@@ -270,7 +270,7 @@ const toggleDetail = (id: string): void => {
                     <span class="text-2xs font-medium text-subtle">{{ pending.length }}</span>
                     <span class="text-2xs text-subtle">These fired and are held: the agent hasn't run yet.</span>
                 </div>
-                <div class="divide-y divide-line overflow-hidden rounded-lg border border-warning/40 bg-card">
+                <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-warning/40 bg-card">
                     <div v-for="item in pending" :key="item.id" class="flex items-center gap-2 px-2.5 py-1.5">
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ item.automationId }}</span>
                         <!-- A countdown hold runs ITSELF when the timer passes: the row's job is to say so

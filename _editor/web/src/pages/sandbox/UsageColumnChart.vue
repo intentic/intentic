@@ -55,7 +55,7 @@ const PLOT_HEIGHT = `10rem`;
 
             <div class="relative min-w-0 flex-1" :style="{ height: PLOT_HEIGHT }">
                 <!-- Hairline, solid, one step off the surface: a grid is scaffolding, not data. -->
-                <div v-for="tick in [0, 50, 100]" :key="tick" class="absolute inset-x-0 border-t border-line" :style="{ top: `${tick}%` }" />
+                <div v-for="tick in [0, 50, 100]" :key="tick" class="absolute inset-x-0 border-t border-line-subtle" :style="{ top: `${tick}%` }" />
 
                 <div class="absolute inset-0 flex items-end gap-0.5">
                     <!-- The hit target is the whole column band, not the mark: a $0.02 day is 1px tall and

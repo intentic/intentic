@@ -221,7 +221,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 v-for="group in groups"
                 :key="group.sandboxId"
                 :id="blockId(group)"
-                class="flex flex-col gap-2 border-t border-line py-2 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
+                class="flex flex-col gap-2 border-t border-line-subtle py-2 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
                 :class="flashing === blockId(group) ? `bg-warning/10` : ``"
             >
                 <!-- WHICH SANDBOX THIS IS, WHETHER IT IS FINE, and what can be done to it: all on the one line

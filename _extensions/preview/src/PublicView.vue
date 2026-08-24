@@ -95,7 +95,7 @@ const size = (bytes: number): string => {
                  are coming stand in: an icon, the path, and its size on the line below. -->
             <div v-if="isLoading && outline" class="rounded-lg border border-line bg-card" role="status" aria-busy="true">
                 <span class="sr-only">Reading your published files…</span>
-                <div class="flex flex-col divide-y divide-line" aria-hidden="true">
+                <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
                     <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
                         <span class="skeleton block h-3.5 w-3.5 shrink-0" />
                         <div class="flex min-w-0 flex-1 flex-col gap-1">
@@ -120,7 +120,7 @@ const size = (bytes: number): string => {
             </div>
 
             <div v-else-if="files.length > 0" class="rounded-lg border border-line bg-card">
-                <div class="flex flex-col divide-y divide-line">
+                <div class="flex flex-col divide-y divide-line-subtle">
                     <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
                         <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
                         <div class="min-w-0 flex-1">

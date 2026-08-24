@@ -210,7 +210,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 
         <!-- The full record, one click away: where it lives, what uses it, and either the value or the editor.
              Indented to the name's column so it reads as belonging to the row above rather than as a section. -->
-        <div v-if="expanded" :id="`secret-${row.entry.key}-panel`" class="border-t border-line py-2.5 pl-9 pr-3">
+        <div v-if="expanded" :id="`secret-${row.entry.key}-panel`" class="border-t border-line-subtle py-2.5 pl-9 pr-3">
             <p class="text-2xs text-muted">
                 <template v-if="row.detail">
                     <span class="@xl:hidden">{{ row.detail }} · </span>

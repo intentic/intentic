@@ -1513,7 +1513,7 @@ const submitLabel = computed(() => {
                                     v-for="card in group.entries"
                                     :key="card.entry.id"
                                     type="button"
-                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
+                                    class="flex h-full w-full items-stretch overflow-hidden rounded-lg border border-line-subtle bg-card text-left transition-colors hover:border-line-strong hover:bg-overlay"
                                     @click="pick(card.entry)"
                                 >
                                     <!-- THE MARK IS THE TILE'S FULL HEIGHT: a band down the left edge, which is what makes

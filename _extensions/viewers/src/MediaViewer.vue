@@ -430,7 +430,7 @@ watch(
                       // scrim into white icons on white. It fades out over the height of the block so the
                       // picture is never boxed in by a hard edge.
                       `absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent px-3 pb-2 pt-12`
-                    : `shrink-0 border-t border-line px-4 py-3`,
+                    : `shrink-0 border-t border-line-subtle px-4 py-3`,
                 controlsVisible ? `opacity-100` : `pointer-events-none opacity-0`,
             ]"
         >

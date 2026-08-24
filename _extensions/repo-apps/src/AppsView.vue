@@ -231,9 +231,9 @@ onUnmounted(() => {
                     <!-- The scan of the workspace, as the rows it is about to produce. The empty state was
                          already held back until the answer was in, which left the section blank meanwhile:
                          correct, and indistinguishable from a repository with no apps in it. -->
-                    <div v-if="isLoading && outline" class="overflow-hidden rounded-lg border border-line bg-card" role="status" aria-busy="true">
+                    <div v-if="isLoading && outline" class="overflow-hidden rounded-lg border border-line-subtle bg-card" role="status" aria-busy="true">
                         <span class="sr-only">Reading this repository's apps…</span>
-                        <div class="flex flex-col divide-y divide-line" aria-hidden="true">
+                        <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
                             <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2.5">
                                 <span class="skeleton block h-5 w-5 shrink-0" />
                                 <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -248,8 +248,8 @@ onUnmounted(() => {
                     <div v-else-if="appRows.length === 0 && !isLoading" :class="ui.emptyState()">
                         No apps yet: use "Add app" to scaffold one and get a live preview.
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
-                        <div class="flex flex-col divide-y divide-line">
+                    <div v-else class="overflow-hidden rounded-lg border border-line-subtle bg-card">
+                        <div class="flex flex-col divide-y divide-line-subtle">
                             <div v-for="app in appRows" :key="app.app" class="flex items-center gap-3 px-4 py-2.5">
                                 <Icon :name="app.badge.icon" class="shrink-0 text-lg" :class="app.badge.tint" />
                                 <div class="flex min-w-0 flex-1 items-center gap-2">
@@ -364,8 +364,8 @@ onUnmounted(() => {
                     <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
                         No vitest projects found: nothing here owns a vitest.config.* or *.test.* file.
                     </div>
-                    <div v-else class="overflow-hidden rounded-lg border border-line bg-card">
-                        <div class="flex flex-col divide-y divide-line">
+                    <div v-else class="overflow-hidden rounded-lg border border-line-subtle bg-card">
+                        <div class="flex flex-col divide-y divide-line-subtle">
                             <div v-for="dir in projects" :key="dir" class="flex items-center gap-3 px-4 py-2">
                                 <Icon name="bolt" class="shrink-0 text-subtle" />
                                 <span class="min-w-0 flex-1 truncate font-mono text-sm text-content">{{ label(dir) }}</span>

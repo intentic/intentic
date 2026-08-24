@@ -646,7 +646,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                     <!-- WHAT IT IS RUNNING FOR YOU: one row per sandbox, folded to a line that says whether it
                          is fine, and carrying its folder, its ports, its image and its verbs when opened. Only
                          a machine that reported can say any of it. -->
-                    <div v-if="row.computer.report" class="border-t border-line pt-3">
+                    <div v-if="row.computer.report" class="border-t border-line-subtle pt-3">
                         <MachineDetail
                             :pairings="row.computer.report.pairings"
                             :ports="row.computer.report.ports"

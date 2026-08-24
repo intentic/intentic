@@ -114,7 +114,7 @@ onBeforeUnmount(() => {
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div v-if="sheets.length > 1" class="flex shrink-0 items-center overflow-x-auto border-b border-line px-2 py-1.5">
+        <div v-if="sheets.length > 1" class="flex shrink-0 items-center overflow-x-auto border-b border-line-subtle px-2 py-1.5">
             <SegmentedControl v-model="active" size="xs" :options="tabOptions" @update:model-value="select" />
         </div>
         <div class="min-h-0 flex-1">

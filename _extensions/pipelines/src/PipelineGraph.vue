@@ -64,7 +64,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                         <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content">{{ stageLabel(stage, index) }}</span>
                         <StatusBadge :variant="STATUS_TONE[stage.status].variant" :label="STATUS_TONE[stage.status].label" size="xs" />
                     </div>
-                    <div class="flex flex-col divide-y divide-line">
+                    <div class="flex flex-col divide-y divide-line-subtle">
                         <div v-for="job in stage.jobs" :key="job.name" class="flex items-center gap-2 py-1.5">
                             <Icon
                                 :name="STATUS_TONE[job.status].icon"

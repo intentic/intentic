@@ -31,14 +31,14 @@ const AT_A_GLANCE = [
         </p>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     A clean finish applies straight away. You come back to the work already in your workspace, and nothing is waiting on you to notice
                     it.
                 </p>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off: the default</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off: the default</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     Every clean finish becomes a <span class="font-medium text-content">Ready to land</span> card. Nothing touches your workspace
                     until you press it, from the board or the review.

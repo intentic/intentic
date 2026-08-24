@@ -203,7 +203,7 @@ const save = async (): Promise<void> => {
                         :disabled="!isOwner || logoBusy"
                         :aria-label="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
                         v-tooltip.bottom="isOwner ? (logo ? `Change or remove the logo` : `Add a logo`) : undefined"
-                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-muted"
+                        class="group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line-subtle bg-card text-muted"
                         :class="isOwner ? 'cursor-pointer hover:border-line-strong' : ''"
                         @click="pressLogo"
                     >

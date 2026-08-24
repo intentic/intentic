@@ -54,7 +54,7 @@ const GROUPS = [
                 <span class="skeleton h-3 max-w-2/5" :class="group.caption"></span>
             </div>
 
-            <div class="divide-y divide-line overflow-hidden rounded-lg border border-line bg-card">
+            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle bg-card">
                 <!-- Chore rows: px-4 py-2.5 around a 20px line box, which is what the text-sm title and the xs
                      badge both measure: 41px with the hairline, exactly what ChoreRow collapses to. -->
                 <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="border-t border-line/60 px-4 py-2.5 first:border-t-0">

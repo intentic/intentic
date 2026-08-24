@@ -73,7 +73,7 @@ const areaLink = computed(() => {
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <!-- A thin strip, not a PageHeader: this is a tab beside a file's tab, and a full page title on top of a
              document would say the same thing the tab strip already says. -->
-        <div class="flex h-8 shrink-0 items-center gap-2 border-b border-line px-3">
+        <div class="flex h-8 shrink-0 items-center gap-2 border-b border-line-subtle px-3">
             <Icon name="question-circle" class="shrink-0 text-2xs text-subtle" />
             <span class="min-w-0 truncate font-mono text-2xs text-muted">{{ label }}</span>
             <div class="ml-auto flex shrink-0 items-center gap-2">

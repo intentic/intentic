@@ -90,7 +90,7 @@ const sizeLabel = (bytes: number): string => {
                  its own, so `-mx-5` widens it by the card's padding on both sides (`5`, like
                  `--ui-card-padding`), and the row inside is 100% of THAT. The row keeps the padding, so the
                  words stay lined up with everything else on the card while the tint runs edge to edge. -->
-            <div class="-mx-5 border-t border-line">
+            <div class="-mx-5 border-t border-line-subtle">
                 <Row
                     flush
                     as="label"

@@ -208,7 +208,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                 <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
                 <span class="text-sm font-medium text-content">New skill</span>
             </div>
-            <div class="border-t border-line py-3 pl-9 pr-3">
+            <div class="border-t border-line-subtle py-3 pl-9 pr-3">
                 <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </div>
         </div>
@@ -242,7 +242,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
                      wrapped: it explains the line above it, and a two-line summary reads as two facts. -->
                 <span class="hidden min-w-0 truncate text-2xs text-subtle sm:inline">to drop one, drop the thing that ships it</span>
             </summary>
-            <div class="divide-y divide-line border-t border-line">
+            <div class="divide-y divide-line-subtle border-t border-line-subtle">
                 <SkillRow
                     v-for="skill in borrowed"
                     :key="skill.id"

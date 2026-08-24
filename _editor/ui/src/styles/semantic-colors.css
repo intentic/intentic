@@ -82,6 +82,7 @@
     --color-overlay:     var(--role-overlay);
     --color-line:        var(--role-line);
     --color-line-strong: var(--role-line-strong);
+    --color-line-subtle: var(--role-line-subtle);
     --color-content:     var(--role-content);
     --color-muted:       var(--role-muted);
     --color-subtle:      var(--role-subtle);
@@ -138,8 +139,9 @@
     --role-canvas:      var(--color-surface-50);
     --role-card:        var(--color-surface-0);
     --role-overlay:     var(--color-surface-0);
-    --role-line:        var(--color-surface-200);
-    --role-line-strong: var(--color-surface-300);
+    --role-line:        var(--color-surface-100);
+    --role-line-strong: var(--color-surface-200);
+    --role-line-subtle: color-mix(in srgb, var(--role-line) 50%, var(--role-card));
     --role-content:     var(--color-surface-900);
     --role-muted:       var(--color-surface-600);
     --role-subtle:      var(--color-surface-500);
@@ -177,8 +179,9 @@
     --role-canvas:      var(--color-surface-950);
     --role-card:        var(--color-surface-900);
     --role-overlay:     var(--color-surface-800);
-    --role-line:        var(--color-surface-800);
-    --role-line-strong: var(--color-surface-700);
+    --role-line:        color-mix(in srgb, var(--color-content) 6%, var(--color-surface-900));
+    --role-line-strong: var(--color-surface-800);
+    --role-line-subtle: color-mix(in srgb, var(--role-line) 45%, var(--role-card));
     --role-content:     var(--color-surface-50);
     --role-muted:       var(--color-surface-400);
     --role-subtle:      var(--color-surface-500);

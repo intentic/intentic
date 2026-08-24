@@ -399,7 +399,7 @@ const roster = computed(() => {
             <div v-if="rosterOpen" class="scrollbar-thin overflow-x-auto">
                 <table class="w-full text-2xs">
                     <thead class="text-left text-subtle">
-                        <tr class="border-b border-line">
+                        <tr class="border-b border-line-subtle">
                             <th class="py-1.5 pr-3 font-medium">Account</th>
                             <th class="py-1.5 pr-3 font-medium">Provider</th>
                             <th class="py-1.5 pr-3 font-medium">Binding pool</th>

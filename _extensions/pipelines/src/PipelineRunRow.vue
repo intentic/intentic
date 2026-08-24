@@ -234,7 +234,7 @@ const startFix = (): void => {
         </div>
 
         <!-- Expanded: the run's job graph -->
-        <div v-if="expanded" class="border-t border-line px-4 pb-4 pt-3">
+        <div v-if="expanded" class="border-t border-line-subtle px-4 pb-4 pt-3">
             <!-- The heading is known before the jobs are, so it stays real text and only the graph band is a
                  placeholder: sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">

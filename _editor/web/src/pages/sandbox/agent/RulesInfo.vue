@@ -26,7 +26,7 @@ const MOMENTS = [
         <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">When several rules match</h3>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">
                     Moments that do things
                 </p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
@@ -36,7 +36,7 @@ const MOMENTS = [
                 </p>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Moments that decide</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Moments that decide</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     When an agent finishes there is one question: does this land, so the
                     <span class="font-medium text-content">first</span> matching rule answers it and the rest are not asked. Put your narrow rules

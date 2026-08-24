@@ -62,7 +62,7 @@ const REACH_ROWS = [
         </div>
         <div class="mt-2 grid gap-2 @lg:grid-cols-2">
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">Off</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     "Great question! Let me take a look at that authentication file. Here's the current content of
                     <span class="font-mono">auth.ts</span> for reference: … Looking at this, I can see that on line 42 the token check runs before the
@@ -70,7 +70,7 @@ const REACH_ROWS = [
                 </p>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">On</p>
                 <p class="px-2.5 py-2 text-2xs text-muted">
                     "<span class="font-mono">auth.ts:42</span>, the token check runs before the session loads. That's the bug."
                 </p>
@@ -121,7 +121,7 @@ const REACH_ROWS = [
                 </div>
             </div>
             <div class="overflow-hidden rounded-lg border border-line">
-                <p class="border-b border-line bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">What stays</p>
+                <p class="border-b border-line-subtle bg-canvas px-2.5 py-1 text-2xs font-medium uppercase tracking-wide text-subtle">What stays</p>
                 <div class="flex flex-col gap-1.5 px-2.5 py-2">
                     <p v-for="[what, effect] in PROMPT_KEPT" :key="what" class="text-2xs text-muted">
                         <span class="font-medium text-content">{{ what }}</span>: {{ effect }}

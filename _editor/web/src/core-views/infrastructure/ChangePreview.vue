@@ -111,7 +111,7 @@ const hasChanges = computed(() => sections.value.length > 0);
                         <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="statusDot(section.action)"></span>
                         <span class="text-sm font-medium text-content">{{ section.steps.length }} {{ section.label }}</span>
                     </summary>
-                    <div class="ml-1.5 mt-1.5 divide-y divide-line rounded-md border border-line bg-canvas">
+                    <div class="ml-1.5 mt-1.5 divide-y divide-line-subtle rounded-md border border-line bg-canvas">
                         <div v-for="step in section.steps" :key="step.id" class="px-3 py-1.5">
                             <span class="block truncate font-mono text-2xs text-content">{{ step.id }}</span>
                             <span v-if="step.reason" class="block truncate text-2xs text-muted">{{ step.reason }}</span>

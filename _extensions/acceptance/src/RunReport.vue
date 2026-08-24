@@ -253,8 +253,8 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
 
         <Notice v-if="failure" :of="noticeOf(failure)" />
 
-        <div class="overflow-hidden rounded-lg border border-line bg-card">
-            <div v-for="story in run.manifest.stories" :key="story.slug" class="border-b border-line last:border-b-0">
+        <div class="overflow-hidden rounded-lg border border-line-subtle bg-card">
+            <div v-for="story in run.manifest.stories" :key="story.slug" class="border-b border-line-subtle last:border-b-0">
                 <div class="flex items-center gap-3 px-4 py-2.5">
                     <button
                         type="button"

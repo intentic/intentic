@@ -267,7 +267,7 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
 
         <!-- The full record, one click away. Indented to the name's column so it reads as belonging to the row
              above it rather than as a new section. -->
-        <div v-if="expanded" class="flex flex-col gap-4 border-t border-line py-3.5 pl-10 pr-4">
+        <div v-if="expanded" class="flex flex-col gap-4 border-t border-line-subtle py-3.5 pl-10 pr-4">
             <p v-if="entry.detail" class="text-xs" :class="tone">{{ entry.detail }}</p>
 
             <dl v-if="breakdown.length > 0" class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">

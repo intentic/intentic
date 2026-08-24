@@ -593,7 +593,7 @@ const runPending = async (): Promise<void> => {
         <!-- Header: which repository this is · its checked-out branch · how many commits are drawn. The repo is
              a LABEL, not a control: this tab belongs to one directory, and the tree row beside the next repo is
              how you reach its history. -->
-        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line bg-card px-3">
+        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-line-subtle bg-card px-3">
             <Icon name="sitemap" class="shrink-0 text-xs text-subtle" />
             <span class="truncate text-xs font-medium text-content">{{ repoRef }}</span>
             <!-- The checked-out branch, and the switch/create/delete popover behind it. A detached HEAD has
@@ -820,7 +820,7 @@ const runPending = async (): Promise<void> => {
                     </dl>
                     <pre v-if="commit.body" class="mt-1.5 whitespace-pre-wrap font-sans text-2xs text-muted">{{ commit.body }}</pre>
 
-                    <div class="mt-2 pt-1.5" :class="commit.sha === WORKING ? '' : 'border-t border-line'">
+                    <div class="mt-2 pt-1.5" :class="commit.sha === WORKING ? '' : 'border-t border-line-subtle'">
                         <p v-if="filesError" class="text-2xs text-danger">{{ filesError }}</p>
                         <p v-else-if="filesLoading" class="text-2xs text-subtle">Loading changed files…</p>
                         <template v-else>

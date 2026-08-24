@@ -187,7 +187,7 @@ const items = computed<MenuItem[]>(() => {
              swaps it under the reader rather than making them go and find it again. -->
         <!-- Recessed against the group's own surface (the bg-canvas-inside-bg-card pattern), so the block reads
              as a step attached to this row rather than as a second row under it. -->
-        <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line bg-canvas px-3 py-2.5">
+        <div v-if="pendingStep" class="flex flex-col gap-2 border-t border-line-subtle bg-canvas px-3 py-2.5">
             <div v-if="pairingCode" class="flex flex-wrap items-center gap-3">
                 <span class="select-all font-mono text-xl font-semibold tracking-[0.3em] text-content tabular-nums">{{ pairingCode }}</span>
                 <CopyButton :text="pairingCode" label="Copy" />

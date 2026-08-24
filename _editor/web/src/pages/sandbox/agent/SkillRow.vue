@@ -131,7 +131,7 @@ watch(
 
         <!-- Indented to the name's column, so it reads as belonging to the row above rather than as a new
              section. -->
-        <div v-if="expanded" class="border-t border-line py-3 pl-9 pr-3">
+        <div v-if="expanded" class="border-t border-line-subtle py-3 pl-9 pr-3">
             <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
             <p v-else-if="body === undefined" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="animate-spin text-xs" />

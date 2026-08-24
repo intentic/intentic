@@ -40,7 +40,7 @@ const options = computed(() => [
 
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="flex shrink-0 items-center border-b border-line px-2 py-1.5">
+        <div class="flex shrink-0 items-center border-b border-line-subtle px-2 py-1.5">
             <SegmentedControl v-model="view" :options="options" />
         </div>
         <div class="min-h-0 flex-1">

@@ -46,8 +46,8 @@ defineProps<{ label?: string; count?: string | number; caption?: string; flat?: 
         </div>
         <div
             :class="[
-                undivided === true ? `` : `divide-y divide-line`,
-                flat === true ? `` : `overflow-hidden rounded-xl border border-line bg-card`,
+                undivided === true ? `` : `divide-y divide-line-subtle`,
+                flat === true ? `` : `overflow-hidden rounded-xl border border-line-subtle bg-card`,
             ]"
         >
             <slot />

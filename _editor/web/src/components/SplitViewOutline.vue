@@ -29,7 +29,7 @@ const PILL_WIDTHS = [`w-20`, `w-16`, `w-24`, `w-14`, `w-20`];
 <template>
     <SplitView :title="title" :description="description" scroll="page">
         <template #compact>
-            <div class="flex gap-2 overflow-hidden border-b border-line pb-2" aria-hidden="true">
+            <div class="flex gap-2 overflow-hidden border-b border-line-subtle pb-2" aria-hidden="true">
                 <span v-for="(width, index) in PILL_WIDTHS" :key="index" class="skeleton block h-6 shrink-0 rounded-full" :class="width" />
             </div>
         </template>

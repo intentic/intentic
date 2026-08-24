@@ -235,7 +235,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     </div>
 
                     <!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
-                    <div class="mt-4 border-t border-line pt-3">
+                    <div class="mt-4 border-t border-line-subtle pt-3">
                         <div class="mb-2 flex items-center gap-2">
                             <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">Live check</h3>
                             <template v-if="checking">

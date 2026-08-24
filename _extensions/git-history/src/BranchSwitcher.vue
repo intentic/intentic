@@ -179,7 +179,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                     <p v-if="shown.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No branches match.</p>
                 </div>
 
-                <div class="border-t border-line pt-1.5">
+                <div class="border-t border-line-subtle pt-1.5">
                     <button
                         v-if="!creating"
                         type="button"

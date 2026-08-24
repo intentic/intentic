@@ -255,7 +255,7 @@ watch(flow, (live) => {
                     your sandbox.
                 </p>
                 <div class="overflow-hidden rounded-lg border border-line bg-canvas select-none" aria-hidden="true">
-                    <div class="flex items-center gap-2 border-b border-line px-2 py-1.5">
+                    <div class="flex items-center gap-2 border-b border-line-subtle px-2 py-1.5">
                         <span class="flex shrink-0 gap-1">
                             <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>
                             <span class="h-1.5 w-1.5 rounded-full bg-content/20"></span>

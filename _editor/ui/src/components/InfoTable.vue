@@ -16,14 +16,14 @@ defineProps<{ headers?: string[]; rows: string[][] }>();
                 <th
                     v-for="(header, index) in headers"
                     :key="index"
-                    class="border-b border-line pb-1.5 pr-3 align-bottom font-medium uppercase tracking-wide text-subtle last:pr-0"
+                    class="border-b border-line-subtle pb-1.5 pr-3 align-bottom font-medium uppercase tracking-wide text-subtle last:pr-0"
                 >
                     {{ header }}
                 </th>
             </tr>
         </thead>
         <tbody>
-            <tr v-for="(row, rowIndex) in rows" :key="rowIndex" class="border-b border-line last:border-b-0">
+            <tr v-for="(row, rowIndex) in rows" :key="rowIndex" class="border-b border-line-subtle last:border-b-0">
                 <td
                     v-for="(cell, index) in row"
                     :key="index"

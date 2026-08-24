@@ -100,7 +100,7 @@ watch(
              of pills is the idiom every mobile tab bar already uses; the width failure that killed the strip on
              desktop is caused by a content cap that does not apply once the page is the whole screen. -->
         <template #compact>
-            <div class="scrollbar-thin overflow-x-auto border-b border-line pb-2">
+            <div class="scrollbar-thin overflow-x-auto border-b border-line-subtle pb-2">
                 <SegmentedControl :model-value="activeSlug" :options="options" @update:model-value="select" />
             </div>
         </template>
