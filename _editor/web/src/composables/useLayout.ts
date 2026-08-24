@@ -63,8 +63,14 @@ export const MIN_PANE_PX = 352;
  * The floor is the pane's own: someone who deliberately drags the column narrow is asking for the two-line
  * composer, and should get it rather than a scrollbar. */
 const DEFAULT_CHAT_WIDTH = 432;
+const NARROW_DEFAULT_CHAT_WIDTH = 360;
 const MIN_CHAT_WIDTH = MIN_PANE_PX;
 const MAX_CHAT_WIDTH = 4000;
+
+const NARROW_DESKTOP_MAX_PX = 1280;
+const isNarrowDesktop = (width: number): boolean => width < NARROW_DESKTOP_MAX_PX && width >= 768;
+
+const defaultChatWidth = (): number => (isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_CHAT_WIDTH : DEFAULT_CHAT_WIDTH);
 
 // Workspace explorer sidebar, the file-tree column inside the /workspace view. Persisted like the chat width.
 //
@@ -77,6 +83,7 @@ const MAX_CHAT_WIDTH = 4000;
 const SIDEBAR_WIDTH_KEY = `ui-workspace-sidebar-width`;
 const SIDEBAR_COLLAPSED_KEY = `ui-workspace-sidebar-collapsed`;
 const DEFAULT_SIDEBAR_WIDTH = 288;
+const NARROW_DEFAULT_SIDEBAR_WIDTH = 240;
 const MIN_SIDEBAR_WIDTH = 272;
 const MAX_SIDEBAR_WIDTH = 600;
 
@@ -85,8 +92,14 @@ const MAX_SIDEBAR_WIDTH = 600;
 // the file tree (already indented into folders) does not.
 const REVIEW_LIST_WIDTH_KEY = `ui-agent-review-list-width`;
 const DEFAULT_REVIEW_LIST_WIDTH = 288;
+const NARROW_DEFAULT_REVIEW_LIST_WIDTH = 240;
 const MIN_REVIEW_LIST_WIDTH = 180;
 const MAX_REVIEW_LIST_WIDTH = 800;
+
+const defaultSidebarWidth = (): number =>
+    isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH;
+const defaultReviewListWidth = (): number =>
+    isNarrowDesktop(window.innerWidth) ? NARROW_DEFAULT_REVIEW_LIST_WIDTH : DEFAULT_REVIEW_LIST_WIDTH;
 
 // The global terminal, the panel the shell mounts below every view. Only the OPEN state lives here (the rail's
 // terminal button + Ctrl+` toggle it); its height belongs to the shared TerminalPanel, persisted per surface.
@@ -237,9 +250,9 @@ export const resetTerminalOpen = (): void => {
 
 const position = ref<ChatPosition>(readEnum(STORAGE_KEY, [`left`, `right`] as const, `left`));
 const chatHome = ref<ChatHome>(readEnum(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`));
-const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, DEFAULT_CHAT_WIDTH));
-const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH));
-const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, DEFAULT_REVIEW_LIST_WIDTH));
+const chatWidth = ref<number>(readWidth(WIDTH_KEY, clampWidth, defaultChatWidth()));
+const sidebarWidth = ref<number>(readWidth(SIDEBAR_WIDTH_KEY, clampSidebarWidth, defaultSidebarWidth()));
+const reviewListWidth = ref<number>(readWidth(REVIEW_LIST_WIDTH_KEY, clampReviewListWidth, defaultReviewListWidth()));
 const sidebarCollapsed = ref<boolean>(readBool(SIDEBAR_COLLAPSED_KEY));
 const sidebarPanel = ref<SidebarPanel>(readEnum(SIDEBAR_PANEL_KEY, [`files`, `changes`, `history`] as const, `files`));
 const showIgnored = ref<boolean>(readBool(SHOW_IGNORED_KEY));
@@ -274,7 +287,7 @@ const setChatWidth = (px: number): void => {
 };
 
 const resetChatWidth = (): void => {
-    setChatWidth(DEFAULT_CHAT_WIDTH);
+    setChatWidth(defaultChatWidth());
 };
 
 const setSidebarWidth = (px: number): void => {
@@ -284,7 +297,7 @@ const setSidebarWidth = (px: number): void => {
 };
 
 const resetSidebarWidth = (): void => {
-    setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+    setSidebarWidth(defaultSidebarWidth());
 };
 
 const setReviewListWidth = (px: number): void => {
@@ -294,7 +307,7 @@ const setReviewListWidth = (px: number): void => {
 };
 
 const resetReviewListWidth = (): void => {
-    setReviewListWidth(DEFAULT_REVIEW_LIST_WIDTH);
+    setReviewListWidth(defaultReviewListWidth());
 };
 
 const setSidebarCollapsed = (collapsed: boolean): void => {

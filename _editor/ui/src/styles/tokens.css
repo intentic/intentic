@@ -130,10 +130,10 @@
 }
 
 /* ── BASE TEXT SIZE ────────────────────────────────────────────────────────────────────────────────────────
- * The interface is drawn at what a browser calls 110%, and until this rule existed everyone got there by
- * zooming the browser. Setting it here instead makes it what the app opens at — and because every size above is
- * a rem, ONE declaration moves type, spacing, control heights, radii and page widths together, in the same
- * proportions the zoom did.
+ * Ships at 100% (Compact), the same default VS Code and most desktop tools use — fixed density until the reader
+ * opts into more. The interface was originally drawn at 110%; that size is `default` in Appearance, not the
+ * shipped baseline. Because every size above is a rem, ONE declaration moves type, spacing, control heights,
+ * radii and page widths together.
  *
  * A percentage, not a pixel count: it multiplies whatever the reader's browser calls normal text, so raising
  * that for readability still works.
@@ -146,12 +146,12 @@
  * The size is chosen in Appearance and restored before first paint by the inline script in index.html;
  * useTextSize.ts is the source of truth for which attribute goes on. */
 :root {
-    font-size: 110%;
-    --ui-scale: 1.1;
-}
-[data-text-size="compact"] {
     font-size: 100%;
     --ui-scale: 1;
+}
+[data-text-size="default"] {
+    font-size: 110%;
+    --ui-scale: 1.1;
 }
 [data-text-size="large"] {
     font-size: 120%;

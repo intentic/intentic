@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/* The base text size ships as a DEFAULT, so what these pin is mostly what happens when nobody has chosen: a
- * fresh window is the 110% the interface is drawn at, and it says so by carrying no attribute at all (the
- * stylesheet's own value: see tokens.css). The attribute only ever appears for the two sizes that are a
- * departure from it, which is also the contract index.html's anti-flash script is written against. */
+/* Compact (100%) is the shipped default — no attribute, scale 1. Comfortable (stored as `default`) and Large
+ * set data-text-size. index.html's anti-flash script mirrors the same contract. */
 
 const load = () => import("@intentic/ui/text-size");
 
@@ -15,11 +13,11 @@ beforeEach(() => {
 });
 
 describe(`useTextSize`, () => {
-    it(`opens at the size the app is drawn for, with no attribute to say so`, async () => {
+    it(`opens at Compact with no attribute`, async () => {
         const { useTextSize } = await load();
 
-        expect(useTextSize().textSize.value).toBe(`default`);
-        expect(useTextSize().scale.value).toBeCloseTo(1.1);
+        expect(useTextSize().textSize.value).toBe(`compact`);
+        expect(useTextSize().scale.value).toBe(1);
         expect(document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
     });
 
@@ -32,24 +30,34 @@ describe(`useTextSize`, () => {
         expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`large`);
     });
 
+    it(`restores Comfortable with the attribute set`, async () => {
+        localStorage.setItem(`ui-text-size`, `default`);
+        const { useTextSize } = await load();
+
+        expect(useTextSize().textSize.value).toBe(`default`);
+        expect(useTextSize().scale.value).toBeCloseTo(1.1);
+        expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`default`);
+    });
+
     it(`ignores a stored value that is not a size`, async () => {
         localStorage.setItem(`ui-text-size`, `110%`);
         const { useTextSize } = await load();
 
-        expect(useTextSize().textSize.value).toBe(`default`);
+        expect(useTextSize().textSize.value).toBe(`compact`);
     });
 
-    it(`persists a change and takes the attribute back off for the default`, async () => {
+    it(`persists a change and clears the attribute for Compact`, async () => {
         const { useTextSize } = await load();
         const { setTextSize, textSize } = useTextSize();
 
+        setTextSize(`default`);
+        expect(textSize.value).toBe(`default`);
+        expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`default`);
+        expect(localStorage.getItem(`ui-text-size`)).toBe(`default`);
+
         setTextSize(`compact`);
         expect(textSize.value).toBe(`compact`);
-        expect(document.documentElement.getAttribute(`data-text-size`)).toBe(`compact`);
-        expect(localStorage.getItem(`ui-text-size`)).toBe(`compact`);
-
-        setTextSize(`default`);
         expect(document.documentElement.hasAttribute(`data-text-size`)).toBe(false);
-        expect(localStorage.getItem(`ui-text-size`)).toBe(`default`);
+        expect(localStorage.getItem(`ui-text-size`)).toBe(`compact`);
     });
 });

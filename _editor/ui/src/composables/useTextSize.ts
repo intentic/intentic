@@ -8,10 +8,9 @@ const ATTRIBUTE = `data-text-size`;
 const sizes = new Set<string>([`compact`, `default`, `large`]);
 
 /* THE APP'S BASE TEXT SIZE, the one knob every rem in the design system hangs off, so moving it grows type,
- * padding, control heights, radii and column gutters together instead of only the words. The interface was drawn
- * at what a browser calls 110%, and everyone was reaching for the browser's own zoom to get there; `default` IS
- * that size, so a fresh window already looks the way it is supposed to. `compact` is the old 100% for anyone who
- * wants the density back, and `large` is the step past it.
+ * padding, control heights, radii and column gutters together instead of only the words. The app ships at
+ * 100% (Compact), like VS Code's default zoom — fixed until the reader opts in. `default` is 110%, the size the
+ * interface was originally drawn at; `large` is 120%.
  *
  * Stated as a PERCENTAGE of the browser's base font rather than as a pixel number (tokens.css owns the actual
  * rules, keyed off this attribute): someone who has raised that base for readability keeps the gain instead of
@@ -34,13 +33,15 @@ const read = (): TextSize => {
         // Storage may be unavailable (private mode); fall back to the attribute.
     }
     const attribute = document.documentElement.getAttribute(ATTRIBUTE);
-    return isTextSize(attribute) ? attribute : `default`;
+    if (attribute === null || attribute === `compact`) {
+        return `compact`;
+    }
+    return isTextSize(attribute) ? attribute : `compact`;
 };
 
 const apply = (value: TextSize): void => {
-    // `default` is the stylesheet's own value, so it is the ABSENCE of the attribute, which keeps the markup
-    // quiet for the size almost everyone runs.
-    if (value === `default`) {
+    // Compact is the stylesheet's own `:root` value, so it is the absence of the attribute.
+    if (value === `compact`) {
         document.documentElement.removeAttribute(ATTRIBUTE);
     } else {
         document.documentElement.setAttribute(ATTRIBUTE, value);

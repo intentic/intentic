@@ -40,8 +40,8 @@
         </script>
         <!-- Anti-flash: restore the saved accent colour and text size before first paint (same idea as the static
              data-mode above, but a per-user choice can't be static). A text size arriving late is worse than a
-             late colour — the whole layout reflows — so it is restored here rather than only in useTextSize.ts,
-             which stays the source of truth for both. The default size carries no attribute.
+             late colour — the whole layout reflows — so it is restored here rather than only in useTextSize.ts.
+             Compact (100%, the shipped default) carries no attribute; Comfortable and Large set data-text-size.
 
              The accent is written as the ramp declarations themselves, which useTheme.ts keeps serialized in
              `ui-accent-vars` for exactly this: the colour maths that expands one hex into two twelve-step ramps
@@ -53,7 +53,7 @@
                 var accentVars = localStorage.getItem("ui-accent-vars");
                 if (accentVars) document.documentElement.setAttribute("style", accentVars);
                 var uiTextSize = localStorage.getItem("ui-text-size");
-                if (["compact", "large"].indexOf(uiTextSize) !== -1)
+                if (uiTextSize === "default" || uiTextSize === "large")
                     document.documentElement.setAttribute("data-text-size", uiTextSize);
                 // A skin repaints every surface in the app, so arriving late means a white flash of the normal
                 // look before the deep one lands — the worst flash of the three. See src/skins/README.md.

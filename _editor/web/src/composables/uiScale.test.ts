@@ -21,9 +21,10 @@ describe(`uiScale`, () => {
     });
 
     it(`converts a pointer position into the unit widths are stored in`, async () => {
-        const { toAppPx } = await load();
+        const { toAppPx, useTextSize } = await load();
+        useTextSize().setTextSize(`default`);
 
-        // Default size: a drag to 387 screen pixels is the 352 the column was measured at.
+        // Comfortable (110%): a drag to 387 screen pixels is the 352 the column was measured at.
         expect(toAppPx(387.2)).toBeCloseTo(352);
     });
 

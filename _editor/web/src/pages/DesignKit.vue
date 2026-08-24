@@ -209,7 +209,7 @@ const pickedTier = ref(`collaborator`);
                     :model-value="textSize"
                     :options="[
                         { label: `Compact`, value: `compact` },
-                        { label: `Default`, value: `default` },
+                        { label: `Comfortable`, value: `default` },
                         { label: `Large`, value: `large` },
                     ]"
                     @update:model-value="setTextSize"

@@ -73,6 +73,15 @@
     }
 }
 
+/* Narrow desktop: tablet band where the desktop shell is active but the window is laptop-sized. Trim card and
+ * page padding so the three-column chrome (rail + workspace + chat) keeps more room for content. */
+@media (max-width: 1279.98px) and (min-width: 768px) {
+    :root {
+        --ui-page-padding: calc(var(--spacing) * 4);
+        --ui-card-padding: calc(var(--spacing) * 4);
+    }
+}
+
 /* Mobile dialogs: every PrimeVue Dialog carries a desktop inline width (e.g. `26rem`/`40rem`) that overflows
  * a phone. Cap width/height to the viewport (minus a margin) with `!important` — it beats the non-important
  * inline width — and let the content region scroll. On a 375px screen this makes big dialogs near-full-screen

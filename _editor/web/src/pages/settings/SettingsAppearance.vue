@@ -109,7 +109,7 @@ const iconRailOptions = [
 // set both.
 const textSizeOptions = [
     { label: `Compact`, value: `compact` as const },
-    { label: `Default`, value: `default` as const },
+    { label: `Comfortable`, value: `default` as const, title: `110% — the size the interface was drawn at` },
     { label: `Large`, value: `large` as const },
 ];
 
