@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, FilterBar, type NoticeModel, NoticeStack, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -19,11 +19,11 @@ import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./s
  * same problem: a tab whose length is the number of things you own.
  *
  * IT HOLDS TWO KINDS OF THING AND ONLY ONE OF THEM IS WORK (see ./secretRows). The owner's own values can be
- * missing, are set and rotated and removed here, and a deploy fails without them. Everything under "Connected
- * accounts" is a credential belonging to a connection or a subscription: connected by construction, unsettable
- * from here, and already managed one click away. That half is what grows without limit: one row per account:
- * so it is FOLDED once it is big enough to bury the half that is work. It is still here, still searchable,
- * still one click from its value; it just stops setting the length of the page.
+ * missing, are set and rotated and removed here, and a deploy fails without them. Capability credentials belong
+ * to a connection: connected by construction, unsettable from here, and already managed one click away on the
+ * Capabilities tab. That list is what grows without limit, so once there are enough rows to bury the half that
+ * is work the first few stay visible and the rest sit behind the same toggle the Agent tab uses. AI provider
+ * accounts are not listed here at all; they live on the Agent tab.
  *
  * WHAT IS OWED IS PINNED, AND THE BANNER IS GONE. A strip at the top saying "3 required secrets are not set"
  * named a number and then left the reader to find three rows scattered down five groups. The rows themselves
@@ -37,10 +37,12 @@ import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./s
  * Values stay in the sandbox: the only value-returning action anywhere here is the owner-only reveal. */
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-// Below this many rows the list is its own overview; below this many accounts the fold saves nothing. Both are
-// display choices, so they live here rather than in the row model.
+// Below this many rows the list is its own overview. A display choice, so it lives here rather than in the row model.
 const FILTERABLE_FROM = 8;
-const FOLD_FROM = 8;
+/* Same truncation as AiAccountSection: five fit comfortably; beyond that show the first three and a toggle for
+ * the rest, on capability credentials alone. */
+const COLLAPSE_THRESHOLD = 5;
+const VISIBLE_WHEN_COLLAPSED = 3;
 
 const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
 const outline = useSandboxOutline(inventoryPending);
@@ -53,7 +55,11 @@ const { enabled: enabledExtensions } = useExtensions();
 const devopsActive = computed(() => capabilities.value.some((entry) => entry.kind === `devops` && entry.status.state === `active`));
 
 // Every secret as this tab reads it: named, marked, and sorted with whatever is unfinished first.
-const rows = computed<SecretRow[]>(() => secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value }));
+// Provider accounts live on the Agent tab; they are excluded here so nothing downstream needs to filter them.
+const rows = computed<SecretRow[]>(() =>
+    secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value })
+        .filter((row) => row.group !== `provider`),
+);
 
 const query = ref(``);
 const scope = ref<`all` | `missing`>(`all`);
@@ -80,25 +86,22 @@ const required = computed(() => held(`required`));
 const yours = computed(() => held(`yours`));
 const generated = computed(() => held(`generated`));
 const credentials = computed(() => held(`credential`));
-const providers = computed(() => held(`provider`));
 
 // Empty groups keep their informative note at rest, but drop out entirely while filtering.
 const groupVisible = (list: readonly SecretRow[]): boolean => !filtering.value || list.length > 0;
-/* The accounts fold: open while small, open while anything is being looked for, shut when it would otherwise
- * bury the half of this tab that is actually work.
- *
- * A READER WHO OPENS IT KEEPS IT OPEN. Searching forces it open: the matches are inside, and a filter that
- * silently omitted them would make this tab lie about what the sandbox holds, and clearing that search used to
- * fold it back over the reader who had opened it by hand a minute earlier. Their own answer is remembered
- * instead, and only recorded when it IS their answer: a fold opened by a search is not a preference. */
-const accountCount = computed(() => credentials.value.length + providers.value.length);
-const openedByHand = ref<boolean | undefined>(undefined);
-const accountsOpen = computed(() => filtering.value || (openedByHand.value ?? accountCount.value <= FOLD_FROM));
-const rememberFold = (event: Event): void => {
-    if (!filtering.value) {
-        openedByHand.value = (event.target as HTMLDetailsElement).open;
+
+/* Capability credentials truncation: the same pattern AiAccountSection uses. Once the list is long enough to
+ * bury the rest of the tab, the first three stay visible and the rest sit behind a toggle. While filtering,
+ * every match shows and the toggle is hidden. */
+const credentialsExpanded = ref(false);
+const shouldCollapseCredentials = computed(() => credentials.value.length > COLLAPSE_THRESHOLD);
+const collapsedCredentialCount = computed(() => credentials.value.length - VISIBLE_WHEN_COLLAPSED);
+const visibleCredentials = computed(() => {
+    if (filtering.value || !shouldCollapseCredentials.value || credentialsExpanded.value) {
+        return credentials.value;
     }
-};
+    return credentials.value.slice(0, VISIBLE_WHEN_COLLAPSED);
+});
 
 const clearFilters = (): void => {
     query.value = ``;
@@ -290,46 +293,33 @@ const pushToCi = async (): Promise<void> => {
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
                 </RowGroup>
+
+                <!-- Capability credentials: the inventory the Capabilities page shows. Once there are enough rows
+                     to bury the rest of the tab, the first three stay visible and the rest sit behind the same
+                     toggle the Agent tab uses. -->
+                <RowGroup v-if="groupVisible(visibleCredentials)" label="Capability credentials" :count="credentials.length">
+                    <template #actions>
+                        <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
+                    </template>
+                    <SecretEntryRow
+                        v-for="row in visibleCredentials"
+                        :key="row.entry.key"
+                        :row="row"
+                        :expanded="opened === row.entry.key"
+                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                    />
+                    <Row v-if="shouldCollapseCredentials && !filtering" interactive @click="credentialsExpanded = !credentialsExpanded">
+                        <template #title>
+                            <span class="flex items-center gap-2 text-2xs font-medium text-link">
+                                <span class="flex w-[1.125rem] shrink-0 justify-center">
+                                    <Icon :name="credentialsExpanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                                </span>
+                                {{ credentialsExpanded ? `Show less` : `Show ${collapsedCredentialCount} more accounts` }}
+                            </span>
+                        </template>
+                    </Row>
+                </RowGroup>
             </div>
-
-            <!-- AND THE HALF THAT IS NOT WORK: one line at rest once there are enough of them to bury the rest
-                 of the tab, exactly as a mass change folds in the deploy preview. Open, it is the inventory the
-                 Capabilities page shows: same names, same marks, same one click back to where they are set up. -->
-            <details v-if="accountCount > 0" class="group/fold" :open="accountsOpen" @toggle="rememberFold">
-                <summary class="flex cursor-pointer list-none items-center gap-2 py-1 [&::-webkit-details-marker]:hidden">
-                    <Icon name="chevron-right" aria-hidden="true" class="text-xs text-subtle transition-transform group-open/fold:rotate-90" />
-                    <span :class="ui.sectionLabel()">Connected accounts</span>
-                    <span class="text-2xs font-medium text-subtle">{{ accountCount }}</span>
-                </summary>
-
-                <div class="mt-3 flex flex-col gap-6">
-                    <RowGroup v-if="credentials.length > 0" label="Capability credentials" :count="credentials.length">
-                        <template #actions>
-                            <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
-                        </template>
-                        <SecretEntryRow
-                            v-for="row in credentials"
-                            :key="row.entry.key"
-                            :row="row"
-                            :expanded="opened === row.entry.key"
-                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                        />
-                    </RowGroup>
-
-                    <RowGroup v-if="providers.length > 0" label="AI providers" :count="providers.length">
-                        <template #actions>
-                            <Button :as="RouterLink" to="/sandbox/agent" label="Manage accounts" size="small" severity="secondary" />
-                        </template>
-                        <SecretEntryRow
-                            v-for="row in providers"
-                            :key="row.entry.key"
-                            :row="row"
-                            :expanded="opened === row.entry.key"
-                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                        />
-                    </RowGroup>
-                </div>
-            </details>
 
             <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                 <span>{{ emptyNote }}</span>

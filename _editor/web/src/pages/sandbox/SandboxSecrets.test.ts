@@ -3,7 +3,7 @@
 // jsdom because the whole complaint about this tab was a fact about the rendered page: nineteen credentials one
 // under another, each with the same furniture, burying the three rows that were actually work. What is pinned
 // here is that the page stays short as the account list grows, that what is owed rises to the top of it, and
-// that the accounts are still reachable: folded is not gone, and a filter must reach inside the fold or the
+// that the accounts are still reachable: truncated is not gone, and a filter must reach every match or the
 // search box would quietly lie about what this sandbox holds.
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
@@ -37,7 +37,6 @@ vi.mock(`../../composables/extensions/useExtensions`, () => ({ useExtensions: ()
 // Reached only by the CI push, which nothing here presses: mocked because the client has no environment here.
 vi.mock(`../../composables/sandbox/sandboxClient`, () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
 
-// The two "Manage …" buttons navigate; no route is mounted here, and RouterLink is stubbed below.
 // The two "Manage …" controls are links now, so the mock carries a stand-in for them.
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
@@ -87,7 +86,11 @@ const mount = (): HTMLElement => {
 };
 
 const text = (el: HTMLElement): string => el.textContent ?? ``;
-const fold = (el: HTMLElement): HTMLDetailsElement | null => el.querySelector(`details`);
+const moreAccountsToggle = (el: HTMLElement): HTMLElement | null => {
+    const all = ([...el.querySelectorAll(`*`)] as HTMLElement[]).filter((node) => node.textContent?.includes(`more accounts`));
+    // The deepest element is the one actually rendering the toggle — clicking it bubbles up to the Row's @click handler.
+    return all.at(-1) ?? null;
+};
 const filterField = (el: HTMLElement): HTMLInputElement => el.querySelector<HTMLInputElement>(`input[type="search"], input`)!;
 const type = async (field: HTMLInputElement, value: string): Promise<void> => {
     field.value = value;
@@ -124,17 +127,26 @@ afterEach(() => {
     document.body.innerHTML = ``;
 });
 
-it(`folds the accounts away once they would bury the secrets that are work`, () => {
+it(`truncates capability credentials once they would bury the secrets that are work`, () => {
     const el = mount();
-    expect(fold(el)?.open).toBe(false);
-    // Folded, not hidden: the count is on the summary, so nothing can be concealed by the fold.
-    expect(text(el)).toContain(`Connected accounts`);
-    expect(text(el)).toContain(`20`);
+    expect(text(el)).toContain(`Capability credentials`);
+    expect(text(el)).toContain(`19`);
+    expect(text(el)).toContain(`Show 16 more accounts`);
+    expect(text(el)).toContain(`github`);
+    expect(text(el)).not.toContain(`radarsuspam8`);
 });
 
-it(`leaves the fold open while there are few enough accounts to read`, () => {
+it(`shows every capability credential while there are few enough to read`, () => {
     inventory.value = inventory.value.filter((secret) => secret.kind !== `capability` || !secret.key.startsWith(`radarsuspam`));
-    expect(fold(mount())?.open).toBe(true);
+    const el = mount();
+    expect(moreAccountsToggle(el)).toBeNull();
+    expect(text(el)).toContain(`github`);
+});
+
+it(`hides AI provider accounts entirely`, () => {
+    const el = mount();
+    expect(text(el)).not.toContain(`Claude · you@example.com`);
+    expect(text(el)).not.toContain(`AI providers`);
 });
 
 it(`pins what is owed above everything, instead of a banner counting it`, () => {
@@ -148,28 +160,27 @@ it(`pins what is owed above everything, instead of a banner counting it`, () => 
     expect(heading).toBeLessThan(text(el).indexOf(`Required by your intent`));
 });
 
-it(`names a credential by its account and its address, not by the key alone`, () => {
-    expect(text(mount())).toContain(`radarsuspam7@gmail.com`);
+it(`names a credential by its account and its address, not by the key alone`, async () => {
+    const el = mount();
+    moreAccountsToggle(el)?.click();
+    await nextTick();
+    expect(text(el)).toContain(`radarsuspam7@gmail.com`);
 });
 
-it(`reaches inside the fold when something is looked for`, async () => {
+it(`reaches every matching account while something is looked for`, async () => {
     const el = mount();
     await type(filterField(el), `radarsuspam7`);
-    expect(fold(el)?.open).toBe(true);
     expect(text(el)).toContain(`radarsuspam7`);
     expect(text(el)).not.toContain(`radarsuspam8`);
+    expect(moreAccountsToggle(el)).toBeNull();
 });
 
-it(`does not fold the accounts back over a reader who opened them by hand`, async () => {
+it(`expands the account list when the toggle is pressed`, async () => {
     const el = mount();
-    const details = fold(el)!;
-    // Opened by hand, then a search that forces it open anyway, then the search cleared.
-    details.open = true;
-    details.dispatchEvent(new Event(`toggle`));
+    moreAccountsToggle(el)?.click();
     await nextTick();
-    await type(filterField(el), `radarsuspam7`);
-    await type(filterField(el), ``);
-    expect(fold(el)?.open).toBe(true);
+    expect(text(el)).toContain(`radarsuspam8`);
+    expect(text(el)).toContain(`Show less`);
 });
 
 it(`says so when a filter matches nothing, rather than showing an empty tab`, async () => {
