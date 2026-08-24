@@ -16,8 +16,8 @@ import { useTheme } from "@intentic/ui/theme";
  *
  * ONE ATTRIBUTE ON <html>, and that is the entire mechanism. Every rule in a skin's stylesheet is scoped to
  * `[data-skin="<name>"]`, so the workspace's normal look is not a set of overrides being undone, it is the
- * skin's rules never matching at all. `none` therefore writes no attribute, which keeps the markup quiet for the
- * look almost everyone runs and makes "is a skin on?" answerable by looking at the element.
+ * skin's rules never matching at all. `none` therefore writes no attribute, which is how someone who picks Light
+ * or Dark opts back out of a skin, and makes "is a skin on?" answerable by looking at the element.
  *
  * A SKIN IMPLIES A SCHEME. Both skins are dark by construction: their grounds, their materials and their light
  * are built for a near-black canvas, and PrimeVue's own component preset keys its dark treatment off `data-mode`
@@ -81,11 +81,11 @@ const apply = (value: Skin): void => {
 };
 
 /* The skin the app opens in: whatever index.html's anti-flash script left on <html>, read ONCE before anything
- * here writes it. That script reads this same key, so nothing stored means no attribute and no skin. Captured
- * rather than consulted on demand, for the reason useTheme's own boot value gives: after the first change the
- * attribute states what this window is WEARING, not what is stored. */
+ * here writes it. That script reads this same key; nothing stored leaves the shipped default on the element.
+ * Captured rather than consulted on demand, for the reason useTheme's own boot value gives: after the first
+ * change the attribute states what this window is WEARING, not what is stored. */
 const bootAttribute = document.documentElement.getAttribute(ATTRIBUTE);
-const BOOT_SKIN: Skin = isSkin(bootAttribute) ? bootAttribute : `none`;
+const BOOT_SKIN: Skin = isSkin(bootAttribute) ? bootAttribute : `sanctum`;
 
 const skin: Ref<Skin> = definePreference<Skin>({
     key: STORAGE_KEY,

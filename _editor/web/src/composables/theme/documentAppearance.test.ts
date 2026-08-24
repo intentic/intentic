@@ -63,17 +63,28 @@ describe(`installDocumentAppearance`, () => {
         expect(root().getAttribute(`data-text-size`)).toBe(`large`);
     });
 
-    it(`drops a skin back to none, attribute and face together`, async () => {
+    it(`drops a skin back to none when light or dark is chosen`, async () => {
         localStorage.setItem(`ui-skin`, `hud`);
         const { installDocumentAppearance } = await boot();
         const { receivePreferenceChange } = await seam();
 
         installDocumentAppearance();
-        // Picking Light or Dark in the Theme row is `setSkin('none')`, which stores nothing for this key.
-        receivePreferenceChange({ key: `ui-skin`, raw: null });
+        receivePreferenceChange({ key: `ui-skin`, raw: `none` });
 
         expect(root().hasAttribute(`data-skin`)).toBe(false);
         expect(document.getElementById(`ui-skin-font`)).toBeNull();
+    });
+
+    it(`falls back to the default skin when storage is cleared`, async () => {
+        localStorage.setItem(`ui-skin`, `hud`);
+        const { installDocumentAppearance } = await boot();
+        const { receivePreferenceChange } = await seam();
+
+        installDocumentAppearance();
+        receivePreferenceChange({ key: `ui-skin`, raw: null });
+
+        expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
+        expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
     });
 
     it(`lands an imported VSCode theme's chrome tokens`, async () => {

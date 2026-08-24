@@ -23,11 +23,12 @@ beforeEach(() => {
 });
 
 describe(`useSkin`, () => {
-    it(`defaults to no skin, and writes no attribute for it`, async () => {
+    it(`defaults to sanctum, attribute and webfont together`, async () => {
         const { useSkin } = await load();
 
-        expect(useSkin().skin.value).toBe(`none`);
-        expect(root().hasAttribute(`data-skin`)).toBe(false);
+        expect(useSkin().skin.value).toBe(`sanctum`);
+        expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
+        expect(fontLink()).not.toBeNull();
     });
 
     it(`restores a stored skin on load, attribute and webfont together`, async () => {
@@ -51,8 +52,8 @@ describe(`useSkin`, () => {
         localStorage.setItem(`ui-skin`, `neon`);
         const { useSkin } = await load();
 
-        expect(useSkin().skin.value).toBe(`none`);
-        expect(root().hasAttribute(`data-skin`)).toBe(false);
+        expect(useSkin().skin.value).toBe(`sanctum`);
+        expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
     });
 
     it(`turns the HUD on: attribute, storage, webfont, and the dark scheme it is built for`, async () => {
