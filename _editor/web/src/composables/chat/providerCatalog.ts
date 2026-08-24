@@ -68,12 +68,29 @@ export const defaultModelFor = (provider: AgentProvider): string => {
     return modelsFor(provider)[0]?.value ?? ``;
 };
 
+/* TWO ROWS, ONE NAME. A catalog can publish several ids under the SAME display name, and Cursor's does: `auto`
+ * (the server-picked Auto) and `auto-smart` (Cursor Router, the same word with a different router and different
+ * billing behind it) both arrive as "Auto". Rendered straight, that is a list offering the same choice twice,
+ * where picking either is a guess and the checkmark is the only thing telling the user what they landed on.
+ *
+ * So a repeated label is qualified by the one thing that distinguishes those rows and that the vendor did
+ * publish: the model id. Nothing is invented and no row is dropped, because these are genuinely different
+ * models, and only the colliding rows carry the suffix, so a catalog that names its models distinctly reads
+ * exactly as its vendor wrote it. */
+const qualifyCollidingLabels = (options: readonly ModelOption[]): ModelOption[] => {
+    const count = new Map<string, number>();
+    for (const option of options) {
+        count.set(option.label, (count.get(option.label) ?? 0) + 1);
+    }
+    return options.map((option) => ((count.get(option.label) ?? 0) > 1 ? { ...option, label: `${option.label} (${option.value})` } : option));
+};
+
 // The model options for a provider's picker/chip: the provider's live daemon catalog, with the static catalog
 // as the pre-load floor (Claude's seeded versions; codex/grok empty). Harness-independent (the harness is a
 // separate axis now). Shared by the composer pill and the menu bodies so their list + label logic can't drift.
 export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
-    return live.length > 0 ? live : modelsFor(provider);
+    return qualifyCollidingLabels(live.length > 0 ? live : modelsFor(provider));
 };
 
 // The slash commands each provider last published daemon-side (GET /agent/commands), loaded on the same
