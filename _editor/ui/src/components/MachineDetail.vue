@@ -53,6 +53,7 @@ const {
     sandboxes = [],
     watcher,
     open = [],
+    undivided = false,
 } = defineProps<{
     pairings?: readonly MachineFolderRow[];
     ports?: readonly MachinePortRow[];
@@ -66,6 +67,18 @@ const {
      * localhost, a file conflict, a dead tunnel) it unfolds without being told; this is for the facts it cannot
      * know. Reactive: a filter that narrows to one row opens it as it lands. */
     open?: readonly string[];
+    /* `undivided` DROPS THE HAIRLINES BETWEEN SANDBOXES, for a caller that is itself a list.
+     *
+     * ONE SEPARATOR PER TIER, or the tiers stop being readable. The desktop app frames this as the one list on
+     * a window about one computer, so its hairlines are the strongest line on screen and mean exactly what they
+     * look like. The Computers tab nests it under a MACHINE, whose own rows are parted by the card's hairline
+     * (RowGroup) at the same width and the same token: two tiers drawn with one stroke, so the line ending
+     * `radarsu-rog` and the line between two of its sandboxes were the same mark, and a reader scrolling had
+     * nothing to tell them apart with but a 44px inset.
+     *
+     * Set there, the hairline is left to mean "the next COMPUTER" and nothing else, and the rhythm of the rows
+     * parts the sandboxes under one, the way whitespace parts the providers on the Plan limits panel. */
+    undivided?: boolean;
 }>();
 
 defineSlots<{
@@ -221,8 +234,11 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                 v-for="group in groups"
                 :key="group.sandboxId"
                 :id="blockId(group)"
-                class="flex flex-col gap-2 border-t border-line-subtle py-2 transition-colors duration-500 first:border-t-0 first:pt-0 last:pb-0"
-                :class="flashing === blockId(group) ? `bg-warning/10` : ``"
+                class="flex flex-col gap-2 transition-colors duration-500"
+                :class="[
+                    undivided ? `pb-3 last:pb-0` : `border-t border-line-subtle py-2 first:border-t-0 first:pt-0 last:pb-0`,
+                    flashing === blockId(group) ? `bg-warning/10` : ``,
+                ]"
             >
                 <!-- WHICH SANDBOX THIS IS, WHETHER IT IS FINE, and what can be done to it: all on the one line
                      that is the whole row until somebody asks for more.
