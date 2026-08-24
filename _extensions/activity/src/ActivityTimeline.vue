@@ -5,9 +5,9 @@ import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
 
 /* The selected source's story, newest first. Sectioned by day rather than run as one undifferentiated column:
- * "when" is the second question after "who", and a divider answers it for a whole run of rows at the cost of one
- * line. Nothing here is virtualised: the rail and the window are what keep the list short, and a bounded list of
- * real rows beats an unbounded one with a scrollbar as its only affordance. */
+ * "when" is the second question after "who", and a sticky signpost answers it for a whole run of rows. Nothing
+ * here is virtualised: the rail and the window are what keep the list short, and a bounded list of real rows
+ * beats an unbounded one with a scrollbar as its only affordance. */
 
 const { episodes, source, window, truncated, isLoading } = defineProps<{
     episodes: readonly Episode[];
@@ -28,19 +28,10 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
 <template>
     <!-- NOT `grow`: this panel is sized by its own max-height in a page-scrolling hub section, not by the free
          space of a bounded pane it no longer sits in. `flex-1` in an auto-height parent resolves to nothing. -->
-    <ScrollFrame>
-        <template #title
-            ><span :class="ui.sectionLabel()">{{ source?.label ?? `All sources` }}</span></template
-        >
-        <!-- A count of nothing is a claim, not a wait: while the first page is still out this reads as "the
-             window was empty" and then corrects itself. A bar of the same width says the tally is coming. -->
-        <template #actions>
-            <span v-if="isLoading" class="skeleton block h-2.5 w-28" aria-hidden="true" />
-            <span v-else class="text-2xs text-subtle">
-                {{ episodes.length }} {{ episodes.length === 1 ? `entry` : `entries` }} {{ timeWindowWords(window) }}
-            </span>
-        </template>
-
+    <!-- The filter bar immediately above already names the source and time window. Repeating both in a framed
+         header added another horizontal band without adding information; the day headers carry the useful
+         result counts instead. -->
+    <ScrollFrame aria-label="Activity feed">
         <!-- A connection that should be up and isn't says so here, where the person who selected it is looking.
              Above the scroll, so it stays put while the feed under it moves. -->
         <template v-if="source?.lastError || source?.gateway === `idle`" #strips>
@@ -50,17 +41,17 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
             </p>
         </template>
 
-        <div class="px-4 py-2">
+        <div class="px-4 pb-2">
             <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: a day
                  divider and a run of rows, at the row's real spacing, so the panel is the height it is going to
                  be. Only on the FIRST load: a poll or a widened window refetches with rows already on screen,
                  and replacing them with an outline would be the flicker this exists to remove. -->
             <div v-if="isLoading && episodes.length === 0" role="status" aria-busy="true" aria-label="Loading activity">
-                <div class="flex items-center gap-2 py-1">
+                <div class="sticky top-0 z-1 -mx-4 flex items-center justify-between bg-card px-4 py-2 shadow-none">
                     <span class="skeleton block h-2 w-16" />
-                    <span class="h-px flex-1 bg-line"></span>
+                    <span class="skeleton block h-2 w-12" />
                 </div>
-                <div class="flex flex-col divide-y divide-line/60">
+                <div class="flex flex-col divide-y divide-line-subtle/50">
                     <div v-for="row in 6" :key="row" class="flex items-start gap-2 py-1.5" aria-hidden="true">
                         <span class="skeleton mt-0.5 block h-3 w-3 shrink-0" />
                         <span class="skeleton mt-0.5 block h-3 w-3 shrink-0" />
@@ -75,12 +66,17 @@ const ROW_WIDTHS = [`w-64`, `w-48`, `w-56`, `w-40`, `w-52`, `w-44`];
                 </div>
             </div>
 
-            <div v-for="day in days" :key="day.label" class="mb-1">
-                <div class="sticky top-0 z-1 flex items-center gap-2 bg-card py-1">
+            <!-- Day labels are sticky signposts, not dividers. `shadow-none` matters in the Sanctum skin: its
+                 general `bg-card` treatment adds a bevel to card-painted surfaces, which otherwise turns every
+                 sticky label into two unrequested horizontal rules. -->
+            <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
+                <div class="sticky top-0 z-1 -mx-4 flex items-center justify-between bg-card px-4 py-2 shadow-none">
                     <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
-                    <span class="h-px flex-1 bg-line"></span>
+                    <span class="text-2xs tabular-nums text-subtle">
+                        {{ day.episodes.length }} {{ day.episodes.length === 1 ? `entry` : `entries` }}
+                    </span>
                 </div>
-                <div class="flex flex-col divide-y divide-line/60">
+                <div class="flex flex-col divide-y divide-line-subtle/50">
                     <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
                 </div>
             </div>
