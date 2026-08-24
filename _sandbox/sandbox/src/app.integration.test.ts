@@ -183,7 +183,9 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     expect((await postJson(createApp(services({ auth })), "/system/sessions/revoke")).status).toBe(403);
     expect(rotations).toBe(0);
 
-    const ownerServices = services({ auth: { ...auth, authorizeOwner: async () => {} } });
+    const ownerServices = services({
+        auth: { ...auth, authorize: async () => ({ email: "owner@x.com", role: "owner" as const }), authorizeOwner: async () => {} },
+    });
     const ticket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
     const owner = createApp(ownerServices);
     expect((await postJson(owner, "/system/sessions/revoke")).status).toBe(200);
@@ -1144,7 +1146,7 @@ test("environment: lower roles read state, maintainers approve/reject, and failu
     expect(await seen.json()).toEqual({ proposal: { content: proposal, hash } });
     const approveDenied = await postJson(memberApp, "/environment/approve", { hash });
     expect(approveDenied.status).toBe(403);
-    expect(await approveDenied.json()).toEqual({ error: "not a sandbox maintainer" });
+    expect(await approveDenied.json()).toEqual({ error: "maintainer access required", floor: "maintainer" });
     expect((await postJson(memberApp, "/environment/reject")).status).toBe(403);
 
     // Loopback (no auth) is the owner, like every other route.

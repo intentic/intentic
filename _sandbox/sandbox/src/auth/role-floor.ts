@@ -73,6 +73,9 @@ const PATH_FLOORS: Readonly<Record<string, MemberRole>> = {
     // Minting is deliberately cheap: each WebSocket upgrade floors its OWN redemption (ws-tickets.ts),
     // the terminal at maintainer, the sign-in browser at owner.
     "/system/ws-ticket": "collaborator",
+    // Desktop pairing: the handler caps anyone below maintainer to port-mirror, so collaborators can mint
+    // a live-preview tunnel without touching the single-holder file-sync lock.
+    "/system/sync/pair": "collaborator",
     // Giving up one's own grant must be reachable by every granted tier. The handler can remove only the
     // verified caller, never another member or the owner.
     "/members/self": "viewer",

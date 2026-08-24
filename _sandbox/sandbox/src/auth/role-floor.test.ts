@@ -24,6 +24,7 @@ describe("routeFloor", () => {
         expect(routeFloor("POST", "/agents/abc/request-land")).toBe("collaborator");
         expect(routeFloor("POST", "/workspace/upload")).toBe("collaborator");
         expect(routeFloor("POST", "/system/ws-ticket")).toBe("collaborator");
+        expect(routeFloor("POST", "/system/sync/pair")).toBe("collaborator");
     });
 
     test("what leaves the sandbox floors at maintainer: land, discard, drafts, workspace writes", () => {
