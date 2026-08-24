@@ -79,7 +79,15 @@ test("the settle still photographs the page where it is now, not the top of the 
         const context = await browser.newContext({ viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT } });
         const page = await context.newPage();
         await page.goto(`data:text/html,${encodeURIComponent(bandPage)}`);
-        await page.evaluate((offset) => window.scrollTo(0, offset), SCROLL_TO);
+        /* THE SCROLL IS THE PRECONDITION, NOT THE SUBJECT, and asking for it once does not establish it. A
+         * scroll CLAMPS against the document as it is laid out at that instant, and a data: URL on a loaded box
+         * hands back a document whose bands are still arriving: one ask landed at 1200 instead of 2000, the
+         * still photographed 1200 perfectly correctly, and the test reported band 12 as though the clip were
+         * wrong. Asked until the page AGREES it is there, so a failure below can only be about the clip. */
+        await page.waitForFunction((offset) => {
+            window.scrollTo(0, offset);
+            return window.scrollY === offset;
+        }, SCROLL_TO);
 
         const stills: ScreencastFrame[] = [];
         const screencast = await startScreencast(context, (frame) => {

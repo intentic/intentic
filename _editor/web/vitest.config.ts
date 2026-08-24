@@ -52,8 +52,23 @@ export default defineConfig({
          *    whole repo. Over-subscription is not what hurts; the scheduler handles it.
          * What is left is the shape of the tests themselves: ~90 `await import()` calls, most of them a
          * singleton being reset. Those are relied on, and this is the budget that covers them.
+         *
+         * WHY 60 AND NOT THE 20 THIS SAID FOR A WHILE. 20s was set against "the heaviest costs ~1s idle, ten
+         * times that busy" and that estimate was low. Measured in one full `pnpm test` on this workspace, from
+         * the run's own per-test timings, PASSING tests in this package: 19.5s to load every Shiki grammar in
+         * LANGS, 18.3s to send a push with nobody watching, 14.1s to draw every control that goes somewhere as
+         * a link. Two others died on 20s in the same run, a different pair than the run before, which is the
+         * signature of a ceiling standing where the work is rather than clear of it. A budget that the slowest
+         * honest test comes within half a second of is not a hang detector, it is a coin toss, and it reports as
+         * a red push against code nobody touched.
+         *
+         * 60s is three times the slowest real test here and still finite. It stays this package's own number
+         * rather than the shared one (`@intentic/testing/vitest`, 20s): those suites do in-memory work and their
+         * imports are paid during collection, while this one re-enters a large graph from INSIDE test bodies,
+         * ~90 times, each of those re-imports serialized behind the single transform server all of its workers
+         * share. Different work, different ceiling, and each says which it is.
          */
-        testTimeout: 20_000,
-        hookTimeout: 30_000,
+        testTimeout: 60_000,
+        hookTimeout: 60_000,
     },
 });

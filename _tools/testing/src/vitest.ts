@@ -30,26 +30,49 @@ const ALL_TESTS = ["./**/*.test.{ts,mjs}"];
 // build outputs and the package store have to be named here or a project walks into them.
 const NOT_TESTS = ["**/node_modules/**", "**/dist/**", "**/.cache/**", "**/.turbo/**", "**/out-tsc/**"];
 
-// In-memory work only, under vitest's own default budget, stated rather than inherited, because the point of
-// this pair is that the two ceilings are read side by side.
+/* In-memory work only, and therefore the suite whose ceiling is PURELY a hang detector: nothing here waits on
+ * anything, so whatever a test spends it spends on a core.
+ *
+ * VITEST'S OWN 5s WAS THAT CEILING AND IT MEASURED THE MACHINE INSTEAD. It is the default for a package run by
+ * itself; `pnpm test` runs sixty-four suites at once (turbo at 200% concurrency, each vitest forking per core)
+ * on a box that is also running the agents that produced the change. Measured on this workspace, at load ~35 on
+ * 16 cores: _platform/api's unit suite spends 1283s importing against 53s asserting, and a route test costing
+ * 4ms with the package to itself took over 5000ms in the full run. Two of them died on the ceiling and blocked
+ * a push, and they were the FIRST test in their file both times, which is the tell: a file's own imports land
+ * during collection, so the first assertion in it runs at the exact moment every other fork is still loading.
+ * The code under it was correct and the same tests were green on the re-run, which is what makes this the
+ * expensive kind of red, the kind that teaches people to re-run rather than to read.
+ *
+ * 20s is the number the one package that had already met this settled on by measurement (_editor/web, whose
+ * config records what else was tried: worker caps 2.5x SLOWER, threads no wall-clock win, isolate:false unsafe
+ * on singletons). It is ~4x the worst inflation observed here and still reports a genuine hang inside half a
+ * minute. Stated here rather than in each package, because the per-package constant is how this was answered
+ * three times before: every one of them invented after that file had already broken main. */
 export const UNIT_SUITE = {
     name: "unit",
     include: ALL_TESTS,
     exclude: [...NOT_TESTS, ...INTEGRATION_TESTS],
     environment: "node",
-    testTimeout: 5_000,
-    hookTimeout: 10_000,
+    testTimeout: 20_000,
+    hookTimeout: 30_000,
 } as const;
 
-// Real work on a shared machine. Well clear of what the work takes rather than near it, so the number bounds a
-// hang and never measures latency, and still small enough that a genuine hang reports within a minute.
+/* Real work on a shared machine. Well clear of what the work takes rather than near it, so the number bounds a
+ * hang and never measures latency.
+ *
+ * IT ALSO HAS TO CONTAIN THE WAITS INSIDE IT, which 60s did not: `SETTLES` below is 30s, a test that reads a
+ * surface back twice therefore holds two of them, and 60 is not "a fraction of the test's own budget" for the
+ * second one, it is the whole of it. localmodel's held-open download is exactly that shape (drain, wait for the
+ * card's progress, release, wait for the start) and it died on the suite ceiling rather than on either wait, so
+ * the report named the test instead of the read-back that was slow. 120s keeps SETTLES a quarter of the budget
+ * where a test uses two, and a hang still reports well inside a suite that runs for minutes. */
 export const INTEGRATION_SUITE = {
     name: "integration",
     include: INTEGRATION_TESTS,
     exclude: NOT_TESTS,
     environment: "node",
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
 } as const;
 
 /* THE SAME CEILING, ONE LAYER IN: what `vi.waitFor` is allowed inside an integration suite.
@@ -66,7 +89,10 @@ export const INTEGRATION_SUITE = {
  * lost the second on a runner running every package's vitest at once, which is where this landed: two tests
  * red on the push, green on every re-run, pointing at queue code that was working.
  *
- * 30s for the same reason the suite gets 60: well clear of what real work takes, still a fraction of the
- * test's own budget, so an overrun reports as the assertion that never came true rather than as a dead test.
- * It buys PATIENCE, not leniency, the assertion is untouched and a real regression fails exactly as before. */
+ * 30s for the same reason the suite gets 120: well clear of what real work takes, still a fraction of the
+ * test's own budget EVEN WHERE A TEST HOLDS TWO OF THEM, so an overrun reports as the assertion that never came
+ * true rather than as a dead test. That relationship is the point and it is why the suite ceiling moved with
+ * this one rather than being read as a separate number: a wait longer than the budget around it can only ever
+ * report as the wrong failure. It buys PATIENCE, not leniency, the assertion is untouched and a real regression
+ * fails exactly as before. */
 export const SETTLES = { timeout: 30_000 } as const;

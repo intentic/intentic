@@ -25,7 +25,7 @@
  * A directive-less `<template>` is ALWAYS a mistake in this codebase: there is no case where shipping a real
  * `<template>` element to the browser is the intent (nothing here uses one as a client-side cloning source), so
  * the rule needs no exceptions and no allowlist to drift out of date. */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { parse } from "vue/compiler-sfc";
@@ -37,12 +37,12 @@ const SRC = join(import.meta.dirname, `..`);
 const STRUCTURAL = new Set([`if`, `else-if`, `else`, `for`, `slot`]);
 
 const vueFiles = (dir: string): string[] =>
-    readdirSync(dir).flatMap((entry) => {
-        const path = join(dir, entry);
-        if (statSync(path).isDirectory()) {
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) {
             return vueFiles(path);
         }
-        return entry.endsWith(`.vue`) ? [path] : [];
+        return entry.name.endsWith(`.vue`) ? [path] : [];
     });
 
 interface DeadTemplate {
@@ -50,12 +50,32 @@ interface DeadTemplate {
     readonly line: number;
 }
 
+/* WHICH FILES ARE WORTH PARSING, because the whole tree is not, and this rule is cheap to write and was
+ * expensive to run: ~13ms of compiler per file across 259 components, 3.4s of CPU, 9.6s of it inside vitest,
+ * where it is half the hang-detector budget the suite allows a test and it went over on a loaded box. Every one
+ * of those parses but three answered a question the raw text had already answered.
+ *
+ * An offender is a NESTED `<template>` whose opening tag carries no structural directive. So a file can hold
+ * one only if, after the first `<template` in it (the SFC's root block, which `parse` does not put in the AST
+ * anyway, see below), some opening tag does not so much as MENTION one. Text rather than syntax, and read in
+ * the forgiving direction on purpose: a mention inside a comment or a string counts as a candidate and is
+ * parsed, which costs one parse and can change no verdict. Three files pass it today and all three are comments
+ * discussing this very rule. The AST is still the only thing that decides. */
+const STRUCTURAL_ATTR = /(^|\s)(v-if|v-else-if|v-else|v-for|v-slot|#)/;
+
+const mayHoldNested = (source: string): boolean =>
+    [...source.matchAll(/<template\b([^>]*)>/g)].slice(1).some((tag) => !STRUCTURAL_ATTR.test(tag[1] ?? ``));
+
 /* Walks the template AST looking for element nodes named `template`. The ROOT `<template>` of an SFC is not in
  * here: `parse` hands back its children, so every hit is a nested one, which is exactly the population the
  * rule is about. Node type 1 is ELEMENT; `props` type 7 is DIRECTIVE. Compared numerically rather than through
  * the compiler's enums so this test does not import Vue's internal AST types. */
 const deadTemplates = (file: string): DeadTemplate[] => {
-    const { descriptor, errors } = parse(readFileSync(file, `utf8`), { filename: file });
+    const source = readFileSync(file, `utf8`);
+    if (!mayHoldNested(source)) {
+        return [];
+    }
+    const { descriptor, errors } = parse(source, { filename: file });
     // A file the compiler cannot read is a different failure, and the build reports it far more loudly.
     if (errors.length > 0 || descriptor.template === null) {
         return [];
