@@ -65,7 +65,7 @@ const settleWith = (patch: { account?: string; harness?: AgentHarness }): void =
             <!-- The composer's footer metrics exactly (ModelPicker's own 12px rhythm, the row groups bleeding
                  back out with `-mx-3`): the two panels are the same panel, and a reader who opens this one from
                  an extension should not be able to tell which surface asked for it. -->
-            <div v-if="hasContent" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line px-3 py-2">
+            <div v-if="hasContent" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
                 <PickerAccounts
                     :provider="request.provider"
                     :harness="request.harness ?? `native`"

@@ -2,7 +2,7 @@
 import { browserOwnsClick, SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { type AgentProvider, capabilitiesOf, PROVIDERS, TRIAL_NOTICE } from "@intentic/sandbox-contract";
+import { type AgentProvider, capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../composables/chat/access";
 import { BADGE_META } from "../composables/chat/catalog";
 import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../composables/chat/providerCatalog";
@@ -449,12 +449,6 @@ onMounted(() => {
                             >{{ section.trial }}</span
                         >
                     </div>
-                    <!-- SAID BEFORE THE FIRST MESSAGE, not after. A trial turn is the one kind this product
-                         serves that does not go straight from the sandbox to the model vendor, and a user cannot
-                         weigh that once they have already typed into it. -->
-                    <p v-if="section.trial !== undefined" class="px-3 pb-1 text-2xs normal-case tracking-normal text-muted">
-                        {{ TRIAL_NOTICE }}
-                    </p>
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- A family header, shown only for the older-versions blocks a disclosure reveals: the
                          latest band needs none (the provider header above it already names the group). -->

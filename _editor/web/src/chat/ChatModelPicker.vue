@@ -153,7 +153,11 @@ const footerVisible = computed(
                  model list's floor (ModelPicker): the two together mean a tall footer and a short window can
                  shorten each other but neither can erase the other. Nothing scrolls here until the window is
                  genuinely too short: the account lists fold themselves long before that (PickerAccounts). -->
-            <div v-if="footerVisible" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line px-3 py-2">
+            <!-- ON THE CANVAS, NOT THE PANEL. The list above is what the panel opened for; this block is the
+                 session behind it, and a rule alone was not enough to say so on a tall picker. `bg-canvas` is
+                 the app's own ground (textured wherever the skin textures it), so the footer reads as the
+                 surface the list is standing on rather than more list. -->
+            <div v-if="footerVisible" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
                 <!-- WHO SERVES THE NEXT TURN: the account list and the harness axis, shared verbatim with the
                      shell's own picker (PickerAccounts). Bound to the conversation here: each row writes
                      straight through and the panel stays open, because these are settings of the session you

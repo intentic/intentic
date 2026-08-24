@@ -365,9 +365,9 @@ const pickAccount = (id: string): void => {
             </span>
         </button>
 
-        <p class="text-2xs text-subtle">
-            {{ routedRows.length === 1 ? `Signed in through your subscription` : `Turns are spread across these automatically` }}
-        </p>
+        <!-- Only the multi-account case earns a line: with one connection there is nothing to explain, and a
+             caption restating the header above it is read once and skipped from then on. -->
+        <p v-if="routedRows.length > 1" class="text-2xs text-subtle">Turns are spread across these automatically</p>
     </template>
 
     <!-- Harness axis (codex/grok): the provider's own runtime, or its model through the Claude Code harness.
