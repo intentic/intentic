@@ -4,12 +4,14 @@ const highlighter = vi.hoisted(() => ({ ensureLang: vi.fn() }));
 
 vi.mock("@intentic/ui", () => ({
     useHighlighter: () => highlighter,
-    useTheme: vi.fn(),
 }));
 
-// The editors' type follows the app's base text size, which is a fact about a document, and these cases are
-// about grammar registration, so they run without one. Stubbed for the same reason useTheme above is.
+// The editors' type follows the app's base text size, and their colours follow the scheme; both are facts about
+// a document, and these cases are about grammar registration, so they run without one. Stubbed on the SUBPATHS,
+// which is how the modules under test reach them: a plain state module takes the kit's own entry point rather
+// than the barrel, so that holding a preference does not drag mermaid, shiki and vue-flow in with it.
 vi.mock("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
+vi.mock("@intentic/ui/theme", () => ({ useTheme: vi.fn() }));
 
 const { useMonaco } = await import("./useMonaco");
 

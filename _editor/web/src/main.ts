@@ -8,6 +8,7 @@ import { describeError, installClientDiagnostics, reportClient } from "./composa
 import { installPerfConsole, installPerfReporter } from "./composables/perf";
 import { queryClient } from "./composables/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./composables/selfHeal";
+import { installDocumentAppearance } from "./composables/theme/documentAppearance";
 // Registers the module-level watch that re-scopes chat / editor / file-action state on sandbox switch.
 import "./composables/sandbox/sandboxScope";
 // …and the one that remembers each sandbox's screen, so a switch lands where that sandbox was left.
@@ -28,6 +29,13 @@ installSelfHeal();
 installClientDiagnostics();
 await purgeIfMarked();
 dropOutdatedMirrors();
+
+/* The whole-document look, installed for THIS window: the scheme, the base text size, the skin and any imported
+ * VSCode theme. Here rather than in whatever page happens to read one, because a preference that paints <html>
+ * has to be declared in every window of the app or it is neither applied nor live there, which is what left a
+ * popped-out chat frozen in the theme it was opened with (composables/theme/documentAppearance.ts). After the
+ * purge above, so a wipe this page was asked to perform is never read back as a preference. */
+installDocumentAppearance();
 
 initAnalytics();
 

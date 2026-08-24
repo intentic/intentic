@@ -32,6 +32,13 @@ import { ref, watch, type Ref } from "vue";
  * Both land in `receivePreferenceChange`, so there is ONE path in and duplicates cost nothing: adopting a value
  * this window already holds does not change the ref, so it does not re-apply and does not echo.
  *
+ * A PREFERENCE IS DECLARED WHEN ITS MODULE LOADS, which is the one thing a caller still has to think about. A
+ * window that never imports the module holds no such preference: it hears nothing, and, if the preference has an
+ * `apply`, it never applied the stored value either. That is fine for a setting read by the surface it governs,
+ * since the window drawing that surface is the window that imported it. It is NOT fine for one that paints the
+ * whole document, so those are installed for every window in one place rather than left to the import graph, see
+ * web/composables/theme/documentAppearance.ts.
+ *
  * Storage can be missing entirely (private mode, disabled site data) and merely TOUCHING it throws there, so
  * every access below is guarded: a read degrades to "no answer stored", a write to a no-op, and the in-memory ref
  * stays authoritative for the life of the window. */

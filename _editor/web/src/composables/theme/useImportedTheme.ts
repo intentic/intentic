@@ -1,9 +1,10 @@
 import { type Ref } from "vue";
-import { useTheme } from "@intentic/ui";
-// The preference primitive off its own entry point rather than the barrel, the same reason skins/useSkin.ts
-// does: declaring a piece of state should not drag the kit's component graph (and mermaid, shiki and vue-flow
-// behind it) into every module that holds some.
+// Both off their own entry points rather than the barrel, the same reason skins/useSkin.ts gives: this is a
+// plain state module, and reaching the kit through @intentic/ui would drag its whole component graph (and
+// mermaid, shiki and vue-flow behind it) into every window that merely holds an imported theme — which, now
+// that the document's look is installed from main.ts, is every window of the app.
 import { definePreference } from "@intentic/ui/preference";
+import { useTheme } from "@intentic/ui/theme";
 import { THEME_TOKEN_VARS, vscodeThemeToTokens, type ImportedTheme } from "./vscodeTheme";
 
 /* Apply an imported VSCode/OpenVSX theme to the live app, the user-facing half of the theme-import lever (the
