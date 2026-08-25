@@ -7,6 +7,7 @@ import { whenAborted } from "../abort.js";
 import { mainBranchOf } from "../agents/agent-refs.js";
 import type { ConversationWorktree } from "../agents/worktrees.js";
 import type { Services } from "../composition.js";
+import { forgetRemoteRequest, forgetRemoteRequestsOf, noteRemoteRequest } from "./runner-requests.js";
 
 /* ONE TURN, EXECUTED ON A RUNNER, the parent's side of the dispatch (docs/remote-runners-plan.md §5 at the
  * workspace root). The shape mirrors what the isolated arm does locally, station for station:
@@ -144,10 +145,25 @@ export async function* dispatchRemoteTurn(
             { ...turn, ...(attachments !== undefined ? { attachments } : {}) },
             signal !== undefined ? { signal } : {},
         )) {
+            /* WHERE THE CARD CAME FROM, written down as it passes (runner-requests.ts). A question,
+             * permission prompt or plan approval raised over there is answered over HERE, and the answer
+             * carries nothing but the id, so this relay is the only moment the two can be tied together. A
+             * `resolved` frame is that card's last word, so the note goes with it. */
+            const requestId = (event as { requestId?: unknown }).requestId;
+            if (typeof requestId === "string" && requestId !== "") {
+                if (event.kind === "resolved") {
+                    forgetRemoteRequest(requestId);
+                } else {
+                    noteRemoteRequest(requestId, { runnerId, conversationId: input.conversationId });
+                }
+            }
             yield event;
         }
     } finally {
         unwatchAbort();
+        // The turn is over, so nothing it raised can be answered any more; a stale id must not outlive it and
+        // send a later answer at a runner that has forgotten the card.
+        forgetRemoteRequestsOf(input.conversationId);
         /* Deliver whatever the runner committed, however the turn ended. Best-effort: a push the dropped
          * link refuses leaves the branch on the runner, which the next dispatch's pull reconciles — the
          * exact exposure a local power loss has today, and never data loss (the failure model's terms). */

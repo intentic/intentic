@@ -119,6 +119,8 @@ export const MANIFESTS = family(`manifests`);
 export const PANELS = family(`panels`);
 export const PERSONAS = family(`personas`);
 export const PORTS = family(`ports`);
+// This sandbox's runners: the machines it can hand a conversation to (docs/remote-runners-plan.md).
+export const RUNNERS = family(`runners`);
 /* SHARED WITH THE PREVIEW EXTENSION, deliberately and by exact path. That extension's manifest binds `public/`
  * to the name `public` (contributes.files), which is what makes a write into the outbox refresh its view
  * without a clock. `family("public").of()` and its `api.key("public")` produce the identical key, so the

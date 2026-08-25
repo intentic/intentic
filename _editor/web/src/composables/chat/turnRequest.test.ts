@@ -47,6 +47,13 @@ describe(`turnRequestBody`, () => {
         expect(wire(turnRequestBody({ ...base, settings: { ...settings, harness: `claude-code` } }))).toMatchObject({ harness: `claude-code` });
     });
 
+    /* WHERE THE TURN RUNS. Absent is "this sandbox", which is what every conversation that never opens the
+     * placement picker sends: an ordinary chat's request must not grow a field because the feature exists. */
+    it(`sends a placement only when the conversation was pointed at a runner`, () => {
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`placement`);
+        expect(wire(turnRequestBody({ ...base, runner: `rig` }))).toMatchObject({ placement: { kind: `runner`, id: `rig` } });
+    });
+
     it(`sends isolated only when the conversation owns a worktree`, () => {
         expect(wire(turnRequestBody(base))).not.toHaveProperty(`isolated`);
         expect(wire(turnRequestBody({ ...base, isolated: true }))).toMatchObject({ isolated: true });

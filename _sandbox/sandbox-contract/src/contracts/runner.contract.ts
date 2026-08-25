@@ -1,7 +1,8 @@
 import { eventIterator, oc } from "@orpc/contract";
+import { z } from "zod";
 import { AgentEventSchema } from "../events.js";
 import { RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../runner-protocol.js";
-import { OkSchema } from "../schemas.js";
+import { AgentReplySchema, EditorContextSchema, OkSchema } from "../schemas.js";
 
 /* What a RUNNER can be asked, over the socket it opened to its parent sandbox. Phase-1 skeleton: the shape is
  * decided (docs/remote-runners-plan.md §5, workspace root), the implementations land with runner mode.
@@ -26,6 +27,21 @@ export const runnerContract = {
     // The dispatch: one turn in, the frames a local turn would have produced out. The parent republishes them
     // into the same pipeline local frames enter, which is the whole "feels local" mechanism.
     runTurn: oc.input(RunnerTurnSchema).output(eventIterator(AgentEventSchema)),
+    /* THE USER, REACHING THE TURN THEY ARE WATCHING. A remote turn's question, permission prompt and plan
+     * approval are minted in the RUNNER's request registry, and the answer arrives at the PARENT (that is
+     * where the browser is). So it travels back down the same socket and is applied there by the same code a
+     * local answer takes (agent/turn-interactions.ts).
+     *
+     * `applied` rather than a throw: "nothing holds that id any more" is an ordinary race (the card was
+     * answered in another window, or the turn ended while the user was reading), and the parent turns it
+     * into the same NOT_FOUND its local path gives. */
+    reply: oc.input(AgentReplySchema).output(z.object({ applied: z.boolean() })),
+    /* Speaking into a running remote turn. The parent sends the user's words, the attachment paths and the
+     * editor context UNCOMPOSED: the note over those paths has to be built against the runner's own
+     * workspace root, since that is the machine whose files the agent will open. */
+    steer: oc
+        .input(z.object({ conversationId: z.string().min(1), text: z.string(), attachments: z.array(z.string()).optional(), editorContext: EditorContextSchema.optional() }))
+        .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
     // Stop the running turn; the parent's stop button reaching through.
     interrupt: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(OkSchema),
     // Liveness, driven by the parent: keepalive and gone-detection in one, the host hub's heartbeat verbatim.

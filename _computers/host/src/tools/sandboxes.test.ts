@@ -4,10 +4,12 @@ import { ScopeError } from "../policy.js";
 import {
     icCandidates,
     icRemoveArgs,
+    icRunnerArgs,
     icSwapArgs,
     listSandboxes,
     manageSandbox,
     removeSandbox,
+    runnerFlow,
     rowsFrom,
     sandboxesFrom,
     sandboxLogs,
@@ -92,6 +94,36 @@ test("a rebuild without the approved digest is refused rather than built against
 
 test("removal confirms itself, because there is no terminal on this end to answer ic's prompt", () => {
     expect(icRemoveArgs("work")).toEqual(["sandbox", "remove", "work", "-y"]);
+});
+
+/* The RUNNER argv, which carries something no other flow does: a single-use pairing. An argument lost here is
+ * invisible in the worst way, the container boots, dials, is refused, and reads as a network problem. */
+test("a runner is started with its parent's address and its pairing, and removed without a prompt", () => {
+    expect(icRunnerArgs("runner-up", "rig", "https://sandbox-x.intentic.dev", "pair-1")).toEqual([
+        "runner",
+        "up",
+        "https://sandbox-x.intentic.dev",
+        "--pair",
+        "pair-1",
+        "--name",
+        "rig",
+    ]);
+    expect(icRunnerArgs("runner-remove", "rig", undefined, undefined)).toEqual(["runner", "remove", "rig", "-y"]);
+});
+
+test("a runner start with no way home is refused before anything is spawned", () => {
+    // A container with no parent URL, or none of the pairing that gets it enrolled, is a container somebody
+    // has to go and clean up by hand: it can never become a runner, and it says nothing about why.
+    expect(() => icRunnerArgs("runner-up", "rig", "", "pair-1")).toThrow(/address/i);
+    expect(() => icRunnerArgs("runner-up", "rig", "https://sandbox-x.intentic.dev", "")).toThrow(/pairing/i);
+});
+
+test("both runner ops ride the sandboxes switch, and removal does NOT take the removal one", async () => {
+    // A runner's /work is a mirror of the parent's git, so removing it destroys nothing the parent still has:
+    // the switch that guards somebody's workspace is not the switch that guards this.
+    const off = scopes({ sandboxes: "off", sandboxRemove: "on" });
+    await expect(runnerFlow("runner-up", "rig", "https://x", "p", off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
+    await expect(runnerFlow("runner-remove", "rig", undefined, undefined, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
 });
 
 /* The agent's own install is preferred over whatever is on PATH, per platform: the same rule the desktop app

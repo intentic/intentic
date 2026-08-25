@@ -67,6 +67,9 @@ export const turnRequestBody = (input: {
     readonly conversationId: string;
     readonly title: string | null;
     readonly isolated: boolean;
+    // The runner this conversation executes on, on its FIRST turn; absent = this sandbox. The daemon latches
+    // it with the conversation's identity, so later turns need not (and cannot usefully) repeat it.
+    readonly runner?: string | undefined;
     readonly mode: PermissionMode;
     readonly settings: TurnSettings;
     // The session this turn resumes, when the selection still matches the runtime/account that minted it.
@@ -89,6 +92,9 @@ export const turnRequestBody = (input: {
     // own git worktree (branch agent/<conversationId>) instead of /work.
     conversationId: input.conversationId,
     ...(input.isolated ? { isolated: true } : {}),
+    // Where it runs. Omitted for this sandbox, which is what every conversation that never touches the
+    // placement picker sends, so the ordinary chat's request is byte-for-byte what it always was.
+    ...(input.runner !== undefined ? { placement: { kind: `runner` as const, id: input.runner } } : {}),
     // `native` is the daemon's default, so only `claude-code` rides the wire, that's what routes codex/grok
     // through the translator under the Claude Code loop.
     ...(input.settings.harness === `claude-code` ? { harness: input.settings.harness } : {}),

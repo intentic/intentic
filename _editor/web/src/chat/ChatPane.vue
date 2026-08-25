@@ -49,7 +49,9 @@ import ChatForkCut from "./ChatForkCut.vue";
 import ChatForkLine from "./ChatForkLine.vue";
 import ChatMessageView from "./ChatMessageView.vue";
 import ChatModelPicker from "./ChatModelPicker.vue";
+import { useRunners } from "../composables/sandbox/useRunners";
 import ChatModeMenu from "./ChatModeMenu.vue";
+import ChatPlacementMenu from "./ChatPlacementMenu.vue";
 import ChatPaneNotices from "./ChatPaneNotices.vue";
 import ChatPaneStatus from "./ChatPaneStatus.vue";
 import ChatPersonaMenu from "./ChatPersonaMenu.vue";
@@ -216,8 +218,10 @@ const input = ref<HTMLTextAreaElement>();
 const modelOpen = ref(false);
 const modeOpen = ref(false);
 const personaOpen = ref(false);
+const placementOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
+const placementPill = ref<HTMLElement>();
 const runThroughPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
 
@@ -416,6 +420,13 @@ const staged = computed(() => draft.value.trim().length > 0 || attachments.value
  * Offered only where it can land: the route is keyed on the registry, so a draft chat that has never run a
  * turn has nowhere to place into: the pill appears with the first turn, like the agent itself does. */
 const voiceAgent = ref(false);
+
+/* WHERE THE NEXT AGENT RUNS (runners/, docs/remote-runners-plan.md in the workspace). The pill appears only
+ * when this sandbox has runners at all, or when this conversation is already placed on one: a control whose
+ * only option is "here" is noise in a row that is already dense, and every sandbox starts with no runners. */
+const { runners: pairedRunners } = useRunners();
+const placementLabel = computed(() => props.conversation.runner.value ?? `Here`);
+const placementShown = computed(() => pairedRunners.value.length > 0 || props.conversation.runner.value !== undefined);
 const placeable = computed(() => props.conversation.registered.value || agentById(props.conversation.conversationId) !== undefined);
 
 // The badge that says what the next message is run THROUGH: a loop, a workflow, or nothing (useRunThrough).
@@ -1532,6 +1543,25 @@ watch(
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
+                                        <!-- WHERE IT RUNS, the last of the right-hand group and the one that is
+                                         about the machine rather than the message: this sandbox, or a runner of
+                                         its own on another computer. Hidden entirely until there is a runner to
+                                         choose, and read-only once the conversation has run, because placement is
+                                         part of a conversation's identity (ChatPlacementMenu). -->
+                                        <button
+                                            v-if="placementShown"
+                                            ref="placementPill"
+                                            type="button"
+                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+                                            @click="placementOpen = !placementOpen"
+                                            :aria-expanded="placementOpen"
+                                            aria-label="Where this runs"
+                                        >
+                                            <Icon name="desktop" class="text-2xs text-link" />
+                                            <span class="@max-lg:hidden">{{ placementLabel }}</span>
+                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
+                                        </button>
+
                                         <!-- PERSONA, who the chat IS when it reaches outside: which of your accounts
                                          this turn may speak through, and how much of the toolbox it holds.
 
@@ -1777,6 +1807,9 @@ watch(
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="personaOpen" :anchor="personaPill" cross="end" header="Acts as" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.actsAs.value" @picked="pickPersona($event)" />
+        </ResponsiveOverlay>
+        <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" header="Where this runs" panel-class="w-80 p-1">
+            <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="runThroughOpen" :anchor="runThroughPill" cross="end" header="Run this message through" panel-class="w-80 p-1">
             <ChatRunThroughMenu

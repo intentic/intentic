@@ -7907,15 +7907,41 @@ export type MachineSandbox = z.infer<typeof MachineSandboxSchema>;
  *
  * The machine enforces which of them it will do: `sandboxes` covers everything but removal, which takes its own
  * switch, and a refusal comes back as the machine's own sentence naming the control to flip. */
-export const MachineSandboxOpSchema = z.enum(["start", "stop", "restart", "prepare", "update", "rebuild", "rollback", "remove", "logs"]);
+/* `runner-up` / `runner-remove` are the same door for a container that belongs to THIS SANDBOX rather than to
+ * a person: a runner (runners/, docs/remote-runners-plan.md at the workspace root). They ride here because to
+ * the machine they are the same act it already does, run and remove a sandbox container, and to the person
+ * clicking they are the same row of buttons. Both take the `sandboxes` switch and neither takes the removal
+ * one: a runner holds no workspace of its own, only a mirror of the parent's git, so removing it destroys
+ * nothing the parent does not still have. */
+export const MachineSandboxOpSchema = z.enum([
+    "start",
+    "stop",
+    "restart",
+    "prepare",
+    "update",
+    "rebuild",
+    "rollback",
+    "remove",
+    "logs",
+    "runner-up",
+    "runner-remove",
+]);
 export type MachineSandboxOp = z.infer<typeof MachineSandboxOpSchema>;
 
 export const MachineSandboxFlowSchema = z.object({
     op: MachineSandboxOpSchema,
+    // Which sandbox, or, for the two runner ops, which RUNNER: the name it is known by at both ends, the
+    // parent's `/system/runners` list and the machine's `ic runner list`.
     slug: z.string().min(1),
     // The approved overlay's sha256, required by `rebuild` and meaningless to the rest. It is the trust anchor:
     // only content that still hashes to what the owner reviewed is ever built.
     hash: z.string().optional(),
+    /* `runner-up` only, and both are filled in by the DAEMON, never by the caller: where the runner dials
+     * (this sandbox's public URL) and the single-use pairing it redeems there. The browser asks for a runner
+     * on a machine; it never holds the credential that makes one, which is what keeps a pairing out of every
+     * surface between here and that machine. */
+    parentUrl: z.string().optional(),
+    pair: z.string().optional().meta({ secret: true }),
 });
 export type MachineSandboxFlow = z.infer<typeof MachineSandboxFlowSchema>;
 

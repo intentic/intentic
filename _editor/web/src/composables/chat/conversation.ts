@@ -280,6 +280,13 @@ export class Conversation {
     // the main tree's namespace) and legacy restored tabs.
     readonly isolated = ref(true);
 
+    /* WHICH MACHINE THIS CONVERSATION RUNS ON: a paired runner's id, or undefined for this sandbox (the
+     * default). Chosen before the first turn and latched by the daemon from then on, so the picker offers it
+     * only while `registered` is false: a conversation cannot move between machines mid-life, and a control
+     * that pretended otherwise would silently do nothing. Design: docs/remote-runners-plan.md in the
+     * workspace this sandbox serves. */
+    readonly runner = ref<string | undefined>();
+
     // Whether the fleet has ever known this conversation. The board's DRAFT card exists to bridge exactly one
     // gap, "New agent" pressed → the first roster frame that registers it, and that crossing happens once, so
     // this LATCHES rather than tracking the roster. Reading "absent from the roster" as "draft" instead is what
@@ -1221,6 +1228,7 @@ export class Conversation {
                         conversationId: this.conversationId,
                         title: this.title.value,
                         isolated: this.isolated.value,
+                        runner: this.runner.value,
                         mode: this.mode.value,
                         settings,
                         resume,

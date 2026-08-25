@@ -2,7 +2,7 @@ import { type HostScopes, type MachineFlowLine, type MachineSandboxFlow, hostCon
 import { implement } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
-import { manageSandbox, removeSandbox, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
+import { manageSandbox, removeSandbox, runnerFlow, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
 
 /* What this computer answers, as the oRPC SERVER on the socket it dialled out.
  *
@@ -73,10 +73,14 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
 // Which function each op is. Start/stop/restart are a docker call and say one sentence, `logs` is a read whose
 // lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a
 // single answer to "what does this op mean".
-const flowFor = ({ op, slug, hash }: MachineSandboxFlow, scopes: HostScopes): ((onLine: (line: string) => void) => Promise<string>) => {
+const flowFor = ({ op, slug, hash, parentUrl, pair }: MachineSandboxFlow, scopes: HostScopes): ((onLine: (line: string) => void) => Promise<string>) => {
     switch (op) {
         case "remove":
             return (onLine) => removeSandbox(slug, scopes, onLine);
+        // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name.
+        case "runner-up":
+        case "runner-remove":
+            return (onLine) => runnerFlow(op, slug, parentUrl, pair, scopes, onLine);
         case "logs":
             return (onLine) => tailSandboxLogs(slug, scopes, onLine);
         case "prepare":

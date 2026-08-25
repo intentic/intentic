@@ -108,7 +108,7 @@ export const createRunnerCredentialRefreshRoute =
             services.logger.warn({ err: error, runner, account: body.data.account }, "runner: mid-turn token re-mint failed");
             return undefined;
         });
-        return c.json({ ...(accessToken !== undefined ? { accessToken } : {}) });
+        return c.json(accessToken !== undefined ? { accessToken } : {});
     };
 
 // Hop-by-hop and identity headers the proxy must not forward: the target sees the proxy's own connection,

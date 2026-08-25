@@ -177,6 +177,46 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // The consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
+/* The argv for the two RUNNER ops (a sandbox-image container that belongs to a parent sandbox rather than to
+ * a person). Asserted without a machine for icSwapArgs' reason, and with one extra worth stating: the pairing
+ * is single-use and short-lived, so an argv that dropped it produces a container that boots, dials, is
+ * refused, and sits there looking like a network problem. */
+export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, parentUrl: string | undefined, pair: string | undefined): string[] => {
+    if (op === "runner-remove") {
+        return ["runner", "remove", name, "-y"];
+    }
+    if (parentUrl === undefined || parentUrl === "" || pair === undefined || pair === "") {
+        throw new Error(`starting a runner needs the parent sandbox's address and a pairing, and this request carried ${parentUrl ? "no pairing" : "neither"}.`);
+    }
+    return ["runner", "up", parentUrl, "--pair", pair, "--name", name];
+};
+
+/* Start or remove a runner on this computer.
+ *
+ * BOTH RIDE THE `sandboxes` SWITCH, removal included, and that is the one place this differs from a person's
+ * sandbox. The removal switch exists because a sandbox is somebody's workspace and deleting it is undone by
+ * nothing; a runner's /work is a MIRROR of the parent's git, so what dies with it is a checkout the parent can
+ * hand back. The owner who allowed sandbox containers here allowed this one too. */
+export const runnerFlow = async (
+    op: "runner-up" | "runner-remove",
+    name: string,
+    parentUrl: string | undefined,
+    pair: string | undefined,
+    scopes: HostScopes,
+    onLine: (line: string) => void,
+): Promise<string> => {
+    assertScope(scopes, "sandboxes");
+    // Built first, so a request missing its pairing is refused before anything is spawned.
+    const args = icRunnerArgs(op, name, parentUrl, pair);
+    const { code, output } = await runIc(args, onLine);
+    if (code !== 0) {
+        throw new Error(`That runner ${op === "runner-up" ? "start" : "removal"} failed on this computer.\n\n${output}`);
+    }
+    return op === "runner-up"
+        ? `Runner "${name}" is up on this computer and pairing with the sandbox that asked for it.`
+        : `Removed runner "${name}". Its work lives in the parent sandbox's git, so nothing was lost with it.`;
+};
+
 /* An `ic` run, narrated as it goes. Every line it prints is handed to `onLine` the moment it arrives, which is
  * what lets the browser show progress on an operation that takes minutes, and the same lines are collected for
  * the callers that want one answer at the end (an MCP tool result). Both streams go to one place on purpose:

@@ -348,9 +348,39 @@ export async function* manageMachineSandbox(services: Services, id: string, inpu
             message: `"${id}" is not connected right now, the computer is asleep, offline, or its agent isn't running.`,
         });
     }
+    /* STARTING A RUNNER IS THE ONE OP THIS SIDE ADDS TO (runners/, docs/remote-runners-plan.md at the
+     * workspace root): the caller names a machine and a name, and the DAEMON supplies the two things that
+     * make a runner, where to dial and a single-use pairing bound to that name. Neither is ever in the
+     * browser's hands: a pairing is a key to this sandbox's dispatch surface, and the only hop it needs to
+     * make is the one to the machine that is about to spend it.
+     *
+     * A sandbox with no public URL cannot be a parent at all: the runner has nothing to dial back to, so the
+     * refusal is here, before a container exists on somebody's computer with no way home. */
+    const flow: MachineSandboxFlow =
+        input.op === "runner-up"
+            ? await (async () => {
+                  const parentUrl = services.config.sandbox.publicUrl;
+                  if (parentUrl === "") {
+                      throw new ORPCError("CONFLICT", {
+                          message: "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
+                      });
+                  }
+                  return { ...input, parentUrl, pair: services.runners.mintPairing(input.slug).token };
+              })()
+            : input;
     try {
         // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
-        yield* await client.runSandboxFlow(input, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) });
+        for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) })) {
+            /* A RUNNER THAT IS GONE FROM THE MACHINE MUST GO FROM HERE TOO. Its enrollment is a durable token
+             * for a container that no longer exists, and leaving it behind means a list with a ghost in it and
+             * a placement the picker still offers. Only on the machine's own `result`: a removal that failed
+             * left the container running, and revoking its way home would strand a working runner. */
+            if (line.kind === "result" && input.op === "runner-remove") {
+                services.runnerHub.disconnect(input.slug, "this runner was removed from its machine");
+                await services.runners.revoke(input.slug);
+            }
+            yield line;
+        }
     } finally {
         /* In `finally` rather than after the loop, because the interesting cases are the ones that do not reach
          * it: a removal that failed halfway still changed the machine, and a reader who navigated away mid-update

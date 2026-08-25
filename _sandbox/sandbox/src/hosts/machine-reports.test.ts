@@ -1,7 +1,7 @@
-import type { HostSummary, MachineReport } from "@intentic/sandbox-contract";
+import type { HostSummary, MachineFlowLine, MachineReport, MachineSandboxFlow } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
-import { computers, mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
+import { computers, manageMachineSandbox, mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
 
 const report = (hostname: string, overrides: Partial<MachineReport> = {}): MachineReport => ({
     hostname,
@@ -277,4 +277,88 @@ test("asks for the status and the fleet in one go, and bounds the pair with one 
 test("a machine that refuses to answer at all reads as offline", async () => {
     const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
     expect((await computers(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
+});
+
+/* ---- runner lifecycle, the two ops the daemon fills in for ---- */
+
+// The flow the machine was actually asked to run, plus the store the parent kept: enough to see both halves of
+// starting a runner, the pairing this side mints and the argv the far side gets.
+const runnerServices = (
+    overrides: { publicUrl?: string; online?: boolean } = {},
+): { services: Services; sent: MachineSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
+    const sent: MachineSandboxFlow[] = [];
+    const minted: string[] = [];
+    const revoked: string[] = [];
+    const disconnected: string[] = [];
+    const services = {
+        config: { historyRoot: NO_HISTORY, sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" } },
+        runners: {
+            mintPairing: (id: string) => {
+                minted.push(id);
+                return { token: `pair-for-${id}`, expiresIn: 600 };
+            },
+            revoke: async (id: string) => {
+                revoked.push(id);
+                return true;
+            },
+        },
+        runnerHub: { disconnect: (id: string) => disconnected.push(id) },
+        hostHub: {
+            client:
+                overrides.online === false
+                    ? () => undefined
+                    : () => ({
+                          runSandboxFlow: async (flow: MachineSandboxFlow) => {
+                              sent.push(flow);
+                              return (async function* () {
+                                  yield { kind: "line", text: "working" } as const;
+                                  yield { kind: "result", message: "done" } as const;
+                              })();
+                          },
+                      }),
+        },
+    } as unknown as Services;
+    return { services, sent, minted, revoked, disconnected };
+};
+
+const drain = async (flow: AsyncGenerator<MachineFlowLine>): Promise<MachineFlowLine[]> => {
+    const lines: MachineFlowLine[] = [];
+    for await (const line of flow) {
+        lines.push(line);
+    }
+    return lines;
+};
+
+/* THE PAIRING IS THE DAEMON'S TO MINT, never the caller's to carry. A browser that could name the credential
+ * could mint a runner anywhere; what it names is a machine and a name, and this side supplies the rest. */
+test("starting a runner fills in this sandbox's address and a pairing bound to the runner's own name", async () => {
+    const { services, sent, minted } = runnerServices();
+    await drain(manageMachineSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
+    expect(minted).toEqual(["rig"]);
+    expect(sent[0]).toEqual({ op: "runner-up", slug: "rig", parentUrl: "https://sandbox-x.intentic.dev", pair: "pair-for-rig" });
+});
+
+test("a sandbox with no public address refuses rather than leaving a container with no way home", async () => {
+    const { services, sent, minted } = runnerServices({ publicUrl: "" });
+    await expect(drain(manageMachineSandbox(services, "rog", { op: "runner-up", slug: "rig" }))).rejects.toThrow(/public address/i);
+    expect(minted).toEqual([]);
+    expect(sent).toEqual([]);
+});
+
+// Every other op is passed through untouched: the injection is for `runner-up` alone, and a pairing riding an
+// update would be a live credential in a flow that has no use for one.
+test("no other op grows a pairing", async () => {
+    const { services, sent, minted } = runnerServices();
+    await drain(manageMachineSandbox(services, "rog", { op: "update", slug: "work" }));
+    expect(sent[0]).toEqual({ op: "update", slug: "work" });
+    expect(minted).toEqual([]);
+});
+
+/* A RUNNER REMOVED FROM ITS MACHINE IS REMOVED HERE TOO, and only on the machine's own success: a removal that
+ * failed left the container running, and revoking its way home would strand a working runner. */
+test("a removed runner loses its enrollment here, but only when the machine says it worked", async () => {
+    const { services, revoked, disconnected } = runnerServices();
+    await drain(manageMachineSandbox(services, "rog", { op: "runner-remove", slug: "rig" }));
+    expect(revoked).toEqual(["rig"]);
+    expect(disconnected).toEqual(["rig"]);
 });

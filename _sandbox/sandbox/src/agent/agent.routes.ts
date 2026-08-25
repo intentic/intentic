@@ -36,9 +36,7 @@ import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor } from "../children/children.js";
 import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
-import { withAttachmentNote } from "./attachment-note.js";
 import { preambleNotes, withTurnPreamble } from "./turn-preamble.js";
-import { conversationOf, resolveRequest } from "./agent-requests.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
 import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
@@ -56,6 +54,8 @@ import {
     startConversationTurn,
 } from "./turn-resume.js";
 import { dispatchRemoteTurn } from "../runners/runner-dispatch.js";
+import { forgetRemoteRequest, remoteRequestOf } from "../runners/runner-requests.js";
+import { applyReply, composeSteerText } from "./turn-interactions.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { nameAgentTitle } from "./title-namer.js";
@@ -1607,45 +1607,69 @@ export const createAgentRoutes = (services: Services) => {
          * Marked before it is resolved, and the whole handler down to the abort is synchronous, so the tool's
          * own continuation cannot run in between and re-publish the agent as running. */
         reply: i.reply.handler(async ({ input }) => {
-            const dismissed = input.kind === "question" && input.cancelled === true ? conversationOf(input.requestId) : undefined;
-            if (dismissed !== undefined) {
-                services.agents.stopping(dismissed, "dismissed");
-            }
-            if (!resolveRequest(input)) {
-                throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
-            }
-            if (dismissed === undefined) {
+            if (await applyReply(services, input)) {
                 return { ok: true } as const;
             }
-            stopTurn(dismissed);
-            // Joined like the stop route joins, and for the same reason: the answer to this request is what the
-            // browser lets the user type behind, so it must not come back while the run still holds the
-            // conversation. The wait is a blink, the turn is parked inside the card being dismissed.
-            await turnRunOf(dismissed)?.waitUntilFinished();
-            return { ok: true } as const;
+            /* NOTHING HELD THAT ID HERE, which for a REMOTE conversation is the ordinary case rather than a
+             * stale card: the question was minted on the runner, and this daemon only relayed the frame that
+             * drew it (runners/runner-requests.ts remembers which machine). So the answer travels, and the
+             * runner applies it with the very same function this handler just tried.
+             *
+             * The dismissal marker is set HERE as well as there, because the two daemons own different halves
+             * of the same card: the runner ends the turn, and this side is what the board is drawing. */
+            const remote = remoteRequestOf(input.requestId);
+            const client = remote === undefined ? undefined : services.runnerHub.client(remote.runnerId);
+            if (remote !== undefined && client !== undefined) {
+                if (input.kind === "question" && input.cancelled === true) {
+                    services.agents.stopping(remote.conversationId, "dismissed");
+                }
+                const answered = await client.reply(input).catch((error: unknown) => {
+                    services.logger.warn({ err: error, runner: remote.runnerId }, "runner: forwarding an answer failed");
+                    return { applied: false };
+                });
+                if (answered.applied) {
+                    forgetRemoteRequest(input.requestId);
+                    return { ok: true } as const;
+                }
+            }
+            throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
         }),
         // Inject a user message into the conversation's running turn (delivered between tool calls);
         // NOT_FOUND when no steerable turn is live, the client then keeps it queued for the next turn.
         // The message is composed exactly like a turn's own prompt (editor-context note, then the attachment
         // note over workspace-resolved paths), so adding a file mid-turn reads the same to the agent as
         // attaching it to a fresh message.
-        steer: i.steer.handler(({ input }) => {
-            const paths: string[] = [];
-            for (const rel of input.attachments ?? []) {
-                const abs = resolveWithin(services.workspace.root, rel);
-                if (abs === undefined) {
-                    throw new ORPCError("BAD_REQUEST", { message: `invalid attachment path: ${rel}` });
+        steer: i.steer.handler(async ({ input }) => {
+            /* A REMOTE CONVERSATION'S TURN IS RUNNING ON ANOTHER MACHINE, so the words go there, UNCOMPOSED:
+             * the attachment note names absolute paths, and the only workspace those mean anything in is the
+             * runner's (turn-interactions.ts). What stays here is the RECORD below, because the parent owns
+             * the transcript wherever the turn ran. */
+            const runnerId = services.agents.entry(input.conversationId)?.runner;
+            if (runnerId !== undefined) {
+                const client = services.runnerHub.client(runnerId);
+                if (client === undefined) {
+                    throw new ORPCError("NOT_FOUND", { message: `the runner "${runnerId}" is offline, so nothing is running to say this to.` });
                 }
-                paths.push(abs);
-            }
-            if (input.editorContext !== undefined && resolveWithin(services.workspace.root, input.editorContext.file) === undefined) {
-                throw new ORPCError("BAD_REQUEST", { message: `invalid editor context path: ${input.editorContext.file}` });
-            }
-            const withEditor = [input.text, ...(input.editorContext !== undefined ? [editorContextNote(input.editorContext)] : [])]
-                .filter((part) => part !== "")
-                .join("\n\n");
-            if (!steerTurn(input.conversationId, paths.length > 0 ? withAttachmentNote(withEditor, paths) : withEditor)) {
-                throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
+                const delivered = await client.steer({
+                    conversationId: input.conversationId,
+                    text: input.text,
+                    ...(input.attachments !== undefined ? { attachments: [...input.attachments] } : {}),
+                    ...(input.editorContext !== undefined ? { editorContext: input.editorContext } : {}),
+                });
+                if (delivered.invalid !== undefined) {
+                    throw new ORPCError("BAD_REQUEST", { message: delivered.invalid });
+                }
+                if (!delivered.applied) {
+                    throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
+                }
+            } else {
+                const composed = composeSteerText(services, input);
+                if (composed.invalid !== undefined) {
+                    throw new ORPCError("BAD_REQUEST", { message: composed.invalid });
+                }
+                if (!steerTurn(input.conversationId, composed.text)) {
+                    throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
+                }
             }
             /* THE MESSAGE INTO THE RUN'S OWN LOG, at the point in the stream where the turn took it, which is
              * what puts it in front of every window rendering this run, in the right place, and in the record

@@ -14,6 +14,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
+import { applyReply, applySteer, composeSteerText } from "../agent/turn-interactions.js";
 import type { Services } from "../composition.js";
 import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
 import type { RunnerIdentity } from "./runner-identity.js";
@@ -158,6 +159,19 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
             ),
         ),
         runTurn: os.runTurn.handler(({ input }) => runTurn(input)),
+        /* The user's answer, arriving from the parent (where the browser is) for a card THIS daemon raised.
+         * Applied by the same function a local answer takes, dismissal-ends-the-turn included, so a question
+         * closes identically wherever the turn happens to be running. */
+        reply: os.reply.handler(async ({ input }) => ({ applied: await applyReply(services, input) })),
+        // Composed HERE on purpose: the attachment note names absolute paths, and the only workspace those
+        // paths mean anything in is this one (turn-interactions.ts).
+        steer: os.steer.handler(({ input }) => {
+            const composed = composeSteerText(services, input);
+            if (composed.invalid !== undefined) {
+                return { applied: false, invalid: composed.invalid };
+            }
+            return { applied: applySteer(input.conversationId, composed.text) };
+        }),
         interrupt: os.interrupt.handler(({ input }) => {
             running.get(input.conversationId)?.abort();
             return { ok: true };
