@@ -139,13 +139,12 @@ export const sandboxRunCommandCli = buildCommand<{
         // off the container being replaced, on a machine the derived share is wrong about. The hosted shape
         // drops the cap entirely in the contract. Read from the ALLOWLISTED pairs, not the raw stdin dump, so
         // the var has to earn its place in REPLAY_ENV to be honoured, and is re-emitted for the next recreate.
-        const { memory, memorySwap } = localSandboxMemory(engineMemoryBytes(), env.find(([name]) => name === "SANDBOX_MEMORY")?.[1]);
+        const memory = localSandboxMemory(engineMemoryBytes(), env.find(([name]) => name === "SANDBOX_MEMORY")?.[1]);
         const run = {
             names: sandboxNames(flags.slug),
             image: flags.image,
             baseImage: flags.baseImage,
             memory,
-            memorySwap,
             ...(sandboxId !== undefined ? { sandboxId } : {}),
             localPublish: flags.noLocalPublish !== true,
             unsupported: (flags.unsupported ?? "").split(/\s+/).filter((token) => token !== ""),
