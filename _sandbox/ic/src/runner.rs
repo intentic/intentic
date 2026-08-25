@@ -31,7 +31,11 @@ fn generated_name() -> String {
 }
 
 fn slug_of(name: &str) -> Result<String> {
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
         bail!("runner names are lowercase letters, digits and dashes — '{name}' is not.");
     }
     Ok(format!("{SLUG_PREFIX}{name}"))

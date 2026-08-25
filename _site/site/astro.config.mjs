@@ -16,6 +16,7 @@ import { defineConfig } from "astro/config";
 import { createReadStream, existsSync } from "node:fs";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { ogCard, ogFonts } from "./scripts/og-template.mjs";
+import { sourceFirstWorkspace } from "./scripts/source-first.mjs";
 
 const isIndexNowDisabled = process.env.INDEXNOW_ENABLED === "0";
 
@@ -71,7 +72,7 @@ export default defineConfig({
         inlineStylesheets: "always",
     },
     vite: {
-        plugins: [tailwindcss(), desktopDevRoutes],
+        plugins: [sourceFirstWorkspace(), tailwindcss(), desktopDevRoutes],
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },
@@ -80,7 +81,14 @@ export default defineConfig({
          * surfaces: sandbox-openapi pulls sandbox-contract at SSR time to generate the OpenAPI document, so a
          * new file exported from index.ts but not yet emitted to dist is a full-page build error on every group
          * page. The @intentic/src condition in each package's exports map is the resolver; these are what make
-         * Vite honor it. */
+         * Vite honor it.
+         *
+         * THEY DO NOT REACH EVERY ENVIRONMENT, which is why sourceFirstWorkspace() is in `plugins` above rather
+         * than this block being the whole rule. Astro gives `astro` and `prerender` conditions of their own and
+         * discards a `vite.environments.prerender` written here — and `prerender` is where /api is rendered, so
+         * the page this comment is about was reading `dist/` the entire time these conditions were set. The
+         * plugin states the rule as a resolver, which every environment runs. Keep both: this block is what the
+         * client bundle and the SSR graph use, and it is the shorter statement of the same intent. */
         resolve: {
             conditions: ["@intentic/src", "@intentic-dev/src", "@intentic-app/src", "import", "module", "browser", "default"],
         },
