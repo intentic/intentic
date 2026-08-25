@@ -8543,6 +8543,73 @@ export const SubagentIdParamSchema = z.object({ id: z.string() });
 // proposal present with a hash different from custom's.
 
 const environmentFileSchema = z.object({ content: z.string(), hash: z.string() });
+
+/* ---- environment DRIFT: what the live container has that the image did not put there ----
+ *
+ * Anything installed outside /work dies with the container, and transcript mining showed the same tools being
+ * reinstalled session after session (cargo-xwin six times, a Windows rustup target eight) before anyone thought
+ * to bake them. Drift is the daemon OBSERVING that gap rather than trusting the model to report it: apt installs
+ * read from dpkg's own log, everything else from system paths newer than the container itself. Two channels
+ * because they are disjoint by construction — dpkg unpacks files with their archive mtimes, so an mtime sweep
+ * cannot see apt, and nothing apt does lands under the swept prefixes' hand-installed corners. */
+export const EnvironmentDriftSchema = z.object({
+    // When this container was created (PID 1's start). A snapshot whose bornAt is not the running container's
+    // describes a container that no longer exists, and every reader must treat it as no drift at all.
+    bornAt: z.number(),
+    // When the probe ran.
+    at: z.number(),
+    // Debian packages installed since the container was born, from /var/log/dpkg.log.
+    apt: z.array(z.string()),
+    // System paths (outside /work) newer than the container, collapsed so a browser download is one entry.
+    paths: z.array(z.string()),
+});
+export type EnvironmentDrift = z.infer<typeof EnvironmentDriftSchema>;
+
+// How a runtime install was made, which decides whether the daemon can draft a Dockerfile step for it
+// mechanically (apt/cargo/npm/rustup-target) or only surface it for a person to route (pip belongs in a venv or
+// a Debian package, "other" is a curl|sh whose replay could embed anything).
+export const RuntimeInstallKindSchema = z.enum(["apt", "pip", "cargo", "npm", "rustup-target", "playwright", "gem", "pipx", "go", "other"]);
+export type RuntimeInstallKind = z.infer<typeof RuntimeInstallKindSchema>;
+
+/* One tool's runtime-install history across sessions: the ledger entry behind the recurrence signal. Sessions
+ * are the unit of recurrence — a session that retries an install five times needed it once — and the entry
+ * survives container recreates (the file lives under /work), which is exactly what makes "installed again in a
+ * fresh container" observable at all. */
+export const RuntimeInstallSchema = z.object({
+    tool: z.string(),
+    kind: RuntimeInstallKindSchema,
+    // Distinct conversation ids that installed it, capped; length is the recurrence count that gates drafting.
+    sessions: z.array(z.string()),
+    // The most recent install commands, capped, secrets already masked to references by the harness.
+    commands: z.array(z.string()),
+    firstAt: z.number(),
+    lastAt: z.number(),
+    count: z.number(),
+    // The owner rejected an auto-drafted step for this tool: never propose it again until this is cleared.
+    declinedAt: z.number().optional(),
+});
+export type RuntimeInstall = z.infer<typeof RuntimeInstallSchema>;
+
+export const RuntimeInstallsFileSchema = z.object({
+    installs: z.array(RuntimeInstallSchema),
+    // The last drift snapshot, persisted so a daemon restart does not blank the card until the next sweep.
+    drift: EnvironmentDriftSchema.optional(),
+});
+export type RuntimeInstallsFile = z.infer<typeof RuntimeInstallsFileSchema>;
+
+// A ledger entry as the Environment card shows it: recurrence joined with whether the install is present in the
+// LIVE container (drift-corroborated), already drafted for approval, or previously declined.
+export const EnvironmentRecurringSchema = z.object({
+    tool: z.string(),
+    kind: RuntimeInstallKindSchema,
+    sessions: z.number(),
+    lastAt: z.number(),
+    live: z.boolean(),
+    drafted: z.boolean().optional(),
+    declined: z.boolean().optional(),
+});
+export type EnvironmentRecurring = z.infer<typeof EnvironmentRecurringSchema>;
+
 export const EnvironmentSchema = z.object({
     proposal: environmentFileSchema.optional(),
     // The owner-approved agent-written custom section (.intentic/config/environment.custom.Dockerfile).
@@ -8552,6 +8619,10 @@ export const EnvironmentSchema = z.object({
     appliedHash: z.string().optional(),
     // config.sandbox.name, the UI derives the rebuild one-liner's slug from it.
     container: z.string().optional(),
+    // What the live container has that the image did not put there; absent until the first sweep of this container.
+    drift: EnvironmentDriftSchema.optional(),
+    // Runtime installs worth the owner's attention: recurring across sessions, or present-and-doomed right now.
+    recurring: z.array(EnvironmentRecurringSchema).optional(),
 });
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export const EnvironmentApproveSchema = z.object({ hash: z.string().min(1) });

@@ -70,7 +70,11 @@ import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
 import { createRunnerConnectRoute, runnerSummaries } from "./runners/runner.routes.js";
-import { createRunnerCredentialRefreshRoute, createRunnerCredentialsRoute, createRunnerTranslatorProxyRoute } from "./runners/runner-credentials.routes.js";
+import {
+    createRunnerCredentialRefreshRoute,
+    createRunnerCredentialsRoute,
+    createRunnerTranslatorProxyRoute,
+} from "./runners/runner-credentials.routes.js";
 import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
@@ -944,6 +948,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/environment/contents", async (c) => {
         if (c.req.query("refresh") !== undefined) {
             clearVersionCache();
+            // The drift half of "it says X but I just changed it": re-probe now, not at the next idle tick.
+            // Not awaited — the sweep persists its snapshot and the watcher invalidates `environment`, so the
+            // card refetches when the answer lands rather than holding this response on a find walk.
+            void services.driftSweep.refresh();
         }
         return c.json(await readEnvironmentContents(services));
     });

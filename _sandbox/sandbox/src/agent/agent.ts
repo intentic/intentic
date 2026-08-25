@@ -41,6 +41,7 @@ import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
+import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 import { redactionHooks } from "./agent-redaction.js";
 import { type SecretAccess, secretCommandHooks } from "./agent-secrets.js";
 import { commandGateHooks } from "../guard/command-gate.js";
@@ -93,6 +94,9 @@ export interface AgentRequest {
     // whole workspace and excuse one project's error with another project's missing package.
     readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
     readonly dependencyInstallAllowed?: boolean;
+    // Every image-scoped install this turn attempts, classified, for the runtime-install ledger behind the
+    // environment drift sweep (environment/runtime-installs.ts). Silent: nothing about it reaches the model.
+    readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
     // Where this turn works, and how strongly that is enforced (agents/isolation.ts). With an anchor the turn
     // runs in its own mount namespace and its /work IS its worktree; without one the same mapping is applied
     // to tool inputs instead (agents/worktree-redirect.ts). Absent entirely ⇒ a main-tree turn, which means
@@ -632,7 +636,7 @@ const baseOptions = (
              * terminal lane and only that one, so which of Read/Grep/an MCP call fetched a secret decided whether
              * the model saw it, this makes the answer the same for all of them (agent/agent-redaction.ts). */
             request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
-            installSteeringHooks(request.dependencyInstallAllowed === true),
+            installSteeringHooks(request.dependencyInstallAllowed === true, request.onImageInstall),
             // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
             // the owner's action rules BEFORE they run, and hooks fire even under bypassPermissions, which is what
             // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).

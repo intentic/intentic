@@ -177,6 +177,8 @@ import { createSpeech, type Speech } from "./speech/transcribe.js";
 import { purgeConversationState } from "./sessions/conversation-purge.js";
 import { type SandboxSettingsStore, fileSandboxSettingsStore } from "./settings/settings-store.js";
 import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firings.js";
+import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
+import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { onTurnSettled, turnRunOf } from "./agent/turn-runs.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
@@ -454,6 +456,13 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // When each rule last did something (.intentic/local/rule-firings.json). Beside the settings rather than in them:
     // a firing is not an edit, so it must not make every push a write of the owner's configuration.
     readonly ruleFirings: RuleFiringsStore;
+    // The runtime-install ledger (.intentic/records/runtime-installs.json): which tools sessions installed into
+    // the container at runtime, written by the install-steering hook, read by the Environment card and the
+    // drift sweep's auto-drafter (environment/runtime-installs.ts).
+    readonly runtimeInstalls: RuntimeInstallsStore;
+    // The environment drift sweep: probes what the live container has that the image did not put there, and
+    // drafts overlay steps for recurring runtime installs (environment/drift-sweep.ts).
+    readonly driftSweep: DriftSweep;
     // Push state: this sandbox's VAPID keypair + one channel per registered device (browsers over web push,
     // native installs through the platform relay). On the HISTORY volume, outside the agent's reach, because
     // the private key and the relay secrets can forge notifications to the owner's devices.
@@ -999,6 +1008,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     void heavyCommands.seed().catch((error: unknown) => logger.warn({ err: error }, "heavy-commands: could not write the default rules"));
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
+    // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route
+    // reads, and the sweep is constructed inside the services literal below.
+    const runtimeInstalls = fileRuntimeInstallsStore(statePath(workspace.root, ".intentic/records/runtime-installs.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
     // instance would answer a poll from a file the runner had already moved past.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
@@ -1247,6 +1259,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),
         ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
+        runtimeInstalls,
+        driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),
         push: pushStore,
         pushSender: createPushSender(pushStore, logger),
         // The provider slices, whole: their members' docs live on the slice interfaces, beside the code.

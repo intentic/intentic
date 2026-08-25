@@ -31,6 +31,7 @@ vi.mock(`../../composables/sandbox/useEnvironment`, () => ({
         proposal: ref(undefined),
         pending: ref(undefined),
         applied: ref(environment.approved),
+        recurring: ref([]),
         serverManaged: ref(false),
         slug: ref(`demo`),
     }),

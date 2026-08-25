@@ -43,6 +43,12 @@ owner-approved custom section. You propose ONLY custom-section content.
 
 ## How to propose
 
+A plain runtime install usually needs NO proposal from you: the daemon records image-scoped installs, watches
+what the live container has that the image did not put there, and drafts the overlay step itself once the same
+tool recurs across sessions. Draft manually when the need is known NOW (the owner asked, or waiting for
+recurrence would waste sessions), or when the step is more than a package name — build flags, an ENV, a
+download the daemon cannot infer.
+
 1. Write your steps to `.intentic/config/environment.d/<tool>.Dockerfile`: one file per thing you need, named after
    it (`ffmpeg.Dockerfile`, `rust.Dockerfile`). Do NOT write `.intentic/config/environment.Dockerfile`: the daemon
    composes that from your drafts plus the already-approved custom section, and writing it directly would

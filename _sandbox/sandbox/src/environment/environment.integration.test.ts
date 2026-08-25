@@ -9,6 +9,8 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
 import { packFragment } from "./packs.js";
+import { AUTO_MARKER } from "./auto-drafts.js";
+import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import {
     approvedPath,
     approveEnvironment,
@@ -65,6 +67,9 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "environment-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath }),
+        // A real store on the same throwaway root: readEnvironment folds the ledger into every payload and
+        // reject tombstones through it, so a stand-in would throw on the first ordinary read.
+        runtimeInstalls: fileRuntimeInstallsStore(join(tmpdir(), `runtime-installs-${Math.random().toString(36).slice(2)}.json`)),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         // The other two provider-pack predicates: an empty auth dir (no translator subscriptions on disk) and
@@ -289,6 +294,7 @@ test("re-reading unchanged drafts writes nothing, so the watcher has no change t
         workspace: services.workspace,
         logger: services.logger,
         capabilities: services.capabilities,
+        runtimeInstalls: services.runtimeInstalls,
         files: unstubbed<Services["files"]>("files", {
             read: services.files.read,
             remove: services.files.remove,
@@ -344,4 +350,45 @@ test("rejecting drops the drafts, not just the composed proposal", async () => {
 
     await rejectEnvironment(services);
     expect((await readEnvironment(services)).proposal).toBeUndefined();
+});
+
+test("rejecting an AUTO-drafted step tombstones its tool; an agent's draft is only deleted", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "nsis" }], "apt-get install -y nsis", "s1", 1_000);
+    await services.files.write(join(draftsDir(services), "nsis.Dockerfile"), `${AUTO_MARKER} nsis\nRUN apt-get install -y nsis\n`);
+    await services.files.write(join(draftsDir(services), "ffmpeg.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    await readEnvironment(services);
+
+    await rejectEnvironment(services);
+    const { installs } = await services.runtimeInstalls.read();
+    // The machine is told to stop repeating itself; the agent remains free to ask again.
+    expect(installs.find((entry) => entry.tool === "nsis")?.declinedAt).toBeDefined();
+    expect((await readEnvironment(services)).proposal).toBeUndefined();
+});
+
+test("the payload carries recurring runtime installs, and drops the ones the custom section already bakes", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "cargo", tool: "cargo-xwin" }], "cargo install --locked cargo-xwin", "s1", 1_000);
+    await services.runtimeInstalls.record([{ kind: "cargo", tool: "cargo-xwin" }], "cargo install --locked cargo-xwin", "s2", 2_000);
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "ffmpeg" }], "apt-get install -y ffmpeg", "s1", 1_000);
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "ffmpeg" }], "apt-get install -y ffmpeg", "s2", 2_000);
+    await services.files.write(customPath(services), "# ---- ffmpeg ----\nRUN apt-get update && apt-get install -y ffmpeg\n");
+
+    const { recurring } = await readEnvironment(services);
+    // ffmpeg is already the owner's approved custom section: recurrence about it is stale news.
+    expect(recurring?.map((entry) => entry.tool)).toEqual(["cargo-xwin"]);
+    expect(recurring?.[0]).toMatchObject({ kind: "cargo", sessions: 2 });
+});
+
+test("a one-session install that is not live in this container stays off the card", async () => {
+    const services = stubServices();
+    await services.runtimeInstalls.record([{ kind: "apt", tool: "jq" }], "apt-get install -y jq", "s1", 1_000);
+    expect((await readEnvironment(services)).recurring).toBeUndefined();
+});
+
+test("a drift snapshot from a container that no longer exists is not reported", async () => {
+    const services = stubServices();
+    // bornAt 1970 can never be within jitter of the running container's birth.
+    await services.runtimeInstalls.saveDrift({ bornAt: 1_000, at: 2_000, apt: ["xdg-utils"], paths: [] });
+    expect((await readEnvironment(services)).drift).toBeUndefined();
 });

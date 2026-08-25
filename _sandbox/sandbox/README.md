@@ -253,6 +253,15 @@ reports the profile.
 - [src/cursor](src/cursor), the Cursor runtime, run in this process: the account store and its browser sign-in (`cursor-credentials.ts`), the adapter (`cursor-agent.ts`), the delta→frame mapping (`cursor-events.ts`), the socket-backed command gate Cursor calls back into (`cursor-hooks.ts`), the dynamic module resolution that lets the daemon boot without it (`cursor-sdk.ts`), and the provider module that registers all of it (`cursor-provider.ts`).
 - [src/git/git.routes.ts](src/git/git.routes.ts) (status/commit/push over the wire; [src/workspace](src/workspace)) the repo layout the daemon serves. [src/workspace/workspace-scope.ts](src/workspace/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](src/composition.ts) (what is wired to what; [src/main.ts](src/main.ts)) the entrypoint that builds it and serves.
+- [src/environment](src/environment): the overlay Dockerfile pipeline (capability fragments + the owner-approved
+  custom section), and the image boundary held by the harness rather than by prose. The install-steering hook
+  ([src/agent/agent-installs.ts](src/agent/agent-installs.ts)) classifies image-scoped installs into the
+  runtime-install ledger (`runtime-installs.ts`, `.intentic/records/runtime-installs.json` — it survives container
+  recreates, which is what makes "installed again in a fresh container" observable); the drift sweep
+  (`drift-sweep.ts`, idle-only) observes what the live container has that the image did not put there (`drift.ts`:
+  dpkg's own log for apt, an mtime sweep for everything else); and an install that recurs across sessions, is
+  corroborated by drift, and has a mechanical template is auto-drafted into the owner's proposal (`auto-drafts.ts`).
+  Rejection tombstones the tool in the ledger so the machine never re-proposes what the owner already declined.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts): the update lifecycle for git-installed
   extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
   official-registry admission check (an unaudited sha never becomes an install or update offer),

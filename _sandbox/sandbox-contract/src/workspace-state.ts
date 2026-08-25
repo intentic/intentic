@@ -242,6 +242,13 @@ const STATE_FILES = [
         portability: "derived",
         note: "Stamps of when each rule last did something; the new sandbox starts its own record.",
     },
+    /* The runtime-install ledger: which tools sessions installed into the container at runtime, how often, and
+     * the last drift snapshot (environment/runtime-installs.ts). `carry` where rule-firings chose `derived`,
+     * because the two record different subjects: a firing is about what THIS machine did, while the ledger is
+     * about what this WORKSPACE's tasks keep needing — a workspace moved to a fresh sandbox will hit the same
+     * missing tools, and arriving with the recurrence memory is the whole reason it is kept. The drift snapshot
+     * inside is machine-scoped, and self-expires on the move: its bornAt can never match the new container. */
+    { path: ".intentic/records/runtime-installs.json", invalidates: ["environment"], portability: "carry" },
     /* Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox, the one entry
      * here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
      * a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.

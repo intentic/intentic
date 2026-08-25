@@ -1,26 +1,28 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { stateRelPath } from "../workspace/state-paths.js";
+import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 
-/* Steering the image boundary: a runtime install toward the owner-approved overlay, and, from the opposite
- * direction, a tool that turned out not to be there toward the same place.
+/* The image boundary, held by the HARNESS rather than by prose.
  *
- * Anything installed outside /work dies with the container. The environment skill already explains how to
- * propose Dockerfile steps the owner approves, but an agent mid-task does not go and read a skill it has no
- * reason to suspect exists, it types `apt-get install` and moves on. One turn spent 250s and a 114 MiB
- * `npx playwright install chromium` rebuilding a browser the image now ships, and the layer it wrote is gone
- * on the next recreate. The moment the agent reaches for the install IS the moment it can be told, so this
- * rides in as PreToolUse context rather than as more standing prose in the system prompt.
+ * Anything installed outside /work dies with the container. This hook used to answer that with a paragraph —
+ * "if it should persist, ALSO draft an overlay step" — and the transcript record is the measurement of how that
+ * went: cargo-xwin reinstalled in six sessions, a Windows rustup target in eight, not one draft written. So the
+ * model is no longer asked to do the bookkeeping. Every image-scoped install is CLASSIFIED here and recorded
+ * silently to the runtime-install ledger (environment/runtime-installs.ts); the drift sweep joins that record
+ * with what the container actually has and drafts the overlay step itself (environment/auto-drafts.ts). The
+ * model installs and moves on, which is exactly what it was doing anyway.
  *
- * Image-scoped installs are steered, because a one-off experiment can be legitimate even though it will not
- * survive a recreate. Project dependency mutations are different: they are denied inside a turn and handed to
- * the workspace coordinator, because an isolated result is discarded and a shared-tree result races every
- * other mounted turn. */
+ * What still speaks to the model is only what changes its behaviour IN THE MOMENT: a browser install is told
+ * the browser is already baked (a 250s / 114 MiB detour otherwise), and a project dependency mutation is denied
+ * outright — an isolated turn's install is discarded and a shared-tree install races every other mounted turn,
+ * so that one is not advice. */
 
 // A venv is the sanctioned way to use pip here (Debian marks the system interpreter externally-managed), and
 // it lands wherever the agent puts it, so a pip install INSIDE one is project scope, not image scope.
 const VENV_SCOPED = /(\bsource\s+\S*\/activate\b|\bpython3?\s+-m\s+venv\b|\/venv\/bin\/pip\b|\.venv\/bin\/pip\b)/;
 const NODE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const NODE_INSTALL_VERBS = new Set(["i", "install", "add", "ci", "update", "up", "upgrade", "remove", "rm", "uninstall", "prune", "dedupe"]);
+// Verbs that ADD a package; a global uninstall is not an install and must not enter the ledger.
+const NODE_ADD_VERBS = new Set(["i", "install", "add"]);
 const OPTION_WITH_VALUE = new Set(["--cwd", "--dir", "--filter", "--prefix", "-C"]);
 
 const shellWords = (command: string): string[] => {
@@ -74,11 +76,13 @@ export const agentCommand = (command: string): string => {
 // Read command INVOCATIONS, not arbitrary substrings. The previous unanchored expressions denied harmless
 // commands such as `rg 'pnpm install' docs` merely because the words appeared in a quoted search. Splitting at
 // shell control operators is deliberately modest rather than pretending to be a shell parser; each candidate
-// still has to begin with the package manager after ordinary env/sudo prefixes.
+// still has to begin with the package manager after ordinary prefixes — env assignments, env/sudo/nice, and
+// `timeout <n>`, which transcript mining showed wrapped around half the slow installs (`timeout 600 npx
+// playwright install chromium`).
 export const commandInvocations = (command: string): string[] =>
     command
         .split(/(?:&&|\|\||[;|\n])/)
-        .map((part) => part.trim().replace(/^(?:(?:then|do)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S+|env|sudo)\s+)*/, ""))
+        .map((part) => part.trim().replace(/^(?:(?:then|do)\s+)?(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S+|env|sudo|nice|timeout\s+[\d.]+[smhd]?)\s+)*/, ""))
         .filter((part) => part !== "");
 
 const nodeInstall = (command: string): { project: boolean; global: boolean } => {
@@ -110,56 +114,213 @@ const nodeInstall = (command: string): { project: boolean; global: boolean } => 
     return { project: false, global: false };
 };
 
-const installScope = (command: string): { image: boolean; project: boolean } => {
+/* ---- classification: which tools an image-scoped install would put on this container ---- */
+
+// Flags whose NEXT word is a value, not a package. Shared across ecosystems because misreading `--version 1.2`
+// as a package named "1.2" pollutes the ledger the same way everywhere; a flag listed here that some tool does
+// not take merely skips a word that was not a package either.
+const VALUE_FLAGS = new Set([
+    ...OPTION_WITH_VALUE,
+    "--version",
+    "--vers",
+    "--git",
+    "--branch",
+    "--tag",
+    "--rev",
+    "--root",
+    "--features",
+    "-F",
+    "--registry",
+    "--index",
+    "--target",
+    "-j",
+    "--jobs",
+    "--profile",
+    "-t",
+    "-o",
+    "-r",
+    "--python",
+]);
+
+// Bare package words after a verb: flags skipped, value-flag values skipped, surrounding quotes shed.
+const packagesAfter = (words: readonly string[], start: number): string[] => {
+    const packages: string[] = [];
+    for (let index = start; index < words.length; index += 1) {
+        const word = words[index];
+        if (word === undefined) {
+            break;
+        }
+        if (VALUE_FLAGS.has(word)) {
+            index += 1;
+            continue;
+        }
+        if (word.startsWith("-")) {
+            continue;
+        }
+        packages.push(word.replace(/^['"]|['"]$/g, ""));
+    }
+    return packages;
+};
+
+// `pkg@1.2` → pkg, `@scope/pkg@1.2` → @scope/pkg; a bare scope's own @ is position 0 and survives.
+const withoutVersion = (name: string): string => {
+    const at = name.lastIndexOf("@");
+    return at > 0 ? name.slice(0, at) : name;
+};
+
+// `pillow==9.5` / `requests>=2` → the name pip resolves.
+const withoutSpecifier = (name: string): string => name.split(/[=<>~!]/, 1)[0] ?? name;
+
+// npx and `pnpm exec` are transparent wrappers; the tool being run sits after them.
+const unwrapped = (words: string[]): string[] => {
+    let current = words;
+    for (;;) {
+        const head = current[0]?.split("/").at(-1);
+        if (head === "npx") {
+            current = current.slice(1).filter((word, index) => !(index === 0 && word.startsWith("-")) && word !== "--yes" && word !== "-y");
+            continue;
+        }
+        if ((head !== undefined && NODE_MANAGERS.has(head)) || head === "corepack") {
+            const exec = current.indexOf("exec");
+            if (exec !== -1) {
+                current = current.slice(exec + 1);
+                continue;
+            }
+        }
+        return current;
+    }
+};
+
+/* Every tool an image-scoped install in this command would put on the container, as (kind, tool) pairs the
+ * ledger merges on. Precision over recall at the edges — `rustup target list` is not an install, `apt-get
+ * install --dry-run` is not an install, and anything inside `docker run` mutates a DIFFERENT container — the
+ * drift sweep corroborates against the live filesystem anyway, so a miss here costs one session of memory
+ * while a false entry costs the ledger its meaning. */
+export const classifyImageInstalls = (command: string): ClassifiedInstall[] => {
     const effective = agentCommand(command);
-    const node = nodeInstall(effective);
+    // Installs inside another container's filesystem are that container's business; skipping the whole command
+    // over one docker word can only lose entries the corroboration gate would have discarded later.
+    if (/\b(?:docker|podman|nerdctl)\s+(?:run|exec|build|buildx|compose)\b/.test(effective)) {
+        return [];
+    }
     const venv = VENV_SCOPED.test(effective);
-    const image =
-        node.global ||
-        commandInvocations(effective).some(
-            (part) =>
-                /^apt(?:-get)?\s+install\b/.test(part) ||
-                (!venv && /^pip3?\s+install\b/.test(part)) ||
-                /^(?:npx\s+)?playwright\s+install\b/.test(part) ||
-                /^rustup\b/.test(part) ||
-                /^nvm\s+install\b/.test(part),
-        );
-    const project =
-        node.project ||
+    const found: ClassifiedInstall[] = [];
+    const add = (kind: ClassifiedInstall["kind"], tool: string): void => {
+        if (tool !== "" && !found.some((entry) => entry.kind === kind && entry.tool === tool)) {
+            found.push({ kind, tool });
+        }
+    };
+
+    // The pipe is a separator commandInvocations splits on, so installer pipes are read off the whole command.
+    const piped = /\b(?:curl|wget)\b[^|;&\n]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b/.exec(effective);
+    if (piped !== null) {
+        const url = /https?:\/\/([^/\s'"]+)/.exec(piped[0]);
+        add("other", url?.[1] ?? "shell installer");
+    }
+
+    for (const invocation of commandInvocations(effective)) {
+        const words = unwrapped(invocation.split(/\s+/).filter((word) => word !== ""));
+        const executable = words[0]?.split("/").at(-1);
+        if (executable === undefined) {
+            continue;
+        }
+        if (/^apt(?:-get)?$/.test(executable)) {
+            const verb = words.indexOf("install");
+            if (verb !== -1 && !words.some((word) => ["-s", "--simulate", "--dry-run", "--download-only", "--print-uris"].includes(word))) {
+                for (const tool of packagesAfter(words, verb + 1)) {
+                    add("apt", tool);
+                }
+            }
+        } else if (/^pip3?$/.test(executable) && !venv) {
+            if (words[1] === "install" && !words.includes("-r") && !words.includes("--requirement")) {
+                for (const tool of packagesAfter(words, 2)) {
+                    add("pip", withoutSpecifier(tool));
+                }
+            }
+        } else if (executable === "playwright") {
+            if (words[1] === "install") {
+                const browsers = packagesAfter(words, 2);
+                for (const tool of browsers.length > 0 ? browsers : ["chromium"]) {
+                    add("playwright", tool);
+                }
+            }
+        } else if (executable === "rustup") {
+            if (words[1] === "target" && words[2] === "add") {
+                for (const tool of packagesAfter(words, 3)) {
+                    add("rustup-target", tool);
+                }
+            } else if ((words[1] === "component" && words[2] === "add") || (words[1] === "toolchain" && words[2] === "install")) {
+                for (const tool of packagesAfter(words, 3)) {
+                    add("other", `rustup-${words[1]}-${tool}`);
+                }
+            }
+        } else if (executable === "cargo") {
+            if (words[1] === "install") {
+                for (const tool of packagesAfter(words, 2)) {
+                    add("cargo", withoutVersion(tool));
+                }
+            }
+        } else if (executable === "go") {
+            if (words[1] === "install") {
+                for (const tool of packagesAfter(words, 2).filter((word) => word.includes("@"))) {
+                    add("go", withoutVersion(tool).split("/").at(-1) ?? tool);
+                }
+            }
+        } else if (executable === "gem" || executable === "pipx") {
+            if (words[1] === "install") {
+                for (const tool of packagesAfter(words, 2)) {
+                    add(executable, tool);
+                }
+            }
+        } else if (executable === "dpkg") {
+            // A local .deb is not necessarily in any repo, so no apt step follows from it mechanically.
+            if (words.includes("-i") || words.includes("--install")) {
+                for (const tool of words.filter((word) => word.endsWith(".deb"))) {
+                    add("other", tool.split("/").at(-1)?.split("_")[0] ?? tool);
+                }
+            }
+        } else if (executable === "nvm") {
+            if (words[1] === "install") {
+                add("other", "nvm");
+            }
+        } else if (NODE_MANAGERS.has(executable) || executable === "corepack") {
+            const bare = words[0] === "corepack" ? words.slice(1) : words;
+            const global = bare.some((word) => word === "-g" || word === "--global");
+            const verb = bare.findIndex((word, index) => index > 0 && NODE_ADD_VERBS.has(word));
+            if (global && verb !== -1) {
+                for (const tool of packagesAfter(bare, verb + 1)) {
+                    add("npm", withoutVersion(tool));
+                }
+            }
+        }
+    }
+    return found;
+};
+
+const projectInstallOf = (command: string): boolean => {
+    const effective = agentCommand(command);
+    const venv = VENV_SCOPED.test(effective);
+    return (
+        nodeInstall(effective).project ||
         (venv && commandInvocations(effective).some((part) => /^(?:\S*\/)?pip3?\s+(?:install|uninstall)\b/.test(part))) ||
         commandInvocations(effective).some((part) =>
             /^(?:uv\s+sync|poetry\s+(?:install|add|remove|update|sync)|pipenv\s+(?:install|uninstall|sync|update))\b/.test(part),
-        );
-    return { image, project };
+        )
+    );
 };
 
 const BROWSER_ALREADY_BAKED =
     "This sandbox already ships Chromium and browser tools: load them with ToolSearch (`mcp__web__browser_navigate`, " +
-    "`mcp__web__browser_take_screenshot`) instead of installing a browser. ";
-
-// The overlay is the only place an image-scoped tool can outlive the container, so both notices below end by
-// naming it, the same sentence, because they are the same instruction arrived at from opposite directions.
-const OVERLAY_DRAFT =
-    // Interpolated for real: as a plain string this notice told the agent to write under a literal
-    // dollar-brace STATE_DIR spelling, template syntax and all.
-    `write the install step to \`${stateRelPath(".intentic/config/environment.d/")}/<tool>.Dockerfile\` (RUN/ENV lines only, no FROM): the ` +
-    "daemon composes those drafts into one proposal for the owner to approve, and the `environment` skill has " +
-    "the details.";
-
-const GUIDANCE =
-    "That install writes to the image filesystem, which a container recreate throws away: whatever you install " +
-    "now is gone the next time this sandbox restarts, and the next session will hit the same missing tool. If you " +
-    `need it only for this task, carry on. If it should persist, ALSO ${OVERLAY_DRAFT} Draft it now while ` +
-    "you know why it is needed, then continue the task; drafting does not block you and does not need an answer.";
+    "`mcp__web__browser_take_screenshot`) instead of installing a browser.";
 
 /* The other half of that boundary: the turn that never reaches for an install at all.
  *
  * A missing tool does not present itself as a decision, `command not found` scrolls past inside a tool result
- * and the model quietly picks a worse route, so the rule above never gets the chance to fire. Mining this
- * workspace's transcripts found `file` reached for in eight separate sessions and installed in none of them;
- * the image now ships it and thirty-odd other staples, but the tail is endless and the next one is unknowable.
- * So the failure itself is the trigger, and the notice names the only two places an answer can live: the
- * project (where a dependency belongs) or the image (where a system tool belongs). */
+ * and the model quietly picks a worse route. Mining this workspace's transcripts found `file` reached for in
+ * eight separate sessions and installed in none of them; the image now ships it and thirty-odd other staples,
+ * but the tail is endless and the next one is unknowable. So the failure itself is the trigger, and the notice
+ * routes: a project tool through its project, a system tool installed plainly — the ledger and the drift sweep
+ * do the durability bookkeeping, so the model is told it need not. */
 const NOT_FOUND = [
     /(?:^|\s)([\w.@+-]+): command not found/, // bash: `bash: line 1: lsof: command not found`
     /command not found: ([\w.@+-]+)/, // zsh
@@ -169,8 +330,8 @@ const NOT_FOUND = [
 const MISSING_GUIDANCE =
     "is not on PATH in this sandbox. Do not silently route around it. If it belongs to a project, run it through " +
     "that project's package manager (`pnpm exec <tool>`, `npx <tool>`) or install the project's dependencies: " +
-    "not globally. If it is a system tool this image should have shipped, install it for this task if you need it " +
-    `now, and ALSO ${OVERLAY_DRAFT}`;
+    "not globally. If it is a system tool, install it and carry on: the sandbox records runtime installs and " +
+    "proposes durable image steps to the owner by itself.";
 
 // The captured name must also appear in the command that produced it. A tool result is full of other people's
 // text, a grep over a log, a test asserting on an error string, and without this guard the notice fires on
@@ -206,8 +367,11 @@ export const toolResultText = (response: unknown): string => {
     return parts.join("\n");
 };
 
-export const installSteeringHooks = (canRequestProjectInstall = true): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
-    let told = false;
+export const installSteeringHooks = (
+    canRequestProjectInstall = true,
+    onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
+    let browserTold = false;
     let missingTold = false;
     return {
         PostToolUse: [
@@ -245,14 +409,13 @@ export const installSteeringHooks = (canRequestProjectInstall = true): Partial<R
                         if (input.hook_event_name !== "PreToolUse") {
                             return {};
                         }
-                        // The tmux hook may already have rewrapped this command; installScope reads the original
-                        // command carried in its `-c` field before classifying actual invocations.
+                        // The tmux hook may already have rewrapped this command; classification reads the
+                        // original command carried in its `-c` field before reading actual invocations.
                         const command = (input.tool_input as { command?: unknown }).command;
                         if (typeof command !== "string") {
                             return {};
                         }
-                        const { image: imageInstall, project: projectInstall } = installScope(command);
-                        if (projectInstall) {
+                        if (projectInstallOf(command)) {
                             const route = canRequestProjectInstall
                                 ? "Edit the manifest if the task needs a new dependency, then call `mcp__deps__install`; the daemon queues the real install for after this turn."
                                 : "This persona cannot change the workspace; ask the owner to install it.";
@@ -264,15 +427,23 @@ export const installSteeringHooks = (canRequestProjectInstall = true): Partial<R
                                 },
                             };
                         }
-                        if (told || !imageInstall) {
+                        const installs = classifyImageInstalls(command);
+                        if (installs.length === 0) {
                             return {};
                         }
-                        told = true;
-                        const browser = /\bplaywright\s+install\b|\bchromium\b|\bgoogle-chrome\b/.test(command) ? BROWSER_ALREADY_BAKED : "";
+                        // The record is the whole point and it is SILENT: the ledger and the drift sweep carry
+                        // the durability question to the owner, so the model is not asked to.
+                        onImageInstall?.(installs, agentCommand(command));
+                        const browser =
+                            installs.some((install) => install.kind === "playwright") || /\bchromium\b|\bgoogle-chrome\b/.test(agentCommand(command));
+                        if (!browser || browserTold) {
+                            return {};
+                        }
+                        browserTold = true;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
-                                additionalContext: `${browser}${GUIDANCE}`,
+                                additionalContext: BROWSER_ALREADY_BAKED,
                             },
                         };
                     },

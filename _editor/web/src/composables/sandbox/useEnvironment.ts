@@ -32,6 +32,11 @@ export function useEnvironment() {
         return current?.approved !== undefined && current.approved.hash === current.appliedHash ? current.approved : undefined;
     });
 
+    // Runtime installs worth the owner's eye: recurring across sessions, or present in the live container and
+    // doomed with it. The daemon auto-drafts the mechanically fixable ones into the proposal; this list is the
+    // memory behind that, plus the entries only a person can route (a pip package, a shell installer).
+    const recurring = computed(() => state.value?.recurring ?? []);
+
     // Server-managed sandboxes use the provider's fixed container name; their rebuild rides `intentic deploy apply`
     // (the overlay content is git-reviewed in desired-state), not a local one-liner.
     const serverManaged = computed(() => state.value?.container === `intentic-sandbox-workspace`);
@@ -39,5 +44,5 @@ export function useEnvironment() {
     // the desktop app, the equivalent one-liner in a browser.
     const slug = computed(() => state.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { state, query, proposal, pending, applied, serverManaged, slug };
+    return { state, query, proposal, pending, applied, recurring, serverManaged, slug };
 }

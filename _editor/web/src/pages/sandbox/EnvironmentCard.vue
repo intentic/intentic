@@ -41,7 +41,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
 const { canShip: canOperate } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
-const { state, query, proposal, pending, applied, serverManaged, slug } = useEnvironment();
+const { state, query, proposal, pending, applied, recurring, serverManaged, slug } = useEnvironment();
 
 /* Which of the two reads is on screen. "Recipe" rather than "Source" because it says what you are switching TO,
  * and "Contents" rather than "Simplified" because the plain view is not the lesser one: naming it that way
@@ -80,13 +80,8 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
 </script>
 
 <template>
-    <Card v-if="proposal || pending || applied" class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            icon="box"
-            title="Environment"
-        >
+    <Card v-if="proposal || pending || applied || recurring.length" class="flex flex-col gap-4">
+        <Row flush :heading="2" icon="box" title="Environment">
             <template #control>
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
@@ -131,6 +126,24 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <p v-if="unsupported" class="text-2xs text-subtle">
             This sandbox's image is older than the plain-language contents list. Update the sandbox and the list appears beside the recipe.
         </p>
+
+        <!-- What sessions keep installing at RUNTIME — the daemon's cross-session memory, drift-corroborated.
+             The mechanically fixable entries are usually already drafted into the proposal above ("proposed");
+             the rest wait for a person: a pip package that belongs in a venv or a Debian package, a shell
+             installer whose replay could carry anything. Lives under both views because it is a fact about the
+             environment's state, like the decision below. -->
+        <div v-if="recurring.length" class="flex flex-col gap-1">
+            <p class="text-xs font-medium text-content">Installed at runtime, not in the image</p>
+            <ul class="flex flex-col gap-0.5">
+                <li v-for="entry in recurring" :key="`${entry.kind}:${entry.tool}`" class="text-2xs text-subtle">
+                    <span class="font-mono text-content">{{ entry.tool }}</span>
+                    · {{ entry.sessions === 1 ? `1 session` : `${entry.sessions} sessions` }}
+                    <template v-if="entry.live"> · present now, lost on rebuild</template>
+                    <template v-if="entry.drafted"> · proposed</template>
+                    <template v-if="entry.declined"> · declined</template>
+                </li>
+            </ul>
+        </div>
 
         <!-- THE DECISION, under both views: it is about the environment's state, not about how it is displayed. -->
         <template v-if="proposal">

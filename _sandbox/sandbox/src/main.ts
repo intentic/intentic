@@ -1072,6 +1072,14 @@ const main = async (): Promise<void> => {
         services.probeRunner.start();
     }
 
+    // Environment drift: what the live container has that the image did not put there, and the auto-drafted
+    // overlay steps recurring runtime installs earn. Same manners as the probe runner (idle-only, allowed to
+    // fail, unref'd timers so no shutdown hook), one cheap pass per tick; see environment/drift-sweep.ts.
+    // Container-only for the probe's own reason: outside a container there is no image to drift from.
+    if (role.container) {
+        services.driftSweep.start();
+    }
+
     // Resume scheduler: credential refusals and provider outages re-run the turn they killed, see
     // turn-resume.ts. A spent usage limit is deliberately not among them; that allowance is the user's own.
     const turnResume = createTurnResumeScheduler(services, streamAgent);

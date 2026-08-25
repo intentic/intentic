@@ -898,6 +898,15 @@ export const planHarnessTurn = async (
             ...(subagentsAtOnce !== SETTINGS_DEFAULTS.subagentsAtOnce ? { subagentsAtOnce } : {}),
             ...(subagentsPerTurn !== SETTINGS_DEFAULTS.subagentsPerTurn ? { subagentsPerTurn } : {}),
             ...(subagentDepth !== SETTINGS_DEFAULTS.subagentDepth ? { subagentDepth } : {}),
+            /* Every image-scoped install the turn attempts, into the runtime-install ledger. The hook already
+             * classified the command; this only appends, best-effort — a turn must proceed whether or not its
+             * bookkeeping did. The conversation id is the recurrence unit: a second DISTINCT session installing
+             * the same tool is what earns an auto-drafted overlay step (environment/auto-drafts.ts). */
+            onImageInstall: (installs, command) => {
+                void services.runtimeInstalls
+                    .record(installs, command, input.conversationId, Date.now())
+                    .catch((error: unknown) => services.logger.warn({ err: error }, "runtime-install ledger append failed"));
+            },
             /* The rules standing where a turn ends, forwarded only when there ARE some so a workspace with none
              * wires no hooks at all. Their CONDITIONS are deliberately not read here: this turn has not run
              * yet, so nothing knows which files it will touch, and a path condition resolved now would be a

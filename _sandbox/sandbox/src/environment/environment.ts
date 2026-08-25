@@ -1,8 +1,10 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { Environment } from "@intentic/sandbox-contract";
+import type { Environment, EnvironmentRecurring } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
+import { autoDraftedTools, named } from "./auto-drafts.js";
+import { containerBornAtMs, installLive } from "./drift.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { providerPackFragments } from "./provider-packs.js";
 import { statePath } from "../workspace/state-paths.js";
@@ -163,6 +165,49 @@ const fileState = async (services: Services, path: string): Promise<{ content: s
     return content === undefined ? undefined : { content, hash: sha256Hex(content) };
 };
 
+/* The snapshot's bornAt and a fresh computation of the same moment differ by clock-read jitter (both are
+ * derived from /proc/uptime at different instants), so "same container" is a tolerance, not an equality. Five
+ * seconds is orders of magnitude above the jitter and orders below any two containers' real birth gap. */
+const SAME_BIRTH_MS = 5_000;
+
+// How many recurring entries the card is asked to carry; the ledger itself keeps more.
+const RECURRING_SHOWN = 30;
+
+/* The runtime-install half of the payload: the persisted drift snapshot (guarded against describing a container
+ * that no longer exists) and the ledger entries worth the owner's attention — recurring across sessions, or
+ * present in the live container and doomed with it. Spawn-free: the route is polled, so presence checks are
+ * stats against known paths (installLive), never a walk; the walk belongs to the sweep. */
+const runtimeAttention = async (services: Services, baked: string): Promise<Pick<Environment, "drift" | "recurring">> => {
+    const ledger = await services.runtimeInstalls.read();
+    const born = await containerBornAtMs().catch(() => undefined);
+    const drift = ledger.drift !== undefined && born !== undefined && Math.abs(ledger.drift.bornAt - born) < SAME_BIRTH_MS ? ledger.drift : undefined;
+    const drafted = new Set(await autoDraftedTools(services));
+    const recurring: EnvironmentRecurring[] = [];
+    for (const entry of ledger.installs) {
+        if (named(baked, entry.tool)) {
+            continue;
+        }
+        const live = drift !== undefined && (await installLive(entry, drift));
+        if (entry.sessions.length < 2 && !live) {
+            continue;
+        }
+        recurring.push({
+            tool: entry.tool,
+            kind: entry.kind,
+            sessions: entry.sessions.length,
+            lastAt: entry.lastAt,
+            live,
+            ...(drafted.has(entry.tool) ? { drafted: true } : {}),
+            ...(entry.declinedAt !== undefined ? { declined: true } : {}),
+        });
+    }
+    recurring.sort((left, right) => right.lastAt - left.lastAt);
+    return {
+        ...(drift !== undefined ? { drift } : {}),
+        ...(recurring.length > 0 ? { recurring: recurring.slice(0, RECURRING_SHOWN) } : {}),
+    };
+};
+
 export const readEnvironment = async (services: Services): Promise<Environment> => {
     // Fold in anything agents have drafted since the last read, so the card shows what they actually asked for
     // and its hash is the one approve will check against.
@@ -171,12 +216,15 @@ export const readEnvironment = async (services: Services): Promise<Environment> 
     const custom = await fileState(services, customPath(services));
     const approved = await fileState(services, approvedPath(services));
     const { environmentHash: appliedHash, name } = services.config.sandbox;
+    // Approved contains custom by composition, so one string answers "already baked or already approved".
+    const attention = await runtimeAttention(services, `${custom?.content ?? ""}\n${approved?.content ?? ""}`);
     return {
         ...(proposal !== undefined ? { proposal } : {}),
         ...(custom !== undefined ? { custom } : {}),
         ...(approved !== undefined ? { approved } : {}),
         ...(appliedHash !== "" ? { appliedHash } : {}),
         ...(name !== "" ? { container: name } : {}),
+        ...attention,
     };
 };
 
@@ -206,8 +254,15 @@ export const approveEnvironment = async (services: Services, hash: string): Prom
     return undefined;
 };
 
-// Rejecting drops the drafts too, otherwise the next read composes the rejected proposal straight back.
+// Rejecting drops the drafts too, otherwise the next read composes the rejected proposal straight back. The
+// AUTO-drafted among them are additionally tombstoned in the ledger first: deleting alone would only pause
+// them until the drift sweep's next pass re-earned the same draft, a proposal the owner already answered
+// coming back forever. Agent-written drafts keep today's meaning — deleted, and free to be asked for again.
 export const rejectEnvironment = async (services: Services): Promise<void> => {
+    const auto = await autoDraftedTools(services);
+    if (auto.length > 0) {
+        await services.runtimeInstalls.decline(auto, Date.now());
+    }
     await services.files.remove(draftsDir(services));
     await services.files.remove(proposalPath(services));
 };
