@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoPaths } from "@intentic-app/api-contract";
-import { Button, ChangeStatusMark, ui, Modal, useDevice, type IconName, vAction } from "@intentic/ui";
+import { Button, ChangeStatusMark, growTextarea, ui, Modal, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
@@ -801,21 +801,12 @@ const doCommit = async (): Promise<void> => {
 // Eight lines exactly, at this box's font and padding: the composer's own ceiling (ChatPane), scaled to a
 // sidebar. Spelled again as the box's own `max-h`, which is what caps it in the frame before this first runs.
 const MAX_COMMIT_HEIGHT = 142;
-// The border this box wears itself, which the composer's does not (there it sits on the wrapper). scrollHeight
-// counts the padding and never the border, so with `border-box` sizing a height set straight from it is two
-// pixels short of its own text: enough to put a scrollbar on a single-line message.
-const COMMIT_BOX_BORDER = 2;
 const commitBox = ref<HTMLTextAreaElement | null>(null);
-// Manual textarea auto-grow, the composer's own: reset to one line, then size to content up to the maximum.
-// `auto` first because a height already set is a floor scrollHeight can never report under: without it the box
-// would grow for a long message and stay tall after the message got shorter.
+// Auto-grow, the composer's own. This box wears its own border, which the composer's does not (there it sits
+// on the wrapper); `growTextarea` reads that off the element, so the two pixels `scrollHeight` never counts
+// are not a constant here any more.
 const growCommitBox = (): void => {
-    const el = commitBox.value;
-    if (!el) {
-        return;
-    }
-    el.style.height = `auto`;
-    el.style.height = `${Math.min(el.scrollHeight + COMMIT_BOX_BORDER, MAX_COMMIT_HEIGHT)}px`;
+    growTextarea(commitBox.value, MAX_COMMIT_HEIGHT);
 };
 /* Watched rather than hung off `@input`, because most of what lands in this box is not typing: a From chip
  * files a whole message, a commit clears it, switching sandboxes swaps it for that tree's own. `post` runs it

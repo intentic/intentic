@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { RowGroup } from "@intentic/extension-ui";
+
 /* What Maintenance shows before its first /chores response: the SHAPE of the chore book, not a line of text. The
  * geometry is a deliberate copy of the real thing: a kind heading with its count and its caption, then chore rows
  * with a chevron, a chore icon, a title, a headline and a state badge, so the page does not jump when the report
@@ -12,6 +14,9 @@
  * Nothing here stands in for the rail or the scope strip. Both are DERIVED from the same report: until it lands
  * there is no list of repositories to index and no measurement to be honest about the age of, and drawing a
  * placeholder for either would be inventing the one thing this surface must never invent.
+ *
+ * The group is the board's own <RowGroup>, drawn with bars in its heading slot rather than re-typed here: the
+ * surface, the dividers and the heading's spacing then cannot drift from the groups this stands in for.
  *
  * The heights are the real ones, not approximations: every box below states the padding and the line box it is
  * copying, and those were measured against ChoreRow/RowGroup in a browser rather than guessed. Widths vary per row
@@ -45,31 +50,31 @@ const GROUPS = [
          indistinguishable from a workspace with no chores due. The bars carry no text, so there is nothing to
          read out of them. -->
     <div class="flex animate-fade-in flex-col gap-6" role="status" aria-busy="true" aria-label="Reading the evidence">
-        <section v-for="(group, index) in GROUPS" :key="index">
-            <!-- RowGroup's heading: the kind, its due count, and the caption arguing for the grouping. h-4 is the
-                 one text-xs line the real heading is. -->
-            <div class="mb-2 flex h-4 items-center gap-x-2 px-0.5">
-                <span class="skeleton h-3 w-20"></span>
-                <span class="skeleton h-3 w-2"></span>
-                <span class="skeleton h-3 max-w-2/5" :class="group.caption"></span>
-            </div>
+        <RowGroup v-for="(group, index) in GROUPS" :key="index">
+            <!-- The group's heading: the kind, its due count, and the caption arguing for the grouping. h-4 is
+                 the one text-xs line the real heading is. -->
+            <template #label>
+                <span class="flex h-4 items-center gap-x-2">
+                    <span class="skeleton h-3 w-20"></span>
+                    <span class="skeleton h-3 w-2"></span>
+                    <span class="skeleton h-3 max-w-2/5" :class="group.caption"></span>
+                </span>
+            </template>
 
-            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle bg-card">
-                <!-- Chore rows: px-4 py-2.5 around a 20px line box, which is what the text-sm title and the xs
-                     badge both measure: 41px with the hairline, exactly what ChoreRow collapses to. -->
-                <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="border-t border-line/60 px-4 py-2.5 first:border-t-0">
-                    <div class="flex h-5 items-center gap-3">
-                        <span class="skeleton h-3 w-3 shrink-0"></span>
-                        <span class="skeleton h-4 w-4 shrink-0"></span>
-                        <span class="skeleton h-3.5 shrink-0" :class="row.title"></span>
-                        <!-- The headline takes the flexible column, as it does in the row itself. -->
-                        <div class="min-w-0 flex-1">
-                            <span class="skeleton block h-3 max-w-full" :class="row.headline"></span>
-                        </div>
-                        <span class="skeleton h-5 shrink-0 rounded-full" :class="row.badge"></span>
+            <!-- Chore rows: px-4 py-2.5 around a 20px line box, which is what the text-sm title and the xs
+                 badge both measure: 41px with the hairline, exactly what ChoreRow collapses to. -->
+            <div v-for="(row, rowIndex) in group.rows" :key="rowIndex" class="border-t border-line/60 px-4 py-2.5 first:border-t-0">
+                <div class="flex h-5 items-center gap-3">
+                    <span class="skeleton h-3 w-3 shrink-0"></span>
+                    <span class="skeleton h-4 w-4 shrink-0"></span>
+                    <span class="skeleton h-3.5 shrink-0" :class="row.title"></span>
+                    <!-- The headline takes the flexible column, as it does in the row itself. -->
+                    <div class="min-w-0 flex-1">
+                        <span class="skeleton block h-3 max-w-full" :class="row.headline"></span>
                     </div>
+                    <span class="skeleton h-5 shrink-0 rounded-full" :class="row.badge"></span>
                 </div>
             </div>
-        </section>
+        </RowGroup>
     </div>
 </template>

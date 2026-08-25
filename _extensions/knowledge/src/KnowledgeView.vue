@@ -10,6 +10,7 @@ import {
     Picker,
     type NoticeModel,
     type PickerOptions,
+    useKeyedDraft,
     useNarrow,
 } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
@@ -61,22 +62,7 @@ const typeChoice = computed<string>({ get: () => type.value ?? ``, set: (value) 
 const tagChoice = computed<string>({ get: () => tag.value ?? ``, set: (value) => (tag.value = value === `` ? undefined : value) });
 
 const selected = ref<string>();
-/* Unsaved edits, keyed by note. Held here, above the pane, because the pane is REUSED as the selection moves:
- * without this, opening a linked note to check a fact would silently drop the correction being written. */
-const drafts = ref(new Map<string, string>());
-const draft = computed<string | undefined>({
-    get: () => (selected.value === undefined ? undefined : drafts.value.get(selected.value)),
-    set: (value) => {
-        if (selected.value === undefined) {
-            return;
-        }
-        if (value === undefined) {
-            drafts.value.delete(selected.value);
-        } else {
-            drafts.value.set(selected.value, value);
-        }
-    },
-});
+const { draft } = useKeyedDraft(selected);
 
 // Open on the first answer, so the section is never a list with an empty half beside it, and follow the list
 // when what is selected drops out of it, which is what happens as somebody types.

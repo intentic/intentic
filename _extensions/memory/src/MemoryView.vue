@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MemoryFileEntry } from "./contract";
-import { ui, formatBytes, freshness, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions } from "@intentic/extension-ui";
+import { ui, formatBytes, freshness, Icon, InfoHint, Notice, noticeOf, Picker, type PickerOptions, useKeyedDraft } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { INDEX_NAME, noteTitle, projectLabel } from "./memoryNote";
 import MemoryPane from "./MemoryPane.vue";
@@ -39,23 +39,7 @@ const note = computed(() => {
 });
 const selectedEntry = computed(() => files.value.find((file) => keyOf(file.project, file.name) === selected.value));
 
-/* Unsaved edits, keyed by note. Held here, above the reader, because the reader is REUSED as the selection
- * moves: without this, reading another note to check a fact would silently drop the correction being written.
- * A note with a draft says so in the picker, so an edit left open can be found again. */
-const drafts = ref(new Map<string, string>());
-const draft = computed<string | undefined>({
-    get: () => (selected.value === undefined ? undefined : drafts.value.get(selected.value)),
-    set: (value) => {
-        if (selected.value === undefined) {
-            return;
-        }
-        if (value === undefined) {
-            drafts.value.delete(selected.value);
-        } else {
-            drafts.value.set(selected.value, value);
-        }
-    },
-});
+const { draft, hasDraft } = useKeyedDraft(selected);
 
 const noteLabel = (name: string): string => (name === INDEX_NAME ? `Index` : noteTitle(name));
 
@@ -81,7 +65,7 @@ const options = computed<PickerOptions>(() => {
                 value: keyOf(file.project, file.name),
                 label: noteLabel(file.name),
                 icon: file.name === INDEX_NAME ? (`sparkles` as const) : (`file` as const),
-                description: drafts.value.has(keyOf(file.project, file.name)) ? `Unsaved` : freshness(file.modifiedAt),
+                description: hasDraft(keyOf(file.project, file.name)) ? `Unsaved` : freshness(file.modifiedAt),
             })),
     }));
 });

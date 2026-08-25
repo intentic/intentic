@@ -83,6 +83,7 @@ export const useAgentRunPick = m["useAgentRunPick"];
 export const useAsyncAction = m["useAsyncAction"];
 export const useCompact = m["useCompact"];
 export const useDevice = m["useDevice"];
+export const useKeyedDraft = m["useKeyedDraft"];
 export const useListNavigation = m["useListNavigation"];
 export const useLoadingReveal = m["useLoadingReveal"];
 export const useNarrow = m["useNarrow"];

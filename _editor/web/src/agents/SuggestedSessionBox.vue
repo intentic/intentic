@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ResponsiveOverlay, useDevice } from "@intentic/ui";
+import { ResponsiveOverlay, growTextarea, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
 import ComposerEffort from "../chat/ComposerEffort.vue";
@@ -34,16 +34,11 @@ const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 // hand-written pair grows into and the reason the swap is a component now.
 const modelOpen = ref(false);
 
-// Manual auto-grow, the composer's own: reset to one line, then size to content up to the max-height. The box
-// opens on a composed prompt rather than an empty line, so this runs once at mount or it opens one row tall
-// over a twelve-line message.
+// Auto-grow, the composer's own: size to content, capped by the box's own `max-h-64` rather than by a number
+// here. The box opens on a composed prompt rather than an empty line, so this runs once at mount or it opens
+// one row tall over a twelve-line message.
 const grow = (): void => {
-    const el = input.value;
-    if (el === null) {
-        return;
-    }
-    el.style.height = `auto`;
-    el.style.height = `${el.scrollHeight}px`;
+    growTextarea(input.value);
 };
 
 const canStart = computed(() => !busy && conversation.draft.value.trim() !== ``);

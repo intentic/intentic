@@ -128,6 +128,10 @@ export {
     type NoteDraft,
     type NoteDraftOptions,
     useNoteDraft,
+    /* And the map those drafts live in, for the same pair of callers: the lifecycle deliberately does not own
+     * the ref (an unsaved edit has to outlive the pane that shows it), so both views had written the same
+     * keyed store above it, down to the `undefined` deletes rule the picker's "Unsaved" reads. */
+    useKeyedDraft,
     /* <NoticeStack> and its model ship beside <ConfirmDialog> for the same reason <InfoDialog> does: a view
      * with several async actions needs somewhere for their failures to land that isn't one action's own row,
      * and a hand-rolled error strip is the first thing to disagree with the app's about tone and dismissal.

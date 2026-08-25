@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type IconName, MarkdownFigure, useDevice } from "@intentic/ui";
+import { type IconName, growTextarea, MarkdownFigure, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -363,15 +363,7 @@ const otherInputs = ref<Record<number, HTMLTextAreaElement | undefined>>({});
 // in your own words is the one that can run long, and a box that hides its own start while you write it is the
 // box you stop trusting.
 const growOther = (el: HTMLTextAreaElement | undefined): void => {
-    if (el === undefined) {
-        return;
-    }
-    el.style.height = `auto`;
-    // A field that isn't laid out yet measures nothing, and writing that back would pin the box shut with no
-    // later measurement to undo it: the one-row default stands instead until there is a real height to use.
-    if (el.scrollHeight > 0) {
-        el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
-    }
+    growTextarea(el, 192);
 };
 // Sizing on attach, not just on typing: the field is rendered by picking the row, and a draft restored after a
 // reload puts it on screen with paragraphs already in it. A tick later, because the ref lands while the card is

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, PersonaFace, ResponsiveOverlay, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Icon, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -381,34 +381,16 @@ const forkInsteadOfEdit = (): void => {
 const modeLabel = computed(() => modeMeta(mode.value).label);
 const modeIcon = computed(() => modeMeta(mode.value).icon);
 
-/* Manual textarea auto-grow: reset to one line, then size to content up to the max-height.
- *
- * WITH A FLOOR OF ONE LINE, because `scrollHeight` is a measurement and a measurement can be taken at a moment
- * that has no answer. Every caller below fires on something this pane just did: a tab switch, a send, an
- * account connecting, and lands on `nextTick` or a post-flush watch, which guarantees the DOM is updated and
- * guarantees nothing about the box being laid out and styled yet. When it isn't, the element reports a height
- * smaller than one line of its own text, and the old code wrote that number into `style.height` and never
- * looked again. The result was a composer permanently the height of its own padding, with the placeholder
- * sliced through the middle: worst in a floating window, where the panel is measured in the window it left
- * and dressed in the one it arrived in, so nothing this pane does ever re-measures it.
- *
- * The floor is computed rather than assumed: line-height plus the vertical padding is what this box is when it
- * holds one line, whatever the reader's text size. Below it, the measurement is not believed at all and the
- * height is left as `auto`: the browser's own one-line size, and the same thing the box would show if this
- * function had never run. A later grow (the first keystroke, the next tab switch) then measures properly. */
+/* Size to content up to the max-height; `growTextarea` owns how, including the one-line floor THIS PANE is the
+ * reason for. Every caller below fires on something the pane just did, a tab switch, a send, an account
+ * connecting, and lands on `nextTick` or a post-flush watch, which guarantees the DOM is updated and
+ * guarantees nothing about the box being laid out and styled yet. Believing that measurement left a composer
+ * permanently the height of its own padding with the placeholder sliced through the middle: worst in a
+ * floating window, where the panel is measured in the window it left and dressed in the one it arrived in, so
+ * nothing this pane does ever re-measures it. */
 const MAX_COMPOSER_HEIGHT = 192;
 const grow = (): void => {
-    const el = input.value;
-    if (!el) {
-        return;
-    }
-    el.style.height = `auto`;
-    const style = getComputedStyle(el);
-    const oneLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    if (!(el.scrollHeight >= oneLine)) {
-        return;
-    }
-    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`;
+    growTextarea(input.value, MAX_COMPOSER_HEIGHT);
 };
 
 // Files staged for the next turn, and the three ways they arrive (useChatAttachments).

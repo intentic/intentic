@@ -70,6 +70,9 @@ export { type DagEdge, type DagNode, layoutDag } from "./components/dagLayout.js
 // The instrument above a list, free text, the controls that narrow it, and any bare action. In the kit rather
 // than in any one view because six views had written the row by hand and no two of them agreed.
 export { default as FilterBar } from "./components/FilterBar.vue";
+// A textarea as tall as its content, for the composers <ProseField>'s grid replica is not a drop-in for. Four
+// of them had each measured it themselves, and had three different answers to the same two edge cases.
+export { growTextarea } from "./lib/growTextarea.js";
 export { default as Icon } from "./components/Icon.vue";
 // THE surface that shows a picture, the workspace file viewer's images (through the viewers extension), the
 // SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
@@ -122,6 +125,9 @@ export { type NavGroup } from "./components/navRail.js";
 // `useNoteDraft` is the lifecycle underneath it, which they had each built too.
 export { default as NoteEditor } from "./components/NoteEditor.vue";
 export { type NoteDraft, type NoteDraftOptions, useNoteDraft } from "./composables/useNoteDraft.js";
+// Where those unsaved edits live while the pane above them is reused: the draft map the note lifecycle asks
+// its caller for, held once instead of in every view that opens one.
+export { useKeyedDraft } from "./composables/useKeyedDraft.js";
 // How the app says something went wrong: a sentence it wrote, the raw cause underneath, at most one way out.
 // The stack is what a view with more than one thing wrong renders, it ranks by severity and collapses repeats,
 // so the reading order stops being an accident of where the boxes sit in the template.

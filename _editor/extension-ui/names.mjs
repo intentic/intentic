@@ -84,6 +84,7 @@ export const extensionUiNames = [
     "useAsyncAction",
     "useCompact",
     "useDevice",
+    "useKeyedDraft",
     "useListNavigation",
     "useLoadingReveal",
     "useNarrow",

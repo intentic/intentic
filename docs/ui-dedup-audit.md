@@ -33,8 +33,9 @@ including the `50 + (i / top) * 45` fill curve; the pill markup and the picker h
 one component is still open: the rest of it (attachments, @-mentions, slash commands, dictation, queueing) is
 genuinely chat-only, and the box deliberately has none of it.
 
-**Not touched.** `_sandbox/webchat-widget/src/element.ts:219` has a third auto-grow, but that widget is a
-vanilla custom element embedded in customers' pages and cannot import Vue.
+**Not touched.** `_sandbox/webchat-widget/src/element.ts:217` has a third auto-grow, but that widget is a
+vanilla custom element embedded in customers' pages: it cannot import Vue, and taking a dependency on the app's
+design system for one function is the wrong trade for it (see §7).
 
 ---
 
@@ -148,11 +149,27 @@ which is why the clickable one kept getting rewritten. Applied in `agents/Agents
 `chat/ChatTabList.vue`, `shell/ShellDesktop.vue`, `pages/TerminalPanel.vue` (×2) and
 `_extensions/automations/src/AutomationsView.vue` (×2).
 
-**Auto-grow textareas.** Four hand-rolled measure-and-set implementations sit alongside `ProseField.vue`, which
-sizes itself with a CSS grid replica and no JavaScript: and whose doc comment explains that measuring on
-`nextTick` measures the *fallback* font and clips long text once the webfont swaps. The four have that bug.
-**Not changed:** `ProseField` is borderless-prose styled and not a drop-in, and the two composer textareas carry
-their own max-heights and keyboard rules. The grid-replica technique should be what any new one uses.
+**Auto-grow textareas.** Four hand-rolled measure-and-set implementations, and the copies had drifted into
+three different answers to the same two problems: only one floored the measurement at a line of text (without
+it a box measured before layout is pinned shut for good), and only one added the border `scrollHeight` never
+counts, as a constant it had worked out by hand. Now `growTextarea(element, maxHeight?)` in
+[`_editor/ui/src/lib/growTextarea.ts`](../_editor/ui/src/lib/growTextarea.ts), which does both for everybody
+and reads the border off the element. Applied in `chat/ChatPane.vue`, `chat/ChatMessageView.vue`,
+`agents/SuggestedSessionBox.vue` and `pages/workspace/ReviewPanel.vue`; the max-heights stay at the call sites,
+because they are what each box is for. **Still true:** `ProseField.vue` sizes itself with a CSS grid replica
+and no JavaScript, which is what any NEW box should use, and it is not a drop-in for these four (borderless
+prose styling, no cap, no keyboard rules). The webchat widget's fifth copy
+(`_sandbox/webchat-widget/src/element.ts:217`) is left alone on purpose: the helper is plain TypeScript now, so
+it *could* import it, but not without the widget taking a dependency on the app's design system, and the widget
+ships into customers' pages precisely by depending on almost nothing.
+
+**Board loading skeletons.** Pipelines, Deployments and Maintenance each drew their placeholder board out of a
+hand-copied `<RowGroup>` surface (`divide-y … rounded-lg border … bg-card`) and, for two of them, a hand-copied
+`<StatusTally>` line: the same markup the boards themselves had already stopped keeping, and it had already
+drifted, the copies say `rounded-lg` where the component says `rounded-xl`. Now the outlines render the REAL
+components: `<RowGroup>` through its `#label` slot, which exists for exactly this, and `<StatusTally skeleton>`,
+a loading form added for the same reason. Same argument as `SkeletonRows`: an outline built out of divs states a
+geometry its own board does not have, and the page jumps when the data lands.
 
 **Large centred empty states.** `pages/workspace/WorkspaceEmptyState.vue` and
 `_extensions/memory/src/MemoryView.vue:184` are the same block at different sizes. Two instances: watch, don't
