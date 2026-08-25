@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Checkbox, ui, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, Checkbox, DisclosureRow, ui, Icon, Notice, noticeOf, ProseField, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { criteriaOf, narrativeOf, type Story, storyMarkdown } from "./stories";
 
@@ -200,146 +200,150 @@ onBeforeUnmount(() => void flush());
 </script>
 
 <template>
-    <div>
+    <!-- THE DOCUMENT IS A `drawer`: what opens is a place to write in, with its own heading and its own margins,
+         not a fact hanging off the row's title. -->
+    <DisclosureRow density="compact" body="drawer" :open="expanded" @update:open="emit(`toggle`)">
         <!-- The tick sits OUTSIDE the row's button rather than inside it: a checkbox nested in a button is both
              invalid and unusable (every attempt to tick would expand the row instead), and the two gestures are
-             genuinely different: one narrows the next run, the other opens the story to write. The hover tint
-             rides the wrapper so the whole line still lights up as one row. -->
-        <div class="group flex w-full items-center gap-3 pl-4 hover:bg-overlay" :class="expanded && `bg-overlay`">
-            <!-- SMALL AND QUIET, because this column is as long as the list and almost none of it is ever ticked
-                 (empty means all, see RunControls): at Aura's full size and ring the narrowing control was the
-                 first thing the eye found on a page whose subject is the promises beside it. Pointing at the row
-                 brings its tick back to full contrast: see `ui-checkbox-quiet` for what that state is paying for. -->
+             genuinely different: one narrows the next run, the other opens the story to write. `#before` is
+             <DisclosureRow>'s name for that column, and it rides inside the row's tint so the whole line still
+             lights up as one row.
+
+             SMALL AND QUIET, because this column is as long as the list and almost none of it is ever ticked
+             (empty means all, see RunControls): at Aura's full size and ring the narrowing control was the
+             first thing the eye found on a page whose subject is the promises beside it. Pointing at the row
+             brings its tick back to full contrast: see `ui-checkbox-quiet` for what that state is paying for. -->
+        <template #before>
             <Checkbox
                 :model-value="selected"
                 binary
                 size="small"
-                class="ui-checkbox-quiet"
+                class="ui-checkbox-quiet ml-4"
                 :aria-label="`Run ${story.title}`"
                 @update:model-value="emit(`select`, $event === true)"
             />
-            <button
-                type="button"
-                class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2.5 pr-4 text-left"
-                :aria-expanded="expanded"
-                @click="emit(`toggle`)"
-            >
-                <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
-                <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
-                <span v-if="expanded" class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ story.path }}</span>
-                <!-- ONE STEP OFF WHITE, AND FULL WHITE UNDER THE POINTER: the app's own weight for a long list of
-                     rows read by scanning (the file tree, the search results, the commit list all sit here). Twenty
-                     rows whose entire ink is one sentence-long title each read as a wall at full content white, and
-                     nothing in them stands out: least of all the row carrying a failed verdict. `muted` is the step
-                     past this one and it is the wrong one: that is the weight of a FACT ABOUT a row, and a list
-                     whose subject is set in it looks switched off. -->
-                <span v-else class="min-w-0 flex-1 truncate text-sm text-content/80 group-hover:text-content">{{ story.title }}</span>
-                <!-- THE VERDICT FIRST, THEN THE COUNT, and the count in a fixed cell, the runs list's own
-                     trailing-column recipe. Ordered the other way round they both moved: the count sat at the
-                     right edge on a story nothing had tested and 70px in on one that had, so a list where most
-                     rows carry no badge yet had a ragged right margin and no badge column to scan down. -->
-                <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
-                <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody
-                     has just said yet what "done" means for it. Stated quietly for that reason: a fresh workspace
-                     that shouted a warning on every row would be teaching people to ignore the colour. -->
-                <span class="w-20 shrink-0 text-right text-2xs text-subtle">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
-            </button>
-        </div>
+        </template>
 
-        <!-- THE DOCUMENT. Its own generous margins rather than the list's row padding, a measured column, and
-             `cursor-text` over the whole of it: the page under the words is what says "write here", now that no
-             field draws a box to say it. -->
-        <div v-if="expanded" class="cursor-text border-t border-line/60 bg-canvas px-4 py-6 sm:px-6">
-            <!-- `text-sm` on the COLUMN, not just on the fields inside it: `ch` resolves against the element's own
+        <template #title>
+            <!-- Open, the heading below is the title, so the row identifies the FILE instead of repeating it. -->
+            <span v-if="expanded" class="block min-w-0 truncate font-mono text-2xs font-normal text-subtle">{{ story.path }}</span>
+            <!-- ONE STEP OFF WHITE, AND FULL WHITE UNDER THE POINTER: the app's own weight for a long list of
+                 rows read by scanning (the file tree, the search results, the commit list all sit here). Twenty
+                 rows whose entire ink is one sentence-long title each read as a wall at full content white, and
+                 nothing in them stands out: least of all the row carrying a failed verdict. `muted` is the step
+                 past this one and it is the wrong one: that is the weight of a FACT ABOUT a row, and a list
+                 whose subject is set in it looks switched off. -->
+            <span v-else class="block min-w-0 truncate font-normal text-content/80 group-hover:text-content">{{ story.title }}</span>
+        </template>
+
+        <!-- THE VERDICT FIRST, THEN THE COUNT, and the count in a fixed cell, the runs list's own
+             trailing-column recipe. Ordered the other way round they both moved: the count sat at the
+             right edge on a story nothing had tested and 70px in on one that had, so a list where most
+             rows carry no badge yet had a ragged right margin and no badge column to scan down. -->
+        <template #meta>
+            <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" />
+            <!-- Criteria are the story's readiness, not its correctness: a story with none still runs, nobody
+                 has just said yet what "done" means for it. Stated quietly for that reason: a fresh workspace
+                 that shouted a warning on every row would be teaching people to ignore the colour. -->
+            <span class="w-20 shrink-0 text-right">{{ authored === 0 ? `no criteria` : `${authored} criteria` }}</span>
+        </template>
+
+        <!-- Its own generous margins rather than the list's row padding, a measured column, and `cursor-text`
+             over the whole of it: the page under the words is what says "write here", now that no field draws a
+             box to say it. -->
+        <template #below>
+            <div class="cursor-text py-2 sm:px-2">
+                <!-- `text-sm` on the COLUMN, not just on the fields inside it: `ch` resolves against the element's own
                  font-size, so a cap set here while the div still inherited the 16px root made 68ch mean 686px:
                  101 characters of 14px prose, past the ~90 where the eye stops finding the next line. Set in the
                  prose's own size it means what it says. -->
-            <div class="flex max-w-read flex-col px-2 text-sm">
-                <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium`: the same
+                <div class="flex max-w-read flex-col px-2 text-sm">
+                    <!-- The `# Heading` this writes, at the size a heading is. It was `text-sm font-medium`: the same
                      size as the collapsed row it replaces, so opening a story changed nothing about how it read. -->
-                <ProseField
-                    v-model="title"
-                    variant="heading"
-                    :placeholder="TITLE_HINT"
-                    class="-mx-2"
-                    @keydown.enter.prevent="focusAt(0)"
-                    @keydown.esc="emit(`toggle`)"
-                />
+                    <ProseField
+                        v-model="title"
+                        variant="heading"
+                        :placeholder="TITLE_HINT"
+                        class="-mx-2"
+                        @keydown.enter.prevent="focusAt(0)"
+                        @keydown.esc="emit(`toggle`)"
+                    />
 
-                <!-- The story's prose, directly under its heading and unlabelled: in the file it is simply the
+                    <!-- The story's prose, directly under its heading and unlabelled: in the file it is simply the
                      body, and a form label over it would be describing what the words already are. -->
-                <ProseField v-model="narrative" :placeholder="NARRATIVE_HINT" class="-mx-2 mt-3 min-h-24" @keydown.esc="emit(`toggle`)" />
+                    <ProseField v-model="narrative" :placeholder="NARRATIVE_HINT" class="-mx-2 mt-3 min-h-24" @keydown.esc="emit(`toggle`)" />
 
-                <!-- `## Acceptance criteria`, set as the subheading it becomes rather than as a form's field
+                    <!-- `## Acceptance criteria`, set as the subheading it becomes rather than as a form's field
                      label: the panel is a picture of the file, and this line exists in the file. -->
-                <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
-                    <h3 class="text-sm font-semibold text-content">Acceptance criteria</h3>
-                    <span class="text-2xs text-subtle">one verdict each, in this order</span>
-                </div>
-                <div class="mt-2 flex flex-col">
-                    <div v-for="(text, index) in criteria" :key="index" class="group flex items-start gap-1">
-                        <!-- The same line box as the text it numbers: same size, same leading, same padding, so
+                    <div class="mt-5 flex items-baseline justify-between border-t border-line/60 pt-4">
+                        <h3 class="text-sm font-semibold text-content">Acceptance criteria</h3>
+                        <span class="text-2xs text-subtle">one verdict each, in this order</span>
+                    </div>
+                    <div class="mt-2 flex flex-col">
+                        <div v-for="(text, index) in criteria" :key="index" class="group flex items-start gap-1">
+                            <!-- The same line box as the text it numbers: same size, same leading, same padding, so
                              the digit sits ON the first baseline. Smaller, it rendered as a superscript. It
                              recedes by colour instead, which costs no alignment. -->
-                        <span class="w-5 shrink-0 py-1 text-right text-sm leading-relaxed tabular-nums text-subtle">{{ index + 1 }}</span>
-                        <!-- Bound through the loop's own value rather than as `v-model="criteria[index]"`: an
+                            <span class="w-5 shrink-0 py-1 text-right text-sm leading-relaxed tabular-nums text-subtle">{{ index + 1 }}</span>
+                            <!-- Bound through the loop's own value rather than as `v-model="criteria[index]"`: an
                              indexed read is `string | undefined`, and the field's model is a string. -->
-                        <ProseField
-                            :ref="(el) => (inputs[index] = el as InstanceType<typeof ProseField>)"
-                            :model-value="text"
-                            @update:model-value="criteria[index] = $event"
-                            :placeholder="index === 0 ? CRITERION_HINT : NEXT_HINT"
-                            class="min-w-0 flex-1"
-                            @keydown.enter.prevent="insertAfter(index)"
-                            @keydown.backspace="shrink(index, $event)"
-                            @keydown.up="walk(index, $event, -1)"
-                            @keydown.down="walk(index, $event, 1)"
-                            @keydown.esc="emit(`toggle`)"
-                        />
-                        <!-- Quiet until the row is under the pointer or holds the caret. Fifteen ×'s down the
+                            <ProseField
+                                :ref="(el) => (inputs[index] = el as InstanceType<typeof ProseField>)"
+                                :model-value="text"
+                                @update:model-value="criteria[index] = $event"
+                                :placeholder="index === 0 ? CRITERION_HINT : NEXT_HINT"
+                                class="min-w-0 flex-1"
+                                @keydown.enter.prevent="insertAfter(index)"
+                                @keydown.backspace="shrink(index, $event)"
+                                @keydown.up="walk(index, $event, -1)"
+                                @keydown.down="walk(index, $event, 1)"
+                                @keydown.esc="emit(`toggle`)"
+                            />
+                            <!-- Quiet until the row is under the pointer or holds the caret. Fifteen ×'s down the
                              margin is fifteen invitations to delete a promise, printed beside every one of them. -->
-                        <button
-                            type="button"
-                            class="mt-0.5 shrink-0 cursor-pointer p-1 text-subtle opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
-                            aria-label="Remove criterion"
-                            @click="drop(index)"
-                        >
-                            <Icon name="times" />
-                        </button>
+                            <button
+                                type="button"
+                                class="mt-0.5 shrink-0 cursor-pointer p-1 text-subtle opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
+                                aria-label="Remove criterion"
+                                @click="drop(index)"
+                            >
+                                <Icon name="times" />
+                            </button>
+                        </div>
                     </div>
+                    <p class="mt-2 pl-8 text-2xs text-subtle">
+                        Enter opens the next one.
+                        <template v-if="authored === 0">
+                            With none, the agent reads checkable claims out of your prose instead, which works, but then the report grades itself
+                            against its own reading rather than against what you promised.
+                        </template>
+                    </p>
+
+                    <Notice v-if="failure" :of="noticeOf(failure)" class="mt-4" />
                 </div>
-                <p class="mt-2 pl-8 text-2xs text-subtle">
-                    Enter opens the next one.
-                    <template v-if="authored === 0">
-                        With none, the agent reads checkable claims out of your prose instead, which works, but then the report grades itself against
-                        its own reading rather than against what you promised.
-                    </template>
-                </p>
 
-                <Notice v-if="failure" :of="noticeOf(failure)" class="mt-4" />
-            </div>
-
-            <!-- OUTSIDE the column: the document is measured, the toolbar under it is not. Kept inside the 68ch
+                <!-- OUTSIDE the column: the document is measured, the toolbar under it is not. Kept inside the 68ch
                  rule, these buttons floated in the middle of a 1100px card with empty surface either side, which
                  reads as a stray cluster rather than as the panel's actions. -->
-            <div class="mt-6 flex items-center gap-3 border-t border-line/60 pt-3">
-                <!-- Autosave is only trustworthy if it says so. Silence here would make a story authored and
+                <div class="mt-6 flex items-center gap-3 border-t border-line/60 pt-3">
+                    <!-- Autosave is only trustworthy if it says so. Silence here would make a story authored and
                      closed in six seconds feel like a story that was lost. -->
-                <span class="text-2xs" :class="state === `saved` ? `text-success` : `text-subtle`">{{
-                    state === `saving` ? `Saving…` : state === `dirty` ? `Unsaved` : state === `saved` ? `Saved` : ``
-                }}</span>
-                <div class="ml-auto flex items-center gap-2">
-                    <!-- Narrows the run to this story; the run pill then says what it will do and does it.
+                    <span class="text-2xs" :class="state === `saved` ? `text-success` : `text-subtle`">{{
+                        state === `saving` ? `Saving…` : state === `dirty` ? `Unsaved` : state === `saved` ? `Saved` : ``
+                    }}</span>
+                    <div class="ml-auto flex items-center gap-2">
+                        <!-- Narrows the run to this story; the run pill then says what it will do and does it.
                          Not a second way to start a run: one gate, one button, and this is how you aim at it. -->
-                    <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
-                        <template #icon><Icon name="play" /></template>
-                    </Button>
-                    <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than
+                        <Button label="Run only this" size="small" severity="secondary" @click="emit(`run`)">
+                            <template #icon><Icon name="play" /></template>
+                        </Button>
+                        <!-- Delete asks once, in place: a story is a file in the repo, and the ask costs less than
                          a restore from git for someone who clicked the wrong row. -->
-                    <Button v-if="!confirmRemove" size="small" severity="danger" label="Delete" @click="confirmRemove = true" />
-                    <Button v-else size="small" severity="danger" :label="`Delete ${story.path.split(`/`).pop()}?`" @click="discard" />
+                        <Button v-if="!confirmRemove" size="small" severity="danger" label="Delete" @click="confirmRemove = true" />
+                        <Button v-else size="small" severity="danger" :label="`Delete ${story.path.split(`/`).pop()}?`" @click="discard" />
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

@@ -1,5 +1,18 @@
 <script setup lang="ts">
-import { appLink, Button, Card, ui, Icon, Markdown, Notice, noticeOf, StatusBadge, timeAgo, type StatusVariant } from "@intentic/extension-ui";
+import {
+    appLink,
+    Button,
+    Card,
+    DisclosureRow,
+    ui,
+    Icon,
+    Markdown,
+    Notice,
+    noticeOf,
+    StatusBadge,
+    timeAgo,
+    type StatusVariant,
+} from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { host } from "./host";
 import { isShotPath, storyDir, storyStanding } from "./runs";
@@ -254,28 +267,32 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
         <Notice v-if="failure" :of="noticeOf(failure)" />
 
         <div class="overflow-hidden rounded-lg border border-line-subtle bg-card">
-            <div v-for="story in run.manifest.stories" :key="story.slug" class="border-b border-line-subtle last:border-b-0">
-                <div class="flex items-center gap-3 px-4 py-2.5">
-                    <button
-                        type="button"
-                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
-                        :aria-expanded="open.has(story.slug)"
-                        @click="toggle(story.slug)"
-                    >
-                        <Icon :name="open.has(story.slug) ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
-                        <span class="min-w-0 flex-1">
-                            <span class="block truncate text-sm text-content">{{ story.title }}</span>
-                            <!-- The session's last words REPLACE the activity line for a story that died: a
-                                 dead session has no activity left to report, and the row's one subordinate
-                                 line is worth more spent on why it stopped than on the repo it belongs to. -->
-                            <span v-if="failureOf(story.slug)" class="block truncate text-2xs text-danger" v-tooltip.top="failureOf(story.slug)">
-                                {{ failureOf(story.slug) }}
-                            </span>
-                            <span v-else class="block truncate font-mono text-2xs text-subtle">
-                                {{ story.repo }}<template v-if="activityOf(story.slug)"> · {{ activityOf(story.slug) }}</template>
-                            </span>
-                        </span>
-                    </button>
+            <!-- `body="drawer"`: a report is a document with its own measure and its own screenshots, not a
+                 fact hanging off the story's title. -->
+            <DisclosureRow
+                v-for="story in run.manifest.stories"
+                :key="story.slug"
+                class="border-b border-line-subtle last:border-b-0"
+                density="compact"
+                body="drawer"
+                :open="open.has(story.slug)"
+                @update:open="toggle(story.slug)"
+            >
+                <template #title>
+                    <span class="block truncate font-normal">{{ story.title }}</span>
+                </template>
+                <template #description>
+                    <!-- The session's last words REPLACE the activity line for a story that died: a dead session
+                         has no activity left to report, and the row's one subordinate line is worth more spent
+                         on why it stopped than on the repo it belongs to. -->
+                    <span v-if="failureOf(story.slug)" class="block truncate text-danger" v-tooltip.top="failureOf(story.slug)">
+                        {{ failureOf(story.slug) }}
+                    </span>
+                    <span v-else class="block truncate font-mono text-subtle">
+                        {{ story.repo }}<template v-if="activityOf(story.slug)"> · {{ activityOf(story.slug) }}</template>
+                    </span>
+                </template>
+                <template #control>
                     <StatusBadge :variant="verdictBadge(story.slug).variant" :label="verdictBadge(story.slug).label" size="xs" />
                     <!-- The supervision button. Only while the daemon lists this session's Chromium: it opens
                          the Browsers area on the live screencast, where the view's own control offers the
@@ -299,9 +316,9 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                     <Button v-if="isLive(story.slug)" label="Stop" size="small" severity="secondary" @click="halt(story.slug)">
                         <template #icon><Icon name="stop" /></template>
                     </Button>
-                </div>
+                </template>
 
-                <div v-if="open.has(story.slug)" class="border-t border-line/60 bg-canvas px-4 py-3">
+                <template #below>
                     <!-- The report is the artifact; everything else on this row is a summary of it. -->
                     <!-- A measure, because this page is 72rem wide and a report is the longest prose in the
                          extension: unbounded, its paragraphs ran past 150 characters a line. Only text takes the
@@ -359,8 +376,8 @@ const addresses = computed(() => Object.entries(run.manifest.targets).map(([key,
                             </span>
                         </li>
                     </ul>
-                </div>
-            </div>
+                </template>
+            </DisclosureRow>
         </div>
     </div>
 </template>

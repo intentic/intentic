@@ -52,6 +52,7 @@ import {
     ProgressRing,
     ProseField,
     ResponsiveOverlay,
+    DisclosureRow,
     Row,
     RowGroup,
     SandboxVerbs,
@@ -64,6 +65,7 @@ import {
     useTextSize,
     useTheme,
 } from "@intentic/ui";
+import Checkbox from "primevue/checkbox";
 import { ref } from "vue";
 
 const { scheme, set: setScheme } = useTheme();
@@ -144,6 +146,12 @@ const KIT_PORTS: readonly MachinePortRow[] = [
 
 // Live state for the parts that have any. One flag per surface, which is also what the surfaces themselves do.
 const modalSize = ref<(typeof MODAL_SIZES)[number]>(`md`);
+// The disclosure gallery's own open state: one of each shape left OPEN, because a closed row shows nothing
+// that could have drifted.
+const kitRail = ref(true);
+const kitDrawer = ref(true);
+const kitBefore = ref(false);
+
 const modalOpen = ref(false);
 const confirmOpen = ref(false);
 const anchoredOpen = ref(false);
@@ -361,6 +369,53 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                     <RowGroup label="Loading">
                         <SkeletonRows :rows="4" description control />
+                    </RowGroup>
+                </div>
+
+                <!-- EVERY SHAPE A DISCLOSURE ROW COMES IN, side by side, because side by side is the only place
+                     the drift this component ended was ever visible: fourteen lists had each answered "what does
+                     an expandable row look like" alone, and arrived at five chevrons, four indents and four
+                     tints. Both hit areas and both bodies are here open at once, so the next person to add one
+                     picks from a picture instead of from whichever file they happened to be in. -->
+                <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
+                <div class="grid gap-4 md:grid-cols-2">
+                    <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
+                        <DisclosureRow v-model:open="kitRail" density="compact" title="A turn that failed" description="Claude · from discord">
+                            <template #lead><Icon name="sparkles" class="text-xs text-link" /></template>
+                            <template #meta><span>4m 2s</span><span>2h ago</span></template>
+                            <template #below>
+                                <p class="font-mono text-2xs text-subtle">14:02:11 · error · rate limited</p>
+                            </template>
+                        </DisclosureRow>
+                        <DisclosureRow density="compact" title="Closed, for the chevron's other angle">
+                            <template #lead><Icon name="cog" class="text-xs text-subtle" /></template>
+                            <template #below><span>unused</span></template>
+                        </DisclosureRow>
+                        <DisclosureRow density="compact" title="Nothing behind it" description="disabled: no arrow, no hover, no tab stop" disabled>
+                            <template #lead><Icon name="box" class="text-xs text-subtle" /></template>
+                        </DisclosureRow>
+                    </RowGroup>
+
+                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline is its own control">
+                        <DisclosureRow v-model:open="kitDrawer" density="compact" body="drawer" hit="pair">
+                            <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
+                            <template #title>
+                                <a href="#" class="hover:text-link">A headline that navigates</a>
+                            </template>
+                            <template #description>so the disclosure takes the chevron and the mark, not the name</template>
+                            <template #control><Button size="small" severity="secondary" label="Run" /></template>
+                            <template #below>
+                                <p class="text-xs text-muted">A drawer takes the full width and no surface of its own: one row, one wash.</p>
+                            </template>
+                        </DisclosureRow>
+                        <DisclosureRow v-model:open="kitBefore" density="compact" body="drawer">
+                            <!-- The selection column: outside the toggle (a checkbox in a button is invalid and
+                                 unusable), inside the tint (the whole line is still one row). -->
+                            <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" /></template>
+                            <template #title>With a #before selection column</template>
+                            <template #meta><StatusBadge variant="success" label="pass" size="xs" /></template>
+                            <template #below><p class="text-xs text-muted">The tick narrows the next run; the row opens the story.</p></template>
+                        </DisclosureRow>
                     </RowGroup>
                 </div>
             </section>

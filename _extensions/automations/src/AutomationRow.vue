@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AutomationRun, AutomationSummary, AutomationTemplate, Trigger } from "@intentic/sandbox-contract";
-import { Button, ui, CopyButton, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
+import { Button, ui, CopyButton, DisclosureRow, formatDateTime, Icon, Notice, noticeOf, ToggleSwitch, type IconName } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleLabel, since } from "./cronSchedule";
 import { host } from "./host";
@@ -182,18 +182,17 @@ const frontDesk = computed(() => {
          viewport breakpoints, which are a fair guess only for a page that owns the screen: with the chat panel
          open the list gets ~350px, `sm:` and `lg:` both still read as true, and the last-run column, the next-run
          column and the whole prompt were laid on top of the automation's own name. -->
-    <div class="group/row @container">
-        <div class="flex items-center gap-2 px-2.5 py-1.5 transition-colors hover:bg-content/5">
-            <button
-                type="button"
-                class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
-                :aria-expanded="expanded"
-                @click="emit(`expand`)"
-            >
-                <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-2xs text-subtle" />
-                <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="DOT[health]"></span>
-                <span class="truncate text-xs font-medium" :class="automation.enabled ? `text-content` : `text-subtle`">{{ automation.id }}</span>
-                <span class="inline-flex shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">
+    <!-- `body="drawer"`: what opens is the automation's prose and its edit form, a place of its own rather than
+         a fact hanging off its id. -->
+    <DisclosureRow class="group/row @container" density="dense" body="drawer" :open="expanded" @update:open="emit(`expand`)">
+        <template #lead>
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="DOT[health]"></span>
+        </template>
+
+        <template #title>
+            <span class="flex min-w-0 items-center gap-2">
+                <span class="truncate" :class="automation.enabled ? `text-content` : `text-subtle`">{{ automation.id }}</span>
+                <span class="inline-flex shrink-0 items-center gap-1 rounded bg-overlay px-1.5 py-0.5 text-2xs font-normal text-muted">
                     <Icon :name="TRIGGER_ICON[trigger.kind]" class="text-2xs" />
                     {{ triggerLabel }}
                 </span>
@@ -217,26 +216,33 @@ const frontDesk = computed(() => {
                      "and what does it do" without costing a second line. First thing to go as the page narrows.
                      aria-hidden so the disclosure's accessible name stays "<id> <trigger>" rather than a whole
                      truncated prompt: the full text is one expand away, unabridged. -->
-                <span class="hidden min-w-0 flex-1 truncate text-2xs text-subtle @3xl:block" aria-hidden="true">{{ automation.prompt }}</span>
-            </button>
+                <span class="hidden min-w-0 flex-1 truncate text-2xs font-normal text-subtle @3xl:block" aria-hidden="true">{{
+                    automation.prompt
+                }}</span>
+            </span>
+        </template>
 
+        <!-- Facts, not verbs: the two trailing columns a reader scans DOWN the list. -->
+        <template #meta>
             <span
                 v-if="lastRun"
-                class="hidden w-24 shrink-0 truncate text-right text-2xs @xl:block"
+                class="hidden w-24 shrink-0 truncate text-right @xl:block"
                 :class="OUTCOME_CLASS[lastRun.outcome]"
                 v-tooltip.top="runTooltip(lastRun)"
             >
                 {{ OUTCOME_VERB[lastRun.outcome] }} {{ since(lastRun.at) }}
             </span>
-            <span v-else class="hidden w-24 shrink-0 text-right text-2xs text-subtle @xl:block">never run</span>
+            <span v-else class="hidden w-24 shrink-0 text-right @xl:block">never run</span>
 
             <span
-                class="hidden w-12 shrink-0 truncate text-right text-2xs text-subtle @xl:block"
+                class="hidden w-12 shrink-0 truncate text-right @xl:block"
                 v-tooltip.top="automation.nextRun !== undefined ? `Next: ${formatDateTime(automation.nextRun)}` : undefined"
             >
                 {{ nextLabel }}
             </span>
+        </template>
 
+        <template #control>
             <!-- A Front Desk's snippet is the DELIVERABLE: the one thing the owner came here to get, so unlike
                  Run and Delete it is always visible rather than hover-revealed, and it sits before them because
                  installing is what you do first and most often. It also carries the install status, which is
@@ -303,78 +309,82 @@ const frontDesk = computed(() => {
             >
                 <Icon name="trash" class="text-xs" />
             </button>
-        </div>
+        </template>
 
         <!-- The prose half, on demand: what this automation actually says and does, then what it has done. -->
-        <div v-if="expanded" class="flex flex-col gap-2.5 border-t border-line-subtle bg-canvas/40 px-3 py-2.5 pl-8">
-            <!-- EDITING HAPPENS HERE, not in a dialog. Same argument the acceptance rows make: a modal hides the
+        <template #below>
+            <div class="flex flex-col gap-2.5">
+                <!-- EDITING HAPPENS HERE, not in a dialog. Same argument the acceptance rows make: a modal hides the
                  list you are comparing against, and at 32rem it turned a form with a Front Desk's worth of fields
                  into a column you scrolled twice. The row has the whole page width and the automation's own
                  history under it. -->
-            <div v-if="editing" class="flex flex-col gap-3 pr-3">
-                <Notice v-if="editError" :of="noticeOf(editError)" />
-                <AutomationFields :state="editForm" :name-locked="true" />
-                <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-2.5">
-                    <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
-                    <Button label="Save" :loading="saving" @click="saveEdit">
-                        <template #icon><Icon name="check" /></template>
-                    </Button>
-                </div>
-            </div>
-
-            <template v-else>
-                <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">{{ automation.prompt }}</p>
-
-                <div v-if="trigger.kind === `event`" class="flex items-center gap-1.5">
-                    <Icon name="link" class="shrink-0 text-2xs text-subtle" />
-                    <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
-                    <CopyButton
-                        :text="webhookUrl(automation) ?? ``"
-                        :aria-label="`Copy webhook URL for ${automation.id}`"
-                        v-tooltip.top="`Copy URL`"
-                    />
+                <div v-if="editing" class="flex flex-col gap-3 pr-3">
+                    <Notice v-if="editError" :of="noticeOf(editError)" />
+                    <AutomationFields :state="editForm" :name-locked="true" />
+                    <div class="flex items-center justify-end gap-2 border-t border-line-subtle pt-2.5">
+                        <Button label="Cancel" severity="secondary" :text="true" @click="cancelEdit" />
+                        <Button label="Save" :loading="saving" @click="saveEdit">
+                            <template #icon><Icon name="check" /></template>
+                        </Button>
+                    </div>
                 </div>
 
-                <!-- A Front Desk's embed snippet, where the owner will actually look for it: on the row, months after
+                <template v-else>
+                    <p class="scrollbar-thin max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
+                        {{ automation.prompt }}
+                    </p>
+
+                    <div v-if="trigger.kind === `event`" class="flex items-center gap-1.5">
+                        <Icon name="link" class="shrink-0 text-2xs text-subtle" />
+                        <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
+                        <CopyButton
+                            :text="webhookUrl(automation) ?? ``"
+                            :aria-label="`Copy webhook URL for ${automation.id}`"
+                            v-tooltip.top="`Copy URL`"
+                        />
+                    </div>
+
+                    <!-- A Front Desk's embed snippet, where the owner will actually look for it: on the row, months after
                  the create dialog that first showed it. Beside it, the two things that decide whether the widget
                  works at all, which sites may load it, and who it lets in. -->
-                <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
+                    <!-- State only. The snippet itself lives behind Install above rather than being repeated here: two
                  copies of the one string the owner acts on is two places for it to be stale or disagree. -->
-                <div v-if="frontDesk" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                    <span v-if="frontDesk.origins.length > 0">on {{ frontDesk.origins.join(`, `) }}</span>
-                    <span v-else class="text-danger">no sites allowed: nobody can chat</span>
-                    <span>{{ frontDesk.access }}</span>
-                    <span>{{ frontDesk.botCheck }}</span>
-                </div>
+                    <div v-if="frontDesk" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                        <span v-if="frontDesk.origins.length > 0">on {{ frontDesk.origins.join(`, `) }}</span>
+                        <span v-else class="text-danger">no sites allowed: nobody can chat</span>
+                        <span>{{ frontDesk.access }}</span>
+                        <span>{{ frontDesk.botCheck }}</span>
+                    </div>
 
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                    <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>
-                    <span v-if="automation.harness">on the {{ automation.harness }} harness</span>
-                    <span v-if="automation.requireApproval">holds for approval</span>
-                </div>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                        <span>wakes {{ automation.agent ?? `claude` }}{{ automation.model ? ` · ${automation.model}` : `` }}</span>
+                        <span v-if="automation.harness">on the {{ automation.harness }} harness</span>
+                        <span v-if="automation.requireApproval">holds for approval</span>
+                    </div>
 
-                <!-- The run history, and, where the run reached a turn: a way INTO it. "It failed at 3am and I
+                    <!-- The run history, and, where the run reached a turn: a way INTO it. "It failed at 3am and I
                  can't see why" is answered by a transcript, so a run with a conversation is a button that opens
                  one; a guard-skip has nothing behind it and stays plain text. -->
-                <div class="flex flex-col gap-1 border-t border-line-subtle pt-2">
-                    <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
-                    <component
-                        :is="run.conversationId ? `button` : `div`"
-                        v-for="run in automation.runs"
-                        :key="run.at"
-                        :type="run.conversationId ? `button` : undefined"
-                        class="flex items-baseline gap-2 rounded text-left text-2xs"
-                        :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
-                        :aria-label="run.conversationId ? `Open the transcript of the run from ${formatDateTime(run.at)}` : undefined"
-                        @click="openRun(run)"
-                    >
-                        <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>
-                        <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
-                        <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
-                        <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                    </component>
-                </div>
-            </template>
-        </div>
-    </div>
+                    <div class="flex flex-col gap-1 border-t border-line-subtle pt-2">
+                        <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">No runs yet.</p>
+                        <component
+                            :is="run.conversationId ? `button` : `div`"
+                            v-for="run in automation.runs"
+                            :key="run.at"
+                            :type="run.conversationId ? `button` : undefined"
+                            class="flex items-baseline gap-2 rounded text-left text-2xs"
+                            :class="run.conversationId ? `cursor-pointer hover:bg-content/5` : undefined"
+                            :aria-label="run.conversationId ? `Open the transcript of the run from ${formatDateTime(run.at)}` : undefined"
+                            @click="openRun(run)"
+                        >
+                            <span class="w-20 shrink-0 text-subtle" v-tooltip.top="formatDateTime(run.at)">{{ since(run.at) }}</span>
+                            <span class="w-14 shrink-0" :class="OUTCOME_CLASS[run.outcome]">{{ OUTCOME_VERB[run.outcome] }}</span>
+                            <span v-if="run.detail" class="min-w-0 truncate text-subtle" v-tooltip.top="run.detail">{{ run.detail }}</span>
+                            <Icon v-if="run.conversationId" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
+                        </component>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </DisclosureRow>
 </template>

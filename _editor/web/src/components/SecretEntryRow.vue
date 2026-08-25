@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, ui, CopyButton, Notice, type NoticeModel, StatusBadge, vAction } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, StatusBadge, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
@@ -105,51 +105,42 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
 
 <template>
     <!-- Header and panel share one tint while open, so an expanded row reads as a single block rather than as a
-         row that happens to have grown something under it: the extension row's treatment, same wash. -->
-    <div class="group @container" :class="expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`">
-        <div class="flex items-center gap-2 pl-2.5 pr-3">
-            <button
-                type="button"
-                class="flex min-w-0 flex-1 items-center gap-2.5 py-2 text-left"
-                :aria-expanded="expanded"
-                :aria-controls="`secret-${row.entry.key}-panel`"
-                @click="emit(`update:expanded`, !expanded)"
-            >
-                <Icon
-                    name="chevron-right"
-                    aria-hidden="true"
-                    class="shrink-0 text-2xs text-subtle transition-transform group-hover:text-muted"
-                    :class="expanded ? `rotate-90` : undefined"
-                />
-                <!-- The only thing on the row that is not words, and the only one that can be found without
-                     reading: sixteen accounts of the same person differ solely in their last character. -->
-                <BrandMark :size="20" :name="row.title" :logo="row.logo" :icon="row.icon" />
-                <span class="min-w-0 flex-1">
-                    <span class="flex min-w-0 items-baseline gap-2.5">
-                        <span
-                            v-tooltip.top.overflow="row.title"
-                            class="min-w-0 flex-1 truncate @xl:w-56 @xl:flex-none"
-                            :class="row.mono ? `font-mono text-sm text-content` : `text-sm font-medium text-content`"
-                            >{{ row.title }}</span
-                        >
-                        <!-- Dropped rather than wrapped at rail width: the name is what the row is for, and the
-                             panel below states everything this line was carrying. -->
-                        <span
-                            v-if="row.detail"
-                            v-tooltip.top.overflow="row.detail"
-                            class="hidden min-w-0 flex-1 truncate text-2xs text-muted @xl:block"
-                            >{{ row.detail }}</span
-                        >
-                    </span>
-                    <span
-                        v-if="row.note && !expanded"
-                        class="block truncate pt-0.5 text-2xs"
-                        :class="row.attention ? `text-warning` : `text-subtle`"
-                        >{{ row.note }}</span
-                    >
-                </span>
-            </button>
+         row that happens to have grown something under it. That wash, the chevron, the ARIA and the rail under
+         the name are <DisclosureRow>'s; the four hand-rolled copies of them that used to be here are the reason
+         `pl-9` in this file, `pl-10` next door and `pl-8` in the automations list were three answers to one
+         question. `body="rail"`: what opens is the secret's RECORD — where it lives, what last spent it — and
+         evidence hangs off the name it is about. -->
+    <DisclosureRow class="@container" density="compact" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
+        <template #lead>
+            <!-- The only thing on the row that is not words, and the only one that can be found without
+                 reading: sixteen accounts of the same person differ solely in their last character. -->
+            <BrandMark :size="20" :name="row.title" :logo="row.logo" :icon="row.icon" />
+        </template>
 
+        <template #title>
+            <span class="flex min-w-0 items-baseline gap-2.5">
+                <span
+                    v-tooltip.top.overflow="row.title"
+                    class="min-w-0 flex-1 truncate @xl:w-56 @xl:flex-none"
+                    :class="row.mono ? `font-mono` : ``"
+                    >{{ row.title }}</span
+                >
+                <!-- Dropped rather than wrapped at rail width: the name is what the row is for, and the
+                     panel below states everything this line was carrying. -->
+                <span
+                    v-if="row.detail"
+                    v-tooltip.top.overflow="row.detail"
+                    class="hidden min-w-0 flex-1 truncate text-2xs font-normal text-muted @xl:block"
+                    >{{ row.detail }}</span
+                >
+            </span>
+        </template>
+
+        <template v-if="row.note && !expanded" #description>
+            <span class="block truncate" :class="row.attention ? `text-warning` : `text-subtle`">{{ row.note }}</span>
+        </template>
+
+        <template #control>
             <span class="flex shrink-0 items-center gap-1.5">
                 <StatusBadge v-if="state" :variant="state.tone" :label="state.label" size="xs" />
                 <span
@@ -206,11 +197,10 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     </template>
                 </span>
             </span>
-        </div>
+        </template>
 
-        <!-- The full record, one click away: where it lives, what uses it, and either the value or the editor.
-             Indented to the name's column so it reads as belonging to the row above rather than as a section. -->
-        <div v-if="expanded" :id="`secret-${row.entry.key}-panel`" class="border-t border-line-subtle py-2.5 pl-9 pr-3">
+        <!-- The full record, one click away: where it lives, what uses it, and either the value or the editor. -->
+        <template #below>
             <p class="text-2xs text-muted">
                 <template v-if="row.detail">
                     <span class="@xl:hidden">{{ row.detail }} · </span>
@@ -256,6 +246,6 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     {{ multiline ? `Single-line value` : `Multi-line value (SSH key, PEM…)` }}
                 </button>
             </div>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

@@ -24,6 +24,7 @@ export const extensionUiNames = [
     "DagEditor",
     "DagGraph",
     "DiffStat",
+    "DisclosureRow",
     "errorMessage",
     "FilterBar",
     "formatBytes",

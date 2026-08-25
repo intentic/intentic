@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { DeployAction, DeployResource } from "./contract";
-import { AgentRunButton, Button, ui, Code, Icon, Notice, noticeOf, StatusBadge, type AgentRunChoice, useAgentRunPick } from "@intentic/extension-ui";
+import {
+    AgentRunButton,
+    Button,
+    ui,
+    Code,
+    DisclosureRow,
+    Icon,
+    Notice,
+    noticeOf,
+    StatusBadge,
+    type AgentRunChoice,
+    useAgentRunPick,
+} from "@intentic/extension-ui";
 import { host } from "./host";
 import { computed, ref } from "vue";
 import { imageLabel, STATE_TONE } from "./stateVisual";
@@ -91,32 +103,40 @@ const logText = computed(() => {
 </script>
 
 <template>
-    <div class="group border-l-4 transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/2` : `hover:bg-content/2`]">
-        <div class="flex w-full items-center gap-3 px-4 py-3">
-            <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="toggle">
-                <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
-                <span class="min-w-0 flex-1">
-                    <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span class="truncate text-sm font-medium text-content">{{ resource.name }}</span>
-                        <!-- Kind is a fact about the row, not a state: it wears the same neutral chip the CI
-                             trigger does rather than a coloured badge, which is reserved for what is wrong. -->
-                        <span
-                            v-if="resource.kind === `stack`"
-                            class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle"
-                        >
-                            stack
-                        </span>
-                        <StatusBadge v-if="resource.updateAvailable" variant="info" size="xs" label="New image" class="shrink-0" />
-                    </span>
-                    <span class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
-                        <!-- Komodo's own prose ("Up 4 days", "Exited (1) 20 minutes ago") is more precise than
-                             anything we would compose from the state word, so it leads. -->
-                        <span class="truncate">{{ resource.status ?? tone.label }}</span>
-                        <span v-if="resource.image" class="truncate font-mono" v-tooltip.top="resource.image">{{ imageLabel(resource.image) }}</span>
-                    </span>
-                </span>
-            </button>
+    <!-- ONE TOGGLE, and there used to be two: this button AND a trailing chevron in the verb cluster, the same
+         action twice, a second tab stop, and the trailing copy carried no `aria-expanded` at all. It also sat
+         among Start, Stop and Open-in-Komodo, which is the mistake the ports list made with its `(i)`: a
+         navigation control filed under side effects.
 
+         `body="drawer"`: what opens is the resource's own report — services, ports, the container log — with
+         headings of its own, not a fact hanging off its name. -->
+    <DisclosureRow class="border-l-4" :class="tone.rowBorder" density="comfortable" body="drawer" :open="expanded" @update:open="toggle">
+        <template #lead>
+            <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
+        </template>
+
+        <template #title>
+            <span class="flex flex-wrap items-center gap-x-2 gap-y-1 font-normal">
+                <span class="truncate text-sm font-medium text-content">{{ resource.name }}</span>
+                <!-- Kind is a fact about the row, not a state: it wears the same neutral chip the CI
+                             trigger does rather than a coloured badge, which is reserved for what is wrong. -->
+                <span v-if="resource.kind === `stack`" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
+                    stack
+                </span>
+                <StatusBadge v-if="resource.updateAvailable" variant="info" size="xs" label="New image" class="shrink-0" />
+            </span>
+        </template>
+
+        <template #description>
+            <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
+                <!-- Komodo's own prose ("Up 4 days", "Exited (1) 20 minutes ago") is more precise than
+                     anything we would compose from the state word, so it leads. -->
+                <span class="truncate">{{ resource.status ?? tone.label }}</span>
+                <span v-if="resource.image" class="truncate font-mono" v-tooltip.top="resource.image">{{ imageLabel(resource.image) }}</span>
+            </span>
+        </template>
+
+        <template #control>
             <div class="flex shrink-0 items-center gap-1">
                 <Button
                     v-if="primary"
@@ -140,13 +160,10 @@ const logText = computed(() => {
                 <a :href="resource.url" target="_blank" rel="noopener" :class="ui.iconButton()" v-tooltip.top="`Open in Komodo`">
                     <Icon name="arrow-up-right" class="text-xs" />
                 </a>
-                <button type="button" :class="ui.iconButton()" :title="expanded ? `Hide details` : `Show details`" @click="toggle">
-                    <Icon name="chevron-down" class="text-2xs transition-transform" :class="expanded ? `rotate-180` : ``" />
-                </button>
             </div>
-        </div>
+        </template>
 
-        <div v-if="expanded" class="border-t border-line/60 px-4 pb-4 pt-3">
+        <template #below>
             <!-- Whatever Komodo refused, next to the button that asked. -->
             <Notice v-if="error" :of="noticeOf(error)" class="mb-3" />
 
@@ -203,6 +220,6 @@ const logText = computed(() => {
                  and a clamp, so a 200-line tail does not push the next row off the screen. -->
             <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :clamp-lines="14" />
             <div v-else class="text-2xs text-subtle">No log output.</div>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

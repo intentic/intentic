@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, formatTime, formatTimestamp, Icon, type IconName, Row, StatusBadge, timeAgo } from "@intentic/extension-ui";
+import { ui, DisclosureRow, formatTime, formatTimestamp, Icon, type IconName, StatusBadge, timeAgo } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { type Episode, sourceLabel, typeLabel } from "./episodes";
 import { host } from "./host";
@@ -11,9 +11,10 @@ import { host } from "./host";
  * away, because a feed you cannot audit down to the actual record is not an audit surface. Opening the transcript
  * is the other exit: "why did it do that" is only ever answered by reading the turn.
  *
- * THIS IS A <Row>, AND IT USED NOT TO BE, which is what the row's anatomy is now spelled in rather than
- * re-derived: the lead glyph, the title, the description under it, the trailing FACTS cluster and the expanded
- * block are that component's five slots. Hand-written, this file had picked `py-1.5` for its own density tier,
+ * THIS IS A <DisclosureRow>, AND IT USED TO BE A <Row> WITH A HAND-BUILT DISCLOSURE ON IT, which is what the
+ * row's anatomy is now spelled in rather than re-derived: the lead glyph, the title, the description under it,
+ * the trailing FACTS cluster and the expanded block are that component's five slots, and the chevron, the
+ * ARIA, the open tint and the rail beneath are its own. Hand-written, this file had picked `py-1.5` for its own density tier,
  * `text-2xs text-muted` for facts the kit sets at `text-2xs text-subtle`, and `mt-0.5` on both lead glyphs:
  * the three drifts <Row>'s own notes name as the reason record lists stopped using it. It also means the
  * loading outline is <SkeletonRows> for real now, rather than a second hand-built guess at this row's shape.
@@ -66,21 +67,11 @@ const facts = computed(() =>
 </script>
 
 <template>
-    <Row density="compact">
-        <!-- The disclosure takes the chevron AND the kind glyph, so the hit area is the pair rather than a 12px
-             arrow: the same argument the machine and sandbox rows make for putting the name inside it. The
-             headline cannot join them here, because on a turn it already has a job of its own. -->
+    <!-- `hit="pair"` — the chevron and the kind glyph, and not the headline: on a turn the headline already
+         has a job of its own (it opens the transcript). -->
+    <DisclosureRow v-model:open="open" density="compact" hit="pair">
         <template #lead>
-            <button
-                type="button"
-                class="flex shrink-0 cursor-pointer items-center gap-2 text-subtle hover:text-content"
-                :aria-expanded="open"
-                :aria-label="open ? `Collapse` : `Expand`"
-                @click="open = !open"
-            >
-                <Icon :name="open ? `chevron-down` : `chevron-right`" class="text-2xs" />
-                <Icon :name="KIND_ICONS[episode.kind]" class="text-xs" :class="open ? `` : KIND_TINTS[episode.kind]" />
-            </button>
+            <Icon :name="KIND_ICONS[episode.kind]" class="text-xs" :class="open ? `` : KIND_TINTS[episode.kind]" />
         </template>
 
         <!-- A turn with a transcript opens it; anything else is plain text, because a dead link is worse than no
@@ -127,39 +118,27 @@ const facts = computed(() =>
 
         <!-- THE EVIDENCE: the daemon's own rows, oldest first, exactly as written. Inset behind a rail rather
              than parted by a hairline, because the hairline between two EPISODES is the separator this list
-             already spends, and a third tier drawn with the same stroke is the one nobody can place.
-             ALIGNED UNDER THE HEADLINE, not under the row's own edge: `#below` is full-width by contract, and
-             evidence starting to the LEFT of the title it belongs to reads as the list's rather than the row's.
-             The spacer is the lead cluster itself, drawn again and hidden, so it cannot drift from the glyphs it
-             stands in for the way a hard-coded indent would the first time an icon changes size. -->
-        <template v-if="open" #below>
-            <div class="flex gap-3">
-                <span class="invisible flex shrink-0 items-center gap-2" aria-hidden="true">
-                    <Icon name="chevron-right" class="text-2xs" />
-                    <Icon :name="KIND_ICONS[episode.kind]" class="text-xs" />
-                </span>
-                <div class="flex min-w-0 flex-1 flex-col gap-1 border-l border-line pl-3">
-                    <p v-if="episode.detail" class="whitespace-pre-wrap break-words text-2xs text-muted">{{ episode.detail }}</p>
-                    <div v-for="entry in episode.events" :key="entry.id" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
-                        <span class="font-mono text-subtle">{{ formatTime(entry.at) }}</span>
-                        <span class="text-muted">{{ typeLabel(entry.type) }}</span>
-                        <span v-if="entry.method" class="font-mono text-subtle">{{ entry.method }} {{ entry.endpoint }}</span>
-                        <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? `error` }}</span>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-x-3 font-mono text-2xs text-subtle/70">
-                        <span v-if="episode.sessionId">session {{ episode.sessionId }}</span>
-                        <span>source {{ sourceLabel(episode.sourceKey) }}</span>
-                    </div>
-                    <button
-                        v-if="episode.sessionId"
-                        type="button"
-                        :class="ui.linkButton('text-2xs')"
-                        @click="api.chat.openSession(episode.sessionId)"
-                    >
-                        <Icon name="external-link" /> Open transcript
-                    </button>
+             already spends, and a third tier drawn with the same stroke is the one nobody can place. The rail,
+             and the offset that aligns it under the headline instead of the row's own edge, are
+             <DisclosureRow>'s: this file wrote both by hand, and the hand-written offset (a hidden copy of the
+             lead cluster) is the trick the component now performs for all fourteen lists. -->
+        <template #below>
+            <div class="flex flex-col gap-1">
+                <p v-if="episode.detail" class="whitespace-pre-wrap break-words text-2xs text-muted">{{ episode.detail }}</p>
+                <div v-for="entry in episode.events" :key="entry.id" class="flex flex-wrap items-baseline gap-x-2 text-2xs">
+                    <span class="font-mono text-subtle">{{ formatTime(entry.at) }}</span>
+                    <span class="text-muted">{{ typeLabel(entry.type) }}</span>
+                    <span v-if="entry.method" class="font-mono text-subtle">{{ entry.method }} {{ entry.endpoint }}</span>
+                    <span v-if="entry.outcome === `error`" class="text-danger">{{ entry.error ?? `error` }}</span>
                 </div>
+                <div class="flex flex-wrap items-center gap-x-3 font-mono text-2xs text-subtle/70">
+                    <span v-if="episode.sessionId">session {{ episode.sessionId }}</span>
+                    <span>source {{ sourceLabel(episode.sourceKey) }}</span>
+                </div>
+                <button v-if="episode.sessionId" type="button" :class="ui.linkButton('text-2xs')" @click="api.chat.openSession(episode.sessionId)">
+                    <Icon name="external-link" /> Open transcript
+                </button>
             </div>
         </template>
-    </Row>
+    </DisclosureRow>
 </template>

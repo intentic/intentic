@@ -28,11 +28,17 @@
      ONE RULE, AND IT IS `items-center`: the icon centres against the whole title-and-description block, at
      every density, padded or flush. A caller writing `mt-0.5` on a lead icon is re-opening the bug.
 
+     A ROW THAT OPENS IS `<DisclosureRow>`, NOT THIS. It wraps this component and owns the chevron, the ARIA,
+     the tint and the indent of the block below, which are the five things fourteen expandable rows had each
+     answered on their own. `headerButton` below is the one hook it needed from here. Reach for this component
+     directly only for a row that does not expand.
+
      Rounding is deliberately NOT a prop: it is the container's business, and Vue's fallthrough puts it one
      `class="rounded-md"` away for the rails that want it. -->
 <script setup lang="ts">
 import { type IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
+import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone } from "./row.js";
 
 const {
     as = `div`,
@@ -43,6 +49,7 @@ const {
     selected = false,
     flush = false,
     wideControl = false,
+    headerButton = false,
 } = defineProps<{
     icon?: IconName;
     title?: string;
@@ -52,9 +59,9 @@ const {
     as?: `div` | `label` | `button`;
     interactive?: boolean;
     chevron?: boolean;
-    tone?: `default` | `danger` | `warning` | `success` | `info`;
+    tone?: RowTone;
     /** comfortable: settings rows · compact: record lists · dense: navigator rails. */
-    density?: `comfortable` | `compact` | `dense`;
+    density?: RowDensity;
     /** Paints the app-wide selected tint. Implies `interactive`: a row you can pick is a row you can hover. */
     selected?: boolean;
     /* Renders the title as a real heading, one step up in size. A card's masthead is an `h2` in the document,
@@ -90,30 +97,24 @@ const {
      *
      * The control inside still has to be a wrapping one (`flex-wrap`) for the second line to happen. */
     wideControl?: boolean;
+    /* THE LEFT REGION BECOMES ONE `<button>`: the lead, the title and the description together, with #meta and
+     * #control left outside it as the separate controls they are. It exists for <DisclosureRow>, and it exists
+     * because SIX files had already hand-rolled exactly this shape — the extension list, the skill list, the
+     * secrets list, the machine report, the deployments board and the pipelines board — every one of them
+     * because <Row> could make the WHOLE row a button (`as="button"`) or none of it, and a record row that
+     * expands has trailing verbs that must not toggle it. Nesting those verbs inside a row-wide <button> is
+     * invalid markup and gives the keyboard one stop where there are three actions.
+     *
+     * It stays PRESENTATIONAL: the button emits `headerClick` and the ARIA comes in as props. <Row> holds no
+     * open/closed state and should not learn any. */
+    headerButton?: boolean;
+    /** `aria-expanded` for the header button. Leave unset on a header button that is not a disclosure. */
+    headerExpanded?: boolean;
+    /** `aria-controls` for the header button: the id of the block it opens. */
+    headerControls?: string;
 }>();
 
-/* One table, so a tier is read in one place rather than reassembled from five ternaries down the template.
- * THE ICON SCALES WITH THE TIER. It used to be a flat `text-lg`, which is right for a settings row and a third
- * too big beside a rail row's `text-xs` title: the icon then reads as the row's subject and the name as its
- * annotation, which is backwards. */
-const TIERS = {
-    comfortable: { pad: `px-4.5 py-3.5`, gap: `gap-3`, icon: `text-lg`, title: `font-semibold leading-tight`, description: `text-xs` },
-    compact: { pad: `px-4 py-2.5`, gap: `gap-3`, icon: `text-sm`, title: `text-sm font-medium leading-tight`, description: `text-2xs` },
-    dense: { pad: `px-2.5 py-2`, gap: `gap-2.5`, icon: `text-xs`, title: `text-xs font-medium leading-tight`, description: `text-2xs` },
-} as const;
-
-/* The lead icon's colour, as a tone rather than as a class the caller brings. The three semantic ones are not
- * decoration: they are the card's state said in colour before its sentence is read (a warning triangle on
- * "sandbox is behind the app", an open lock the moment a bundle stops being safe to hand over), and each was
- * previously spelled at its own call site, which is why one of them was `text-base` while its neighbours were
- * `text-lg`. `info` is the link colour, kept off the name `link` because nothing here navigates. */
-const TONES = {
-    default: `text-subtle`,
-    danger: `text-danger`,
-    warning: `text-warning`,
-    success: `text-success`,
-    info: `text-link`,
-} as const;
+defineEmits<{ headerClick: [event: MouseEvent] }>();
 
 /* A ROW YOU PICK FROM IS MUTED UNTIL YOU REACH FOR IT. All four selectable lists in the app had this rule and
  * all four spelled it themselves: the source rail, the memory index, the documentation contents and the log
@@ -143,7 +144,24 @@ const picked = as === `button`;
         ]"
     >
         <div class="flex items-center justify-between gap-4">
-            <div class="flex min-w-0 items-center" :class="TIERS[density].gap">
+            <!-- The left region. As a `div` it is layout; as a `button` (see `headerButton`) it is the row's
+                 one hit area, and it TAKES THE FREE SPACE (`flex-1`) rather than shrink-wrapping the title:
+                 the gap between a short name and the trailing verbs is the easiest part of the row to aim at,
+                 and a hit area that stops at the last letter of the name throws it away. -->
+            <component
+                :is="headerButton ? `button` : `div`"
+                :type="headerButton ? `button` : undefined"
+                :aria-expanded="headerButton ? headerExpanded : undefined"
+                :aria-controls="headerButton ? headerControls : undefined"
+                class="flex min-w-0 items-center"
+                :class="[
+                    TIERS[density].gap,
+                    headerButton
+                        ? `flex-1 cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
+                        : ``,
+                ]"
+                @click="headerButton ? $emit(`headerClick`, $event) : undefined"
+            >
                 <slot name="lead" />
                 <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[density].icon, TONES[tone]]" />
                 <div class="min-w-0">
@@ -163,7 +181,7 @@ const picked = as === `button`;
                         <slot name="description">{{ description }}</slot>
                     </p>
                 </div>
-            </div>
+            </component>
             <div
                 v-if="$slots[`meta`] || $slots[`control`] || chevron || href !== undefined"
                 class="flex items-center gap-2"

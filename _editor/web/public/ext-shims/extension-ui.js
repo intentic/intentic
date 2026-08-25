@@ -19,6 +19,7 @@ export const CopyButton = m["CopyButton"];
 export const DagEditor = m["DagEditor"];
 export const DagGraph = m["DagGraph"];
 export const DiffStat = m["DiffStat"];
+export const DisclosureRow = m["DisclosureRow"];
 export const FilterBar = m["FilterBar"];
 export const Icon = m["Icon"];
 export const ImageView = m["ImageView"];

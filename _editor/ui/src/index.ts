@@ -52,6 +52,14 @@ export { default as CopyButton } from "./components/CopyButton.vue";
 export { type TallyItem, default as StatusTally } from "./components/StatusTally.vue";
 export { default as DagEditor } from "./components/DagEditor.vue";
 export { default as DagGraph } from "./components/DagGraph.vue";
+/* The app's ONE expandable record row: <Row> plus the chevron, the ARIA, the open tint and the indented rail
+ * beneath. It ships because fourteen lists had each answered those four questions alone and arrived at five
+ * chevron spellings, four indents and four tints — and, on the ports list, at an `(i)` that toggled, thirty
+ * pixels below an <InfoHint> whose `(i)` does not. */
+export { default as DisclosureRow } from "./components/DisclosureRow.vue";
+/* <Row>'s tier table, exported because <DisclosureRow> draws the lead cluster a SECOND time (hidden) to
+ * offset the block below it, and a mirror built from restated numbers is a mirror that goes stale. */
+export { ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone } from "./components/row.js";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.

@@ -5,6 +5,7 @@ import {
     type AgentRunChoice,
     Avatar,
     Button,
+    DisclosureRow,
     formatTimestamp,
     Icon,
     Modal,
@@ -92,67 +93,70 @@ const startFix = (): void => {
 </script>
 
 <template>
-    <div class="group border-l-4 transition-colors" :class="[tone.rowBorder, expanded ? `bg-content/2` : `hover:bg-content/2`]">
-        <!-- Run header row. IT WRAPS, because the pane it lives in is not the window: with the chat panel open
-             this row gets ~450px, and four rigid clusters in a nowrap line simply ran off the side of it: the
-             stage circles landed on top of the branch name and "Fix with agent" was painted outside the pane. The
-             commit line keeps a floor (it is the row's headline, and truncating it to nothing helps nobody) and
-             the two right-hand clusters travel together, so what happens instead is a second line. -->
-        <div class="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+    <!-- THE DISCLOSURE MOVED TO THE LEFT EDGE. It was a bare `chevron-down` rotated 180° at the far right of the
+         verb cluster, with no `aria-expanded` and a `title` for a label — the ports list's mistake in a
+         different costume: a navigation control filed among Cancel, Re-run and "Fix with agent".
+
+         `hit="pair"` because this row's headline is a LINK to the run on the vendor; swallowing it into the
+         disclosure would make "show me the jobs" and "leave the app" the same press. `wideControl` because the
+         trailing cluster is a SET (a stage graph, a time, two buttons) that has to be allowed to take a second
+         line rather than squeeze the commit subject to nothing — see <Row>'s own note on the prop. -->
+    <DisclosureRow class="border-l-4" :class="tone.rowBorder" density="comfortable" hit="pair" body="drawer" wide-control v-model:open="expanded">
+        <template #lead>
             <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
+            <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
+        </template>
 
-            <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" v-tooltip.top="run.authorName" />
-
-            <!-- Pipeline info. The floor is what decides when this row breaks in two: a flex line wraps on the
-                 items' MINIMUM widths, before any of them is allowed to shrink, so a generous floor here spends
-                 itself as second lines on rows that had the room all along. 10rem is the commit subject's own
-                 floor: under it there is no headline left to read, which is the point at which stacking wins. -->
-            <div class="min-w-40 flex-1">
-                <div class="flex items-center gap-2">
-                    <a
-                        :href="run.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="touch-target min-w-0 truncate text-sm font-medium text-content hover:text-link"
-                        :title="headline"
-                    >
-                        {{ headline }}
-                    </a>
-                    <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
-                    <!-- Qualifies the verdict, so it sits with it: the run failed, and the branch has recovered
+        <template #title>
+            <div class="flex flex-wrap items-center gap-2">
+                <a
+                    :href="run.url"
+                    target="_blank"
+                    rel="noopener"
+                    class="touch-target min-w-0 truncate text-sm font-medium text-content hover:text-link"
+                    :title="headline"
+                >
+                    {{ headline }}
+                </a>
+                <StatusBadge :variant="tone.variant" :label="tone.label" size="xs" class="shrink-0" />
+                <!-- Qualifies the verdict, so it sits with it: the run failed, and the branch has recovered
                          since. Links to the green rather than just naming it: checking whether the job that
                          failed here even ran there is the one way to catch a "pass" that only skipped it. -->
-                    <a
-                        v-if="superseded"
-                        :href="superseded.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
-                        v-tooltip.top="`${run.branch} went green again in this run: open it to check the job that failed here even ran`"
-                    >
-                        <Icon name="check-circle" class="text-2xs text-success" />
-                        superseded by
-                        <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
-                    </a>
-                    <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
-                    <span v-if="trigger" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
-                        {{ trigger }}
-                    </span>
-                </div>
-                <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-subtle">
-                    <span v-if="run.authorName" class="truncate font-medium text-muted">{{ run.authorName }}</span>
-                    <span class="inline-flex items-center gap-1">
-                        <Icon name="code" class="text-2xs" />
-                        <span class="font-mono">{{ run.branch }}</span>
-                    </span>
-                    <span class="font-mono text-subtle/70">{{ run.sha.slice(0, 7) }}</span>
-                    <span v-if="duration" class="inline-flex items-center gap-1">
-                        <Icon name="clock" class="text-2xs" />
-                        {{ duration }}
-                    </span>
-                </div>
+                <a
+                    v-if="superseded"
+                    :href="superseded.url"
+                    target="_blank"
+                    rel="noopener"
+                    class="touch-target inline-flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle hover:text-link"
+                    v-tooltip.top="`${run.branch} went green again in this run: open it to check the job that failed here even ran`"
+                >
+                    <Icon name="check-circle" class="text-2xs text-success" />
+                    superseded by
+                    <span class="font-mono">{{ superseded.sha.slice(0, 7) }}</span>
+                </a>
+                <!-- Only unusual origins earn a chip; a plain push is every repo's default. -->
+                <span v-if="trigger" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
+                    {{ trigger }}
+                </span>
             </div>
+        </template>
 
+        <template #description>
+            <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-subtle">
+                <span v-if="run.authorName" class="truncate font-medium text-muted">{{ run.authorName }}</span>
+                <span class="inline-flex items-center gap-1">
+                    <Icon name="code" class="text-2xs" />
+                    <span class="font-mono">{{ run.branch }}</span>
+                </span>
+                <span class="font-mono text-subtle/70">{{ run.sha.slice(0, 7) }}</span>
+                <span v-if="duration" class="inline-flex items-center gap-1">
+                    <Icon name="clock" class="text-2xs" />
+                    {{ duration }}
+                </span>
+            </span>
+        </template>
+
+        <template #control>
             <!-- The stages and what you can do about them. They wrap between themselves as well, because the
                  alternative is the stage circles being squeezed to a sliver by two buttons that refuse to shrink:
                  and the circles are what the row is FOR. `ml-auto` + `justify-end` keeps them to the right of
@@ -221,20 +225,12 @@ const startFix = (): void => {
                             @click="emit(`rerun`, run)"
                         />
                     </div>
-                    <button
-                        type="button"
-                        class="touch-target cursor-pointer p-1"
-                        :title="expanded ? `Hide job graph` : `Show job graph`"
-                        @click="expanded = !expanded"
-                    >
-                        <Icon name="chevron-down" class="text-2xs text-subtle transition-transform" :class="expanded ? `rotate-180` : ``" />
-                    </button>
                 </div>
             </div>
-        </div>
+        </template>
 
         <!-- Expanded: the run's job graph -->
-        <div v-if="expanded" class="border-t border-line-subtle px-4 pb-4 pt-3">
+        <template #below>
             <!-- The heading is known before the jobs are, so it stays real text and only the graph band is a
                  placeholder: sized to DagGraph's own floor (150px) so the row settles once, not twice. -->
             <div v-if="jobsLoading" class="flex flex-col gap-2" role="status" aria-busy="true" aria-label="Loading jobs">
@@ -277,14 +273,14 @@ const startFix = (): void => {
             </div>
 
             <p v-else class="py-2 text-xs text-muted">No job details available for this run.</p>
-        </div>
 
-        <!-- THE SAME GRAPH, GIVEN THE WINDOW. A run wide enough to need panning inside a row is exactly the one
-             worth reading whole, and the band in a list of rows can never be that. Its own component instance,
-             so the trace pinned in the small one does not follow you in and the pan you leave behind is still
-             there when you close. -->
-        <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
-            <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
-        </Modal>
-    </div>
+            <!-- THE SAME GRAPH, GIVEN THE WINDOW. A run wide enough to need panning inside a row is exactly the
+                 one worth reading whole, and the band in a list of rows can never be that. Its own component
+                 instance, so the trace pinned in the small one does not follow you in and the pan you leave
+                 behind is still there when you close. -->
+            <Modal v-model:open="fullscreen" size="full" :scroll="false" :header="`${headline}: job graph`">
+                <PipelineDagGraph :stages="stages" :recurring="recurring" fill />
+            </Modal>
+        </template>
+    </DisclosureRow>
 </template>

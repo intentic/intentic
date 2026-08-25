@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic-app/api-contract";
-import { BrandMark, Code, Notice, Row, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import { BrandMark, Code, DisclosureRow, Notice, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -187,13 +187,22 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
              frame around a surface painted in the card's own colour, so the section labels and the gap between
              them do the grouping and the card stays the only frame. -->
         <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
-            <Row
+            <!-- The row's chevron used to ride in `#meta`, at the TRAILING edge among the facts, which is where
+                 the verbs live and not where a reader looks for a disclosure. <DisclosureRow> puts it in the
+                 lead column with the rest of the app's expandable rows, and `disabled` is how a row with
+                 nothing behind it says so: no arrow, no hover, no tab stop.
+                 The "Show more" inside the opened block keeps its own `chevron-up`/`chevron-down` swap, and
+                 should: that is a text clamp, not a row disclosure, and its arrow points at what the press
+                 will do rather than at where the content is. -->
+
+            <DisclosureRow
                 v-for="item in group.items"
                 :key="item.id"
                 density="compact"
-                :interactive="expandable(item)"
+                :disabled="!expandable(item)"
                 :class="item.state === `after-rebuild` ? `opacity-70` : undefined"
-                @click="expandable(item) && toggle(item.id)"
+                :open="open.has(item.id)"
+                @update:open="toggle(item.id)"
             >
                 <!-- Not switched off, but not here yet: an entry the recipe has and the container does not gets
                      the drained mark, which says the same thing to someone who cannot see the colour. -->
@@ -262,20 +271,14 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                     <span v-if="stateOf(item) !== undefined" :class="stateOf(item)?.tone" class="inline-flex items-center gap-1 font-medium">
                         <Icon :name="stateOf(item)!.icon" />{{ stateOf(item)!.label }}
                     </span>
-                    <Icon
-                        v-if="expandable(item)"
-                        name="chevron-right"
-                        class="shrink-0 transition-transform"
-                        :class="open.has(item.id) ? `rotate-90` : ``"
-                    />
                 </template>
                 <!-- The slot itself is conditional, not its contents: a row that declares one always gets the
                      gap above it, and twelve pixels of nothing per closed row is what this view is fixing. -->
-                <template v-if="open.has(item.id)" #below>
-                    <!-- The disclosure keeps its own clicks: the row header is what closes the row, so "Show
-                         more" and the code block's copy button must not travel up to it and collapse the thing
-                         the reader just asked to see. -->
-                    <div class="flex flex-col gap-3" @click.stop>
+                <template #below>
+                    <!-- No `@click.stop` any more: the disclosure's hit area is the row's HEADER, and this block
+                         is that button's sibling, so "Show more" and the code block's copy button cannot travel
+                         up to it and collapse the thing the reader just asked to see. -->
+                    <div class="flex flex-col gap-3">
                         <!-- What the agent wrote, as prose. Its own paragraphs, its own bullet lists: it was
                              written to be read, and rendering it as code would undo that. -->
                         <p class="whitespace-pre-line text-xs leading-relaxed text-muted">
@@ -302,7 +305,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                         <Code v-if="item.commands !== undefined" :code="item.commands" lang="docker" label="What this installs" :clamp-lines="10" />
                     </div>
                 </template>
-            </Row>
+            </DisclosureRow>
         </RowGroup>
 
         <!-- THE STAPLES, AS A STRIP. Thirteen names and thirteen versions, which is the entire question anybody
@@ -343,7 +346,8 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                 </div>
                 <!-- Under the strip rather than beside the pill, so opening one never reflows the grid above it. -->
                 <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
-                    <span class="font-medium text-content">{{ pickedItem.name }}</span>: {{ pickedItem.purpose }}
+                    <span class="font-medium text-content">{{ pickedItem.name }}</span
+                    >: {{ pickedItem.purpose }}
                 </p>
             </div>
         </RowGroup>

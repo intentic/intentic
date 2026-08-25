@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
-import { BrandMark, ui, StatusBadge } from "@intentic/ui";
+import { BrandMark, DisclosureRow, ui, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
@@ -172,60 +172,61 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
     <!-- Header and detail share one tint while open, so an expanded row reads as a single block rather than as
          a row that happens to have grown a panel under it. The tint is an ink wash rather than `bg-canvas`
          because canvas and card are one step apart in light mode: a treatment that only exists in the dark
-         scheme is a treatment that isn't there. -->
-    <div
-        class="group @container border-l-2"
-        :class="[expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`, accent ?? `border-l-transparent`]"
+         scheme is a treatment that isn't there. It, the chevron and the ARIA are <DisclosureRow>'s now; the
+         accent edge stays here because it is this list's alone.
+
+         `body="drawer"`: what opens is not evidence hanging off the name, it is the extension's whole record
+         under headings of its own — settings, consequences, routes, fitness to publish. -->
+    <DisclosureRow
+        class="@container border-l-2"
+        :class="accent ?? `border-l-transparent`"
+        body="drawer"
+        :open="expanded"
+        @update:open="emit(`update:expanded`, !expanded)"
     >
-        <div class="flex items-center gap-3 pl-3 pr-3.5">
-            <button
-                type="button"
-                class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-3 text-left"
-                :aria-expanded="expanded"
-                @click="emit(`update:expanded`, !expanded)"
-            >
-                <Icon
-                    name="chevron-right"
-                    class="shrink-0 text-2xs text-subtle transition-transform group-hover:text-muted"
-                    :class="expanded ? `rotate-90` : undefined"
-                    aria-hidden="true"
-                />
-                <!-- The one thing on the row that is not words. Dimmed AND desaturated when the extension is
-                     off, so a brand logo goes quiet with the rest of the row instead of being the loudest
-                     thing on the one row that is switched off. -->
-                <BrandMark
-                    :size="22"
-                    :name="manifest.name"
-                    :art="manifest.art"
-                    :logo="manifest.logo"
-                    :icon="manifest.icon"
-                    :idle="!entry.extension.enabled"
-                />
-                <span class="min-w-0 flex-1">
-                    <span class="flex min-w-0 items-baseline gap-3">
-                        <!-- Dimming is never on the switch: a faded control reads as unavailable, and the switch
-                             is the one thing on a switched-off row that still does something. The name recedes
-                             by changing INK rather than by opacity: a half-transparent word over a tinted row
-                             is a muddier grey than the palette's own muted one, and it takes the hover tint
-                             with it. -->
-                        <span class="min-w-0 flex-1 truncate text-sm @2xl:w-48 @2xl:flex-none">
-                            <span v-if="entry.extension.source !== `builtin`" class="text-subtle">{{ manifest.publisher }}.</span
-                            ><span class="font-medium" :class="entry.extension.enabled ? `text-content` : `text-muted`">{{ manifest.name }}</span>
-                        </span>
-                        <span
-                            class="hidden min-w-0 flex-1 items-baseline gap-1.5 text-xs @2xl:flex"
-                            :class="entry.extension.enabled ? `text-muted` : `text-subtle`"
-                        >
-                            <span v-tooltip.overflow="shown" class="min-w-0 truncate">{{ shown }}</span>
-                            <span v-if="hidden.length > 0" v-tooltip.top="hidden.join(` · `)" class="shrink-0 text-subtle">+{{ hidden.length }}</span>
-                        </span>
-                    </span>
-                    <!-- An exception says WHAT went wrong where the reader already is: the badge names the kind
-                         of failure, this names the failure. Only while the row is closed: open, the record
-                         below states it in full, and a truncated copy of a line already on screen is noise. -->
-                    <span v-if="entry.detail && !expanded" class="block truncate pt-0.5 text-2xs" :class="tone">{{ entry.detail }}</span>
+        <template #lead>
+            <!-- The one thing on the row that is not words. Dimmed AND desaturated when the extension is
+                 off, so a brand logo goes quiet with the rest of the row instead of being the loudest
+                 thing on the one row that is switched off. -->
+            <BrandMark
+                :size="22"
+                :name="manifest.name"
+                :art="manifest.art"
+                :logo="manifest.logo"
+                :icon="manifest.icon"
+                :idle="!entry.extension.enabled"
+            />
+        </template>
+
+        <template #title>
+            <span class="flex min-w-0 items-baseline gap-3">
+                <!-- Dimming is never on the switch: a faded control reads as unavailable, and the switch
+                     is the one thing on a switched-off row that still does something. The name recedes
+                     by changing INK rather than by opacity: a half-transparent word over a tinted row
+                     is a muddier grey than the palette's own muted one, and it takes the hover tint
+                     with it. -->
+                <span class="min-w-0 flex-1 truncate font-normal @2xl:w-48 @2xl:flex-none">
+                    <span v-if="entry.extension.source !== `builtin`" class="text-subtle">{{ manifest.publisher }}.</span
+                    ><span class="font-medium" :class="entry.extension.enabled ? `text-content` : `text-muted`">{{ manifest.name }}</span>
                 </span>
-            </button>
+                <span
+                    class="hidden min-w-0 flex-1 items-baseline gap-1.5 text-xs font-normal @2xl:flex"
+                    :class="entry.extension.enabled ? `text-muted` : `text-subtle`"
+                >
+                    <span v-tooltip.overflow="shown" class="min-w-0 truncate">{{ shown }}</span>
+                    <span v-if="hidden.length > 0" v-tooltip.top="hidden.join(` · `)" class="shrink-0 text-subtle">+{{ hidden.length }}</span>
+                </span>
+            </span>
+        </template>
+
+        <!-- An exception says WHAT went wrong where the reader already is: the badge names the kind of failure,
+             this names the failure. Only while the row is closed: open, the record below states it in full, and
+             a truncated copy of a line already on screen is noise. -->
+        <template v-if="entry.detail && !expanded" #description>
+            <span class="block truncate" :class="tone">{{ entry.detail }}</span>
+        </template>
+
+        <template #control>
             <div class="flex shrink-0 items-center gap-2.5">
                 <!-- The update badge is AMBIENT unless the listing says the old version is the dangerous one:
                      a security fix promotes it to the loud tier, because waiting is what needs the eye there.
@@ -263,115 +264,116 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
                     @update:model-value="(value: boolean) => emit(`toggle`, value)"
                 />
             </div>
-        </div>
+        </template>
 
-        <!-- The full record, one click away. Indented to the name's column so it reads as belonging to the row
-             above it rather than as a new section. -->
-        <div v-if="expanded" class="flex flex-col gap-4 border-t border-line-subtle py-3.5 pl-10 pr-4">
-            <p v-if="entry.detail" class="text-xs" :class="tone">{{ entry.detail }}</p>
+        <!-- The full record, one click away. -->
+        <template #below>
+            <div class="flex flex-col gap-4">
+                <p v-if="entry.detail" class="text-xs" :class="tone">{{ entry.detail }}</p>
 
-            <dl v-if="breakdown.length > 0" class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
-                <template v-for="facet in breakdown" :key="`${facet.kind}:${facet.label}`">
-                    <dt class="text-xs text-subtle">{{ facet.label }}</dt>
-                    <dd class="min-w-0 text-xs text-content">{{ facet.names.join(` · `) }}</dd>
-                </template>
-            </dl>
+                <dl v-if="breakdown.length > 0" class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+                    <template v-for="facet in breakdown" :key="`${facet.kind}:${facet.label}`">
+                        <dt class="text-xs text-subtle">{{ facet.label }}</dt>
+                        <dd class="min-w-0 text-xs text-content">{{ facet.names.join(` · `) }}</dd>
+                    </template>
+                </dl>
 
-            <!-- The update lifecycle: only a git-installed extension has one (a builtin updates with the
+                <!-- The update lifecycle: only a git-installed extension has one (a builtin updates with the
                  image, a workspace one is live-edited), and the daemon only sends its fields for those. -->
-            <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
+                <ExtensionUpdateCard v-if="entry.extension.source === `installed`" :extension="entry.extension" />
 
-            <div v-if="settings.length > 0">
-                <p :class="ui.sectionLabel(`mb-2 text-2xs`)">Settings</p>
-                <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
-            </div>
+                <div v-if="settings.length > 0">
+                    <p :class="ui.sectionLabel(`mb-2 text-2xs`)">Settings</p>
+                    <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
+                </div>
 
-            <div v-if="entry.extension.enabled && consequences.length > 0">
-                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Switching it off</p>
-                <ul class="flex flex-col gap-1">
-                    <li v-for="consequence in consequences" :key="consequence" class="text-2xs text-muted">— {{ consequence }}.</li>
-                </ul>
-            </div>
+                <div v-if="entry.extension.enabled && consequences.length > 0">
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Switching it off</p>
+                    <ul class="flex flex-col gap-1">
+                        <li v-for="consequence in consequences" :key="consequence" class="text-2xs text-muted">— {{ consequence }}.</li>
+                    </ul>
+                </div>
 
-            <!-- The daemon reach the owner approved at install, the only place it is visible afterwards, and now
+                <!-- The daemon reach the owner approved at install, the only place it is visible afterwards, and now
                  also whether it was ever needed. A never-called route is drawn hollow rather than in a warning
                  colour: it is a question for whoever maintains the extension, not a fault of the install. -->
-            <div v-if="manifest.permissions !== undefined">
-                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
-                <div class="flex flex-wrap gap-1">
-                    <code
-                        v-for="route in routes"
-                        :key="route.route"
-                        class="rounded px-1.5 py-0.5 text-2xs"
-                        :class="route.unused ? `border border-dashed border-line text-subtle` : `border border-line bg-canvas text-muted`"
-                        v-tooltip.top="
-                            route.calls > 0
-                                ? `Called ${route.calls.toLocaleString()} times`
-                                : route.unused
-                                  ? `Never called since this was first observed`
-                                  : undefined
-                        "
-                        >{{ route.route }}</code
-                    >
-                </div>
-                <p v-if="observed === undefined" class="mt-1.5 text-2xs text-subtle">
-                    Nothing observed yet: routes are counted as the extension uses them.
-                </p>
-                <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
-                    Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone: a route used only by
-                    a screen you have not opened looks identical.
-                    <!-- The one case where "raise it with the maintainer" means "you are the maintainer": this
+                <div v-if="manifest.permissions !== undefined">
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Daemon routes it may call</p>
+                    <div class="flex flex-wrap gap-1">
+                        <code
+                            v-for="route in routes"
+                            :key="route.route"
+                            class="rounded px-1.5 py-0.5 text-2xs"
+                            :class="route.unused ? `border border-dashed border-line text-subtle` : `border border-line bg-canvas text-muted`"
+                            v-tooltip.top="
+                                route.calls > 0
+                                    ? `Called ${route.calls.toLocaleString()} times`
+                                    : route.unused
+                                      ? `Never called since this was first observed`
+                                      : undefined
+                            "
+                            >{{ route.route }}</code
+                        >
+                    </div>
+                    <p v-if="observed === undefined" class="mt-1.5 text-2xs text-subtle">
+                        Nothing observed yet: routes are counted as the extension uses them.
+                    </p>
+                    <p v-else-if="routes.some((route) => route.unused)" class="mt-1.5 text-2xs text-subtle">
+                        Dashed routes have never been called. That is worth raising with whoever maintains it, not acting on alone: a route used only
+                        by a screen you have not opened looks identical.
+                        <!-- The one case where "raise it with the maintainer" means "you are the maintainer": this
                          manifest is a file in this workspace. The turn it starts reads the code and decides route
                          by route rather than deleting what is dashed: see tightenBrief. -->
-                    <button v-if="tightenable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
-                        Have an agent go through them
-                    </button>
-                </p>
-            </div>
+                        <button v-if="tightenable" type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(tightenBrief(tighten))">
+                            Have an agent go through them
+                        </button>
+                    </p>
+                </div>
 
-            <!-- Only for a workspace extension, and only what is answerable off its files. The failures here are
+                <!-- Only for a workspace extension, and only what is answerable off its files. The failures here are
                  the ones that are invisible in this workspace: the daemon serves the entry live, so a bundle
                  that only works because of how it is being loaded here looks perfect until it is a commit in
                  somebody else's sandbox. -->
-            <div v-if="entry.extension.source === `workspace`">
-                <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
-                <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
-                <ul v-else-if="readiness" class="flex flex-col gap-1">
-                    <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
-                        <Icon
-                            :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
-                            :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
-                            class="mt-0.5 shrink-0"
-                        />
-                        <span class="text-muted"
-                            >{{ check.label }}: <span class="text-subtle">{{ check.detail }}</span></span
-                        >
-                    </li>
-                </ul>
-                <!-- Offered only when nothing FAILS: a warning is the author's judgement call and must not bar
+                <div v-if="entry.extension.source === `workspace`">
+                    <p :class="ui.sectionLabel(`mb-1.5 text-2xs`)">Fit to publish</p>
+                    <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
+                    <ul v-else-if="readiness" class="flex flex-col gap-1">
+                        <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
+                            <Icon
+                                :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
+                                :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
+                                class="mt-0.5 shrink-0"
+                            />
+                            <span class="text-muted"
+                                >{{ check.label }}: <span class="text-subtle">{{ check.detail }}</span></span
+                            >
+                        </li>
+                    </ul>
+                    <!-- Offered only when nothing FAILS: a warning is the author's judgement call and must not bar
                      the door, but a failing check names something every installer would hit. The turn itself is
                      an ordinary chat (see publishBrief): publishing is watched, not fired and forgotten. -->
-                <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
-                    <button type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
-                        Publish it: an agent pushes these files and reports the commit
-                    </button>
+                    <p v-if="publishable" class="mt-1.5 text-2xs text-subtle">
+                        <button type="button" :class="ui.linkButton(`text-2xs`)" @click="startAgent(publishBrief(publish))">
+                            Publish it: an agent pushes these files and reports the commit
+                        </button>
+                    </p>
+                </div>
+
+                <!-- Identity: the full id the collapsed row leaves off a baked-in extension,
+                 with the version and commit that say WHICH code this is. -->
+                <p class="text-2xs text-subtle">
+                    <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
+                    {{
+                        entry.extension.source === `builtin`
+                            ? `built into the sandbox image`
+                            : entry.extension.source === `workspace`
+                              ? `from .intentic/config/workspace-extensions`
+                              : `installed · ${entry.extension.commit.slice(0, 12)}`
+                    }}
+                    · needs intentic
+                    {{ manifest.engines.intentic }}
                 </p>
             </div>
-
-            <!-- Identity: the full id the collapsed row leaves off a baked-in extension,
-                 with the version and commit that say WHICH code this is. -->
-            <p class="text-2xs text-subtle">
-                <span class="text-muted">{{ extensionIdOf(manifest) }}</span> · v{{ manifest.version }} ·
-                {{
-                    entry.extension.source === `builtin`
-                        ? `built into the sandbox image`
-                        : entry.extension.source === `workspace`
-                          ? `from .intentic/config/workspace-extensions`
-                          : `installed · ${entry.extension.commit.slice(0, 12)}`
-                }}
-                · needs intentic
-                {{ manifest.engines.intentic }}
-            </p>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

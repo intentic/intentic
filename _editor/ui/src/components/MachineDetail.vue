@@ -244,7 +244,17 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                      that is the whole row until somebody asks for more.
                      The chevron and the name are ONE button. A disclosure whose only hit area is a 12px glyph is
                      a disclosure nobody finds; the verbs keep their own hit areas outside it, so opening a row
-                     and acting on one are never the same click. -->
+                     and acting on one are never the same click.
+
+                     NOT A <DisclosureRow>, AND ON PURPOSE. Thirteen expandable rows across the app moved onto
+                     that component; these did not, because they are not list rows. A block here is a REPORT
+                     ENTRY inside a card that already owns the padding and draws the dividers, set at `py-0.5`
+                     against the component's tightest tier of `py-2`, with no open wash of its own. Fitting it
+                     would take two escape hatches — drop the padding, drop the tint — and an escape hatch is
+                     how the next fourteen spellings start. What this DOES take from there is the spelling:
+                     `chevron-right` + `rotate-90` at `text-2xs text-subtle`, `aria-expanded` + `aria-controls`,
+                     and the opened block indented to the chevron's own column. Change those here only by
+                     changing them there first. -->
                 <div class="flex min-w-0 items-center gap-x-2">
                     <button
                         type="button"

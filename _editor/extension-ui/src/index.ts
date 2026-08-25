@@ -88,6 +88,13 @@ export {
     type DagEdge,
     type DagNode,
     DiffStat,
+    /* <DisclosureRow> ships for the reason <Row> itself does, one turn of the screw further on: shipping the
+     * row WITHOUT the expandable row is what made SIX extensions build their own — activity, maintenance,
+     * acceptance (twice), automations, deployments, pipelines, preview — and no two of them drew the same
+     * chevron, indented the opened block to the same column, or painted an open row the same colour. The
+     * preview extension's ports list went furthest and used an `(i)` as the toggle, thirty pixels under a real
+     * <InfoHint> whose `(i)` is a hover card: one glyph, two behaviours, one screen. */
+    DisclosureRow,
     FilterBar,
     Icon,
     type IconName,

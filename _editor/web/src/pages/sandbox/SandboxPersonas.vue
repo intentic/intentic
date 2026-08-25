@@ -6,10 +6,10 @@ import {
     Button,
     ui,
     ConfirmDialog,
+    DisclosureRow,
     Notice,
     type NoticeModel,
     PersonaFace,
-    Row,
     RowGroup,
     SkeletonRows,
     StatusBadge,
@@ -339,14 +339,23 @@ const confirmRemove = async (): Promise<void> => {
                 </template>
 
                 <!-- THE ROW IS THE DISCLOSURE. Clicking it opens the card in place; there is no second
-                     affordance meaning the same thing, which is what the pencil used to be. -->
-                <Row
+                     affordance meaning the same thing, which is what the pencil used to be.
+
+                     `hit="row"` is what that costs and what it now also buys. It cannot be `header` — the name
+                     is itself a control (click it to rename), and a <button> inside a <button> is invalid and
+                     unusable. It is not `pair` either, because shrinking the target to the chevron and the face
+                     would take away the gesture people actually use. So the whole row keeps the click, every
+                     control on it keeps its `@click.stop`, and the chevron-and-face pair is a real <button> for
+                     the first time: opening a card used to be reachable by pointer only. The CARD needs no
+                     guard of its own any more — a `drawer` body sits outside the row's handler. -->
+                <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
-                    :title="persona.label ?? persona.id"
                     density="comfortable"
-                    interactive
-                    @click="toggleOpen(persona)"
+                    hit="row"
+                    body="drawer"
+                    :open="isOpen(persona)"
+                    @update:open="toggleOpen(persona)"
                 >
                     <!-- A persona is a person, so it gets a person's face: the SAME one, at the same size and
                          in the same colours, that the chat's persona rail draws it with. This page is where you
@@ -355,16 +364,13 @@ const confirmRemove = async (): Promise<void> => {
                          nor the colour is decided here any more (PersonaFace holds both), which is what keeps
                          the two lists in step.
 
-                         The disclosure arrow rides in front of the face, where a reader looks for one:
-                         rather than in the row's trailing cluster, which is where facts and actions live. -->
+                         The disclosure arrow rides in front of the face, where a reader looks for one, rather
+                         than in the row's trailing cluster, which is where facts and actions live. It is
+                         <DisclosureRow>'s arrow now: this file drew a `chevron-down`/`chevron-right` swap, two
+                         files away another drew `chevron-right` + `rotate-90`, and they were the same control.
+                         It is also a real button now, so the face is where a keyboard gets in. -->
                     <template #lead>
-                        <span class="flex items-center gap-1.5">
-                            <Icon
-                                :name="isOpen(persona) ? `chevron-down` : `chevron-right`"
-                                class="w-3 shrink-0 text-2xs text-subtle transition-colors"
-                            />
-                            <PersonaFace :persona />
-                        </span>
+                        <PersonaFace :persona />
                     </template>
 
                     <!-- THE NAME READS AS A NAME until you ask to change it: click-to-rename, on the app's one
@@ -447,14 +453,13 @@ const confirmRemove = async (): Promise<void> => {
                          subject you have to remember, and the name it would have asked for first is the row's
                          own title, three lines up. No Save: an open card writes as it is changed.
 
-                         `click.stop` because the row itself is the disclosure: without it every switch flipped
-                         in here would ALSO close the card it belongs to. -->
-                    <template v-if="isOpen(persona)" #below>
-                        <div class="pt-4" @click.stop>
-                            <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
-                        </div>
+                         It used to need a `click.stop` wrapper, because the row is the disclosure and every
+                         switch flipped in here ALSO closed the card it belongs to. A `drawer` body is rendered
+                         outside the row's click handler, so there is nothing left to stop. -->
+                    <template #below>
+                        <PersonaForm :draft="draft!" :accounts="accounts" :connected="connected" :grantables="grantables" :error="saveError" />
                     </template>
-                </Row>
+                </DisclosureRow>
 
                 <!-- MAKING ONE ASKS FOR A NAME AND NOTHING ELSE, at the tail of the group where the new row will
                      appear. Everything else about a persona has a default worth keeping, and the card opens the

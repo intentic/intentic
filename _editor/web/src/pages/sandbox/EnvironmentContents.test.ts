@@ -106,9 +106,19 @@ const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     return el;
 };
 
-// Every pill in the staples strip. The filter's own clear button is a `button` too, and names itself.
+/* Every pill in the staples strip. Two other buttons on this tab are not pills and each is excluded by what it
+ * IS rather than by where it sits: the filter's own clear button names itself, and a row's disclosure carries
+ * `aria-expanded` (it is a <DisclosureRow>, so the pressable part of a row is a real button now, where it used
+ * to be a click handler on a div). */
 const pills = (el: HTMLElement): HTMLButtonElement[] =>
-    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter((button) => button.ariaLabel !== `Clear filter`);
+    [...el.querySelectorAll<HTMLButtonElement>(`button[type="button"]`)].filter(
+        (button) => button.ariaLabel !== `Clear filter` && !button.hasAttribute(`aria-expanded`),
+    );
+
+/* THE ROW'S OWN DISCLOSURE, which is what opens it. `.ui-row-select` used to find it: that is the class <Row>
+ * paints on a row you can click, and the row was a div with a click handler. The pressable part is now the
+ * header BUTTON (chevron, mark, name and sentence in one hit area), and `aria-expanded` is what says so. */
+const disclosure = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`button[aria-expanded]`)!;
 
 // A pill's words, in order. Read per child because the mark, the name and the version are siblings with no text
 // between them: the gap is a layout gap, so the concatenated textContent runs "Node.js24.18.0".
@@ -151,12 +161,12 @@ it(`draws the staples as a strip whose sentences are one click away`, async () =
 
 it(`keeps a closed row to its one line, and opens the comment in place`, async () => {
     const el = mount();
-    const row = el.querySelector<HTMLElement>(`.ui-row-select`);
+    const row = disclosure(el);
     // The sentence rides the name; the rationale and the install lines do not exist until asked for.
     expect(el.textContent).toContain(`ffmpeg, encoding screen recordings.`);
     expect(el.textContent).not.toContain(`raw frames until something encodes them`);
 
-    row!.click();
+    row.click();
     await nextTick();
     expect(el.textContent).toContain(`raw frames until something encodes them`);
     expect(el.textContent).toContain(`RUN apt-get install -y ffmpeg`);
@@ -168,7 +178,7 @@ it(`keeps a closed row to its one line, and opens the comment in place`, async (
  * One of the two, never both. */
 it(`never shows the opening sentence twice`, async () => {
     const el = mount();
-    el.querySelector<HTMLElement>(`.ui-row-select`)!.click();
+    disclosure(el).click();
     await nextTick();
     expect(el.textContent?.match(/encoding screen recordings/g)).toHaveLength(1);
 });
@@ -178,7 +188,7 @@ it(`never shows the opening sentence twice`, async () => {
  * there genuinely is more, and it does not collapse the row it lives inside. */
 it(`opens on the first paragraph and keeps the rest one click away`, async () => {
     const el = mount();
-    const row = el.querySelector<HTMLElement>(`.ui-row-select`)!;
+    const row = disclosure(el);
     row.click();
     await nextTick();
     expect(el.textContent).not.toContain(`go out as MP4`);
@@ -208,7 +218,10 @@ it(`filters across every group, and drops the ones that match nothing`, async ()
     // group the query simply missed.
     await filterBy(el, `haskell`);
     expect(el.textContent).toContain(`Nothing here matches`);
-    expect(el.querySelectorAll(`.ui-row-select`)).toHaveLength(0);
+    // The exact translation of the old `.ui-row-select` count: that class was painted only on a row <Row> had
+    // been told was `interactive`, which was every EXPANDABLE row and no other, and those are the rows that
+    // carry `aria-expanded` now.
+    expect(el.querySelectorAll(`button[aria-expanded]`)).toHaveLength(0);
 });
 
 it(`only names the source when it is not already saying the row's own name`, () => {

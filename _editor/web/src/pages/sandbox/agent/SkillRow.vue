@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { BrandMark, Button, CodeField, Icon, Markdown, SegmentedControl } from "@intentic/ui";
+import { BrandMark, Button, CodeField, DisclosureRow, Icon, Markdown, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./SkillForm.vue";
@@ -19,9 +19,10 @@ import { provenanceOf } from "./skillWords";
  * closes it, which is also why nothing here closes on Escape: the form's Cancel discards what has been typed,
  * and a key that quietly threw away three paragraphs would be a worse trade than a second click on the row.
  *
- * THE SWITCH STAYS OUTSIDE THE BUTTON, and that is not a nicety: a control nested inside a <button> is invalid
- * and unusable: every attempt to flip it would expand the row instead. Same split the acceptance panel's story
- * rows make for their tick.
+ * "THE COLUMN WHERE EVERY OTHER EXPANDABLE ROW PUTS IT" IS <DisclosureRow> NOW, and it used not to be true: this
+ * file drew `chevron-right` + `rotate-90`, the activity feed swapped two icon names, the deployments board
+ * rotated a `chevron-down` 180°, and the ports list used an `(i)`. The chevron, the ARIA, the open wash and the
+ * hairline under the header all come from the component; what is left here is what a skill IS.
  *
  * DELETE MOVED UNDER THE FOLD, where it now asks first. On the closed row it was one keystroke away from a
  * skill the reader may have spent an afternoon on, hidden inside a menu that gave no clue which rows even offer
@@ -81,57 +82,47 @@ watch(
 </script>
 
 <template>
-    <!-- Header and body share one tint while open, so an expanded row reads as a single block rather than as a
-         row that grew a panel under it. The extension list's wash, for the same reason it is a wash there. -->
-    <div class="group" :class="expanded ? `bg-content/6` : `transition-colors hover:bg-content/4`">
-        <div class="flex items-center gap-3 pl-2.5 pr-3">
-            <button
-                type="button"
-                class="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 py-2.5 text-left"
-                :aria-expanded="expanded"
-                @click="emit(`toggle`)"
-            >
-                <Icon
-                    name="chevron-right"
-                    class="shrink-0 text-2xs text-subtle transition-transform group-hover:text-muted"
-                    :class="expanded ? `rotate-90` : undefined"
-                    aria-hidden="true"
-                />
-                <!-- Drained and dimmed on a switched-off skill, so a brand goes quiet with the rest of the row
-                     instead of being the loudest thing on the one row that is off. -->
-                <BrandMark :size="22" :name="skill.name" :logo="visual.logo" :icon="visual.icon" :idle="!skill.enabled" />
-                <span class="min-w-0 flex-1">
-                    <span class="flex min-w-0 items-center gap-2">
-                        <span class="shrink-0 text-sm font-medium" :class="skill.enabled ? `text-content` : `text-muted`">{{ skill.name }}</span>
-                        <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ provenanceOf(skill) }}</span>
-                    </span>
-                    <!-- The line the agent reads every turn to decide whether to open this skill, on the row for
-                         the same reason: it is what the row is FOR. Only while closed, open, it is stated in
-                         full a few lines below, and a truncated copy of text already on screen is noise. -->
-                    <span
-                        v-if="!expanded"
-                        class="block truncate pt-0.5 text-2xs"
-                        :class="skill.description === `` ? `italic text-subtle` : `text-muted`"
-                    >
-                        {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
-                    </span>
-                </span>
-            </button>
-            <!-- Never dimmed with the row: a faded control reads as unavailable, and the switch is the one thing
-                 on a switched-off row that still does something. -->
+    <!-- `body="drawer"`: what opens here is a place to read and edit a file, not evidence hanging off the row's
+         name, so it takes the full width. Header and drawer share the open row's one wash, so an expanded row
+         reads as a single block rather than as a row that grew a panel under it. -->
+    <DisclosureRow density="compact" body="drawer" :open="expanded" @update:open="emit(`toggle`)">
+        <template #lead>
+            <!-- Drained and dimmed on a switched-off skill, so a brand goes quiet with the rest of the row
+                 instead of being the loudest thing on the one row that is off. -->
+            <BrandMark :size="22" :name="skill.name" :logo="visual.logo" :icon="visual.icon" :idle="!skill.enabled" />
+        </template>
+
+        <template #title>
+            <span class="flex min-w-0 items-center gap-2">
+                <span class="shrink-0" :class="skill.enabled ? `text-content` : `text-muted`">{{ skill.name }}</span>
+                <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs font-normal text-muted">{{ provenanceOf(skill) }}</span>
+            </span>
+        </template>
+
+        <!-- The line the agent reads every turn to decide whether to open this skill, on the row for the same
+             reason: it is what the row is FOR. Only while closed, open, it is stated in full a few lines below,
+             and a truncated copy of text already on screen is noise. -->
+        <template v-if="!expanded" #description>
+            <span class="block truncate" :class="skill.description === `` ? `italic text-subtle` : ``">
+                {{ skill.description === `` ? `No description, the agent rarely picks a skill without one.` : skill.description }}
+            </span>
+        </template>
+
+        <!-- Never dimmed with the row: a faded control reads as unavailable, and the switch is the one thing
+             on a switched-off row that still does something. Outside the disclosure's hit area, which is what
+             <DisclosureRow>'s `#control` slot is for: nesting it inside would make every attempt to flip it
+             expand the row instead. -->
+        <template v-if="skill.switchable" #control>
             <ToggleSwitch
-                v-if="skill.switchable"
                 class="ui-switch-sm shrink-0"
                 :model-value="skill.enabled"
                 :disabled="disabled"
                 :aria-label="`Enable ${skill.name}`"
                 @update:model-value="(value: boolean) => emit(`enable`, value)"
             />
-        </div>
+        </template>
 
-        <!-- Indented to the name's column, so it reads as belonging to the row above rather than as a new
-             section. -->
-        <div v-if="expanded" class="border-t border-line-subtle py-3 pl-9 pr-3">
+        <template #below>
             <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
             <p v-else-if="body === undefined" class="flex items-center gap-2 text-2xs text-subtle">
                 <Icon name="spinner" class="animate-spin text-xs" />
@@ -191,6 +182,6 @@ watch(
                     </template>
                 </div>
             </template>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

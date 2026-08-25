@@ -4,6 +4,7 @@ import {
     AgentRunButton,
     type AgentRunChoice,
     Button,
+    DisclosureRow,
     Icon,
     type IconName,
     StatusBadge,
@@ -158,25 +159,30 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
 
 <template>
     <!-- A @container: whether this row can hold its title and its headline on one line is a fact about the ROW,
-         and the row is as wide as a workspace pane the reader can shrink to a third of the window. -->
-    <div class="@container border-t border-line/60 first:border-t-0">
-        <button
-            type="button"
-            class="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
-            :class="expanded && `bg-overlay`"
-            :aria-expanded="expanded"
-            @click="emit(`toggle`)"
-        >
-            <Icon :name="expanded ? `chevron-down` : `chevron-right`" class="shrink-0 text-subtle" />
+         and the row is as wide as a workspace pane the reader can shrink to a third of the window.
+
+         `body="drawer"`: what opens is a place of its own — a live measurement strip, the evidence tables, and
+         the row's verbs under their own rule — not a fact hanging off the chore's name. -->
+    <DisclosureRow
+        class="@container border-t border-line/60 first:border-t-0"
+        density="compact"
+        body="drawer"
+        :open="expanded"
+        @update:open="emit(`toggle`)"
+    >
+        <template #lead>
             <Icon :name="verdict.chore.icon as IconName" class="shrink-0 text-subtle" />
-            <!-- ONE LINE WITH ROOM FOR IT, TWO WITHOUT. On a wide row the title keeps its full width and the
-                 headline takes the flexible column: truncating "4 majors waiting, 61 behind in total" to fit a
-                 chore name nobody needed re-reading would lose the only part that changes. In a narrow pane there
-                 is no column wide enough for both, and the row that tried spilled its state badge off the card, so
-                 the two stack, each truncating on its own line, and the badge stays where it can be read. -->
-            <span class="flex min-w-0 flex-1 flex-col gap-0.5 @lg:flex-row @lg:items-center @lg:gap-3">
+        </template>
+
+        <!-- ONE LINE WITH ROOM FOR IT, TWO WITHOUT. On a wide row the title keeps its full width and the
+             headline takes the flexible column: truncating "4 majors waiting, 61 behind in total" to fit a
+             chore name nobody needed re-reading would lose the only part that changes. In a narrow pane there
+             is no column wide enough for both, and the row that tried spilled its state badge off the card, so
+             the two stack, each truncating on its own line, and the badge stays where it can be read. -->
+        <template #title>
+            <span class="flex min-w-0 flex-1 flex-col gap-0.5 font-normal @lg:flex-row @lg:items-center @lg:gap-3">
                 <span class="@lg:shrink-0 flex min-w-0 items-center gap-2">
-                    <span class="min-w-0 truncate text-sm text-content">{{ verdict.chore.title }}</span>
+                    <span class="min-w-0 truncate text-content">{{ verdict.chore.title }}</span>
                     <span v-if="showRepo" class="shrink-0 rounded bg-content/5 px-1.5 py-0.5 text-2xs text-subtle">
                         {{ repoName(verdict.repo) }}
                     </span>
@@ -188,127 +194,135 @@ const liveAgent = computed(() => (run?.running === true ? run.manifest.conversat
                     <span v-if="measured" class="shrink-0 text-2xs text-subtle/70">{{ measured }}</span>
                 </span>
             </span>
-            <!-- One spinner, whichever kind of work is in flight. A row can be both re-measuring and running a
-                 turn, and two spinners side by side say nothing the badge beside them does not. -->
+        </template>
+
+        <!-- Facts, not verbs, so they ride `#meta`. One spinner, whichever kind of work is in flight: a row can
+             be both re-measuring and running a turn, and two spinners side by side say nothing the badge beside
+             them does not. -->
+        <template #meta>
             <Icon v-if="liveAgent || busyHere" name="spinner" spin class="shrink-0 text-subtle" />
             <StatusBadge v-if="status" :variant="status.variant" :label="status.label" size="xs" class="shrink-0" />
-        </button>
+        </template>
 
-        <div v-if="expanded" class="border-t border-line/60 bg-canvas px-4 py-4 @lg:px-6">
-            <!-- THE MEASUREMENT, WHILE IT IS HAPPENING: at the TOP of the opened row, above the evidence it is
+        <template #below>
+            <div class="@lg:px-2">
+                <!-- THE MEASUREMENT, WHILE IT IS HAPPENING: at the TOP of the opened row, above the evidence it is
                  replacing, because that is the reading order the reader is in: they pressed the button, and the
                  next thing they look at has to be the answer to "did that do anything". It names the tool's
                  subject, counts, and says out loud that the numbers underneath are the OLD ones: a panel that
                  leaves stale figures under a spinner is inviting them to be read as the new result. -->
-            <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/10 px-3 py-2">
-                <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
-                <!-- Two lines, always: the caveat is a sentence in its own right, and hanging it off the end of
+                <div v-if="busyHere" class="mb-3 flex items-start gap-2 rounded-lg bg-info/10 px-3 py-2">
+                    <Icon name="spinner" spin class="mt-0.5 shrink-0 text-xs text-info" />
+                    <!-- Two lines, always: the caveat is a sentence in its own right, and hanging it off the end of
                      the live one on a wide pane meant it wrapped to a line beginning with a separator dot on
                      every narrower one. A pane the reader can drag to a third of the window has no wide case. -->
-                <span class="flex min-w-0 flex-col gap-0.5">
-                    <span class="flex flex-wrap items-baseline gap-x-2">
-                        <span class="text-xs text-content">Measuring {{ measuringWhat }}…</span>
-                        <span class="text-2xs text-subtle">{{ elapsed }}</span>
+                    <span class="flex min-w-0 flex-col gap-0.5">
+                        <span class="flex flex-wrap items-baseline gap-x-2">
+                            <span class="text-xs text-content">Measuring {{ measuringWhat }}…</span>
+                            <span class="text-2xs text-subtle">{{ elapsed }}</span>
+                        </span>
+                        <span class="text-2xs text-subtle/70">The figures below are the ones being replaced.</span>
                     </span>
-                    <span class="text-2xs text-subtle/70">The figures below are the ones being replaced.</span>
-                </span>
-            </div>
+                </div>
 
-            <!-- AND WHEN IT LANDS. Held until the row is collapsed rather than faded out on a timer: the reader
+                <!-- AND WHEN IT LANDS. Held until the row is collapsed rather than faded out on a timer: the reader
                  who pressed re-measure and then went to read something else comes back to the sentence, which is
                  the case an auto-dismissing toast serves worst. "Unchanged" is stated as loudly as a change,
                  because it is a finding: it is the whole answer to "is this row still telling the truth". -->
-            <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/10 px-3 py-2">
-                <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
-                <!-- The claim on one line, what it found on the next: the same two-line shape as the strip
+                <div v-else-if="landed" class="mb-3 flex items-start gap-2 rounded-lg bg-success/10 px-3 py-2">
+                    <Icon name="check-circle" class="mt-0.5 shrink-0 text-xs text-success" />
+                    <!-- The claim on one line, what it found on the next: the same two-line shape as the strip
                      above, so a row that has just finished measuring reads as the sentence that replaced the
                      one before it rather than as a different kind of thing. The before/after is one wrapping
                      unit: split across lines, an arrow ends up alone at the end of a line pointing at nothing. -->
-                <span class="flex min-w-0 flex-col gap-0.5">
-                    <span class="text-xs text-content">Re-measured just now.{{ landed.from === landed.to ? ` Nothing changed.` : `` }}</span>
-                    <span v-if="landed.from === landed.to" class="text-2xs text-subtle">{{ landed.to }}</span>
-                    <span v-else class="flex flex-wrap items-baseline gap-x-1.5 text-2xs">
-                        <span class="text-subtle line-through">{{ landed.from }}</span>
-                        <span class="whitespace-nowrap text-content"><Icon name="arrow-right" class="text-2xs text-subtle" /> {{ landed.to }}</span>
+                    <span class="flex min-w-0 flex-col gap-0.5">
+                        <span class="text-xs text-content">Re-measured just now.{{ landed.from === landed.to ? ` Nothing changed.` : `` }}</span>
+                        <span v-if="landed.from === landed.to" class="text-2xs text-subtle">{{ landed.to }}</span>
+                        <span v-else class="flex flex-wrap items-baseline gap-x-1.5 text-2xs">
+                            <span class="text-subtle line-through">{{ landed.from }}</span>
+                            <span class="whitespace-nowrap text-content"
+                                ><Icon name="arrow-right" class="text-2xs text-subtle" /> {{ landed.to }}</span
+                            >
+                        </span>
                     </span>
-                </span>
-            </div>
+                </div>
 
-            <p class="max-w-read text-xs text-subtle">{{ verdict.chore.description }}</p>
+                <p class="max-w-read text-xs text-subtle">{{ verdict.chore.description }}</p>
 
-            <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
+                <!-- THE RULE, above the evidence and phrased as what WOULD make this due, so it reads the same whether
                  the chore is due or clear. Without it a row is asking to be taken on trust; with it, the reader
                  can disagree with the rule rather than only with the number, which is the disagreement worth
                  having, and the one that improves the book. -->
-            <p class="mt-3 max-w-read text-2xs text-subtle">
-                <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
-            </p>
+                <p class="mt-3 max-w-read text-2xs text-subtle">
+                    <span class="text-content">{{ verdict.state === `due` ? `Shown because` : `Shows when` }}:</span> {{ verdict.chore.criterion }}
+                </p>
 
-            <!-- The evidence, verbatim from the measurement. One claim per line and never summarised further:
+                <!-- The evidence, verbatim from the measurement. One claim per line and never summarised further:
                  this is the list the reader checks the rule above against. -->
-            <ul v-if="verdict.detail.length > 0" class="mt-3 flex flex-col gap-1">
-                <li v-for="line in verdict.detail" :key="line" class="font-mono text-2xs text-content">{{ line }}</li>
-            </ul>
+                <ul v-if="verdict.detail.length > 0" class="mt-3 flex flex-col gap-1">
+                    <li v-for="line in verdict.detail" :key="line" class="font-mono text-2xs text-content">{{ line }}</li>
+                </ul>
 
-            <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs text-subtle">{{ evidenceNote }}</p>
+                <p v-if="evidenceNote" class="mt-3 max-w-read text-2xs text-subtle">{{ evidenceNote }}</p>
 
-            <!-- The last run, whatever it concluded. A `clean` outcome is shown as prominently as any other: it is
+                <!-- The last run, whatever it concluded. A `clean` outcome is shown as prominently as any other: it is
                  the agent saying the findings did not hold up, and that is a result, not a non-event. -->
-            <div v-if="run" class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-subtle">
-                <span>{{ run.running ? `running` : (run.result?.outcome ?? `no result written`) }} · {{ timeAgo(run.manifest.createdAt) }}</span>
-                <button type="button" class="cursor-pointer underline hover:text-content" @click="emit(`open`, run.manifest.conversationId)">
-                    open the transcript
-                </button>
-            </div>
-            <p v-if="run?.result?.summary" class="mt-1 max-w-read text-xs text-content">{{ run.result.summary }}</p>
+                <div v-if="run" class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-subtle">
+                    <span>{{ run.running ? `running` : (run.result?.outcome ?? `no result written`) }} · {{ timeAgo(run.manifest.createdAt) }}</span>
+                    <button type="button" class="cursor-pointer underline hover:text-content" @click="emit(`open`, run.manifest.conversationId)">
+                        open the transcript
+                    </button>
+                </div>
+                <p v-if="run?.result?.summary" class="mt-1 max-w-read text-xs text-content">{{ run.result.summary }}</p>
 
-            <div class="mt-4 flex flex-wrap items-center gap-2">
-                <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <!-- No "start an agent" on a clear or unmeasured chore: a button that spends money proving nothing
                      is wrong is an invitation this surface should not be making. -->
-                <AgentRunButton
-                    v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
-                    :label="verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
-                    icon="play"
-                    :model-label="runModel.model.value.label"
-                    :overridden="runModel.overridden.value"
-                    :disabled="busy || busyHere || liveAgent !== undefined"
-                    @run="startRun"
-                    @pick="runModel.choose"
-                />
-                <!-- The one move a stale row has, and the reason it has no "Fix it" beside it: nobody can decide
+                    <AgentRunButton
+                        v-if="verdict.prompt !== undefined && verdict.state !== `clear`"
+                        :label="verdict.chore.stance === `act` ? `Fix it` : `Look into it`"
+                        icon="play"
+                        :model-label="runModel.model.value.label"
+                        :overridden="runModel.overridden.value"
+                        :disabled="busy || busyHere || liveAgent !== undefined"
+                        @run="startRun"
+                        @pick="runModel.choose"
+                    />
+                    <!-- The one move a stale row has, and the reason it has no "Fix it" beside it: nobody can decide
                      whether there is work here until something has looked at the tree since the last turn.
                      It stays on the row WHILE it runs, wearing the state, rather than vanishing: a control that
                      disappears when pressed leaves nowhere to look for what pressing it did, and the button is
                      where the reader's eye already is. -->
-                <Button
-                    v-if="verdict.state === `stale` || busyHere"
-                    size="small"
-                    severity="secondary"
-                    :label="busyHere ? `Measuring…` : `Re-measure`"
-                    :title="
-                        busyHere
-                            ? `Measuring ${measuringWhat}: a deep check can take a few minutes`
-                            : `Measure this again now, a deep check can take a few minutes`
-                    "
-                    :disabled="busy || busyHere"
-                    @click="emit(`remeasure`)"
-                >
-                    <!-- The kit's icon set, through the slot: the underlying Button's own `icon` prop takes a
+                    <Button
+                        v-if="verdict.state === `stale` || busyHere"
+                        size="small"
+                        severity="secondary"
+                        :label="busyHere ? `Measuring…` : `Re-measure`"
+                        :title="
+                            busyHere
+                                ? `Measuring ${measuringWhat}: a deep check can take a few minutes`
+                                : `Measure this again now, a deep check can take a few minutes`
+                        "
+                        :disabled="busy || busyHere"
+                        @click="emit(`remeasure`)"
+                    >
+                        <!-- The kit's icon set, through the slot: the underlying Button's own `icon` prop takes a
                          PrimeIcons class name, so passing a name from our set renders an empty box. -->
-                    <template #icon><Icon :name="busyHere ? `spinner` : `refresh`" :spin="busyHere" /></template>
-                </Button>
-                <Button v-if="liveAgent" size="small" severity="secondary" text label="Watch it" @click="emit(`open`, liveAgent)" />
-                <Button
-                    v-if="verdict.state === `due`"
-                    size="small"
-                    severity="secondary"
-                    text
-                    label="Not now"
-                    title="Keep it listed, keep it out of the rail, for a month"
-                    @click="emit(`snooze`)"
-                />
-                <Button v-if="verdict.state === `snoozed`" size="small" severity="secondary" text label="Un-snooze" @click="emit(`unsnooze`)" />
+                        <template #icon><Icon :name="busyHere ? `spinner` : `refresh`" :spin="busyHere" /></template>
+                    </Button>
+                    <Button v-if="liveAgent" size="small" severity="secondary" text label="Watch it" @click="emit(`open`, liveAgent)" />
+                    <Button
+                        v-if="verdict.state === `due`"
+                        size="small"
+                        severity="secondary"
+                        text
+                        label="Not now"
+                        title="Keep it listed, keep it out of the rail, for a month"
+                        @click="emit(`snooze`)"
+                    />
+                    <Button v-if="verdict.state === `snoozed`" size="small" severity="secondary" text label="Un-snooze" @click="emit(`unsnooze`)" />
+                </div>
             </div>
-        </div>
-    </div>
+        </template>
+    </DisclosureRow>
 </template>

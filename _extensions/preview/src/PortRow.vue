@@ -9,9 +9,18 @@
 
      Shared by both groups (the user's own services and the sandbox's internals) because a row that means the
      same thing should look the same; `muted` only drops the emphasis of the action button, since nobody is
-     hunting for a Preview button next to the sandbox's own plumbing. -->
+     hunting for a Preview button next to the sandbox's own plumbing.
+
+     THE EVIDENCE OPENS FROM A CHEVRON ON THE LEFT, like every other expandable row in the app. It used to open
+     from an `(i)` in the TRAILING cluster that turned into a `chevron-up`, and that was wrong three times over:
+     `(i)` is <InfoHint>'s glyph, which this view already uses thirty pixels higher in its own group header for
+     a hover card that toggles nothing; a morph carries no state a reader can scan a list for; and the trailing
+     cluster is where the VERBS live, so the toggle sat one mis-click from the button that publishes a port to
+     the public internet. <DisclosureRow> owns all of that now. `hit="pair"` because this row's description
+     already carries a control of its own (the terminal link), and a disclosure that swallowed it would make
+     "show me the command" and "take me to the terminal" the same press. -->
 <script setup lang="ts">
-import { Button, type IconName, Icon, InfoTable, Row, StatusBadge, ui } from "@intentic/extension-ui";
+import { Button, DisclosureRow, type IconName, Icon, InfoTable, StatusBadge, ui } from "@intentic/extension-ui";
 import type { PortSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import SharePreview from "./SharePreview.vue";
@@ -51,7 +60,10 @@ const details = computed<string[][]>(() => [
 </script>
 
 <template>
-    <Row density="compact">
+    <DisclosureRow v-model:open="open" density="compact" hit="pair">
+        <!-- The origin glyph and the port number ride INSIDE the toggle: the pair is the hit area, and a
+             fixed-width number is a wide, easy target that costs the row nothing. It also sets where the
+             evidence below starts, since <DisclosureRow> offsets that block by this cluster's own width. -->
         <template #lead>
             <Icon :name="ORIGIN_ICONS[entry.origin]" class="shrink-0 text-sm text-subtle" />
             <!-- The port number is what the reader came looking for, and a fixed width is what makes a column
@@ -88,17 +100,10 @@ const details = computed<string[][]>(() => [
             <StatusBadge variant="success" label="forwarded" size="xs" />
         </template>
 
+        <!-- VERBS ONLY. The disclosure used to lead this cluster, which put "tell me what this is" among "open
+             it", "share it" and "publish it to the internet", four presses of very different consequence in one
+             row of identical 32px squares. -->
         <template #control>
-            <button
-                type="button"
-                :class="ui.iconButton(`h-8 w-8`)"
-                :aria-expanded="open"
-                :aria-label="`${open ? `Hide` : `Show`} what is running on port ${entry.port}`"
-                v-tooltip.bottom="open ? `Hide details` : `What is this?`"
-                @click="open = !open"
-            >
-                <Icon :name="open ? `chevron-up` : `info-circle`" />
-            </button>
             <a
                 v-if="entry.previewUrl"
                 :href="entry.previewUrl"
@@ -130,8 +135,8 @@ const details = computed<string[][]>(() => [
             </span>
         </template>
 
-        <template v-if="open" #below>
+        <template #below>
             <InfoTable :rows="details" />
         </template>
-    </Row>
+    </DisclosureRow>
 </template>
