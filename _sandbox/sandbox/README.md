@@ -400,8 +400,9 @@ conversation's worktree instead of a path that still reaches the shared checkout
 - The daemon authenticates every request itself (a Google ID token only at exchange, then a daemon-minted session verified per request), since it is reached directly over its public tunnel, it owns its own auth. Access is tiered: the owner binds on first sign-in, and every invited member holds a granted role (viewer / collaborator / maintainer) stored in `.intentic/identity/members.json`. The bearer middleware holds each request to its route's floor (`src/auth/role-floor.ts`): viewers read, collaborators drive agents (their lands become requests on the agent card), maintainers ship and get the terminal, and credentials-adjacent surfaces stay owner-only. Rotating sessions or changing a member's grant closes that identity's live event, terminal, and browser transports and invalidates unused connection tickets. Account deletion retires browser authorization at the daemon before the platform record disappears; if the daemon cannot be reached, deletion stops and names the sandbox that still needs attention. The platform only mirrors the grants; this daemon is the enforcer.
 - Resource diagnostics survive the container. Once a minute `src/platform/resource-metrics.ts` appends one JSON
   object to `/history/logs/resource-metrics.jsonl`: daemon heap/native memory, GC and event-loop windows, cgroup
-  pressure, process memory/CPU grouped by workload role, and cardinalities for the resident transcript, turn,
-  browser, performance, and IQ owners. It is readable directly from a later sandbox shell (for example,
+  pressure, process memory/CPU grouped by workload role, the agent-side git queue's depth (`daemon.gitSpawn`,
+  which is what separates "git is slow" from "git was never started"), and cardinalities for the resident
+  transcript, turn, browser, performance, and IQ owners. It is readable directly from a later sandbox shell (for example,
   `tail -n 20 /history/logs/resource-metrics.jsonl | jq .`) and through the existing authenticated
   `GET /logs/file?name=resource-metrics.jsonl&bytes=1000000` route. The normal logs retention applies: files are
   tail-truncated after 5 MB, expire after 30 days, and participate in the 100-file cap.

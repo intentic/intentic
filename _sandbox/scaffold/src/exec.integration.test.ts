@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
-import { defaultGit } from "./exec.js";
+import { defaultGit, gitSpawnStats, politeGit } from "./exec.js";
 
 // defaultGit is the runner every git call in the daemon goes through, so the two things it adds on top of
 // `execFile` (a buffer big enough for real git output, and a retry for index.lock contention) are worth
@@ -65,6 +65,57 @@ test("defaultGit never gives up forever: a lock that is never released still rej
     await expect(defaultGit(dir, ["add", "a.txt"])).rejects.toThrow(/index\.lock/);
 });
 
+/* THE BULK CAP, and the shape of it that the measurement chose. Capping ALL git was tried and is a
+ * regression: 512 reads against a real workspace take 581ms through the forker unbounded and 1,443ms behind a
+ * 14-slot queue, because the kernel schedules processes better than a promise chain does and the queue adds an
+ * event-loop round trip per wave. So only `politeGit`, the agent-side bulk work whose concurrent memory can
+ * push the daemon into swap, is bounded. The two tests are the two halves of that: bulk is held to its
+ * ceiling, and interactive is not held at all. */
+
+test("agent-side git is held to the bulk ceiling, without changing what it answers", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "x\n");
+    await defaultGit(dir, ["add", "a.txt"]);
+    await defaultGit(dir, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "one"]);
+    const head = (await defaultGit(dir, ["rev-parse", "HEAD"])).stdout.trim();
+
+    const { bulkSlots } = gitSpawnStats();
+    // Four times the ceiling, so the queue is genuinely deep rather than incidentally so on a big machine.
+    const reads = Array.from({ length: bulkSlots * 4 }, async () => (await politeGit(dir, ["rev-parse", "HEAD"])).stdout.trim());
+
+    /* Read SYNCHRONOUSLY, before a single call has had a chance to resolve, which makes this exact rather than
+     * a sampling race: a slot is claimed (or a waiter parked) in the same tick as the call, so the whole
+     * stampede's split across running and queued is settled by the time the loop above returns. */
+    expect(gitSpawnStats()).toMatchObject({ activeBulk: bulkSlots, queuedBulk: bulkSlots * 3 });
+
+    // The cap is a scheduling change and must never be a correctness one.
+    expect(await Promise.all(reads)).toEqual(Array.from({ length: bulkSlots * 4 }, () => head));
+    // And it hands every slot back: a leak here would stop the daemon's agent-side git permanently, with no
+    // timeout underneath to recover it, so "the queue drained to nothing" is the assertion that matters most.
+    expect(gitSpawnStats()).toMatchObject({ activeBulk: 0, queuedBulk: 0 });
+});
+
+test("the reads a person is waiting on are never queued, however many agents are starting", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "a.txt"), "x\n");
+    await defaultGit(dir, ["add", "a.txt"]);
+    await defaultGit(dir, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "one"]);
+
+    /* The production shape: several conversations start turns at once and each checks out the workspace
+     * through `politeGit`, while the owner has the Changes panel open. */
+    const { bulkSlots } = gitSpawnStats();
+    const stampede = Array.from({ length: bulkSlots * 8 }, () => politeGit(dir, ["rev-parse", "HEAD"]));
+    // Issued AFTER the whole stampede is already in flight, which is the worst case for them.
+    const panel = Array.from({ length: 8 }, () => defaultGit(dir, ["rev-parse", "HEAD"]));
+
+    // The bulk queue holds the fleet and nothing else: not one of the panel's reads is parked behind it, and
+    // the count of running bulk work is exactly the ceiling no matter how many agents piled in.
+    expect(gitSpawnStats()).toMatchObject({ activeBulk: bulkSlots, queuedBulk: bulkSlots * 8 - bulkSlots });
+
+    await Promise.all([...stampede, ...panel]);
+    expect(gitSpawnStats()).toMatchObject({ activeBulk: 0, queuedBulk: 0 });
+});
+
 /* THE RESIDENT FORKER'S OWN PATH, which none of the tests above can reach. Vitest resolves this package
  * through its `@intentic/src` export condition, so `defaultGit` there finds no compiled `git-forker.js` beside
  * it and execs git directly: the fallback. The daemon always runs from dist, so the branch that actually
@@ -84,8 +135,13 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
     await defaultGit(dir, ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "one"]);
 
     const probe = `
-        const { defaultGit } = await import(${JSON.stringify(built.href)});
+        const { defaultGit, observeGitCommands } = await import(${JSON.stringify(built.href)});
         const dir = ${JSON.stringify(dir)};
+        // The forked path is the only one where git's own clock and the caller's are separate numbers, so it
+        // is the only one that can prove the split arrives at all: a forker that dropped execMs would report
+        // every call as pure event-loop wait, which is the exact misreading the field exists to prevent.
+        const seen = [];
+        observeGitCommands((observation) => seen.push(observation));
         const head = (await defaultGit(dir, ["rev-parse", "HEAD"])).stdout.trim();
         // GIT_INDEX_FILE is the env a checkpoint snapshot stages with: it has no command-line spelling, so a
         // forker that dropped \`env\` would silently stage into the user's own index instead.
@@ -96,13 +152,34 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
         } catch (error) {
             failure = { code: error.code, stderr: String(error.stderr), message: typeof error.message };
         }
-        process.stdout.write(JSON.stringify({ head, gitDir, failure }));
+        const first = seen[0];
+        process.stdout.write(JSON.stringify({
+            head,
+            gitDir,
+            failure,
+            observed: { forked: first.forked, execMs: first.execMs, ms: first.ms },
+            // A failed call reports the far side's clock too, so an incident log can tell eight seconds of git
+            // from eight seconds of stalled loop on the path where that matters most.
+            failedExecMs: seen.at(-1).execMs,
+        }));
     `;
     const { stdout } = await exec(process.execPath, ["--input-type=module", "-e", probe]);
-    const result = JSON.parse(stdout) as { head: string; gitDir: string; failure: { code: number; stderr: string; message: string } };
+    const result = JSON.parse(stdout) as {
+        head: string;
+        gitDir: string;
+        failure: { code: number; stderr: string; message: string };
+        observed: { forked: boolean; execMs: number; ms: number };
+        failedExecMs: number;
+    };
 
     expect(result.head).toMatch(/^[0-9a-f]{40}$/);
     expect(result.gitDir).not.toBe("");
+    // Forked, and carrying a real duration from the child rather than a zero the daemon would then charge to
+    // its own event loop. `ms` is the caller's clock and can only be the larger of the two.
+    expect(result.observed.forked).toBe(true);
+    expect(result.observed.execMs).toBeGreaterThan(0);
+    expect(result.observed.ms).toBeGreaterThanOrEqual(result.observed.execMs);
+    expect(result.failedExecMs).toBeGreaterThan(0);
     // The rejection has to arrive shaped like execFile's, because that is what the daemon reads: `stderr` for
     // the user-facing reason (gitFailureReason) and `code` for politeGit's ENOENT fallback to plain git.
     expect(result.failure.code).toBe(128);

@@ -3,6 +3,7 @@ import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
+import { gitSpawnStats } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { logsRoot } from "../logs/log-files.js";
 import { parsePressure, type PressureSnapshot } from "./loop-watchdog.js";
@@ -394,6 +395,14 @@ const createResourceSampler = (owners: () => Readonly<Record<string, unknown>> =
                     ),
                 },
                 handles: { openFds, threads: selfStatus?.threads, activeResources: activeResources() },
+                /* AGENT-SIDE GIT AS A QUEUE, which is what it becomes under a fleet: the bulk cap
+                 * (scaffold/exec.ts) holds a fixed number of turn-start checkouts and parks the rest.
+                 * `queuedBulk` standing above zero across samples is the difference between "git is slow" and
+                 * "git was never started", and it is what decides whether a slow turn start means the
+                 * repositories or the number of conversations that began together. Nothing else in this series
+                 * can see it: `processes.byRole.git` counts what is RUNNING, and a queue is precisely what is
+                 * not. Interactive git is absent because nothing queues it. */
+                gitSpawn: gitSpawnStats(),
             },
             system,
             processes: { total: processes.total, descendants: processes.descendants, byRole: processes.byRole },

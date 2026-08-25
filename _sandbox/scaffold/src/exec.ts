@@ -1,5 +1,6 @@
 import { type ChildProcess, execFile, fork } from "node:child_process";
 import { existsSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { promisify } from "node:util";
 import type { ForkRequest, ForkResponse } from "./git-forker.js";
 
@@ -90,7 +91,11 @@ export const gitBytes = async (dir: string, args: readonly string[], maxBytes: n
  * which is exactly what it did before the forker existed.
  */
 type GitOutput = { readonly stdout: string; readonly stderr: string };
-const inFlight = new Map<number, { readonly resolve: (value: GitOutput) => void; readonly reject: (error: unknown) => void }>();
+// What one invocation cost, as opposed to what the caller waited: see ForkResponse.execMs for why the two are
+// different numbers and why only the far side can answer the first. Internal to this module, the exported
+// GitRunner still hands back stdout/stderr and nothing else.
+type GitRun = GitOutput & { readonly execMs: number };
+const inFlight = new Map<number, { readonly resolve: (value: GitRun) => void; readonly reject: (error: unknown) => void }>();
 let forker: ChildProcess | undefined;
 let forkerUnavailable = false;
 let nextRequestId = 0;
@@ -112,7 +117,17 @@ const forkerFailure = (response: ForkResponse, failure: NonNullable<ForkResponse
         ...(failure.code !== undefined ? { code: failure.code } : {}),
         stdout: response.stdout,
         stderr: response.stderr,
+        // Rides the failure too: a git that fails after eight seconds is the most useful line in an incident
+        // log, and "eight seconds of git" and "eight seconds of stalled loop" are different incidents.
+        execMs: response.execMs,
     });
+
+// The far side's clock off a rejection, for the observation. Zero when the failure happened before any child
+// ran at all (a dead channel, a fork that never started), which is honest: nothing executed.
+const failedExecMs = (error: unknown): number => {
+    const reported = (error as { execMs?: unknown }).execMs;
+    return typeof reported === "number" ? reported : 0;
+};
 
 /* The compiled child, beside this file, and the one case where it legitimately is not there. Packages here
  * expose an `@intentic/src` export condition, so a test or a dev run imports THIS file as `src/exec.ts`, where
@@ -144,7 +159,7 @@ const gitForker = (): ChildProcess | undefined => {
             waiting.reject(forkerFailure(response, response.failure));
             return;
         }
-        waiting.resolve({ stdout: response.stdout, stderr: response.stderr });
+        waiting.resolve({ stdout: response.stdout, stderr: response.stderr, execMs: response.execMs });
     });
     // A dead forker takes its in-flight reads with it, fail them rather than leave callers hanging forever,
     // and drop the handle so the next call starts a fresh one.
@@ -166,18 +181,122 @@ const gitForker = (): ChildProcess | undefined => {
     return forker;
 };
 
-const runGit = (command: string, args: readonly string[], env: Readonly<Record<string, string>> | undefined): Promise<GitOutput> => {
+/* THE SPAWN CAP, the other half of the forker's argument.
+ *
+ * The forker made each spawn cheap; nothing made the NUMBER of them bounded. `git-forker.ts` execs whatever
+ * arrives the instant it arrives, so a Changes scan over six repos, a fleet-wide standing pass and three agents
+ * starting turns all run at once. The obvious next move is a slot queue over ALL of it. That was measured, and
+ * it is wrong, which is worth recording so nobody re-derives it: 512 reads against this workspace take 581ms
+ * through the forker unbounded and 1,443ms behind a 14-slot queue. The kernel is a better scheduler than a
+ * promise chain, and a slot queue adds an event-loop round trip per wave that the unbounded path pipelines
+ * away. Capping interactive git makes the panel slower, full stop.
+ *
+ * What is NOT free is the other class. `politeGit` marks work done in bulk on an agent's behalf, and one
+ * conversation's turn-start checkout is the whole monorepo hitting the disk; several conversations start
+ * together. That work is already demoted with `nice`/`ionice`, which is the scheduler's answer and covers CPU
+ * and IO, and covers memory not at all: concurrent gits have been observed holding 682MB resident together on
+ * a box whose processes already peak at 25GB against 20GB of RAM, and that overcommit is what pushes the
+ * DAEMON's own pages into swap, which is what turns a garbage collection into the multi-second stall every
+ * inflated number in the perf log actually is.
+ *
+ * So the cap is on BULK ONLY, and it is a memory bound rather than a scheduling one. Interactive git, every
+ * read the browser is waiting on, is never queued by this module and runs exactly as fast as it did before.
+ * A fleet of agents starting cannot flood the machine; nothing an agent does can make the panel wait.
+ *
+ * NETWORK SUBCOMMANDS DO NOT TAKE A SLOT AT ALL, even in bulk. A fetch against a slow remote is latency, not
+ * work: it holds nothing but a socket, so a handful of them would idle out the whole bulk allowance while
+ * consuming none of the memory it exists to bound. */
+const BULK_SLOTS = Math.max(2, Math.floor(availableParallelism() / 4));
+
+/* Latency-bound, not memory-bound: these wait on a remote, so a slot spent on one bounds nothing.
+ *
+ * `remote` is deliberately NOT here, though it looks like it belongs: `git remote` and `git remote -v` read
+ * local config and nothing else (they are 1,503 of the slow ops in the log, all of them 1ms commands), and the
+ * one spelling that does touch the network, `remote update`, has no caller in this workspace. Listing the verb
+ * would exempt the reads and catch nothing. */
+const UNBOUNDED = new Set(["push", "fetch", "pull", "clone", "ls-remote", "submodule"]);
+
+/* Which git verb this is, which is NOT `args[0]`: every call carries GIT_GLOBAL_ARGS, so the first token is
+ * `--no-optional-locks` and the third is a `-c core.fileMode=false` pair, and a naive read classifies the whole
+ * daemon as running a subcommand called `-c`. (The perf log shows exactly that: 1,417 slow ops filed under
+ * `--no-optional-locks` and 99 under `-c`.) Skip flags, skip the value that follows a `-c`, take the first bare
+ * word. `-C <dir>` is skipped by the same rule. */
+const subcommandOf = (args: readonly string[]): string | undefined => {
+    for (let index = 0; index < args.length; index += 1) {
+        const arg = args[index]!;
+        // The one-letter options this module itself passes, each of which takes a separate value token.
+        if (arg === "-c" || arg === "-C") {
+            index += 1;
+            continue;
+        }
+        if (!arg.startsWith("-")) {
+            return arg;
+        }
+    }
+    return undefined;
+};
+
+let activeBulk = 0;
+// Woken in arrival order. A plain array: this holds resolvers for a queue that is empty in the steady state
+// and tens deep at its worst, never the thousands a real structure would earn.
+const waitingBulk: (() => void)[] = [];
+
+// A slot, or a promise for one. Undefined return means "start now", which keeps the uncontended case off the
+// microtask queue entirely rather than paying a promise per call to express "there was nothing to wait for".
+const acquireBulk = (): Promise<void> | undefined => {
+    if (activeBulk < BULK_SLOTS) {
+        activeBulk += 1;
+        return undefined;
+    }
+    return new Promise<void>((resolve) => waitingBulk.push(resolve));
+};
+
+const releaseBulk = (): void => {
+    activeBulk -= 1;
+    const next = waitingBulk.shift();
+    if (next === undefined) {
+        return;
+    }
+    activeBulk += 1;
+    next();
+};
+
+/** How much agent-side git is running and how much is parked behind the bulk cap. Exported for the daemon's
+ *  resource series and for the tests that pin the cap: a queue standing above zero across samples is what
+ *  separates "git is slow" from "git was never started", and it is unknowable from outside this module.
+ *  Interactive git is absent by design, nothing here queues it, so there is no number to report. */
+export const gitSpawnStats = (): { readonly activeBulk: number; readonly queuedBulk: number; readonly bulkSlots: number } => ({
+    activeBulk,
+    queuedBulk: waitingBulk.length,
+    bulkSlots: BULK_SLOTS,
+});
+
+const runGit = async (command: string, args: readonly string[], env: Readonly<Record<string, string>> | undefined): Promise<GitRun> => {
     // Merged, never replaced: execFile's `env` REPLACES the child's whole environment, and git without
     // PATH/HOME finds neither its helpers nor its config.
     const resolved = env === undefined ? undefined : { ...process.env, ...env };
     const channel = gitForker();
     if (channel === undefined) {
-        return exec(command, [...args], { maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) });
+        /* No forker: THIS process execs git, so its own clock is the child's. There is no IPC hop to cross and
+         * no second loop between the exit and the callback, which is exactly what makes the forked path's two
+         * clocks worth reporting separately and this one's not. */
+        const from = process.hrtime.bigint();
+        try {
+            const output = await exec(command, [...args], { maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) });
+            return { ...output, execMs: Number(process.hrtime.bigint() - from) / 1e6 };
+        } catch (error) {
+            // Only ever an execFile Error in practice; the typeof guard is so a non-object throw is rethrown
+            // untouched rather than boxed into a wrapper that loses whatever it was.
+            if (typeof error === "object" && error !== null) {
+                Object.assign(error, { execMs: Number(process.hrtime.bigint() - from) / 1e6 });
+            }
+            throw error;
+        }
     }
     const id = nextRequestId;
     nextRequestId += 1;
     const request: ForkRequest = { id, command, args, maxBuffer: MAX_GIT_OUTPUT, ...(resolved !== undefined ? { env: resolved } : {}) };
-    return new Promise<GitOutput>((resolve, reject) => {
+    return await new Promise<GitRun>((resolve, reject) => {
         inFlight.set(id, { resolve, reject });
         channel.channel?.ref();
         channel.send(request, (error) => {
@@ -189,6 +308,29 @@ const runGit = (command: string, args: readonly string[], env: Readonly<Record<s
             }
         });
     });
+};
+
+/* One invocation, holding a bulk slot for exactly as long as git is running. Separate from `runGit` so the
+ * acquire and the release are one bracket a reader can check: a slot leaked here stops the daemon's agent-side
+ * git for good, and there is no timeout underneath to paper over it. The `finally` covers the throw, which is
+ * the path that matters, git fails for ordinary reasons dozens of times a minute (a missing ref, a repo
+ * mid-upload). Interactive work never reaches the queue at all, it is the first branch. */
+const runGitSlotted = async (
+    command: string,
+    args: readonly string[],
+    env: Readonly<Record<string, string>> | undefined,
+    bulk: boolean,
+    unbounded: boolean,
+): Promise<GitRun> => {
+    if (!bulk || unbounded) {
+        return await runGit(command, args, env);
+    }
+    await acquireBulk();
+    try {
+        return await runGit(command, args, env);
+    } finally {
+        releaseBulk();
+    }
 };
 
 /* THE MEASUREMENT SEAM. Every git this process runs passes through the loop below, both exported runners are
@@ -208,12 +350,25 @@ export interface GitObservation {
     readonly dir: string;
     readonly args: readonly string[];
     readonly ms: number;
+    /* HOW MUCH OF `ms` WAS GIT, summed over the attempts. `ms - execMs` is everything else: the slot queue, the
+     * IPC hop, and, dominating both, however long this process's event loop was away before it read the result.
+     *
+     * The two were one number until a performance review read `git.run mean 77ms` off the summary and concluded
+     * the repositories were slow. They are not: the same commands, run at a shell against the same workspace,
+     * are 1-9ms, and the log's own `for-each-ref ... 3500ms` is a 2ms read that spanned a garbage collection.
+     * A measurement that cannot tell those apart does not merely lack detail, it points at the wrong subsystem,
+     * and it pointed at this one for two days. Same split, same reason, as git.lock.wait against
+     * git.lock.hold one layer up. */
+    readonly execMs: number;
     // 1 for a clean first-try run; higher means the lock retry loop below spun (see LOCK_CONTENTION).
     readonly attempts: number;
     readonly failed: boolean;
     // Whether the resident forker served it. False means every spawn is paying the parent's page-table copy,
     // the exact cost the forker exists to avoid, and a real regression when it shows up in a dist run.
     readonly forked: boolean;
+    // Agent-side callers parked behind the bulk cap when this one finished. Non-zero means the cap was binding
+    // and the fan-out above it is what to look at. Always zero on an interactive call, which is never queued.
+    readonly queueDepth: number;
 }
 
 let gitObserver: ((observation: GitObservation) => void) | undefined;
@@ -225,43 +380,72 @@ export const observeGitCommands = (observer: (observation: GitObservation) => vo
 };
 
 const gitRunnerVia =
-    (argv: readonly string[]): GitRunner =>
+    (argv: readonly string[], bulk: boolean): GitRunner =>
     async (dir, args, env) => {
         const [command, ...rest] = argv;
+        // Classified from the CALLER's args, never the assembled command line: `politeGit` prefixes `nice -n 10
+        // ionice -c 2 -n 7`, whose first bare token is `10`, and this runner's own GIT_GLOBAL_ARGS sit in front
+        // of everything either way. The caller's args are the only list whose first bare word is a git verb.
+        const unbounded = UNBOUNDED.has(subcommandOf(args) ?? "");
         const from = process.hrtime.bigint();
+        // Summed across attempts, not overwritten by the last one: six lock-contended tries are six real git
+        // runs, and charging the caller for only the last of them would credit the backoff to the event loop.
+        let execMs = 0;
         // Reported whether the call succeeds or throws: a git that fails after 8 seconds is the single most
         // useful line in an incident log, and measuring only the happy path is how it stays missing.
         const observe = (attempts: number, failed: boolean): void => {
-            gitObserver?.({ dir, args, ms: Number(process.hrtime.bigint() - from) / 1e6, attempts, failed, forked: forker !== undefined });
+            gitObserver?.({
+                dir,
+                args,
+                ms: Number(process.hrtime.bigint() - from) / 1e6,
+                execMs,
+                attempts,
+                failed,
+                forked: forker !== undefined,
+                queueDepth: waitingBulk.length,
+            });
         };
         for (let attempt = 1; ; attempt += 1) {
             try {
-                const output = await runGit(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env);
+                const output = await runGitSlotted(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env, bulk, unbounded);
+                execMs += output.execMs;
                 observe(attempt, false);
-                return output;
+                return { stdout: output.stdout, stderr: output.stderr };
             } catch (error) {
+                execMs += failedExecMs(error);
                 if (attempt >= RETRY_ATTEMPTS || !isLockContention(error)) {
                     observe(attempt, true);
                     throw error;
                 }
+                // Outside the slot on purpose (runGitSlotted released it on the way out): a caller sleeping off
+                // another writer's index.lock is not using the machine, and holding a slot through the backoff
+                // would let six contended writes idle out a third of the cap.
                 await new Promise((resolve) => setTimeout(resolve, attempt * attempt * 50));
             }
         }
     };
 
-export const defaultGit: GitRunner = gitRunnerVia(["git"]);
+export const defaultGit: GitRunner = gitRunnerVia(["git"], false);
 
-// The same runner, demoted. CPU nice +10, IO best-effort lowest. For git work done ON BEHALF OF agents in
-// bulk (a conversation's worktree checkout is the whole monorepo hitting the disk at once, and several start
-// together): priorities only bind under contention, and contention is exactly when the daemon's own loop,
-// the thing serving every browser, must win. Falls back to plain git where the wrappers don't exist (macOS
-// dev has no ionice), because a checkout that fails to start is worse than one that competes.
+/* The same runner, demoted, and the two forms it takes are built once rather than per call. CPU nice +10, IO
+ * best-effort lowest. For git work done ON BEHALF OF agents in bulk (a conversation's worktree checkout is the
+ * whole monorepo hitting the disk at once, and several start together): priorities only bind under contention,
+ * and contention is exactly when the daemon's own loop, the thing serving every browser, must win.
+ *
+ * Both spellings are BULK-classed, including the fallback. Demotion and the spawn cap's bulk ceiling are the
+ * same policy expressed against two different resources (the scheduler's, and this module's), so a checkout
+ * that loses `ionice` must not silently gain a claim on half the slot queue as its consolation. */
+const nicedGit: GitRunner = gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"], true);
+const plainBulkGit: GitRunner = gitRunnerVia(["git"], true);
+
+// Falls back to plain git where the wrappers don't exist (macOS dev has no ionice), because a checkout that
+// fails to start is worse than one that competes.
 export const politeGit: GitRunner = async (dir, args, env) => {
     try {
-        return await gitRunnerVia(["nice", "-n", "10", "ionice", "-c", "2", "-n", "7", "git"])(dir, args, env);
+        return await nicedGit(dir, args, env);
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-            return defaultGit(dir, args, env);
+            return await plainBulkGit(dir, args, env);
         }
         throw error;
     }

@@ -40,6 +40,11 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     // One git subprocess. The forker exists to keep this near-instant (see scaffold/exec.ts); a plain read that
     // takes a fifth of a second means the fork is being paid from a large heap, or the disk is contended.
     "git.run": 200,
+    // The part of a git call that was NOT git: the spawn queue, the IPC hop, and this process's own event loop
+    // being away. Floored low like git.lock.wait and for the same reason, this is not work, it is a queue, so
+    // any measurable amount of it is worth a line. When this row rivals git.run's total, the repositories are
+    // innocent and the loop is the thing to open.
+    "git.run.wait": 150,
     // The whole Changes review: a repo walk plus a status/remote/attribution round per repo. It is the single
     // most expensive read the daemon serves, and the browser can ask for it once a second.
     "git.scan": 1_000,
@@ -61,6 +66,23 @@ const SLOW_MS: Readonly<Record<string, number>> = {
 // How often the ranked summary prints while anything is being measured. Long enough not to be noise, short
 // enough that a user who noticed a stall can still find the window it happened in.
 const SUMMARY_MS = 60_000;
+
+// How many ranked rows the summary prints before its wait siblings are added back (see summaryRows). Past the
+// top handful the tail is noise, and the whole point of the line is that it fits in one screen during an
+// incident.
+const SUMMARY_ROWS = 12;
+
+/* THE WAIT HALF OF A WORK OP, so the summary can print the pair rather than whichever of them ranked.
+ *
+ * A wait op measures a QUEUE, so its total is small by construction and it loses a ranking-by-total-time to the
+ * very op it explains. That is not a tie-break detail, it is how this daemon got misread: `git.lock.hold` made
+ * the top twelve, `git.lock.wait` fell off the bottom, and a performance review read a summary showing only
+ * holds and concluded the repo lock was contended. The waits said 2.3% slow, and nobody could see them. Half of
+ * a two-sided measurement is worse than neither half, because it reads as a whole one.
+ *
+ * Pairing is by name and needs no registry: `X.hold` pairs with `X.wait` (the lock's spelling), anything else
+ * with `<itself>.wait` (git.run's). An op whose sibling was never recorded contributes nothing. */
+const waitOpFor = (op: string): string => (op.endsWith(".hold") ? `${op.slice(0, -".hold".length)}.wait` : `${op}.wait`);
 
 // The retained-sample and log payloads. Values stay primitive so a pino line is greppable and a summary row
 // can be read without a JSON parser in the loop.
@@ -136,6 +158,16 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
 
     const ranked = (): readonly PerfStat[] => [...stats.values()].toSorted((left, right) => right.totalMs - left.totalMs);
 
+    const summaryRows = (): readonly PerfStat[] => {
+        const top = ranked().slice(0, SUMMARY_ROWS);
+        const shown = new Set(top.map((stat) => stat.op));
+        const waits = top.flatMap((stat) => {
+            const sibling = stats.get(waitOpFor(stat.op));
+            return sibling !== undefined && !shown.has(sibling.op) ? [sibling] : [];
+        });
+        return [...top, ...waits];
+    };
+
     const record = (op: string, ms: number, fields: PerfFields, failed = false): void => {
         const slow = ms >= (SLOW_MS[op] ?? DEFAULT_SLOW_MS);
         const stat = stats.get(op) ?? { op, count: 0, totalMs: 0, maxMs: 0, slowCount: 0, failed: 0, slowest: undefined };
@@ -183,22 +215,19 @@ export const createPerfTracker = (logger: Logger, slowLogger: Logger | undefined
         dirty = false;
         logger.info(
             {
-                // Ranked by total, capped: past the top handful the tail is noise, and the whole point of the
-                // line is that it fits in one screen during an incident.
+                // Ranked by total, capped, plus the wait half of whatever made the cut (see summaryRows).
                 // The quiet fields are `undefined` rather than conditionally spread: JSON drops them, so a row
                 // with nothing slow and nothing failed prints just as narrow either way.
-                perfSummary: ranked()
-                    .slice(0, 12)
-                    .map((stat) => ({
-                        op: stat.op,
-                        count: stat.count,
-                        totalMs: Math.round(stat.totalMs),
-                        meanMs: round(stat.totalMs / stat.count),
-                        maxMs: Math.round(stat.maxMs),
-                        slow: stat.slowCount > 0 ? stat.slowCount : undefined,
-                        failed: stat.failed > 0 ? stat.failed : undefined,
-                        worst: stat.slowest,
-                    })),
+                perfSummary: summaryRows().map((stat) => ({
+                    op: stat.op,
+                    count: stat.count,
+                    totalMs: Math.round(stat.totalMs),
+                    meanMs: round(stat.totalMs / stat.count),
+                    maxMs: Math.round(stat.maxMs),
+                    slow: stat.slowCount > 0 ? stat.slowCount : undefined,
+                    failed: stat.failed > 0 ? stat.failed : undefined,
+                    worst: stat.slowest,
+                })),
                 windowMs: SUMMARY_MS,
             },
             "perf summary: ranked by TOTAL time, which is what a bottleneck actually is",

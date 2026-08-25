@@ -99,6 +99,38 @@ test("the ranked summary stays on the main log, where an incident reader is alre
     expect(perf.lines.every((line) => line["perfSummary"] === undefined)).toBe(true);
 });
 
+test("a wait op is printed beside the work it explains, however far down the ranking it falls", () => {
+    vi.useFakeTimers();
+    const main = capturing();
+    const tracker = createPerfTracker(main.logger, capturing().logger);
+
+    /* THE REGRESSION THIS PINS, which cost two days of looking at the wrong subsystem. A wait op measures a
+     * QUEUE, so its total is small by construction and it loses a ranking-by-total to the very op it explains.
+     * The summary printed `git.lock.hold` and cut `git.lock.wait`, and a reader concluded from holds alone
+     * that the repo lock was contended, when the waits said it was not. */
+    tracker.record("git.lock.hold", 4_000, {});
+    tracker.record("git.run", 3_000, {});
+    // Twenty ops that each outrank both waits, so the waits are nowhere near the printed rows on their own
+    // total, and the top twelve is full without them.
+    for (let index = 0; index < 20; index += 1) {
+        tracker.record(`filler.${index}`, 100, {});
+    }
+    tracker.record("git.lock.wait", 1, {});
+    tracker.record("git.run.wait", 1, {});
+    vi.advanceTimersByTime(60_000);
+    tracker.stop();
+    vi.useRealTimers();
+
+    const rows = main.lines.find((line) => line["perfSummary"] !== undefined)?.["perfSummary"] as { op: string }[];
+    const ops = rows.map((row) => row.op);
+    // Both spellings of the pairing: `X.hold` pairs with `X.wait`, anything else with `<itself>.wait`.
+    expect(ops).toContain("git.lock.wait");
+    expect(ops).toContain("git.run.wait");
+    // And they are here BECAUSE their work op is, not because they earned a place: the ranking proper is the
+    // two work ops and ten fillers, every one of which outranks either wait a hundred times over.
+    expect(ops.slice(0, 12)).toEqual(["git.lock.hold", "git.run", ...Array.from({ length: 10 }, (_, index) => `filler.${index}`)]);
+});
+
 test("track records a failed span and rethrows the error untouched", async () => {
     const perf = capturing();
     const tracker = createPerfTracker(capturing().logger, perf.logger);

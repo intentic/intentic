@@ -27,6 +27,19 @@ export interface ForkResponse {
     readonly id: number;
     readonly stdout: string;
     readonly stderr: string;
+    /* HOW LONG GIT ITSELF RAN, timed HERE and not on the far side, which is the only place the number is true.
+     *
+     * The parent measures a git call as wall clock from its own call site, so whatever it reports includes the
+     * IPC hop and, decisively, however long the parent's event loop was away before it got round to reading
+     * this response. That is not a small correction: this daemon's loop stalls past a second in 11% of its
+     * sampled windows and past ten in 3%, and a stalled loop backdates nothing, it simply adds itself to every
+     * measurement in flight. Every `for-each-ref` in the perf log reading three and a half seconds is a two
+     * millisecond command that was waiting for a garbage collection it had nothing to do with.
+     *
+     * This process is a forking stub with an idle loop, so the gap between these two clocks IS the parent's
+     * own stall, reported rather than inferred. `git.run` minus this is what the daemon spends waiting for
+     * itself, and it is the difference between fixing git and fixing the thing actually holding the loop. */
+    readonly execMs: number;
     readonly failure?: { readonly message: string; readonly code?: number | string };
 }
 
@@ -36,6 +49,7 @@ if (send === undefined) {
 }
 
 process.on("message", (request: ForkRequest) => {
+    const from = process.hrtime.bigint();
     execFile(
         request.command,
         [...request.args],
@@ -45,6 +59,7 @@ process.on("message", (request: ForkRequest) => {
                 id: request.id,
                 stdout,
                 stderr,
+                execMs: Number(process.hrtime.bigint() - from) / 1e6,
                 // A `null` code (killed by a signal) carries nothing the far side can branch on, absent is the
                 // honest spelling, and the message still says what happened.
                 ...(error === null

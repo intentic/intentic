@@ -264,20 +264,24 @@ const main = async (): Promise<void> => {
      * same on all of them. `args` keeps the subcommand and its flags but drops trailing operands, which are
      * pathspecs, a `checkout -- <400 paths>` would otherwise put 400 paths in a log line, and the subcommand
      * is what identifies the op anyway. */
-    observeGitCommands(({ dir, args, ms, attempts, failed, forked }) => {
-        services.perf.record(
-            "git.run",
-            ms,
-            {
-                git: args.slice(0, 3).join(" "),
-                repo: dir.startsWith(services.workspace.root) ? dir.slice(services.workspace.root.length + 1) || "root" : dir,
-                ...(attempts > 1 ? { lockRetries: attempts - 1 } : {}),
-                // Only worth a field when it is FALSE: a direct exec pays the parent's page-table copy on every
-                // call (~27ms at this daemon's resident size), which is a whole class of slowness on its own.
-                ...(forked ? {} : { forked: false }),
-            },
-            failed,
-        );
+    observeGitCommands(({ dir, args, ms, execMs, attempts, failed, forked, queueDepth }) => {
+        const fields = {
+            git: args.slice(0, 3).join(" "),
+            repo: dir.startsWith(services.workspace.root) ? dir.slice(services.workspace.root.length + 1) || "root" : dir,
+            ...(attempts > 1 ? { lockRetries: attempts - 1 } : {}),
+            // Only worth a field when it is FALSE: a direct exec pays the parent's page-table copy on every
+            // call (~27ms at this daemon's resident size), which is a whole class of slowness on its own.
+            ...(forked ? {} : { forked: false }),
+            ...(queueDepth > 0 ? { queueDepth } : {}),
+        };
+        services.perf.record("git.run", ms, { ...fields, execMs: Math.round(execMs) }, failed);
+        /* AND THE PART THAT WASN'T GIT, filed as its own op so the ranked summary carries both numbers side by
+         * side. `git.run` alone is the measurement that sent a performance review after the repo layer: it read
+         * "86,070 calls, mean 77ms" and concluded git was slow, when the same commands are 1-9ms at a shell and
+         * the difference is this process's event loop being away (p99 stall 10s, max 239s). One glance at the
+         * two rows now says which subsystem to open. Never negative: the two clocks are read on opposite sides
+         * of an IPC hop, so a sub-millisecond call can report a hair more exec than wall. */
+        services.perf.record("git.run.wait", Math.max(0, ms - execMs), fields, failed);
     });
 
     /* Every provider's boot tasks — the Codex config write, Cursor's command-gate socket, Claude's refresh
