@@ -924,6 +924,9 @@ importers:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.8(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
+      sharp:
+        specifier: 0.35.3
+        version: 0.35.3(@types/node@24.13.2)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
