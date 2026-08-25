@@ -277,10 +277,10 @@ export const syncHolder = async (historyRoot: string): Promise<SyncHolder | unde
 export const mirrorMachines = async (historyRoot: string): Promise<string[]> =>
     (await readEnrollments(historyRoot)).filter((entry) => entry.mode === "mirror").map((entry) => entry.machine);
 
-// Every enrolled machine's label, whichever mode it holds, the Computers view's row list. A machine belongs on
-// it because it is ENROLLED, not because it has managed to report: one that never posts is exactly the case
-// worth showing (an agent too old to report, or a setup that never finished).
-export const enrolledMachines = async (historyRoot: string): Promise<string[]> => (await readEnrollments(historyRoot)).map((entry) => entry.machine);
+// Every enrolled machine's label, whichever mode it holds. A machine belongs on the Computers view's row list
+// because it is ENROLLED, not because it has managed to report: one that never posts is exactly the case worth
+// showing (an agent too old to report, or a setup that never finished).
+const labelsOf = (enrollments: readonly SyncEnrollment[]): string[] => enrollments.map((entry) => entry.machine);
 
 /* WHAT THE MACHINE SAYS ABOUT ITSELF. Everything above is what the SANDBOX knows about an enrollment, that it
  * exists, and roughly when it was last used. None of it can answer the questions the Desktop sync card was
@@ -313,12 +313,23 @@ export const recordMachineReport = async (historyRoot: string, presented: string
  *
  * Filtered against the live enrollments rather than returned wholesale: revoking a machine's access has to stop
  * the sandbox showing its folders too, and the in-memory map has no revocation hook of its own. */
-export const machineReports = async (historyRoot: string): Promise<{ machine: string; report: MachineReport }[]> => {
-    const enrolled = new Set((await readEnrollments(historyRoot)).map((entry) => entry.machine));
+const reportsFor = (enrollments: readonly SyncEnrollment[]): { machine: string; report: MachineReport }[] => {
+    const enrolled = new Set(labelsOf(enrollments));
     return [...reports.entries()]
         .filter(([machine]) => enrolled.has(machine))
         .toSorted(([, a], [, b]) => b.receivedAt - a.receivedAt)
         .map(([machine, entry]) => ({ machine, report: entry.report }));
+};
+
+export const machineReports = async (historyRoot: string): Promise<{ machine: string; report: MachineReport }[]> =>
+    reportsFor(await readEnrollments(historyRoot));
+
+/* BOTH ENROLLMENT LISTS OFF ONE READ OF THE FILE, for the Computers view, which needs the labels and the reports
+ * together and used to ask for them separately, reading and parsing sync-enrollments.json twice per request.
+ * Trivial next to a round trip to a laptop, and free to stop doing now that the round trip is off that path. */
+export const enrolledFleet = async (historyRoot: string): Promise<{ machines: string[]; reports: { machine: string; report: MachineReport }[] }> => {
+    const enrollments = await readEnrollments(historyRoot);
+    return { machines: labelsOf(enrollments), reports: reportsFor(enrollments) };
 };
 
 // Self-revoke: drop the enrollment owning this sync token (the agent's uninstall). Returns false when no

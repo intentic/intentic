@@ -293,7 +293,10 @@ reports the profile.
   (`machine-reports.ts`), and `host-seed.ts`: the card the setup flow creates for the machine that installed
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
-  here.
+  here. Reading them does NOT: a reading is served from memory and refreshed behind the answer, because the
+  alternative is a page that waits on a round trip to every one of somebody's laptops before it can paint, and
+  a reading carries its own `capturedAt` for the view to age it by. Only a machine this daemon has never once
+  read is waited for, and only up to `PULL_TIMEOUT_MS`.
 - [src/runners](src/runners), this sandbox's own execution containers on other machines — both halves, since
   a runner IS this daemon in another posture. Parent half: enrollment on /history, live sockets in memory
   (the hosts pair retold), a per-repo git door (stock smart HTTP off the real git dirs), and the turn

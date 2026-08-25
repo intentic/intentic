@@ -18,7 +18,18 @@ import { useSandboxQuery } from "./useSandboxQuery";
 const QUERY_KEY = COMPUTERS.of();
 const POLL_MS = 10_000;
 
-export function useComputers(): {
+/* WHO POLLS AND WHO ONLY READS, and it has to be a choice the caller makes.
+ *
+ * The rule this file states two paragraphs up, that reaching out to a machine happens because a person opened
+ * the view that shows it, was true of the Computers tab and quietly false everywhere else: useHostRunning reads
+ * the same query, HostRecreate calls it, and the update card renders HostRecreate whenever a release, a rollback
+ * or a pending overlay is on offer. So the sandbox Overview and Environment tabs re-polled every connected
+ * laptop every ten seconds to decide whether a button could be a button, and a reader who then opened Computers
+ * arrived behind a fan-out that was already running.
+ *
+ * A non-polling reader still gets the list, and gets it instantly: whatever the shared cache holds, refreshed
+ * once on mount. That is all "which computer runs this sandbox" ever needed. */
+export function useComputers({ poll = true }: { poll?: boolean } = {}): {
     computers: ComputedRef<Computer[]>;
     error: ComputedRef<string | undefined>;
     isLoading: Ref<boolean>;
@@ -27,7 +38,7 @@ export function useComputers(): {
     const { query, error } = useSandboxQuery({
         queryKey: QUERY_KEY,
         queryFn: async () => ComputersListSchema.parse(await sandboxJson(`/system/computers`)),
-        refetchInterval: POLL_MS,
+        refetchInterval: poll ? POLL_MS : false,
     });
     return {
         computers: computed(() => query.data.value?.computers ?? []),
@@ -92,9 +103,12 @@ export async function manageMachineSandbox(
  * button that fails when taken is worse than the command it replaced, and this one would fail at the moment
  * somebody's sandbox is already unhappy.
  *
- * Shares the Computers query, so a hub with both this card and that view open asks the machine once. */
+ * Shares the Computers query, so a hub with both this card and that view open asks the machine once, and does
+ * NOT poll it: this is a card deciding what kind of control to draw, not a view of the machines. With the tab
+ * open the poll is there anyway (same key, same cache); without it, an update card sitting on the Overview stops
+ * being a reason to talk to somebody's laptop every ten seconds. */
 export function useHostRunning(slug: () => string | undefined): ComputedRef<string | undefined> {
-    const { computers } = useComputers();
+    const { computers } = useComputers({ poll: false });
     return computed(() => {
         const target = slug();
         if (target === undefined || target === ``) {

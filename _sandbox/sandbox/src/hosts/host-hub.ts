@@ -47,9 +47,14 @@ export interface HostHub {
     // The typed client for a connected machine, or undefined when it is offline. Callers that need a REASON for
     // the absence use `mcp`, which throws one the model can read.
     readonly client: (id: string) => HostClient | undefined;
-    // One MCP message to a machine, bounded by CALL_TIMEOUT_MS. Throws when the machine is offline, with the
-    // sentence the agent ends up reading, since an asleep laptop is a normal state, not a fault.
-    readonly mcp: (id: string, payload: unknown) => Promise<unknown>;
+    /* One MCP message to a machine. Throws when the machine is offline, with the sentence the agent ends up
+     * reading, since an asleep laptop is a normal state, not a fault.
+     *
+     * `signal` is how a caller states its OWN deadline, and a caller serving a browser needs one: CALL_TIMEOUT_MS
+     * is sized for a tool call an agent made on purpose and will wait minutes for, which is the wrong ceiling
+     * entirely for a read behind a page (see machine-reports.ts PULL_TIMEOUT_MS). Absent ⇒ the fifteen-minute
+     * backstop, which is right for everything that is genuinely a tool call. */
+    readonly mcp: (id: string, payload: unknown, options?: { readonly signal?: AbortSignal }) => Promise<unknown>;
     // Push the grant. False ⇒ nobody to push to; the machine gets it on its next connect instead.
     readonly pushScopes: (id: string, scopes: HostScopes) => Promise<boolean>;
     // Cut a machine off now, the owner revoking it, or removing the capability.
@@ -131,13 +136,13 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             host.lastSeen = Date.now();
         },
         client: (id) => live.get(id)?.client,
-        mcp: async (id, payload) => {
+        mcp: async (id, payload, options) => {
             const host = live.get(id);
             if (host === undefined) {
                 throw new Error(`"${id}" is not connected right now: the computer is asleep, offline, or its agent isn't running.`);
             }
             host.lastSeen = Date.now();
-            return await host.client.mcp(payload, { signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
+            return await host.client.mcp(payload, { signal: options?.signal ?? AbortSignal.timeout(CALL_TIMEOUT_MS) });
         },
         pushScopes: async (id, scopes) => {
             const host = live.get(id);

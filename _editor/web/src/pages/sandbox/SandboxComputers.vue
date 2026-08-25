@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Computer, type MachineSandboxOp, watcherStalled } from "@intentic/sandbox-contract";
+import { type Computer, type MachineSandboxOp, type MachineWatcher, watcherStalled } from "@intentic/sandbox-contract";
 import {
     Button,
     groupNeedsAttention,
@@ -79,9 +79,20 @@ const computersNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't list your computers.`, detail: error.value },
 );
 
-// One clock for the whole render, so every row's staleness is judged against the same instant rather than each
-// against the moment its own computed happened to run, and the app's one clock, so it stops with this tab.
-const now = useNow();
+/* One clock for the whole render, so every row's staleness is judged against the same instant rather than each
+ * against the moment its own computed happened to run, and the app's one clock, so it stops with this tab.
+ *
+ * QUANTISED, and that is not a detail: the app's clock ticks every second, and every derivation on this page
+ * hangs off it. `label` reads it, `sorted` sorts by `label`, `rows` maps `sorted` and calls `sandboxGroups` per
+ * machine, and `shown`, `tally`, `blocks` and `autoOpenMachine` all read `rows`: so the entire list, every
+ * machine's port-and-folder grouping included, was rebuilt once a second and handed to <MachineDetail> as fresh
+ * objects, for data that arrives every ten. Nothing on this page needs finer time than that, because everything
+ * that reads the clock is a threshold a MINUTE wide (reportStale, watcherStalled). Rounding to the poll interval
+ * leaves those answers unchanged to within ten seconds and stops the cascade dead: the computed still runs each
+ * tick, returns the same number, and nothing downstream of it moves. */
+const CLOCK_STEP_MS = 10_000;
+const ticking = useNow();
+const now = computed(() => Math.floor(ticking.value / CLOCK_STEP_MS) * CLOCK_STEP_MS);
 
 /* The release this sandbox knows about: the SAME value behind its own update badge, because one release stamps
  * the daemon, the image and both machine agents alike. It rides the shared /info query, so putting agent
@@ -196,6 +207,11 @@ interface ComputerRow {
     readonly warnings: readonly string[];
     /** Sandbox ids this machine should unfold on arrival: the one you are using, and anything the filter hit. */
     readonly open: readonly string[];
+    /** The machine's watcher with this render's stall verdict already on it, absent on a machine that never
+     *  reported. Derived HERE rather than in the template, where `{ ...watcher, stalled }` was a fresh object
+     *  every render and re-rendered the whole of <MachineDetail> beneath it for a fact that changes about once
+     *  a minute. */
+    readonly watcher: (MachineWatcher & { readonly stalled: boolean }) | undefined;
 }
 
 /* WHICH ROW IS THE SANDBOX YOU ARE LOOKING AT. The container's slug on its machine is the leading label of the
@@ -235,6 +251,7 @@ const rows = computed<ComputerRow[]>(() =>
         if (computer.report !== undefined && (computer.report.watcher.running === false || watcherHalted(computer))) {
             warnings.push(`sync agent stopped`);
         }
+        const watcher = computer.report?.watcher;
         return {
             computer,
             groups,
@@ -243,6 +260,7 @@ const rows = computed<ComputerRow[]>(() =>
             open: groups
                 .filter((group) => isSelf(computer, group) || (needle.value !== `` && groupMatches(group, needle.value)))
                 .map((group) => group.sandboxId),
+            watcher: watcher === undefined ? undefined : { ...watcher, stalled: watcherStalled(watcher, now.value) },
         };
     }),
 );
@@ -669,7 +687,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                                 :pairings="row.computer.report.pairings"
                                 :ports="row.computer.report.ports"
                                 :sandboxes="row.computer.report.sandboxes"
-                                :watcher="{ ...row.computer.report.watcher, stalled: watcherStalled(row.computer.report.watcher, now) }"
+                                :watcher="row.watcher"
                                 :open="row.open"
                                 :undivided="true"
                             >

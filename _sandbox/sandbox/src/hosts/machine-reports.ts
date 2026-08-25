@@ -12,7 +12,7 @@ import {
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
-import { enrolledMachines, machineReports } from "../platform/sync.js";
+import { enrolledFleet } from "../platform/sync.js";
 import { hostSummaries } from "./host.routes.js";
 
 /* THE COMPUTERS VIEW'S DATA, every machine on the other end of this sandbox, however it is reachable.
@@ -30,15 +30,26 @@ import { hostSummaries } from "./host.routes.js";
  * second implementation of the same questions. One producer is what stops the terminal answer and the two
  * on-screen answers from drifting, the argument the desktop app already makes for spawning connect.sh. */
 
-// How long a pulled report is served before the machine is asked again. Every open Computers tab polls this
-// route, and the far end is somebody's laptop over a WebSocket, so the cost of the tab must not scale with how
-// long it is left open. Comfortably shorter than the sync agent's own reporting cadence, so the pulled half is
-// never the stale one.
-const PULL_TTL_MS = 10_000;
+/* How old a served reading may be before the machine is asked again. NOT how long a reader waits: the answer
+ * comes out of this map either way and the refresh runs behind it (see pullCached), so this is the machine's
+ * poking cadence and nothing else.
+ *
+ * It used to be 10s, which was exactly the browser's own poll interval, and a request that itself took seconds:
+ * so the entry had always just expired by the time the next poll arrived, every poll re-poked every machine, and
+ * the cache never once hit. A cadence has to be longer than the poll it is meant to absorb. */
+const PULL_TTL_MS = 30_000;
 
-// Reading a machine's own state is a fast local command. Anything slower is a machine in trouble, and the tab is
-// better off saying so than holding the request open.
-const PULL_TIMEOUT_MS = 15_000;
+/* THE DEADLINE ON ONE READING, and it is a real one now.
+ *
+ * This number used to be handed to the machine as its own `run_command` budget and nowhere else, so the only
+ * deadline this side had was the hub's fifteen-MINUTE backstop (host-hub.ts CALL_TIMEOUT_MS), which is sized for
+ * a tool call an agent meant to make. A socket that was gone but not closed therefore held the whole HTTP
+ * response: the observed tail on this route ran to 45, 65, 91 seconds. Now the call carries the signal.
+ *
+ * The machine's own budget sits BELOW it by about a round trip, so a command that overruns comes back as the
+ * machine's own answer rather than being cut off mid-sentence by this side. */
+const COMMAND_TIMEOUT_MS = 5_000;
+const PULL_TIMEOUT_MS = 8_000;
 
 // The ceiling on one management flow. Far above what any of them should take, an update on a slow connection
 // pulls a multi-gigabyte image, because the machine bounds its own work and this only ever catches a socket that
@@ -46,9 +57,24 @@ const PULL_TIMEOUT_MS = 15_000;
 // view re-reads the fleet afterwards rather than trusting what it last saw.
 const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 
-const pulled = new Map<string, { readonly at: number; readonly result: PullResult }>();
-
 export type PullResult = { readonly report: MachineReport } | { readonly gap: ComputerGap };
+
+/* ONE MACHINE'S LAST READING, plus whatever refresh is currently on the wire for it.
+ *
+ * `inflight` is the half that was missing, and its absence was not a nicety: `pullCached` used to check the map,
+ * await a pull, then write it, so every reader that arrived during those seconds started a pull of its own. A
+ * second browser tab, the desktop app, another member of the sandbox and the poll landing on top of a manual
+ * refetch were four simultaneous round trips to the same laptop asking the same question. */
+interface PullEntry {
+    /** When `result` landed. Zero until the first reading of this daemon's life does. */
+    at: number;
+    /** The last complete reading, served while a newer one is being fetched. */
+    result: PullResult | undefined;
+    /** The refresh on the wire, so however many readers arrive, the machine is asked once. */
+    inflight: Promise<PullResult> | undefined;
+}
+
+const pulled = new Map<string, PullEntry>();
 
 /* `run_command` answers in PROSE, an exit line, then the streams under `--- stdout ---` fences (see the host
  * agent's describeResult). That is right for the agent, which is its only other caller, and it means a machine
@@ -93,14 +119,24 @@ const toolText = (answer: unknown): { text: string; refused: boolean } => {
     return { text, refused: result?.isError === true };
 };
 
-const callTool = async (services: Services, id: string, name: string, args: Record<string, unknown>): Promise<{ text: string; refused: boolean }> =>
+const callTool = async (
+    services: Services,
+    id: string,
+    name: string,
+    args: Record<string, unknown>,
+    signal: AbortSignal,
+): Promise<{ text: string; refused: boolean }> =>
     toolText(
-        await services.hostHub.mcp(id, {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name, arguments: args },
-        }),
+        await services.hostHub.mcp(
+            id,
+            {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "tools/call",
+                params: { name, arguments: args },
+            },
+            { signal },
+        ),
     );
 
 const MachineSandboxRowsSchema = z.array(MachineSandboxSchema);
@@ -121,36 +157,75 @@ export const sandboxesFromTool = (text: string, refused: boolean): MachineSandbo
     return rows.success ? rows.data : [];
 };
 
-// Ask one connected machine what it looks like. Every failure mode is a NAMED gap rather than an absence, because
-// each is a different errand for whoever is reading the tab.
+/* Ask one connected machine what it looks like. Every failure mode is a NAMED gap rather than an absence, because
+ * each is a different errand for whoever is reading the tab.
+ *
+ * THE TWO QUESTIONS GO TOGETHER. They are independent, and asking the second only after the first came back made
+ * every reporting machine cost two round trips end to end where it needed one: at the 1-3s a round trip to a
+ * laptop actually costs, that was half this route's latency for nothing. The `no-agent`/`scope-off` decision is
+ * still the status call's alone; the fleet answer is simply already in hand by the time it is made, and a machine
+ * that refused it (or is too old to have the tool) reads exactly as one running no containers, which is the rule
+ * sandboxesFromTool already stated. */
 const pull = async (services: Services, id: string): Promise<PullResult> => {
-    const { text, refused } = await callTool(services, id, "run_command", { command: "intentic-sync status --json", timeoutMs: PULL_TIMEOUT_MS });
-    if (refused) {
+    // One deadline over both calls: the reading is what has a budget, not either half of it.
+    const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
+    const [status, fleet] = await Promise.all([
+        callTool(services, id, "run_command", { command: "intentic-sync status --json", timeoutMs: COMMAND_TIMEOUT_MS }, signal),
+        callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
+    ]);
+    if (status.refused) {
         // The host agent refuses out-of-scope calls as a value naming the switch. Anything else refused here is
         // still, from the reader's side, "this machine would not answer", and the tab's remedy is the same.
         return { gap: "scope-off" };
     }
-    const report = reportFrom(text);
+    const report = reportFrom(status.text);
     if (report === undefined) {
         return { gap: "no-agent" };
     }
-    // The containers are the reason to have asked at all; a machine that answers the report but not the fleet
-    // still contributes everything else.
-    const sandboxes = await callTool(services, id, "list_sandboxes", {})
-        .then((answer) => sandboxesFromTool(answer.text, answer.refused))
-        .catch((): MachineSandbox[] => []);
+    const sandboxes = sandboxesFromTool(fleet.text, fleet.refused);
     return { report: { ...report, sandboxes, agents: { ...report.agents, host: services.hostHub.state(id).version } } };
 };
 
+// One refresh for this machine, however many readers wanted it, stamped when it LANDS rather than when it
+// started: `at` is the age of the reading being served, and a pull that took six seconds is six seconds of that
+// age already spent.
+const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
+    const inflight = services.perf
+        .track("computers.pull", { id }, () => pull(services, id))
+        // Never rejects, so a caller that walks away from it (the stale-serving path below) leaves nothing
+        // unhandled behind. A machine that would not answer within the deadline is offline as far as this reads.
+        .catch((): PullResult => ({ gap: "offline" }))
+        .then((result) => {
+            entry.at = Date.now();
+            entry.result = result;
+            if (entry.inflight === inflight) {
+                entry.inflight = undefined;
+            }
+            return result;
+        });
+    entry.inflight = inflight;
+    return inflight;
+};
+
+/* WHAT THIS MACHINE LOOKED LIKE, ANSWERED FROM MEMORY, with the refresh running behind the answer.
+ *
+ * This is the whole of the Computers view's latency fix. The route used to be a live fan-out: a reader waited on
+ * a round trip to every one of their laptops, and the measured cost of that was a p50 of ~9.8s with a tail past a
+ * minute. Nothing about it needed to be synchronous. A reading is a snapshot of somebody's computer that carries
+ * its own `capturedAt`, the view already prints "Last heard from ..." over it, and the machines volunteer reports
+ * of their own besides: serving the last one instantly and asking again behind it costs the reader nothing true.
+ *
+ * Only a machine this daemon has never once read blocks, and that one is bounded by PULL_TIMEOUT_MS. */
 const pullCached = async (services: Services, id: string): Promise<PullResult> => {
-    const cached = pulled.get(id);
-    const now = Date.now();
-    if (cached !== undefined && now - cached.at < PULL_TTL_MS) {
-        return cached.result;
+    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined };
+    pulled.set(id, entry);
+    if (entry.result !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
+        return entry.result;
     }
-    const result = await pull(services, id).catch((): PullResult => ({ gap: "offline" }));
-    pulled.set(id, { at: now, result });
-    return result;
+    const inflight = entry.inflight ?? refresh(services, id, entry);
+    // Stale but serving. The refresh above is deliberately not awaited: it lands in the map and the next reader
+    // (or this one's next poll, ten seconds out) gets it.
+    return entry.result ?? (await inflight);
 };
 
 /* WHICH OS, in the one vocabulary the view renders, the capability cards' own slugs (see the `computers`
@@ -233,19 +308,26 @@ export const mergeComputers = (
     return rows;
 };
 
-// The IO half: read both doors, ask every host that is actually up, and hand the three lists to the merge above.
-export const computers = async (services: Services): Promise<Computer[]> => {
-    const hosts = await hostSummaries(services);
-    const answered = await Promise.all(
-        hosts.map(async (host) => ({
-            host,
-            // An offline machine is never asked: the call would hang until the hub's own timeout to produce an
-            // answer that is already knowable.
-            result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
-        })),
-    );
-    return mergeComputers(await enrolledMachines(services.config.historyRoot), await machineReports(services.config.historyRoot), answered);
-};
+/* The IO half: read both doors, ask every host that is actually up, and hand the three lists to the merge above.
+ *
+ * Timed as one span so the route's cost is attributable in logs/perf.jsonl rather than only visible as the
+ * http.request that contains it: `computers.read` is this reconciliation, `computers.pull` is one round trip to
+ * one machine, and the two rows together say whether a slow tab is the daemon or somebody's laptop. Which is the
+ * distinction that took a day of log archaeology to establish the first time. */
+export const computers = async (services: Services): Promise<Computer[]> =>
+    services.perf.track("computers.read", {}, async () => {
+        const hosts = await hostSummaries(services);
+        const answered = await Promise.all(
+            hosts.map(async (host) => ({
+                host,
+                // An offline machine is never asked: the call would hang until the deadline to produce an answer
+                // that is already knowable.
+                result: host.online ? await pullCached(services, host.id) : ({ gap: "offline" } as const),
+            })),
+        );
+        const fleet = await enrolledFleet(services.config.historyRoot);
+        return mergeComputers(fleet.machines, fleet.reports, answered);
+    });
 
 /* One management action on one machine's sandbox, the Computers view's buttons, relayed to the machine and
  * narrated back as it happens.
@@ -272,7 +354,11 @@ export async function* manageMachineSandbox(services: Services, id: string, inpu
     } finally {
         /* In `finally` rather than after the loop, because the interesting cases are the ones that do not reach
          * it: a removal that failed halfway still changed the machine, and a reader who navigated away mid-update
-         * must not come back to a cache that predates it. */
+         * must not come back to a cache that predates it.
+         *
+         * DELETED rather than aged out, which is the one place this route waits on a machine on purpose: with no
+         * entry left there is nothing to serve stale, so the re-read that follows a button blocks on a real
+         * answer. That is exactly what somebody who just pressed Stop is owed. */
         pulled.delete(id);
     }
 }

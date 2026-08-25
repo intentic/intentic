@@ -54,6 +54,22 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
     RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
 }));
 
+/* HOW MANY TIMES THE LIST RE-DERIVES ITSELF, counted through the one function every derivation of a row passes
+ * through. `watcherStalled` is called from `rows` (once per machine) and from `tone`/`label` (again per machine,
+ * and again per comparison the sort makes), so its call count is a direct read on whether the whole chain,
+ * sandboxGroups included, has run. See the tick test at the bottom for why that is worth pinning. */
+let derivations = 0;
+vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
+    const real = await importOriginal();
+    return {
+        ...real,
+        watcherStalled: ((...args: Parameters<typeof real.watcherStalled>) => {
+            derivations += 1;
+            return real.watcherStalled(...args);
+        }) as never,
+    };
+});
+
 const { default: SandboxComputers } = await import("./SandboxComputers.vue");
 
 let app: App | undefined;
@@ -85,6 +101,8 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    // The app's clock is a module singleton, so a test that faked time hands the next one a frozen one.
+    vi.useRealTimers();
 });
 
 /* The row from the report: a connected computer, reachable, with no sync agent on it, so no report, and before
@@ -512,4 +530,30 @@ it(`does not offer to pair a first computer while the list is still being read`,
 it(`offers to pair a first computer once the read lands empty`, () => {
     computersLoading.value = false;
     expect(mount([]).textContent ?? ``).toContain(`No computer is paired`);
+});
+
+/* THE CLOCK MUST NOT REBUILD THE PAGE.
+ *
+ * Every derivation on this tab hangs off the app's one-second clock: `label` reads it, `sorted` sorts by `label`,
+ * `rows` maps `sorted` and groups every machine's folders and ports, and `shown`, `tally`, `blocks` and the
+ * auto-open set all read `rows`. So the entire list was rebuilt and re-rendered once a second, for data that
+ * arrives every ten, on a page that can be left open all day. Nothing here needs finer time than the poll: both
+ * facts read off the clock (a stale report, a stalled watcher) are thresholds a MINUTE wide.
+ *
+ * Pinned by counting derivations across three ticks INSIDE one quantised instant. A regression here is silent,
+ * costs nothing anybody can point at, and is exactly the kind of thing a later edit reintroduces by reaching for
+ * the raw clock because it is right there. */
+it(`does not re-derive the whole list on every tick of the app clock`, async () => {
+    vi.useFakeTimers();
+    // A round instant, so three seconds of ticking cannot cross a bucket boundary and legitimately re-derive.
+    vi.setSystemTime(1_700_000_000_000);
+    mount([managed(true), { ...managed(false), key: `desktop`, label: `desktop` }]);
+    await nextTick();
+
+    const derivedOnce = derivations;
+    expect(derivedOnce).toBeGreaterThan(0);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await nextTick();
+    expect(derivations).toBe(derivedOnce);
 });

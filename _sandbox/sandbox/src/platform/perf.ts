@@ -59,6 +59,14 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "git.discover": 400,
     // One HTTP request, end to end, as the browser experiences it.
     "http.request": 1_000,
+    /* One round trip to one of the user's own computers, over its WebSocket, to read what it is running. The
+     * floor is high because the honest cost is a network hop to somebody's laptop and back (measured at 1-3s on
+     * a healthy link), not because slowness here is acceptable: past this the machine is in trouble, and the
+     * deadline in machine-reports.ts cuts it off shortly after.
+     *
+     * It is off the request path (the Computers route serves its last reading and refreshes behind it), so a slow
+     * row here is a fact about a MACHINE, and reading it next to `computers.read` is what tells the two apart. */
+    "computers.pull": 4_000,
     // Pushing one frame to one connected browser's /events stream.
     "events.frame": 250,
 };

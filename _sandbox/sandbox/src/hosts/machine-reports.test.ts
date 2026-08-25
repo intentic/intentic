@@ -1,6 +1,7 @@
 import type { HostSummary, MachineReport } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
-import { mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
+import { afterEach, expect, test, vi } from "vitest";
+import type { Services } from "../composition.js";
+import { computers, mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
 
 const report = (hostname: string, overrides: Partial<MachineReport> = {}): MachineReport => ({
     hostname,
@@ -159,4 +160,121 @@ test("carries the reason a reachable computer produced nothing", () => {
     );
     expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "no-agent"]);
     expect(merged.every((row) => !row.syncEnrolled)).toBe(true);
+});
+
+/* --- HOW OFTEN THE MACHINE IS ACTUALLY ASKED ---------------------------------------------------------------
+ *
+ * The reason this route was slow was never the merge above; it was that every reader waited on a live round trip
+ * to every one of their laptops (a measured p50 of ~9.8s, with a tail past a minute). These pin the three rules
+ * that fixed it, and each of them is a rule somebody could quietly undo while making the merge nicer.
+ *
+ * The cache lives in the module, so every test here uses ids of its own: sharing one would make the order of the
+ * file part of its meaning. */
+
+/* A history root with no enrollments file behind it, so the sync door contributes nothing and these read the
+ * PULLED half alone, which is the half with the round trip in it.
+ *
+ * A path that does not exist rather than a real directory, and the difference is the point: nothing here writes
+ * an enrollment, `readEnrollments` answers an unreadable file with an empty list, and cutting a temp tree for it
+ * would put this whole file, its dozen pure-function tests included, under the integration budget for storage it
+ * never touches. */
+const NO_HISTORY = "/nonexistent/machine-reports-history";
+
+interface FakeCall {
+    readonly id: string;
+    readonly tool: string;
+    readonly signal: AbortSignal | undefined;
+}
+
+const answer = (text: string, isError = false): unknown => ({ result: { content: [{ text }], isError } });
+
+const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
+    const calls: FakeCall[] = [];
+    const services = {
+        config: { historyRoot: NO_HISTORY },
+        perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
+        capabilities: { list: async () => [{ kind: "host", id, config: { platform: "linux" } }] },
+        hostHub: {
+            state: () => ({ online: true, version: "0.1.0" }),
+            mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) => {
+                const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
+                const call = { id: asked, tool, signal: options?.signal };
+                calls.push(call);
+                return await mcp(call);
+            },
+        },
+    } as unknown as Services;
+    return { services, calls };
+};
+
+afterEach(() => vi.useRealTimers());
+
+/* THE ANSWER COMES OUT OF MEMORY AND THE REFRESH RUNS BEHIND IT. Only a machine this daemon has never once read
+ * is worth waiting for; every reader after that gets the last reading at once. A reading carries its own
+ * capturedAt and the view prints "Last heard from ..." over it, so serving it is not a claim that it is live. */
+test("waits for the first reading of a machine, then serves it while refreshing behind the answer", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let hostname = "first";
+    const { services, calls } = fakeServices("cached-pc", async (call) =>
+        call.tool === "run_command" ? answer(JSON.stringify(report(hostname))) : answer("[]"),
+    );
+
+    // Cold: this one pays the round trip, which is the only time anybody does.
+    expect((await computers(services))[0]?.report?.hostname).toBe("first");
+    expect(calls).toHaveLength(2);
+
+    // Inside the TTL: straight out of the map, machine untouched.
+    hostname = "second";
+    expect((await computers(services))[0]?.report?.hostname).toBe("first");
+    expect(calls).toHaveLength(2);
+
+    // Past it: the reader still gets the reading in hand rather than waiting on a new one...
+    vi.setSystemTime(Date.now() + 31_000);
+    expect((await computers(services))[0]?.report?.hostname).toBe("first");
+    // ...and the refresh it kicked off lands for whoever asks next.
+    await vi.waitFor(() => expect(calls).toHaveLength(4));
+    expect((await computers(services))[0]?.report?.hostname).toBe("second");
+});
+
+/* ONE OUTSTANDING PULL PER MACHINE, WHOEVER ASKS. Without this, a second browser tab, the desktop app, another
+ * member of the sandbox and a poll landing on top of a manual refetch were four simultaneous round trips to one
+ * laptop asking it the same question. */
+test("coalesces concurrent readers into a single round trip", async () => {
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { services, calls } = fakeServices("busy-pc", async (call) => {
+        await held;
+        return call.tool === "run_command" ? answer(JSON.stringify(report("busy"))) : answer("[]");
+    });
+
+    const readers = [computers(services), computers(services), computers(services)];
+    release();
+    const answers = await Promise.all(readers);
+
+    expect(answers.every((rows) => rows[0]?.report?.hostname === "busy")).toBe(true);
+    expect(calls.filter((call) => call.tool === "run_command")).toHaveLength(1);
+});
+
+/* BOTH QUESTIONS GO OUT TOGETHER. They are independent, and asking the second only once the first came back cost
+ * every reporting machine two round trips where it needed one. The status call still decides what the row SAYS,
+ * which is why the fleet call has to happen even on a machine whose status answer turns out to be no report at
+ * all: if it did not, this test would pass with the calls back in sequence. */
+test("asks for the status and the fleet in one go, and bounds the pair with one deadline", async () => {
+    const { services, calls } = fakeServices("bare-pc", async (call) =>
+        call.tool === "run_command" ? answer("intentic-sync: command not found", false) : answer("[]"),
+    );
+
+    expect((await computers(services))[0]?.gap).toBe("no-agent");
+    expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "run_command"]);
+    // One signal over the whole reading, and it is the daemon's own: without it the only ceiling on this route is
+    // the hub's fifteen-minute backstop, which is what the minute-long samples in the perf log were.
+    expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(calls[0]?.signal).toBe(calls[1]?.signal);
+});
+
+// A machine that will not answer is a machine you cannot read: the row says so instead of the request hanging on
+// it. Same outcome the deadline produces, reached here without waiting for one.
+test("a machine that refuses to answer at all reads as offline", async () => {
+    const { services } = fakeServices("dead-pc", () => Promise.reject(new Error("socket is gone")));
+    expect((await computers(services))[0]).toMatchObject({ hostId: "dead-pc", gap: "offline" });
 });
