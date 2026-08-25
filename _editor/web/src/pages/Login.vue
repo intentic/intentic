@@ -164,7 +164,7 @@ watch(
 
             <h1 class="animate-fade-in-up headline" style="animation-delay: 110ms">
                 <span class="beat"><span class="display">Sign in</span><span class="stop">.</span></span>
-                <span class="beat"><span class="display">Your workspace opens</span><span class="stop">.</span></span>
+                <span class="beat"><span class="display">Start building with agents</span><span class="stop">.</span></span>
             </h1>
 
             <p class="animate-fade-in-up hero-sub" style="animation-delay: 160ms">A workspace for coding agents, on hardware you own.</p>
