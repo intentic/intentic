@@ -102,6 +102,65 @@ export const installedApp = (entries: readonly UninstallEntry[], displayName: st
 /** Strips one layer of surrounding double quotes, which is how Windows stores a path that may contain spaces. */
 const unquote = (value: string): string => value.replace(/^"(.*)"$/s, `$1`);
 
+/* WHAT IS KEEPING THIS RUNNER ALIVE, which is a different question from "is it in a desktop session".
+ *
+ * Both were the same question while the only two shapes were "a service" (session 0, fails everything) and "the
+ * logon task" (a desktop, passes). There is a third, and it is the one a machine drifts into: somebody starts
+ * `run.cmd` in a console window by hand. That runner has a desktop and passes every assertion in tier 1, so
+ * nothing here has ever objected to it — and it dies with the window, with the sign-out and with the reboot, and
+ * nothing brings it back. What that looks like from the outside is jobs queueing against `windows-desktop`
+ * forever with no failure anywhere to read, which is the least diagnosable state this machine has.
+ *
+ * So it is reported, and NOT as a failure: this runner is running the job that is asking, and failing the job
+ * would be the tier punishing a machine for something that is about the next reboot rather than about this run.
+ * A line in a passing log is the right weight — it is there to be found by whoever asks "why did CI stop?".
+ */
+export interface RunnerTask {
+    /** As Windows reports it: `Running` when the task is what started this listener, `Ready` when it is not. */
+    readonly State?: string;
+    /** How often the watchdog trigger re-runs the task, as an ISO 8601 duration, or absent if there is none. */
+    readonly Repetition?: string;
+}
+
+export type RunnerSupervision =
+    /** The logon task started this listener and re-checks it: a reboot, a crash and a sign-out all heal. */
+    | { readonly kind: `supervised`; readonly repetition: string }
+    /** The task started it, but nothing re-checks it: a crash needs a sign-out and back in. */
+    | { readonly kind: `no-watchdog` }
+    /** A console somebody opened. Runs this job perfectly and is gone at the next reboot. */
+    | { readonly kind: `hand-started` };
+
+/* `Running` is the whole test for "the task started this", and it is exact rather than a heuristic: the doctor
+ * runs INSIDE the listener, so if the task were not the thing hosting this process the task would not be in a
+ * running state. A missing task and a task sitting at Ready are the same answer — something else started this. */
+export const runnerSupervision = (tasks: readonly RunnerTask[]): RunnerSupervision => {
+    const running = tasks.find((task) => (task.State ?? ``).toLowerCase() === `running`);
+    if (running === undefined) {
+        return { kind: `hand-started` };
+    }
+    const repetition = (running.Repetition ?? ``).trim();
+    return repetition === `` ? { kind: `no-watchdog` } : { kind: `supervised`, repetition };
+};
+
+/* An ISO 8601 duration as a person reads it. Task Scheduler speaks PT3M and nothing else, and "every PT3M" in
+ * a CI log is a line the reader has to decode to know whether it says three minutes or three months. Only the
+ * shapes this actually produces are handled, and anything else is passed through verbatim rather than guessed
+ * at: a wrong number here would be a confident lie about how long this machine takes to heal. */
+export const humanDuration = (iso: string): string => {
+    const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso.trim());
+    if (match === null) {
+        return iso.trim();
+    }
+    const parts = [
+        [match[1], `hour`],
+        [match[2], `minute`],
+        [match[3], `second`],
+    ]
+        .filter(([value]) => value !== undefined)
+        .map(([value, unit]) => `${value as string} ${unit as string}${value === `1` ? `` : `s`}`);
+    return parts.length === 0 ? iso.trim() : parts.join(` `);
+};
+
 /* `docker info --format {{.OSType}}`, the question `connect.ps1` and `ic` both skip.
  *
  * Both of them establish that a daemon ANSWERS and go straight on to pulling a Linux image. On Windows those

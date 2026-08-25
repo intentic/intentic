@@ -48,6 +48,9 @@ So it is a property of how the runner was REGISTERED, and registering is a scrip
 ```powershell
 # From an ELEVATED PowerShell on the runner. Token from Settings > Actions > Runners > New self-hosted runner.
 ./_tools/scripts/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <registration-token>
+
+# On a box that exists to be this runner and nothing else, add both switches — see "what each costs" below.
+./_tools/scripts/setup-windows-runner.ps1 -Url https://github.com/intentic -Token <token> -AutoLogon -KeepAwake
 ```
 
 Run it on a machine somebody already registered as a service and it takes the service out and puts the logon
@@ -61,9 +64,58 @@ command when it fails, so this is also the answer to a runner that mysteriously 
 ./_tools/scripts/setup-windows-runner.ps1 -Repair
 ```
 
-After an unattended reboot the runner waits for someone to sign in. `-AutoLogon` removes that wait by storing a
-logon password in the registry in cleartext; it is off by default because that is a poor trade on a machine
-anybody also uses.
+**It refuses while a job is running**, and `-Force` is how you override that. Repairing a busy runner takes the
+job down at whatever step it had reached, and what that looks like on the Actions page is a step whose every
+assertion passed and whose process then vanished, with nothing in the log naming a cause — the reader has no way
+to connect it to a command somebody ran on the box. Waiting is nearly always right; the runner does one job at a
+time, so it is minutes.
+
+### And not a console window either
+
+"Not a service" is a statement about the *session*, and it gets read as a statement about *attendance*. Those
+are different, and the gap between them is the second way this machine goes quiet: somebody starts `run.cmd` in
+a console window, which has a desktop and passes every assertion in tier 1 — and dies with the window, with the
+sign-out and with the reboot, and nothing brings it back.
+
+That failure is the least diagnosable one this repo has, because there is nothing to read. Jobs naming
+`windows-desktop` queue against a label no machine is answering; GitHub shows them as *in progress* for as long
+as you leave them; no run fails, no log is written, and the Actions page looks like a slow pipeline rather than
+an absent machine. It stays that way until a person notices.
+
+So the task the script registers is unattended in every way a service is, except the session:
+
+| | |
+| --- | --- |
+| no window | the listener runs under a hidden host, so there is nothing on the desktop to close by accident and nothing to keep open on purpose |
+| self-healing | a repeating trigger re-runs the task every 3 minutes, and the task's `IgnoreNew` policy makes that a no-op while the listener is alive. A crash, a dropped network, a failed self-update or an operator's Ctrl-C is repaired within minutes, by the machine, with nobody signed in |
+| survives a reboot | `-AutoLogon`, below |
+| does not sleep through work | `-KeepAwake`, below |
+
+Task Scheduler's own restart-on-failure is set too, as the fast path — but it is not a substitute: it only fires
+for what the scheduler *calls* a failure, and a listener that exited zero, which is what a graceful stop and most
+self-update handoffs look like, is not one. That is the gap the repetition closes.
+
+`doctor` reports which of the three shapes this machine is, and a hand-started runner is a **note in a passing
+log** rather than a failure: that runner is running the job that is asking, and the problem is about the next
+reboot, not this build. It is worth knowing that the line is there, because it is the only place the answer to
+"why did CI stop?" is written down before it happens.
+
+### The two switches, and what each costs
+
+Both are off by default, because each trades away something real and only a dedicated CI box should make the
+trade.
+
+**`-AutoLogon`.** After an unattended reboot the runner waits for someone to sign in. This removes that wait by
+storing a logon password in the registry in cleartext, which is a poor trade on a machine anybody also uses.
+
+**`-KeepAwake`.** A sleeping runner is an offline runner, and from GitHub's side that is indistinguishable from a
+broken one — see the queueing above. This stops the machine sleeping or hibernating **on mains power only**; on
+battery it is somebody's laptop and should still be allowed to sleep. It is the only machine-wide setting this
+script will make, which is why it asks. The monitor is deliberately left alone: a blanked screen keeps every
+window mapped, so it costs the tiers nothing.
+
+A laptop is the machine this matters most on, and it is worth being blunt about it: a lid that closes is a
+Windows leg of the pipeline that stops, silently, until somebody opens it.
 
 ---
 
@@ -97,7 +149,13 @@ the logon task. What it passes, and why, if you ever do it by hand:
              --work _work `
              --unattended --replace
 
-# then a scheduled task running run.cmd AT LOGON, "run only when user is logged on".
+# then a scheduled task, "run only when user is logged on", with:
+#   • the action a HIDDEN host running run.cmd, not run.cmd itself — no console on the desktop to close
+#   • two triggers: at logon, and a repetition every 3 minutes for an indefinite duration
+#   • multiple-instance policy IgnoreNew, which is what makes that repetition a watchdog rather than a
+#     fork bomb: while the listener lives, every repetition is dropped
+#   • start-when-available, so a trigger whose time passed while the machine slept is deferred, not skipped
+#   • no execution time limit, and run-on-batteries allowed
 # NOT svc.cmd install — see above.
 ```
 
@@ -197,6 +255,8 @@ The Windows runner never builds product binaries. Linux jobs cross-build what ea
 
 | What you see | What it is |
 | --- | --- |
+| Windows jobs sit *in progress* for hours, nothing fails, no log | no machine is answering `windows-desktop`. The runner is not running, and a runner that is not running produces no error anywhere: check Settings > Actions > Runners for `offline`, then whether the box is asleep, signed out, or was only ever a console window somebody closed |
+| the runner was there yesterday and is gone today | it was started by hand, not by the logon task. `doctor` says so, in the log of the last run that passed. `-Repair` |
 | every window assertion times out | the runner is a service: session 0 has no desktop |
 | `already installed` | something the reconcile teardown could not remove: a stuck uninstaller, or an install under a different account |
 | `the daemon runs windows containers, not linux` | Docker Desktop is in Windows-container mode: one tray-menu click |

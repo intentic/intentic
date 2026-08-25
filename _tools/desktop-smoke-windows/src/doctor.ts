@@ -14,9 +14,10 @@
  * already installed" is that the snapshot did not reset, which no amount of uninstalling addresses.
  */
 
-import { PRODUCT_NAME, SCHEME } from "./constants.js";
+import { PRODUCT_NAME, RUNNER_TASK_NAME, SCHEME } from "./constants.js";
 import type { Harness } from "./harness.js";
-import { dockerContainerOs, dockerReachable, findInstalledApp, schemeCommand, userInteractive, webView2, windows } from "./probe.js";
+import { humanDuration, runnerSupervision } from "./parse.js";
+import { dockerContainerOs, dockerReachable, findInstalledApp, runnerTask, schemeCommand, userInteractive, webView2, windows } from "./probe.js";
 
 export interface DoctorOptions {
     /** Whether Docker is needed, tier 1 does not need it, tiers 2 and 3 do. */
@@ -41,6 +42,28 @@ export const runDoctor = async (harness: Harness, options: DoctorOptions): Promi
                 `property of how it was REGISTERED: the one thing about this machine a job cannot repair from inside itself,\n` +
                 `since the job IS the runner. From an elevated PowerShell on the runner:\n` +
                 `  _tools/scripts/setup-windows-runner.ps1 -Repair`,
+        );
+    }
+
+    /* WILL THIS RUNNER STILL BE HERE TOMORROW. Not an assertion either, and deliberately: a runner somebody
+     * started in a console window has a desktop and passes everything below it, so failing the run would be
+     * this tier objecting to something that is about the NEXT reboot rather than about this build. But it is
+     * the state that takes the Windows leg of the pipeline down for a day at a time, with jobs queueing against
+     * a label nothing answers and no failure anywhere to read, so it is said out loud in the log of a run that
+     * passed — which is the only place anyone asking "why did CI stop?" will find it. */
+    const supervision = runnerSupervision(await runnerTask(RUNNER_TASK_NAME));
+    if (supervision.kind === `supervised`) {
+        harness.pass(`the runner is the logon task's, re-checked every ${humanDuration(supervision.repetition)}`);
+    } else if (supervision.kind === `no-watchdog`) {
+        harness.pass(
+            `the runner is the logon task's, but nothing re-checks it: it comes back at the next sign-in and not before. ` +
+                `_tools/scripts/setup-windows-runner.ps1 -Repair adds the watchdog`,
+        );
+    } else {
+        harness.pass(
+            `THE RUNNER WAS STARTED BY HAND, not by the logon task: it dies with that console window, with the sign-out and ` +
+                `with the reboot, and nothing brings it back. This run is fine; the next one may find no runner at all. ` +
+                `_tools/scripts/setup-windows-runner.ps1 -Repair makes it unattended`,
         );
     }
 

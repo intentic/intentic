@@ -12,6 +12,12 @@ export const APP_IDENTIFIER = `dev.intentic.desktop`;
 /** The scheme the whole channel from the SPA into the app rides on. */
 export const SCHEME = `intentic`;
 
+/* The scheduled task `_tools/scripts/setup-windows-runner.ps1` registers, by the name it registers it under.
+ * Written down in both places and nowhere else: the doctor reads this task to tell a runner that will survive a
+ * reboot from one somebody started by hand, and if the two names drift the doctor reports every properly
+ * provisioned machine as hand-started. */
+export const RUNNER_TASK_NAME = `GitHub Actions Runner`;
+
 /* The link every tier fires. A setup link, because it is the one a first-time user meets and the only one
  * whose arrival is VISIBLE without a test hook: the app asks whether to run it, then parks a pending setup and
  * raises the setup screen. The code is nonsense on purpose; tier 1 points the platform at loopback and hands

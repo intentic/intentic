@@ -3,8 +3,10 @@ import {
     assistantReplied,
     asList,
     dockerOsType,
+    humanDuration,
     installedApp,
     nonEmpty,
+    runnerSupervision,
     sandboxContainerName,
     sandboxSlug,
     titled,
@@ -118,4 +120,34 @@ test("the WebView2 version is the first client key that carries one", () => {
     expect(webView2Version([{ pv: `` }, { pv: `139.0.3405.86` }])).toBe(`139.0.3405.86`);
     expect(webView2Version([])).toBeUndefined();
     expect(webView2Version([{}])).toBeUndefined();
+});
+
+test("a runner nobody supervises is told apart from the logon task's", () => {
+    // The doctor runs INSIDE the listener, so a task that is not `Running` did not start this process — which
+    // makes "no such task" and "a task sitting at Ready" the same answer, and the answer that matters: this
+    // runner is a console window somebody opened, and it is gone at the next reboot.
+    expect(runnerSupervision([]).kind).toBe(`hand-started`);
+    expect(runnerSupervision([{ State: `Ready`, Repetition: `PT3M` }]).kind).toBe(`hand-started`);
+
+    // A machine provisioned before the watchdog existed: the task is what is running, but a crash still needs a
+    // person, so it must not read as fully unattended.
+    expect(runnerSupervision([{ State: `Running` }]).kind).toBe(`no-watchdog`);
+    expect(runnerSupervision([{ State: `Running`, Repetition: `` }]).kind).toBe(`no-watchdog`);
+    expect(runnerSupervision([{ State: `Running`, Repetition: `  ` }]).kind).toBe(`no-watchdog`);
+
+    // Windows' own casing is Windows' business.
+    expect(runnerSupervision([{ State: `running`, Repetition: `PT3M` }])).toEqual({ kind: `supervised`, repetition: `PT3M` });
+});
+
+test("a repetition interval is reported in the units a person reads", () => {
+    expect(humanDuration(`PT3M`)).toBe(`3 minutes`);
+    expect(humanDuration(`PT1M`)).toBe(`1 minute`);
+    expect(humanDuration(`PT1H`)).toBe(`1 hour`);
+    expect(humanDuration(`PT1H30M`)).toBe(`1 hour 30 minutes`);
+    expect(humanDuration(`PT30S`)).toBe(`30 seconds`);
+    // Anything else is passed through rather than guessed at: a wrong number here would be a confident lie
+    // about how long this machine takes to heal itself.
+    expect(humanDuration(`P99999999DT23H59M59S`)).toBe(`P99999999DT23H59M59S`);
+    expect(humanDuration(`  PT5M  `)).toBe(`5 minutes`);
+    expect(humanDuration(``)).toBe(``);
 });

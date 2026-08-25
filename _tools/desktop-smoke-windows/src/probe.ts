@@ -7,7 +7,7 @@
  */
 
 import { desktop, type WindowInfo } from "@intentic/desktop";
-import { asList, dockerOsType, installedApp, titled, webView2Version, type InstalledApp, type UninstallEntry } from "./parse.js";
+import { asList, dockerOsType, installedApp, titled, webView2Version, type InstalledApp, type RunnerTask, type UninstallEntry } from "./parse.js";
 import { powershell, run } from "./run.js";
 
 /* Where Windows lists what is installed. Both hives, because `installMode: currentUser` in the bundle config
@@ -79,6 +79,27 @@ export const webView2 = async (): Promise<string | undefined> => {
 export const userInteractive = async (): Promise<boolean> => {
     const result = await powershell(`[System.Environment]::UserInteractive`);
     return result.stdout.trim().toLowerCase() === `true`;
+};
+
+/* Whether the listener this job is running inside is the logon task's, and whether that task re-checks it.
+ *
+ * The repetition is read off the TRIGGERS rather than assumed from the task existing, because the two shapes are
+ * a version apart: the task registered before the watchdog was added has one trigger and no repetition, and a
+ * machine provisioned then is exactly the one that still needs a person after a crash. `Where-Object` rather
+ * than indexing, since which trigger carries the repetition is not fixed.
+ *
+ * -ErrorAction SilentlyContinue on the whole thing: no such task is an ANSWER here (somebody started the runner
+ * by hand), and its error text on stdout would be parsed as the task's state. */
+export const runnerTask = async (taskName: string): Promise<RunnerTask[]> => {
+    const result = await powershell(
+        `$ErrorActionPreference='SilentlyContinue'
+         Get-ScheduledTask -TaskName '${taskName}' |
+           Select-Object @{n='State';e={ [string]$_.State }},
+                         @{n='Repetition';e={ ($_.Triggers | Where-Object { $_.Repetition.Interval } |
+                                               Select-Object -First 1).Repetition.Interval }} |
+           ConvertTo-Json -Depth 3 -Compress`,
+    );
+    return asList<RunnerTask>(result.stdout);
 };
 
 /** Whether a docker CLI is on PATH and its daemon answers. Separate from `dockerContainerOs` on purpose. */
