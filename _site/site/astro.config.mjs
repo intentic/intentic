@@ -75,6 +75,15 @@ export default defineConfig({
         define: {
             "import.meta.env.PUBLIC_OG_PER_PAGE": JSON.stringify(ogFontFaces !== undefined),
         },
+        /* Source-first workspace resolution, same conditions tsconfig.astro.json sets for typechecking. Without
+         * these, Vite reads each package's default export (`dist/`), and /api is the first place a stale dist
+         * surfaces: sandbox-openapi pulls sandbox-contract at SSR time to generate the OpenAPI document, so a
+         * new file exported from index.ts but not yet emitted to dist is a full-page build error on every group
+         * page. The @intentic/src condition in each package's exports map is the resolver; these are what make
+         * Vite honor it. */
+        resolve: {
+            conditions: ["@intentic/src", "@intentic-dev/src", "@intentic-app/src", "import", "module", "browser", "default"],
+        },
         /* The interactive demo (@intentic-dev/demo) at DEMO_PATH. In production it is a BUILD output copied into
          * this package's public/demo/, and the worker serves its history routes (worker.ts). Neither exists under
          * `astro dev`: the demo isn't built, and public/demo/index.html (if someone did build it) would answer
