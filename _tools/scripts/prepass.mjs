@@ -1223,7 +1223,14 @@ const needsDeclarations = packages.filter(
  * and run through a shell with the package's own `.bin` on PATH rather than through pnpm: pnpm's
  * `syncInjectedDepsAfterScripts` hardlinks into `node_modules` afterwards and dies EXDEV in an agent worktree,
  * which is the very thing this script exists to keep out of the path. Generation is unconditional: it is
- * ~0.8s, and a conditional pass would have to model each generator's inputs to know when it is stale. */
+ * ~0.8s, and a conditional pass would have to model each generator's inputs to know when it is stale.
+ *
+ * Generation can also change the set of files matched by the project's `include`. Native TypeScript's
+ * incremental build otherwise reuses the old root list from `.tsbuildinfo`: it can resolve a newly generated
+ * module through a checked-in entry point while still saying that module is not in the composite project's
+ * file list (TS6307). `--clean` asks the compiler where that package keeps its own outputs and build info, so
+ * the rule stays independent of a package's `.cache`/`dist` conventions; the ordinary build below remains
+ * incremental for every package whose sources were not just replaced. */
 const generated = needsDeclarations.filter(({ pkg }) => pkg.scripts?.generate !== undefined);
 for (const { name, dir, pkg } of generated) {
     console.log(`generating: ${name}`);
@@ -1234,8 +1241,16 @@ for (const { name, dir, pkg } of generated) {
     }
 }
 
+const tsgo = join(root, "node_modules/.bin/tsgo");
+if (generated.length > 0) {
+    const clean = spawnSync(tsgo, ["-b", "--clean", ...generated.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
+    if (clean.status !== 0) {
+        process.exit(clean.status ?? 1);
+    }
+}
+
 console.log(`declarations: building ${needsDeclarations.length} packages that dependents read from dist`);
-const build = spawnSync(join(root, "node_modules/.bin/tsgo"), ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
+const build = spawnSync(tsgo, ["-b", ...needsDeclarations.map(({ name }) => name)], { cwd: root, stdio: "inherit" });
 if (build.status !== 0) {
     process.exit(build.status ?? 1);
 }
