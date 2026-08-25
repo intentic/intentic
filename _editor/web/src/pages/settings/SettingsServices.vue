@@ -293,9 +293,8 @@ const rotate = (slug: string) =>
                  The narrative first, then the thresholds as facts. Every figure below is the platform's. -->
             <RowGroup label="How admission works">
                 <p class="px-4.5 py-3.5 text-sm text-muted">
-                    There's no review queue. You prove a publisher name, connect payouts, and pass a health check: three calls to your endpoint, one
-                    correctly signed that has to answer, and two deliberately bad ones that have to be refused. Passing puts you live immediately, on
-                    probation. The check gives your endpoint the same five minutes a paid run gets, so a slow one takes a while to come back.
+                    No review queue. Prove your publisher name, connect payouts, and pass a health check: one signed call that succeeds, two bad ones
+                    that fail. Pass and you're live on probation. Same five-minute timeout as a paid run, so slow endpoints take time.
                 </p>
                 <Row v-for="rule in ruleRows" :key="rule.key" density="compact" :title="rule.title" :description="rule.description">
                     <template #meta
