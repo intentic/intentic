@@ -143,6 +143,62 @@ const usagePools = (usage: AccountUsage): readonly PlanLimitPool[] =>
         resetsAt: window.resetsAt,
     }));
 
+/* ---- which pool a MODEL spends ---------------------------------------------------------------------------
+ * A plan that meters models separately publishes one pool per model (`model:Opus`, `model:Fable`; see the
+ * sandbox's claude-usage.ts, where the scope's own display name becomes the kind). That is the only place in
+ * this product where "what does picking this model cost" has a real answer rather than a guess, so the match
+ * from a picked model to its pool is written once, here, beside the pools it reads.
+ *
+ * TOKENS, NOT SUBSTRINGS. The pool is named by the plan ("Opus"), the model by its vendor ("claude-opus-4-6",
+ * "Claude Opus 4.6"), and the two only ever agree on a word. A substring test would match "opus" inside an id
+ * that merely mentions it, and a normalized-string equality would match nothing at all. */
+const wordsOf = (text: string): readonly string[] =>
+    text
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+
+// Whether `needle` appears as a run of whole words in `words`: "claude opus" is in "claude-opus-4-6", "opus"
+// is in "Claude Opus 4.6", and "sonnet" is in neither.
+const runOfWords = (words: readonly string[], needle: readonly string[]): boolean =>
+    needle.length > 0 && words.some((_, at) => needle.every((word, index) => words[at + index] === word));
+
+const MODEL_SCOPE = `model:`;
+
+/* WHAT ONE MODEL SPENDS, as much of it as the plan publishes. The pool's own figures, plus the plan's NAME for
+ * the model it meters ("Opus"), which is what a sentence about it has to say: the pool's label reads
+ * "Weekly · Opus", written for a meter's heading and not for prose. */
+export interface ModelAllowance {
+    readonly name: string;
+    readonly percent: number;
+    readonly resetsAt: number | undefined;
+}
+
+/* The pool the given model draws on, or undefined when this plan doesn't meter it separately (every provider
+ * but Claude today) or when nothing has been read yet. Both the id the wire carries and the label the picker
+ * shows are offered to the match, because which of them names the tier differs by vendor.
+ *
+ * AMBIGUITY ANSWERS NOTHING. Two pools matching one model (a plan that meters "Opus" and "Claude Opus"
+ * separately) means we cannot say which allowance a turn spends, so the more specific one wins and a tie
+ * returns undefined: no sentence beats a sentence naming the wrong pool. */
+export const modelAllowance = (
+    pools: readonly PlanLimitPool[],
+    model: { readonly id: string; readonly label: string },
+): ModelAllowance | undefined => {
+    const id = wordsOf(model.id);
+    const label = wordsOf(model.label);
+    const matched = pools
+        .filter((pool) => pool.kind.startsWith(MODEL_SCOPE))
+        .map((pool) => ({ pool, scope: wordsOf(pool.kind.slice(MODEL_SCOPE.length)) }))
+        .filter((entry) => runOfWords(id, entry.scope) || runOfWords(label, entry.scope))
+        .toSorted((left, right) => right.scope.length - left.scope.length);
+    const best = matched[0];
+    if (best === undefined || matched[1]?.scope.length === best.scope.length) {
+        return undefined;
+    }
+    return { name: best.pool.kind.slice(MODEL_SCOPE.length), percent: best.pool.percent, resetsAt: best.pool.resetsAt };
+};
+
 // The fullest of them, the pool that will gate the next turn, off the ROUNDED figures the meters draw, so a
 // headline number and the pool it names can never come from different arithmetic.
 const bindingPool = (pools: readonly PlanLimitPool[]): PlanLimitPool | undefined =>

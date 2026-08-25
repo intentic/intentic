@@ -28,8 +28,19 @@ const { loadProviderModelsMock, loadTrialStatusMock } = vi.hoisted(() => ({
 }));
 vi.mock("./useChat", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
 
+// turnDefaults is a module singleton; reset the per-provider memory so tests stay order-independent. Grok's
+// default is loaded live (empty until then); a fresh test env has no loaded catalog.
+// BEFORE each, not only after: the FIRST test in the file used to run against whatever the module seeded
+// itself with, which is the one conversation in this suite whose selection didn't match the `settings` every
+// send passes, and the divider that reports a model swap reads exactly that difference.
+const seedTurnDefaults = (): void => {
+    turnDefaults.models.value = { claude: `opus`, codex: ``, grok: `` };
+    turnDefaults.provider.value = `claude`;
+};
+
 // The typewriter drains via requestAnimationFrame; run frames synchronously so deltas land immediately.
 beforeEach(() => {
+    seedTurnDefaults();
     vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
         callback(0);
         return 0;
@@ -40,10 +51,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
-    // turnDefaults is a module singleton; reset the per-provider memory so tests stay order-independent.
-    // Grok's default is loaded live (empty until then); a fresh test env has no loaded catalog.
-    turnDefaults.models.value = { claude: `opus`, codex: ``, grok: `` };
-    turnDefaults.provider.value = `claude`;
+    seedTurnDefaults();
 });
 
 // One `data:` SSE frame, as the daemon's attach stream emits envelopes.
@@ -259,6 +267,94 @@ describe(`Conversation`, () => {
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
         expect(`history` in secondBody).toBe(false);
+    });
+
+    it(`says what a same-provider model swap costs, where it used to say nothing at all`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.send(`first`, settings);
+
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        const notice = conversation.messages.value.at(-1)!;
+        expect(notice.role).toBe(`notice`);
+        // The two things a model swap actually does, and neither of them is the provider switch's sentence: the
+        // session is kept, and the next turn re-reads the whole conversation on a model with no cache of it.
+        expect(notice.text).toContain(`the session carries on`);
+        expect(notice.text).toContain(`re-read the conversation so far`);
+        expect(notice.text).not.toContain(`fresh session`);
+
+        // …and the promise holds: the swapped turn resumes the same session, on the new model.
+        await conversation.send(`second`, { ...settings, model: `haiku` });
+        const secondBody = turnBodies()[1]!;
+        expect(secondBody[`sessionId`]).toBe(`s-1`);
+        expect(secondBody[`model`]).toBe(`haiku`);
+    });
+
+    it(`says nothing about a model picked before the chat has run anything`, async () => {
+        const conversation = new Conversation(`c1`);
+        // No turn has gone out, so no cache exists to lose and no allowance has been spent yet: a divider here
+        // would be announcing a cost that isn't there.
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        expect(conversation.messages.value).toEqual([]);
+    });
+
+    it(`retracts the model divider once the pick goes back to what the last turn ran on`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.send(`first`, settings);
+
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        // Browsing the picker and landing back where you started costs nothing, so it says nothing, the same
+        // rule the provider divider follows.
+        conversation.selectModel({ provider: `claude`, value: `opus` });
+        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+    });
+
+    it(`names the allowance the new model spends, when the plan meters it and we have a reading`, async () => {
+        usageStatusByAccount.value = {};
+        const conversation = new Conversation(`c1`);
+        conversation.account.value = `acct-1`;
+        sandboxRequestMock.mockImplementation(
+            sseResponse([
+                { kind: `session`, sessionId: `s-1` },
+                // The per-model pools a Claude plan publishes: the one fact in this product that can answer
+                // "what does picking this model cost" with the provider's own number instead of a guess.
+                {
+                    kind: `account_usage`,
+                    account: `acct-1`,
+                    windows: [
+                        { kind: `seven_day`, utilization: 20 },
+                        { kind: `model:Opus`, utilization: 61.4, resetsAt: 1_700_000 },
+                    ],
+                },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.send(`first`, { ...settings, account: `acct-1` });
+
+        conversation.selectModel({ provider: `claude`, value: `claude-opus-4-6` });
+        // The pool's own figure, rounded once by the same projection the meters draw from.
+        expect(conversation.messages.value.at(-1)!.text).toContain(`weekly Opus allowance, 61% used.`);
+    });
+
+    it(`holds a divider for a model swapped mid-turn until the turn settles`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        const turn = conversation.send(`go`, settings);
+        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+
+        // A same-provider swap is allowed mid-stream (it retires nothing), but the transcript's tail belongs to
+        // the turn being typed into it: a divider there would read as part of the answer.
+        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+
+        conversation.stop();
+        await turn;
+        // Settled, the tail is the composer's again, and the line describes the message the user types next.
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`the session carries on`))).toBe(
+            true,
+        );
     });
 
     it(`ignores a provider switch while a turn is streaming`, async () => {

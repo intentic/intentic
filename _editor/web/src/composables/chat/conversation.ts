@@ -43,7 +43,7 @@ import { TurnFailures } from "./turnFailures";
 import type { TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, resumes, turnRequestBody } from "./turnRequest";
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
-import { usageStatusByAccount } from "./usageStatus";
+import { formatReset, formatUtilization, modelAllowance, planHeadroom, SPENT_PERCENT, usageStatusByAccount, usageStatusFor } from "./usageStatus";
 import { mentionPaths } from "./useMentions";
 import { uuid } from "../uuid";
 
@@ -506,6 +506,19 @@ export class Conversation {
     // permanent by the next send (the segment cut).
     private pendingSwitchNoticeId: number | undefined;
 
+    /* THE MODEL THIS CONVERSATION IS ALREADY RUNNING ON: the pick the last SENT turn went out under, and the
+     * only thing a same-provider model swap can be measured against.
+     *
+     * Deliberately not `activeModel`, which looks like the same fact and isn't: that is the model the SDK
+     * RESOLVED, so an automatic-tier turn that ran on the cheap model leaves it naming a model the user never
+     * picked, and every message after one would then announce a switch nobody made. This is the ASK, so it
+     * moves only when the user moves it.
+     *
+     * Undefined until the first send, and cleared wherever the segment restarts (a provider or harness switch,
+     * a restored session): past that boundary there is no cached prompt left to lose, which is the one thing
+     * the notice it feeds exists to report. */
+    private sentModel: string | undefined;
+
     /* Where this conversation was cut from, until the daemon has ACCEPTED a turn carrying it (see forkFrom).
      * Undefined on every conversation that is not a fork, and on a fork from its acked first turn onward, the
      * daemon has copied the rows by then, and from there this conversation's record is its own.
@@ -581,6 +594,9 @@ export class Conversation {
         // The old segment's live model and context meter don't describe the next turn.
         this.activeModel.value = null;
         this.contextUsage.value = undefined;
+        // …nor does the model it ran on: the next turn opens a fresh session on the new provider, so there is
+        // no cached prompt for a later model swap to be measured against.
+        this.sentModel = undefined;
         this.refreshSwitchNotice();
         return true;
     }
@@ -606,6 +622,12 @@ export class Conversation {
         // Per-provider memory, so switching provider away and back restores the pick (the catalog is
         // harness-independent, so it rides across a harness switch too).
         turnDefaults.models.value = { ...turnDefaults.models.value, [pick.provider]: pick.value };
+        /* A SAME-PROVIDER MODEL SWAP GETS A DIVIDER TOO, which it did not until this line, and the silence was
+         * read as "this one is free". It keeps the session where a provider switch retires it, so the sentence
+         * it earns is a different one (modelSwitchNotice), but it is not nothing: the next turn re-reads the
+         * whole conversation on a model that has never seen it, and on a metered-per-model plan it spends a
+         * different allowance from the one this chat has been spending. */
+        this.refreshSwitchNotice();
     }
 
     // The effort PICK, which is not always the effort in force: Conversation.effort clamps it to whatever scale
@@ -663,6 +685,8 @@ export class Conversation {
         turnDefaults.harness.value = next;
         this.activeModel.value = null;
         this.contextUsage.value = undefined;
+        // A retired session takes its prompt cache with it, exactly as a provider switch does (pointAt).
+        this.sentModel = undefined;
         this.refreshSwitchNotice();
     }
 
@@ -676,15 +700,22 @@ export class Conversation {
         this.pendingSwitchNoticeId = undefined;
     }
 
-    // Upsert/remove the one pending "switched" divider as the user toggles provider/account: no notice when the
-    // next send still resumes the session (the selection matches it) or the chat hasn't begun; otherwise one
-    // notice says what the next message starts. send() freezes it into the transcript at the segment cut.
-    private refreshSwitchNotice(): void {
+    /* WHAT THE NEXT MESSAGE DOES DIFFERENTLY, in one line, or undefined when it does nothing differently.
+     *
+     * Two kinds of switch reach this, and they cost opposite things, which is why one sentence could never
+     * cover both. A provider / account / harness switch RETIRES the session: the next send opens a fresh one
+     * and the daemon re-seeds it from its own record. A same-provider model swap KEEPS it, so nothing is
+     * retired and nothing is re-seeded, and it used to say nothing at all, which read as "this one is free".
+     *
+     * It isn't. A prompt cache belongs to one model, so the resumed turn re-reads every token of the
+     * conversation on a model that has never seen it, and that is the whole cost of a model swap made twenty
+     * turns deep. Where the plan meters models separately (Claude's weekly per-model pools) it also moves the
+     * spend onto a different allowance, which the account's own reading can name and count. */
+    private segmentSwitchNotice(): string | undefined {
         const session = this.session.value;
         const started = this.messages.value.length > 0 || session !== undefined;
-        if (resumes(session, this.turnSettings()) || !started) {
-            this.dropSwitchNotice();
-            return;
+        if (!started || resumes(session, this.turnSettings())) {
+            return undefined;
         }
         // ACP providers have no tab entry, the shared label fallback (capability name layered by the picker,
         // else the raw id) covers them.
@@ -692,7 +723,71 @@ export class Conversation {
         // Unconditional now: what carries over is the DAEMON's record of this conversation, not what this window
         // happens to have painted. The notice used to hedge for a restored codex/grok tab, whose transcript no
         // reader could reach, that gap closed when the daemon started recording every runtime's turns itself.
-        const text = `Switched to ${label}: your next message starts a fresh session with the conversation so far carried over.`;
+        return `Switched to ${label}: your next message starts a fresh session with the conversation so far carried over.`;
+    }
+
+    // The other half: the swap that keeps everything and still costs something. See segmentSwitchNotice above.
+    private modelSwitchNotice(): string | undefined {
+        /* Nothing sent yet on this segment, or the pick is back where the last turn left it: there is no warm
+         * cache to lose and no allowance to move, so there is nothing to say.
+         *
+         * This is also the whole guard against a provider switch drawing two lines. A switch that retires the
+         * session clears `sentModel` on its way through (pointAt, selectHarness), so by the time the segment's
+         * own sentence is written there is no model swap left to report beside it. */
+        if (this.sentModel === undefined || this.sentModel === this.model.value) {
+            return undefined;
+        }
+        // Kept close to the segment sentence's length on purpose: a notice line is centred and muted, so it is
+        // read at a glance or not at all, and the clause below can already add a second row to it.
+        return `Switched to ${this.modelLabel()}: the session carries on, but a prompt cache is per-model, so your next message pays to re-read the conversation so far.${this.allowanceNote()}`;
+    }
+
+    // The picked model, named the way the picker names it.
+    private modelLabel(): string {
+        return modelLabelFor(this.provider.value, this.model.value);
+    }
+
+    /* WHOSE ALLOWANCE THE NEW MODEL SPENDS, when the plan meters that model on its own and this sandbox has a
+     * reading for the account serving the turn. Empty for every provider and plan that publishes no per-model
+     * pool, which is all of them but Claude today: naming an allowance we cannot see would be inventing one,
+     * and this notice's only claim to being worth reading is that every figure in it came from the provider.
+     *
+     * The floor mark rides along (formatUtilization), because a reading taken twenty minutes ago can only have
+     * climbed since. The reset instant is spent only on a pool that is effectively spent, where "when does it
+     * come back" is the question the number raises; below that it is a date nobody asked for. */
+    private allowanceNote(): string {
+        const headroom = planHeadroom(usageStatusFor(this.account.value));
+        if (headroom === undefined) {
+            return ``;
+        }
+        const allowance = modelAllowance(headroom.pools, { id: this.model.value, label: this.modelLabel() });
+        if (allowance === undefined) {
+            return ``;
+        }
+        const resetsAt = allowance.percent >= SPENT_PERCENT ? allowance.resetsAt : undefined;
+        return (
+            ` It spends this account's weekly ${allowance.name} allowance, ${formatUtilization(allowance.percent, headroom.stale)} used` +
+            (resetsAt === undefined ? `.` : `, which resets ${formatReset(resetsAt)}.`)
+        );
+    }
+
+    /* Upsert/remove the one pending "switched" divider as the user toggles provider / account / harness /
+     * model: nothing to announce retracts it, otherwise one notice says what the next message does. send()
+     * freezes it into the transcript at the segment cut.
+     *
+     * MID-STREAM IT WAITS. The transcript's tail belongs to the turn being typed into it, so a divider appended
+     * under a half-written answer would read as part of that answer. The one switch reachable while a turn runs
+     * is a same-provider model swap (selectModel's own rule, since it retires nothing), and endTurn asks again
+     * the moment the turn settles, which is where that divider belongs anyway. */
+    private refreshSwitchNotice(): void {
+        if (this.streaming.value) {
+            return;
+        }
+        const text = this.segmentSwitchNotice() ?? this.modelSwitchNotice();
+        if (text === undefined) {
+            this.dropSwitchNotice();
+            return;
+        }
         const noticeId = this.pendingSwitchNoticeId;
         if (noticeId !== undefined) {
             this.transcript.write((state) => ({
@@ -702,6 +797,18 @@ export class Conversation {
             return;
         }
         this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
+    }
+
+    /* The settle hook's half of that, and deliberately only the MODEL half: a swap is the one switch reachable
+     * while a turn runs (every other one is refused mid-turn), so it is the only one that can have gone
+     * unannounced. Asking the whole question here instead would have every turn on a provider that mints no
+     * session ref end by announcing a switch nobody made, `resumes` being false for want of a session rather
+     * than for want of a match. It only ever ADDS a line, for the same reason: nothing pending survives a send. */
+    private noticeSwappedModel(): void {
+        const text = this.modelSwitchNotice();
+        if (text !== undefined && this.pendingSwitchNoticeId === undefined) {
+            this.pendingSwitchNoticeId = this.transcript.append({ role: `notice`, text });
+        }
     }
 
     // Mirror the settled transcript to the local cache (see transcriptCache), so reopening this conversation
@@ -1026,6 +1133,9 @@ export class Conversation {
         this.model.value = rememberedModelFor(`claude`);
         this.title.value = title;
         this.activeModel.value = null;
+        // Whatever the restored session last ran on, this window never sent it: nothing here can claim a model
+        // swap would cost a cache, so the first send under this tab is what starts measuring again.
+        this.sentModel = undefined;
     }
 
     async send(prompt: string, settings: TurnSettings, attachments: readonly ChatAttachment[] = [], editorContext?: EditorContext): Promise<void> {
@@ -1061,6 +1171,15 @@ export class Conversation {
         }
         // The switch divider (if any) is frozen into the transcript, the segment cut happened.
         this.pendingSwitchNoticeId = undefined;
+        /* …and this turn is what the NEXT model swap is measured against: the pick it goes out under is the one
+         * the provider will have a warm prompt cache for.
+         *
+         * Read off the conversation's own ref rather than off `settings`, which is the same string on every
+         * path that matters (drainQueue builds them from turnSettings) and is NOT on a caller that hands in a
+         * selection this chat never made. Both sides of the comparison therefore read one ref, and no caller
+         * can manufacture a swap nobody performed. The cost is a divider missed if the pick moves inside this
+         * method's own awaits, which is the right way round: a line that isn't there beats a line that lies. */
+        this.sentModel = this.model.value;
         // A fork names its origin on its first turn: this send is what makes the daemon copy the rows. Consumed
         // on the daemon's ack below, not here, a send refused at the door produced nothing, and a linkage
         // dropped with it would make the retry quietly open an unrelated conversation.
@@ -1209,6 +1328,10 @@ export class Conversation {
         this.providerRetry.value = undefined;
         this.turnStartedAt.value = undefined;
         this.failures.armRenewalProbe();
+        // A model swapped WHILE this turn ran held its divider back (refreshSwitchNotice won't write into a
+        // transcript a turn is still typing into). The turn is over, the tail is ours again, and the line
+        // describes the next message, so this is exactly where it goes. A no-op for every other ending.
+        this.noticeSwappedModel();
         this.persist();
         this.scheduleAutoContinue(ranForMs);
         void this.drainQueue();

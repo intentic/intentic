@@ -10,6 +10,7 @@ import {
     isSpent,
     isStale,
     liveUsage,
+    modelAllowance,
     orderedWindows,
     planLimitBand,
     planLimitGroups,
@@ -217,6 +218,54 @@ describe(`planHeadroom`, () => {
         expect(mixed.percent).toBe(91);
         expect(mixed.binding).toEqual({ kind: `seven_day`, label: `Weekly · all models`, percent: 91, resetsAt: 1_700_000_000 });
         expect(mixed.pools.map((pool) => pool.label)).toEqual([`5-hour session`, `Weekly · all models`]);
+    });
+});
+
+describe(`modelAllowance`, () => {
+    const pools = (...kinds: readonly string[]): readonly { kind: string; label: string; percent: number; resetsAt: number | undefined }[] =>
+        kinds.map((kind, index) => ({ kind, label: kind, percent: index, resetsAt: undefined }));
+
+    it(`matches the plan's name for a model against the vendor's id and label alike`, () => {
+        // The plan says "Opus", the wire says "claude-opus-4-6" and the picker says "Claude Opus 4.6": the same
+        // tier under three spellings, which is the entire reason this match is written once.
+        const opus = pools(`five_hour`, `model:Opus`, `model:Sonnet`);
+        expect(modelAllowance(opus, { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(`Opus`);
+        expect(modelAllowance(opus, { id: `claude-sonnet-4-6`, label: `Claude Sonnet 4.6` })?.name).toBe(`Sonnet`);
+    });
+
+    it(`carries the pool's own figures, so the sentence and the meter can't disagree`, () => {
+        const [allowance] = [
+            modelAllowance([{ kind: `model:Fable`, label: `Weekly · Fable`, percent: 94, resetsAt: 1_700_000 }], {
+                id: `claude-fable-5`,
+                label: `Claude Fable 5`,
+            }),
+        ];
+        expect(allowance).toEqual({ name: `Fable`, percent: 94, resetsAt: 1_700_000 });
+    });
+
+    it(`says nothing for a plan that doesn't meter this model on its own`, () => {
+        // Every provider but Claude today. An unscoped weekly pool is not this model's allowance, and claiming
+        // it were would put a number on the screen that describes something else.
+        expect(modelAllowance(pools(`five_hour`, `seven_day`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+        expect(modelAllowance(pools(`model:Opus`), { id: `grok-4-fast`, label: `Grok 4 Fast` })).toBeUndefined();
+        expect(modelAllowance([], { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+    });
+
+    it(`matches whole words only, so a pool never claims a model that merely mentions it`, () => {
+        // "Sonnet" is not in "claude-opus-4-6" and a substring test is what would have said it was.
+        expect(modelAllowance(pools(`model:Son`), { id: `claude-sonnet-4-6`, label: `Claude Sonnet 4.6` })).toBeUndefined();
+        // …and a multi-word scope still has to appear as a run of words.
+        expect(modelAllowance(pools(`model:Claude Opus`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(`Claude Opus`);
+        expect(modelAllowance(pools(`model:Opus Claude`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
+    });
+
+    it(`prefers the more specific pool, and answers nothing when two are equally specific`, () => {
+        // A plan metering both a family and one member of it: the member is the honest answer. Two pools of the
+        // same specificity mean we cannot tell which allowance the turn spends, and no sentence beats a wrong one.
+        expect(modelAllowance(pools(`model:Opus`, `model:Claude Opus`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })?.name).toBe(
+            `Claude Opus`,
+        );
+        expect(modelAllowance(pools(`model:Opus`, `model:Claude`), { id: `claude-opus-4-6`, label: `Claude Opus 4.6` })).toBeUndefined();
     });
 });
 
