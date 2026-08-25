@@ -84,7 +84,14 @@ const agentReach = (method: string, path: string): boolean =>
     // reads a key: the container never holds one.
     (method === "GET" && path === "/wallet/status") ||
     (method === "POST" && path === "/wallet/fetch") ||
-    (method === "GET" && path === "/wallet/history");
+    (method === "GET" && path === "/wallet/history") ||
+    // The child-agent surface the `agents` CLI drives: start a full agent on any connected provider, park
+    // until one needs input, list this conversation's children. The route refuses a conversation planTurn
+    // never armed (children/children.routes.ts), so the persona decision stays where the persona was in hand,
+    // and nothing here reads a credential: the child spends the same connected accounts a composer turn would.
+    (method === "POST" && path === "/children/spawn") ||
+    (method === "POST" && path === "/children/wait") ||
+    (method === "GET" && path === "/children");
 
 /* The WIDE grant, a panel's backend is server-side code running inside this container that legitimately acts
  * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one

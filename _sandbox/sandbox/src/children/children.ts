@@ -44,10 +44,28 @@ const REPORT_KEPT = 2_000;
 const depths = new Map<string, number>();
 const spent = new Map<string, { live: number; total: number }>();
 
+/* WHICH CONVERSATIONS MAY SPAWN FROM OUTSIDE A TOOL CALL, the seam behind the `agents` CLI (bin/agents →
+ * /children routes). The in-loop tools are gated at mount (turn-plan withholds them from a persona without
+ * full agency); a CLI call arrives with no mount to gate, so the same decision is recorded HERE, at plan time,
+ * as the ready-to-run closure itself: planTurn arms a conversation whose persona holds full agency, and the
+ * route runs exactly what was armed. Armed for the conversation's lifetime, the same life a delegated shell
+ * already has: a `codex exec` keeps working after its turn ends, and so does `agents spawn` from the same
+ * shell. In-memory like the roster, and a daemon death disarms everything it kills. */
+const armed = new Map<string, (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>>();
+
+/** Record, at plan time, that this conversation's shell may spawn — with the exact closure a tool call would run. */
+export const armSpawn = (conversationId: string, spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>): void => {
+    armed.set(conversationId, spawn);
+};
+
+/** The armed spawn for a conversation, or undefined for one no qualifying turn ever planned. */
+export const spawnFor = (conversationId: string): ((spec: ChildSpawnSpec) => Promise<ChildSpawnResult>) | undefined => armed.get(conversationId);
+
 // Tests drive spawning through its real entry point, so they need a way back to empty between cases.
 export const resetChildrenForTest = (): void => {
     depths.clear();
     spent.clear();
+    armed.clear();
 };
 
 export interface ChildSpawnSpec {

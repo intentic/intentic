@@ -53,6 +53,7 @@ import { soleLiveConversation, turnRunOf } from "./agent/turn-runs.js";
 import { relayServiceCatalog, relayServiceRun, relayServiceWant } from "./platform/pool-services.js";
 import { gatedServiceRun } from "./platform/service-offer.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
+import { createChildrenRoutes } from "./children/children.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
@@ -1263,6 +1264,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.get("/wallet/status", walletRoutes.status);
     app.post("/wallet/fetch", walletRoutes.fetch);
     app.get("/wallet/history", walletRoutes.history);
+
+    /* The child-agent surface the `agents` CLI drives (children/children.routes.ts): start a full agent on any
+     * connected provider, park until one needs input, list this conversation's children. The shell half of the
+     * spawn door — the tool half mounts in-process per runtime — and the gate is the ARMING, recorded at plan
+     * time where the persona was in hand (children/children.ts), because the agent token names the sandbox,
+     * never a persona. Scoped to that token in auth/grants.ts like `services` and `capabilities`. */
+    const childrenRoutes = createChildrenRoutes();
+    app.post("/children/spawn", childrenRoutes.spawn);
+    app.post("/children/wait", childrenRoutes.wait);
+    app.get("/children", childrenRoutes.list);
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via
     // /state, POSTs inbound events to /dispatch (holding an ndjson turn-stream when it wants the reply painted),

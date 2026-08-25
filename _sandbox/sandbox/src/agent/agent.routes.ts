@@ -870,11 +870,13 @@ async function* runTurn(
      * composer's connect gate reads. */
     // The `spawn` tool's engine: start a full agent on any connected provider as a conversation of its own
     // (children/children.ts). Built HERE because the child runs through streamAgent, which only this module can
-    // hand down without a cycle — the same argument as `resync`. Withheld from a conversationless turn: a child
-    // files under its parent on the roster, and a turn with no conversation has nowhere to file one.
+    // hand down without a cycle — the same argument as `resync`. Withheld from a conversationless turn (a child
+    // files under its parent on the roster, and a turn with no conversation has nowhere to file one) and from a
+    // turn OUTSIDE CONTENT caused: a stranger's message must not start turns that spend the owner's accounts,
+    // whatever tools its prompt talked it into — the same reasoning as the outside-wake taint floor.
     const spawnParent = input.conversationId;
     const spawn =
-        spawnParent === undefined
+        spawnParent === undefined || input.outsideWake !== undefined
             ? undefined
             : (spec: ChildSpawnSpec): Promise<ChildSpawnResult> =>
                   spawnChild(services, { conversationId: spawnParent, cwd: localCwd }, spec, streamAgent);

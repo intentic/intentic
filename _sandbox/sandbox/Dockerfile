@@ -488,6 +488,11 @@ COPY --chmod=755 _sandbox/sandbox/bin/capabilities /usr/local/bin/capabilities
 # endpoints under the owner's policy. Same shape as services — it relays through the daemon, which owns the
 # consent card and the ledger; the signing key lives with the platform and never enters this container.
 COPY --chmod=755 _sandbox/sandbox/bin/wallet /usr/local/bin/wallet
+# The child-agent command the spawn note teaches (src/children/spawn-note.ts): start a full agent on any
+# connected provider from any runtime's shell, wait on it, list this conversation's children. Same shape as
+# services — it relays through the daemon, which owns the engine, the budgets and the persona gate; the CLI
+# spawns nothing itself and reads no credential.
+COPY --chmod=755 _sandbox/sandbox/bin/agents /usr/local/bin/agents
 # Entrypoint starts sshd (for Mutagen sync) then execs the daemon as PID 1.
 COPY _sandbox/sandbox/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

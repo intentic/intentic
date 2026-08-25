@@ -1,0 +1,192 @@
+#!/usr/bin/env node
+// The in-sandbox child-agent command — the SHELL door onto the daemon's spawn service
+// (src/children/children.routes.ts), which is what lets an agent on ANY runtime with a shell — a native
+// Codex, OpenCode, Kimi, Pi or ACP turn, or a person in a terminal — start a full agent on any connected
+// provider and supervise it, exactly as the Claude loop's `spawn`/`wait` MCP tools and Cursor's custom tools
+// do in-process. Same engine, same budgets, same roster: a child spawned from here is indistinguishable from
+// one a tool call started.
+//
+// It owns NO policy: whether this conversation may spawn was decided when its turn was planned, where the
+// persona was in hand, and recorded daemon-side (children.ts armSpawn). This command only relays, and a
+// refusal arrives as the daemon's own sentence.
+//
+// node:http rather than fetch, deliberately: `wait` holds its connection for as long as a child takes to
+// need something (bounded by the daemon's own ceiling), and undici's default header timeout would kill the
+// park at five minutes with the child still working.
+//
+// Auth is the per-boot agent token from /run/intentic/agent.token; auth/grants.ts admits it to exactly the
+// three /children routes this command drives, and nothing credential-shaped.
+
+import { readFileSync } from "node:fs";
+import { request } from "node:http";
+
+const TOKEN_PATH = "/run/intentic/agent.token";
+const PORT = process.env.SANDBOX_PORT ?? "8787";
+
+// The conversation this shell was spawned for (platform/leftovers.ts workloadStamp) — what tells the daemon
+// WHOSE children these are. The daemon falls back to the sole live turn when it is unset.
+const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
+
+const USAGE = `agents — start and supervise full agents on any connected provider
+
+  agents spawn [--provider <id>] [--model <id>] [--effort <tier>]
+               [--harness native|claude-code] [--description "one line"] '<task>'
+                                       start a child agent; prints its id and returns immediately
+  agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
+                                       block until a child needs input or finishes (default: either,
+                                       whichever comes first); no id means whichever child moves first
+  agents list                          this conversation's children, live first
+
+The child runs as its own conversation in an isolated copy of the repos, on the named provider's connected
+account (claude, codex, grok, kimi, gemini, cursor — e.g. --provider cursor --model composer-2.5), and its
+finished work lands the workspace's ordinary way. It sees nothing of this shell or its conversation: give it
+a self-contained task with every path, requirement and constraint. A provider nobody has connected fails
+with the words to say so.`;
+
+const die = (message) => {
+    process.stderr.write(`${message}\n`);
+    process.exit(1);
+};
+
+// Read lazily, not at startup: `agents --help` has to work in any shell, including one where the daemon
+// isn't running yet — only an actual call needs the token.
+const token = () => {
+    try {
+        return readFileSync(TOKEN_PATH, "utf8").trim();
+    } catch {
+        return die(`agents: no daemon token at ${TOKEN_PATH} — is the intentic daemon running in this container?`);
+    }
+};
+
+// One loopback call, held open for as long as the daemon holds it — no timeout on purpose (see the header
+// note above). Resolves with whatever the daemon answered; only a transport failure rejects.
+const call = (method, path, body) =>
+    new Promise((resolve, reject) => {
+        const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
+            let raw = "";
+            response.on("data", (chunk) => {
+                raw += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+        });
+        req.on("error", reject);
+        req.setHeader("x-intentic-agent", token());
+        if (CONVERSATION !== "") {
+            req.setHeader("x-intentic-conversation", CONVERSATION);
+        }
+        if (body !== undefined) {
+            req.setHeader("content-type", "application/json");
+        }
+        req.end(body);
+    });
+
+// The daemon's refusals arrive as {message} or {note} — surface the sentence, it is already written to be read.
+const refusalOf = (text) => {
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed?.message === "string") return parsed.message;
+        if (typeof parsed?.note === "string") return parsed.note;
+    } catch {
+        // Not JSON — fall through to the raw text.
+    }
+    return text || "the daemon did not say why";
+};
+
+// Flags then one positional, in any order: `--provider cursor 'do X'` and `'do X' --provider cursor` both
+// parse, because an agent writes commands by meaning, not by grammar memory.
+const parseFlags = (argv, known) => {
+    const flags = {};
+    const positional = [];
+    for (let i = 0; i < argv.length; i += 1) {
+        const arg = argv[i];
+        if (arg.startsWith("--")) {
+            const name = arg.slice(2);
+            if (!known.includes(name)) {
+                return die(`agents: unknown flag --${name}\n\n${USAGE}`);
+            }
+            const value = argv[i + 1];
+            if (value === undefined) {
+                return die(`agents: --${name} needs a value`);
+            }
+            flags[name] = value;
+            i += 1;
+        } else {
+            positional.push(arg);
+        }
+    }
+    return { flags, positional };
+};
+
+const spawn = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description"]);
+    const prompt = positional.join(" ").trim();
+    if (prompt === "") {
+        return die(`agents: spawn needs a task\n\n${USAGE}`);
+    }
+    const body = JSON.stringify({
+        prompt,
+        ...(flags.description !== undefined ? { description: flags.description } : {}),
+        ...(flags.provider !== undefined ? { provider: flags.provider } : {}),
+        ...(flags.harness !== undefined ? { harness: flags.harness } : {}),
+        ...(flags.model !== undefined ? { model: flags.model } : {}),
+        ...(flags.effort !== undefined ? { effort: flags.effort } : {}),
+    });
+    const { status, text } = await call("POST", "/children/spawn", body);
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { id } = JSON.parse(text);
+    process.stdout.write(`${id}\n`);
+    process.stderr.write(`Running. Follow it with: agents wait ${id}\n`);
+};
+
+const wait = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["until", "timeout"]);
+    const body = JSON.stringify({
+        ...(positional[0] !== undefined ? { target: positional[0] } : {}),
+        ...(flags.until !== undefined ? { until: [flags.until] } : {}),
+        ...(flags.timeout !== undefined ? { timeoutSeconds: Number(flags.timeout) } : {}),
+    });
+    const { status, text } = await call("POST", "/children/wait", body);
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    // The whole answer as JSON on stdout, so it composes into pipes; the human line rides stderr.
+    process.stdout.write(`${text}\n`);
+    const { outcome, agent } = JSON.parse(text);
+    if (outcome === "timeout") {
+        process.stderr.write("Still working. Call `agents wait` again to keep following it.\n");
+    } else if (agent?.summary !== undefined) {
+        process.stderr.write(`${outcome}: ${agent.summary}\n`);
+    }
+};
+
+const list = async () => {
+    const { status, text } = await call("GET", "/children");
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { sessions } = JSON.parse(text);
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+        process.stdout.write("No children. Start one with `agents spawn '<task>'`.\n");
+        return;
+    }
+    for (const session of sessions) {
+        const what = [session.agentType, session.model].filter(Boolean).join(" · ");
+        const label = session.description !== undefined ? ` — ${session.description}` : "";
+        process.stdout.write(`${session.id}  [${session.status}]  ${what}${label}\n`);
+    }
+};
+
+const [command, ...rest] = process.argv.slice(2);
+const main = async () => {
+    if (command === "spawn") return spawn(rest);
+    if (command === "wait") return wait(rest);
+    if (command === "list") return list();
+    process.stdout.write(`${USAGE}\n`);
+    if (command !== undefined && command !== "--help" && command !== "help") {
+        process.exit(1);
+    }
+};
+
+main().catch((error) => die(`agents: ${error?.message ?? error}`));

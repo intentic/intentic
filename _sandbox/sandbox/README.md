@@ -30,14 +30,19 @@ reports the profile.
   rather than being matched by timing. That is what gives a child a real session id, a `blocked` status, and its
   own last words as its report, and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep
   until one of this turn's own children needs input or finishes, instead of polling a terminal tail.
-- Spawn full agents from inside a turn, on ANY connected provider. The `spawn` tool beside `wait` starts a
-  child through the daemon's own turn path (src/children/children.ts): an ordinary isolated unattended
-  conversation served by whichever provider adapter the spec names, so a Claude turn starts Cursor's Composer
-  with the same call a Cursor turn would start Codex with. The daemon drives both ends, so the child's life is
-  reported onto the roster by direct call (the `spawned` kind), nothing sniffed from stdout or hooks; the
-  owner's delegation ceilings (`subagentsAtOnce` / `subagentsPerTurn` / `subagentDepth`) are enforced in the
-  daemon, because a spawned child gets the spawn tool too and a cap a model is merely told about is a cap a
-  runaway chain never reads.
+- Spawn full agents from inside a turn, on ANY connected provider, from ANY runtime. The engine is one
+  (src/children/children.ts): a child is an ordinary isolated unattended conversation served by whichever
+  provider adapter the spec names, so a Claude turn starts Cursor's Composer with the same call a Cursor turn
+  would start Codex with. What differs per runtime is only the DOOR, each the widest seam that runtime has:
+  the Claude Code loop mounts `spawn`/`wait` as SDK MCP tools (src/agent/subagent-wait.ts), Cursor gets the
+  same pair as custom tools (src/cursor/cursor-tools.ts), and every runtime with a shell — Codex, OpenCode,
+  Kimi, Pi, ACP — gets the `agents` CLI (bin/agents → /children routes), taught once by a note on the
+  conversation's opening turn (src/children/spawn-note.ts). The persona gate is decided once at plan time and
+  recorded as the armed closure itself (children.routes.ts), because the agent token names the sandbox, never
+  a persona. The daemon drives both ends of every child, so its life is reported onto the roster by direct
+  call (the `spawned` kind), nothing sniffed from stdout or hooks; the owner's delegation ceilings
+  (`subagentsAtOnce` / `subagentsPerTurn` / `subagentDepth`) are enforced in the daemon, because a spawned
+  child gets the spawn door too and a cap a model is merely told about is a cap a runaway chain never reads.
 - Outwait the world on the agent's behalf. For a condition OUTSIDE the harness: a CI run, a deploy, a remote
   queue, the agent arms a condition watch (src/agent/watch-server.ts): a check command that exits 0 when the
   thing has happened. The daemon polls it between turns (src/agent/watchers.ts) and wakes the arming

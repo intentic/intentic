@@ -31,6 +31,7 @@ import { z } from "zod";
 import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import type { AccountsServerFactory } from "../browser/accounts-tools.js";
+import type { ChildSpawnResult, ChildSpawnSpec } from "../children/children.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { browserSessionHooks } from "../browser/browser-sessions.js";
 import { depsNoticeHooks } from "./agent-deps.js";
@@ -289,6 +290,12 @@ export interface AgentRequest {
     // turn burns until something aborts it. So an unattended turn is given no plan tools and no ask tool, and
     // its permission gate refuses rather than waits.
     readonly unattended?: boolean;
+    /* Start a full agent on any connected provider (children/children.ts), for the runtimes that mount it as
+     * a tool of their own rather than through the harness's SDK server: Cursor's custom tools read it here
+     * (cursor/cursor-tools.ts). Present exactly when the turn's persona holds full agency and the route
+     * injected the engine — the same predicate that arms the shell door — so an adapter never has to re-derive
+     * the gate. Absent ⇒ the runtime offers no spawn tool. */
+    readonly spawn?: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
 }
 
 // Render the user's question picks (or a dismissal) as the `ask` tool's text result. A dismissal is not a

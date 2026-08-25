@@ -3,6 +3,7 @@ import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { formatAnswers } from "../agent/agent.js";
+import { waitForSubagent, type SubagentWaitUntil } from "../agent/subagents.js";
 
 /* WHAT THE TURN'S TOOLS BECOME ON CURSOR'S RUNTIME. Three seams, and between them they are the whole reason
  * this provider's `mcp` axis reads "tools" rather than "browser":
@@ -87,12 +88,99 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
  * its tool calls still arrive on the same delta stream, and the model plans around having it. */
 export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 
-/* The daemon-side tools a turn hands Cursor. `unattended` is the one condition that changes the answer, and it
- * is the same rule the Claude Code loop and the Codex adapter both apply: a benchmark, a schedule or another
- * program started this turn, so a card is not merely useless but a DEADLOCK — it parks the turn on an answer
- * that can never arrive and burns until something aborts it. A turn nobody is watching decides for itself. */
-export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> =>
-    request.unattended === true ? {} : { ask: askTool(request, push) };
+/* THE SPAWN/WAIT PAIR, the cross-provider supervision surface on Cursor's runtime — the same two calls the
+ * Claude Code loop mounts as an SDK MCP server (agent/subagent-wait.ts), through the seam Cursor actually
+ * has. The engine arrives on the request (planCursorTurn sets it under the full-agency predicate), so this
+ * module never re-derives the gate; the wait reads the same roster primitive the harness's tool does, which
+ * is what makes a child spawned from a Cursor turn and one spawned from a Claude turn indistinguishable to
+ * everything that watches. */
+const spawnTool = (spawn: NonNullable<AgentRequest["spawn"]>): SDKCustomTool => ({
+    description:
+        "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
+        "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
+        "after your turn ends; its finished work lands the way any agent's does. Returns the child's id " +
+        "immediately: supervise it with the wait tool (target: that id). Give it a self-contained prompt with " +
+        "every path, requirement, and constraint — it sees none of this conversation.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            prompt: { type: "string", description: "The child's whole task, self-contained." },
+            description: { type: "string", description: "One line naming the task, for the board and the roster." },
+            provider: { type: "string", description: "Which provider serves it. Leave it out for Claude." },
+            model: { type: "string", description: "Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default." },
+            effort: { type: "string", description: "How hard it should think, where the provider offers a choice." },
+        },
+        required: ["prompt"],
+    },
+    execute: async (args) => {
+        const prompt = typeof args["prompt"] === "string" ? args["prompt"] : "";
+        if (prompt === "") {
+            return JSON.stringify({ ok: false, message: "A child needs a task: pass `prompt`." });
+        }
+        const text = (key: string): string | undefined => (typeof args[key] === "string" && args[key] !== "" ? (args[key] as string) : undefined);
+        const [description, provider, model, effort] = [text("description"), text("provider"), text("model"), text("effort")];
+        const result = await spawn({
+            prompt,
+            ...(description !== undefined ? { description } : {}),
+            ...(provider !== undefined ? { provider } : {}),
+            ...(model !== undefined ? { model } : {}),
+            ...(effort !== undefined ? { effort } : {}),
+        });
+        return JSON.stringify(
+            result.ok ? { ok: true, child: result.id, note: `Running. Supervise it with wait(target: "${result.id}").` } : result,
+        );
+    },
+});
+
+// One wait's ceiling and default, the harness tool's numbers (subagent-wait.ts): long enough for a real child,
+// short enough that a forgotten wait returns within the turn; a parent that wants longer calls again.
+const WAIT_DEFAULT_S = 600;
+const WAIT_MAX_S = 1800;
+
+const waitTool = (request: AgentRequest): SDKCustomTool => ({
+    description:
+        "Wait until an agent you started needs you. Blocks until the target is blocked on input or finishes, " +
+        'whichever comes first, then returns its status and last report. Target a spawned child by its id, or "any" ' +
+        "for whichever of this conversation's children moves first. On timeout it returns the current state: call " +
+        "it again to keep waiting.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            target: { type: "string", description: 'The child\'s id, or "any".' },
+            until: { type: "array", items: { type: "string", enum: ["blocked", "finished"] }, description: 'Default ["blocked","finished"].' },
+            timeoutSeconds: { type: "number", description: `Default ${WAIT_DEFAULT_S}, at most ${WAIT_MAX_S}.` },
+        },
+        required: ["target"],
+    },
+    execute: async (args) => {
+        if (request.conversationId === undefined) {
+            return JSON.stringify({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
+        }
+        const target = typeof args["target"] === "string" ? args["target"] : "any";
+        const until = (Array.isArray(args["until"]) ? args["until"] : []).filter(
+            (entry): entry is SubagentWaitUntil => entry === "blocked" || entry === "finished",
+        );
+        const seconds = typeof args["timeoutSeconds"] === "number" ? Math.min(Math.max(args["timeoutSeconds"], 5), WAIT_MAX_S) : WAIT_DEFAULT_S;
+        const result = await waitForSubagent(request.conversationId, {
+            ...(target !== "any" ? { target } : {}),
+            until: until.length > 0 ? until : ["blocked", "finished"],
+            timeoutMs: Math.round(seconds * 1000),
+            signal: request.signal,
+        });
+        return JSON.stringify({ outcome: result.outcome, ...(result.matched !== undefined ? { agent: result.matched } : {}) });
+    },
+});
+
+/* The daemon-side tools a turn hands Cursor. `unattended` is the one condition that changes the ASK's answer,
+ * and it is the same rule the Claude Code loop and the Codex adapter both apply: a benchmark, a schedule or
+ * another program started this turn, so a card is not merely useless but a DEADLOCK — it parks the turn on an
+ * answer that can never arrive and burns until something aborts it. A turn nobody is watching decides for
+ * itself. The spawn/wait pair is NOT card-shaped and rides unattended turns too: a child of a loop iteration
+ * settles on its own clock, deadlocking nothing. */
+export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
+    ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
+    ...(request.spawn !== undefined ? { spawn: spawnTool(request.spawn), wait: waitTool(request) } : {}),
+});
 
 /* The turn's MCP servers, in Cursor's own spelling.
  *

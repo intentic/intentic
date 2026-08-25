@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "../agent/subagents.js";
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";
-import { resetChildrenForTest, spawnChild } from "./children.js";
+import { armSpawn, resetChildrenForTest, spawnChild, spawnFor } from "./children.js";
 
 /* The spawn engine, driven through its real entry point with a fake turn generator, the loop pump's own test
  * shape. What the suite defends is the seam's PROMISES rather than its plumbing: a child is an ordinary
@@ -147,6 +147,33 @@ describe("the child's life on the roster", () => {
         }
         await settled(result.id);
         expect(listSubagentSessions()[0]).toMatchObject({ status: "failed", error: "no Cursor subscription connected" });
+    });
+});
+
+/* The SHELL door's gate (children.routes.ts): the persona decision is recorded at plan time as the closure
+ * itself, so the route runs exactly what a tool call would have, and a conversation no qualifying turn ever
+ * planned has nothing armed to run. */
+describe("the shell door's arming", () => {
+    it("answers with exactly the closure a qualifying turn recorded", async () => {
+        const calls: string[] = [];
+        armSpawn("conv-armed", async (spec) => {
+            calls.push(spec.prompt);
+            return { ok: true, id: "sub-x" };
+        });
+        const armed = spawnFor("conv-armed");
+        expect(armed).toBeDefined();
+        await armed?.({ prompt: "go" });
+        expect(calls).toEqual(["go"]);
+    });
+
+    it("has nothing for a conversation no qualifying turn planned", () => {
+        expect(spawnFor("conv-never-planned")).toBeUndefined();
+    });
+
+    it("forgets every arming on reset, the daemon-death story", () => {
+        armSpawn("conv-armed", async () => ({ ok: true, id: "sub-x" }));
+        resetChildrenForTest();
+        expect(spawnFor("conv-armed")).toBeUndefined();
     });
 });
 

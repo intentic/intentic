@@ -43,7 +43,8 @@ import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import type { AgentRequest } from "./agent.js";
-import type { ChildSpawnResult, ChildSpawnSpec } from "../children/children.js";
+import { armSpawn, type ChildSpawnResult, type ChildSpawnSpec } from "../children/children.js";
+import { spawnNote } from "../children/spawn-note.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -126,6 +127,9 @@ export interface TurnContext {
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
     readonly iqSearchNote?: string;
+    // The `agents` CLI teaching for shell-only runtimes, resolved by planTurn on a conversation's opening turn
+    // where the spawn door is open (children/spawn-note.ts). Rides the same notes list as the iq teaching.
+    readonly spawnNote?: string;
     readonly iqSearchCohort?: string;
     /* Who the turn is and what it may do, resolved once by planTurn and handed down (personas/personas.ts).
      * Set only on the context the arms receive, the route builds this object before a card has been read, so
@@ -259,6 +263,21 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
     const granted = personaCapabilities(installed, persona);
     const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
+    /* THE SPAWN DOOR, decided once here for every runtime, in both of its shapes. A persona with full agency
+     * (shell and write — a child is a whole agent holding both) gets to start agents on any connected
+     * provider; one without must not get them back by proxy. The TOOL mounts read this same predicate at their
+     * seams (the harness arm's subagents server, Cursor's custom tools); the SHELL door (`agents` CLI →
+     * /children routes) has no mount to gate, so the decision is recorded as the armed closure itself
+     * (children/children.ts armSpawn), and the note below is only ever offered where the door is actually open. */
+    const maySpawn = context.spawn !== undefined && input.conversationId !== undefined && persona.powers.shell && persona.powers.files === "write";
+    if (maySpawn && context.spawn !== undefined && input.conversationId !== undefined) {
+        armSpawn(input.conversationId, context.spawn);
+    }
+    /* The CLI teaching, for the runtimes whose only door is the shell: not the Claude Code loop (it carries
+     * the spawn/wait MCP tools in its prompt) and not Cursor (same pair as custom tools), and only on the
+     * conversation's opening turn, the iq teaching's rule — the provider session carries it thereafter. */
+    const spawnNoteText =
+        maySpawn && capabilities.runtime !== "claude-code" && capabilities.runtime !== "cursor" && conversationTurns === 0 ? spawnNote() : undefined;
     const searchArm =
         settings.iqSearch && settings.iqSearchHoldout > 0 && input.conversationId !== undefined
             ? conversationExperimentArm(input.conversationId, settings.iqSearchHoldout)
@@ -304,6 +323,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
         ...(delegation !== undefined ? { delegation } : {}),
+        ...(spawnNoteText !== undefined ? { spawnNote: spawnNoteText } : {}),
     };
     /* WHO GETS THE PROJECT MAP: the opening message of a conversation, once, and never again in it.
      *
@@ -498,6 +518,7 @@ const honoured = (
          * unresolved-import errors. It stays where it is, unchanged, for exactly as long as that is true. */
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [setupNotice] : []),
         ...(context.iqSearchNote !== undefined ? [context.iqSearchNote] : []),
+        ...(context.spawnNote !== undefined ? [context.spawnNote] : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
