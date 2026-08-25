@@ -8,20 +8,22 @@ import {
     ui,
     Notice,
     type NoticeModel,
-    NoticeStack,
     Picker,
     type PickerOption,
+    Row,
     RowGroup,
     SegmentedControl,
     SkeletonRows,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
+import { formatDate } from "@intentic/ui/format";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { jsonBody } from "../../composables/sandbox/jsonBody";
 import { apiClient } from "../../composables/useApi";
 import { useAuth } from "../../composables/useAuth";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
+import { useSandboxSession } from "../../composables/sandbox/sandboxSession";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { identityHue } from "../../composables/identityHue";
 import { presenceActivity, presenceOthers } from "../../composables/usePresence";
@@ -48,6 +50,7 @@ import { presenceActivity, presenceOthers } from "../../composables/usePresence"
 
 const { user } = useAuth();
 const sandbox = useSandbox();
+const { sessionExpiresAt } = useSandboxSession();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 
@@ -229,13 +232,36 @@ const resend = async (target: string): Promise<void> => {
     }
 };
 
-/* "Sign out everywhere". A sandbox session is a 30-day signed claim living in each browser's localStorage, so
- * a device that walked off keeps working until it expires, and there is no per-device list to revoke from,
- * because nothing is stored per session. Re-keying the daemon's signer is the revocation, and it takes every
- * browser with it including this one: the next call 401s and re-establishes from the Google credential this tab
- * already holds, so the owner sees nothing. Members are signed out too and come back only if still on the list. */
+/* "Signed-in browsers": A SECTION THAT CANNOT HAVE A LIST IN IT, and used to pretend otherwise.
+ *
+ * A sandbox session is a 30-day signed claim living in each browser's localStorage. The daemon VERIFIES it
+ * rather than looking it up, which is what keeps every request a local HMAC instead of a database read, so
+ * nothing is stored per session and no device roster exists to render, here or on the daemon. The heading is a
+ * plural noun, so it read as an empty list: one lone red button under a title promising devices, which invites
+ * exactly the wrong conclusion ("nothing is signed in, so this button is pointless") about the one control
+ * that answers a lost laptop. Hiding the group when empty would hide it forever, and hide the kill switch at
+ * precisely the moment it is needed: the device you cannot enumerate is the device you are worried about.
+ *
+ * So the group says what is true instead. THIS browser is one signed-in browser and the app can speak for it
+ * (identity, and the pass expiry it holds in localStorage); the absence of the others is a fact with a reason
+ * worth one row; and the kill switch keeps its place, now with the consequence spelled out beside it rather
+ * than left to be discovered. Re-keying the daemon's signer IS the revocation, and it takes every browser with
+ * it including this one: the next call 401s and re-establishes from the Google credential this tab already
+ * holds, so the owner sees nothing. Members are signed out too and come back only if still on the list. */
 const revokingSessions = ref(false);
 const sessionsRevoked = ref(false);
+/* Armed before it fires, the same two-step inline confirm as account deletion. This signs out every person in
+ * the sandbox, cannot be undone and cannot be aimed at one device, which is three reasons not to hang it on a
+ * single click, and it sits one row under a roster whose own destructive buttons are per-member. */
+const confirmingRevoke = ref(false);
+
+// What this browser's own pass is worth, said as a date rather than a countdown: it slides forward whenever
+// the session renews, so "expires Sep 24" is a fact about neglect ("if I stop opening this"), not a deadline.
+const thisBrowser = computed<string>(() => {
+    const who = user.value?.email ?? `You`;
+    const expires = sessionExpiresAt.value;
+    return expires === undefined ? `${who} · signed in` : `${who} · signed in until ${formatDate(expires)}, and renews whenever you use it`;
+});
 
 const revokeSessions = async (): Promise<void> => {
     if (revokingSessions.value) {
@@ -247,6 +273,7 @@ const revokeSessions = async (): Promise<void> => {
     try {
         await sandboxJson<{ ok: boolean }>(`/system/sessions/revoke`, { method: `POST` });
         sessionsRevoked.value = true;
+        confirmingRevoke.value = false;
     } catch (err) {
         notice.value = noticeFrom(err, `Couldn't sign other browsers out: is the sandbox online?`);
     } finally {
@@ -414,24 +441,66 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- The credential kill switch. Owner-only, and separate from the member list above on purpose: this
-             answers \"is anything still holding a way in\", not \"who is allowed in\". -->
+             answers \"is anything still holding a way in\", not \"who is allowed in\".
+
+             THREE ROWS RATHER THAN A BARE BUTTON, because there is no fourth: the roster this heading implies
+             cannot exist (see the note in the script). The rows are the answers to the three questions asked in
+             the order the eye arrives at them: what IS signed in that I can see, why can't I see the rest, and
+             what exactly happens if I press this. -->
         <RowGroup v-if="isOwner" label="Signed-in browsers">
-            <div class="flex flex-col gap-2 px-4 py-3">
-                <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">
-                    <Icon name="check-circle" /> Every browser has been signed out of this sandbox.
-                </p>
-                <div>
+            <!-- The one signed-in browser the app can name, because it is running in it. -->
+            <Row icon="desktop" density="compact" title="This browser" :description="thisBrowser">
+                <template #meta><span class="text-success">Signed in</span></template>
+            </Row>
+
+            <!-- The empty list, explained where the reader asks about it, rather than left as a blank surface. -->
+            <Row
+                icon="shield"
+                density="compact"
+                title="Other browsers aren't listed"
+                description="Each browser keeps its own signed pass and the sandbox stores nothing per device, so there is no list to show — and no device that could quietly stay off one. Signing out covers all of them at once."
+            />
+
+            <Row icon="sign-out" density="compact" tone="danger" title="Sign out everywhere">
+                <template #description>
+                    Ends every pass, this browser's included, though you stay signed in here. Everyone else signs in again and gets back in only if
+                    they're still on the list above.
+                </template>
+                <template #control>
+                    <!-- Arming clears the last run's receipt: the row has one thing to say at a time, and
+                         "every browser has been signed out" under a live "are you sure?" is two. -->
                     <Button
+                        v-if="!confirmingRevoke"
                         label="Sign out all browsers"
                         severity="danger"
-                        :loading="revokingSessions"
+                        size="small"
                         :disabled="revokingSessions"
-                        @click="revokeSessions"
+                        @click="
+                            sessionsRevoked = false;
+                            confirmingRevoke = true;
+                        "
                     >
                         <template #icon><Icon name="sign-out" /></template>
                     </Button>
-                </div>
-            </div>
+                </template>
+                <template v-if="confirmingRevoke || sessionsRevoked" #below>
+                    <div v-if="confirmingRevoke" class="flex flex-wrap items-center justify-end gap-2">
+                        <span class="mr-auto text-2xs text-subtle">Sure? Everyone working in this sandbox right now has to sign in again.</span>
+                        <Button
+                            label="Cancel"
+                            severity="secondary"
+                            :text="true"
+                            size="small"
+                            :disabled="revokingSessions"
+                            @click="confirmingRevoke = false"
+                        />
+                        <Button label="Sign out all browsers" severity="danger" size="small" :loading="revokingSessions" @click="revokeSessions" />
+                    </div>
+                    <p v-if="sessionsRevoked" class="flex items-center gap-1.5 text-xs font-semibold text-success">
+                        <Icon name="check-circle" /> Every browser has been signed out. Any device still holding a pass is locked out now.
+                    </p>
+                </template>
+            </Row>
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->

@@ -27,6 +27,10 @@ vi.mock(`../../composables/sandbox/useSandbox`, () => ({
 }));
 vi.mock(`../../composables/sandbox/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 vi.mock(`../../composables/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
+// The session module reaches Google Identity Services and localStorage at module eval; the tab only needs the
+// one fact it exports, this browser's pass expiry. Fixed so the rendered date is the same in every timezone.
+const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
+vi.mock(`../../composables/sandbox/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 
@@ -55,12 +59,16 @@ const inviteEmail = async (address: string): Promise<void> => {
     await nextTick();
 };
 
+const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
+    [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label);
+
 afterEach(() => {
     sandboxJson.mockReset();
     sandboxJson.mockResolvedValue({ members: [] });
     create.mockReset();
     list.mockReset();
     list.mockResolvedValue({ members: [] });
+    sessionExpiresAt.value = Date.parse(`2026-09-24T12:00:00.000Z`);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -125,4 +133,61 @@ it(`shows what the mail provider said when it refused`, async () => {
     expect(shown()).toContain(`The email was refused`);
     expect(shown()).toContain(`daily quota reached`);
     expect(shown()).toContain(`https://app.test/invite/tok`);
+});
+
+/* "Signed-in browsers" was a plural heading over a lone red button, so it read as a roster with nothing in it,
+ * and the honest reading of an empty roster is that no browser is signed in and the button is pointless. No
+ * roster can exist (sessions are verified, not stored), so the group has to say what IS true: this browser,
+ * which it can name because it is running in it, and why the rest are unlistable. */
+it(`names this browser and says why the others cannot be listed`, async () => {
+    mount();
+    await nextTick();
+
+    expect(shown()).toContain(`This browser`);
+    expect(shown()).toContain(`owner@example.com · signed in until Sep 24, 2026`);
+    expect(shown()).toContain(`Other browsers aren't listed`);
+    expect(shown()).toMatch(/stores nothing per device/);
+});
+
+// A daemon predating the session exchange hands out no pass to quote an expiry for. Still signed in, and the
+// row must not invent a date or render "until undefined".
+it(`says only that this browser is signed in when there is no pass to date`, async () => {
+    sessionExpiresAt.value = undefined;
+    mount();
+    await nextTick();
+
+    expect(shown()).toContain(`owner@example.com · signed in`);
+    expect(shown()).not.toMatch(/signed in until/);
+});
+
+/* One click used to sign every person in the sandbox out, with no undo and no aim. It is armed first now, the
+ * same two-step inline confirm as account deletion, and the arming step must not fire the request. */
+it(`arms sign-out-everywhere before firing it, and says who it hits`, async () => {
+    mount();
+    await nextTick();
+
+    buttonLabelled(`Sign out all browsers`)?.click();
+    await nextTick();
+    expect(sandboxJson).not.toHaveBeenCalled();
+    expect(shown()).toContain(`has to sign in again`);
+
+    buttonLabelled(`Cancel`)?.click();
+    await nextTick();
+    expect(shown()).not.toContain(`has to sign in again`);
+});
+
+it(`revokes only on the confirming click, then reports it`, async () => {
+    mount();
+    await nextTick();
+
+    buttonLabelled(`Sign out all browsers`)?.click();
+    await nextTick();
+    // Two buttons carry the label once armed (the row's, now hidden, and the confirm's): the live one is last.
+    const confirm = [...document.body.querySelectorAll(`button`)].findLast((button) => button.textContent?.trim() === `Sign out all browsers`);
+    confirm?.click();
+    await nextTick();
+    await nextTick();
+
+    expect(sandboxJson).toHaveBeenCalledWith(`/system/sessions/revoke`, { method: `POST` });
+    expect(shown()).toContain(`Every browser has been signed out`);
 });

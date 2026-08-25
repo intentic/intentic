@@ -347,6 +347,21 @@ const presentedEmail = computed<string | undefined>(() => {
     return stored !== undefined && Date.now() < stored.expiresAt ? stored.email : signedInEmail.value;
 });
 
+/* WHEN THIS BROWSER'S PASS RUNS OUT, and the only fact about a signed-in browser the app can ever state.
+ *
+ * Nothing is stored per session anywhere: the daemon VERIFIES a signed claim rather than looking one up, which
+ * is what keeps a request a local HMAC instead of a database read. So no device list exists to render, here or
+ * on the daemon, and the access tab would otherwise have nothing at all to say under a heading that promises a
+ * roster. It can at least speak for the browser it is running in.
+ *
+ * Undefined when there is no session to describe: a daemon predating the exchange (raw Google token per call)
+ * and loopback mode, where the answer is "signed in" with no expiry to quote. */
+const sessionExpiresAt = computed<number | undefined>(() => {
+    const sandboxId = activeSandboxId.value;
+    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
+    return stored !== undefined && Date.now() < stored.expiresAt ? stored.expiresAt : undefined;
+});
+
 export function useSandboxSession() {
-    return { presentedEmail, getSessionToken, rejectSessionToken, invalidateSession, clearSessions, retireAccountAccess };
+    return { presentedEmail, sessionExpiresAt, getSessionToken, rejectSessionToken, invalidateSession, clearSessions, retireAccountAccess };
 }
