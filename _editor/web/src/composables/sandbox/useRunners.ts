@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/vue-query";
-import { RunnerSummarySchema } from "@intentic/sandbox-contract";
+import { RunnerSummarySchema, runnerSlug } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { z } from "zod";
 import { RUNNERS } from "../queryKeys";
@@ -44,6 +44,13 @@ export const createRunner = (hostId: string, name: string, onLine?: (line: strin
 
 export const removeRunner = (hostId: string, name: string, onLine?: (line: string) => void): Promise<string> =>
     manageMachineSandbox(hostId, name, `runner-remove`, onLine === undefined ? {} : { onLine });
+
+/* BRINGING AN OUTDATED RUNNER UP TO THE PARENT'S BUILD. It is an ordinary sandbox container on that machine,
+ * so this is the ordinary `update` flow addressed by the runner's container name (runnerSlug) rather than a
+ * verb of its own: the same pull, the same recreate, and the runner's identity survives it because its
+ * enrollment lives on the volume the update keeps. */
+export const updateRunner = (hostId: string, name: string, onLine?: (line: string) => void): Promise<string> =>
+    manageMachineSandbox(hostId, runnerSlug(name), `update`, onLine === undefined ? {} : { onLine });
 
 // Cut a runner loose from THIS side alone: its enrollment goes and its socket closes, which is what you press
 // when the machine itself is gone for good and there is nothing left to remove a container from.

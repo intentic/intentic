@@ -52,6 +52,12 @@ export const runnerGitUrl = (parentUrl: string, repo: string): string => `${pare
  * the mirror worktree to this ref, which advances the checked-out branch through the door git sanctions. */
 export const runnerIncomingRef = (conversationId: string): string => `refs/runner-incoming/${conversationId}`;
 
+/* THE CONTAINER A RUNNER'S NAME MEANS on the machine holding it, which is how the update and rebuild flows
+ * address it. The prefix is `ic`'s own (runner.rs SLUG_PREFIX) and the two must stay identical: a mismatch
+ * does not fail loudly, it sends an update at a container that does not exist and reports "no such sandbox"
+ * about a runner sitting right there in the list. */
+export const runnerSlug = (name: string): string => `runner-${name}`;
+
 /* THE CREDENTIAL DOORS: a runner's turns spend the ORIGIN sandbox's model providers, never accounts of their
  * own. The shape is a service, not a sync: the parent resolves each turn's credential with the same code its
  * local turns use and answers with the least that travels — an access token minted for the turn, or a route.
@@ -128,6 +134,13 @@ export const RunnerFactsSchema = z.object({
 });
 export type RunnerFacts = z.infer<typeof RunnerFactsSchema>;
 
+/* WHETHER IT IS RUNNING WHAT THIS SANDBOX IS RUNNING (§7 of the design): `current` matches on image, channel
+ * and approved overlay; `outdated` differs on one of them and gets the update button; `unknown` is a runner
+ * that has never connected, or a parent that cannot name its own image (a dev daemon), where a warning would
+ * be one nobody can act on. Reported, never enforced: an outdated runner still runs turns. */
+export const RunnerParitySchema = z.enum(["current", "outdated", "unknown"]);
+export type RunnerParity = z.infer<typeof RunnerParitySchema>;
+
 // One runner as the owner's views list it: enrolled state plus whatever the hub knows right now, the
 // HostSummary shape retold for a runner (no platform/scopes, parity instead).
 export const RunnerSummarySchema = z.object({
@@ -142,6 +155,9 @@ export const RunnerSummarySchema = z.object({
     overlayHash: z.string().optional(),
     facts: RunnerFactsSchema.optional(),
     lastSeen: z.number().optional(),
+    // Computed by the daemon (runners/runner-parity.ts) rather than by each surface, so the badge on a row and
+    // the note in the placement picker cannot disagree about the same runner.
+    parity: RunnerParitySchema,
 });
 export type RunnerSummary = z.infer<typeof RunnerSummarySchema>;
 

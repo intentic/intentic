@@ -73,7 +73,7 @@ vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
 /* THIS SANDBOX'S RUNNERS ON A MACHINE, mocked for the reason the computers list is: the real hook is a
  * vue-query read, and this bare `createApp` has no plugin to provide a client. What the row draws from it is
  * the subject here. */
-const runnersList = ref<{ id: string; host?: string; online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }[]>([]);
+const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>([]);
 vi.mock(`../../composables/sandbox/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: () => Promise.resolve(`made`),
@@ -606,4 +606,25 @@ it(`explains what a runner is on a machine that has none`, async () => {
     const el = mount([managed(true)]);
     await nextTick();
     expect(el.textContent ?? ``).toContain(`None here yet`);
+});
+
+/* DRIFT IS SAID ON THE ROW, with the button that ends it. A runner months behind the parent runs turns fine
+ * until the day it does not, and then the failure reads as a link error rather than as an old machine. */
+it(`marks a runner whose build has drifted from this sandbox, and offers the update`, async () => {
+    runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `outdated` }];
+    const el = mount([managed(true)]);
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`outdated`);
+    expect(text).toContain(`Update`);
+});
+
+// A runner matching the parent says nothing about its build: a badge on every healthy row is noise, and the
+// update button on one is a click with nothing behind it.
+it(`says nothing about the build of a runner that matches`, async () => {
+    runnersList.value = [{ id: `rig`, host: `host-1`, online: true, parity: `current` }];
+    const el = mount([managed(true)]);
+    await nextTick();
+    expect(el.textContent ?? ``).not.toContain(`outdated`);
+    expect(el.textContent ?? ``).not.toContain(`Update`);
 });

@@ -24,8 +24,16 @@ const picked = computed(() => conversation.runner.value);
 // first roster frame). A draft is the whole window in which this control means anything.
 const settled = computed(() => conversation.registered.value);
 
-const load = (runner: { facts?: { cpus: number; load: number } }): string | undefined =>
-    runner.facts === undefined ? undefined : `${runner.facts.cpus} cores · load ${runner.facts.load.toFixed(2)}`;
+/* What the row says under the name. An OUTDATED runner is still offered, and says so: it runs turns, it is
+ * simply behind this sandbox's build, and the choice between "run it there now" and "update it first" is the
+ * user's (the Computers view has the button). */
+const detail = (runner: { online: boolean; parity: string; facts?: { cpus: number; load: number } }): string => {
+    if (!runner.online) {
+        return `Offline — wake that machine to use it`;
+    }
+    const load = runner.facts === undefined ? `Ready` : `${runner.facts.cpus} cores · load ${runner.facts.load.toFixed(2)}`;
+    return runner.parity === `outdated` ? `${load} · older build than this sandbox` : load;
+};
 
 const place = (id: string | undefined): void => {
     if (settled.value) {
@@ -63,9 +71,7 @@ const place = (id: string | undefined): void => {
             <Icon name="desktop" class="mt-0.5 text-xs" :class="picked === runner.id ? 'text-primary-500' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
-                <span class="text-2xs text-subtle">
-                    {{ runner.online ? (load(runner) ?? `Ready`) : `Offline — wake that machine to use it` }}
-                </span>
+                <span class="text-2xs text-subtle">{{ detail(runner) }}</span>
             </span>
         </button>
         <p v-if="runners.length === 0" class="px-2.5 py-1.5 text-2xs text-subtle">

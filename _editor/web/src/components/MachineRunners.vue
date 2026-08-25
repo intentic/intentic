@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import type { Computer } from "@intentic/sandbox-contract";
 import { Button, MachineRunLog, Notice, type NoticeModel, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { createRunner, removeRunner, useRunners } from "../composables/sandbox/useRunners";
+import { createRunner, removeRunner, updateRunner, useRunners } from "../composables/sandbox/useRunners";
 
 /* THIS SANDBOX'S RUNNERS ON ONE COMPUTER: the containers it keeps there to run agents in, listed under the
  * machine that holds them, with the two buttons that make and unmake one (docs/remote-runners-plan.md in the
@@ -41,7 +41,7 @@ const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: numb
 /* A NAME THAT READS AS A PLACE. It is what the placement picker shows and what the machine files the
  * container under, so it is asked for rather than generated: "rog" beats "runner-8f3a1c" in a menu you pick
  * from every day. Lowercase letters, digits and dashes, which is what `ic` accepts. */
-const run = async (op: "create" | "remove", name: string): Promise<void> => {
+const run = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
     if (computer.hostId === undefined || busy.value !== undefined) {
         return;
     }
@@ -54,7 +54,8 @@ const run = async (op: "create" | "remove", name: string): Promise<void> => {
     lines.value = [];
     try {
         const onLine = (line: string): void => void (lines.value = [...lines.value, line]);
-        done.value = await (op === "create" ? createRunner(computer.hostId, name, onLine) : removeRunner(computer.hostId, name, onLine));
+        const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
+        done.value = await flow(computer.hostId, name, onLine);
     } catch (error) {
         failure.value = noticeFrom(error, `That didn't work on this computer.`);
     } finally {
@@ -125,8 +126,21 @@ const add = async (): Promise<void> => {
                     <span class="text-2xs text-subtle">{{ facts(runner) }}</span>
                 </span>
                 <StatusBadge v-if="!runner.online" variant="neutral" size="xs" label="offline" />
+                <!-- A runner months behind the parent runs turns fine until the day it does not, and then the
+                 failure reads as a link error rather than as an old machine. So the drift is said on the row,
+                 with the one button that ends it. -->
+                <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" label="outdated" />
                 <Button
+                    v-if="runner.parity === `outdated` && runner.online"
                     class="ml-auto"
+                    size="small"
+                    severity="secondary"
+                    label="Update"
+                    :disabled="busy !== undefined || computer.online !== true"
+                    @click="run(`update`, runner.id)"
+                />
+                <Button
+                    :class="runner.parity === `outdated` && runner.online ? `` : `ml-auto`"
                     size="small"
                     severity="secondary"
                     :text="true"

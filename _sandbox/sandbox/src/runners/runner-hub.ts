@@ -1,6 +1,12 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import type { runnerContract, RunnerFacts, RunnerHello, RunnerSummary } from "@intentic/sandbox-contract";
 
+/* WHAT THE LIVE HALF KNOWS about a runner, which is deliberately less than a row shows: this hub holds
+ * sockets, so it can say whether one is up, what it announced about its build, and what it last measured.
+ * Which machine holds it comes from the enrollment, and whether its build matches this sandbox is a
+ * comparison neither end makes (runner-parity.ts). Both are added where the row is assembled. */
+export type RunnerLiveState = Omit<RunnerSummary, "id" | "host" | "parity">;
+
 /* The live half of the runner registry: which of this sandbox's runners are holding a socket right now, and
  * the typed client for each (runners-store.ts is the credential half; docs/remote-runners-plan.md, workspace
  * root, is the design). The host hub's shape without its host-specific limbs, no scopes to push (a runner has
@@ -41,7 +47,7 @@ export interface RunnerHub {
     // Cut a runner off now: the owner revoking it, or the capability being removed.
     readonly disconnect: (id: string, reason: string) => void;
     readonly online: (id: string) => boolean;
-    readonly state: (id: string) => Omit<RunnerSummary, "id">;
+    readonly state: (id: string) => RunnerLiveState;
 }
 
 export const createRunnerHub = (logger: { warn: (data: object, message: string) => void }): RunnerHub => {

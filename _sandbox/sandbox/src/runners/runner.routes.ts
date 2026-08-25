@@ -4,6 +4,7 @@ import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Services } from "../composition.js";
 import type { RunnerClient } from "./runner-hub.js";
+import { runnerParity } from "./runner-parity.js";
 
 /* The parent-side doors of a runner (docs/remote-runners-plan.md, workspace root):
  *
@@ -76,5 +77,17 @@ export const createRunnerConnectRoute = (services: Services) =>
 
 // The owner's view: every enrolled runner, with whatever the hub knows about it right now. "Enrolled but
 // never connected" must be distinguishable from "connected but asleep", the hosts view's rule.
-export const runnerSummaries = async (services: Services): Promise<RunnerSummary[]> =>
-    (await services.runners.list()).map((runner) => Object.assign({ id: runner.id }, runner.host !== undefined ? { host: runner.host } : {}, services.runnerHub.state(runner.id)));
+export const runnerSummaries = async (services: Services): Promise<RunnerSummary[]> => {
+    // What THIS sandbox is running, read once for the whole list: every row's parity is measured against it.
+    const parent = {
+        image: services.config.sandbox.image,
+        channel: services.config.sandbox.channel,
+        overlayHash: services.config.sandbox.environmentHash,
+    };
+    return (await services.runners.list()).map((runner) => {
+        const state = services.runnerHub.state(runner.id);
+        return Object.assign({ id: runner.id }, runner.host !== undefined ? { host: runner.host } : {}, state, {
+            parity: runnerParity(parent, state.image === undefined ? undefined : { image: state.image, channel: state.channel, overlayHash: state.overlayHash }),
+        });
+    });
+};
