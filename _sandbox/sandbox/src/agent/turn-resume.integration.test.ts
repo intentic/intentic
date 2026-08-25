@@ -721,6 +721,41 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
 });
 
+/* THE WORK ITSELF, not just the words that asked for it. An interrupted turn is typically a LONG one, that is
+ * the shape of thing a rebuild or an OOM lands in the middle of, and none of it reached the record: nothing
+ * settled, and the record is appended per settled turn. The provider wrote it down as it streamed, so the boot
+ * pass reads that back before it consumes the entry naming it, which is the last moment anything can. */
+test("an interrupted turn is recorded from the work it did, not from its prompt alone", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-"));
+    const base = await journalServices(root, false);
+    const services = unstubbed<Services>("services", {
+        ...base,
+        sessions: unstubbed<Services["sessions"]>("sessions", {
+            ...base.sessions,
+            readTail: async (_dir: string, id: string) => [
+                { role: "user", text: "finish the report" },
+                { role: "assistant", text: `two chapters in, on ${id}` },
+            ],
+        }),
+    });
+    await services.turnJournal.recordTurn(journalled("rs-work", { sessionId: "s-partial" }));
+
+    await resumeInterruptedTurns(services, fakeWake([]), BOOT_AT);
+
+    expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-work")).toEqual([
+        // Stamped with when the TURN started, not when the provider store happened to file it: every other user
+        // row in this record carries the daemon's clock, and a recovered one must not be the exception.
+        { role: "user", text: "finish the report", sentAt: 10_000 },
+        // Read off the session the DYING TURN reported, which the journal carries because the daemon may have
+        // been killed before that id reached the registry entry.
+        { role: "assistant", text: "two chapters in, on s-partial" },
+        {
+            role: "notice",
+            text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
+        },
+    ]);
+});
+
 test("a failed interrupted-transcript append retains the journal for a later boot", async () => {
     const root = mkdtempSync(join(tmpdir(), "restart-"));
     const base = await journalServices(root, false);

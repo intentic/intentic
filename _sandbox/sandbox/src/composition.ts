@@ -155,6 +155,7 @@ import {
     createRecentSessions,
     listWorkspaceSessions,
     readWorkspaceSession,
+    readWorkspaceSessionTail,
     searchWorkspaceSessions,
     type SessionSummary,
     workspaceSessionExists,
@@ -634,6 +635,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly sessions: {
         readonly list: (dir: string) => Promise<SessionSummary[]>;
         readonly read: (dir: string, id: string) => Promise<RestoredMessage[]>;
+        // The LAST turn of one, which is what a turn the daemon died under reads back as: it never settled, so
+        // the conversation's own record has nothing of it, and this is what the boot pass writes down in its
+        // place (sessions/turn-transcript.ts → recordInterruptedTurn).
+        readonly readTail: (dir: string, id: string) => Promise<RestoredMessage[]>;
         // No `dir`, unlike its neighbours: a search reads the phrase index and a listing bound to this
         // workspace's root, both of which the daemon built once. A parameter the implementation is free to
         // ignore is a trap for the next caller who passes something else and is quietly obeyed.
@@ -1325,6 +1330,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         sessions: {
             list: listWorkspaceSessions,
             read: readWorkspaceSession,
+            readTail: readWorkspaceSessionTail,
             // Bound to this daemon's one index: the history box and the fleet board answer from the same rows.
             search: (query, caseSensitive) =>
                 searchWorkspaceSessions(recentSessions, query, caseSensitive, async (...args) => saidIndex.search(...args)),

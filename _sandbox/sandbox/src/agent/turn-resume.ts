@@ -3,7 +3,7 @@ import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { turnAwaiting, turnFinished } from "../push/notifications.js";
-import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
+import { openTurnTranscript, recordInterruptedTurn, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { formatAnswers, grantRestoredPermission, POST_PLAN_MODE } from "./agent.js";
 import { restoreRequest } from "./agent-requests.js";
 import { agentRunModel } from "./agent-run-model.js";
@@ -71,10 +71,6 @@ const RESUME_MAX_AGE_MS = 6 * 60 * 60_000;
  * turn's spend to reach the same crash. The entry is rewritten with the spent attempt BEFORE the resume starts,
  * so the counter survives the death it is guarding against. */
 const MAX_RESUME_ATTEMPTS = 1;
-
-// What an interrupted turn that will not be re-run leaves in the durable transcript. The prompt itself comes
-// from the journal; this line makes the otherwise one-sided chat explain why there is no answer underneath it.
-const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.";
 
 /* HOW LONG A CARD MAY SAY "COMING BACK" BEFORE IT HAS TO STOP SAYING IT.
  *
@@ -704,18 +700,17 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
         const stale = now - entry.startedAt > RESUME_MAX_AGE_MS;
         if (!autoResumeOnRestart || spent || stale) {
             if (entry.kind === "turn") {
-                /* The shipped default is not to spend another turn automatically. That must not mean deleting
-                 * the only durable copy of the user's prompt: a first turn has no settled transcript yet and
-                 * native runtimes may not have reported a provider session id, so clearing the journal first
-                 * made the interrupted card impossible to open. Record the prompt and an honest ending, then
-                 * clear. If the append fails, keep the journal for the next boot instead of converting a
-                 * transient disk error into permanent loss. */
-                const recovered = await recordTurnTranscript(
-                    services,
-                    entry.turn,
-                    [{ kind: "error", message: RESTART_INTERRUPTED }],
-                    entry.startedAt,
-                );
+                /* The shipped default is not to spend another turn automatically. That must not mean losing what
+                 * the turn had already done: it never settled, so the conversation's record holds nothing of it,
+                 * and this journal entry, about to be cleared, is the last thing that names it. Write the turn
+                 * down from the provider's own session store, with an honest ending under it, THEN clear. If the
+                 * append fails, keep the journal for the next boot instead of converting a transient disk error
+                 * into permanent loss.
+                 *
+                 * The journal's session id, not the registry's: this is the session THIS turn reported, and the
+                 * registry entry may still be pointing at the one before it (the id is written onto the entry as
+                 * the frame arrives, but a daemon killed in the gap never got to). */
+                const recovered = await recordInterruptedTurn(services, entry.turn, entry.sessionId ?? entry.turn.sessionId, entry.startedAt);
                 if (!recovered) {
                     services.logger.warn(
                         { conversationId: entry.turn.conversationId },

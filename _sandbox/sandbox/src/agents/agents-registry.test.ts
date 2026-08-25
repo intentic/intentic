@@ -113,6 +113,29 @@ describe("agents registry", () => {
         expect(await registry.begin(turn(), 3_000)).toBe(true);
     });
 
+    /* THE SESSION ID HAS TO SURVIVE THE DAEMON, and the daemon is regularly killed mid-turn (a rebuild, an
+     * environment approval, an OOM). Held only in the runtime state until finish flushed it, a conversation
+     * whose FIRST turn was killed came back with no session id at all, which is the only key into the provider
+     * store: its transcript had nothing to read (the record is appended per SETTLED turn, so it held nothing
+     * either) and the chat opened permanently blank over a session file sitting on disk the whole time. */
+    it("writes the session id through to the store as the frame arrives, not at the finish that flushes it", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        registry.observe("c1", { kind: "session", sessionId: "sess-1" });
+
+        // The write is fire-and-forget behind the store's chain, so settle it the way a persisting caller does.
+        await registry.setTitle("c1", "Fix the login bug", "user");
+        expect(store.saved().find((entry) => entry.id === "c1")?.sessionId).toBe("sess-1");
+
+        // A conversation that switches session mid-way (a handoff) moves the pointer with it, rather than
+        // leaving the entry naming a thread the turn has already left.
+        registry.observe("c1", { kind: "session", sessionId: "sess-2" });
+        await registry.finish("c1", 2_000);
+        expect(store.saved().find((entry) => entry.id === "c1")?.sessionId).toBe("sess-2");
+    });
+
     it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();

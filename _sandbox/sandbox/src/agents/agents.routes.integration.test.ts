@@ -219,6 +219,7 @@ test("agents.search matches titles and later lines, across the archive", async (
                           ]
                         : [];
                 },
+                readTail: async () => [],
                 search: async () => [],
                 exists: async () => true,
             },
@@ -315,6 +316,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
             sessions: {
                 list: async () => [],
                 read: async () => [],
+                readTail: async () => [],
                 search: async () => [],
                 exists: async () => true,
             },

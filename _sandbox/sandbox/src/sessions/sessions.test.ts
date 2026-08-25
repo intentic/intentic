@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
-import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, searchWorkspaceSessions } from "./sessions.js";
+import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
 import { IN_MEMORY, openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";
 
@@ -243,6 +243,65 @@ test("a re-run in the provider's store reads as the interruption, not as the mes
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "notice", "assistant"]);
     expect(messages[2]?.text).toContain("sign-in renewed");
+});
+
+/* THE TAIL READ, which exists for one caller: the boot pass writing down a turn the daemon died under. The
+ * conversation's record already holds every turn before it, so this must hand back the LAST one and nothing
+ * else, or the recovery appends a second copy of the conversation underneath itself. */
+test("the tail is the last turn alone, not the session it sits at the end of", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "ship the parser" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "shipped" }] } },
+        { type: "user", message: { content: "now the printer" } },
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "pnpm test" } }] } },
+    ]);
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    expect(messages.map((message) => message.text)).toEqual(["now the printer", ""]);
+    // The turn was cut off mid-call, and the card says so rather than claiming a result it never got.
+    expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Bash", status: "in_progress" });
+});
+
+// The user message the SDK files around a tool RESULT is plumbing between two calls of ONE turn, not somebody
+// speaking. Counting it as a boundary would cut the recovered turn off in the middle of its own work.
+test("a tool result does not open a turn, so the tail keeps the calls that preceded it", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "audit the rail" } },
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/a.ts` } }] } },
+        { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "export const a = 1;" }] } },
+        { type: "assistant", message: { content: [{ type: "text", text: "read it" }] } },
+    ]);
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages[0]?.text).toBe("audit the rail");
+    expect(messages[1]?.tools?.[0]).toMatchObject({ name: "Read", status: "completed" });
+});
+
+/* A RE-RUN opens the turn without a user row: the reducer turns a prompt wearing a resume note into the muted
+ * line explaining the gap. That line is still a boundary, and finding it is why the split is read off the
+ * STORED messages rather than the restored ones, where it is indistinguishable from any other notice. */
+test("a re-run's resume note opens the tail, so the turn it replaced is not recovered twice", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "ship the parser" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "on it" }] } },
+        { type: "user", message: { content: withResumeNote("ship the parser", RESUME_NOTES.outage) } },
+        { type: "assistant", message: { content: [{ type: "text", text: "picking back up" }] } },
+    ]);
+    const messages = await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0");
+    expect(messages.map((message) => message.role)).toEqual(["notice", "assistant"]);
+    expect(messages[1]?.text).toBe("picking back up");
+});
+
+// One unfinished turn is the whole session, which is the shape every conversation whose FIRST turn was killed
+// arrives in, and the one this recovery matters most for: nothing else on disk holds a line of it.
+test("a session holding one unfinished turn is entirely tail", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "audit the rail" } },
+        { type: "assistant", message: { content: [{ type: "text", text: "reading it now" }] } },
+    ]);
+    expect(await readWorkspaceSessionTail(WORKSPACE_ROOT, "s0")).toEqual([
+        { role: "user", text: "audit the rail" },
+        { role: "assistant", text: "reading it now" },
+    ]);
 });
 
 test("a call whose result never arrived stays in progress rather than claiming it finished", async () => {

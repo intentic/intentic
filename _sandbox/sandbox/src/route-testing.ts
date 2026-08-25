@@ -656,6 +656,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         sessions: {
             list: async () => [],
             read: async () => [],
+            // Empty is the shape a runtime with no readable store answers with, so the default here is the
+            // documented fallback: an interrupted turn recorded from its prompt alone.
+            readTail: async () => [],
             search: async () => [],
             exists: async () => true,
         },

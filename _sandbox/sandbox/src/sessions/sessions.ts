@@ -168,6 +168,52 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
     return restoredSessionMessages(scoped.length > 0 ? scoped : await getSessionMessages(id), dir);
 };
 
+/* WHERE THE LAST TURN OF A STORED SESSION BEGINS, as an index into the stored messages.
+ *
+ * A turn opens at a user message carrying WORDS. That is the same test restoredSessionMessages applies one
+ * level down (`text.length > 0`), and it is the whole of the distinction: the store files a `user` message
+ * around every tool RESULT too, and those are the SDK's plumbing between two calls of one turn, not somebody
+ * speaking. Counting them as boundaries would put the "last turn" in the middle of the last tool call.
+ *
+ * 0 when nothing in the session carries words, which restores the whole of it, the right answer for a session
+ * that holds one unfinished turn and the honest one for a shape this does not recognise. */
+const lastTurnStart = (messages: readonly { readonly type?: string; readonly message?: unknown }[]): number => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.type !== "user") {
+            continue;
+        }
+        const spoken = blocksOf(message).some((block) => block.type === "text" && typeof block.text === "string" && block.text.length > 0);
+        if (spoken) {
+            return index;
+        }
+    }
+    return 0;
+};
+
+/* THE LAST TURN OF A STORED SESSION, and only it, restored by the same reducer the whole session goes through.
+ *
+ * This is what a turn the daemon DIED under reads back as. Such a turn never settled, so it was never appended
+ * to the conversation's durable record (transcript-record.ts records per settled turn), and the boot pass is
+ * the only chance anything will ever write it down: the journal entry that names it is consumed there
+ * (turn-resume.ts). The provider wrote the turn to its own session file as it streamed, so the work is sitting
+ * on disk, and one turn is exactly the slice the record is missing.
+ *
+ * ONE TURN, never the whole session, because the record already holds every turn before it and this appends.
+ * The boundary is read here rather than by counting rows the record holds, because the two do not share a
+ * coordinate system: the record carries a row per mid-turn `steer` that the provider folds into the turn's own
+ * prompt, so the same point in one conversation sits at different indices on the two sides.
+ *
+ * A RE-RUN opens with a resume note rather than a user row, and needs no special case here: the reducer already
+ * turns a prompt wearing one into the muted line that explains the gap (see restoredSessionMessages), which is
+ * a turn boundary that is not a `user` row and the reason `lastTurnStart` reads the STORED messages instead of
+ * the restored ones. */
+export const readWorkspaceSessionTail = async (dir: string, id: string): Promise<RestoredMessage[]> => {
+    const scoped = await getSessionMessages(id, { dir });
+    const messages = scoped.length > 0 ? scoped : await getSessionMessages(id);
+    return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
+};
+
 /* The stored-message → transcript reduction itself, over whatever set of SDK session messages it is handed.
  * Exported because a SUBAGENT's transcript is the same file format read from a different file
  * (getSubagentMessages, see sessions/subagent-transcript.ts): one reducer, so a delegation's transcript and its

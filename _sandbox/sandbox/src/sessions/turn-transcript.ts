@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurn, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentTurn, capabilitiesOf, type RestoredMessage, type RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
 import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
@@ -327,6 +327,79 @@ export const recordTurnTranscript = async (
         return true;
     } catch (error) {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed");
+        return false;
+    }
+};
+
+// The line a turn the daemon died under leaves under whatever it managed to write: what stopped it, and the one
+// move that carries the conversation on from here. Lives beside the recording rather than at the boot pass that
+// asks for it, so the sentence and the rows it closes are written in one place.
+export const RESTART_INTERRUPTED = "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.";
+
+/* WHAT THE INTERRUPTED TURN ACTUALLY WROTE, recovered from the provider's own session store.
+ *
+ * The one provider-shaped read on this file, and, like storedTranscript's, a RECOVERY rather than a road any
+ * ordinary turn goes down: a turn's frames live in the daemon's memory and die with it, so for a turn nothing
+ * ever settled the provider's store is the only place its work exists. `undefined` for a runtime that keeps no
+ * readable store (codex/grok NATIVE, every ACP agent) and for a turn that never reported a session, which is
+ * not a failure, the caller writes the prompt alone, exactly as it did before this existed.
+ *
+ * The opening row is stamped with when the TURN started. The store knows when the provider received the prompt
+ * and the daemon knows when the user sent it, and the second is what every other user row in this record
+ * carries, so a recovered turn must not be the one message in a conversation whose clock comes from somewhere
+ * else. */
+const interruptedTurnRows = async (
+    services: Pick<Services, "sessions" | "workspace" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+    sessionId: string | undefined,
+    sentAt: number,
+): Promise<readonly RestoredMessage[]> => {
+    const agent = transcriptAgentOf(turn);
+    if (sessionId === undefined || capabilitiesOf(agent.provider, agent.harness).runtime !== "claude-code") {
+        return [];
+    }
+    const rows = await services.sessions.readTail(services.workspace.root, sessionId).catch((error: unknown) => {
+        services.logger.warn({ err: error, conversationId: turn.conversationId, sessionId }, "interrupted turn: session tail unreadable");
+        return [] as RestoredMessage[];
+    });
+    const [opening, ...rest] = rows;
+    return opening === undefined ? [] : [opening.role === "user" ? { ...opening, sentAt } : opening, ...rest];
+};
+
+/* WRITE DOWN A TURN THE DAEMON DIED UNDER, at the boot that finds its journal entry still standing
+ * (turn-resume.ts). The one write that is not a settled turn, and the last chance this turn is ever recorded:
+ * the journal entry naming it is consumed in the same pass.
+ *
+ * It used to record the PROMPT and the interruption, nothing else, on the reasoning that a turn with no settled
+ * transcript at least should not lose the user's words. That left the far bigger half on the floor. An
+ * interrupted turn is usually a LONG one, an hour of tool calls is exactly the shape of thing a container
+ * rebuild or an OOM lands in the middle of, and every line of it was already on disk in the provider's session
+ * file. What the chat opened onto was the user's own message with a notice under it, over work that had really
+ * happened, which reads as "nothing came of this" about a turn that got most of the way.
+ *
+ * The prompt-alone shape is still the FALLBACK, for the cases where there is genuinely nothing to recover: a
+ * runtime with no readable store, a turn killed before it reported a session, a store that has since lost the
+ * file. Nothing about those is an error; they are the conversations this used to be the whole answer for.
+ *
+ * Never throws. The boolean is the caller's, and it is load-bearing rather than informational: a failed write
+ * means the journal entry is KEPT for the next boot instead of a transient disk error turning into permanent
+ * loss (see turn-resume.ts). */
+export const recordInterruptedTurn = async (
+    services: Pick<Services, "transcripts" | "sessions" | "workspace" | "logger">,
+    turn: AgentTurn & { readonly conversationId: string },
+    // The session the dead turn last reported, off its journal entry, which is where that id survives a daemon
+    // that never got to write it onto the registry entry.
+    sessionId: string | undefined,
+    sentAt: number,
+): Promise<boolean> => {
+    const recovered = await interruptedTurnRows(services, turn, sessionId, sentAt);
+    // restoredTurn with no frames is the prompt row and nothing else, which is precisely the fallback.
+    const written = recovered.length > 0 ? recovered : restoredTurn(turn, [], services.workspace.root, sentAt);
+    try {
+        await services.transcripts.append(transcriptAgentOf(turn), [...written, { role: "notice", text: RESTART_INTERRUPTED }]);
+        return true;
+    } catch (error) {
+        services.logger.warn({ err: error, conversationId: turn.conversationId }, "interrupted turn: transcript append failed");
         return false;
     }
 };

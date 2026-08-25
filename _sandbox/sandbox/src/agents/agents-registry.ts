@@ -995,8 +995,31 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 void persist();
             }
             switch (event.kind) {
-                case "session":
+                case "session": {
                     state.pendingSessionId = event.sessionId;
+                    /* AND ON THE ENTRY, NOW, rather than at the finish that flushes it (see finish's
+                     * `pendingSessionId ?? entry.sessionId`). The runtime copy alone is what every reader in
+                     * this process wants, so this write buys exactly one thing: the id survives the daemon.
+                     *
+                     * Which is the whole of a failure that cost seven conversations. `pendingSessionId` lives in
+                     * the process, and the process is regularly killed mid-turn (a rebuild, an OOM), so a
+                     * conversation whose FIRST turn was killed came back with no session id at all, which is the
+                     * only key into the provider store: `storedTranscript` had nothing to read, the record held
+                     * nothing either (it is appended per SETTLED turn), and the chat opened permanently blank
+                     * over a session file sitting on disk the whole time. A LATER turn's death is the same bug
+                     * one step quieter: the entry keeps pointing at the previous turn's session, so the next
+                     * message resumes a thread that never saw the work the user is looking at.
+                     *
+                     * Fire-and-forget, exactly like the plan-title promotion above: it is ordered behind whatever
+                     * is in the store's write chain, and a daemon that dies before it lands is no worse off than
+                     * it was without this write. The turn journal carries the same id for the same reason, and
+                     * turn-resume reads THAT for the turn it is recovering; this is what makes the id survive
+                     * every other way a turn can end badly. */
+                    const entry = entryOf(id);
+                    if (entry !== undefined && entry.sessionId !== event.sessionId) {
+                        replace({ ...entry, sessionId: event.sessionId });
+                        void persist();
+                    }
                     // The turn's own prompt has been waiting for exactly this id (see begin), file it so the
                     // agent is findable by what started it from its first frame, not from its last.
                     if (state.pendingPrompt !== undefined) {
@@ -1004,6 +1027,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                         state.pendingPrompt = undefined;
                     }
                     return;
+                }
                 case "usage":
                     state.pendingCostUsd += event.costUsd ?? 0;
                     state.pendingInputTokens += event.inputTokens ?? 0;

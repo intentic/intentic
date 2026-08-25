@@ -265,6 +265,7 @@ test("an editor-scoped control token reaches the agent-conversation surface and 
             sessions: {
                 list: async () => [],
                 read: async () => [],
+                readTail: async () => [],
                 search: async () => [],
                 exists: async () => true,
             },
@@ -992,6 +993,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                 sessions: {
                     list: async () => [],
                     read: async () => [],
+                    readTail: async () => [],
                     search: async () => [],
                     exists: async () => false,
                 },

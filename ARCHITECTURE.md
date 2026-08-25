@@ -165,10 +165,16 @@ survive reconnects. Its subsystems:
   and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
   to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's
   allowance unwatched; once turned on it fires once per turn, and only for turns under six hours old: a turn
-  that OOM-kills the daemon must not resurrect it on every boot. Not resuming is still recorded: the fleet card
-  reads `interrupted` and an automation's row shows an `interrupted` run.
-  The frame log itself stays in memory on purpose: the transcript's durable copy is the provider's session
-  store, which every client replays from before it attaches.
+  that OOM-kills the daemon must not resurrect it on every boot. Not resuming is still recorded, and records
+  the WORK and not just the fact: the boot pass reads the dead turn back out of the provider's session store and
+  appends it to the conversation's transcript before consuming the journal entry that names it, so an hour of
+  tool calls that never settled is still there to read. The fleet card reads `interrupted` and an automation's
+  row shows an `interrupted` run.
+  The frame log itself stays in memory on purpose: the durable copy is the daemon's own **transcript record**,
+  one file per conversation on the history volume
+  ([sessions/transcript-record.ts](_sandbox/sandbox/src/sessions/transcript-record.ts)), appended as each turn
+  settles. The provider's session store is now only a backfill for conversations older than that record and the
+  recovery source above, which is why a provider that keeps no readable store still opens.
 - **Terminals**: interactive PTYs over WebSocket ([terminal/terminal.ts](_sandbox/sandbox/src/terminal/terminal.ts)).
 - **Panels & previews**: per-repo dev servers behind `preview-<panel>-<id>.<zone>` hostnames
   ([panels/](_sandbox/sandbox/src/panels/)); plus generic **port forwarding** for anything run in a terminal
