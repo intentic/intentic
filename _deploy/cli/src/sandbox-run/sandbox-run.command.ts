@@ -117,14 +117,29 @@ export const sandboxRunCommandCli = buildCommand<{
         },
     },
     func(this: CommandContext, flags) {
-        // stdin carries NAME=VALUE pairs, NUL-framed; empty input means a fresh container with no env to carry.
-        const env = replayableEnv(parseNulEnv(readFileSync(0, "utf8")));
+        /* stdin carries NAME=VALUE pairs, NUL-framed; empty input means a fresh container with no env to carry.
+         *
+         * SANDBOX_MEMORY is the one pair a RUNNER may inject rather than replay: ic forwards it into this probe
+         * as a docker `-e` when the host asked for a cap (see contract.rs), and a fresh ask outranks whatever
+         * the container being replaced carried. Merged in HERE, before the allowlist filter, so the winning
+         * value is re-emitted onto the new container like any other replayed pair — which is what turns a
+         * one-time `SANDBOX_MEMORY=10g` into the sandbox's standing cap instead of a one-run argument. */
+        const dumped = parseNulEnv(readFileSync(0, "utf8"));
+        const seed = process.env["SANDBOX_MEMORY"];
+        const env = replayableEnv(
+            seed === undefined || seed.trim() === ""
+                ? dumped
+                : [...dumped.filter(([name]) => name !== "SANDBOX_MEMORY"), ["SANDBOX_MEMORY", seed] as [string, string]],
+        );
         // The loopback shortcut's port derives from the sandbox id, which derives from the connect token this
         // container is already being handed, so no flow computes an address, and a recreate reproduces the
         // same port by replaying the same token. A run with no token (bare dev) publishes nothing.
         const sandboxId = sandboxIdFromToken(env.find(([name]) => name === "CONNECT_TOKEN")?.[1] ?? "");
-        // The local shape's cgroup cap, sized to this machine. The hosted shape drops it in the contract.
-        const { memory, memorySwap } = localSandboxMemory(engineMemoryBytes());
+        // The local shape's cgroup cap, sized to this machine — or to the owner's own SANDBOX_MEMORY, replayed
+        // off the container being replaced, on a machine the derived share is wrong about. The hosted shape
+        // drops the cap entirely in the contract. Read from the ALLOWLISTED pairs, not the raw stdin dump, so
+        // the var has to earn its place in REPLAY_ENV to be honoured, and is re-emitted for the next recreate.
+        const { memory, memorySwap } = localSandboxMemory(engineMemoryBytes(), env.find(([name]) => name === "SANDBOX_MEMORY")?.[1]);
         const run = {
             names: sandboxNames(flags.slug),
             image: flags.image,

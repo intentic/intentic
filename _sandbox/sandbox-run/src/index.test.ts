@@ -87,6 +87,60 @@ test("an unmeasurable machine gets the fallback, never a cap derived from zero",
     }
 });
 
+/* THE ESCAPE HATCH, for the machine the share is wrong about: one sandbox, many agent sessions inside it.
+ * Pinned on the same guest as the test above, whose derived 6g is exactly the cap that is too small for it —
+ * a `turbo` fan-out plus a handful of open agents does not fit, and the owner widens it by hand every rebuild. */
+test("an explicit SANDBOX_MEMORY replaces the derived share and takes the same swap rule", () => {
+    const guest = 20479632 * 1024;
+    expect(localSandboxMemory(guest)).toEqual({ memory: "6g", memorySwap: "8g" });
+    expect(localSandboxMemory(guest, "10g")).toEqual({ memory: "10g", memorySwap: "13g" });
+    // Asking for LESS is an ask too: the override replaces the share, it does not raise a floor under it.
+    expect(localSandboxMemory(guest, "5g")).toEqual({ memory: "5g", memorySwap: "7g" });
+});
+
+/* An override that could claim anything would just be the uncapped container the cap exists to prevent, so the
+ * ask is held between the same floor and ceiling the derived share is, plus its own share of the machine. */
+test("an override is bounded: it may claim more of the machine than the share, never all of it", () => {
+    const guest = 20479632 * 1024;
+    // 60% of 19.53 GiB is ~11.7, so a greedy ask lands there rather than on the number it asked for.
+    expect(localSandboxMemory(guest, "18g").memory).toBe("11g");
+    // Never above the absolute ceiling, however large the machine.
+    expect(localSandboxMemory(256 * 1024 ** 3, "200g").memory).toBe("24g");
+    // And the floor holds from below: an override cannot starve the image's own toolchain.
+    expect(localSandboxMemory(guest, "1g").memory).toBe("4g");
+    // The 72% that caused the incident is not reachable by asking for it.
+    expect(Number(localSandboxMemory(guest, "14g").memory.replace("g", "")) / 19.53).toBeLessThan(0.62);
+});
+
+test("an override is honoured on a machine the caller could not measure", () => {
+    expect(localSandboxMemory(0, "12g")).toEqual({ memory: "12g", memorySwap: "15g" });
+});
+
+test("a malformed SANDBOX_MEMORY stops the recreate by name rather than reverting to the share", () => {
+    for (const bad of ["10", "10G", "10gb", "ten", "10.5g", "-4g", "10 g"]) {
+        expect(() => localSandboxMemory(20479632 * 1024, bad), bad).toThrowError(/SANDBOX_MEMORY/u);
+    }
+    // Empty is ABSENT, not malformed: replayableEnv drops empty values, and an unset cap is the derived share.
+    expect(localSandboxMemory(20479632 * 1024, "")).toEqual({ memory: "6g", memorySwap: "8g" });
+});
+
+/* The cap must OUTLIVE the container it sizes, which is the whole reason it is an env var and not a flag:
+ * `docker update --memory` retunes a running container and is discarded by the next recreate. Replayed, the
+ * number rides onto the new container and the recreate after that reads it back. */
+test("SANDBOX_MEMORY survives the replay allowlist and is re-emitted onto the container it sizes", () => {
+    expect(replayableEnv([["SANDBOX_MEMORY", "10g"]])).toEqual([["SANDBOX_MEMORY", "10g"]]);
+    const argv = sandboxRunArgv({
+        names,
+        image: "img:1",
+        baseImage: "img:1",
+        memory: "10g",
+        memorySwap: "13g",
+        env: [["SANDBOX_MEMORY", "10g"]],
+    });
+    expect(argv.join(" ")).toContain("--memory 10g --memory-swap 13g");
+    expect(argv.join(" ")).toContain("-e SANDBOX_MEMORY=10g");
+});
+
 test("the hosted-provider shape drops init/alias and adds ports, labels, dns: same posture, same volumes", () => {
     const argv = sandboxRunArgv({
         names,

@@ -101,6 +101,49 @@ const SANDBOX_MEMORY_CEILING = 24 * GIB;
 const SANDBOX_SWAP_SHARE = 0.25;
 const SANDBOX_SWAP_CEILING = 4 * GIB;
 
+/* WHAT AN EXPLICIT ASK MAY CLAIM — the ceiling on SANDBOX_MEMORY (see localSandboxMemory below).
+ *
+ * The share above is sized for a host running SEVERAL sandboxes, and on a machine that runs exactly ONE it
+ * answers the wrong question: a 20 GiB guest derives 6 GiB, which one `turbo` fan-out plus a handful of live
+ * agent sessions does not fit, and its owner is left widening the cgroup by hand after every recreate. Rather
+ * than loosen the default and thereby un-bound every multi-sandbox host, that owner names their number here.
+ *
+ * Still BOUNDED, because a cap an override can lift to anything is the uncapped container with extra steps,
+ * and the uncapped container is the whole failure this section exists to prevent. 60% sits deliberately below
+ * the 72% (14 GiB of a 19.53 GiB guest) that had this repo's own dev machine parked at its low-memory
+ * watermark while the userspace OOM killer shot the owner's dev server: an override buys a single-sandbox
+ * machine real headroom without buying that incident back. */
+const SANDBOX_MEMORY_OVERRIDE_SHARE = 0.6;
+
+// The two docker strings for a chosen cap. Split out because a derived share and an explicit ask agree on
+// everything downstream of "how many bytes": the swap allowance, the rounding, the `<n>g` spelling.
+const capStrings = (capBytes: number): { readonly memory: string; readonly memorySwap: string } => {
+    const memoryGib = Math.max(1, Math.floor(capBytes / GIB));
+    const swapGib = Math.max(1, Math.ceil(Math.min(memoryGib * GIB * SANDBOX_SWAP_SHARE, SANDBOX_SWAP_CEILING) / GIB));
+    return { memory: `${memoryGib}g`, memorySwap: `${memoryGib + swapGib}g` };
+};
+
+/* An owner's explicit cap, in bytes, held inside the same bounds the derived one is.
+ *
+ * Whole GiB only, `<n>g`, the SAME spelling this module emits, so the figure a person reads out of `docker
+ * inspect` is the figure they can write back. Anything else THROWS rather than quietly falling through to the
+ * derived share: an override that silently reverts leaves an owner believing they hold headroom they do not,
+ * which is exactly the invisible drift runtimeDirectivesOf refuses, for the same reason.
+ *
+ * An UNMEASURABLE machine still honours the ask, bounded by the absolute ceiling alone — a caller that could
+ * not read /proc/meminfo knows strictly less about the machine than the person who typed a number into it. */
+const overrideCapBytes = (override: string, totalBytes: number): number => {
+    const asked = /^(\d+)g$/u.exec(override.trim());
+    if (asked === null) {
+        throw new Error(`SANDBOX_MEMORY must be whole GiB spelled '<n>g' (e.g. '10g'), got '${override}'`);
+    }
+    const ceiling =
+        Number.isFinite(totalBytes) && totalBytes > 0
+            ? Math.min(SANDBOX_MEMORY_CEILING, totalBytes * SANDBOX_MEMORY_OVERRIDE_SHARE)
+            : SANDBOX_MEMORY_CEILING;
+    return Math.min(Math.max(Number(asked[1]) * GIB, SANDBOX_MEMORY_FLOOR), ceiling);
+};
+
 /* THE PER-MACHINE CAP, as docker's `<n>g` strings, derived from the memory the docker engine actually has.
  *
  * Pure arithmetic on a byte count, deliberately: this module stays importable by a browser (see README), so it
@@ -112,15 +155,21 @@ const SANDBOX_SWAP_CEILING = 4 * GIB;
  * derived from a lie. The two figures round in OPPOSITE directions, both away from breaking something: the cap
  * DOWN, since a cap that rounds up bounds the machine less than the reasoning above allows, and the swap
  * allowance UP, since it exists to absorb a peak and rounding it away makes the container fail a build it had
- * the headroom for. */
-export const localSandboxMemory = (totalBytes: number): { readonly memory: string; readonly memorySwap: string } => {
+ * the headroom for.
+ *
+ * `override` is the sandbox's own SANDBOX_MEMORY, replayed off the container being replaced (REPLAY_ENV). When
+ * set it REPLACES the derived share rather than raising a floor under it: the point is an owner who knows their
+ * machine better than a fraction does, and that includes knowing when to ask for LESS. See overrideCapBytes for
+ * what an ask may claim and why a malformed one stops the recreate. */
+export const localSandboxMemory = (totalBytes: number, override?: string): { readonly memory: string; readonly memorySwap: string } => {
+    // Empty is ABSENT, not invalid: replayableEnv drops empty values, so an unset cap arrives either way.
+    if (override !== undefined && override.trim() !== "") {
+        return capStrings(overrideCapBytes(override, totalBytes));
+    }
     if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
         return { memory: LOCAL_SANDBOX_MEMORY, memorySwap: LOCAL_SANDBOX_MEMORY_SWAP };
     }
-    const share = Math.min(Math.max(totalBytes * SANDBOX_MEMORY_SHARE, SANDBOX_MEMORY_FLOOR), SANDBOX_MEMORY_CEILING);
-    const memoryGib = Math.max(1, Math.floor(share / GIB));
-    const swapGib = Math.max(1, Math.ceil(Math.min(memoryGib * GIB * SANDBOX_SWAP_SHARE, SANDBOX_SWAP_CEILING) / GIB));
-    return { memory: `${memoryGib}g`, memorySwap: `${memoryGib + swapGib}g` };
+    return capStrings(Math.min(Math.max(totalBytes * SANDBOX_MEMORY_SHARE, SANDBOX_MEMORY_FLOOR), SANDBOX_MEMORY_CEILING));
 };
 
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
@@ -241,6 +290,17 @@ export const REPLAY_ENV = [
     "HOST_LABEL",
     "SELF_HOST_ADDRESS",
     "SELF_HOST_VIA",
+    /* THE OWNER'S EXPLICIT CGROUP CAP, for a machine the derived share is wrong about (localSandboxMemory).
+     *
+     * Replayed, and so emitted again as `-e SANDBOX_MEMORY=` onto the very container it sizes, which is what
+     * makes it stick: the number lives ON the sandbox, so every later recreate reads back the figure its owner
+     * chose instead of re-deriving the share they already rejected. This is the property that separates it from
+     * the obvious alternative — `docker update --memory` retunes a running container and is silently discarded
+     * by the next recreate, which is how an owner ends up re-widening the same cgroup after every rebuild.
+     *
+     * Unlike SANDBOX_CHANNEL and the directive-fate vars above, this one SHOULD outlive the run that set it: it
+     * describes the machine's standing arrangement with its owner, not a decision the runner makes per launch. */
+    "SANDBOX_MEMORY",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:
@@ -389,9 +449,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "max-size=10m",
         "--log-opt",
         "max-file=3",
-        ...(run.init === false
-            ? []
-            : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", run.memorySwap ?? LOCAL_SANDBOX_MEMORY_SWAP]),
+        ...(run.init === false ? [] : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", run.memorySwap ?? LOCAL_SANDBOX_MEMORY_SWAP]),
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
         ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
         ...(run.ports ?? []).flatMap((port) => ["-p", port]),
