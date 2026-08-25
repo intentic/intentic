@@ -22,6 +22,39 @@ export const exec = promisify(execFile);
 // optional locks are off; the locks a commit/add genuinely needs are unaffected.
 export const GIT_GLOBAL_ARGS = ["--no-optional-locks", "-c", "core.fileMode=false"] as const;
 
+/* A FILENAME IS NOT A PATTERN, and everything this daemon puts after a bare `--` is a filename — a path a user
+ * ticked in the Changes panel, or one an agent named. git reads that position as a PATHSPEC and wildmatches it,
+ * so the glob characters that are ordinary in real trees made one selected row act on its neighbours:
+ * `report[1].txt` also matches `report1.txt`, and every Next.js/SvelteKit app-router tree is full of `[slug]`.
+ * Measured on git 2.39: `git checkout -f HEAD -- 'report[1].txt'` reverted the sibling too, `git add -A --`
+ * staged it into a commit nobody reviewed, and `git clean -f -f -d --` DELETED it. Discard is the one verb in
+ * the changes router git cannot walk back, so the untracked case was silent loss of the user's work.
+ *
+ * `:(literal)` per pathspec rather than the `--literal-pathspecs` flag, and the difference is not stylistic: the
+ * flag is global to the process, and git's OWN commands construct pathspecs with magic internally. With it set,
+ * `git stash push --include-untracked` silently stops sweeping untracked files — it reports success and leaves
+ * them in the tree. The prefix marks only the arguments this daemon supplies and leaves git's internals alone.
+ *
+ * Applied in the runner rather than at each call site, on this repo's own rule (AGENTS.md: guard invariants by
+ * discovery, not enumeration): a call site added tomorrow is covered tomorrow. The LAST `--` is the separator —
+ * git's own rule, and it is what keeps a `-m` message that happens to be `--` from being read as one.
+ *
+ * PLUMBING_PATHS is the exception that rule needs, and it is small on purpose. A handful of plumbing commands
+ * take literal FILENAMES after `--` rather than pathspecs, so the prefix is not merely unnecessary there, it is
+ * wrong and SILENT: `git update-index --force-remove -- ':(literal)a.txt'` exits 0 and removes nothing. The
+ * failure mode of a verb missing from this set is a git that errors or no-ops, which is loud; the failure mode
+ * of a forgotten call site under the other design is a Discard that deletes the wrong file. That asymmetry is
+ * why the marking lives here and the exceptions are named. */
+const PLUMBING_PATHS = new Set(["update-index", "hash-object", "check-ignore", "check-attr"]);
+
+export const literalPathspecs = (args: readonly string[]): readonly string[] => {
+    const separator = args.lastIndexOf("--");
+    if (separator === -1 || separator === args.length - 1 || PLUMBING_PATHS.has(subcommandOf(args) ?? "")) {
+        return args;
+    }
+    return [...args.slice(0, separator + 1), ...args.slice(separator + 1).map((path) => `:(literal)${path}`)];
+};
+
 // Node's execFile buffers stdout and REJECTS past its default 1 MiB, which real git output clears easily: an
 // `ls-files`/`status` over a workspace with a large untracked tree (an un-gitignored node_modules, a build dir,
 // a repo mid-upload) blows the limit and the caller sees ERR_CHILD_PROCESS_STDIO_MAXBUFFER instead of a repo.
@@ -68,7 +101,7 @@ export type GitRunner = (
 // have to be base64'd across the IPC channel, and this read serves an interactive file open (one spawn), never
 // the per-poll storm the forker exists for.
 export const gitBytes = async (dir: string, args: readonly string[], maxBytes: number): Promise<Buffer> => {
-    const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...args], { maxBuffer: maxBytes, encoding: "buffer" });
+    const { stdout } = await exec("git", [...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)], { maxBuffer: maxBytes, encoding: "buffer" });
     return stdout;
 };
 
@@ -407,7 +440,7 @@ const gitRunnerVia =
         };
         for (let attempt = 1; ; attempt += 1) {
             try {
-                const output = await runGitSlotted(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...args], env, bulk, unbounded);
+                const output = await runGitSlotted(command!, [...rest, ...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)], env, bulk, unbounded);
                 execMs += output.execMs;
                 observe(attempt, false);
                 return { stdout: output.stdout, stderr: output.stderr };

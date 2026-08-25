@@ -368,10 +368,13 @@ export const fileClaudeStore = (dir: string, logger: Logger): ClaudeStore => {
         // Atomic: a reader (this daemon, another sandbox, the account list) must never observe a half-written
         // file. An unparsed truncated read used to degrade to "no such account", which reads to the user as a
         // credential that silently disconnected itself.
+        // 0o600 because the file holds an OAuth REFRESH token, and the mode is the temp file's: `rename` carries
+        // it onto the target, so leaving it to the umask published the credential at 0644 to everything in the
+        // container. The sibling Cursor store next door already writes 0o600 for the same reason.
         write: async (account) => {
             await mkdir(dir, { recursive: true });
             const temp = `${path(account.id)}.${randomUUID()}.tmp`;
-            await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`);
+            await writeFile(temp, `${JSON.stringify(account, undefined, 2)}\n`, { mode: 0o600 });
             await rename(temp, path(account.id));
         },
         clear: async (id) => {

@@ -542,6 +542,46 @@ test("discardPaths restores a tracked file, deletes an untracked one, and leaves
     expect(await bothSides(dir)).toEqual([{ path: "kept.txt", status: "added", additions: 1, deletions: 0 }]);
 });
 
+/* A FILENAME IS NOT A PATTERN, and everything this router puts after a `--` is a name a person ticked off a
+ * list. git reads that position as a PATHSPEC and wildmatches it, so one row selected used to act on every
+ * sibling whose name the brackets happened to match: `report[1].txt` also matched `report1.txt`. For discard
+ * that is silent loss of work — `git clean -f -f -d` DELETED the untracked sibling, and discard is the one verb
+ * in this router git cannot walk back. Square brackets in filenames are not exotic: every Next.js/SvelteKit
+ * app-router tree is full of them.
+ *
+ * Pinned on discard, stage and unstage together because one flag (`--literal-pathspecs`, in scaffold's
+ * GIT_GLOBAL_ARGS) covers all three, and a regression would take all three back at once. */
+test("a path with glob characters acts on that file only, never on the sibling its brackets match", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "report[1].txt"), "bracket\n");
+    await writeFile(join(dir, "report1.txt"), "sibling\n");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "reports");
+
+    // Stage: only the ticked row reaches the index.
+    await writeFile(join(dir, "report[1].txt"), "bracket edited\n");
+    await writeFile(join(dir, "report1.txt"), "sibling edited\n");
+    await stagePaths(dir, ["report[1].txt"]);
+    const afterStage = await changedFiles(dir);
+    expect(afterStage.staged.map((change) => change.path)).toEqual(["report[1].txt"]);
+    expect(afterStage.unstaged.map((change) => change.path)).toEqual(["report1.txt"]);
+
+    // Unstage: and only the ticked row leaves it again.
+    await unstagePaths(dir, ["report[1].txt"]);
+    expect((await changedFiles(dir)).staged).toEqual([]);
+
+    // Discard: the tracked sibling keeps its edit, and the UNTRACKED sibling keeps existing — the case where
+    // the bug destroyed work rather than merely reverting it.
+    await writeFile(join(dir, "fresh[1].txt"), "new bracket\n");
+    await writeFile(join(dir, "fresh1.txt"), "new sibling\n");
+    await discardPaths(dir, ["report[1].txt", "fresh[1].txt"]);
+
+    expect(await readFile(join(dir, "report[1].txt"), "utf8")).toBe("bracket\n");
+    expect(await readFile(join(dir, "report1.txt"), "utf8")).toBe("sibling edited\n");
+    expect(existsSync(join(dir, "fresh[1].txt"))).toBe(false);
+    expect(existsSync(join(dir, "fresh1.txt"))).toBe(true);
+});
+
 test("discardPaths undoes both legs of a staged rename from either path", async () => {
     const dir = await tempRepo();
     await sh(dir, "mv", "a.txt", "b.txt");

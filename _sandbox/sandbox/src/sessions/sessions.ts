@@ -126,7 +126,13 @@ export const searchWorkspaceSessions = async (
     const needle = caseSensitive ? query : query.toLowerCase();
     const sessions = await recent();
     const hits = await said(query, "session", caseSensitive);
-    return sessions.flatMap((session): SessionSummary[] => {
+    /* COPIES, NEVER THE LISTED OBJECTS THEMSELVES. `recent()` caches its array for LIST_TTL_MS and hands the
+     * same summary objects back to every query inside that window, so writing a snippet onto one is writing it
+     * into the cache: type `abc`, backspace to `ab`, and the row that now matches on its TITLE was rendered
+     * with the evidence from a term no longer typed. The title branch therefore has to DROP a snippet as
+     * deliberately as the other one adds one — the rule this function states is that a title match carries no
+     * snippet, and after a mutation there was one to carry. */
+    return sessions.flatMap(({ snippet: _stale, ...session }): SessionSummary[] => {
         if ((caseSensitive ? session.title : session.title.toLowerCase()).includes(needle)) {
             return [session];
         }
@@ -136,8 +142,7 @@ export const searchWorkspaceSessions = async (
         const pending = matchLines(sessionOverlay(session.id), needle, caseSensitive);
         // The user's own words win, and among theirs the oldest, which is the index's own ordering rule.
         const snippet = indexed?.speaker === "user" ? indexed : pending?.speaker === "user" ? pending : (indexed ?? pending);
-        // Object.assign, not a spread, these summaries are this call's own, built fresh by the list above.
-        return snippet === undefined ? [] : [Object.assign(session, { snippet })];
+        return snippet === undefined ? [] : [{ ...session, snippet }];
     });
 };
 

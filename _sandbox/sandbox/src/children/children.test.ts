@@ -292,14 +292,61 @@ describe("the escalation ladder", () => {
         await settled(result.id);
     });
 
-    it("refuses a stranger's child and a child waiting on nothing", async () => {
+    it("refuses a child waiting on nothing", async () => {
         const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([]));
         if (!result.ok) {
             throw new Error(result.message);
         }
-        await expect(answerChild(fakeServices(), { conversationId: "conv-other", cwd: "/work" }, result.id, {})).resolves.toMatchObject({ ok: false });
         await settled(result.id);
         await expect(answerChild(fakeServices(), parent, result.id, {})).resolves.toMatchObject({ ok: false, message: expect.stringContaining("not waiting") });
+    });
+
+    /* ONLY THE PARENT THAT STARTED A CHILD MAY REACH IT, which children.ts calls the security spine of the
+     * whole surface, and it has to be asserted WHILE there is something to reach. Against a settled child every
+     * door refuses anyway ("not waiting on anything"), so `ok: false` alone proves nothing: delete the parentage
+     * check and a stranger still gets `ok: false`, from the wrong branch, and the suite stays green.
+     *
+     * So the child is parked on a real question first, and the refusals are read by their REASON. What is at
+     * stake is a cross-conversation channel into a live turn: `answer` settles a card the child is blocked on,
+     * `send` injects text straight into it, and `pendingQuestion` would hand a stranger the full question. */
+    it("refuses a stranger every door onto a child parked mid-turn, by parentage rather than by state", async () => {
+        const { id: requestId, wait: parked } = createRequest("question", { kind: "question", requestId: "", cancelled: true });
+        void parked(new AbortController().signal);
+        const gate = Promise.withResolvers<void>();
+        const turns: AgentTurn[] = [];
+        const askThenFinish = async function* (services: Services, input: AgentTurn): AsyncGenerator<AgentEvent> {
+            void services;
+            turns.push(input);
+            yield questionFrame(requestId);
+            await gate.promise;
+            yield { kind: "resolved", requestId };
+            yield { kind: "done" };
+        };
+        const services = fakeServices();
+        const result = await spawnChild(services, parent, { prompt: "go" }, askThenFinish);
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        await waitForSubagent(parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 });
+        const stranger = { conversationId: "conv-other", cwd: "/work" };
+
+        // The real parent CAN see the card — so the refusals below are about who is asking, not about state.
+        expect(pendingQuestionOf(result.id)).toMatchObject({ kind: "question", requestId });
+
+        await expect(answerChild(services, stranger, result.id, { "Which port should the server bind?": ["8080"] })).resolves.toMatchObject({
+            ok: false,
+            message: expect.stringContaining("No such child"),
+        });
+        await expect(sendToChild(services, stranger, result.id, "do something else", askThenFinish)).resolves.toMatchObject({
+            ok: false,
+            message: expect.stringContaining("No such child"),
+        });
+        // The stranger's send started no turn, and its answer settled nothing: the child is still parked.
+        expect(turns).toHaveLength(1);
+        expect(pendingQuestionOf(result.id)).toMatchObject({ kind: "question", requestId });
+
+        gate.resolve();
+        await settled(result.id);
     });
 
     it("send to a settled child runs a follow-up turn on its own conversation, continuing its session", async () => {
@@ -420,6 +467,78 @@ describe("the budgets, enforced in the daemon", () => {
         }
         const second = await spawnChild(services, parent, { prompt: "two" }, fakeTurn([]));
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
+    });
+
+    /* THE CAP HAS TO HOLD AGAINST TWO SPAWNS AT ONCE, which is the shape a runaway actually arrives in: two
+     * tool_use blocks in one assistant message, or a turn backgrounding two `agents spawn` shells, each landing
+     * on POST /children/spawn independently. Every case above this one awaits its first spawn before starting
+     * the second, so all of them pass against a ledger that is read in one turn of the event loop and written
+     * in another — which is what it used to be. Both calls read {live: 0}, both cleared a ceiling of one. */
+    it("holds the live ceiling against spawns that arrive together", async () => {
+        const gate = Promise.withResolvers<void>();
+        const holdOpen = async function* (services: Services, input: AgentTurn): AsyncGenerator<AgentEvent> {
+            void services;
+            void input;
+            await gate.promise;
+            yield { kind: "done" };
+        };
+        const services = fakeServices({ subagentsAtOnce: 1 });
+
+        const results = await Promise.all([
+            spawnChild(services, parent, { prompt: "one" }, holdOpen),
+            spawnChild(services, parent, { prompt: "two" }, holdOpen),
+            spawnChild(services, parent, { prompt: "three" }, holdOpen),
+        ]);
+
+        expect(results.filter((result) => result.ok)).toHaveLength(1);
+        for (const refused of results.filter((result) => !result.ok)) {
+            expect(refused).toMatchObject({ message: expect.stringContaining("already running") });
+        }
+        gate.resolve();
+    });
+
+    /* A CLAIMED SEAT THAT NEVER BECAME A TURN HAS TO COME BACK, however the spawn ended.
+     *
+     * The budget is reserved BEFORE the child is assembled, because reading and writing it in one synchronous
+     * step is the only thing that makes it a cap (the two tests around this one). The cost of taking it early
+     * is that an exception on the way to the turn strands it — and a stranded live seat is permanent: it
+     * lowers subagentsAtOnce by one for the life of the conversation, and the parent is eventually refused
+     * forever over children that do not exist. A throwing spec is the cheapest way to reach that path. */
+    it("gives the seat back when the spawn throws before the turn starts", async () => {
+        const services = fakeServices({ subagentsAtOnce: 1 });
+        const exploding = {
+            description: "a spec that cannot be read",
+            get prompt(): string {
+                throw new Error("boom");
+            },
+        } as unknown as Parameters<typeof spawnChild>[2];
+
+        await expect(spawnChild(services, parent, exploding, fakeTurn([]))).rejects.toThrow("boom");
+
+        // The proof is that the next spawn fits: under a ceiling of one, a stranded seat would refuse it.
+        const after = await spawnChild(services, parent, { prompt: "ok" }, fakeTurn([]));
+        expect(after.ok).toBe(true);
+    });
+
+    // The same race against the LIFETIME counter, which is the one that stays wrong: a live seat is given back
+    // when the child settles, but a turn that was never counted is never counted, so N parallel spawns used to
+    // cost 1 against a budget meant to meter N.
+    it("counts every concurrent spawn against the lifetime budget", async () => {
+        const services = fakeServices({ subagentsAtOnce: 5, subagentsPerTurn: 2 });
+
+        const results = await Promise.all([
+            spawnChild(services, parent, { prompt: "one" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "two" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "three" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "four" }, fakeTurn([])),
+        ]);
+
+        expect(results.filter((result) => result.ok)).toHaveLength(2);
+        await Promise.all(results.map(async (result) => (result.ok ? settled(result.id) : undefined)));
+        // The lifetime budget is spent, so a later sequential spawn is refused too: the concurrent pair really
+        // was recorded, rather than merely being let through and forgotten.
+        const later = await spawnChild(services, parent, { prompt: "five" }, fakeTurn([]));
+        expect(later).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
     /* The runaway case the depth setting exists for: a child gets the spawn tool too, so the cap a chain

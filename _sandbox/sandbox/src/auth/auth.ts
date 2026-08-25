@@ -171,6 +171,16 @@ export const authorizeMaintainer = async (authorizer: Authorizer, bearer: string
     }
 };
 
+/* ONE COMPARISON FOR THE ONE FACT EVERY GATE HERE TURNS ON: is this claim the same account as that stored row?
+ *
+ * A Google `email` claim is not guaranteed lowercase, while every write to the roster normalizes (app.ts's
+ * memberGrant/memberEmail both `.toLowerCase()`). So an exact `===` against a stored member row could never
+ * match a Workspace domain that preserves case: the owner grants `Alice@Corp.com`, it stores as
+ * `alice@corp.com`, Alice signs in, `enforce` finds no row and throws — and `GET /members` still lists her, so
+ * roster and daemon disagree with nothing on either side to explain it. First-bind already compared this way,
+ * with the reason written beside it; this is that same rule, applied everywhere the question is asked. */
+const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
+
 export const createAuthorizer = (deps: {
     readonly verify: IdTokenVerifier;
     // Local verify for daemon-minted sessions, the steady-state credential (no JWKS round trip). Optional so
@@ -198,10 +208,10 @@ export const createAuthorizer = (deps: {
         return session ?? deps.verify(bearer);
     };
     const enforce = async (identity: VerifiedIdentity, owner: string): Promise<Caller> => {
-        if (identity.email === owner) {
+        if (sameEmail(identity.email, owner)) {
             return { ...identity, role: "owner" };
         }
-        const member = (await deps.members.list()).find(({ email }) => email === identity.email);
+        const member = (await deps.members.list()).find(({ email }) => sameEmail(email, identity.email));
         if (member === undefined) {
             throw new ForbiddenError("not authorized for this sandbox");
         }
@@ -238,7 +248,8 @@ export const createAuthorizer = (deps: {
                 throw new Error("missing bearer token");
             }
             const { email } = await identify(bearer);
-            if (email !== (await deps.owner.read())) {
+            const owner = await deps.owner.read();
+            if (owner === undefined || !sameEmail(email, owner)) {
                 throw new ForbiddenError("not the sandbox owner");
             }
         },
@@ -247,7 +258,8 @@ export const createAuthorizer = (deps: {
                 throw new Error("missing bearer token");
             }
             const { email } = await identify(bearer);
-            if (email !== (await deps.owner.read())) {
+            const owner = await deps.owner.read();
+            if (owner === undefined || !sameEmail(email, owner)) {
                 throw new ForbiddenError("not the sandbox owner");
             }
         },

@@ -1122,6 +1122,58 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
     });
 
+    /* THE SAME DEAD END, REACHED FROM THE OTHER SIDE, and this is the door the user is actually shown.
+     *
+     * The refusal above is only ever answered by pressing "Have the agent resolve it", which starts a TURN on
+     * the same conversation — and `begin` rebuilds the entry from an explicit field list, where an omission is
+     * a deletion. `conflicts` was not on that list, so the resolve turn retired the very report it exists to
+     * resolve: the card fell from `conflict` back to `ready` as it started, the review opened with nothing to
+     * show, and recordLanded's `outcome.conflicts ?? cleared` fallback — the whole of "only a verdict may
+     * replace a verdict", tested directly above — had nothing left to fall back to.
+     *
+     * `landRequested` rides along because it is the same omission with the same shape: a collaborator's ask is
+     * answered by the land or discard that settles it, and one more turn by the agent is not an answer. */
+    it("a follow-up turn keeps the land refusal and the ask still waiting on one", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 2 }];
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 3, insertions: 10, deletions: 1 },
+            adjudicated: true,
+            conflicts,
+        });
+        await registry.requestLand("c1", { email: "m@x.com", name: "Mo" }, 1_500);
+        // The land that refused ran after the turn ended, which is also what frees the conversation for the next
+        // one — `begin` refuses outright while a turn is running, so without this the rebuild never happens.
+        await registry.finish("c1", 1_800);
+
+        // "Have the agent resolve it": one more turn on the same conversation.
+        expect(await registry.begin(turn({ prompt: "rebase onto main" }), 2_000)).toBe(true);
+
+        // `conflicts` lives on the PERSISTED entry (the review route reads it there; the wire summary carries
+        // only the standing it produces), so the rebuild is observed where the rebuild happened.
+        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+        expect(registry.get("c1")?.landRequested).toMatchObject({ email: "m@x.com", name: "Mo" });
+
+        // And the fallback that depends on it still works: a measure land after the resolve turn keeps the
+        // report rather than silently deleting it, which is the behaviour the test above pins in isolation.
+        await registry.recordLanded("c1", {
+            landed: false,
+            held: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40) }],
+            diff: { files: 4, insertions: 12, deletions: 1 },
+            adjudicated: false,
+        });
+        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+    });
+
     it("counts turns and tool uses: live during the turn, folded at finish, never inflated by manual lands", async () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();

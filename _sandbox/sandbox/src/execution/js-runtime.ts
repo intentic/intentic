@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
+import { whenAborted } from "../abort.js";
 import type { TurnPlacement } from "../agents/isolation.js";
 import { inWorktree, nsenterArgv } from "../agents/isolation.js";
 import type { TurnPersona } from "../personas/personas.js";
@@ -162,7 +163,7 @@ export const runJs = (
             }
             settled = true;
             clearTimeout(timer);
-            options.signal.removeEventListener("abort", kill);
+            unwatchAbort();
             resolve({ exitCode, timedOut, stdout: stdout.slice(-OUTPUT_TAIL), stderr: stderr.slice(-OUTPUT_TAIL) });
         };
         const kill = (): void => {
@@ -172,7 +173,9 @@ export const runJs = (
             timedOut = true;
             kill();
         }, options.timeoutMs);
-        options.signal.addEventListener("abort", kill, { once: true });
+        // A turn stopped while the command gate held this script's card arrives here already aborted, and a bare
+        // listener would never fire: the script would run its full timeout (up to ten minutes) after the Stop.
+        const unwatchAbort = whenAborted(options.signal, kill);
         child.stdout.on("data", (data: Buffer) => {
             stdout += data.toString();
             if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {

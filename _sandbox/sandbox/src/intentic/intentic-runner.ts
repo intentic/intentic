@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { IntenticLine } from "@intentic/sandbox-contract";
+import { whenAborted } from "../abort.js";
 import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
 
 // `IntenticLine` (one parsed line from `intentic … --output ndjson`: engine events, provider `log`, the
@@ -88,7 +89,9 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
         setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
     };
     const onAbort = (): void => kill("the client disconnected");
-    signal?.addEventListener("abort", onAbort, { once: true });
+    // A client that dropped before the spawn finished leaves an already-aborted signal here, which a bare
+    // listener never hears — the run would hold its locks until the watchdog, long after nobody was reading it.
+    const unwatchAbort = whenAborted(signal, onAbort);
     const watchdog = setTimeout(() => kill(`the run exceeded ${RUN_WATCHDOG_MS / 60_000}m`), RUN_WATCHDOG_MS);
     watchdog.unref();
     try {
@@ -110,7 +113,7 @@ export async function* runIntentic(run: IntenticRun, signal?: AbortSignal, logge
         logger?.info(outcome, "intentic run completed");
     } finally {
         clearTimeout(watchdog);
-        signal?.removeEventListener("abort", onAbort);
+        unwatchAbort();
         // Generator torn down mid-stream (the oRPC connection dropped without an abort event, or the consumer
         // stopped iterating) with the child still alive, reap it.
         if (child.exitCode === null && child.signalCode === null) {

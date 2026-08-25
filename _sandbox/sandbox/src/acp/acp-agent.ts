@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { type ContentBlock, type McpServer, methods, type PromptResponse, type SessionNotification } from "@agentclientprotocol/sdk";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
+import { whenAborted } from "../abort.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
@@ -192,7 +193,10 @@ async function* runAcpTurn(
 
     const session = sid;
     const cancel = (): void => void connection.agent.notify(methods.agent.session.cancel, { sessionId: session }).catch(() => {});
-    request.signal.addEventListener("abort", cancel, { once: true });
+    // Nothing existed to cancel until the session did, and getting there spawns the agent and negotiates with
+    // it. A Stop during that reaches an already-aborted signal, which a bare listener never hears — the prompt
+    // below would then be sent to an agent nobody had told to stop.
+    const unwatchAbort = whenAborted(request.signal, cancel);
 
     let settled = false;
     let response: PromptResponse | undefined;
@@ -261,7 +265,7 @@ async function* runAcpTurn(
         return { sessionId: session, text, errored: false };
     } finally {
         unbind();
-        request.signal.removeEventListener("abort", cancel);
+        unwatchAbort();
     }
 }
 

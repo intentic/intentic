@@ -297,11 +297,22 @@ const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: A
     }
 };
 
-// The one budget read both doors share: may this parent put one more child turn in flight?
+/* The one budget check both doors share: may this parent put one more child turn in flight?
+ *
+ * READS AND RESERVES IN ONE SYNCHRONOUS STEP, which is the whole point of the shape. This used to hand its
+ * snapshot of the ledger back to the caller, which wrote the increment much later, several statements and an
+ * `await` past the check. Two spawns arriving together — two backgrounded `agents spawn` shells, two POSTs to
+ * /children/spawn, two tool calls in one assistant block — both read `{live: 0}`, both passed a ceiling of
+ * one, and both then wrote `{live: 1}`. So the cap admitted N children instead of one and the lifetime counter
+ * recorded a single turn for all of them, which is the runaway this budget exists to stop, counted by a ledger
+ * that could not see two of anything. Reading and writing with no await between them is what makes it a cap.
+ *
+ * `release` refunds a reservation whose turn never started. A turn that DID start gives its live seat back in
+ * runChildTurn's finally instead; `total` is a lifetime count, so only a never-started turn ever refunds it. */
 const admitChildTurn = async (
     services: Services,
     parent: string,
-): Promise<{ readonly ok: true; readonly ledger: { live: number; total: number } } | { readonly ok: false; readonly message: string }> => {
+): Promise<{ readonly ok: true; readonly release: () => void } | { readonly ok: false; readonly message: string }> => {
     const settings = await services.sandboxSettings.get();
     const ledger = spent.get(parent) ?? { live: 0, total: 0 };
     if (ledger.live >= settings.subagentsAtOnce) {
@@ -310,7 +321,16 @@ const admitChildTurn = async (
     if (ledger.total >= settings.subagentsPerTurn) {
         return { ok: false, message: `This conversation has started ${ledger.total} child turns, its lifetime budget.` };
     }
-    return { ok: true, ledger };
+    spent.set(parent, { live: ledger.live + 1, total: ledger.total + 1 });
+    return {
+        ok: true,
+        release: (): void => {
+            const now = spent.get(parent);
+            if (now !== undefined) {
+                spent.set(parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
+            }
+        },
+    };
 };
 
 /** Start a child agent and return the moment it is running. Refusals are ordinary states (a budget met, a
@@ -332,56 +352,69 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     if (!admitted.ok) {
         return admitted;
     }
-    composeRuntimeFloor(parent.conversationId, provider, harness);
-    const id = `sub-${newConversationId()}`;
-    const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
-    const turn: AgentTurn & { conversationId: string } = {
-        prompt: spec.prompt,
-        conversationId: id,
-        title: description.slice(0, 80),
-        // A worktree of its own, so parallel children (and the parent) never edit under each other. Landing
-        // keeps the workspace's ordinary posture: a child's finished work merges the way any turn's does.
-        isolated: true,
-        // Nobody is at a composer. This is what the flag means, and it also sets the safe persona floor: an
-        // unattended turn with no named persona speaks for no outside account.
-        unattended: true,
-        agent: provider,
-        harness,
-        ...(spec.model !== undefined ? { model: spec.model } : {}),
-        ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
-        ...(spec.account !== undefined ? { account: spec.account } : {}),
-    };
-    kids.set(id, {
-        parent: parent.conversationId,
-        spec: { ...spec, provider, harness },
-        depth,
-        cwd: parent.cwd,
-        sessionId: undefined,
-        running: true,
-        pending: undefined,
-    });
-    /* The roster handle: the PARENT's conversation, which is what the record files under and what the wait
-     * tool matches on. The session/subagentsDir halves are the SDK children's concern and stay empty here. */
-    const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: parent.cwd, sessionId: undefined, subagentsDir: undefined };
-    openSpawnedChild(handle, {
-        id,
-        description,
-        agentType: labelOf(provider),
-        provider,
-        harness,
-        spawnDepth: depth,
-        ...(spec.model !== undefined ? { model: spec.model } : {}),
-    });
-    const started = runChildTurn(services, id, parent.conversationId, turn, turnFn);
-    if (!started.ok) {
-        kids.delete(id);
-        settleSpawnedChild(id, { failed: true, report: "", error: started.message });
-        // A fresh id colliding with a live run should be impossible; saying so beats pretending a child exists.
-        return { ok: false, message: "The child's conversation could not be started." };
+    /* THE SEAT IS CLAIMED, so from here every exit has to either hand it to a running turn or give it back.
+     * A turn that starts gives it back in runChildTurn's finally; anything else refunds below. The `finally` is
+     * what covers the paths nobody wrote deliberately: the reservation is now taken BEFORE this work rather
+     * than written after it (which is what made the cap atomic), so a throw in here would strand it, and a
+     * stranded live seat is permanent — it lowers `subagentsAtOnce` by one for the life of the conversation,
+     * and once enough accumulate the parent is refused forever over children that do not exist. */
+    let handedOff = false;
+    try {
+        composeRuntimeFloor(parent.conversationId, provider, harness);
+        const id = `sub-${newConversationId()}`;
+        const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
+        const turn: AgentTurn & { conversationId: string } = {
+            prompt: spec.prompt,
+            conversationId: id,
+            title: description.slice(0, 80),
+            // A worktree of its own, so parallel children (and the parent) never edit under each other. Landing
+            // keeps the workspace's ordinary posture: a child's finished work merges the way any turn's does.
+            isolated: true,
+            // Nobody is at a composer. This is what the flag means, and it also sets the safe persona floor: an
+            // unattended turn with no named persona speaks for no outside account.
+            unattended: true,
+            agent: provider,
+            harness,
+            ...(spec.model !== undefined ? { model: spec.model } : {}),
+            ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
+            ...(spec.account !== undefined ? { account: spec.account } : {}),
+        };
+        kids.set(id, {
+            parent: parent.conversationId,
+            spec: { ...spec, provider, harness },
+            depth,
+            cwd: parent.cwd,
+            sessionId: undefined,
+            running: true,
+            pending: undefined,
+        });
+        /* The roster handle: the PARENT's conversation, which is what the record files under and what the wait
+         * tool matches on. The session/subagentsDir halves are the SDK children's concern and stay empty here. */
+        const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: parent.cwd, sessionId: undefined, subagentsDir: undefined };
+        openSpawnedChild(handle, {
+            id,
+            description,
+            agentType: labelOf(provider),
+            provider,
+            harness,
+            spawnDepth: depth,
+            ...(spec.model !== undefined ? { model: spec.model } : {}),
+        });
+        const started = runChildTurn(services, id, parent.conversationId, turn, turnFn);
+        if (!started.ok) {
+            kids.delete(id);
+            settleSpawnedChild(id, { failed: true, report: "", error: started.message });
+            // A fresh id colliding with a live run should be impossible; saying so beats pretending a child exists.
+            return { ok: false, message: "The child's conversation could not be started." };
+        }
+        depths.set(id, depth);
+        handedOff = true;
+        return { ok: true, id };
+    } finally {
+        if (!handedOff) {
+            admitted.release();
+        }
     }
-    depths.set(id, depth);
-    spent.set(parent.conversationId, { live: admitted.ledger.live + 1, total: admitted.ledger.total + 1 });
-    return { ok: true, id };
 };
 
 /** Steer a working child, or send a settled one a follow-up turn on its own conversation, resuming the
@@ -414,42 +447,51 @@ export const sendToChild = async (
     if (!admitted.ok) {
         return admitted;
     }
-    const spec = kid.spec;
-    const turn: AgentTurn & { conversationId: string } = {
-        prompt: message,
-        conversationId: childId,
-        isolated: true,
-        unattended: true,
-        ...(spec.provider !== undefined ? { agent: spec.provider } : {}),
-        ...(spec.harness !== undefined ? { harness: spec.harness } : {}),
-        ...(spec.model !== undefined ? { model: spec.model } : {}),
-        ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
-        ...(spec.account !== undefined ? { account: spec.account } : {}),
-        // The session its last turn reported, so the follow-up continues the child's own context. Absent (a
-        // turn that never reported one), the daemon seeds from the conversation's record instead, the
-        // ordinary reopened-conversation path.
-        ...(kid.sessionId !== undefined ? { sessionId: kid.sessionId } : {}),
-    };
-    // Reopen the roster record: same id, fresh life, so the parent's wait and the area both see it working.
-    const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: kid.cwd, sessionId: undefined, subagentsDir: undefined };
-    openSpawnedChild(handle, {
-        id: childId,
-        description: message.replaceAll(/\s+/gu, " ").trim().slice(0, 200),
-        agentType: labelOf(spec.provider ?? "claude"),
-        provider: spec.provider ?? "claude",
-        harness: spec.harness ?? "native",
-        spawnDepth: kid.depth,
-        ...(spec.model !== undefined ? { model: spec.model } : {}),
-    });
-    kid.running = true;
-    const started = runChildTurn(services, childId, parent.conversationId, turn, turnFn);
-    if (!started.ok) {
-        kid.running = false;
-        settleSpawnedChild(childId, { failed: true, report: "", error: started.message });
-        return started;
+    // The seat is claimed: same handoff-or-refund rule as spawnChild, and the `finally` covers the same
+    // unwritten path — a throw between the claim and the running turn would strand it permanently.
+    let handedOff = false;
+    try {
+        const spec = kid.spec;
+        const turn: AgentTurn & { conversationId: string } = {
+            prompt: message,
+            conversationId: childId,
+            isolated: true,
+            unattended: true,
+            ...(spec.provider !== undefined ? { agent: spec.provider } : {}),
+            ...(spec.harness !== undefined ? { harness: spec.harness } : {}),
+            ...(spec.model !== undefined ? { model: spec.model } : {}),
+            ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
+            ...(spec.account !== undefined ? { account: spec.account } : {}),
+            // The session its last turn reported, so the follow-up continues the child's own context. Absent (a
+            // turn that never reported one), the daemon seeds from the conversation's record instead, the
+            // ordinary reopened-conversation path.
+            ...(kid.sessionId !== undefined ? { sessionId: kid.sessionId } : {}),
+        };
+        // Reopen the roster record: same id, fresh life, so the parent's wait and the area both see it working.
+        const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: kid.cwd, sessionId: undefined, subagentsDir: undefined };
+        openSpawnedChild(handle, {
+            id: childId,
+            description: message.replaceAll(/\s+/gu, " ").trim().slice(0, 200),
+            agentType: labelOf(spec.provider ?? "claude"),
+            provider: spec.provider ?? "claude",
+            harness: spec.harness ?? "native",
+            spawnDepth: kid.depth,
+            ...(spec.model !== undefined ? { model: spec.model } : {}),
+        });
+        kid.running = true;
+        const started = runChildTurn(services, childId, parent.conversationId, turn, turnFn);
+        if (!started.ok) {
+            kid.running = false;
+            settleSpawnedChild(childId, { failed: true, report: "", error: started.message });
+            return started;
+        }
+        handedOff = true;
+        return { ok: true, note: "Sent: the child is running a follow-up turn. Supervise it with wait." };
+    } finally {
+        if (!handedOff) {
+            admitted.release();
+        }
     }
-    spent.set(parent.conversationId, { live: admitted.ledger.live + 1, total: admitted.ledger.total + 1 });
-    return { ok: true, note: "Sent: the child is running a follow-up turn. Supervise it with wait." };
 };
 
 /** Settle a child's QUESTION with the parent's picks — and only a question. A permission hold or a plan

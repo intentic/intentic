@@ -1,6 +1,7 @@
 import type { AgentOptions, InteractionUpdate, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
+import { whenAborted } from "../abort.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
@@ -159,7 +160,11 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             void started.then((handle) => handle?.cancel().catch(() => undefined));
             setTimeout(() => queue.close(), CANCEL_GRACE_MS).unref();
         };
-        request.signal.addEventListener("abort", onAbort, { once: true });
+        /* A generator body does not run until it is pulled, and the caller does real work first: loading the
+         * SDK, resolving the model, reading the vendor's record for it. A Stop anywhere in there reaches an
+         * already-aborted signal, which a bare listener never hears — so `agent.send` above would have started
+         * a run that nothing would ever cancel, and the drain below would sit on it to completion. */
+        const unwatchAbort = whenAborted(request.signal, onAbort);
 
         // Close the queue when the run itself finishes, which is what ends the drain below.
         const finished = started.then(async (handle) => {
@@ -199,7 +204,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         } finally {
             // One listener per phase, and a plan turn runs two, so an un-removed one would still be holding a
             // reference to the finished run when the next phase's Stop fires.
-            request.signal.removeEventListener("abort", onAbort);
+            unwatchAbort();
         }
         const captured = mapper.capture();
         return { errored: errored || captured.errored === true, planText: captured.planText };

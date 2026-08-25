@@ -1185,3 +1185,31 @@ test("the panel token is accepted in place of a Google bearer (server-side panel
     expect((await app.request("/panels", { headers: { "x-intentic-panel": "wrong" } })).status).toBe(401);
     expect((await app.request("/panels")).status).toBe(401);
 });
+
+/* THE ROUTE THE GRANT REFUSES HAS TO BE REFUSED AT THE SPELLING THE ROUTER ACCEPTS, and the two disagreed.
+ *
+ * `/capabilities/probe` rehydrates a stored credential and dials a URL the caller supplied, so the panel grant
+ * denies it (auth/grants.ts). But the denial reads Hono's verbatim `c.req.path` while the oRPC handler behind
+ * the catch-all normalizes a trailing slash before dispatching — so `POST /capabilities/probe/` matched no rule
+ * and then ran the probe, returning a real dial verdict with a real key. One character.
+ *
+ * Asserted end to end rather than on the regex, because the regex was never the bug: both halves were
+ * individually right and disagreed about what the path was. Only a real request can tell them apart. */
+test("the panel grant's refusal survives the spellings the router treats as the same route", async () => {
+    const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    const probe = { id: "zz", kind: "endpoint", config: { baseUrl: "http://127.0.0.1:1/", protocol: "openai", apiKey: "k" } };
+    for (const path of ["/capabilities/probe", "/capabilities/probe/", "/capabilities/probe//"]) {
+        const response = await app.request(path, {
+            method: "POST",
+            headers: { "x-intentic-panel": "panel-secret", "content-type": "application/json" },
+            body: JSON.stringify(probe),
+        });
+        expect({ path, status: response.status }).toEqual({ path, status: 403 });
+    }
+    // The credential READ is the same rule and gets the same treatment.
+    for (const path of ["/capabilities/reddit/connection", "/capabilities/reddit/connection/"]) {
+        expect((await app.request(path, { headers: { "x-intentic-panel": "panel-secret" } })).status).toBe(403);
+    }
+    // And normalizing the path for the grant check must not narrow what a panel legitimately reaches.
+    expect((await app.request("/panels/", { headers: { "x-intentic-panel": "panel-secret" } })).status).toBe(200);
+});

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { AcpAgentConfig, AgentCommand, AgentEvent } from "@intentic/sandbox-contract";
+import { whenAborted } from "../abort.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
@@ -123,7 +124,9 @@ async function* runPiTurn(
             void proc.request({ type: "abort" });
         }
     };
-    request.signal.addEventListener("abort", sendAbort, { once: true });
+    // The CLI is spawned before this point, so a turn stopped during the spawn arrives already aborted and a
+    // bare listener would never fire: the loop below would notice the Stop, but Pi itself would never be told.
+    const unwatchAbort = whenAborted(request.signal, sendAbort);
 
     try {
         const accepted = await withTimeout(proc.request(prompt), SETUP_TIMEOUT_MS).catch(() => ({ success: false, error: "no response" }));
@@ -189,7 +192,7 @@ async function* runPiTurn(
             state.wake = noopWake;
         }
     } finally {
-        request.signal.removeEventListener("abort", sendAbort);
+        unwatchAbort();
     }
 }
 

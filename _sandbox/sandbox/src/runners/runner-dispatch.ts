@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { AgentEvent, AgentTurn, RunnerSync, RunnerSyncLine, RunnerTurn } from "@intentic/sandbox-contract";
 import { runnerIncomingRef } from "@intentic/sandbox-contract";
 import { defaultGit } from "@intentic/scaffold";
+import { whenAborted } from "../abort.js";
 import { mainBranchOf } from "../agents/agent-refs.js";
 import type { ConversationWorktree } from "../agents/worktrees.js";
 import type { Services } from "../composition.js";
@@ -121,7 +122,9 @@ export async function* dispatchRemoteTurn(
     const interrupt = (): void => {
         void client.interrupt({ conversationId: input.conversationId }).catch(() => undefined);
     };
-    signal?.addEventListener("abort", interrupt, { once: true });
+    // The sync pull above is a round trip to another machine, so a Stop during it lands on an already-aborted
+    // signal that a bare listener never hears — the runner would keep the turn nobody is waiting for.
+    const unwatchAbort = whenAborted(signal, interrupt);
     try {
         const turn: RunnerTurn = {
             conversationId: input.conversationId,
@@ -144,7 +147,7 @@ export async function* dispatchRemoteTurn(
             yield event;
         }
     } finally {
-        signal?.removeEventListener("abort", interrupt);
+        unwatchAbort();
         /* Deliver whatever the runner committed, however the turn ended. Best-effort: a push the dropped
          * link refuses leaves the branch on the runner, which the next dispatch's pull reconciles — the
          * exact exposure a local power loss has today, and never data loss (the failure model's terms). */

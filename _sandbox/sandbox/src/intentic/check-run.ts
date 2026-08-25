@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { IntenticLine } from "@intentic/sandbox-contract";
+import { whenAborted } from "../abort.js";
 import type { Services } from "../composition.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { INFRA_CHECK_SESSION } from "../terminal/terminal-session.js";
@@ -29,7 +30,7 @@ export async function* runCheckCommand(services: Services, args: readonly string
     // aborting). Either SIGTERMs the wrapper, whose trap kills the tmux window.
     const controller = new AbortController();
     const onAbort = (): void => controller.abort(signal?.reason);
-    signal?.addEventListener("abort", onAbort, { once: true });
+    const unwatchAbort = whenAborted(signal, onAbort);
     let settled = false;
     const done = services.terminalRun
         .tryRun(INFRA_CHECK_SESSION, ["intentic", ...args].map(shellQuote).join(" "), {
@@ -58,7 +59,7 @@ export async function* runCheckCommand(services: Services, args: readonly string
             throw new Error(`intentic ${args.join(" ")} exited ${code}${tail === "" ? "" : `: ${tail}`}`);
         }
     } finally {
-        signal?.removeEventListener("abort", onAbort);
+        unwatchAbort();
         if (!settled) {
             controller.abort(new Error("the stream consumer went away"));
         }

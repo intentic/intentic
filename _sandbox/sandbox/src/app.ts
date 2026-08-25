@@ -143,6 +143,20 @@ const eventFirePath = /^\/automations\/[^/]+\/fire$/;
  * by accident. `widget.js` is the only fixed path, the rest are per-automation. */
 const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|config|challenge)$/.test(path);
 
+/* THE PATH THE ROUTER WILL ACTUALLY MATCH, which is not always the one the client typed, and the gap between
+ * the two is a way through every path-shaped rule in this file.
+ *
+ * Hono's `c.req.path` is the request's path verbatim; the oRPC handler behind the catch-all normalizes a
+ * trailing slash before it dispatches. So `POST /capabilities/probe/` failed every `…probe$` test in the grant
+ * table and then ran the probe handler anyway — measured, 200 with a real dial verdict, on the one route the
+ * panel grant exists to refuse. Every rule that anchors on `$` had the same hole, allow-rules included; those
+ * merely fail closed, which is why only the denials ever showed it.
+ *
+ * Normalizing HERE rather than in each predicate is the point: the middleware asks one question about a
+ * request, so it should ask it about one path. A root request stays `/`, and repeated slashes collapse, since
+ * `//capabilities/probe//` is the same dispatch. */
+const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
+
 // The CI pipeline webhook receiver, its callers are github/gitlab delivery agents (no Google token), so it's
 // exempt from the bearer middleware and gated by the per-sandbox webhook secret instead (github signs the
 // body, gitlab echoes the token, see ci/webhook.routes.ts).
@@ -426,7 +440,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 if (presented === undefined || presented === "") {
                     continue;
                 }
-                const verdict = await grant.authorize(presented, c.req.method, c.req.path);
+                const verdict = await grant.authorize(presented, c.req.method, routedPath(c.req.path));
                 if (verdict === "ok") {
                     return next();
                 }
@@ -905,7 +919,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         if (identity.role === "owner") {
             return c.json({ error: "the owner must retire the sandbox instead" }, 400);
         }
-        await services.members.remove(identity.email);
+        // Normalized, because the roster only ever holds lowercase (memberGrant/memberEmail above) while the
+        // identity carries the claim as Google sent it: the raw form targets a row that cannot exist, so a
+        // mixed-case member's "remove me" reported success and left them granted.
+        await services.members.remove(identity.email.toLowerCase());
         services.auth?.connections.revoke(identity.email);
         services.wsTickets.revoke(identity.email);
         return c.json({ ok: true });

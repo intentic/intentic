@@ -575,6 +575,31 @@ test("createGrokRunner aborts and throws when no event arrives within the inacti
     expect(aborted()).toBe(true);
 });
 
+/* A STOP THAT LANDED BEFORE THE SESSION EXISTED IS STILL A STOP.
+ *
+ * The abort can only be registered once there is a session id to abort, and getting to one is the slowest
+ * stretch of the turn: booting the OpenCode server, opening the scoped stream, and up to CONNECT_MS waiting for
+ * it to say hello. A Stop anywhere in there arrives at an ALREADY-aborted signal, and `addEventListener` on one
+ * of those never fires — so OpenCode was never told, and the session it had just been handed ran to completion
+ * spending the user's allowance while the chat showed the turn stopped.
+ *
+ * Asserted on the CALL rather than on the frames, for the same reason as the scoping test above: the turn ends
+ * either way, and the only evidence of the difference is whether OpenCode heard about it. */
+test("a turn stopped before its session existed still tells OpenCode to abort it", async () => {
+    const { openCode, aborted } = fakeOpenCode([
+        { type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event,
+        { type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event,
+    ]);
+    const controller = new AbortController();
+    controller.abort();
+
+    for await (const event of createGrokRunner(openCode)({ ...runnerTurn, signal: controller.signal })) {
+        void event;
+    }
+
+    expect(aborted()).toBe(true);
+});
+
 /* A RETRY NAMES WHEN IT WILL SPEAK AGAIN, and the watchdog has to wait that long: OpenCode's backoff outgrows
  * two minutes on a provider that keeps refusing, and a turn killed during a wait it announced would be the same
  * false timeout as the one this file already fixed, dressed as a rate limit. */

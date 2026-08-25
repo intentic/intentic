@@ -1,4 +1,4 @@
-import { GIT_GLOBAL_ARGS, type GitRunner } from "@intentic/scaffold";
+import { GIT_GLOBAL_ARGS, type GitRunner, literalPathspecs } from "@intentic/scaffold";
 import type { TerminalRunner } from "../terminal/terminal-run.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
@@ -9,7 +9,12 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 export const terminalGit =
     (runner: TerminalRunner, session: string): GitRunner =>
     async (dir, args) => ({
-        stdout: await runner.run(session, ["git", ...GIT_GLOBAL_ARGS, "-C", dir, ...args].map(shellQuote).join(" "), { cwd: dir, window: "git" }),
+        // Same pathspec marking the direct runner applies (scaffold's literalPathspecs): a visible git in a pane
+        // must act on exactly the paths a hidden one would, or Discard means two different things per route.
+        stdout: await runner.run(session, ["git", ...GIT_GLOBAL_ARGS, "-C", dir, ...literalPathspecs(args)].map(shellQuote).join(" "), {
+            cwd: dir,
+            window: "git",
+        }),
         stderr: "",
     });
 

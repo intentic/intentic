@@ -92,9 +92,15 @@ test("the panel grant reaches the daemon broadly but never the capability connec
     expect(await panel.authorize("panel", "POST", "/listeners/discord/dispatch")).toBe("ok");
     expect(await panel.authorize("panel", "GET", "/capabilities")).toBe("ok");
     expect(await panel.authorize("panel", "GET", "/capabilities/reddit/status")).toBe("ok");
-    // The one door that was never meant for it.
+    // The doors that were never meant for it: the one that hands a stored credential back…
     expect(await panel.authorize("panel", "GET", "/capabilities/reddit/connection")).toBe("out-of-scope");
     expect(await panel.authorize("panel", "GET", "/capabilities/npm/connection")).toBe("out-of-scope");
+    /* …and the one that SENDS it. `probe` rehydrates a VAULTED marker from storage and dials a URL the caller
+     * supplied, so a panel token could make the daemon present any stored key to an address of its choosing —
+     * the same disclosure as the connection read, with nothing in the response to show for it. */
+    expect(await panel.authorize("panel", "POST", "/capabilities/probe")).toBe("out-of-scope");
+    // And the carve-out stays narrow: a connection named "probe" is not the probe route.
+    expect(await panel.authorize("panel", "GET", "/capabilities/probe/status")).toBe("ok");
     // A wrong secret on an in-scope route is 401, never a fall-through to the bearer check behind it.
     expect(await panel.authorize("intruder", "GET", "/capabilities")).toBe("unauthorized");
 });

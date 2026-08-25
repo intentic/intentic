@@ -65,6 +65,33 @@ test("a prompt match is found and reports the line it hit, and whose it was", as
     expect(hits[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
 });
 
+/* TWO QUERIES INSIDE ONE TTL WINDOW, which is what typing in the search box actually is. `recent()` caches its
+ * array for 400ms and hands the SAME summary objects to every query in that window, so a search that wrote its
+ * snippet onto a row was writing into the cache: type "body p2", backspace, and the next query's rows still
+ * carried evidence for a term no longer typed — including rows that now match on their TITLE, which this
+ * function promises never carry a snippet at all.
+ *
+ * Both queries go through ONE `recent`, deliberately: the shared harness above builds a fresh one per call,
+ * which is exactly what hid this. */
+test("a snippet from one query never rides along on the next", async () => {
+    seed("p", 3);
+    const { index, recent } = await indexed(WORKSPACE_ROOT);
+    const said = async (...args: Parameters<typeof index.search>) => index.search(...args);
+
+    const first = await searchWorkspaceSessions(recent, "body p1", false, said);
+    expect(first[0]?.snippet).toEqual({ text: "body p1", speaker: "user" });
+
+    // Same session, now reached by its TITLE: no snippet, not the last query's.
+    const byTitle = await searchWorkspaceSessions(recent, "chat 1", false, said);
+    expect(byTitle.map((session) => session.id)).toEqual(["p1"]);
+    expect(byTitle[0]?.snippet).toBeUndefined();
+
+    // And a different session's body match must not inherit p1's line either.
+    const second = await searchWorkspaceSessions(recent, "body p2", false, said);
+    expect(second.map((session) => session.id)).toEqual(["p2"]);
+    expect(second[0]?.snippet).toEqual({ text: "body p2", speaker: "user" });
+});
+
 // The scan used to read transcripts for the ten most recent sessions only, because each read rebuilt the whole
 // transcript. It reads the spoken text alone now, and holds it, so recall no longer falls off a cliff at the
 // tenth chat, which is precisely where "the one I'm looking for" tends to live.

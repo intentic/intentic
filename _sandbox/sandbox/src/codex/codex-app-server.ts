@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
+import { whenAborted } from "../abort.js";
 import { nsenterArgv } from "../agents/isolation.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 
@@ -530,7 +531,9 @@ const stdioConnector =
                 child.kill();
             }
         };
-        turn.signal.addEventListener("abort", abort, { once: true });
+        // `await binaryPath()` above is a filesystem lookup, so a turn stopped during it reaches here already
+        // aborted; a bare listener would never fire and this app-server would outlive the Stop that killed it.
+        const unwatchAbort = whenAborted(turn.signal, abort);
 
         return {
             request: (method, params) => {
@@ -545,7 +548,7 @@ const stdioConnector =
             messages,
             close: () => {
                 closing = true;
-                turn.signal.removeEventListener("abort", abort);
+                unwatchAbort();
                 child.stdin.end();
             },
         };

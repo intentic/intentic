@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { Event, FilePartInput } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
+import { whenAborted } from "../abort.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { unsentParameterFrame } from "../agent/error-frames.js";
@@ -177,7 +178,11 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 throw new Error("OpenCode did not return a session id");
             }
         }
-        turn.signal.addEventListener("abort", () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}), { once: true });
+        /* Registered only now, because until the session exists there is no id to abort — and everything above
+         * is slow: booting the OpenCode server, opening the stream, and up to CONNECT_MS waiting for it to say
+         * hello. A Stop clicked anywhere in that window reaches a signal that has ALREADY aborted, which a bare
+         * listener never hears; the session would then run to completion, spending, with the turn shown stopped. */
+        whenAborted(turn.signal, () => void c.session.abort({ path: { id: sessionId } }).catch(() => {}));
         if (turn.gate !== undefined) {
             registerSessionGate(sessionId, turn.gate);
         }

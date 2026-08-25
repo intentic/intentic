@@ -782,6 +782,21 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
                 // THIS work when the provider drops it" is a standing choice about the conversation, and the
                 // next turn, which is exactly what this rebuild is, is when it matters.
                 ...(existing?.resumeAfterOutage !== undefined ? { resumeAfterOutage: existing.resumeAfterOutage } : {}),
+                /* THE LAND REFUSAL AND THE ASK THAT IS STILL WAITING ON ONE, for the same "an omission is a
+                 * deletion" reason as `tier` above, and this pair is the one where the omission had teeth.
+                 *
+                 * `conflicts` describes the branch against the main tree, not the turn that last touched it, and
+                 * recordLanded is the ONLY thing entitled to retire it — "an outcome with no conflicts CLEARS the
+                 * stored one, which is what makes a resolved conflict resolve". Dropping it HERE retired it on
+                 * the next turn instead, which is precisely the turn "Have the agent resolve it" starts: the card
+                 * fell from `conflict` back to `ready` the moment the resolve turn began, the review opened with
+                 * no report to show, and recordLanded's `outcome.conflicts ?? cleared` fallback — the whole of
+                 * "only a verdict may replace a verdict" — had nothing left to fall back to.
+                 *
+                 * `landRequested` is a collaborator's standing ask, answered by the land or discard that settles
+                 * it. One more turn by the agent is not an answer. */
+                ...(existing?.conflicts !== undefined ? { conflicts: existing.conflicts } : {}),
+                ...(existing?.landRequested !== undefined ? { landRequested: existing.landRequested } : {}),
                 /* WHAT THE LANDED WORK IS CALLED SURVIVES THE REBUILD, because it describes a CLAIM on the main
                  * tree and not the turn that made it. The claim is what `repos` above carries across, and it
                  * outlives any number of follow-up turns, a commit is what retires it.

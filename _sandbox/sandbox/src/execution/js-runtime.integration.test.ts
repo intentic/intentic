@@ -96,3 +96,21 @@ test("aborting the turn kills the script the same way", async () => {
     expect(result.exitCode).toBeUndefined();
     expect(result.timedOut).toBe(false);
 });
+
+/* The same Stop, arriving one tick earlier. A turn stopped while the command gate held this script's card
+ * reaches the runner with the signal ALREADY aborted, and `addEventListener` on an aborted signal never fires:
+ * the script used to run its full timeout (ten minutes at the ceiling) after the user stopped the turn. The
+ * elapsed assertion is the whole point — a regression here still ends with `timedOut: true`, just much later. */
+test("a turn stopped before the script was dispatched kills it immediately, not at the timeout", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const startedAt = Date.now();
+    const result = await runJs(planFor(tree()), "await new Promise((resolve) => setTimeout(resolve, 60_000));", {
+        timeoutMs: 15_000,
+        signal: controller.signal,
+        placement: undefined,
+    });
+    expect(Date.now() - startedAt).toBeLessThan(10_000);
+    expect(result.exitCode).toBeUndefined();
+    expect(result.timedOut).toBe(false);
+});

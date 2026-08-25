@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
@@ -247,6 +247,18 @@ test("fileClaudeStore round-trips an account through the filesystem", async () =
     await store.clear("acct-1");
     expect(await store.read("acct-1")).toBeUndefined();
     expect(await store.list()).toEqual([]);
+});
+
+/* THE FILE HOLDS AN OAUTH REFRESH TOKEN, so its mode is part of the store's job and not the umask's.
+ *
+ * The mode that survives is the TEMP file's — `rename` carries it onto the target — so a bare `writeFile` for
+ * the temp published the credential at whatever the umask allowed (0644 by default), readable by everything in
+ * the container. The Cursor store next door already wrote 0o600; this one did not, and nothing said so. */
+test("fileClaudeStore writes the credential owner-only, temp file included", async () => {
+    const dir = storeDir();
+    const store = fileClaudeStore(dir, silent);
+    await store.write({ id: "acct-1", label: "Work", connectedAt: 7, accessToken: "t", refreshToken: "r" });
+    expect((await stat(join(dir, "acct-1.json"))).mode & 0o777).toBe(0o600);
 });
 
 // A reader must never catch the file mid-write: a torn read parses to nothing, which used to degrade to "no
