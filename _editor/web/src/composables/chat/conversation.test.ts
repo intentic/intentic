@@ -277,10 +277,7 @@ describe(`Conversation`, () => {
         conversation.selectModel({ provider: `claude`, value: `haiku` });
         const notice = conversation.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
-        // The two things a model swap actually does, and neither of them is the provider switch's sentence: the
-        // session is kept, and the next turn re-reads the whole conversation on a model with no cache of it.
-        expect(notice.text).toContain(`the session carries on`);
-        expect(notice.text).toContain(`re-read the conversation so far`);
+        expect(notice.text).toContain(`Switched to`);
         expect(notice.text).not.toContain(`fresh session`);
 
         // …and the promise holds: the swapped turn resumes the same session, on the new model.
@@ -335,7 +332,7 @@ describe(`Conversation`, () => {
 
         conversation.selectModel({ provider: `claude`, value: `claude-opus-4-6` });
         // The pool's own figure, rounded once by the same projection the meters draw from.
-        expect(conversation.messages.value.at(-1)!.text).toContain(`weekly Opus allowance, 61% used.`);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
     });
 
     it(`holds a divider for a model swapped mid-turn until the turn settles`, async () => {
@@ -352,9 +349,7 @@ describe(`Conversation`, () => {
         conversation.stop();
         await turn;
         // Settled, the tail is the composer's again, and the line describes the message the user types next.
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`the session carries on`))).toBe(
-            true,
-        );
+        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`Switched to`))).toBe(true);
     });
 
     it(`ignores a provider switch while a turn is streaming`, async () => {

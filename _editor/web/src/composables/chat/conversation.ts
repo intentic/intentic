@@ -737,9 +737,7 @@ export class Conversation {
         if (this.sentModel === undefined || this.sentModel === this.model.value) {
             return undefined;
         }
-        // Kept close to the segment sentence's length on purpose: a notice line is centred and muted, so it is
-        // read at a glance or not at all, and the clause below can already add a second row to it.
-        return `Switched to ${this.modelLabel()}: the session carries on, but a prompt cache is per-model, so your next message pays to re-read the conversation so far.${this.allowanceNote()}`;
+        return `Switched to ${this.modelLabel()}${this.allowanceNote()}`;
     }
 
     // The picked model, named the way the picker names it.
@@ -766,8 +764,8 @@ export class Conversation {
         }
         const resetsAt = allowance.percent >= SPENT_PERCENT ? allowance.resetsAt : undefined;
         return (
-            ` It spends this account's weekly ${allowance.name} allowance, ${formatUtilization(allowance.percent, headroom.stale)} used` +
-            (resetsAt === undefined ? `.` : `, which resets ${formatReset(resetsAt)}.`)
+            ` · ${allowance.name} ${formatUtilization(allowance.percent, headroom.stale)} used` +
+            (resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`)
         );
     }
 
