@@ -780,6 +780,73 @@ mod tests {
         }
     }
 
+    /* THE PROMISE AN INSTALLER MAKES THE MOMENT IT PRINTS A COMMAND NAME.
+     *
+     * Every downloading script here drops a binary into a folder under %USERPROFILE%\.intentic and then tells
+     * the user to run it BY NAME — `intentic-host status`, `intentic-sync uninstall`, `ic sandbox doctor
+     * <slug>`. Nothing on Windows puts that folder on PATH. The .sh twins get it free with a symlink into
+     * ~/.local/bin, which is exactly why the gap survived: the shell side was right, so the shape looked
+     * finished from both directions.
+     *
+     * What that cost, on the first Windows computer to connect: two green checkmarks, "This computer is
+     * connected", then `intentic-host status` answering `The term 'intentic-host' is not recognized`. The
+     * install had worked perfectly and every instruction it printed was wrong.
+     *
+     * So a script that downloads a binary calls Add-IntenticPath, and the copies of it stay identical — same
+     * reasoning as the ic download above, and the same reason it has to be a test: these files are handed to
+     * `irm | iex` one at a time and can never import anything. The function itself is the delicate part (a
+     * user's PATH is not ours to corrupt), which is what makes five hand-kept copies worth holding down. */
+    #[test]
+    fn every_downloading_installer_puts_its_binary_on_path() {
+        let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
+        for (path, text) in powershell_scripts() {
+            // Downloads a binary => owes the user a working command name. cleanup.ps1 downloads nothing.
+            if !text.contains("Invoke-WebRequest") {
+                continue;
+            }
+            let block = add_to_path_block(&text).unwrap_or_else(|| {
+                panic!(
+                    "{} downloads a binary but never defines Add-IntenticPath — the folder it installs into \
+                     stays off the user's PATH, so every command this script's own output names is one the \
+                     shell cannot find. Copy the function from computer.ps1 verbatim.",
+                    path.display(),
+                )
+            });
+            assert!(
+                text.contains("Add-IntenticPath -Folder"),
+                "{} defines Add-IntenticPath and never calls it.",
+                path.display(),
+            );
+            blocks.push((path, block));
+        }
+        assert!(
+            blocks.len() == 5,
+            "expected computer/sync/connect/connect-host/recreate to carry this, found {}",
+            blocks.len()
+        );
+        let (first_path, first) = &blocks[0];
+        for (path, block) in &blocks[1..] {
+            assert_eq!(
+                block,
+                first,
+                "{} and {} edit the user's PATH differently. Whichever one drifted, fix it rather than \
+                 relaxing this test: the value is REG_EXPAND_SZ on a real machine, and a copy that writes it \
+                 back as REG_SZ turns every %VAR%-style entry in somebody's PATH into a literal.",
+                path.display(),
+                first_path.display(),
+            );
+        }
+    }
+
+    /// The `Add-IntenticPath` function, up to the brace that closes it. None for a script that has no such
+    /// function. The prose above each copy names that script's own commands, so only the body is compared.
+    fn add_to_path_block(text: &str) -> Option<String> {
+        let start = text.find("function Add-IntenticPath {")?;
+        let rest = &text[start..];
+        let end = rest.find("\n}\n").map(|at| at + 3).unwrap_or(rest.len());
+        Some(rest[..end].to_string())
+    }
+
     /// The `$Ic = $env:IC_BIN` block, up to the brace that closes it, minus the one line that is allowed to
     /// differ. None for a script that has no such block (cleanup, sync, computer).
     fn ic_fetch_block(text: &str) -> Option<String> {

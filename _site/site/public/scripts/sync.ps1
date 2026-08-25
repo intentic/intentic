@@ -1,8 +1,8 @@
 # intentic desktop sync (Windows) - install the sync agent on THIS machine, two-way sync a local folder with
 # your sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this
-# machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs into %USERPROFILE%\.intentic\sync
-# and registers per-user logon tasks (the Mutagen daemon + the port-mirror watcher) so both resume after a
-# reboot. `intentic-sync uninstall` removes everything.
+# machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs into %USERPROFILE%\.intentic\sync,
+# puts that folder on your PATH, and registers per-user logon tasks (the Mutagen daemon + the port-mirror
+# watcher) so both resume after a reboot. `intentic-sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>-<id>"; irm https://intentic.dev/sync.ps1 | iex
@@ -12,6 +12,49 @@
 #   AGENT_BIN  local dev / dogfooding an unreleased build: run this command instead of downloading a release,
 #              whitespace-separated (e.g. "node C:\intentic\_apps\sync\dist\cli.js"; a path with spaces needs a wrapper .cmd).
 $ErrorActionPreference = 'Stop'
+
+# THE FOLDER A DOWNLOADED BINARY LANDS IN, PUT ON THE USER'S PATH - so `intentic-sync status`, `upgrade` and
+# `uninstall`, which this header and the setup output both name, are real commands rather than a promise the
+# installer that made them cannot keep. The .sh twin gets this free with a symlink into ~/.local/bin; Windows
+# has no such folder, so the user's own PATH is the only place to say it. Every Windows installer here carries
+# an identical copy - they are standalone irm|iex files and cannot share code, so a test in the desktop crate
+# holds the copies to each other.
+#
+# HKCU\Environment is written DIRECTLY rather than through [Environment]::SetEnvironmentVariable, which stores
+# the value back as REG_SZ: every %USERPROFILE%- or %PNPM_HOME%-style entry already in that PATH would stop
+# expanding, and each tool behind one would vanish from the user's shell - a far worse bug than the one this
+# fixes, and the first machine tried had two such entries. Reading with DoNotExpandEnvironmentNames keeps them
+# as tokens, and the value goes back under the kind it already had.
+#
+# Best-effort: PATH is the convenience, syncing is the job. A machine that refuses the edit is told where the
+# agent is and keeps everything else.
+function Add-IntenticPath {
+    param([string]$Folder, [string]$Command)
+    try {
+        $key = Get-Item -Path 'HKCU:\Environment' -ErrorAction Stop
+        $stored = [string]$key.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if (($stored -split ';') -notcontains $Folder) {
+            $kind = if ($key.GetValueNames() -contains 'Path') { $key.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+            $kept = @($stored -split ';' | Where-Object { $_ -ne '' })
+            Set-ItemProperty -Path 'HKCU:\Environment' -Name 'Path' -Value (($kept + $Folder) -join ';') -Type $kind -ErrorAction Stop
+            # Explorer hands every terminal it starts a COPY of the environment, taken when Explorer itself
+            # started. Without this broadcast - the one the Control Panel's environment editor sends - the new
+            # PATH would reach nothing until the next sign-in. SendMessageTimeout, so one wedged window on this
+            # desktop cannot wedge an install.
+            if (-not ('Intentic.Native' -as [type])) {
+                $signature = '[DllImport("user32.dll", CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr window, uint message, UIntPtr word, string text, uint flags, uint timeout, out UIntPtr answer);'
+                Add-Type -Namespace 'Intentic' -Name 'Native' -MemberDefinition $signature -ErrorAction Stop
+            }
+            $answer = [UIntPtr]::Zero
+            [void][Intentic.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$answer)
+        }
+        # This window has its own copy as well, and it is the one the user is looking at when the setup output
+        # tells them what to run next.
+        if (($env:Path -split ';') -notcontains $Folder) { $env:Path = "$env:Path;$Folder" }
+    } catch {
+        Write-Warning "Could not put $Folder on your PATH ($($_.Exception.Message)). Run $Command from that folder, or add it to your PATH yourself."
+    }
+}
 
 $url = $env:SANDBOX_URL
 $pair = $env:PAIR_TOKEN
@@ -41,6 +84,7 @@ if (-not $bin) {
         if (Test-Path $dest) { Move-Item -Force -Path $dest -Destination "$dest.old" }
         Move-Item -Force -Path "$dest.tmp" -Destination $dest
         $bin = $dest
+        Add-IntenticPath -Folder (Split-Path $dest) -Command 'intentic-sync'
     } catch {
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"
         $installed = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source
