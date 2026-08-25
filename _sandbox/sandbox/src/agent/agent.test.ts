@@ -184,7 +184,16 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
  * own default there: one of which (the nesting cap) the CLI resolves from its own remote config rather than a
  * constant. So a turn that says nothing must set nothing: emitting today's default back as an env var would pin
  * a number that is meant to be able to move, and it would do it for every sandbox that never opened the group.
- * turn-plan.ts is what decides "the owner moved this"; this asserts the half of the deal that lives here. */
+ * turn-plan.ts is what decides "the owner moved this"; this asserts the half of the deal that lives here.
+ *
+ * "SETS NOTHING" IS MEASURED AGAINST THE AMBIENT ENVIRONMENT, not against undefined, because the turn's env is
+ * `{...process.env, …}` by design (the agent's shell needs the machine's environment). Asserting undefined
+ * asserted something else entirely, that the MACHINE has no such variable, which is true on CI and false in any
+ * sandbox that happens to set one: this suite then failed on the developer's box and passed in the pipeline,
+ * which is the ambient-reading failure AGENTS.md names. Derived from process.env rather than transcribed, so it
+ * holds either way and still catches the only thing it is here to catch, this code adding a ceiling of its own. */
+const ambient = (name: string): string | undefined => process.env[name];
+
 test("the delegation ceilings reach the CLI only where the turn names one", async () => {
     const captured: Options[] = [];
     const capture: QueryFn = async function* (args) {
@@ -193,15 +202,15 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     };
 
     await collect(request, capture);
-    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBeUndefined();
-    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBeUndefined();
-    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe(ambient("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"));
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"));
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"));
 
     // Each is independent: a raised concurrency cap must not drag the other two into the environment with it.
     await collect({ ...request, subagentsAtOnce: 50 }, capture);
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("50");
-    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBeUndefined();
-    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBeUndefined();
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"));
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"));
 
     await collect({ ...request, subagentsAtOnce: 40, subagentsPerTurn: 500, subagentDepth: 5 }, capture);
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("40");

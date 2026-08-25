@@ -25,19 +25,24 @@ const PROMPT_MODES = [
 
 // What a custom prompt actually costs, as a plain inventory. Every row on the "lost" side is a thing the user
 // would otherwise discover by noticing it had stopped happening, which is the worst way to learn it.
+//
+// Only what the PROMPT carries belongs here. The hooks are a separate layer and survive a custom prompt intact,
+// so the search steer is deliberately absent: the agent is still told about `rg` the first time it walks the
+// repo with grep, it just learns it a search later than it would have (agent/agent-search.ts). Listing it as
+// lost would overstate the cost, which is the same disservice as understating it.
 const PROMPT_LOST = [
     [`The built-in prompt`, `Its whole approach to reading, editing and verifying code`],
     [`The question and plan cards`, `It writes "A) … B) …" as text instead of a card you can click`],
     [`The checklist panel`, `Long tasks run with no visible plan to follow along with`],
     [`The browser tools`, `It stops knowing a real browser is available and reaches for curl`],
     [`Knowing how to wait`, `It polls a build with sleep instead of backgrounding it and being woken`],
-    [`Knowing which search binary`, `It walks the repo with grep, ~30× slower here than the rg that is installed`],
     [`Terse responses`, `The toggle stays on screen but no longer does anything`],
 ];
 
 const PROMPT_KEPT = [
     [`Every tool`, `Nothing is removed, only what the model has been TOLD changes`],
     [`CLAUDE.md and your skills`, `Still loaded from the workspace exactly as before`],
+    [`The in-turn notices`, `Hooks are a separate layer: the search, dependency and diagnostics steers still fire`],
     [`Cross-provider delegation`, `Moves into the first message instead of the prompt`],
 ];
 

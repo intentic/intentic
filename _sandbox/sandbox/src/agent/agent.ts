@@ -37,6 +37,7 @@ import type { ChildSupervisor } from "../children/children.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { browserSessionHooks } from "../browser/browser-sessions.js";
 import { depsNoticeHooks } from "./agent-deps.js";
+import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
 import { installSteeringHooks } from "./agent-installs.js";
@@ -199,6 +200,10 @@ export interface AgentRequest {
     // because @playwright/mcp honours it only for the files IT names (browser/browser-artifacts.ts). Drives
     // both the redirect hook and the sentence that tells the agent where to Read a screenshot back from.
     readonly browserOutputDir?: string;
+    // Whether the iq plugin is actually loaded for this turn (turn-plan.ts resolves the gate: the `iqSearch`
+    // setting, its holdout arm, and the plugin dir existing at all). Carried rather than re-derived so the
+    // empty-search notice can name iq exactly where it is real and nowhere else (agent-search.ts).
+    readonly iqAvailable?: boolean;
     // Each browser profile owner's CDP debugging port (owner or `web` → port), so the first browser tool call
     // can register a watchable session for the Chromium that call is launching (browser/browser-sessions.ts).
     // Absent ⇒ the turn has no browser tools at all, and nothing is watched.
@@ -653,6 +658,10 @@ const baseOptions = (
             // filename is rewritten into the tool-owned directory before the tool ever sees it. Named here rather
             // than left to the prompt because a convention only holds for the agents that happen to read it.
             request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
+            // Shell search hygiene: one word about `rg` the first time a turn walks the repo with `grep`, and one
+            // about what an empty `rg` already proved. Advisory and once per turn; the command has run and its
+            // answer stands (agent-search.ts). Never rewrites: the two regex dialects disagree.
+            searchNoticeHooks(request.iqAvailable === true),
             // Browser, the other half: a browser tool call is the moment the agent's Chromium becomes real, so it
             // is where the watchable session is registered. The hook only names what already exists, the browser
             // is the MCP's to launch and to kill (browser/browser-sessions.ts).

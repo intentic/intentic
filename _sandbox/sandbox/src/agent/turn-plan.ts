@@ -667,8 +667,13 @@ export const planHarnessTurn = async (
     // capabilities so the agent prefers iq for code search, gated by the per-sandbox iqSearch toggle (opt-in,
     // default off). Empty dir outside the container ⇒ skipped regardless. Extension checkouts with a
     // contributes.agent manifest entry ride the same SDK plugin loader.
+    /* Resolved ONCE and read twice: the plugin list below, and the request's `iqAvailable`, which is what lets
+     * the empty-search notice name iq only where its skill is actually loaded (agent/agent-search.ts). Deriving
+     * it a second time at the hook would be the same condition written twice, and the holdout arm is exactly the
+     * kind of thing that survives one copy of a condition and not the other. */
+    const iqLoaded = services.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? iqSearch);
     const plugins = [
-        ...(services.config.iqPluginDir !== "" && (context.iqSearchEnabled ?? iqSearch) ? [services.config.iqPluginDir] : []),
+        ...(iqLoaded ? [services.config.iqPluginDir] : []),
         // The webq plugin rides ungated: the CLI is baked onto PATH unconditionally, and the skill is what
         // keeps an agent from WebFetch-looping a JS-rendered docs site it could read in one webq call.
         ...(services.config.webqPluginDir !== "" ? [services.config.webqPluginDir] : []),
@@ -836,6 +841,9 @@ export const planHarnessTurn = async (
             // the turn wired no browser servers (no Chromium in this image, the browser pack rides a rebuild):
             // its absence is what keeps the system prompt from advertising a browser that isn't there.
             ...(Object.keys(browser.servers).length > 0 ? { browserOutputDir: browserOutputDir(services.workspace.root) } : {}),
+            // Whether this turn actually carries the iq plugin, so the notice that fires on an empty `rg` names iq
+            // where it is real and stays quiet in the holdout arm and in every sandbox that never opted in.
+            iqAvailable: iqLoaded,
             // The debugging ports those same servers' Chromiums will open, so the first browser tool call can
             // register a session the owner can watch (browser/browser-sessions.ts).
             ...(Object.keys(browser.ports).length > 0 ? { browserPorts: browser.ports } : {}),
