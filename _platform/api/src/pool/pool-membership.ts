@@ -10,7 +10,7 @@ export const poolEnabled = (config: Config): boolean => config.pool.stripeSecret
  * charge for days while reporting past_due, and the honest reading of "the charge failed" is that premium
  * paused, not that it silently continues on money that never arrived. The webhook keeps `status` current, so
  * this needs no date arithmetic. */
-const PREMIUM_STATUSES = new Set([`active`, `trialing`]);
+export const PREMIUM_STATUSES = new Set([`active`, `trialing`]);
 
 export const isPremium = (membership: { status: string } | null): boolean => membership !== null && PREMIUM_STATUSES.has(membership.status);
 

@@ -42,6 +42,17 @@ export const configSchema = z.object({
             clientSecret: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
+    /* THE PLATFORM'S OPERATORS. Comma-separated emails whose signed-in session may call the admin surface
+     * (guards.ts requireAdmin) — deployment config rather than a database row on purpose: sign-in is
+     * Google-only, so a session's email is Google-verified, and an allowlist the API cannot write means no
+     * endpoint exists that could mint an admin (adding one is a redeploy, which is the right friction).
+     * Empty (the default, and the only sane one for a fresh self-hosted platform) disables the admin
+     * surface outright: every /admin route answers FORBIDDEN for everybody. ADMIN_EMAILS. */
+    admin: z
+        .object({
+            emails: z.string().default(``),
+        })
+        .prefault({}),
     // Transactional email (Resend), sandbox invites, and the setup link a phone sends itself to finish on a
     // real machine (mail.ts). `apiKey` is the Resend API key (re_…); `from` is the verified sender (e.g.
     // "intentic <invites@your-domain>"). Unset → both are still accepted but the link is logged server-side

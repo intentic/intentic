@@ -1160,3 +1160,53 @@ export const PushSendSchema = z.object({
 // Whether APNs took the send. Parallel to the daemon's own delivery counting: a relay that swallowed a send
 // silently would defeat the settings page's test button, whose whole job is proving the chain end-to-end.
 export const PushSentSchema = z.object({ delivered: z.boolean() });
+
+// ---- admin: the operator's read of the platform (ADMIN_EMAILS-gated; api guards.ts requireAdmin) ----
+//
+// Everything here is an AGGREGATE or an account's own directory row — no credentials, no tokens, no
+// sandbox contents (the platform holds none). The surface is read-only on purpose: the v1 panel proves the
+// authorization rail; mutations arrive later, each behind the same guard.
+
+// The platform at a glance. `activeDaemons` counts sandboxes whose daemon announced within the last five
+// minutes — the same "recent lastSeenAt" reading the setup wizard treats as connected.
+export const AdminOverviewSchema = z.object({
+    users: z.number(),
+    sandboxes: z.number(),
+    activeDaemons: z.number(),
+    // Memberships whose Stripe status is active/trialing — the premium answer, not the row count.
+    activeMemberships: z.number(),
+    // Service listings by lifecycle status (pool-admission.ts vocabulary).
+    services: z.object({
+        draft: z.number(),
+        probation: z.number(),
+        listed: z.number(),
+        suspended: z.number(),
+    }),
+    // Metered service runs since UTC midnight.
+    runsToday: z.number(),
+    hostedMachines: z.number(),
+});
+export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
+
+// One account in the operator's directory. Counts and status ride along so the list renders without a
+// per-row round trip; nothing here is a secret (the GDPR export shows the subject strictly more).
+export const AdminUserSchema = z.object({
+    id: z.string(),
+    email: z.email(),
+    name: z.string(),
+    image: z.string().nullable(),
+    createdAt: z.iso.datetime(),
+    sandboxCount: z.number(),
+    // Stripe's word for the membership state ("active", "past_due", …), absent when the account never
+    // completed a checkout.
+    membershipStatus: z.string().optional(),
+});
+export type AdminUser = z.infer<typeof AdminUserSchema>;
+
+// Cursor-paged: `nextCursor` is the last row's id, absent on the final page. Ordered newest first.
+export const AdminUserListSchema = z.object({
+    users: z.array(AdminUserSchema),
+    total: z.number(),
+    nextCursor: z.string().optional(),
+});
+export type AdminUserList = z.infer<typeof AdminUserListSchema>;

@@ -1,3 +1,4 @@
+import { adminRoutes } from "./admin/admin.routes.js";
 import { creatorRoutes } from "./creator/creator.orpc.js";
 import { desktopRoutes } from "./desktop/desktop.routes.js";
 import { inviteRoutes } from "./invite/invite.routes.js";
@@ -16,4 +17,5 @@ export const router = {
     pool: poolRoutes(),
     creator: creatorRoutes(),
     push: pushRelayRoutes(),
+    admin: adminRoutes,
 };

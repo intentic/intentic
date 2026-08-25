@@ -60,6 +60,9 @@ services:
             SECRETS_KEY: ${SECRETS_KEY:?generate a long random string — encrypts stored OAuth/sandbox tokens at rest}
             GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?}
             GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:?}
+            # Comma-separated emails whose signed-in session may call the /admin surface (the operator's
+            # platform-admin panel). Empty (the default) disables it outright — no route, no exposure.
+            ADMIN_EMAILS: ${ADMIN_EMAILS:-}
             # Cloudflare is DNS-ONLY now (the tunnel fabric is the zrok hub above): the loopback-certificate
             # records for same-machine sandboxes, and the sweep that clears their residue.
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}

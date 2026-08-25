@@ -3,6 +3,8 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    AdminOverviewSchema,
+    AdminUserListSchema,
     ClaimableNamesSchema,
     ClaimChallengeSchema,
     CloudCredentialsSchema,
@@ -334,6 +336,31 @@ export const pushRelayContract = {
     send: oc.route({ method: "POST", path: "/push/send" }).input(PushSendSchema).output(PushSentSchema),
 };
 
+/* THE ADMIN SURFACE — the operator's read of their own deployment, gated by the ADMIN_EMAILS allowlist
+ * (api guards.ts requireAdmin) rather than any role row: a session whose Google-verified email is on the
+ * deployment's list may call these, everyone else gets FORBIDDEN, and a platform that never configured the
+ * list has no admin surface at all. Consumed by the private platform-admin extension riding the SPA's own
+ * Better Auth session — there is deliberately no second authentication system behind this namespace.
+ *
+ * READ-ONLY BY DESIGN for now: the panel's bytes are workspace-authored (agent-writable), so until the
+ * extension graduates to a pinned install, nothing here may mutate. A mutation added later belongs in this
+ * namespace, behind the same guard, with its own explicit confirmation input. */
+export const adminContract = {
+    overview: oc.route({ method: "GET", path: "/admin/overview" }).output(AdminOverviewSchema),
+    users: oc
+        .route({ method: "GET", path: "/admin/users" })
+        .input(
+            z.object({
+                // Substring match on email or name, case-insensitive. Absent lists everyone.
+                query: z.string().max(200).optional(),
+                // The previous page's `nextCursor` (a user id). Absent starts from the newest account.
+                cursor: z.string().optional(),
+                limit: z.coerce.number().int().min(1).max(100).default(50),
+            }),
+        )
+        .output(AdminUserListSchema),
+};
+
 // Aggregated contract router, consumed by the oRPC client (ContractRouterClient<typeof apiContract>)
 // and implemented on the server by the per-domain implement() route factories.
 export const apiContract = {
@@ -344,4 +371,5 @@ export const apiContract = {
     pool: poolContract,
     creator: creatorContract,
     push: pushRelayContract,
+    admin: adminContract,
 };
