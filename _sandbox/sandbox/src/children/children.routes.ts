@@ -158,7 +158,7 @@ export const createChildrenRoutes = () => ({
                 const first = pendingQuestionOf(child)?.questions?.[0]?.question;
                 return { [first ?? ""]: [text ?? ""] };
             })();
-        const result = supervisor.answer(child, answers);
+        const result = await supervisor.answer(child, answers);
         return c.json(result, result.ok ? 200 : 409);
     },
     /** GET /children — this conversation's children, every kind, live first. */

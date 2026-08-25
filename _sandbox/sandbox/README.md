@@ -45,7 +45,12 @@ reports the profile.
   that could approve its child's held commands would be a model approving its own dangerous actions through a
   proxy. `send` steers a working child where its runtime takes mid-turn input, and runs a follow-up turn on a
   settled one, continuing the session its last turn reported, so refinement costs a message rather than a
-  fresh agent.
+  fresh agent. The owner's action rulebook binds the whole surface (`agents.spawn`, or `agents.spawn.<provider>`
+  for one provider, guard/actions.ts childSpawn), and two floors compose with it: a parent turn that has taken
+  in outside content is held from every supervisor mutation unless the owner wrote an explicit allow (the
+  wallet's argument — a child spends the owner's accounts on the parent's say-so, and a hostile page is exactly
+  what may have replaced that judgment), and starting a child on a runtime beyond every gate (rulebook "none")
+  marks the parent's own taint bit, so its credential floor engages exactly as it does for a fetched page.
 - Outwait the world on the agent's behalf. For a condition OUTSIDE the harness: a CI run, a deploy, a remote
   queue, the agent arms a condition watch (src/agent/watch-server.ts): a check command that exits 0 when the
   thing has happened. The daemon polls it between turns (src/agent/watchers.ts) and wakes the arming

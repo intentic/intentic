@@ -5,6 +5,7 @@ import { listSubagentSessions, resetSubagents, waitForSubagent } from "../agent/
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { createRequest } from "../agent/agent-requests.js";
+import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../guard/turn-taint.js";
 import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
 
 /* The spawn engine, driven through its real entry point with a fake turn generator, the loop pump's own test
@@ -151,6 +152,64 @@ describe("the child's life on the roster", () => {
     });
 });
 
+/* THE OWNER'S RULE AND THE FLOORS (guard/actions.ts childSpawn), consulted on every supervisor mutation, so
+ * the rulebook binds on every door at once. The taint floor composes BOTH ways: a parent that has taken in
+ * outside content may not reach its children unless the owner explicitly allowed it, and a child on a runtime
+ * beyond every gate (rulebook "none") marks the parent's own turn bit on its way out. */
+describe("the spawn rulebook and the floors", () => {
+    it("a deny rule refuses every door's spawn, a per-provider hold names the owner", async () => {
+        const denied = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "deny" } }), parent, { prompt: "go" }, fakeTurn([]));
+        expect(denied).toMatchObject({ ok: false, message: expect.stringContaining("refused") });
+        const held = await spawnChild(
+            fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }),
+            parent,
+            { prompt: "go", provider: "cursor" },
+            fakeTurn([]),
+        );
+        expect(held).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
+        // The blanket rule does not reach a provider the owner singled out as allowed.
+        const other = await spawnChild(fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+        expect(other.ok).toBe(true);
+        if (other.ok) {
+            await settled(other.id);
+        }
+    });
+
+    it("a tainted parent is held from every mutation, unless the owner explicitly allowed the surface", async () => {
+        const taint = createTurnTaint();
+        taint.mark("webchat");
+        publishTurnTaint(parent.conversationId, taint);
+        try {
+            const held = await spawnChild(fakeServices(), parent, { prompt: "go" }, fakeTurn([]));
+            expect(held).toMatchObject({ ok: false, message: expect.stringContaining("webchat") });
+            const allowed = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "allow" } }), parent, { prompt: "go" }, fakeTurn([]));
+            expect(allowed.ok).toBe(true);
+            if (allowed.ok) {
+                await settled(allowed.id);
+                const sent = await sendToChild(fakeServices(), parent, allowed.id, "more", fakeTurn([]));
+                expect(sent).toMatchObject({ ok: false, message: expect.stringContaining("webchat") });
+            }
+        } finally {
+            clearTurnTaint(parent.conversationId);
+        }
+    });
+
+    it("a child on a runtime beyond every gate marks the parent's own turn bit", async () => {
+        publishTurnTaint(parent.conversationId, createTurnTaint());
+        try {
+            expect(conversationTaintSource(parent.conversationId)).toBeUndefined();
+            const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "pi" }, fakeTurn([]));
+            expect(result.ok).toBe(true);
+            expect(conversationTaintSource(parent.conversationId)).toBe("agent:pi");
+            if (result.ok) {
+                await settled(result.id);
+            }
+        } finally {
+            clearTurnTaint(parent.conversationId);
+        }
+    });
+});
+
 /* THE ESCALATION LADDER, and its one hard rule. A child's QUESTION is the parent's to answer — the parent
  * often holds the information — through the very request registry the child's ask parked on, so the picks
  * arrive exactly as an owner's would. A child's CONSENT cards (permission, plan) refuse BY KIND: a parent
@@ -189,7 +248,8 @@ describe("the escalation ladder", () => {
             yield { kind: "text_end" };
             yield { kind: "done" };
         };
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go" }, askThenFinish);
+        const services = fakeServices();
+        const result = await spawnChild(services, parent, { prompt: "go" }, askThenFinish);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -200,7 +260,7 @@ describe("the escalation ladder", () => {
             requestId,
             questions: [{ question: "Which port should the server bind?" }],
         });
-        const answered = answerChild(parent, result.id, { "Which port should the server bind?": ["8080"] });
+        const answered = await answerChild(services, parent, result.id, { "Which port should the server bind?": ["8080"] });
         expect(answered.ok).toBe(true);
         // The child's parked ask settled with the parent's picks, as a real answer rather than the abort stand-in.
         await expect(asked).resolves.toMatchObject({ reply: { kind: "question", answers: { "Which port should the server bind?": ["8080"] } } });
@@ -226,7 +286,7 @@ describe("the escalation ladder", () => {
         // The consent card is not a question: the wait surfaces hand the parent nothing to answer with…
         expect(pendingQuestionOf(result.id)).toBeUndefined();
         // …and a direct attempt refuses by kind, naming whose the card is.
-        const refused = answerChild(parent, result.id, { anything: ["yes"] });
+        const refused = await answerChild(fakeServices(), parent, result.id, { anything: ["yes"] });
         expect(refused).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
         gate.resolve();
         await settled(result.id);
@@ -237,9 +297,9 @@ describe("the escalation ladder", () => {
         if (!result.ok) {
             throw new Error(result.message);
         }
-        expect(answerChild({ conversationId: "conv-other", cwd: "/work" }, result.id, {})).toMatchObject({ ok: false });
+        await expect(answerChild(fakeServices(), { conversationId: "conv-other", cwd: "/work" }, result.id, {})).resolves.toMatchObject({ ok: false });
         await settled(result.id);
-        expect(answerChild(parent, result.id, {})).toMatchObject({ ok: false, message: expect.stringContaining("not waiting") });
+        await expect(answerChild(fakeServices(), parent, result.id, {})).resolves.toMatchObject({ ok: false, message: expect.stringContaining("not waiting") });
     });
 
     it("send to a settled child runs a follow-up turn on its own conversation, continuing its session", async () => {
@@ -304,7 +364,7 @@ describe("the shell door's arming", () => {
             return { ok: true, id: "sub-x" };
         },
         send: async () => ({ ok: true }),
-        answer: () => ({ ok: true }),
+        answer: async () => ({ ok: true }),
         pendingQuestion: () => undefined,
     });
 

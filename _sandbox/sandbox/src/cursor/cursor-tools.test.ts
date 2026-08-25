@@ -24,7 +24,7 @@ const push = (): ((event: AgentEvent) => void) => () => {};
 const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     spawn: async () => ({ ok: true, id: "sub-x" }),
     send: async () => ({ ok: true }),
-    answer: () => ({ ok: true }),
+    answer: async () => ({ ok: true }),
     pendingQuestion: () => undefined,
     ...over,
 });

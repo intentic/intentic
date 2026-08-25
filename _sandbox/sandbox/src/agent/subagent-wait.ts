@@ -133,7 +133,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               if (children === undefined) {
                                   return answer({ ok: false, message: "This turn cannot supervise agents." });
                               }
-                              return answer(children.answer(args.child, args.answers));
+                              return answer(await children.answer(args.child, args.answers));
                           },
                       ),
                   ]),

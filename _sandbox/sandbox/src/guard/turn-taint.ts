@@ -75,3 +75,17 @@ export const clearTurnTaint = (conversationId: string): void => {
 // Whether the live turn in this conversation has taken in outside content. Unknown conversation ⇒ false: no
 // turn of ours is running there, and the payment gate's own "is there a live run" check is what refuses that.
 export const conversationTainted = (conversationId: string): boolean => live.get(conversationId)?.tainted() ?? false;
+
+// What first brought outside content into the live turn, for a consult site outside the generator that wants
+// to NAME the source rather than only know the bit (the child service's spawn floor).
+export const conversationTaintSource = (conversationId: string): string | undefined => live.get(conversationId)?.source();
+
+/* Mark the live turn's taint from OUTSIDE the generator — the child service's composition seam. A child on a
+ * runtime whose rulebook axis is "none" runs beyond every gate this daemon has, so the parent that started it
+ * (and will read its report) has taken in content no policy could see; the safe direction is the parent's own
+ * credential floor engaging, exactly as it does for a fetched page. No live turn (a CLI spawn after the turn
+ * ended) is a no-op: the bit is per-turn by design and there is no turn to protect. */
+export const markConversationTaint = (conversationId: string, source: string): void => {
+    live.get(conversationId)?.mark(source);
+};
+

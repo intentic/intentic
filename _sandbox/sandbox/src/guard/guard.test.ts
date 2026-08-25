@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AdmissionPolicy } from "@intentic/sandbox-contract";
-import { commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
+import { childSpawn, commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
 const allowAll: AdmissionPolicy = { schedule: "allow", event: "allow", listener: "allow", webchat: "allow", workspace: "allow", workflow: "allow" };
@@ -158,3 +158,28 @@ describe("wakeSourceOf", () => {
         expect(wakeSourceOf({ kind: "workspace", event: "agent.landed" })).toBe("workspace");
     });
 });
+
+/* The child-agent rule: the owner's own verdicts by provider or for the whole surface, and the taint floor
+ * underneath — applied only where the owner said nothing, because an explicit allow is a decision about this
+ * workspace. */
+describe("agents.spawn", () => {
+    test("allows by default and honours deny/hold, most specific key first", () => {
+        expect(guard(childSpawn, { provider: "cursor", rules: {} }).effect).toBe("allow");
+        expect(guard(childSpawn, { provider: "cursor", rules: { "agents.spawn": "deny" } }).effect).toBe("deny");
+        expect(guard(childSpawn, { provider: "cursor", rules: { "agents.spawn": "hold" } }).effect).toBe("hold");
+        // The per-provider key outranks the blanket one, the outbound gate's own precedence.
+        expect(guard(childSpawn, { provider: "cursor", rules: { "agents.spawn": "deny", "agents.spawn.cursor": "allow" } }).effect).toBe("allow");
+        expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny", "agents.spawn.cursor": "allow" } }).effect).toBe("deny");
+    });
+
+    test("holds a tainted parent's spawn unless the owner explicitly allowed it", () => {
+        const held = guard(childSpawn, { provider: "claude", rules: {}, outsideSource: "webchat" });
+        expect(held.effect).toBe("hold");
+        expect(held.reason).toContain("webchat");
+        // An explicit allow is the owner's decision about this exact surface; the floor must not override it.
+        expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "allow" }, outsideSource: "webchat" }).effect).toBe("allow");
+        // An explicit deny still outranks everything.
+        expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny" }, outsideSource: "webchat" }).effect).toBe("deny");
+    });
+});
+

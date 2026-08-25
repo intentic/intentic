@@ -1,8 +1,11 @@
 import type { AgentEvent, AgentHarness, AgentProvider, AgentTurn, AskQuestion } from "@intentic/sandbox-contract";
-import { newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
+import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { resolveRequest } from "../agent/agent-requests.js";
 import { steerTurn } from "../agent/agent-steering.js";
+import { childSpawn } from "../guard/actions.js";
+import { guard } from "../guard/guard.js";
+import { conversationTaintSource, markConversationTaint } from "../guard/turn-taint.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "../agent/subagents.js";
 import { startTurnRun } from "../agent/turn-runs.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
@@ -258,6 +261,42 @@ const runChildTurn = (
     return { ok: true };
 };
 
+/* THE OWNER'S RULE AND THE TAINT FLOOR, consulted before every supervisor mutation — spawn, follow-up send,
+ * steer, answer — because each one is the parent's judgment reaching a child that spends the owner's
+ * accounts, and each door (harness tool, Cursor tool, CLI route) lands here. A HOLD cannot park (a call may
+ * arrive from a shell whose turn already ended, with nobody to raise a card to), so it translates into a
+ * refusal that names the owner, outbound.send's own shape. */
+const admitSupervision = async (
+    services: Services,
+    parent: string,
+    provider: string,
+): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
+    const settings = await services.sandboxSettings.get();
+    const outsideSource = conversationTaintSource(parent);
+    const verdict = guard(childSpawn, {
+        provider,
+        rules: settings.actionRules,
+        ...(outsideSource !== undefined ? { outsideSource } : {}),
+    });
+    if (verdict.effect === "deny") {
+        return { ok: false, message: `Refused: ${verdict.reason}.` };
+    }
+    if (verdict.effect === "hold") {
+        return { ok: false, message: `Held for the owner: ${verdict.reason}. Ask them in chat; they can also set the agents.spawn action rule.` };
+    }
+    return { ok: true };
+};
+
+/* THE FLOOR THAT COMPOSES DOWNWARD: a child on a runtime whose rulebook axis is "none" runs beyond every gate
+ * this daemon has (no consult, no hold, no taint marking of its own), so the PARENT that started it and will
+ * read its report has taken in content no policy could see. The parent's own turn bit engages, exactly as it
+ * does for a fetched page — the safe direction, and the one the axis's own documentation promises. */
+const composeRuntimeFloor = (parent: string, provider: AgentProvider, harness: AgentHarness): void => {
+    if (capabilitiesOf(provider, harness).rulebook === "none") {
+        markConversationTaint(parent, `agent:${provider}`);
+    }
+};
+
 // The one budget read both doors share: may this parent put one more child turn in flight?
 const admitChildTurn = async (
     services: Services,
@@ -283,12 +322,17 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     if (depth > settings.subagentDepth) {
         return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
     }
+    const provider = spec.provider ?? "claude";
+    const harness = spec.harness ?? "native";
+    const allowed = await admitSupervision(services, parent.conversationId, provider);
+    if (!allowed.ok) {
+        return allowed;
+    }
     const admitted = await admitChildTurn(services, parent.conversationId);
     if (!admitted.ok) {
         return admitted;
     }
-    const provider = spec.provider ?? "claude";
-    const harness = spec.harness ?? "native";
+    composeRuntimeFloor(parent.conversationId, provider, harness);
     const id = `sub-${newConversationId()}`;
     const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
     const turn: AgentTurn & { conversationId: string } = {
@@ -353,6 +397,11 @@ export const sendToChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude");
+    if (!allowed.ok) {
+        return allowed;
+    }
+    composeRuntimeFloor(parent.conversationId, kid.spec.provider ?? "claude", kid.spec.harness ?? "native");
     if (kid.running) {
         /* Mid-turn, the only door is the runtime's own steering seam, the same one /agent/steer uses. A
          * runtime without it cannot take words mid-turn, and pretending otherwise (queueing them somewhere
@@ -406,10 +455,19 @@ export const sendToChild = async (
 /** Settle a child's QUESTION with the parent's picks — and only a question. A permission hold or a plan
  *  approval is the owner's consent gate: a parent that could approve its child's held commands would be a
  *  model approving its own dangerous actions through a proxy, so those refuse by kind, always. */
-export const answerChild = (parent: ChildParent, childId: string, answers: Record<string, string[]>): ChildActionResult => {
+export const answerChild = async (
+    services: Services,
+    parent: ChildParent,
+    childId: string,
+    answers: Record<string, string[]>,
+): Promise<ChildActionResult> => {
     const kid = kids.get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
+    }
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude");
+    if (!allowed.ok) {
+        return allowed;
     }
     const pending = kid.pending;
     if (pending === undefined) {
@@ -436,13 +494,13 @@ export const answerChild = (parent: ChildParent, childId: string, answers: Recor
 export interface ChildSupervisor {
     readonly spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
     readonly send: (childId: string, message: string) => Promise<ChildActionResult>;
-    readonly answer: (childId: string, answers: Record<string, string[]>) => ChildActionResult;
+    readonly answer: (childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
 }
 
 export const childSupervisor = (services: Services, parent: ChildParent, turnFn: TurnFn): ChildSupervisor => ({
     spawn: (spec) => spawnChild(services, parent, spec, turnFn),
     send: (childId, message) => sendToChild(services, parent, childId, message, turnFn),
-    answer: (childId, answers) => answerChild(parent, childId, answers),
+    answer: (childId, answers) => answerChild(services, parent, childId, answers),
     pendingQuestion: (childId) => (kids.get(childId)?.parent === parent.conversationId ? pendingQuestionOf(childId) : undefined),
 });

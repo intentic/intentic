@@ -187,7 +187,7 @@ const answerTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomT
         for (const [question, picks] of Object.entries(raw)) {
             answers[question] = Array.isArray(picks) ? picks.filter((entry): entry is string => typeof entry === "string") : [String(picks)];
         }
-        return JSON.stringify(children.answer(child, answers));
+        return JSON.stringify(await children.answer(child, answers));
     },
 });
 

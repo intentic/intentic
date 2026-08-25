@@ -2786,7 +2786,13 @@ export const SandboxSettingsSchema = z.object({
      * `<provider>.<type>` ("discord.message.send") with `<provider>.*` as the per-provider wildcard; exact key
      * wins. An action with no rule is allowed, the empty default wires no hook at all, so an unconfigured
      * workspace pays nothing. "hold" cannot park a running turn (nobody may be there to answer); it refuses the
-     * live call and points the agent at the drafts outbox, which IS the held form of a send. */
+     * live call and points the agent at the drafts outbox, which IS the held form of a send.
+     *
+     * The CHILD-AGENT surface reads the same book: `agents.spawn` covers starting, steering and answering
+     * child agents on every provider, `agents.spawn.<provider>` singles one out (the specific key wins), and
+     * the daemon's own taint floor holds a spawn from a turn that has taken in outside content unless the
+     * owner wrote an explicit allow (guard/actions.ts childSpawn). "hold" refuses with the owner named, the
+     * same translation a send gets. */
     actionRules: z
         .record(z.string(), AdmissionRuleSchema)
         .default({})

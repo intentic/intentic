@@ -129,3 +129,47 @@ export const commandRun = defineGuardedAction<CommandRunInput>({
         return ALLOW(`no command rule restricts ${commandClass}`);
     },
 });
+
+export interface ChildSpawnInput {
+    // The provider the child would run on, so a rule can single one out ("agents.spawn.cursor") or cover the
+    // whole surface ("agents.spawn"). The specific key wins, the outbound gate's own precedence shape.
+    readonly provider: string;
+    // SandboxSettings.actionRules, the same open rulebook the outbound gate reads.
+    readonly rules: Readonly<Record<string, AdmissionRule>>;
+    /* What first brought outside content into the PARENT's turn (guard/turn-taint.ts), or undefined for a
+     * turn working only on the owner's own material. Present ⇒ the parent has read text somebody else wrote,
+     * which is the condition the floor below keys on. */
+    readonly outsideSource?: string;
+}
+
+/* May this turn start, steer or answer a CHILD AGENT? Consulted by the child service on every supervisor
+ * mutation (children/children.ts), which is what makes the rule bind on every door at once — the harness
+ * tools, Cursor's custom tools, and the `agents` CLI all land on the same consult.
+ *
+ * A "hold" cannot park here (a spawn may arrive from a shell whose turn has already ended, with nobody to
+ * raise a card to), so the service translates it into a refusal that names the owner — outbound.send's own
+ * shape, where the held form of the action is "ask the owner in chat".
+ *
+ * THE TAINT FLOOR rides this action too, and for the wallet's reason: a child spends the owner's connected
+ * accounts on the parent's say-so, and a parent that has read a hostile page is exactly the judgment that
+ * page may have replaced. Applied only where the owner has said NOTHING: an explicit `allow` is a decision
+ * about this workspace, and the floor must not override the person who configured it. */
+export const childSpawn = defineGuardedAction<ChildSpawnInput>({
+    action: "agents.spawn",
+    decide: ({ provider, rules, outsideSource }) => {
+        const rule = rules[`agents.spawn.${provider}`] ?? rules["agents.spawn"];
+        if (rule === "deny") {
+            return DENY(`spawning child agents on ${provider} is refused by the action rules`);
+        }
+        if (rule === "hold") {
+            return HOLD(`spawning child agents on ${provider} requires owner approval`);
+        }
+        if (rule === undefined && outsideSource !== undefined) {
+            return HOLD(
+                `this turn has taken in content from outside (${outsideSource}), and a child agent would spend the owner's accounts on its say-so`,
+            );
+        }
+        return ALLOW(`no action rule restricts spawning child agents on ${provider}`);
+    },
+});
+
