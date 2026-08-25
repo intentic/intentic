@@ -33,6 +33,8 @@ const SpawnBodySchema = z.object({
     harness: z.enum(["native", "claude-code"]).optional(),
     model: z.string().min(1).optional(),
     effort: z.string().min(1).optional(),
+    // Which machine runs it: a runner's name, or "here" for this sandbox. Absent ⇒ the fleet scheduler picks.
+    on: z.string().min(1).optional(),
 });
 
 // One wait's ceiling and default, the tool's numbers (agent/subagent-wait.ts): long enough for a real child,
@@ -78,7 +80,7 @@ export const createChildrenRoutes = () => ({
         if (!parsed.success) {
             return c.json({ ok: false, message: 'A spawn needs at least a prompt: pass JSON like {"prompt": "..."}.' }, 400);
         }
-        const { prompt, description, provider, harness, model, effort } = parsed.data;
+        const { prompt, description, provider, harness, model, effort, on } = parsed.data;
         const result = await supervisor.spawn({
             prompt,
             ...(description !== undefined ? { description } : {}),
@@ -86,6 +88,7 @@ export const createChildrenRoutes = () => ({
             ...(harness !== undefined ? { harness } : {}),
             ...(model !== undefined ? { model } : {}),
             ...(effort !== undefined ? { effort } : {}),
+            ...(on !== undefined ? { on } : {}),
         });
         return c.json(result, result.ok ? 200 : 409);
     },

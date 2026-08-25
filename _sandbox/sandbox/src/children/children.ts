@@ -10,6 +10,8 @@ import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTu
 import { startTurnRun } from "../agent/turn-runs.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { TurnFn } from "../loops/loop-runner.js";
+import { placeFanOut } from "../runners/runner-scheduler.js";
+import { runnerSummaries } from "../runners/runner.routes.js";
 
 /* SPAWN, STEER AND ANSWER FULL AGENTS FROM INSIDE A TURN, on ANY connected provider — the daemon-side engine
  * behind every door the supervision surface has (the Claude loop's MCP tools, Cursor's custom tools, the
@@ -62,6 +64,10 @@ export interface ChildSpawnSpec {
     readonly model?: string;
     readonly effort?: string;
     readonly account?: string;
+    /* WHICH MACHINE THIS ONE RUNS ON, when the caller has an opinion: a runner's id, or "here" to pin it to
+     * this sandbox. Absent is the ordinary case and the point of the feature, the fleet scheduler picks
+     * (runners/runner-scheduler.ts), because nobody chooses a machine thirty times for one fan-out. */
+    readonly on?: string;
 }
 
 export interface ChildParent {
@@ -361,6 +367,14 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, harness);
+        /* WHERE THIS CHILD RUNS. The whole reason a person connects a second machine is that work like this
+         * spreads onto it without being asked to; so a spawn with no stated preference is placed by the
+         * scheduler, and one that named a machine gets it (or this sandbox, if that machine is not usable
+         * right now, which beats refusing work over a laptop that went to sleep). */
+        const placement =
+            spec.on === "here"
+                ? undefined
+                : placeFanOut(await runnerSummaries(services), { inFlight: services.agents.inFlightByRunner() }, spec.on).runner;
         const id = `sub-${newConversationId()}`;
         const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
         const turn: AgentTurn & { conversationId: string } = {
@@ -370,6 +384,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             // A worktree of its own, so parallel children (and the parent) never edit under each other. Landing
             // keeps the workspace's ordinary posture: a child's finished work merges the way any turn's does.
             isolated: true,
+            ...(placement !== undefined ? { placement: { kind: "runner" as const, id: placement } } : {}),
             // Nobody is at a composer. This is what the flag means, and it also sets the safe persona floor: an
             // unattended turn with no named persona speaks for no outside account.
             unattended: true,

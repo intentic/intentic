@@ -78,6 +78,13 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
                               model: z.string().optional().describe("Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default."),
                               effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
+                              on: z
+                                  .string()
+                                  .optional()
+                                  .describe(
+                                      "Which machine runs it: a runner's name, or \"here\" to keep it in this sandbox. Leave it out and the fleet " +
+                                          "decides, which is what spreads a fan-out over every machine you have connected.",
+                                  ),
                           },
                           async (args) => {
                               const children = deps.children;
@@ -91,6 +98,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                                   ...(args.harness !== undefined ? { harness: args.harness } : {}),
                                   ...(args.model !== undefined ? { model: args.model } : {}),
                                   ...(args.effort !== undefined ? { effort: args.effort } : {}),
+                                  ...(args.on !== undefined ? { on: args.on } : {}),
                               });
                               return answer(
                                   result.ok

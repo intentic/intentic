@@ -29,9 +29,12 @@ const CONVERSATION = process.env.INTENTIC_TURN_OWNER ?? "";
 
 const USAGE = `agents — start and supervise full agents on any connected provider
 
-  agents spawn [--provider <id>] [--model <id>] [--effort <tier>]
+  agents spawn [--provider <id>] [--model <id>] [--effort <tier>] [--on <runner|here>]
                [--harness native|claude-code] [--description "one line"] '<task>'
-                                       start a child agent; prints its id and returns immediately
+                                       start a child agent; prints its id and returns immediately.
+                                       --on names the machine: a runner, or "here" for this sandbox.
+                                       Left out, the fleet decides, which is what spreads a fan-out
+                                       across every machine you have connected
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a child needs input or finishes (default: either,
                                        whichever comes first); no id means whichever child moves first.
@@ -125,7 +128,7 @@ const parseFlags = (argv, known) => {
 };
 
 const spawn = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description"]);
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on"]);
     const prompt = positional.join(" ").trim();
     if (prompt === "") {
         return die(`agents: spawn needs a task\n\n${USAGE}`);
@@ -137,6 +140,7 @@ const spawn = async (argv) => {
         ...(flags.harness !== undefined ? { harness: flags.harness } : {}),
         ...(flags.model !== undefined ? { model: flags.model } : {}),
         ...(flags.effort !== undefined ? { effort: flags.effort } : {}),
+        ...(flags.on !== undefined ? { on: flags.on } : {}),
     });
     const { status, text } = await call("POST", "/children/spawn", body);
     if (status !== 200) {

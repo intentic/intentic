@@ -378,3 +378,12 @@ it(`withdraws it while a turn is in flight, with the readout it belongs to`, () 
 it(`keeps it on an archived card, the one press that stops one waking back onto the board`, () => {
     expect(stopWatchButton(mount(watching({ archivedAt: 5 })))).toBeDefined();
 });
+
+/* WHERE THE WORK IS HAPPENING, on the card, and only when that is somewhere other than here. A fleet places
+ * its own fan-out across machines without anybody choosing per agent (runners/runner-scheduler.ts), so the
+ * board is where "this one is on the desktop" stops being invisible — and where its absence keeps every card
+ * on an ordinary sandbox exactly as it was. */
+it(`names the machine an agent runs on, and says nothing when it runs here`, () => {
+    expect(mount({ ...ready(), runner: `rig` }).textContent ?? ``).toContain(`rig`);
+    expect(mount(ready()).textContent ?? ``).not.toContain(`rig`);
+});

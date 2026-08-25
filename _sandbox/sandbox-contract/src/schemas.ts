@@ -1085,6 +1085,9 @@ export const AgentSummarySchema = z.object({
         ),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
+    // Which machine its turns execute on: a paired runner's id, absent for this sandbox (runners/). Latched
+    // with the conversation, so a card can say where the work is happening without asking anything.
+    runner: z.string().optional().describe("The runner this conversation runs on. Absent means this sandbox."),
     // What the agent's last turn ran with, the model, its reasoning effort, whether extended thinking was on,
     // and whether fast speed was asked for. Recorded per agent because they are facts about THIS conversation: a
     // client opening it seeds its composer from them, rather than from whatever that browser last picked in some

@@ -15,12 +15,48 @@ import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, se
 
 const settings = (over: Partial<SandboxSettings> = {}): SandboxSettings => ({ ...SandboxSettingsSchema.parse({}), ...over });
 
-const fakeServices = (over: Partial<SandboxSettings> = {}): Services =>
+/* The fleet a spawn is placed onto (runners/runner-scheduler.ts). Empty by default, which is every sandbox
+ * with no runners and therefore every test that is not about placement: with nothing to spread onto, a spawn
+ * runs here exactly as it always did. */
+interface FakeRunner {
+    readonly id: string;
+    readonly online: boolean;
+    readonly cpus?: number;
+    readonly inFlight?: number;
+}
+
+const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeRunner[] = []): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings(over) }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { open: async () => {}, append: async () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/work" }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
+        config: unstubbed<Services["config"]>("config", {
+            // Nested seam: the scheduler's parity read touches three of this object's dozen fields, and the
+            // helper's job is to make the other nine throw by name rather than be quietly invented here.
+            sandbox: unstubbed<Services["config"]["sandbox"]>("config.sandbox", {
+                image: "ghcr.io/intentic/sandbox:2",
+                channel: "stable",
+                environmentHash: "",
+            }),
+        }),
+        runners: unstubbed<Services["runners"]>("runners", { list: async () => fleet.map((runner) => ({ id: runner.id })) }),
+        runnerHub: unstubbed<Services["runnerHub"]>("runnerHub", {
+            state: (id: string) => {
+                const found = fleet.find((runner) => runner.id === id);
+                return found === undefined || !found.online
+                    ? { online: false }
+                    : {
+                          online: true,
+                          image: "ghcr.io/intentic/sandbox:2",
+                          channel: "stable",
+                          facts: { cpus: found.cpus ?? 8, memoryMb: 32_768, freeDiskMb: 100_000, load: 0.1 },
+                      };
+            },
+        }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            inFlightByRunner: () => new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
+        }),
     });
 
 // A child's whole turn, recorded and scripted: `turns` collects what the pump was asked to run, `events` is
@@ -552,5 +588,49 @@ describe("the budgets, enforced in the daemon", () => {
         const fromChild = await spawnChild(services, { conversationId: first.id, cwd: "/work" }, { prompt: "two" }, fakeTurn([]));
         expect(fromChild).toMatchObject({ ok: false, message: expect.stringContaining("depth") });
         await settled(first.id);
+    });
+});
+
+/* ---- where a spawned child runs (the fleet) ---- */
+
+describe("placing a child on the fleet", () => {
+    /* Every assertion here waits for the child to SETTLE first. A spawn hands its turn to a detached pump and
+     * returns immediately, so reading the recorded turn any earlier reads an empty array, and an assertion
+     * that the placement is absent would pass on a turn that had not started. */
+    const placementOf = async (services: Services, spec: Parameters<typeof spawnChild>[2]): Promise<AgentTurn["placement"]> => {
+        const turns: AgentTurn[] = [];
+        const result = await spawnChild(services, parent, spec, fakeTurn(turns));
+        expect(result.ok).toBe(true);
+        await settled(result.ok ? result.id : "");
+        return turns[0]?.placement;
+    };
+
+    /* THE POINT OF THE WHOLE FEATURE, in one assertion: a turn that fans out spreads onto the machines the
+     * owner connected without anybody choosing per agent, which is the only way thirty of them get placed. */
+    it("sends a child to a ready runner with no one asking", async () => {
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go" })).toEqual({ kind: "runner", id: "rig" });
+    });
+
+    it("keeps the work here when there is no fleet", async () => {
+        expect(await placementOf(fakeServices(), { prompt: "go" })).toBeUndefined();
+    });
+
+    // Six slots on eight cores, all taken: the sandbox that was free all along beats waiting for one.
+    it("keeps the work here when every machine is full", async () => {
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), { prompt: "go" })).toBeUndefined();
+    });
+
+    it("honours a machine the caller named over the one with more room", async () => {
+        const fleet = [
+            { id: "rig", online: true },
+            { id: "other", online: true, cpus: 32 },
+        ];
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", on: "rig" })).toEqual({ kind: "runner", id: "rig" });
+        // Nobody asking gets the roomier machine, which is what makes the line above a real preference.
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go" })).toEqual({ kind: "runner", id: "other" });
+    });
+
+    it("`here` pins a child to this sandbox even with a fleet standing by", async () => {
+        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", on: "here" })).toBeUndefined();
     });
 });

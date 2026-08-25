@@ -534,6 +534,14 @@ const grab = (event: PointerEvent): void => {
                 :class="model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
             >
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
+                <!-- WHERE IT IS RUNNING, said only when that is somewhere other than here (runners/). A fleet
+                     spreads its own work across machines without anybody choosing per agent, so the card is
+                     where "this one is on the desktop" stops being invisible. Absent on the ordinary card,
+                     which is every card on a sandbox with no runners. -->
+                <span v-if="agent.runner !== undefined" class="flex shrink-0 items-center gap-1 truncate" :title="`Runs on ${agent.runner}`">
+                    <Icon name="desktop" class="text-2xs" />
+                    {{ agent.runner }}
+                </span>
                 <!-- THE SESSION NAME IS REVEALED, NOT PRINTED, and the argument for that is the lane rather
                      than the name. It is the only thing on this card anybody needs CHARACTER-EXACT: every
                      other word here is read, not retyped: but "needed exactly, occasionally" and "shown on

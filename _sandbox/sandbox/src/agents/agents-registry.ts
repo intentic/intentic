@@ -167,6 +167,13 @@ export interface AgentsRegistry {
     // The persisted entry, the worktree composition (per-repo bases) diff/land need.
     readonly entry: (id: string) => PersistedAgent | undefined;
     readonly running: (id: string) => boolean;
+    /* HOW MANY TURNS ARE IN FLIGHT ON EACH RUNNER RIGHT NOW, by runner id, which is what the fleet scheduler
+     * divides free capacity by (runners/runner-scheduler.ts).
+     *
+     * DERIVED, never counted: this daemon dispatched every one of those turns, so the registry already knows,
+     * and a second tally kept beside it is a number that drifts the first time a turn ends by a path nobody
+     * remembered to decrement. */
+    readonly inFlightByRunner: () => Map<string, number>;
     /* IS THE AGENT ACTUALLY WRITING RIGHT NOW, the narrow half of `running`, for the one caller that can
      * safely act on a live turn.
      *
@@ -453,6 +460,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             provider: entry.provider,
             harness: entry.harness,
             ...(entry.branch !== undefined ? { branch: entry.branch } : {}),
+            ...(entry.runner !== undefined ? { runner: entry.runner } : {}),
             updatedAt: Math.max(entry.updatedAt, state?.lastAt ?? 0),
             attention: {
                 plan: parked.includes("plan"),
@@ -675,6 +683,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         },
         entry: entryOf,
         running: (id) => runtime.get(id)?.running === true,
+        inFlightByRunner: () => {
+            const counts = new Map<string, number>();
+            for (const [id, state] of runtime) {
+                const runner = entryOf(id)?.runner;
+                if (state.running && runner !== undefined) {
+                    counts.set(runner, (counts.get(runner) ?? 0) + 1);
+                }
+            }
+            return counts;
+        },
         writing: (id) => {
             const state = runtime.get(id);
             return state?.running === true && state.stopping === undefined && state.pauses.size === 0;
