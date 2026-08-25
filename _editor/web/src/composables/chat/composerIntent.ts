@@ -178,10 +178,15 @@ export const sendRefusal = (situation: ComposerSituation): string | undefined =>
  * the revision field, where a continuation would be feedback rather than a continuation. And a QUEUED message is
  * already the answer to "what happens next", waiting for a send of its own.
  *
- * TWO PREDICATES, because a pick-up that is waiting on a known instant is still worth a strip and is not yet
- * worth a press. Visible is the strip: it says what happened and what is being waited for. Offered is the press
- * and the Enter key, which are the same offer wearing two shapes, so they share one predicate exactly: a user
- * who reaches for the key because the strip is on screen must not find it does something else. */
+ * TWO PREDICATES, because a pick-up can be worth a strip before it is worth a press. Visible is the strip: it
+ * says what happened and what is being waited for. Offered is the press and the Enter key, which are the same
+ * offer wearing two shapes, so they share one predicate exactly: a user who reaches for the key because the strip
+ * is on screen must not find it does something else.
+ *
+ * They now agree far more often than they used to, and deliberately: a turn the daemon is HOLDING is pressable
+ * whatever its reset instant says (pickUpReady has the argument, which is that withholding the press only ever
+ * sent people to the composer to type the same thing worse). The split survives for the endings with nothing
+ * held, where a press really would just append. */
 export const continueVisible = (situation: ComposerSituation): boolean =>
     situation.pickUp !== undefined && !situation.staged && situation.queued === 0 && !situation.pendingPlan && situation.connected;
 

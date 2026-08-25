@@ -139,6 +139,7 @@ const {
     pendingPlanMessage,
     pickUp,
     continuation,
+    continueTurn: continueChat,
     mode,
     provider,
     model,
@@ -571,17 +572,23 @@ const queuedHint = computed(() => {
 // Resolved per active sandbox rather than held, so switching sandboxes switches rings.
 const history = computed(() => (activeSandboxId.value === undefined ? undefined : inputHistoryFor(activeSandboxId.value)));
 
-/* Send the sentence the press stands for (see continueOffered). It goes down the ordinary send path: it IS
- * an ordinary message, typed by the button instead of by hand, so it lands in the recall ring like any other,
- * and ↑ brings it straight back for anyone who wants to continue with an instruction attached rather than
- * plain. Down here beside the ring rather than up with the offer, so it reads after the thing it writes to. */
+/* Make the press (see continueOffered). What it DOES is the conversation's call, not this view's: on an ending
+ * whose turn the daemon still holds it re-runs that turn, and otherwise it sends the sentence the button shows.
+ *
+ * The ring only takes the second kind. A sent continuation is an ordinary message, typed by the button instead
+ * of by hand, so ↑ brings it straight back for anyone who wants to continue with an instruction attached rather
+ * than plain; a re-run said nothing, and putting a word in the ring that nobody sent would hand them a message
+ * to re-send that had never been a message. Down here beside the ring rather than up with the offer, so it
+ * reads after the thing it writes to. */
 const continueTurn = (): void => {
     if (!reachable.value) {
         return;
     }
-    const text = continuation.value;
-    void send(text);
-    history.value?.record(text);
+    void continueChat().then((sent) => {
+        if (sent !== undefined) {
+            history.value?.record(sent);
+        }
+    });
     pin();
 };
 

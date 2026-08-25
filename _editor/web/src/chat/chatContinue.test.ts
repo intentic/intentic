@@ -154,7 +154,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     continueButton()!.click();
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain, undefined, undefined);
+    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 /* THE WHOLE POINT, in one keystroke. Enter on an empty box did nothing at all before this, so there is no habit
@@ -169,7 +169,7 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain, undefined, undefined);
+    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 /* WHAT THE OFFER MUST NOT DO. Typing is the user saying what happens next in their own words, so the strip goes
@@ -232,15 +232,12 @@ it(`keeps the armed line up on a chat with nothing to continue`, async () => {
     expect(button(`Turn off`)).toBeDefined();
 });
 
-/* THE ENDING THAT USED TO GET NOTHING. A spent allowance stops a turn exactly the way a crash does, work
- * finished and a live session behind it, and it alone knows when the press will work. It used to get a sentence
- * in the transcript and no affordance at all, on the reasoning that a press before the reset re-fails, so the
- * one ending that could have said "and here is when" was the one that made the user type the word by hand.
- *
- * Both halves are asserted here, because either alone is a different bug: the strip has to be UP (so the work
- * is visibly still there and the wait has a length), and the press has to be INERT (so nobody spends a click on
- * a refusal), and the key has to stay out of it. */
-it(`counts a spent allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
+/* A SPENT ALLOWANCE WITH NOTHING HELD: the daemon has no copy of the refused turn (it restarted, or the refusal
+ * reached this window without one), so the only way on really is to say something, and saying it before the
+ * reset really would just append a message to a chat that cannot answer it. That is the one case the wait still
+ * gates, and it is asserted in both halves because either alone is a different bug: the strip has to be UP (so
+ * the work is visibly still there and the wait has a length) and the press has to be INERT, key included. */
+it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
@@ -256,6 +253,48 @@ it(`counts a spent allowance down instead of going quiet, and keeps the press in
     expect(enqueue).not.toHaveBeenCalled();
 });
 
+/* THE HELD TURN, WHICH IS WHAT A SPENT ALLOWANCE ORDINARILY LEAVES, and the case that turns the rule above on
+ * its head: the press is live with the reset eight hours out, because pressing it re-runs the turn the daemon
+ * kept rather than appending anything to the chat.
+ *
+ * This is the bug's own shape, read back off the DOM. A user looking at a dead button and a countdown does not
+ * wait for the countdown; the composer is right there, so they type the word, four times in sixty-five seconds in
+ * the transcript this came from, and the fifth got through eight hours before the reset the notice promised. The
+ * gate never prevented a request. So the gate is gone where there is nothing left to protect, and the strip says
+ * the honest thing instead of the confident one: this never ran, and the reset is a due date rather than a wall. */
+it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
+    const conversation = stoppedChat();
+    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const rerun = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
+    await mountPanel();
+
+    // No claim that work survives a turn that never started, and no wall in front of the press.
+    expect(composerText()).toContain(`The allowance was spent, so this never ran`);
+    expect(composerText()).not.toContain(`the work so far is still here`);
+    expect(continueButton()?.disabled).toBe(false);
+    expect(composerText()).toContain(`Enter to continue`);
+
+    continueButton()!.click();
+    await settle();
+
+    expect(rerun).toHaveBeenCalled();
+    // The whole point: nothing was said. A message here is the pile this replaces, one row per press.
+    expect(enqueue).not.toHaveBeenCalled();
+});
+
+/* A limit reached IN FLIGHT is held too, and it is the one that may honestly claim the work. Same press, same
+ * lack of a gate, different sentence, because a model told to carry on from work that never happened invents
+ * some (RESUME_NOTES.refused vs .limit), and a reader told the same is simply misinformed. */
+it(`tells a mid-turn allowance failure apart from one that refused the turn outright`, async () => {
+    const conversation = stoppedChat();
+    conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: true } };
+    await mountPanel();
+
+    expect(composerText()).toContain(`The allowance ran out mid-turn: the work so far is still here`);
+    expect(continueButton()?.disabled).toBe(false);
+});
+
 // ...and on the far side of the reset it is an ordinary stopped turn, with the ordinary press and the key back.
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
@@ -268,7 +307,7 @@ it(`hands the press over once the allowance has reset`, async () => {
     continueButton()!.click();
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain, undefined, undefined);
+    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 /* THE OUTAGE, IN THE SAME STRIP. It used to be a banner of its own in another component, which is how one

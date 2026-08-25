@@ -48,8 +48,10 @@ import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } fro
 import {
     authResumable,
     clearPendingResume,
+    fireLimitResume,
     outageResumeArmed,
     recordAuthFailure,
+    recordLimitFailure,
     recordOutageFailure,
     startConversationTurn,
 } from "./turn-resume.js";
@@ -1069,9 +1071,16 @@ async function* runTurn(
      * one above, for the same reason: the resume wants the LAST session id, because a 500 that lands mid-turn
      * leaves real work behind it and the resume should continue from there rather than redo it. */
     let outageHit = false;
+    /* A spent allowance refused this turn, so it is HELD for a press rather than for a poll (turn-resume.ts's
+     * pendingLimit says why the allowance is the one failure nothing re-runs on its own). Same finally-time
+     * handling as its two neighbours, and for one reason they do not share: the record needs `providerAnswered`
+     * below, which is only final once the stream is, and it is what decides whether the press re-runs this turn
+     * from the beginning or resumes the session it got partway through. */
+    let limitHit = false;
     // Whether the provider has answered THIS turn at all. Any real content proves it is serving requests, which
     // is what clears a standing outage for every conversation stranded on it, recovery is detected off ordinary
     // traffic instead of a probe anyone has to pay for. Once per turn: the breaker only needs the first word.
+    // It is also what a held turn's re-run branches on, see `limitHit`.
     let providerAnswered = false;
     let usageExtra: Record<string, unknown> | undefined;
     // The turn's usage, kept typed (unlike usageExtra, which is the activity log's opaque `extra`) so the spend
@@ -1166,6 +1175,10 @@ async function* runTurn(
                 // Content AFTER an outage failure means the harness got past it and this turn carried on, so there
                 // is nothing stranded here to resume, the pending record would re-run a turn that finished.
                 outageHit = false;
+                // The same for a rate limit the harness rode out (its own in-turn retry outlasted the window):
+                // this turn is answering, so it is not held, and offering to re-run it would re-run a turn that
+                // is on its way to finishing.
+                limitHit = false;
                 if (!providerAnswered) {
                     providerAnswered = true;
                     recordProviderSuccess(provider);
@@ -1359,8 +1372,24 @@ async function* runTurn(
                     // shapes still resolve through the preceding rate_limit_event or the persisted account
                     // snapshot, one precedence, whatever the rate-limit source.
                     const resetsAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services.accountUsage, resolvedAccount));
+                    /* THE TURN IS BEING HELD, said on the frame, because the client's whole answer to this
+                     * failure hangs off it: a held turn makes Continue a re-run of this turn, and an unheld one
+                     * leaves it what it always was, a new message saying "carry on". The frame goes out while the
+                     * turn is still unwinding, well before the finally records anything, so the condition is
+                     * named once here and read twice, exactly as `resumeArmed` is one branch up: a frame
+                     * promising a re-run the finally then declines to arm is a press that does nothing.
+                     *
+                     * `ran` is read at frame time on purpose. Content arriving AFTER this would mean the harness
+                     * got past the limit, which clears the hold entirely (see the reset beside `outageHit`), so
+                     * there is no case where the finally's answer differs from this one on a turn still held. */
+                    limitHit = input.conversationId !== undefined;
+                    const held = limitHit ? { held: { ran: providerAnswered } } : {};
                     if (resetsAt !== undefined) {
-                        yield { ...event, resetsAt };
+                        yield { ...event, ...held, resetsAt };
+                        continue;
+                    }
+                    if (limitHit) {
+                        yield { ...event, ...held };
                         continue;
                     }
                 }
@@ -1394,6 +1423,21 @@ async function* runTurn(
                 input: { ...input, conversationId: input.conversationId },
                 ...(sessionId !== undefined ? { sessionId } : {}),
                 provider,
+            });
+        }
+        /* A spent allowance refused this turn: hold it whole, so the user's press re-runs THIS turn instead of
+         * sending a fresh "Continue" after it. Nothing polls this entry, which is the difference between it and
+         * the two above and the reason the allowance argument in turn-resume.ts survives intact: the budget is
+         * still the user's to spend, and this only decides what their spending it means.
+         *
+         * `ran` off `providerAnswered`, which is now final: false says the provider refused before the model read
+         * a word, which is the ordinary shape of an already-spent allowance and the case where the session left
+         * behind holds nothing but an unanswered message. */
+        if (limitHit && input.conversationId !== undefined) {
+            recordLimitFailure({
+                input: { ...input, conversationId: input.conversationId },
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                ran: providerAnswered,
             });
         }
         record({ type: "turn.completed", ...(usageExtra !== undefined ? { extra: usageExtra } : {}) });
@@ -1512,6 +1556,23 @@ export const createAgentRoutes = (services: Services) => {
             const run = await startConversationTurn(services, streamAgent, { ...input, conversationId });
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
+            }
+            return { run: run.id };
+        }),
+        /* Run the turn a spent allowance refused, AGAIN, with everything it originally carried. NOT_FOUND when
+         * nothing is held, which is the answer to every way that happens (the failure was something else, a
+         * later turn superseded it, the daemon restarted) and tells the client to fall back to saying something
+         * itself. CONFLICT is deliberately absent: a turn already running on this conversation IS the press
+         * having landed, so a second press answers NOT_FOUND on the entry that turn's start cleared, and a user
+         * pressing twice is told nothing happened twice rather than shown an error the first press caused.
+         *
+         * The re-run is a turn like any other (startConversationTurn), so it journals, notifies and records
+         * identically; what makes it a repeat rather than a new message is the resume note on its prompt, which
+         * every reader of a stored prompt already knows how to strip and to show as a notice. */
+        resume: i.resume.handler(async ({ input }) => {
+            const run = await fireLimitResume(services, streamAgent, input.conversationId);
+            if (run === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
             }
             return { run: run.id };
         }),

@@ -1937,6 +1937,23 @@ export const SteerSchema = z
 // /agent fetch (which sends no cancel frame).
 export const StopTurnSchema = z.object({ conversationId: z.string().min(1).describe("Which conversation's running turn to cancel.") });
 
+/* RUN THE HELD TURN AGAIN, and it carries a conversation id and NOTHING else, which is the entire point of it
+ * existing as its own route rather than as a flag on a turn.
+ *
+ * A spent allowance leaves a turn stranded that the daemon still holds in full: the prompt, the attachments, the
+ * model, the effort, the mode, the worktree, the session that holds whatever it managed to do. Every one of
+ * those is on the turn the daemon already has, and a client that re-derived them from its own transcript would
+ * be re-deriving them from the STRIPPED copy it renders (no preamble notes, no attachment note, no model), which
+ * is how a re-send comes to run a different turn from the one it claims to repeat.
+ *
+ * So the caller says only WHICH conversation, and the daemon re-runs the turn it kept. What comes back is an
+ * ordinary StartedTurn, and the caller then attaches to it exactly as it would to a turn somebody else started
+ * (the resume note on the prompt is what tells an attaching window to reuse the bubble that is already there
+ * instead of drawing the same message twice). */
+export const ResumeTurnSchema = z.object({
+    conversationId: z.string().min(1).describe("Which conversation's held turn to run again."),
+});
+
 // ---- claude rate-limit gate ----
 // The GATE signal: whether the provider is letting turns through right now, and, when it is refusing, which
 // window is binding and when it lifts. This is the SDK's rate_limit_event, mapped one-to-one, and it is only

@@ -1396,7 +1396,10 @@ export class Conversation {
             if (this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.queued.value.length > 0 || this.streaming.value) {
                 return;
             }
-            void this.enqueue(continuationFor(this.messages.value));
+            // The same press the button makes, so a held turn is RE-RUN here too. Which matters more for the
+            // automation than for the button: unattended, this fires three times against one stopped turn, and
+            // three appended "Continue"s is the shape of the pile that made a chat unreadable in the first place.
+            void this.continueTurn();
         }, wait);
     }
 
@@ -1451,6 +1454,27 @@ export class Conversation {
         return this.drainQueue();
     }
 
+    /* WHAT "CARRY ON" ACTUALLY DOES, asked in one place because two callers ask it and an answer that differed
+     * between them would be the worse of the two half the time: the press (the continue strip's button, and Enter
+     * on an empty composer) and the standing version of that press, auto-continue.
+     *
+     * A HELD TURN IS RE-RUN; anything else is continued by saying so. The order matters and only one way round is
+     * safe: a re-run needs the daemon to still be holding the turn, and the fallback is a message that works
+     * whether it is or not, so asking for the re-run first costs a round trip and asking second would cost the
+     * user a message they did not mean to send.
+     *
+     * Returns the words that were sent, or undefined when the held turn was re-run instead and nothing was said.
+     * The caller needs the difference: an actual message belongs in the composer's recall ring, so ↑ brings it
+     * back for anyone who wants to continue with an instruction attached, and a re-run has no words to put there. */
+    async continueTurn(): Promise<string | undefined> {
+        if (await this.resumeHeldTurn()) {
+            return undefined;
+        }
+        const text = continuationFor(this.messages.value);
+        await this.enqueue(text);
+        return text;
+    }
+
     // Drop a queued message before it reaches the agent (the × on its chip).
     removeQueued(id: string): void {
         this.queued.value = this.queued.value.filter((message) => message.id !== id);
@@ -1481,6 +1505,48 @@ export class Conversation {
         this.interrupted = false;
         this.error.value = null;
         return this.drainQueue();
+    }
+
+    /* RUN THE HELD TURN AGAIN, which is what Continue means on an ending the daemon kept the turn for
+     * (PickUp.held, and AgentEvent's error `held` for the argument). Reports whether it started; false sends the
+     * caller back to the ordinary continuation, which is still right for every ending with nothing held.
+     *
+     * NOTHING IS APPENDED HERE, and that absence is the entire feature. A press is the same request again, so
+     * there is no new message to draw: the daemon re-runs the turn with a resume note on its prompt, and the
+     * attach below recognises the note, strips it, and REUSES the bubble the user's words are already in
+     * (reattach → reuseUserBubble). One press, one run, no rows. The alternative is what this replaces: a bubble
+     * reading "Continue" per press, in the record and in the provider session both, and the model reading four of
+     * them back as things it had been asked and had not answered.
+     *
+     * The request only starts the run; watching it is reattach's job, which is also what makes the press safe to
+     * spam. A second press while the first one's turn is running finds `streaming` true and stops at the guard;
+     * one that slips past it is answered NOT_FOUND by a daemon whose held entry that turn has already cleared. */
+    async resumeHeldTurn(): Promise<boolean> {
+        if (this.streaming.value || this.pickUp.value?.held === undefined) {
+            return false;
+        }
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
+        try {
+            const response = await sandboxRequest(`/agent/resume`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify({ conversationId: this.conversationId }),
+            });
+            if (!response.ok) {
+                /* The daemon is not holding it after all: it restarted, or another window has since run a turn
+                 * on this conversation. Both are cases where saying "carry on" is the honest move, so the caller
+                 * falls back to it rather than reporting a failure at a press that was reasonable to make. */
+                return false;
+            }
+        } catch {
+            // The daemon is unreachable. Same answer, for a smaller reason: an offline press must not eat the
+            // one affordance the user has, and the ordinary send path already knows how to hold their words.
+            return false;
+        }
+        await this.reattach();
+        return true;
     }
 
     // Move this conversation onto a re-connected credential for the SAME human account. The session ref moves

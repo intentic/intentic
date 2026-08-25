@@ -6,6 +6,7 @@ import {
     AttachTurnSchema,
     OkSchema,
     ProviderRefusalsSchema,
+    ResumeTurnSchema,
     RewindResultSchema,
     RewindTurnSchema,
     StartedTurnSchema,
@@ -68,6 +69,24 @@ export const agentContract = {
         })
         .input(StopTurnSchema)
         .output(OkSchema),
+    /* Run the conversation's HELD turn again: the one a spent allowance refused, which the daemon kept whole.
+     * NOT_FOUND when it holds none (nothing was stranded, another turn has since superseded it, or the daemon
+     * restarted), which is what tells a client to fall back to saying something itself.
+     *
+     * Separate from `run` because it is a different act. `run` says something new; this repeats something already
+     * said, and the difference has to survive onto the wire or it cannot survive into the transcript: a repeat
+     * sent as a new turn is a new user message, and four presses against one spent allowance then read back, to
+     * the model as much as to the reader, as four things the user said and nobody answered. */
+    resume: oc
+        .route({
+            method: "POST",
+            path: "/agent/resume",
+            summary: "Run a refused turn again",
+            description:
+                "Sends the same turn again when the model provider's allowance refused it, with everything it originally carried. It repeats the request rather than adding a new message to the conversation, so pressing it twice costs nothing and the agent is never told to continue work it has not started.",
+        })
+        .input(ResumeTurnSchema)
+        .output(StartedTurnSchema),
     // Go back to a message: restore the workspace to that turn's checkpoint, drop the messages after it, and
     // forget the provider session. CONFLICT while a turn is running, a restore cannot overwrite files an
     // agent is editing. NOT_FOUND when that message has no checkpoint to go back to.

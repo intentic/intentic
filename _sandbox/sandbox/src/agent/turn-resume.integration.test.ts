@@ -29,8 +29,10 @@ import { turnRunOf } from "./turn-runs.js";
 import {
     clearPendingResume,
     createTurnResumeScheduler,
+    fireLimitResume,
     pendingOutageFailure,
     recordAuthFailure,
+    recordLimitFailure,
     recordOutageFailure,
     resumeInterruptedTurns,
     startConversationTurn,
@@ -1084,4 +1086,126 @@ test("rehydration answers to none of the resume gates: spent, stale and toggle-o
 
     stopTurn("pk-gates");
     await settle("pk-gates");
+});
+
+/* THE HELD TURN AND THE PRESS THAT RUNS IT AGAIN, which is the one resume in this module with no poll behind it.
+ *
+ * A spent allowance is still not auto-resumed and the argument for that is untouched: the budget is the user's.
+ * What these pin is the sentence that argument ends on, "sending again is the user's call to make", which for as
+ * long as re-running was daemon-only the user had no way to act on. All they could do was send a NEW message
+ * after the refused turn, and since the only honest content for one is "carry on", the harness supplied the word
+ * itself: one user row per press in the record, and underneath, one CLI-materialized "Continue from where you
+ * left off." and one SYNTHETIC "No response requested." per press in the provider session the model reads back. */
+
+// A wake that keeps whole turns rather than prompts alone: which SESSION a re-run lands on is half of what
+// these assert, and it is the half that decides whether the model reads an unanswered message of its own.
+const heldWake = (turns: AgentTurn[]): WakeFn =>
+    async function* (_services, input) {
+        turns.push(input);
+        yield { kind: "done" } as AgentEvent;
+    };
+
+test("a turn refused before it ran is sent again in full, and NOT onto the session it left behind", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true }, sessionId: "s-void", ran: false });
+
+    expect(await fireLimitResume(services, heldWake(turns), "lim-1")).toBeDefined();
+    await settle("lim-1");
+
+    expect(turns).toHaveLength(1);
+    // The words ride again IN FULL: a bare "continue" is what this replaces, and it loses the request.
+    expect(turns[0]!.prompt).toContain("ship the parser");
+    // Told plainly that nothing happened. The three notes above it all say "part of it was already completed in
+    // this session, continue from that point", which over a turn that never ran is an instruction to continue
+    // from work that does not exist, and a model handed that instruction answers it by inventing some.
+    expect(turns[0]!.prompt).toContain("no part of the request below was read or acted on");
+    expect(turns[0]!.prompt).not.toContain("continue from that point");
+    /* AND THE VOID SESSION IS DROPPED, which is the change that actually empties the model's context. What is on
+     * disk under s-void is one unanswered message, and resuming a turn that never answered makes the CLI
+     * materialize the resume by writing a "Continue from where you left off." and a synthetic assistant reply
+     * saying "No response requested." Every press against a spent allowance left one more of those. Starting
+     * fresh costs a record-seeded handoff instead, which is what a provider switch already gets. */
+    expect(turns[0]!.sessionId).toBeUndefined();
+
+    clearPendingResume("lim-1");
+});
+
+test("a limit reached mid-flight keeps the session holding its work, and says so", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true }, sessionId: "s-real", ran: true });
+
+    await fireLimitResume(services, heldWake(turns), "lim-2");
+    await settle("lim-2");
+
+    // The opposite call on both counts, and for one reason: this session's tail is real work, so throwing it
+    // away would make the press cost more than it saves, and the model should carry on from it rather than redo.
+    expect(turns[0]!.sessionId).toBe("s-real");
+    expect(turns[0]!.prompt).toContain("allowance ran out while this turn was running");
+    expect(turns[0]!.prompt).toContain("continue from that point");
+
+    clearPendingResume("lim-2");
+});
+
+test("pressing again after a re-run was refused too states the note once, not once per press", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    const wake = heldWake(turns);
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
+
+    await fireLimitResume(services, wake, "lim-3");
+    await settle("lim-3");
+    // The re-run was refused as well, so the turn is held again, carrying the prompt the last fire built.
+    recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
+    await fireLimitResume(services, wake, "lim-3");
+    await settle("lim-3");
+
+    expect(turns).toHaveLength(2);
+    // ONE note, and the same prompt both times. This is the property the whole design turns on: the fourth press
+    // hands the model exactly what the first did, so a chat that bounces off an allowance ten times reads like a
+    // chat that bounced once, and the request that finally lands is the request that was made.
+    expect(turns[1]!.prompt).toBe(turns[0]!.prompt);
+    expect(turns[1]!.prompt.match(/no part of the request below/gu)).toHaveLength(1);
+
+    clearPendingResume("lim-3");
+});
+
+test("a turn that ran before it was refused stops claiming nothing had been done", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    const wake = heldWake(turns);
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
+    await fireLimitResume(services, wake, "lim-4");
+    await settle("lim-4");
+
+    // The re-run got somewhere this time and was then cut off mid-flight, which crosses it to the other arm.
+    recordLimitFailure({ input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
+    await fireLimitResume(services, wake, "lim-4");
+    await settle("lim-4");
+
+    /* The note is RESTATED rather than kept. withResumeNote is idempotent, which is what stops a note stacking
+     * per press and is the wrong answer when the reason has changed underneath: a prompt still saying "nothing
+     * has been done towards it" over a session that now holds work is the same class of lie as the pile it
+     * replaced, told to the same reader. */
+    expect(turns[1]!.prompt).toContain("allowance ran out while this turn was running");
+    expect(turns[1]!.prompt).not.toContain("no part of the request below");
+    expect(turns[1]!.prompt).toContain("ship the parser");
+
+    clearPendingResume("lim-4");
+});
+
+test("nothing held answers with nothing, so the press falls back to saying carry on", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    expect(await fireLimitResume(services, heldWake([]), "lim-none")).toBeUndefined();
+});
+
+test("the next turn on the conversation supersedes the held one, whatever started it", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
+    // What a user TYPING something instead of pressing looks like from here: they have decided against re-running
+    // the old turn, and a press left armed behind their message would start a turn on top of it.
+    clearPendingResume("lim-5");
+
+    expect(await fireLimitResume(services, heldWake([]), "lim-5")).toBeUndefined();
 });

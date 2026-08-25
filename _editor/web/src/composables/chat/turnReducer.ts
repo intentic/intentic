@@ -97,6 +97,9 @@ export type TurnEffect =
           readonly autoResume: Extract<AgentEvent, { kind: "error" }>["autoResume"];
           // provider-outage only: when the next attempt is due and how many are left, see events.ts.
           readonly outage: Extract<AgentEvent, { kind: "error" }>["outage"];
+          // rate_limit only: the daemon is holding this turn, so continuing RE-RUNS it rather than sending a
+          // message after it, and `ran` says whether it got anywhere first. See events.ts for why that matters.
+          readonly held: Extract<AgentEvent, { kind: "error" }>["held"];
       }
     // The turn is alive and waiting on the provider. Not a transcript write at all: the caller renders it where
     // the streaming indicator goes, and the next frame of real content retires it.
@@ -774,6 +777,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 resetsAt: event.resetsAt,
                 autoResume: event.autoResume,
                 outage: event.outage,
+                held: event.held,
             });
         case `provider_retry`:
             return step(state, { kind: `providerRetry`, retry: event });

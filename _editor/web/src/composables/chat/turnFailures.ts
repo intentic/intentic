@@ -263,21 +263,26 @@ export class TurnFailures {
      * broke". Nothing re-runs it by itself, unlike an outage or a rotated token: the allowance is the user's OWN
      * budget, and an automation that spends it the second it reopens is not a decision to make on their behalf.
      *
-     * WHAT IT DOES LEAVE IS THE PRESS. This branch used to end at the sentence, on the reasoning that a
-     * continuation before the reset only re-fails, which is true and which made this the one ending that knew
-     * exactly when the press WOULD work and was also the only one that made the user type the word by hand. The
-     * instant is the answer to both: the offer stands from here, and it says out loud that it is waiting for it.
+     * WHAT IT DOES LEAVE IS THE PRESS, and `held` is what the press now MEANS. The daemon keeps the refused turn
+     * whole and re-runs it (AgentEvent's error `held`), so continuing is the same request again rather than a new
+     * message reading "Continue" appended after it. That distinction is the whole fix: four presses used to leave
+     * four user rows saying "Continue" in the record and, underneath, four turns of provider session in which the
+     * model appeared to have been asked something and declined to answer.
      *
-     * With no instant anywhere (an unpolled pool, a provider that renamed its bucket, the fleet-headroom case
-     * whose own sentence says "send again"), the press is offered live: there is nothing to wait for that anyone
-     * can name, and the daemon's own words already invite the retry.
+     * Carried onto the pick-up rather than acted on here, because three surfaces need it and each needs a
+     * different thing from it: the strip's sentence (a refused turn has no "work so far"), whether the press is
+     * offered at all (a held turn is always pressable, see pickUpReady), and what the press DOES.
      *
      * The frame's own reset instant wins over the usage store's binding window (the frame names the pool that
-     * actually refused). */
+     * actually refused). It rides the notice as information and gates nothing. */
     private applyLimitError(error: TurnError): void {
         const { message } = error;
         const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.account.value))?.resetsAt;
-        this.host.pickUp.value = { reason: `limit`, ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }) };
+        this.host.pickUp.value = {
+            reason: `limit`,
+            ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),
+            ...(error.held === undefined ? {} : { held: { ran: error.held.ran } }),
+        };
         if (resetsAt === undefined) {
             this.host.transcript.notice(message);
             return;

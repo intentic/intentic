@@ -136,7 +136,10 @@ const driveReach: ScopeReach = (method, path) => {
         return false;
     }
     return (
-        oneOf(path, "/agent", "/agent/reply", "/agent/steer", "/agent/stop", "/agents/seen") ||
+        // /agent/resume belongs with /agent rather than above it: it starts the SAME turn the token was already
+        // allowed to start, and a scope that can say something but cannot say it again after a spent allowance
+        // refused it would leave every automation one refusal from stuck.
+        oneOf(path, "/agent", "/agent/reply", "/agent/resume", "/agent/steer", "/agent/stop", "/agents/seen") ||
         /^\/agents\/[^/]+\/(seen|rename|auto-land|resume-after-outage)$/.test(path)
     );
 };

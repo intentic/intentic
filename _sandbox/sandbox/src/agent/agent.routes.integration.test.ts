@@ -135,6 +135,71 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
     expect(filed).toEqual([{ kind: "limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" }]);
 });
 
+/* A SPENT ALLOWANCE HOLDS THE TURN, AND SAYING SO ON THE FRAME IS WHAT MAKES CONTINUE MEAN "AGAIN".
+ *
+ * Asserted end to end, over the two routes together, because the bug lived exactly in the gap between them: the
+ * client could only ever answer a refusal by starting a NEW turn, so continuing meant appending a message, and
+ * the only honest message is "Continue". One row per press in the record; underneath, one CLI-materialized
+ * "Continue from where you left off." and one synthetic "No response requested." per press in the session the
+ * model reads back. Four presses, twelve turns of context describing three refusals it was never told about.
+ *
+ * `ran: false` is the ordinary case and the one worth pinning: an allowance that is already spent refuses the
+ * turn's FIRST request, so nothing ran, and the re-run must neither claim otherwise to the model nor return to
+ * the session holding that one unanswered message. */
+test("a spent allowance holds the turn, and agent.resume runs that same turn again rather than a new message", async () => {
+    const seen: { prompt: string; sessionId?: string }[] = [];
+    let refuse = true;
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* (request) {
+                    seen.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    yield { kind: "session", sessionId: "s-void" };
+                    if (refuse) {
+                        yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
+                    } else {
+                        yield { kind: "delta", text: "on it" };
+                    }
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const first = await runAgentTurn(client, { prompt: "ship the parser", conversationId: "conv-held" });
+    // The frame says the turn is HELD and that nothing ran, which is the whole of what the client needs: a press
+    // now re-runs this turn, and the strip can stop claiming there is work behind it.
+    expect(first).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit", held: { ran: false } }));
+
+    refuse = false;
+    const { run } = await client.agent.resume({ conversationId: "conv-held" });
+    const frames = await collect(await client.agent.attach({ conversationId: "conv-held" }));
+    expect(frames[0]).toMatchObject({ kind: "attached", run });
+
+    expect(seen).toHaveLength(2);
+    // The same request again, in full, behind the note that says why it is here and that nothing was done.
+    expect(seen[1]!.prompt).toContain("ship the parser");
+    expect(seen[1]!.prompt).toContain("no part of the request below was read or acted on");
+    // And NOT onto s-void, whose whole content is the message the provider refused to read.
+    expect(seen[1]!.sessionId).toBeUndefined();
+    expect(frames).toContainEqual(expect.objectContaining({ kind: "frame", event: { kind: "delta", text: "on it" } }));
+});
+
+// ...and once it is not held, the route says so rather than starting something, which is what sends the client
+// back to saying "carry on". A press cannot become a turn nobody asked for just because the daemon forgot.
+test("agent.resume answers NOT_FOUND when nothing is held for the conversation", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    expect(await errorCode(client.agent.resume({ conversationId: "conv-unheld" }))).toBe("NOT_FOUND");
+});
+
 /* DISMISSING A QUESTION ENDS THE TURN, HERE: one request, not the browser's old two.
  *
  * The rule is old: the card was raised because the agent could not choose, so waving it away answers nothing

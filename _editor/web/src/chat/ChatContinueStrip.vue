@@ -51,10 +51,18 @@ const attempts = computed(() => {
     return outage === undefined ? undefined : { attempt: outage.attempt, maxAttempts: outage.maxAttempts };
 });
 const line = computed(() => (pickUp.value === undefined ? `` : pickUpLine(pickUp.value, attempts.value, now.value)));
-// The one thing a waiting press owes the reader: not "disabled", but why, and until when.
-const continueHint = computed(() =>
-    props.ready ? `Pick up where it left off, without retyping` : `Waiting: nothing gets through until the allowance resets`,
-);
+/* What the press promises, and it promises two different things now. A HELD turn is sent again exactly as it
+ * was, so the honest word is "again": nothing is added to the conversation, which is what makes pressing it
+ * twice free and is worth saying to someone who has just watched an allowance refuse them.
+ *
+ * The waiting hint survives for the endings with nothing held, which are the only ones a wait still gates
+ * (pickUpReady). It owes the reader the one thing "disabled" never says: why, and until when. */
+const continueHint = computed(() => {
+    if (pickUp.value?.held !== undefined) {
+        return `Send this turn again, exactly as it was: nothing is added to the chat`;
+    }
+    return props.ready ? `Pick up where it left off, without retyping` : `Waiting: nothing gets through until the allowance resets`;
+});
 
 /* THE OUTAGE'S OWN PAIR OF CONTROLS, which no other ending has, because no other ending has a second party
  * already working on it. Arming is the daemon's per-conversation override, and disarming is the same press

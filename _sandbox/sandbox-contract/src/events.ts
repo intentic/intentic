@@ -971,6 +971,25 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         // Absent means there is nothing automatic to resume: a spent usage limit never has one,
         // and a refused credential has none once re-minting it has already been tried and failed.
         autoResume: z.enum(["scheduled", "available"]).optional(),
+        /* THE DAEMON IS STILL HOLDING THIS EXACT TURN, so the way on is to RE-RUN it rather than to send
+         * something after it. rate_limit only, and the counterpart to `autoResume` rather than a member of it:
+         * that field answers "is a machine bringing this back", and a spent allowance is the one failure where
+         * the answer is deliberately no (the allowance is the user's own budget to spend, turn-resume.ts). This
+         * answers the question that was never asked, "and if the user says go, what happens", which had exactly
+         * one possible answer for as long as it went unasked: a new user message reading "Continue".
+         *
+         * That answer was wrong in a way the chat could not show. The press is not a new instruction, it is the
+         * same one again, and appending it said otherwise to the only reader that matters: the provider session
+         * grew one "Continue" per press, each with a synthetic "No response requested." above it, so a chat that
+         * bounced four times handed the model four turns in which it appeared to have declined to answer. With
+         * this field the press re-runs the held turn instead, which is idempotent by construction (a second press
+         * finds a live turn and supersedes nothing) and leaves the transcript one row for one press.
+         *
+         * `ran` is whether the held turn got anywhere before it was refused, and it changes both what the model
+         * is told (RESUME_NOTES.limit vs .refused, and telling a model to carry on from work that never happened
+         * is how it comes to invent some) and what the strip can honestly say. A spent allowance refuses the
+         * FIRST request most of the time, so false is the common case, not the corner. */
+        held: z.object({ ran: z.boolean() }).optional(),
         /* provider-outage only: the shape of the wait. `retryAt` (epoch seconds) is when the next attempt is
          * due, not a fixed cadence, because an outage has no reset instant to aim at and hammering a provider
          * that is down only spends tokens on refusals, so each attempt waits longer than the last
@@ -1035,6 +1054,23 @@ export const RESUME_NOTES = {
     auth: `The Claude credential that interrupted this conversation has been renewed, and this turn resumed automatically. ${REPEATED}`,
     outage: `The model provider was briefly unavailable and interrupted this conversation; this turn resumed automatically. ${REPEATED}`,
     restart: `The sandbox restarted while this turn was running, which stopped it, and this turn resumed automatically once it came back. ${REPEATED}`,
+    /* A SPENT ALLOWANCE STRANDS A TURN IN TWO SHAPES, and they must not share a note.
+     *
+     * `limit` is the mid-turn one and reads like its three neighbours above: the session holds real work, and
+     * carrying on from it is exactly right.
+     *
+     * `refused` is the turn the provider turned away at the door, before the model read one word of it, and it
+     * is the COMMONER of the two, because an allowance that is already spent refuses the first request it is
+     * asked. REPEATED is actively wrong for it: "part of it was already completed in this session, continue from
+     * that point instead of starting over" is an instruction to continue from work that does not exist, and a
+     * model handed that instruction answers it by inventing the work. So it says the opposite, plainly.
+     *
+     * Both are unlike their neighbours in one way worth stating: nothing resumed automatically. A spent
+     * allowance is the user's own budget and stays their call to spend (turn-resume.ts), so what re-ran this
+     * turn was a person pressing Continue. */
+    limit: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again. ${REPEATED}`,
+    refused:
+        "The model provider refused the previous attempt at this request outright, because its usage allowance was spent: no part of the request below was read or acted on, and nothing has been done towards it. It has been sent again, and starts from the beginning.",
     // A turn that was PARKED on the user when the daemon died: nothing re-runs at boot, the card is restored
     // instead, and this is the turn their answer starts (turn-resume.ts). What rides below the note is the
     // answer itself, so the model picks the session back up at exactly the decision it had handed over.
@@ -1080,6 +1116,14 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     auth: { kind: "notice", text: "Claude sign-in renewed, this turn picked up where it left off." },
     outage: { kind: "notice", text: "The model provider came back, this turn picked up where it left off." },
     restart: { kind: "notice", text: "The sandbox came back, this turn picked up where it left off." },
+    /* THE ONE PAIR NOBODY AUTOMATED, said in the passive voice the other three earn honestly and these two do
+     * not: a person pressed Continue. Which is the whole reason these rows exist at all. A press used to append
+     * the word "Continue" as a message of its own, so a chat that bounced off a spent allowance four times read
+     * back as the user saying "Continue" four times to an agent that had answered none of them, and the provider
+     * session the model actually reads accumulated all four (plus a synthetic "No response requested." per
+     * press). One row for one press was never the problem; a row that claims the user said something new is. */
+    limit: { kind: "notice", text: "Sent again after the allowance ran out mid-turn, picking up where it left off." },
+    refused: { kind: "notice", text: "Sent again after the allowance refused it: nothing had run." },
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
 

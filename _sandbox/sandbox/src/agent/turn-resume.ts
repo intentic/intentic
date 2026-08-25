@@ -1,4 +1,12 @@
-import { type AgentEvent, type AgentReply, type AgentTurn, type ParkedCard, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentReply,
+    type AgentTurn,
+    type ParkedCard,
+    RESUME_NOTES,
+    withoutResumeNote,
+    withResumeNote,
+} from "@intentic/sandbox-contract";
 import { fireAutomation, type WakeFn } from "../automations/scheduler.js";
 import { replaceRejectedToken } from "../claude/claude-credentials.js";
 import type { Services } from "../composition.js";
@@ -91,11 +99,15 @@ const AUTH_RESUME_DEADLINE_MS = 60_000;
 // on, so it names the act rather than the machinery, see abandonResume.
 const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed in time: reconnect the account, then send again.";
 
-// Every turn start clears its conversation's pending resumes, both kinds. Whatever runs next (the user
-// retrying by hand, the scheduler's own fire) supersedes them.
+// Every turn start clears its conversation's pending resumes, all three kinds. Whatever runs next (the user
+// retrying by hand, a press on the held turn, the scheduler's own fire) supersedes them. The held-limit entry
+// belongs here for a reason its neighbours do not have: a user who answers a refusal by TYPING something new has
+// decided against re-running the old turn, and leaving it armed would offer them a press that undoes their own
+// message by starting a turn on top of it.
 export const clearPendingResume = (conversationId: string): void => {
     pendingAuth.delete(conversationId);
     pendingOutage.delete(conversationId);
+    pendingLimit.delete(conversationId);
 };
 
 export interface AuthFailure {
@@ -164,6 +176,82 @@ export const recordOutageFailure = (failure: OutageFailure, now: number = Date.n
 
 export const pendingOutageFailure = (conversationId: string): OutageFailure | undefined => pendingOutage.get(conversationId);
 
+/* A TURN A SPENT ALLOWANCE STRANDED, HELD FOR A PRESS AND FOR NOTHING ELSE. The one entry in this module with
+ * no poll behind it, which is the point of it rather than an omission.
+ *
+ * The header above says why a usage limit is not auto-resumed and that argument stands unchanged: the allowance
+ * is the user's own budget and spending it is theirs to decide. What that argument never covered is the sentence
+ * it ends on, "sending again is the user's call to make", because for as long as re-running was daemon-only the
+ * user had no way to send THIS turn again. All they could do was send a NEW message after it, and since the
+ * only honest content for that message is "carry on", the harness supplied the word itself.
+ *
+ * So the transcript filled with it. A chat that bounced off a spent allowance four times recorded four user rows
+ * reading "Continue", the fourth turn read all four back, and the provider session underneath had accumulated a
+ * CLI-materialized "Continue from where you left off." and a synthetic "No response requested." above each one:
+ * twelve turns of the model's context describing three refusals it was never told about, four of them assistant
+ * turns it never produced. The one thing the model could not learn from any of it was that a provider had said
+ * no. This entry is what a press reaches instead.
+ *
+ * NO STALENESS SWEEP, unlike its neighbours, because nothing here fires on its own: an entry that goes stale is
+ * an entry nobody pressed, it costs one map slot, and it is cleared by the next turn on the conversation
+ * whatever starts it (clearPendingResume). A press hours later is a person deliberately picking work back up,
+ * which is exactly what a reset instant hours out invites, and refusing them on age would be this module
+ * inventing a deadline the allowance never had. */
+export interface LimitFailure {
+    readonly input: AgentTurn & { conversationId: string };
+    // The session the failed turn last reported. Kept even when the turn did nothing with it, so the fire can
+    // decide (see `ran`); dropping it here would make the two cases indistinguishable one layer down.
+    readonly sessionId?: string;
+    /* Whether the refused turn got ANYWHERE before the allowance stopped it, and the only field the fire
+     * branches on. False is the common case and the one worth naming: an allowance that is already spent refuses
+     * the first request of the turn, so nothing ran, the session holds one unanswered message, and both the
+     * session and the note that would tell the model to "continue from that point" are actively wrong to reuse
+     * (see resumedTurn's `fresh`, and RESUME_NOTES.refused). True is a limit reached mid-flight, where the
+     * session holds real work and throwing it away would make the press cost more than it saves. */
+    readonly ran: boolean;
+}
+
+const pendingLimit = new Map<string, LimitFailure>();
+
+/* Hold a turn a spent allowance refused. Recorded from the turn's own exit, like its two neighbours and for the
+ * same reason (the failing run still owns the conversation at that moment).
+ *
+ * Recorded unconditionally, including for a turn that is ITSELF already a resume: the auth rule's argument for
+ * refusing that (a credential that refuses a fresh token is dead, so retrying is hopeless) has no analogue here.
+ * An allowance refusing twice means the allowance is still spent, which is the ORDINARY case and says nothing at
+ * all about whether the next press works, and this module is not the thing deciding when to press. */
+export const recordLimitFailure = (failure: LimitFailure): void => {
+    pendingLimit.set(failure.input.conversationId, failure);
+};
+
+/** Whether a press on this conversation has a held turn to re-run, and what the strip may say about it. */
+export const pendingLimitFailure = (conversationId: string): LimitFailure | undefined => pendingLimit.get(conversationId);
+
+/* RUN THE HELD TURN AGAIN, on a press. Undefined when there is nothing held (never stranded, superseded by a
+ * later turn, or the daemon restarted and this map went with it) or when a turn is already running on the
+ * conversation, which is what makes a second press free rather than doubled.
+ *
+ * Nothing is consumed HERE: the entry is dropped by the turn this starts, through the same clearPendingResume
+ * every turn start runs, and re-armed by recordLimitFailure on that turn's exit if the allowance refuses it
+ * again, with a `ran` describing what THIS attempt did rather than what the last one did. So the press survives
+ * being pressed and the map never holds a turn that a later turn has overtaken. */
+export const fireLimitResume = async (services: Services, wake: WakeFn, conversationId: string): Promise<TurnRun | undefined> => {
+    const held = pendingLimit.get(conversationId);
+    if (held === undefined) {
+        return undefined;
+    }
+    // `restate` on both arms: the note has to describe THIS attempt's starting point, and a turn can cross
+    // between the two arms in either direction between presses (a refused turn that then runs and is cut off
+    // mid-flight; a mid-flight failure whose re-run is refused at the door by a window that has since closed).
+    return startConversationTurn(
+        services,
+        wake,
+        held.ran
+            ? resumedTurn(held, RESUME_NOTES.limit, { restate: true })
+            : resumedTurn(held, RESUME_NOTES.refused, { fresh: true, restate: true }),
+    );
+};
+
 /* WHOSE ANSWER IT IS THAT A STRANDED TURN COMES BACK, asked in one place, because two callers ask it about
  * the same turn seconds apart and a disagreement between them is the worst possible outcome: the failure frame
  * promises the chat a retry, and the pass that would perform it declines.
@@ -188,16 +276,37 @@ export const outageResumeArmed = async (services: Services, conversationId: stri
  * the CLI persisted the unprocessed user message before the refusal is its own implementation detail, and a
  * resume that guesses wrong there loses the message, repeating it costs at most a duplicate the model reads
  * past. The session override keeps partial work; with no session to return to, the turn starts a fresh one and
- * the daemon seeds it from this conversation's record, the same way a switched turn is seeded. */
+ * the daemon seeds it from this conversation's record, the same way a switched turn is seeded.
+ *
+ * `fresh` REFUSES the session on purpose, and it is the option a turn refused at the door needs. Such a turn
+ * created a provider session, wrote the unprocessed prompt into it, and then produced nothing, so what is on
+ * disk under that id is one unanswered message, and the append-only session file offers no way to take it back.
+ * Resuming it costs more than the empty context it carries: the CLI materializes a resume of a turn that never
+ * answered by writing a "Continue from where you left off." of its own and a SYNTHETIC assistant reply saying
+ * "No response requested.", so every attempt against a spent allowance left the model one more turn in which it
+ * appeared to have been asked something and declined. Four presses, four of those. Starting fresh instead costs
+ * a record-seeded handoff (turn-transcript.ts → handoffHistory), which is the same seeding a provider switch
+ * gets and is complete enough to have been built for exactly this.
+ *
+ * `restate` REPLACES a note already on the prompt rather than keeping it. withResumeNote is idempotent, which is
+ * what stops a note stacking per press, and idempotent is the wrong answer when the REASON has changed
+ * underneath: a turn refused at the door (told "nothing has been done towards it") that then runs, does some
+ * work and is refused again mid-turn must stop saying nothing has been done. */
 const resumedTurn = (
     failure: { readonly input: AgentTurn & { conversationId: string }; readonly sessionId?: string },
     note: string,
+    options: { readonly fresh?: boolean; readonly restate?: boolean } = {},
 ): AgentTurn & { conversationId: string } => {
-    const sessionId = failure.sessionId ?? failure.input.sessionId;
+    // The turn's own id is destructured OUT before anything is added back, because `fresh` has to be able to
+    // unset one the failed turn carried: spreading the input whole and then conditionally adding the resolved
+    // id would leave the input's in place on exactly the path that means "not that session".
+    const { sessionId: _carried, ...rest } = failure.input;
+    const sessionId = options.fresh === true ? undefined : (failure.sessionId ?? _carried);
+    const prompt = options.restate === true ? withoutResumeNote(failure.input.prompt) : failure.input.prompt;
     return {
-        ...failure.input,
-        prompt: withResumeNote(failure.input.prompt, note),
-        ...(sessionId !== undefined ? { sessionId } : {}),
+        ...rest,
+        prompt: withResumeNote(prompt, note),
+        ...(sessionId === undefined ? {} : { sessionId }),
     };
 };
 

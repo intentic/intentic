@@ -72,14 +72,26 @@ const head = (overrides?: Partial<{ run: string; prompt: string; startedAt: numb
 // /agent/attach streams the head, the given events as seq-stamped frames, then `end`; control posts ack ok.
 // stayOpen leaves the attach stream open after the frames; aborting the request then errors it, mirroring
 // fetch cancellation.
-const sseResponse = (events: AgentEvent[], options?: { stayOpen?: boolean }): ((path: string, init?: RequestInit) => Promise<Response>) => {
+/* `head` overrides the attach head's fields, which a RESUMED run needs two of. `prompt`, because a resumed run's
+ * prompt is the original words behind a resume note, and recognising that note is how an attaching window reuses
+ * the bubble instead of drawing a second copy. And `startedAt`, because the default is 0 and an adopted run's
+ * start is what its DURATION is measured from (endTurn → scheduleAutoContinue): left at the epoch, every resumed
+ * turn reads as having run for fifty-six years, which resets the auto-continue ladder on every rung.
+ *
+ * A THUNK, not a value, because it is read per attach: a test that serves several runs off one implementation
+ * would otherwise stamp them all with the instant the mock was installed, and a "run" that started thirty
+ * seconds of fake time ago is one the ladder reads as having got somewhere. */
+const sseResponse = (
+    events: AgentEvent[],
+    options?: { stayOpen?: boolean; head?: () => Partial<{ prompt: string; startedAt: number }> },
+): ((path: string, init?: RequestInit) => Promise<Response>) => {
     return (path, init) => {
         if (path !== `/agent/attach`) {
             return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
         }
         const body = new ReadableStream<Uint8Array>({
             start(controller) {
-                controller.enqueue(sseFrame(head()));
+                controller.enqueue(sseFrame(head(options?.head?.())));
                 events.forEach((event, index) => controller.enqueue(sseFrame({ kind: `frame`, seq: index + 1, event })));
                 if (!options?.stayOpen) {
                     controller.enqueue(sseFrame({ kind: `end` }));
@@ -1784,6 +1796,84 @@ describe(`Conversation`, () => {
         expect(conversation.pickUp.value).toEqual({ reason: `limit` });
     });
 
+    /* THE PRESS ON A HELD TURN IS A RE-RUN, AND SAYS NOTHING, which is the whole of the fix these three tests
+     * exist for and the one thing every other spelling of "continue" got wrong.
+     *
+     * The bug: continuing could only mean sending a message, so the harness sent the only message that fits,
+     * "Continue". A chat bouncing off a spent allowance therefore recorded one user row per press, and the
+     * provider session underneath recorded worse, a CLI-materialized "Continue from where you left off." and a
+     * SYNTHETIC assistant turn reading "No response requested." above each one. The transcript this came from
+     * reached four presses in sixty-five seconds, so the request that finally got through carried twelve turns
+     * describing three refusals the model was never told about, four of them answers it had never given. */
+    it(`re-runs the held turn on a press instead of appending anything to the chat`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }]),
+        );
+        await conversation.send(`ship the parser`, settings);
+
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
+
+        // The re-run's own run: the SAME words, behind the note saying why they are here again.
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+                head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
+            }),
+        );
+        // Undefined: nothing was said, so there is nothing for the composer's recall ring to take.
+        await expect(conversation.continueTurn()).resolves.toBeUndefined();
+
+        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/resume`);
+        // No second turn STARTED. /agent is what saying something costs, and nothing was said.
+        expect(turnBodies()).toHaveLength(1);
+        // One user row, still their own words: the note came off and the bubble was reused, not repeated.
+        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+    });
+
+    // ...and it stays one row however many times it is pressed against an allowance that keeps refusing, which is
+    // the ground truth this was written from: four presses, one question, and a transcript that read back as four.
+    it(`keeps one user row through four presses against an allowance that keeps refusing`, async () => {
+        const conversation = new Conversation(`c1`);
+        const refuse = (prompt?: string): ReturnType<typeof sseResponse> =>
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }], {
+                head: () => ({ startedAt: Date.now(), ...(prompt === undefined ? {} : { prompt }) }),
+            });
+        sandboxRequestMock.mockImplementation(refuse());
+        await conversation.send(`ship the parser`, settings);
+
+        sandboxRequestMock.mockImplementation(refuse(withResumeNote(`ship the parser`, RESUME_NOTES.refused)));
+        for (let press = 0; press < 4; press += 1) {
+            await conversation.continueTurn();
+        }
+
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        // Still offering the press, because the turn is still held: a re-run refused is a re-run to make again.
+        expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
+    });
+
+    /* THE DAEMON IS NOT HOLDING IT AFTER ALL, which is what a restart between the refusal and the press looks
+     * like. The press must not become a dead button over it: saying "carry on" is what continuing meant before
+     * any of this and is still the honest move, so the fallback runs and the words go out as an ordinary turn. */
+    it(`falls back to saying carry on when the held turn has gone`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } }, { kind: `done` }]),
+        );
+        await conversation.send(`ship the parser`, settings);
+
+        const refusedResume = sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]);
+        sandboxRequestMock.mockImplementation((path, init) =>
+            path === `/agent/resume`
+                ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ message: `no held turn` }) } as Response)
+                : refusedResume(path, init),
+        );
+        await expect(conversation.continueTurn()).resolves.toBe(CONTINUATIONS.plain);
+
+        expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+    });
+
     /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where the ladder alone gets
      * it wrong: three retries five, fifteen and forty-five seconds into a quota that reopens in an hour spends
      * the whole automation on guaranteed failures and then gives up, hours before the work could have resumed.
@@ -1808,6 +1898,35 @@ describe(`Conversation`, () => {
 
             await vi.advanceTimersByTimeAsync(3_600_000);
             expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /* THE AUTOMATION MAKES THE SAME PRESS, which matters more here than at the button: unattended, this fires
+     * three times against one stopped turn, and three appended "Continue"s IS the pile. An automation that
+     * re-runs instead costs three refused requests and leaves the transcript exactly as it found it. */
+    it(`re-runs the held turn when it continues itself, rather than appending three nudges`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            const refused = { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } } as const;
+            sandboxRequestMock.mockImplementation(sseResponse([refused, { kind: `done` }]));
+            await conversation.send(`ship the parser`, settings);
+
+            sandboxRequestMock.mockImplementation(
+                sseResponse([refused, { kind: `done` }], {
+                    head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
+                }),
+            );
+            // The whole ladder, spent: 5s, 15s, 45s, then it gives up and says so.
+            await vi.advanceTimersByTimeAsync(70_000);
+
+            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(3);
+            expect(turnBodies()).toHaveLength(1);
+            expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+            expect(conversation.autoContinue.value).toBe(false);
         } finally {
             vi.useRealTimers();
         }

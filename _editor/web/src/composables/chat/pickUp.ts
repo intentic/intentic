@@ -23,10 +23,16 @@ export type PickUpReason = `stopped` | `limit` | `outage`;
 export interface PickUp {
     /** Which ending left the work here, read only for the sentence. */
     readonly reason: PickUpReason;
-    /** Nothing gets through before this instant (ms). Only a spent allowance knows one; the press waits for it. */
+    /** When the allowance the failure named is due to reopen (ms). Only a spent allowance knows one. */
     readonly readyAt?: number;
     /** Something OTHER than this window is already bringing the turn back, and when (ms). */
     readonly automatic?: { readonly at: number };
+    /* THE DAEMON IS HOLDING THE TURN ITSELF, so the press RE-RUNS it rather than sending a message after it
+     * (AgentEvent's error `held` has the whole argument). `ran` says whether the held turn got anywhere before it
+     * was refused, which is the difference between two sentences the strip could not previously tell apart: it
+     * said "the work so far is still here" over every spent allowance, including the overwhelmingly common one
+     * that refused the turn's first request and left no work at all. */
+    readonly held?: { readonly ran: boolean };
 }
 
 /* Past this far out a wall-clock time reads better than a countdown: a weekly allowance resets on Tuesday, and
@@ -34,8 +40,24 @@ export interface PickUp {
  * gives: an outage retry expressed as a clock time makes the reader do arithmetic. */
 const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
-/** Whether a press would get through now, or is still waiting on the instant the pick-up named. */
-export const pickUpReady = (pickUp: PickUp, now: number = Date.now()): boolean => pickUp.readyAt === undefined || pickUp.readyAt <= now;
+/* WHETHER TO OFFER THE PRESS AT ALL, which used to be "has the reset instant passed" and is now very nearly
+ * always yes.
+ *
+ * A HELD TURN IS ALWAYS PRESSABLE, whatever the reset says, and withholding it was the most expensive small
+ * decision in this file. The reasoning was sound on its own terms, a press before the allowance reopens only
+ * re-fails, so the button was disabled until then. What it did not account for is that the composer is right
+ * there: a user looking at a dead button and an eight-hour countdown types the word themselves, which used to run
+ * the same send with none of the gate's benefit, and one real transcript did it four times in sixty-five seconds
+ * before the fifth got through, eight hours before the reset the notice had promised. The gate never prevented a
+ * request. It only chose the worse of the two ways to make one.
+ *
+ * With the turn held, a press that re-fails costs one refused request and adds nothing to the conversation
+ * (turn-resume.ts's fireLimitResume is idempotent by construction), so there is nothing left to protect the user
+ * from, and the reset instant goes back to being what it always honestly was: information, in the sentence,
+ * rather than a promise the button is staked on. The wait still gates the endings with nothing held, where a
+ * press really would just append. */
+export const pickUpReady = (pickUp: PickUp, now: number = Date.now()): boolean =>
+    pickUp.held !== undefined || pickUp.readyAt === undefined || pickUp.readyAt <= now;
 
 /** An instant as the strip says it: a countdown while it is close, a weekday and time once it isn't. */
 const pickUpWhen = (at: number, now: number = Date.now()): string =>
@@ -63,12 +85,19 @@ export const pickUpLine = (pickUp: PickUp, attempts: PickUpAttempts | undefined,
         return `The provider failed this turn and nothing is retrying it: the work so far is still here.`;
     }
     if (pickUp.reason === `limit`) {
-        /* The one ending that can promise a working press, and the whole reason this file exists. Before the
-         * reset the strip is a countdown rather than a dead button: the press is coming, and saying WHEN is the
-         * difference between waiting and giving up. */
-        return pickUpReady(pickUp, now)
-            ? `The allowance ran out mid-turn: the work so far is still here.`
-            : `The allowance ran out mid-turn: the work so far is still here, and it carries on ${pickUpWhen(pickUp.readyAt!, now)}, when the allowance resets.`;
+        /* THE TWO SHAPES A SPENT ALLOWANCE COMES IN, which this said one sentence about for as long as it had
+         * one sentence to say. "The allowance ran out mid-turn: the work so far is still here" is true of a limit
+         * reached in flight and false twice over of the commoner one, the allowance that was already spent and
+         * refused the turn's first request: nothing ran, and there is no work so far to still be here. Saying it
+         * anyway is how a reader comes to distrust the line that is also telling them when to come back.
+         *
+         * The reset instant is stated, never promised. It is the provider's own guess at when the window
+         * reopens and it is routinely wrong in the useful direction, so it rides as "not before", with the press
+         * live regardless (see pickUpReady) rather than held behind it. */
+        const opening = pickUp.held?.ran === false ? `The allowance was spent, so this never ran` : `The allowance ran out mid-turn: the work so far is still here`;
+        return pickUp.readyAt === undefined || pickUp.readyAt <= now
+            ? `${opening}. Sending it again is one press.`
+            : `${opening}. The allowance is due back ${pickUpWhen(pickUp.readyAt, now)}; sending it again before that may still get through.`;
     }
     return `This turn stopped before it finished: the work so far is still here.`;
 };
