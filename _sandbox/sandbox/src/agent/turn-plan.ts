@@ -42,6 +42,7 @@ import { createDiagnosticsServer } from "../logs/diagnostics-tools.js";
 import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
+import { queueRunEnabled } from "../terminal/terminal-run.js";
 import type { AgentRequest } from "./agent.js";
 import { armSupervisor, type ChildSupervisor } from "../children/children.js";
 import { spawnNote } from "../children/spawn-note.js";
@@ -873,6 +874,14 @@ export const planHarnessTurn = async (
             // two exits that resolve the same reference back, unconditional, because unlike the cleaners this
             // is not a saving that can be traded away (agent/agent-redaction.ts, agent/agent-secrets.ts).
             secrets: secretAccess,
+            /* The heavy-command queue, forwarded only where the image can actually enforce it: without
+             * bin/queue-run on PATH the rewritten line would name a binary that is not there, which would fail
+             * every heavy command instead of pacing it. Checked here rather than inside the hook so the hook
+             * stays a pure function of its arguments (and so its tests need no filesystem).
+             *
+             * A reader, not a snapshot: the file is one a person edits WHILE watching the box, and re-reading
+             * per command is what makes that edit worth making (agent/agent-terminals.ts). */
+            ...(queueRunEnabled() ? { heavyCommands: () => services.heavyCommands.read() } : {}),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             /* The delegation ceilings, forwarded ONLY WHERE THE OWNER MOVED ONE. An untouched cap is left for the
              * harness to answer, which is not the same as sending the number the harness would have picked: the

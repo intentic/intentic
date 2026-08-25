@@ -62,9 +62,24 @@
         // the root `test` script runs the same prepass and then `turbo run test --only`, which drops the edge
         // and keeps the graph. That is the difference between a suite the fleet can run before landing and one
         // only CI ever sees: 67 of 100 main pipelines failed this job while the whole suite ran nowhere else.
+        // VITEST_MAX_WORKERS is the ONLY thing bounding a repo-wide run's memory, and until this line it was
+        // being stripped before any suite could read it. The root script sets it (`VITEST_MAX_WORKERS=4 turbo
+        // run test --only`), vitest 4 honours it (`if (process.env.VITEST_MAX_WORKERS) resolved.maxWorkers =
+        // ...`), and in between `envMode: strict` rebuilt the task environment without it: measured on turbo
+        // 2.10.8 via `--dry=json`, the test task reported `passThroughEnv: None` and a global passthrough
+        // holding only the 32 telemetry names above. So every vitest fell back to its own default,
+        // `Math.max(availableParallelism() - 1, 1)` = 15 workers on a 16-core box, and `concurrency: 4` made
+        // that FOUR of them: ~64 worker processes for a run the root script believed it had capped at 16.
+        //
+        // That is the same fan-out shape as the 2026-08-25 freeze (see the `concurrency` note at the bottom of
+        // this file, and _editor/web/vitest.config.ts, both of which describe this cap as though it worked).
+        // It is on the TASK rather than in `globalPassThroughEnv` because that list mirrors the Dockerfile's
+        // two ENV blocks statement-for-statement and is diffed against them; this name belongs to `test`
+        // alone. passThrough, so the VALUE stays out of the cache key and this costs one invalidation, once.
         "test": {
             "dependsOn": ["^build"],
-            "outputs": []
+            "outputs": [],
+            "passThroughEnv": ["VITEST_MAX_WORKERS"]
         },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo

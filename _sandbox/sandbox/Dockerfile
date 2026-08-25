@@ -442,6 +442,12 @@ COPY _extensions/workflows/intentic-extension.json /opt/extensions/workflows/
 # realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
 RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
     && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
+# The memory half of the same queue, symlinked the same way and for the same reason: it is the daemon's OWN
+# admission policy (src/platform/memory-admission.ts, the numbers that refuse a turn) run as a command, so
+# queue-run can hold a suite off a pinned box without the policy being written down twice. Fails open on every
+# path, including this binary being absent.
+RUN chmod +x /opt/sandbox/dist/platform/memory-gate.js \
+    && ln -s /opt/sandbox/dist/platform/memory-gate.js /usr/local/bin/memory-gate
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
 # environment skill teaches the agent to extend this very image via an approved overlay Dockerfile.
 COPY _sandbox/sandbox/skills /root/.claude/skills
@@ -450,6 +456,12 @@ COPY _sandbox/sandbox/skills /root/.claude/skills
 # flows through it, so commands run live-visible in tmux sessions — and the agent's output filter, which
 # strips noise from what the model sees.
 COPY --chmod=755 _sandbox/sandbox/bin/tmux-run /usr/local/bin/tmux-run
+# The heavy-command queue the same hook splices in front of a command matching a rule in
+# .intentic/config/heavy-commands.json, so several sessions' test/typecheck fan-outs take turns instead of
+# pinning the cgroup together (src/platform/heavy-commands.ts carries the measurement). It holds an flock, so
+# `flock` (util-linux, already in the base) is its one dependency; a missing one degrades to running the
+# command plainly. Not on PATH ⇒ the daemon never inserts it at all (terminal-run.ts queueRunEnabled).
+COPY --chmod=755 _sandbox/sandbox/bin/queue-run /usr/local/bin/queue-run
 COPY --chmod=755 _sandbox/sandbox/bin/agent-output-filter.mjs /usr/local/bin/agent-output-filter
 # The cleaner registry the filter imports (./cleaners.mjs resolves next to the renamed binary at /usr/local/bin).
 COPY --chmod=755 _sandbox/sandbox/bin/cleaners.mjs /usr/local/bin/cleaners.mjs

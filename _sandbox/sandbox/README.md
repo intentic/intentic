@@ -249,6 +249,21 @@ reports the profile.
   is kept one version back), the post-update health watch, and the owner's per-extension policy (notify / agent-prepared
   / auto). Nothing auto-updates by default; the auto rung is opt-in and gated on a verified listing whose powers didn't
   grow, health-watched with auto-revert.
+- Heavy agent commands take turns, because priorities could not make them.
+  [src/platform/heavy-commands.ts](src/platform/heavy-commands.ts) holds an editable rule list
+  (`.intentic/config/heavy-commands.json`, tracked config the owner and the agent both edit: regex per rule,
+  first match wins, `exempt` for the narrow escape above a broad rule) and the agent's Bash hook splices
+  [bin/queue-run](bin/queue-run) in front of any command that matches, which holds one of N `flock` slots for
+  the life of the command's process tree. The slot is a kernel lock rather than a counter in the daemon
+  precisely so a killed, backgrounded or orphaned command releases it with no lease to expire. Ahead of the
+  slot, [bin/memory-gate](src/platform/memory-gate.ts) runs the daemon's OWN admission policy
+  (`memory-admission.ts`, previously reachable only from the pre-push check) as a command, so the numbers that
+  refuse a turn and the numbers that hold a suite are one set of numbers. Both are bounded and both fail open:
+  past the deadline the command runs anyway, because a queue that can block forever turns one stuck suite into
+  a dead sandbox. Why it exists: nice/ionice ration CPU, and a monorepo fan-out exhausts MEMORY, which no
+  scheduler class rations — on 2026-08-25 09:07-09:29 four sessions' fan-outs pinned this cgroup at 16.00 GiB
+  with memory PSI `full` at 88%, load1 at 312, and the daemon's event loop stalled for 615s; turbo's
+  `concurrency: 4` and `VITEST_MAX_WORKERS=4` each bound ONE invocation and know nothing of the other three.
 - The two things that keep a busy sandbox from eating itself, both keyed on the fact that a child inherits from
   its parent without anyone propagating anything:
   [src/platform/workload-priority.ts](src/platform/workload-priority.ts) renices every direct child so the

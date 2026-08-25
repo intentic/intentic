@@ -8,7 +8,8 @@ import { WORKLOAD_ENV } from "../platform/leftovers.js";
 import { redirectCommand } from "../agents/worktree-redirect.js";
 import { resolveCommandSecrets, type SecretAccess } from "./agent-secrets.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { QUEUE_RUN_BIN, TMUX_RUN_BIN } from "../terminal/terminal-run.js";
+import { type HeavyCommands, matchHeavyCommand } from "../platform/heavy-commands.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 // Rewrites every Bash tool command through bin/tmux-run (baked into the image), so the agent's shell
@@ -86,6 +87,40 @@ const envKeyFlags = (envKeys: readonly string[]): string =>
  * not a shell keyword. */
 const POLITE_PREFIX = "nice -n 10 ionice -c 2 -n 7 ";
 
+/* AND THE ONES DEMOTION IS NOT ENOUGH FOR, put behind bin/queue-run so only so many run at once.
+ *
+ * The demotion above rations CPU, and the thing a monorepo fan-out actually exhausts is MEMORY, which no
+ * scheduler class rations: a niced vitest worker pool occupies exactly as much of the cgroup as an un-niced
+ * one. platform/heavy-commands.ts holds the measurement and the rules; this is only where the wrapper is
+ * spliced in.
+ *
+ * INSIDE the namespace hop and INSIDE the demotion, so the slot covers the whole tree the command forks and
+ * the wait itself is niced: queue-run holds an flock on an inherited descriptor and execs, so what the kernel
+ * releases the slot on is the last process of that tree exiting. Nothing about the agent's own line is
+ * touched — the `-c` copy below still carries the agent's words, so the cleaners and the use ledger read the
+ * verb the agent typed rather than this wrapper.
+ *
+ * A config value reaches a shell line here, so `pool` and `label` are quoted: the file is agent-writable
+ * (that is the point of it), and everything from it is treated as text rather than as shell. The numbers are
+ * integers the schema has already bounded. */
+const queuePrefix = (command: string, config: HeavyCommands | undefined): string => {
+    if (config === undefined) {
+        return "";
+    }
+    const match = matchHeavyCommand(command, config);
+    if (match === undefined) {
+        return "";
+    }
+    const flags = [
+        `--pool ${shellQuote(match.pool)}`,
+        `--limit ${String(match.limit)}`,
+        `--wait ${String(config.waitSeconds)}`,
+        `--memory-gate ${String(config.memoryGateSeconds)}`,
+        `--label ${shellQuote(match.id)}`,
+    ].join(" ");
+    return `${QUEUE_RUN_BIN} ${flags} -- `;
+};
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     /* An isolated turn's Bash must land in the same tree as its Edit/Write, or the two tools disagree about
@@ -114,6 +149,15 @@ export const bashTmuxHooks = (
      * keep the agent's reference-form line. The no-tmux configuration gets the standalone hook instead
      * (agent-secrets.ts secretCommandHooks). */
     secrets?: SecretAccess,
+    /* Reads .intentic/config/heavy-commands.json, or absent when this sandbox does not queue at all (no
+     * queue-run baked into the image, the operator opted out: terminal-run.ts queueRunEnabled).
+     *
+     * A READER rather than a value, and called per command rather than per turn, because the file is one the
+     * owner and the agent both edit by hand. Re-reading it means an edit takes effect on the next command
+     * instead of the next daemon restart, which is the difference between a knob someone turns while watching
+     * the box struggle and one they find out about afterwards. It is a few kilobytes the page cache already
+     * holds; the command it gates costs minutes. */
+    heavy?: () => Promise<HeavyCommands>,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -169,13 +213,27 @@ export const bashTmuxHooks = (
                          * turn in flight. A daemon that can see it was started from a conversation knows it is a
                          * run of the code rather than this sandbox's daemon, and claims nothing. */
                         const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ` : ""}`;
+                        /* Matched on the agent's own line: `command`, not `executed` (a resolved secret must
+                         * never reach a regex or the queue's label) and not the wrapped string (the daemon's
+                         * own `nice`/`nsenter` boilerplate would otherwise satisfy rules of its own).
+                         *
+                         * A failure to read or match must not cost the command: an unreadable file already
+                         * falls back to the shipped defaults inside the store, and anything thrown beyond that
+                         * leaves the queue out of the line entirely rather than failing the tool call. */
+                        const queue = await (async (): Promise<string> => {
+                            try {
+                                return heavy === undefined ? "" : queuePrefix(command, await heavy());
+                            } catch {
+                                return "";
+                            }
+                        })();
                         // The namespace hop goes inside the tmux wrapper: tmux-run itself must stay out here
                         // where the server and the pane logs are. The polite prefix goes with the command
                         // (inside the hop), so the whole build/test tree it forks inherits the demotion.
                         const inner =
                             isolation?.anchor !== undefined
-                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}bash -c ${shellQuote(executed)}`
-                                : `${stamp}${POLITE_PREFIX}bash -c ${shellQuote(executed)}`;
+                                ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`
+                                : `${stamp}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`;
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

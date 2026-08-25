@@ -221,6 +221,18 @@ const STATE_FILES = [
     },
 
     { path: ".intentic/config/settings.json", invalidates: ["settings", "manifests"], portability: "carry", versioned: true },
+    /* Which agent commands are heavy enough to take turns, and how many may run at once (the daemon reads it
+     * per Bash command: platform/heavy-commands.ts).
+     *
+     * `carry`, because the answer is a property of the WORKSPACE rather than of this machine: `pnpm test` fans
+     * out to the same 74 packages wherever the repo is cloned, so a fresh sandbox should arrive already knowing
+     * which commands to queue rather than rediscovering it by freezing once.
+     *
+     * `versioned` for the reason the config slice generally is (personas.json's entry argues it): the file
+     * changes at human speed, it holds no secret, and a change to it is exactly the kind a reviewer should see
+     * — raising the limit is a decision about everyone's sessions on that box, and `git log` is the only thing
+     * that answers "since when have we allowed four of these at once". */
+    { path: ".intentic/config/heavy-commands.json", invalidates: ["settings"], portability: "carry", versioned: true },
     // The rule table's last-fired stamps, beside the rules themselves. `derived` rather than `carry`: it is a
     // record of what happened in THIS sandbox, and carrying it to a fresh one would date every rule to work
     // that machine never did.

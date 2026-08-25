@@ -65,6 +65,7 @@ import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismissals-store.js";
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
+import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/heavy-commands.js";
 import { type CiStore, fileCiStore } from "./ci/ci-store.js";
 import { fileVerifyStore, type VerifyStore } from "./workspace/verify-store.js";
 import { type CiHookReconciler, createCiHookReconciler } from "./ci/hooks.js";
@@ -382,6 +383,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The named personas this sandbox shows the outside world (.intentic/config/personas.json), which connected
     // accounts each speaks for. The turn path reads it to decide what a wake may act through.
     readonly personas: PersonasStore;
+    // Which agent commands are heavy enough to queue (.intentic/config/heavy-commands.json). The agent's Bash
+    // hook reads it per command, so an edit binds on the next command rather than the next restart.
+    readonly heavyCommands: HeavyCommandsStore;
     // Scheduled agent wake-ups (.intentic/config/automations.json), the scheduler polls it; /automations edits it.
     // Their run history is the untracked ledger beside it (.intentic/records/automation-runs.json), joined on read so
     // that nothing above this store knows the two are separate files.
@@ -985,6 +989,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const personas = filePersonasStore(statePath(workspace.root, ".intentic/config/personas.json"), (id, reason) =>
         logger.warn(`personas: skipping unreadable card "${id}" (${reason}), the rest are unaffected`),
     );
+    const heavyCommands = fileHeavyCommandsStore(statePath(workspace.root, ".intentic/config/heavy-commands.json"), (reason) =>
+        logger.warn(`heavy-commands: ${reason}, falling back to the shipped rules`),
+    );
+    /* Written on boot if it is not there yet, because a rule list nobody can see is a rule list nobody edits:
+     * the defaults would work in silence and the first anyone heard of the queue would be a command waiting.
+     * Existing files, including hand-tuned ones, are left exactly as they are (see `seed`). Deliberately not
+     * awaited — a boot must not turn on a config write, and nothing before the first Bash command reads it. */
+    void heavyCommands.seed().catch((error: unknown) => logger.warn({ err: error }, "heavy-commands: could not write the default rules"));
     const ciStore = fileCiStore(statePath(workspace.root, ".intentic/secrets/ci.json"));
     const verifyStore = fileVerifyStore(statePath(workspace.root, ".intentic/records/verify.json"));
     // Hoisted: the background probe runner writes the same cache the /chores route reads, and a second store
@@ -1207,6 +1219,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         platformTunnel,
         capabilityDismissals: fileDismissalsStore(statePath(workspace.root, ".intentic/config/capability-dismissals.json")),
         personas,
+        heavyCommands,
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),

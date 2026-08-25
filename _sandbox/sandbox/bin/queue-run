@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--label ID] -- <command> [args...]
+#
+# Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
+# run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
+# once. The agent's PreToolUse hook (src/agent/agent-terminals.ts) inserts this in front of any Bash command
+# matching a rule in .intentic/config/heavy-commands.json; every other command is untouched and never sees it.
+#
+# WHY A LOCK AND NOT A COUNTER IN THE DAEMON. The slot has to be released by a command that is killed, that
+# backgrounds itself, or that dies with its whole session — and by one running when the daemon restarts under
+# it. An `flock` held on an inherited descriptor is released by the KERNEL when the last holder exits, so none
+# of those cases leaks a slot and there is no lease, no TTL and no reaper to get wrong. The cost is that the
+# lock is held by the process TREE: a command that forks something long-lived and returns keeps the slot until
+# that child exits too. That is the honest accounting — the work really is still running — but it does mean a
+# `run_in_background` build holds its slot for as long as it builds.
+#
+# FD 9 SPECIFICALLY, not bash's `{var}>` form: bash marks automatically-allocated descriptors close-on-exec, so
+# the lock would be dropped at the `exec` below — the command would run holding nothing while queue-run's own
+# exit released the slot it never really had. A literal low fd is inherited across exec, which is the whole
+# mechanism.
+#
+# EVERY FAILURE RUNS THE COMMAND. No flock, no slot directory, a bad argument, an unreadable cgroup: all of it
+# degrades to running the command plainly. This wrapper sits between an agent and its shell, and the one thing
+# it must never become is the reason a command did not run.
+set -u
+
+pool="heavy"
+limit=2
+wait_seconds=900
+memory_gate=0
+label="command"
+poll_seconds="${INTENTIC_QUEUE_POLL:-2}"
+
+# THE COMMAND IS WHATEVER FOLLOWS `--`, and the line is cut there BEFORE any flag is read. Parsing left to
+# right instead means an unrecognised flag — a newer daemon calling an older image's wrapper, which a rollback
+# produces — has no safe reading: stopping there swallows `--future-flag x` into the command line and execs
+# it, and guessing its arity is worse. Cutting first makes an unknown flag exactly as harmless as it should
+# be: ignored, with the command still perfectly delimited. No `--` at all (nothing the daemon emits) means the
+# whole line is the command, because this wrapper must never be the reason a command did not run.
+flags=()
+rest=()
+seen_separator=0
+for arg in "$@"; do
+    if [ "$seen_separator" = 0 ] && [ "$arg" = "--" ]; then
+        seen_separator=1
+        continue
+    fi
+    if [ "$seen_separator" = 1 ]; then rest+=("$arg"); else flags+=("$arg"); fi
+done
+if [ "$seen_separator" = 0 ]; then
+    rest=(${flags[@]+"${flags[@]}"})
+    flags=()
+fi
+set -- ${rest[@]+"${rest[@]}"}
+
+i=0
+while [ "$i" -lt "${#flags[@]}" ]; do
+    case "${flags[$i]}" in
+        --pool) pool="${flags[$((i + 1))]:-heavy}"; i=$((i + 2)) ;;
+        --limit) limit="${flags[$((i + 1))]:-2}"; i=$((i + 2)) ;;
+        --wait) wait_seconds="${flags[$((i + 1))]:-900}"; i=$((i + 2)) ;;
+        --memory-gate) memory_gate="${flags[$((i + 1))]:-0}"; i=$((i + 2)) ;;
+        --label) label="${flags[$((i + 1))]:-command}"; i=$((i + 2)) ;;
+        *) i=$((i + 1)) ;;
+    esac
+done
+
+# Nothing to run is not an error worth a non-zero exit: it means the caller composed an empty command line,
+# and the command it meant to run does not exist to be harmed either way.
+[ $# -eq 0 ] && exit 0
+
+run() { exec "$@"; }
+
+# Digits only. A non-numeric limit or deadline arriving from a config file must not turn into shell arithmetic
+# that errors under `set -u`, or into a negative loop bound that never terminates.
+number() { case "$1" in '' | *[!0-9]*) echo "$2" ;; *) echo "$1" ;; esac; }
+limit=$(number "$limit" 2)
+wait_seconds=$(number "$wait_seconds" 900)
+memory_gate=$(number "$memory_gate" 0)
+poll_seconds=$(number "$poll_seconds" 2)
+[ "$limit" -lt 1 ] && limit=1
+[ "$poll_seconds" -lt 1 ] && poll_seconds=1
+
+# The memory half of the gate, before the slot rather than after: a box with no room should not burn a slot
+# sitting in it. Skipped silently when the binary is absent (a dev daemon, a partial image) — see memory-gate.ts
+# for why every outcome of it is "run the command".
+if [ "$memory_gate" -gt 0 ] && command -v memory-gate >/dev/null 2>&1; then
+    memory-gate --deadline-seconds "$memory_gate" --label "$label" || true
+fi
+
+command -v flock >/dev/null 2>&1 || run "$@"
+
+dir="${INTENTIC_QUEUE_DIR:-${TMPDIR:-/tmp}/intentic-queue}/$pool"
+mkdir -p "$dir" 2>/dev/null || run "$@"
+
+# One pass over the pool: the first slot whose lock is free is taken and kept (fd 9 stays open, deliberately
+# un-closed, all the way through the exec below). A slot we cannot even open is skipped rather than fatal.
+#
+# NO `2>/dev/null` ON THE `exec` BELOW, however tempting it looks beside a file open that can fail. A
+# redirection on `exec` is PERMANENT — `exec 9>slot 2>/dev/null` sets fd 9 AND silences the script's stderr for
+# the rest of its life, which cost this wrapper every one of its notices: the pane showed nothing while a
+# command sat in the queue, and `bash -x` output stopped mid-function, which is how it was found. A failed
+# `exec` redirection returns non-zero without killing a non-interactive bash (verified), so `|| continue` is
+# the whole error path it needs.
+acquire() {
+    local i
+    for ((i = 1; i <= limit; i++)); do
+        exec 9>"$dir/slot.$i" || continue
+        if flock -n 9; then
+            return 0
+        fi
+    done
+    exec 9>&-
+    return 1
+}
+
+acquire && run "$@"
+
+# Every slot was busy. Say so once — the pane is where the person wondering why nothing is happening is
+# looking — then poll until the deadline.
+printf '[queue-run] %s: waiting for a free slot in pool "%s" (limit %s)...\n' "$label" "$pool" "$limit" >&2
+waited=0
+while [ "$waited" -lt "$wait_seconds" ]; do
+    sleep "$poll_seconds"
+    waited=$((waited + poll_seconds))
+    if acquire; then
+        printf '[queue-run] %s: slot free after %ss — starting.\n' "$label" "$waited" >&2
+        run "$@"
+    fi
+done
+
+# Deadline reached. Run it anyway, for the reason memory-admission.ts gives for the same decision: this gate
+# exists to dodge a peak, not to hand whatever is holding the box a veto over the owner's work. A queue that
+# can block forever turns one stuck suite into a dead sandbox — a worse failure, and a much quieter one.
+printf '[queue-run] %s: no slot after %ss — starting anyway.\n' "$label" "$wait_seconds" >&2
+run "$@"

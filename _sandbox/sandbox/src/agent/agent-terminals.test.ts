@@ -3,6 +3,8 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { expect, test } from "vitest";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput } from "../testing.js";
+import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../platform/heavy-commands.js";
+import type { SecretAccess } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
 
 // What the hook makes of the agent's command line before tmux-run sees it: demoted (nice/ionice, priorities
@@ -114,7 +116,11 @@ test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrappe
     // command the pane runs crosses into the namespace (with the demotion, which is the command's own).
     // Without this, `sed -i` would rewrite the shared tree while the same turn's Edit tool wrote to the worktree.
     expect(command).toBe(
-        wrap("sed -i s/a/b/ x.ts", born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`), "edit"),
+        wrap(
+            "sed -i s/a/b/ x.ts",
+            born(`nsenter --mount=/proc/4321/ns/mnt --wdns=${shellQuote("/work")} -- ${demoted("sed -i s/a/b/ x.ts")}`),
+            "edit",
+        ),
     );
 });
 
@@ -186,3 +192,88 @@ test("every command is born carrying the conversation that ran it, ahead of the 
     expect(anchored).toContain(born("nsenter"));
 });
 
+/* THE HEAVY-COMMAND QUEUE, spliced in by this same rewrite (platform/heavy-commands.ts holds the rules and the
+ * measurement behind them). What these pin is WHERE the wrapper lands, because the rest of its behaviour
+ * depends on that: inside the namespace hop or it queues against the wrong tree, inside the demotion or the
+ * wait itself runs at normal priority, and outside `bash -c` or the slot covers a shell that has already
+ * forked the work it was supposed to be pacing. */
+
+const heavy = (over: Partial<HeavyCommands> = {}) => {
+    const config = HeavyCommandsSchema.parse({ ...DEFAULT_HEAVY_COMMANDS, ...over });
+    return () => Promise.resolve(config);
+};
+
+// The demoted form again, with the queue between the demotion and the shell — the position is the assertion.
+const queued = (command: string, label: string, pool = "heavy", limit = 2): string =>
+    `nice -n 10 ionice -c 2 -n 7 /usr/local/bin/queue-run --pool ${shellQuote(pool)} --limit ${String(limit)} --wait 900 --memory-gate 120 --label ${shellQuote(label)} -- bash -c ${shellQuote(command)}`;
+
+test("a heavy command is queued, between the demotion and the shell it runs in", async () => {
+    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
+    expect(command).toBe(wrap("pnpm test", born(queued("pnpm test", "package-script")), "run"));
+});
+
+test("an ordinary command is not queued at all", async () => {
+    // The overwhelming majority of Bash calls, and the ones an agent makes dozens of per turn: no wrapper, no
+    // lock file, no extra process. A queue felt on these would be a queue nobody keeps switched on.
+    const command = await rewritten({ command: "git status" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
+    expect(command).not.toContain("queue-run");
+    expect(command).toBe(wrap("git status", born(demoted("git status")), "run"));
+});
+
+test("a sandbox with no queue configured rewrites exactly as it always did", async () => {
+    // queueRunEnabled() is false on any image without bin/queue-run baked in, and turn-plan then forwards no
+    // reader at all. Naming a binary that is not there would fail every heavy command instead of pacing it.
+    expect(await rewritten({ command: "pnpm test" })).toBe(wrap("pnpm test", born(demoted("pnpm test")), "run"));
+});
+
+test("the queue rides inside the namespace hop, so its slot is held in the tree the command runs in", async () => {
+    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: [], overlays: "/ov" };
+    const command = await rewritten(
+        { command: "pnpm test" },
+        bashTmuxHooks([], { plan, anchor: { pid: 4242, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } }, undefined, undefined, heavy()),
+    );
+    expect(command).toContain("nsenter");
+    expect(command?.indexOf("nsenter")).toBeLessThan(command?.indexOf("queue-run") ?? -1);
+});
+
+test("the agent's own line still reaches the output filter unwrapped", async () => {
+    // `-c` is what cleaner matching and the un-cleaned-commands report read; the queue must no more become the
+    // agent's verb than `nice` was allowed to.
+    const command = await rewritten({ command: "pnpm test" }, bashTmuxHooks([], undefined, undefined, undefined, heavy()));
+    expect(command).toContain(`-c ${shellQuote("pnpm test")} agent-3f2a9b1c`);
+});
+
+test("a pool or label out of the config file is quoted, not interpreted", async () => {
+    /* The file is agent-writable on purpose, and every value from it lands in a line the pane hands to
+     * `bash -c`. Treating all of it as text is the whole of the defence. */
+    const label = "x'; touch /tmp/pwned; '";
+    const nasty = heavy({ rules: [{ id: label, pattern: "\\bmake\\b", pool: "$(id)" }] });
+    const command = await rewritten({ command: "make all" }, bashTmuxHooks([], undefined, undefined, undefined, nasty));
+    // Exact, because "is it quoted" is only answerable against the whole line: both values survive as data
+    // through two levels of quoting (this wrapper's, then tmux-run's) and neither opens a word of its own.
+    expect(command).toBe(wrap("make all", born(queued("make all", label, "$(id)")), "run"));
+    expect(command).not.toContain("--pool $(id) ");
+    expect(command).not.toContain("touch /tmp/pwned; ' --limit");
+});
+
+test("matching reads the agent's reference form, never the resolved secret", async () => {
+    /* Two rewrites compose here and their order is load-bearing: a resolved credential must not reach a
+     * user-authored regex, and must not become a rule id that gets printed into a pane log. The rule below
+     * matches the secret's VALUE, so a queue built after resolution would fire and one built before will not. */
+    const bundle: SecretAccess = { list: async () => [{ name: "TOKEN", value: "pnpm test", source: "env" }], used: () => {} };
+    const reference = `{{secret:${"TOKEN"}}}`;
+    const command = await rewritten({ command: `curl -H ${reference}` }, bashTmuxHooks([], undefined, undefined, bundle, heavy()));
+    // The line the pane runs does hold the value — that is what the exit is for — but it did not decide.
+    expect(command).toContain("pnpm test");
+    expect(command).not.toContain("queue-run");
+});
+
+test("a config that cannot be read costs the command nothing", async () => {
+    // The store already falls back to the shipped rules; anything thrown past that has to leave the queue out
+    // of the line rather than fail the tool call.
+    const command = await rewritten(
+        { command: "pnpm test" },
+        bashTmuxHooks([], undefined, undefined, undefined, () => Promise.reject(new Error("nope"))),
+    );
+    expect(command).toBe(wrap("pnpm test", born(demoted("pnpm test")), "run"));
+});

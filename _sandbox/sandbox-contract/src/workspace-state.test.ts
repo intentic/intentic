@@ -343,6 +343,10 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             // The owner's per-extension update posture (notify / agent / auto): a standing decision about
             // what may run unattended, which is exactly the kind of edit worth a line in `git log`.
             `.intentic/config/extension-update-policy.json`,
+            // Which commands are heavy enough to take turns, and how many may run at once. Tracked because
+            // raising that limit is a decision about every session sharing the box, and `git log` is the only
+            // thing that answers "since when have we been allowing four of these at a time".
+            `.intentic/config/heavy-commands.json`,
             `.intentic/config/loop-designs.json`,
             `.intentic/config/personas.json`,
             // A persona's own kit: the prompt it runs on and the skills only its turns reach. Tracked for the

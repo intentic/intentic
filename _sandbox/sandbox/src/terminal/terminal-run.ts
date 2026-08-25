@@ -27,6 +27,20 @@ const execFileAsync = promisify(execFile);
 // plain invisible `bash -c` with the same result contract, and `visible` gates the terminal frames.
 export const TMUX_RUN_BIN = "/usr/local/bin/tmux-run";
 
+/* The other baked wrapper, which only the AGENT's Bash hook inserts and only in front of a command matching a
+ * rule in .intentic/config/heavy-commands.json (platform/heavy-commands.ts). It holds a slot so several
+ * sessions' test fan-outs take turns rather than landing on the box together.
+ *
+ * It is NOT used by the terminal runner above: those flows are single user-triggered operations (a capability
+ * check, an infra probe), not the repeated many-worker builds that pin this container, and putting the owner's
+ * own click behind an agent's suite would be the wrong queue entirely. */
+export const QUEUE_RUN_BIN = "/usr/local/bin/queue-run";
+
+// Off when the wrapper isn't baked in (local dev, an older image) or the operator opts out. Checked by the
+// caller that builds the agent's hooks, so a sandbox without the binary simply never queues anything —
+// the same fail-open shape tmuxRunEnabled has.
+export const queueRunEnabled = (): boolean => process.env["INTENTIC_AGENT_QUEUE"] !== "0" && existsSync(QUEUE_RUN_BIN);
+
 // What ships back over the wrapper's stdout (the tail, full output stays in the pane + pane log), and the
 // execFile ceiling above it.
 const OUTPUT_TAIL_BYTES = 262_144;

@@ -54,6 +54,7 @@ import { createRequest } from "./agent-requests.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { type TurnRuleCommand, turnEndingHooks } from "../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
+import type { HeavyCommands } from "../platform/heavy-commands.js";
 import { terminalHelpServer } from "../terminal/terminal-help.js";
 import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
@@ -250,6 +251,10 @@ export interface AgentRequest {
      * (agent/agent-secrets.ts), and the browser exit types one into a focused field
      * (browser/secrets-tools.ts). Absent ⇒ none of the three is wired. */
     readonly secrets?: SecretAccess;
+    /* The heavy-command rules, read fresh per Bash command so an edit to the file binds immediately
+     * (platform/heavy-commands.ts). Absent ⇒ this sandbox queues nothing: either the image has no queue-run
+     * baked in or the operator opted out, both answered once by terminal-run.ts queueRunEnabled. */
+    readonly heavyCommands?: () => Promise<HeavyCommands>;
     /* THE HARNESS'S OWN DELEGATION CEILINGS, each raised or lowered by the matching sandbox setting: how many
      * subagents may run at once, how many one conversation may spawn in total, and how deep they may nest.
      * Undefined ⇒ nothing is set in the environment and the CLI's own answer stands, which turn-plan relies on,
@@ -614,7 +619,7 @@ const baseOptions = (
              * still exists, as its own matcher (a reference passed through literally would land in a config as
              * text). */
             tmuxEnabled
-                ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId, request.secrets)
+                ? bashTmuxHooks(Object.keys(request.cliEnv ?? {}), request.isolation, request.conversationId, request.secrets, request.heavyCommands)
                 : request.secrets !== undefined
                   ? secretCommandHooks(request.secrets)
                   : {},
