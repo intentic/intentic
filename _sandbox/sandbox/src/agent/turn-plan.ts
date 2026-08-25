@@ -11,6 +11,7 @@ import {
     capabilitiesOf,
     envSuffix,
 } from "@intentic/sandbox-contract";
+import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
 import { accountsServer } from "../browser/accounts-tools.js";
 import { secretsServer } from "../browser/secrets-tools.js";
 import type { SecretAccess } from "./agent-secrets.js";
@@ -162,6 +163,19 @@ export const conversationExperimentArm = (conversationId: string | undefined, ho
 };
 
 export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
+    /* CAPACITY BEFORE ANYTHING ELSE, and above the dispatch so it covers every provider arm rather than the
+     * one that happens to be wired here. A box with nothing left cannot serve a Claude turn, a Codex turn or an
+     * ACP turn, so asking which of them this is would only be asking a question whose answer does not matter.
+     *
+     * FIRST, so a refused turn costs nothing: the settings read, the capability list, the dependency probe and
+     * the persona load below all run before any credential is checked, and every one of them is work done ON
+     * the box that is already out of room. Three in-memory file reads is the whole price of not doing them.
+     *
+     * Uncapped sandboxes and daemons that cannot see a cgroup admit unconditionally — see admitTurn. */
+    const admission = admitTurn(await readMemoryHeadroom(), context.base.unattended === true);
+    if (!admission.admit) {
+        return { ok: false, code: "sandbox-memory-low", message: admission.message };
+    }
     // Harness (agentic loop) is orthogonal to provider: "native" runs each provider on its own runtime;
     // "claude-code" forces the Claude Code Agent SDK loop for ANY provider, codex/grok then fall through to the
     // harness plan below, which serves them by pointing the harness at the sandbox's translator. The pair's

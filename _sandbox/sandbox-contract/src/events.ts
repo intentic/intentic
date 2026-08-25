@@ -913,6 +913,16 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "context-window-too-small",
                 "subscription-required",
                 "agent-busy",
+                /* THE SANDBOX HAS NO MEMORY LEFT TO RUN THIS TURN, refused before anything was spawned
+                 * (platform/memory-admission.ts). Its own code because it is the only refusal here that is
+                 * about the BOX rather than the request: the prompt, the model and the credential are all
+                 * fine, and the identical request succeeds once something inside frees room, which is the
+                 * opposite of context-window-too-small next door. Transient without being on a clock, so
+                 * there is no resetsAt to offer — what changes the outcome is a turn finishing or a session
+                 * closing, and the message says so. The client HOLDS the words for the same reason
+                 * context-window-too-small does: they never reached a provider, and losing them to a
+                 * capacity fact the user did not cause would be ours to answer for. */
+                "sandbox-memory-low",
             ])
             .optional(),
         // rate_limit only: when the exhausted window reopens (epoch seconds, from the stream's own

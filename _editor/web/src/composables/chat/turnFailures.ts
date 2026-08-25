@@ -153,6 +153,22 @@ export class TurnFailures {
                 this.host.requeue(turn.userMessageId);
                 this.host.transcript.notice(`${message} Your message is held below: pick a bigger model and send it again.`);
                 return;
+            case `sandbox-memory-low`:
+                /* THE BOX, NOT THE REQUEST. The daemon refused before spawning anything because the sandbox had
+                 * no memory left to run a turn in, so the words never reached a provider and are still only in
+                 * this window. Held, like the other refusals that ran nothing.
+                 *
+                 * Muted rather than red: nothing is broken and nothing was lost, the machine is simply full.
+                 *
+                 * NOT auto-resent, which is the whole reason this needs its own case rather than the outage
+                 * loop's. What clears this is a running turn finishing or a session closing, and neither is
+                 * hurried by asking again — a queue that flushed the moment this turn settled would send
+                 * straight back into the same full box, be refused for the same reason, and do it again. The
+                 * user's own next send is the one that goes through, and it is also the evidence that they
+                 * freed something. */
+                this.host.requeue(turn.userMessageId);
+                this.host.transcript.notice(`${message} Your message is held below.`);
+                return;
             case `session-not-found`:
                 /* The runtime could not pick this chat's session back up mid-turn, drop the dead id so the next
                  * send starts a fresh one instead of replaying the failure forever. A muted notice, not the error
