@@ -31,6 +31,14 @@ const GIT_DESTRUCTIVE = [
 ];
 
 const SECRETS_ACCESS = [
+    /* The reference exit, which is a credential READ by another name: `{{secret:NAME}}` in a command becomes
+     * the real value on the way into the process (agent/agent-secrets.ts), so a command carrying one belongs in
+     * this class whatever else it does. Without it the outside-content floor in actions.ts is bypassed by
+     * writing a reference into a curl instead of reading a dotenv, which is the shorter route to the same
+     * place: `curl -d @.env` is held, `curl -d '{"t":"{{secret:X}}"}'` was not. The alphabet is REFERENCE's,
+     * from secrets/secret-registry.ts, respelled rather than imported to keep this table free of a dependency
+     * on the stores it describes. */
+    /\{\{secret:[A-Za-z0-9_./-]+\}\}/,
     /* A dotenv file: `.env`, `.env.production`, `-d @.env`. NOT the checked-in templates that sit beside it in
      * every repo, and not `process.env`, the lookbehind is what excludes the latter, which is otherwise the
      * single most common string in this workspace's own commands and would hold every grep for it. */
@@ -51,16 +59,26 @@ const PACKAGE_PUBLISH = [
     /\btwine\s+upload\b/,
 ];
 
+/* The loopback hosts, as a WHOLE HOST rather than a prefix. `localhost\b` reads as an exemption for
+ * `localhost.attacker.com`, because a `.` is a word boundary, and for `localhost@attacker.com`, where the
+ * loopback name is a URL's userinfo and curl connects to whatever follows the `@`. Either one is a host an
+ * attacker registers, so a prefix test hands it the exemption meant for this container talking to itself, and
+ * with it the outside-content envelope and the turn's taint bit: outsideSourceOf (outside-results.ts) is built
+ * on this class, so a response judged loopback is never wrapped and never marks the turn. The trailing
+ * lookahead is what makes it a whole host, the port is optional, and a URL's authority can only end at one of
+ * `/?#`, whitespace, or a closing quote. */
+const LOOPBACK = String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?=[/?#\s'"\x60]|$)`;
+
 // The sandbox talks to itself over loopback constantly, the host bridge, a dev server the agent just started,
 // and none of that leaves the container, so the class is about reaching OUT rather than about curl.
 const NETWORK_OUTBOUND = [
-    /\b(?:curl|wget)\b[^|;&]*\bhttps?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/,
+    new RegExp(String.raw`\b(?:curl|wget)\b[^|;&]*\bhttps?://(?!${LOOPBACK})`),
     /* The JS execution backend's curl: a literal non-loopback URL handed to `fetch(`. The classifier reads
      * scripts with the same substring honesty it reads shell (the gate feeds it both, see command-gate's
      * EXECUTION_SOURCES), so an owner's rule about reaching out covers both ways of doing it, and the
      * outside-content seam wraps what a fetching script brings back exactly as it wraps a fetching curl's. A
      * URL assembled at runtime walks past this, as the header already admits for shell variables. */
-    /\bfetch\(\s*[`"']https?:\/\/(?!localhost\b|127\.0\.0\.1\b|0\.0\.0\.0\b|\[::1\])/,
+    new RegExp(String.raw`\bfetch\(\s*['"\x60]https?://(?!${LOOPBACK})`),
 ];
 
 // The verb of an `rm` invocation and the flag words that follow it. Read as FLAGS rather than matched as text,

@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, sep } from "node:path";
 import { publicContract, publicLabel, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
@@ -101,9 +101,14 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             if (target === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `"${input.path}" is not a published path` });
             }
-            // A shared conversation is withdrawn by its own action, which also drops it from the list the app
-            // shows. Removing its page through here would leave a row promising a link that answers nothing.
-            if (input.path === SHARE_DIR || input.path.startsWith(`${SHARE_DIR}/`)) {
+            /* A shared conversation is withdrawn by its own action, which also drops it from the list the app
+             * shows. Removing its page through here would leave a row promising a link that answers nothing.
+             * Compared on the RESOLVED path, because that is the one the rm below takes: `./conversations` and
+             * `x/../conversations` address the share root just as plainly as `conversations` does, and a guard
+             * reading the raw input agrees with none of them, so either spelling would take out every published
+             * page while the /share rows survive to promise links that answer nothing. */
+            const shares = join(root, SHARE_DIR);
+            if (target === shares || target.startsWith(shares + sep)) {
                 throw new ORPCError("BAD_REQUEST", { message: "shared conversations are withdrawn from the Shared conversations list" });
             }
             await rm(target, { recursive: true, force: true });

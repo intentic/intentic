@@ -219,8 +219,15 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
     if (real === undefined || !real.startsWith(realRoot + sep)) {
         return notFound();
     }
+    /* Rules 2, 3 and 5 judge the RESOLVED name, not the requested one. Rule 1 above only asks that the bytes
+     * are inside the outbox, so a symlink whose target is also inside it would otherwise launder both name
+     * rules: `logo.png -> .env` is refused as `/.env` and served as `/logo.png`, and because the content type
+     * decides what gets sniffed at all, naming the link `.png` would opt its bytes out of rule 5 too. For every
+     * ordinary file `real === target` and this is the same string. The requested spelling is what a refusal
+     * quotes back, so a symlink's target is never named to whoever asked for it. */
     const relPath = relative(realRoot, target).split(sep).join("/");
-    if (blockByName(relPath) !== undefined) {
+    const realRel = relative(realRoot, real).split(sep).join("/");
+    if (blockByName(realRel) !== undefined) {
         return notFound();
     }
     if (stats.size > MAX_BYTES) {
@@ -231,7 +238,7 @@ export const resolvePublicFile = async (root: string, url: string | undefined): 
             message: `"${escapeHtml(relPath)}" is larger than the 512 MB ceiling the sandbox publishes up to.`,
         };
     }
-    const { type, inline } = contentTypeOf(relPath);
+    const { type, inline } = contentTypeOf(realRel);
     if ((await blockByContent(real, type)) !== undefined) {
         return notFound();
     }
@@ -254,6 +261,12 @@ export interface PublicEntry {
  * listing with a different opinion. An absent outbox lists as empty: publishing is simply off. */
 export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
     const entries: PublicEntry[] = [];
+    // The root resolved once, for the reason the serve path resolves it: with the workspace on a symlinked
+    // mount, measuring real file paths against a symlinked root would call every legitimate file an escape.
+    const realRoot = await realpath(root).catch(() => undefined);
+    if (realRoot === undefined) {
+        return entries;
+    }
     const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
         if (depth > MAX_DEPTH || entries.length >= MAX_ENTRIES) {
             return;
@@ -268,14 +281,23 @@ export const listPublicFiles = async (root: string): Promise<PublicEntry[]> => {
                 await walk(join(dir, dirent.name), path, depth + 1);
                 continue;
             }
-            const stats = await stat(join(dir, dirent.name)).catch(() => undefined);
+            const abs = join(dir, dirent.name);
+            const stats = await stat(abs).catch(() => undefined);
             if (stats === undefined || !stats.isFile()) {
                 continue;
             }
             const entry = { path, size: stats.size, modifiedAt: stats.mtimeMs };
+            /* Judged on the resolved name, the same way the serve path judges it, so this view and a stranger's
+             * request can never disagree about a symlink: a link whose bytes leave the outbox is refused there
+             * and reported here as `escapes`, the reason this type has always declared and nothing produced. */
+            const real = await realpath(abs).catch(() => undefined);
+            if (real === undefined || !real.startsWith(realRoot + sep)) {
+                entries.push({ ...entry, blocked: "escapes" });
+                continue;
+            }
+            const realRel = relative(realRoot, real).split(sep).join("/");
             const blocked =
-                blockByName(path) ??
-                (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(join(dir, dirent.name), contentTypeOf(path).type));
+                blockByName(realRel) ?? (stats.size > MAX_BYTES ? ("too-large" as const) : await blockByContent(real, contentTypeOf(realRel).type));
             entries.push(blocked === undefined ? entry : { ...entry, blocked });
         }
     };

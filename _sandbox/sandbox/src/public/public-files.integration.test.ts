@@ -59,6 +59,31 @@ test("a symlink pointing outside the outbox is refused", async () => {
     expect(await served(root, "/ok.txt")).toBe(true);
 });
 
+/* The other half of that: a symlink whose target is also INSIDE the outbox passes containment, so the name
+ * rules are what has to catch it, and they only do if they read the resolved name. Judging the requested one
+ * meant `/.env` was refused while `/logo.png -> .env` was served, and the requested extension also decided what
+ * got sniffed, so a link named `.png` opted its bytes out of rule 5 as well. */
+test("a symlink to a blocked file inside the outbox is refused under its innocent name", async () => {
+    const root = await outbox({
+        ".env": "CLOUDFLARE_API_TOKEN=abc123supersecret",
+        "server.pem": "-----BEGIN PRIVATE KEY-----\nMIIabc",
+        "ok.txt": "fine",
+    });
+    await symlink(join(root, ".env"), join(root, "logo.png"));
+    await symlink(join(root, "server.pem"), join(root, "readme.txt"));
+    // A PNG is not sniffed at all, which is exactly why the name had to be the resolved one.
+    expect(await served(root, "/logo.png")).toBe(false);
+    expect(await served(root, "/readme.txt")).toBe(false);
+    expect(await served(root, "/ok.txt")).toBe(true);
+});
+
+// A symlink between two servable files is not a trick, and still resolves to the type of the bytes it names.
+test("a symlink to an ordinary file is served", async () => {
+    const root = await outbox({ "v2/index.html": "<h1>hi</h1>" });
+    await symlink(join(root, "v2", "index.html"), join(root, "latest.html"));
+    expect(await resolvePublicFile(root, "/latest.html")).toMatchObject({ kind: "file", type: "text/html; charset=utf-8" });
+});
+
 test("hidden paths are refused at any depth: .env, .git and .ssh in one rule", async () => {
     const root = await outbox({ ".env": "TOKEN=abc", "site/.git/config": "[core]", ".ssh/id_rsa": "key" });
     expect(await served(root, "/.env")).toBe(false);
@@ -121,6 +146,24 @@ test("the listing reports blocked files with their reason rather than hiding the
         "leak.txt": "credential-content",
         "ok.txt": undefined,
         "server.pem": "credential-name",
+    });
+});
+
+/* The owner's view has to agree with the serve path about symlinks, or it promises links that 404 and hides the
+ * ones that would have leaked. `escapes` is the reason for a link whose bytes are outside the outbox: the type
+ * declared it from the start and nothing produced it until the listing started resolving. */
+test("the listing judges a symlink by its target, and names the one that leaves the outbox", async () => {
+    const root = await outbox({ ".env": "TOKEN=abc", "ok.txt": "fine" });
+    const outside = join(root, "..", `escape-${process.pid}.txt`);
+    await writeFile(outside, "aws_secret_access_key=zzz");
+    await symlink(join(root, ".env"), join(root, "logo.png"));
+    await symlink(outside, join(root, "keys.txt"));
+    const listed = await listPublicFiles(root);
+    expect(Object.fromEntries(listed.map((entry) => [entry.path, entry.blocked]))).toEqual({
+        ".env": "hidden",
+        "keys.txt": "escapes",
+        "logo.png": "hidden",
+        "ok.txt": undefined,
     });
 });
 

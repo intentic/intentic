@@ -1,5 +1,5 @@
 import http from "node:http";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readlink, writeFile } from "node:fs/promises";
 import { type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,7 @@ afterAll(async () => {
     await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
 });
 
-const serve = async (files: Record<string, string>): Promise<number> => {
+const servedRoot = async (files: Record<string, string>): Promise<{ port: number; root: string }> => {
     const root = await mkdtemp(join(tmpdir(), "outbox-http-"));
     for (const [name, content] of Object.entries(files)) {
         await writeFile(join(root, name), content);
@@ -24,8 +24,10 @@ const serve = async (files: Record<string, string>): Promise<number> => {
     const server = http.createServer((req, res) => void handler(req, res));
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    return (server.address() as AddressInfo).port;
+    return { port: (server.address() as AddressInfo).port, root };
 };
+
+const serve = async (files: Record<string, string>): Promise<number> => (await servedRoot(files)).port;
 
 const request = (
     port: number,
@@ -115,6 +117,39 @@ test("the outbox is read-only from the internet", async () => {
     const response = await request(port, "/note.txt", { method: "DELETE" });
     expect(response.status).toBe(405);
     expect(response.headers.allow).toBe("GET, HEAD");
+});
+
+/* A viewer walking away mid-download is the ordinary case here (a paused video, a closed tab, a crawler that
+ * gives up), and `pipe` wires up only the destination: the read descriptor stayed open every time, one per
+ * request, on the daemon's one route with no auth in front of it and a 512 MB ceiling. That is a file table
+ * anyone holding the link can exhaust by aborting the same request in a loop, and once it is exhausted
+ * everything else in the container that opens a file fails. `pipeline` destroys both ends instead. */
+test("an aborted download does not leave the read descriptor open", async () => {
+    const { port, root } = await servedRoot({ "big.bin": "x".repeat(16 * 1024 * 1024) });
+    const published = join(root, "big.bin");
+    /* Descriptors pointing at THIS file, not the process's total. A process-wide count is racy here: vitest runs
+     * other files in the same process and they open their own, which would make this pass or fail on timing. */
+    const openHandles = async (): Promise<number> => {
+        const fds = await readdir(`/proc/${process.pid}/fd`).catch(() => [] as string[]);
+        const targets = await Promise.all(fds.map((fd) => readlink(`/proc/${process.pid}/fd/${fd}`).catch(() => "")));
+        return targets.filter((target) => target === published).length;
+    };
+    expect(await openHandles()).toBe(0);
+    for (let i = 0; i < 20; i++) {
+        await new Promise<void>((done) => {
+            const req = http.get({ host: "127.0.0.1", port, path: "/big.bin" }, (response) => {
+                // Abort on the first frame, so the stream is live rather than already drained.
+                response.once("data", () => {
+                    req.destroy();
+                    done();
+                });
+            });
+            req.on("error", () => done());
+        });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    // With `pipe` this was twenty: one abandoned read per aborted request, none of which any later event closes.
+    expect(await openHandles()).toBe(0);
 });
 
 // Every miss looks the same from outside, whatever the reason: the branded page the proxy serves, and nothing

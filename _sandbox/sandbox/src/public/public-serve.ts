@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import type http from "node:http";
+import { pipeline } from "node:stream";
 import { interstitial } from "../panels/interstitial.js";
 import { type PublicResolution, resolvePublicFile } from "./public-files.js";
 
@@ -100,12 +101,15 @@ export const createPublicHandler =
                       { "content-length": range.end - range.start + 1, "content-range": `bytes ${range.start}-${range.end}/${resolution.size}` },
                       createReadStream(resolution.absPath, { start: range.start, end: range.end }),
                   ];
-        // A read that fails after the head is written (the file was deleted mid-stream) has no way left to say
-        // so, dropping the socket is the only honest signal, and the viewer's client reports a truncated
-        // transfer rather than a silently short file.
-        stream.on("error", () => res.destroy());
         res.writeHead(status, { ...headers, ...extra });
-        stream.pipe(res);
+        /* `pipeline`, not `pipe`: it destroys BOTH ends whichever one fails, where `pipe` only ever wires up the
+         * destination and leaves the open descriptor behind every time a viewer walks away mid-download. On a
+         * route with no auth in front of it and a 512 MB ceiling, that is a file table anyone holding the link
+         * can exhaust by aborting the same request in a loop, and an exhausted table breaks every other thing in
+         * the container that opens a file. A read that fails after the head is written (the file was deleted
+         * mid-stream) still has no way left to say so, so dropping the socket remains the only honest signal,
+         * and the viewer's client reports a truncated transfer rather than a silently short file. */
+        pipeline(stream, res, () => undefined);
     };
 
 export type PublicHandler = ReturnType<typeof createPublicHandler>;
