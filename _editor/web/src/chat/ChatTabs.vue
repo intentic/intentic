@@ -2,21 +2,20 @@
 import { AnchoredOverlay, Button, ContextMenu, SearchBar } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { type ComponentPublicInstance, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { startAgent } from "../composables/agents/agentActions";
 import { turnInFlight } from "../composables/agents/agentStatus";
 import { createInlineRename } from "../composables/inlineRename";
 import { useAgents } from "../composables/agents/useAgents";
 import OriginMark from "../components/OriginMark.vue";
+import RailColumn from "../components/RailColumn.vue";
 import { statusIcon, statusLabel, statusTabClass } from "../composables/chat/catalog";
-import { clampRailWidth, DEFAULT_RAIL_WIDTH, RAIL_WIDTH_KEY } from "../composables/chat/chatRail";
 import { chatOnRail, chatWide, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
 import { allTabs, finishedTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, toRightOf } from "../composables/chat/tabs";
 import { useChat } from "../composables/chat/useChat";
 import { useChatFloating } from "../composables/chat/chatFloating";
 import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../composables/commands/useCommands";
-import { toAppPx, uiLength } from "../composables/uiScale";
 import { viewersOfSession } from "../composables/usePresence";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
@@ -99,8 +98,14 @@ const attentionCount = computed(
  * Dismissal is therefore ours: Escape, a second press on the header, picking a chat, or a pointerdown outside
  * the header: except inside an open context menu, which is the one "outside" that is still this sheet. */
 const listOpen = ref(false);
-// The sheet is a child of the bar, so one ref answers both "is this click ours" and "which document are we in".
+/* The sheet is a child of the bar, so one ref answers both "is this click ours" and "which document are we in".
+ * Set through a function because the bar is a plain <header> docked and a RailColumn on a wide surface, and a
+ * component gives back an instance rather than an element: the rail form leaves this null, which is exactly
+ * right, since the sheet exists only in the docked one (out there the list IS the surface). */
 const bar = ref<HTMLElement | null>(null);
+const setBar = (element: Element | ComponentPublicInstance | null): void => {
+    bar.value = element instanceof HTMLElement ? element : null;
+};
 // The rail's list, for the one thing the host has to reach into it for: see the rename command below.
 const rail = ref<InstanceType<typeof ChatTabList> | null>(null);
 
@@ -172,54 +177,6 @@ watch(
         }
     },
 );
-
-// --- Rail width ---------------------------------------------------------------------------------
-// The rail resizes off its RIGHT edge (pointer capture, double-click resets): it stands at the left of every
-// wide surface, and persists locally, because it exists only in those forms. The bounds themselves are
-// chatRail.ts's: the panel needs them too, to know what the panes get.
-const readRailWidth = (): number => {
-    try {
-        const parsed = Number.parseInt(localStorage.getItem(RAIL_WIDTH_KEY) ?? ``, 10);
-        return Number.isFinite(parsed) ? clampRailWidth(parsed) : DEFAULT_RAIL_WIDTH;
-    } catch {
-        return DEFAULT_RAIL_WIDTH;
-    }
-};
-const railWidth = ref(readRailWidth());
-const setRailWidth = (px: number): void => {
-    railWidth.value = clampRailWidth(px);
-    try {
-        localStorage.setItem(RAIL_WIDTH_KEY, String(railWidth.value));
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
-};
-const railResizing = ref(false);
-const startRailResize = (event: PointerEvent): void => {
-    event.preventDefault();
-    railResizing.value = true;
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-};
-// The width is the distance from the rail's own left edge to the pointer: measured off the ELEMENT, not off
-// the window. In a floating window the two are the same thing (the rail is flush with that window's left edge), but in
-// the /chat area the shell's icon rail stands to its left, and a width read as the pointer's x would be that
-// column's width too wide on every drag.
-const onRailResize = (event: PointerEvent): void => {
-    if (railResizing.value) {
-        const left = bar.value?.getBoundingClientRect().left ?? 0;
-        setRailWidth(toAppPx(event.clientX - left));
-    }
-};
-const endRailResize = (event: PointerEvent): void => {
-    if (!railResizing.value) {
-        return;
-    }
-    railResizing.value = false;
-    const target = event.target as HTMLElement;
-    if (target.hasPointerCapture(event.pointerId)) {
-        target.releasePointerCapture(event.pointerId);
-    }
-};
 
 /* The history panel and WHICH button it is hanging off: the docked header's glyph or the rail's "Past chats"
  * button, whichever was pressed. The anchor is also what decides the window it opens in (AnchoredOverlay derives
@@ -458,27 +415,14 @@ const openHistory = (event: Event): void => {
          resizable rail down the window's left edge with the list always open, over a foot that carries the
          same ✚ / history pair the header wears beside it: there as two bare glyphs, here as a labelled
          "Past chats" row and a filled "New agent". -->
+    <!-- The rail form is not this file's box to draw: RailColumn is the column every list of agents stands in
+         (its width, its gutter and its drag), so the rail here and the one on /subagents cannot come apart. -->
     <component
-        :is="vertical ? 'aside' : 'header'"
-        ref="bar"
-        class="relative flex gap-1 border-line"
-        :class="[
-            vertical ? 'h-full shrink-0 flex-col items-stretch p-1.5' : 'view-header items-center border-b px-1.5',
-            { 'rail-resizing': railResizing },
-        ]"
-        :style="vertical ? { width: uiLength(railWidth) } : undefined"
+        :is="vertical ? RailColumn : 'header'"
+        :ref="setBar"
+        :class="vertical ? undefined : 'view-header relative flex items-center gap-1 border-b border-line px-1.5'"
         @contextmenu="onBarContextMenu"
     >
-        <div
-            v-if="vertical"
-            class="rail-resize"
-            @pointerdown="startRailResize"
-            @pointermove="onRailResize"
-            @pointerup="endRailResize"
-            @dblclick="setRailWidth(DEFAULT_RAIL_WIDTH)"
-            title="Drag to resize · double-click to reset"
-        ></div>
-
         <!-- THE SWITCHER. Docked only: the rail below already IS the list, and a header naming the active chat
              above it would say a third time what the ringed card and the transcript already say.
              Renaming REPLACES it rather than nesting a field inside it: an input in a button is neither valid
@@ -680,24 +624,3 @@ const openHistory = (event: Event): void => {
         <ContextMenu ref="barMenu" :model="barMenuItems" :min-width="13" />
     </component>
 </template>
-
-<style scoped>
-/* Drag-to-resize handle on the rail's RIGHT edge: the seam against the panes it stands beside (pointer-capture,
- * mirrors the panel's .resize-handle). */
-.rail-resize {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: 6px;
-    cursor: col-resize;
-    z-index: 20;
-    touch-action: none;
-    transition: background-color 0.15s;
-}
-.rail-resize:hover,
-.rail-resizing .rail-resize {
-    background: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
-}
-.rail-resizing {
-    user-select: none;
-}
-</style>

@@ -5,7 +5,7 @@ import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToF
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
 import { openRunSessions } from "../composables/chat/openRun";
-import { DEFAULT_RAIL_WIDTH } from "../composables/chat/chatRail";
+import { DEFAULT_RAIL_WIDTH } from "../composables/rail";
 import { chatOnRail, chatWide } from "../composables/chat/chatSurface";
 import { useChat } from "../composables/chat/useChat";
 import { useChatFloating } from "../composables/chat/chatFloating";
@@ -60,7 +60,7 @@ const resizing = ref(false);
  * browser's base font, and then the pane would outgrow a column that thought it was wide enough.
  */
 const minPaneLength = uiLength(MIN_PANE_PX);
-// The chat list's rail beside them: the part of the window the panes never get. Its own default (chatRail.ts)
+// The chat list's rail beside them: the part of the window the panes never get. Its own default (rail.ts)
 // rather than a number copied here: a reader who has dragged it wider is asking the panes to scroll a little
 // sooner, which is their trade to make, but the width a fresh window opens at must not be guessed at twice.
 const RAIL_PX = DEFAULT_RAIL_WIDTH;
