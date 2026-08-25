@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { statePath } from "../workspace/state-paths.js";
+import { statePath, stateRelPath } from "../workspace/state-paths.js";
 
 // The Claude Agent SDK keeps its per-conversation state under ~/.claude, the container's ephemeral fs, wiped
 // on every rebuild while /work survives. Point every conversation-owned store at the workspace volume before
@@ -72,4 +72,32 @@ export const linkClaudeState = async (workspaceRoot: string, home = homedir()): 
     // Only once every store IS ours. A refusal means someone else's ~/.claude (a dev-host run), and rewriting
     // the retention of a store we didn't take over would be editing the developer's own settings.
     await persistRetention(claudeHome);
+};
+
+/* THE SAME LINKS, READ BACKWARDS: which workspace file a `~/.claude/…` path an agent wrote actually names.
+ *
+ * The links above are invisible to the model, which is the point of them, and equally invisible to the CHAT,
+ * which was not. A plan the CLI writes to `~/.claude/plans/wiggly-spring.md` escapes the workspace as far as
+ * the tool card can tell, so the card had no location to open, no path worth reading, and the reader was left
+ * with an absolute path into a home directory they have no way to browse. Resolved here, it is an ordinary
+ * workspace file that opens like any other.
+ *
+ * ROOT-relative, not cwd-relative, and that is the honest answer for every turn: `.intentic` is bind-mounted
+ * from the main tree into an isolated turn's namespace (agents/isolation.ts), so this store is shared by
+ * construction, never a per-worktree copy. Whoever opens it wants the shared tree, whichever tree the
+ * conversation itself is working in.
+ *
+ * Only the names actually linked resolve; `~/.claude/skills` and `settings.json` are image-baked and
+ * container-local, and pointing them at a workspace path nothing writes would be worse than leaving them
+ * unaddressable. */
+export const claudeStatePath = (raw: string, home = homedir()): string | undefined => {
+    const prefix = `${join(home, ".claude")}/`;
+    if (!raw.startsWith(prefix)) {
+        return undefined;
+    }
+    const [name, ...tail] = raw.slice(prefix.length).split("/");
+    if (name === undefined || tail.length === 0 || !SESSION_STATE.includes(name)) {
+        return undefined;
+    }
+    return stateRelPath(".intentic/records/sessions/claude/", name, ...tail);
 };

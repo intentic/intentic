@@ -434,6 +434,30 @@ export const SharePayloadSchema = z.object({
 });
 export type SharePayload = z.infer<typeof SharePayloadSchema>;
 
+/* WHAT A PARKED CARD IS ABOUT: the document the turn wrote and is now asking a question against.
+ *
+ * A card asks for a decision; until this it carried no SUBJECT. The commonest shape of a real decision is "I
+ * analysed this and wrote it up, now choose", and the write-up went into a file whose card had already folded
+ * itself into `Write · +135 −0` twenty tool calls back. So the reader was asked to choose between options
+ * describing a document the chat had never shown them.
+ *
+ * Carried BY VALUE rather than as a path, for the same reason the diff on a tool call is: the bytes are already
+ * in hand when the card is raised, a path would make the card's meaning depend on a file that keeps changing
+ * under it, and a restored or published transcript has no workspace to go read. The path rides along anyway, so
+ * a document past the wire cap still has somewhere to send the reader.
+ *
+ * Nothing is asked of the MODEL for this. It calls `ask` exactly as before; the daemon knows what the turn
+ * wrote, because every write came past it as a frame (documents.ts decides which of them is a document). A
+ * harness that can see the answer must not spend prompt on asking the model to repeat it. */
+export const CardDocumentSchema = z.object({
+    path: z.string().describe("Where it lives, as a workspace path."),
+    title: z.string().describe("What it is called: its opening heading, or its file name."),
+    markdown: z.string().describe("The document itself."),
+    truncated: z.boolean().optional().describe("It was clipped at the wire cap; the file on disk has more."),
+    plan: z.boolean().optional().describe("It is one of the CLI's plan files, written to be approved rather than merely read."),
+});
+export type CardDocument = z.infer<typeof CardDocumentSchema>;
+
 /* THE THREE RESTORABLE CARDS, named so the turn journal can hold them verbatim: a parked turn's raised cards
  * are written down beside its prompt (sandbox turn-journal.ts), and a daemon death under the park restores the
  * very same frames instead of ending the turn `interrupted`, the card the user was about to answer survives
@@ -444,11 +468,15 @@ const PlanCardSchema = z.object({
     kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
     requestId: z.string().describe("What to send back when you answer."),
     text: z.string().describe("The plan itself."),
+    // Present when the plan text POINTS at a document instead of being one: the model wrote the real plan to a
+    // file and summarised it here. Absent when the text already is the whole plan, which is the ordinary case.
+    document: CardDocumentSchema.optional().describe("The write-up this plan refers to, when the plan itself is a pointer to one."),
 });
 const QuestionCardSchema = z.object({
     kind: z.literal("question").describe("The agent has asked you something and is waiting."),
     requestId: z.string().describe("What to send back when you answer."),
     questions: z.array(AskQuestionSchema).describe("What it wants to know."),
+    document: CardDocumentSchema.optional().describe("The document this turn wrote and is asking about, so the choice can be read beside it."),
 });
 const PermissionCardSchema = PermissionAskSchema.extend({
     kind: z.literal("permission").describe("The agent wants to use a tool it needs permission for."),

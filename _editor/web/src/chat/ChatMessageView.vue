@@ -4,7 +4,7 @@ import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
 import { CAPABILITY_CATALOG } from "@intentic-app/capability-catalog";
-import { type AskQuestion, planParts } from "@intentic/sandbox-contract";
+import { type AskQuestion, type CardDocument, planParts } from "@intentic/sandbox-contract";
 import { type ComponentPublicInstance, computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQueryClient } from "@tanstack/vue-query";
@@ -27,9 +27,11 @@ import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useToolCalls } from "../composables/chat/useToolCalls";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
+import ChatDocumentBody from "./ChatDocumentBody.vue";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "./ChatToolRows.vue";
 import ChatToolRun from "./ChatToolRun.vue";
+import { present } from "./toolPresentation";
 
 /* One transcript entry: user bubble, notice line, or the assistant turn's stack (thinking, tools, todos,
  * markdown text, plan card, question card, typing loader). Card decisions go straight to the useChat
@@ -208,6 +210,19 @@ const body = useMarkdown(
 const plan = useMarkdown(() => (props.message.plan ? planParts(props.message.plan.text).body : ``), false, linkAgent);
 
 const planTitle = (request: PlanRequest): string => planParts(request.text).title ?? `Proposed plan`;
+
+/* Whether this bubble ALREADY draws the document a card is carrying, as the card of the write that produced it
+ * (a markdown Write renders as prose, see toolPresentation). The question or plan card then opens FOLDED: the
+ * reader has the document on screen, and a second full copy under the first is length, not emphasis.
+ *
+ * Folded, never dropped. Which bubble a write landed in depends on where the model happened to break its prose,
+ * so "it is somewhere above" is not a promise this can make, and the failure worth avoiding is the one that
+ * costs a reader the document, not the one that costs them a click. */
+const documentDrawn = (document: CardDocument | undefined): boolean =>
+    // Asked of the card's OWN presenter rather than of the shared rule underneath it, so "already drawn" means
+    // drawn: a write that failed carries content the card refuses to render as a document, and a question card
+    // must not fold its copy away on the strength of a document nobody can see.
+    document !== undefined && (props.message.tools ?? []).some((tool) => present(tool).document?.path === document.path);
 
 // One delegated listener for every control the rendered markdown carries: a code block's copy button and the
 // file links a mentioned path becomes. Both live inside v-html, so neither can hold a component of its own.
@@ -1086,6 +1101,17 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <MarkdownFigure v-else :figure="part.figure" />
                     </template>
                 </div>
+                <!-- THE PLAN THE TEXT ABOVE POINTS AT. Present only when the model wrote the real plan to a file
+                     and summarised it into the tool call (agent.ts decides, on which of the two is longer), so
+                     approving is never a yes to a document the card did not show. -->
+                <ChatDocumentBody
+                    v-if="message.plan.document"
+                    :document="message.plan.document"
+                    foldable
+                    :open="!documentDrawn(message.plan.document)"
+                    max-height="22rem"
+                    class="mx-3.5 mb-3"
+                />
                 <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
                          and the container is the isolation boundary. -->
@@ -1118,6 +1144,18 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                 </div>
 
+                <!-- WHAT THE QUESTION IS ABOUT, above the options and inside the same card: the write-up this
+                     turn produced (agent.ts attaches it; the model is asked for nothing). A choice between
+                     options describing a document is unanswerable without the document, and by the time the card
+                     is raised that document is a folded card somewhere up the scroll. -->
+                <ChatDocumentBody
+                    v-if="message.question.document"
+                    :document="message.question.document"
+                    foldable
+                    :open="!documentDrawn(message.question.document)"
+                    max-height="22rem"
+                    class="mx-3.5 mt-3"
+                />
                 <div class="flex flex-col gap-4 px-3.5 py-3">
                     <div v-for="(question, index) in message.question.questions" :key="index" class="flex flex-col gap-2">
                         <span v-if="message.question.questions.length > 1" class="chat-question-title text-xs font-medium text-content">{{

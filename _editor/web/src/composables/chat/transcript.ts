@@ -1,6 +1,7 @@
 import type {
     AskQuestion,
     CapabilityOffer,
+    CardDocument,
     PaymentOffer,
     PermissionAsk,
     ServiceOffer,
@@ -36,6 +37,9 @@ export interface PlanRequest {
     readonly requestId: string;
     readonly text: string;
     readonly status: PlanStatus;
+    // The write-up this plan points at, when the model wrote the real thing to a file and summarised it here
+    // (see CardDocumentSchema). Absent when the plan text IS the plan, which is the ordinary case.
+    readonly document?: CardDocument;
 }
 
 // A set of questions awaiting the user's picks. 'pending' shows the selectable card; once the user submits or
@@ -48,6 +52,13 @@ export interface QuestionRequest {
     readonly status: QuestionStatus;
     // Selected option label(s) per question text, captured on submit for the static summary.
     readonly answers?: Record<string, string[]>;
+    /* WHAT THE QUESTION IS ABOUT: the document this turn wrote before asking it (see CardDocumentSchema).
+     *
+     * The commonest real question an agent asks is "I looked into this and wrote it up, now choose", and the
+     * write-up lives in a file whose card has folded itself into `Write · +135 −0` well up the scroll. The card
+     * carries its subject so the choice can be read beside the thing it is a choice about; the daemon attaches
+     * it from the frames it already saw, so nothing is asked of the model to make this work. */
+    readonly document?: CardDocument;
 }
 
 // A tool call awaiting the user's approval (the daemon's canUseTool gate). 'pending' shows the buttons; the

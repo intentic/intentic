@@ -1,4 +1,5 @@
 import { attachmentPreview } from "../composables/chat/attachmentPreviews";
+import { fileLinkDecorator } from "../composables/renderMarkdown";
 import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import { openWorkspaceRef } from "../composables/workspace/openFileRef";
 import type { ChatSurface } from "./chatSurface";
@@ -29,6 +30,9 @@ export interface WorkspaceSurfaceOptions {
 export const workspaceSurface = (options: WorkspaceSurfaceOptions): ChatSurface => ({
     imageUrl: attachmentPreview,
     openFile: (path, line) => openWorkspaceRef(path, line, { agent: options.agent() }),
+    // Prose on a card gets the same file links the assistant's own answer does, into the same tree. Built per
+    // fragment rather than once, for the reason `agent` is a getter: a pane's conversation changes under it.
+    decorate: (fragment) => fileLinkDecorator({ agent: options.agent() })(fragment),
     ...(options.terminal === undefined ? {} : { commandTerminal: options.terminal, watchTerminal: openWorkTerminal }),
     ...(options.browser === undefined || options.navigate === undefined
         ? {}

@@ -1,8 +1,18 @@
+import { STATE_DIR } from "@intentic/sandbox-contract";
 import { router } from "../../router";
 import { handOffToMainWindow } from "../mainWindow";
 import { resolveWorkspaceRef } from "./resolveFileRef";
 import { useWorkspaceTabs } from "./useWorkspaceTabs";
 import { workspaceAgent } from "./workspaceScope";
+
+/* THE DAEMON'S OWN STATE IS ONE TREE, whoever names it. `.intentic` is bind-mounted from the main checkout into
+ * an isolated turn's namespace (sandbox agents/isolation.ts), precisely so a transcript written there reaches
+ * the daemon rather than dying with the worktree, which makes every path under it shared by construction.
+ *
+ * So a reference into it answers "whose copy?" by itself, and the answer overrides the asking card's. It has to:
+ * the CLI's plan files live here (`.intentic/records/sessions/claude/plans/…`), an isolated conversation writes
+ * one and then asks about it, and opened in that conversation's checkout the file is simply not there. */
+const sharedStatePath = (path: string): boolean => path.startsWith(`${STATE_DIR}/`);
 
 /* Going to a file reference, the one navigation every clickable path in the app funnels through: a terminal
  * link, a file mention in the assistant's prose, a tool card's location chip.
@@ -16,7 +26,9 @@ import { workspaceAgent } from "./workspaceScope";
  * in prose is routinely a suffix of the real one, `pages/workspace/Foo.vue` for a file that lives under
  * `_editor/web/src`. A reference nothing matches is opened as written, which lands on the file viewer's
  * not-found state naming exactly what was clicked. */
-export const openWorkspaceRef = async (path: string, line?: number, scope?: { readonly agent: string | undefined }): Promise<void> => {
+export const openWorkspaceRef = async (path: string, line?: number, asked?: { readonly agent: string | undefined }): Promise<void> => {
+    // Settled before anything else, including the hand-off below, so both windows resolve the same file.
+    const scope = sharedStatePath(path) ? { agent: undefined } : asked;
     /* NOT IN A POPPED-OUT PANEL. A floating window holds one panel and no app: routing it to the editor would
      * take away the chat the reader is reading to make room for a view that window was never meant to hold. So
      * the reference is handed to the app's own window, which opens the file and raises itself, and this window

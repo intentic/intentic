@@ -1,5 +1,6 @@
 import { isAbsolute, relative } from "node:path";
 import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
+import { claudeStatePath } from "../sessions/session-store.js";
 
 /* The cross-provider tool-call vocabulary: one home for deriving a tool_call frame's display name, ACP
  * category, target, locations, and structured diff content from whatever a backend's native stream carries.
@@ -230,6 +231,14 @@ export const toolTarget = (input: unknown): string | undefined => {
 // escapes the workspace (the tree/file routes can't address it). Relative inputs are cwd-relative, which
 // IS the route space, worktree cwds mirror the /work layout.
 export const workspacePath = (raw: string, cwd: string): string | undefined => {
+    /* A `~/.claude/…` path is not the escape it looks like: the SDK's conversation stores are symlinked onto
+     * the workspace volume, so the plan the CLI just wrote to `~/.claude/plans/…` IS a workspace file
+     * (sessions/session-store.ts). Resolved before the cwd test, which would otherwise throw it away as
+     * "outside the workspace" and leave the card holding an unopenable absolute path into a home directory. */
+    const state = claudeStatePath(raw);
+    if (state !== undefined) {
+        return state;
+    }
     const rel = isAbsolute(raw) ? relative(cwd, raw) : raw;
     if (rel === "" || rel === "." || rel === ".." || rel.startsWith("../")) {
         return undefined;

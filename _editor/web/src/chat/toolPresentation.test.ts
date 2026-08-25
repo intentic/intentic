@@ -1,3 +1,4 @@
+import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import type { ChatTool } from "../composables/chat/transcript";
 import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
@@ -220,5 +221,48 @@ describe(`present: diffs`, () => {
         expect(result.diffs).toEqual([{ type: `diff`, path: `a.ts`, newText: `hello` }]);
         // No text body, but the diffs are content: the card must still offer its fold affordance.
         expect(result.body).toBeUndefined();
+    });
+});
+
+/* A DOCUMENT IS AN ARTIFACT, NOT AN ACT. A markdown file written whole is the one thing a turn produces that is
+ * addressed to the reader, and drawn as a diff stat it was the one thing the transcript would not show. The
+ * test the card asks is the contract's (documents.ts), so a document is the same thing on both sides of the
+ * wire: what the daemon attaches to a question card is what the write's own card drew. */
+describe(`present: documents`, () => {
+    const written = (path: string, markdown: string, over: Partial<ChatTool> = {}): ChatTool =>
+        tool({ name: `Write`, category: `edit`, content: [{ type: `diff`, path, newText: markdown }], ...over });
+
+    it(`draws a markdown file written whole as prose, titled by its heading, and not also as its diff`, () => {
+        const result = present(written(`docs/findings.md`, `# Why it is slow\n\nThe poll.`));
+        expect(result.document).toMatchObject({ path: `docs/findings.md`, title: `Why it is slow` });
+        // One or the other, never both: the diff of a whole-file write is every line with a plus in front of it.
+        expect(result.diffs).toEqual([]);
+    });
+
+    it(`opens by default: a write-up nobody can see is the failure this exists to fix`, () => {
+        expect(present(written(`docs/findings.md`, `# Findings`)).defaultOpen).toBe(true);
+        expect(present(written(`src/app.ts`, `export const x = 1;`)).defaultOpen).toBe(false);
+    });
+
+    it(`wears the plan card's own glyph for a plan file, and the reading one otherwise`, () => {
+        expect(present(written(`${PLAN_DOCUMENTS_DIR}/wiggly-spring.md`, `# Plan`)).icon).toBe(`list-check`);
+        expect(present(written(`docs/findings.md`, `# Findings`)).icon).toBe(`book`);
+        expect(present(written(`src/app.ts`, `code`)).icon).toBe(`file-edit`);
+    });
+
+    it(`leaves an EDIT to a document as a diff: the change is what a reader wants from one`, () => {
+        const edited = tool({
+            name: `Edit`,
+            category: `edit`,
+            content: [{ type: `diff`, path: `docs/findings.md`, oldText: `old`, newText: `new` }],
+        });
+        expect(present(edited).document).toBeUndefined();
+        expect(present(edited).diffs).toHaveLength(1);
+    });
+
+    it(`draws no document for a write that failed: its content is what the agent MEANT to write`, () => {
+        const failed = present(written(`docs/findings.md`, `# Findings`, { status: `failed` }));
+        expect(failed.document).toBeUndefined();
+        expect(failed.diffs).toHaveLength(1);
     });
 });

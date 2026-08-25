@@ -19,7 +19,9 @@ import {
     type AgentEvent,
     type AgentReply,
     type AskQuestion,
+    type CardDocument,
     type CommandClass,
+    documentOf,
     type PermissionMode,
     type Rule,
     sendableEffort,
@@ -679,6 +681,18 @@ const baseOptions = (
     };
 };
 
+/* WHAT THE TURN HAS WRITTEN FOR THE READER, only the latest of it, handed to every card the turn parks on
+ * (the contract's documents.ts decides what counts as one).
+ *
+ * A turn-scoped mutable handle, exactly like the `shell` one and for the same reason: the cards are wired
+ * before the turn runs, and what they will need to say is not known until it does. The alternative was asking
+ * the MODEL to repeat its own write-up into the question, which spends context on every ask, duplicates a
+ * document that then drifts from the file, and only works on the one backend that was told to do it. The daemon
+ * saw the write go past; nothing needs to be asked of anyone. */
+export interface TurnDocuments {
+    latest: CardDocument | undefined;
+}
+
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
 // because the built-in renders its own picker inside the CLI, headless, that UI has nowhere to go. Aliasing
 // the built-in NAME onto this tool (see toolAliases below) keeps the model's trained call site working while
@@ -688,6 +702,7 @@ const askServer = (
     request: AgentRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
+    documents: TurnDocuments,
 ): McpSdkServerConfigWithInstance =>
     createSdkMcpServer({
         name: "ui",
@@ -718,7 +733,10 @@ const askServer = (
                     // ends the turn, and the route that takes the dismissal ends it there rather than waiting
                     // for the browser to send a second request for it (agent.routes' reply handler).
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
-                    push({ kind: "question", requestId: id, questions });
+                    // Whatever the turn wrote for the reader rides along (see TurnDocuments): a question about a
+                    // write-up is unanswerable without it, and by the time it is asked that document is usually a
+                    // folded card well up the scroll. Nothing here reaches for it, it is already in hand.
+                    push({ kind: "question", requestId: id, questions, ...(documents.latest === undefined ? {} : { document: documents.latest }) });
                     const { reply, resolved } = await wait(request.signal);
                     // The picks belong in the frame log, not just in this tool result: they are what a replayed
                     // or second-window transcript freezes the card with (see the `resolved` frame).
@@ -806,7 +824,7 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 // when the active mode actually requires a prompt (bypassPermissions never does; acceptEdits skips edits;
 // default skips reads), so there is no mode branching here, if we were called, the user is the decider.
 const permissionGate =
-    (request: AgentRequest, push: (event: AgentEvent) => void, shell: { sessionId: string | undefined }): CanUseTool =>
+    (request: AgentRequest, push: (event: AgentEvent) => void, shell: { sessionId: string | undefined }, documents: TurnDocuments): CanUseTool =>
     async (toolName, input, options) => {
         // Nobody can answer, so refuse rather than park: a card raised here would hang the turn until its
         // timeout, which reads as the agent freezing rather than as a decision nobody was there to make.
@@ -815,7 +833,13 @@ const permissionGate =
         }
         if (toolName === "ExitPlanMode") {
             const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
-            push({ kind: "plan", requestId: id, text: String((input as { plan?: unknown }).plan ?? "") });
+            const text = String((input as { plan?: unknown }).plan ?? "");
+            /* The write-up this plan POINTS at, when it points at one. A model that pasted its plan into the tool
+             * call has already filled the card and gets nothing attached; one that wrote the real thing to a file
+             * and summarised it here would otherwise be asking for a yes to a document the reader cannot see. The
+             * longer text is the plan, which is the whole of the test. */
+            const document = documents.latest !== undefined && documents.latest.markdown.length > text.length ? documents.latest : undefined;
+            push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
             const { reply, resolved } = await wait(request.signal);
             push(resolved);
             if (!reply.approve) {
@@ -936,6 +960,13 @@ export async function* runAgent(
      * the writer this gate exists to notice. Empty only on a conversation's first turn, which by definition has
      * no earlier pane to disturb. */
     const shell: { sessionId: string | undefined } = { sessionId: request.sessionId };
+    // What this turn has written for the reader, filled from the stream below and read by every card it parks
+    // on (see TurnDocuments). Per TURN, deliberately: a question asked in a later turn is not about a document
+    // written in an earlier one, and attaching one on that guess would be the harness making things up.
+    const documents: TurnDocuments = { latest: undefined };
+    // Writes seen but not yet settled, by tool-call id: a Write carries its whole file at CALL time and can
+    // still be refused or fail, so a document is only somebody's to read once the call says it landed.
+    const writing = new Map<string, CardDocument>();
     let stderr = "";
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
@@ -952,7 +983,7 @@ export async function* runAgent(
         // same-named tool would override `ui`, but `ui` is reserved). An unattended turn gets no `ui`: a
         // question would be asked of a user who is not there, and the turn would wait for them forever.
         mcpServers: {
-            ...(request.unattended === true ? {} : { ui: askServer(request, push, shell) }),
+            ...(request.unattended === true ? {} : { ui: askServer(request, push, shell, documents) }),
             // The accounts tools get the same two live handles the ask tool does: the stream their help card
             // rides, and the signal that settles a park when the turn dies under it.
             ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
@@ -999,7 +1030,7 @@ export async function* runAgent(
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Propose a clear, concise approach for the user's request, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(request, push, shell),
+        canUseTool: permissionGate(request, push, shell, documents),
     };
 
     // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle
@@ -1048,6 +1079,28 @@ export async function* runAgent(
                 // session after it), so the cards learn it here rather than from a second seam into the stream.
                 if (event.kind === "session") {
                     shell.sessionId = event.sessionId;
+                }
+                /* And the same seam for what the turn WROTE: every write comes past here as a frame carrying the
+                 * file whole, so the cards learn what they are about from the stream they are already in rather
+                 * than from a second pass over the transcript or a re-read off disk. Latest wins: the newest
+                 * write-up is the one a question asked after it is about.
+                 *
+                 * Held back until the call COMPLETES, because a Write's content is known at call time and the
+                 * call can still be refused (the permission gate) or fail. A card offering the reader a document
+                 * that was never written, as the thing they are being asked about, is worse than one offering
+                 * nothing: it reads as fact. */
+                if (event.kind === "tool_call") {
+                    const written = documentOf(event.name, event.content);
+                    if (written !== undefined) {
+                        writing.set(event.id, written);
+                    }
+                }
+                if (event.kind === "tool_call_update" && event.status !== undefined) {
+                    const written = writing.get(event.id);
+                    if (written !== undefined && event.status !== "pending" && event.status !== "in_progress") {
+                        writing.delete(event.id);
+                        documents.latest = event.status === "completed" ? written : documents.latest;
+                    }
                 }
                 push(event);
             }

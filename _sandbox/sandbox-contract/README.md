@@ -31,6 +31,11 @@ mismatch is a type error rather than a runtime surprise.
   their scratch home through `extensionRuntimeDir` rather than spelling the layout themselves. The daemon
   publishes the cause and the browser derives the consequence, so neither side keeps its own copy of the
   other's list.
+- [src/documents.ts](src/documents.ts): which of a turn's writes is a DOCUMENT, a markdown file written whole,
+  as opposed to a change made to code. Shared because both sides act on the same answer: the daemon attaches
+  that document to the question or plan card the turn parks on (so a choice can be read beside the write-up it
+  is about), and the browser draws the write's own card as prose rather than as a diff stat. Two copies of the
+  rule would let a card carry a document the transcript never drew.
 - [src/agent-catalog.ts](src/agent-catalog.ts): what each (provider, harness) pair can actually DO, as one
   record per runtime: its permission axis, its MCP reach, whether it steers, and how much of the owner's system
   prompt it will take (`instructions`: replace, add, or nothing at all). Shared because both sides act on it:

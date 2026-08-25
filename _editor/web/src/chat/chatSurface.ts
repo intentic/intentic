@@ -1,3 +1,4 @@
+import type { MarkdownDecorator } from "@intentic/ui/markdown";
 import { inject, type InjectionKey } from "vue";
 
 /* WHAT A TOOL CARD CAN REACH BEYOND ITSELF, and the reason there is exactly one card renderer.
@@ -22,6 +23,15 @@ export interface ChatSurface {
     readonly imageUrl: (path: string) => string | undefined;
     // Open a workspace file, at a line where one is known. Absent ⇒ paths render as text, not buttons.
     readonly openFile?: (path: string, line?: number) => void;
+    /* HOW PROSE ON A CARD IS DECORATED, for the one card that renders prose rather than output: a document the
+     * turn wrote (ChatDocumentBody). In the app this turns the paths a document mentions into links into the
+     * right copy of the workspace; on a published page it is absent and they stay text.
+     *
+     * Injected for a harder reason than the rest of this interface: the app's decorator reaches the workspace
+     * tree cache, and through it the query client, which is precisely the daemon-shaped weight a published page
+     * must not carry (see share-view's tsconfig). Handed in, the card renders the same document either way and
+     * imports neither. */
+    readonly decorate?: MarkdownDecorator;
     // The live shell behind a command card, and the door onto it. Both or neither.
     readonly commandTerminal?: () => string | undefined;
     readonly watchTerminal?: (session: string) => void;

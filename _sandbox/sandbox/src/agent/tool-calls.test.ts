@@ -1,4 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { homedir } from "node:os";
 import { expect, test } from "vitest";
 import {
     displayNameOf,
@@ -118,6 +119,19 @@ test("toolLocations omits paths escaping the workspace (the routes can't address
     expect(toolLocations({ file_path: "/etc/passwd" }, CWD)).toBeUndefined();
     expect(toolLocations({ file_path: "../outside.ts" }, CWD)).toBeUndefined();
     expect(toolLocations({ command: "ls" }, CWD)).toBeUndefined();
+});
+
+/* A `~/.claude/…` path LOOKS like an escape and is not: those stores are symlinked onto the workspace volume
+ * (sessions/session-store.ts), so the plan the CLI just wrote is an ordinary workspace file the card can open.
+ * Without this the commonest document an agent produces was the one thing the chat could not link to. */
+test("toolLocations resolves the SDK's own stores onto the workspace they are linked into", () => {
+    expect(toolLocations({ file_path: `${homedir()}/.claude/plans/wiggly-spring.md` }, CWD)).toEqual([
+        { path: ".intentic/records/sessions/claude/plans/wiggly-spring.md" },
+    ]);
+    // Not every ~/.claude entry is linked: skills and settings are image-baked and container-local, and
+    // pointing them at a workspace path nothing writes would be a link to a file that isn't there.
+    expect(toolLocations({ file_path: `${homedir()}/.claude/skills/iq/SKILL.md` }, CWD)).toBeUndefined();
+    expect(toolLocations({ file_path: `${homedir()}/.claude/settings.json` }, CWD)).toBeUndefined();
 });
 
 test("editDiffContent derives an Edit diff from either spelling family", () => {

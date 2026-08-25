@@ -106,6 +106,7 @@ export * from "./agent-run-model.js";
 export * from "./capability-env.js";
 export * from "./capability-secrets.js";
 export * from "./conversation-ids.js";
+export * from "./documents.js";
 export * from "./fast-tier.js";
 export * from "./host-protocol.js";
 export * from "./runner-protocol.js";

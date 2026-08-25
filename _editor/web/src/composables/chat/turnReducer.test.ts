@@ -154,7 +154,11 @@ describe(`tool calls`, () => {
     // Nothing to hang it off. Unlike a nested tool_call there is no top-level fallback: a subagent with no
     // delegation card above it is not a thing the transcript can render.
     it(`drops a subagent frame whose card is not there`, () => {
-        const { state } = run(started(), { kind: `subagent`, id: `gone`, subagentKind: `spawned` }, { kind: `subagent_update`, id: `gone`, tokens: 9 });
+        const { state } = run(
+            started(),
+            { kind: `subagent`, id: `gone`, subagentKind: `spawned` },
+            { kind: `subagent_update`, id: `gone`, tokens: 9 },
+        );
         expect(state.messages[1]?.tools).toBeUndefined();
     });
 
@@ -232,6 +236,20 @@ describe(`interactive cards`, () => {
         const { state } = run(started(), { kind: `question`, requestId: `q1`, questions: [] });
         expect(state.messages[1]!.question).toMatchObject({ requestId: `q1`, status: `pending` });
         expect(state.bubbleId).toBeNull();
+    });
+
+    /* WHAT THE CARD IS ABOUT. The daemon attaches the write-up the turn produced (agent.ts), so a question
+     * about a document travels with the document and stops depending on the reader finding the write that
+     * produced it, which by then is a folded card well up the scroll. */
+    it(`carries the document a card is asking about, and adds no such key when there is none`, () => {
+        const document = { path: `docs/findings.md`, title: `Why it is slow`, markdown: `# Why it is slow` };
+        const asked = run(started(), { kind: `question`, requestId: `q1`, questions: [], document }).state;
+        expect(asked.messages[1]!.question).toMatchObject({ document });
+
+        const planned = run(started(), { kind: `plan`, requestId: `p1`, text: `See docs/findings.md`, document }).state;
+        expect(planned.messages[1]!.plan).toMatchObject({ document });
+
+        expect(run(started(), { kind: `question`, requestId: `q1`, questions: [] }).state.messages[1]!.question).not.toHaveProperty(`document`);
     });
 
     it(`carries a permission ask's own fields onto the card`, () => {

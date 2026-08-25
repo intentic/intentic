@@ -1,5 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { homedir } from "node:os";
 import type { AgentEvent, AgentReply } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
 import { mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
@@ -1769,4 +1770,117 @@ test("a harness that says nothing about speed produces no frame", async () => {
     );
 
     expect(events.some((event) => event.kind === "fast_mode")).toBe(false);
+});
+
+/* WHAT A CARD IS ABOUT, attached by the daemon rather than asked of the model.
+ *
+ * The commonest real question an agent asks is "I looked into this and wrote it up, now choose", and the
+ * write-up goes into a file whose card folds itself into `Write · +135 −0` well up the scroll. Every frame the
+ * turn produced came past the daemon, so the document is already in hand when the card is raised; asking the
+ * model to repeat it into the question would spend context on every ask and duplicate a document that then
+ * drifts from the file. */
+
+// The `ask` tool as the CLI reaches it: through the SDK server's own registry, so a rename or a drop fails here
+// rather than quietly leaving the model without the tool. `_registeredTools` is private to McpServer, hence the cast.
+const askTool = (options: Options): ((args: unknown) => Promise<unknown>) => {
+    const server = options.mcpServers?.["ui"] as { instance: unknown } | undefined;
+    const registry = server?.instance as unknown as {
+        _registeredTools: Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>;
+    };
+    const registered = registry?.["_registeredTools"]?.["ask"];
+    expect(registered, "no ask tool on the ui server").toBeDefined();
+    return (args) => registered!.handler(args, {});
+};
+
+const QUESTIONS = [{ question: "How much of the fix?", header: "Scope", multiSelect: false, options: [{ label: "All", description: "…" }] }];
+
+// A turn that writes `path` (as the model spells it), settles that call with `outcome`, then asks a question.
+const askAfterWriting = async (path: string, markdown: string, outcome: { is_error?: boolean } = {}): Promise<AgentEvent[]> => {
+    withoutTmux();
+    const frames: AgentEvent[] = [];
+    const query: QueryFn = async function* (args) {
+        yield {
+            type: "assistant",
+            session_id: "s",
+            message: { content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: path, content: markdown } }] },
+        } as SDKMessage;
+        yield {
+            type: "user",
+            session_id: "s",
+            message: { content: [{ type: "tool_result", tool_use_id: "w1", content: "ok", ...outcome }] },
+        } as SDKMessage;
+        await askTool(args.options)({ questions: QUESTIONS });
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    for await (const event of runAgent(request, query)) {
+        frames.push(event);
+        if (event.kind === "question") {
+            resolveRequest({ kind: "question", requestId: event.requestId, answers: { "How much of the fix?": ["All"] } });
+        }
+    }
+    return frames;
+};
+
+test("a question asked after a write-up carries the document, resolved onto the workspace path", async () => {
+    const frames = await askAfterWriting(`${homedir()}/.claude/plans/wiggly-spring.md`, "# Why it is slow\n\nThe poll is the cost.");
+
+    expect(frames.find((frame) => frame.kind === "question")?.document).toEqual({
+        // The CLI writes its plans into a symlinked store; the card gets the workspace file, not a home path.
+        path: `${STATE_DIR}/records/sessions/claude/plans/wiggly-spring.md`,
+        title: "Why it is slow",
+        markdown: "# Why it is slow\n\nThe poll is the cost.",
+        plan: true,
+    });
+});
+
+// A Write's content is known when the call is MADE, and the call can still be refused or fail. A card offering
+// the reader a document that was never written, as the thing they are being asked about, reads as fact.
+test("a question carries nothing when the write it would be about failed", async () => {
+    const frames = await askAfterWriting("docs/findings.md", "# Findings", { is_error: true });
+
+    expect(frames.find((frame) => frame.kind === "question")?.document).toBeUndefined();
+});
+
+// Code is not a write-up. The question card is for the thing the turn wrote FOR THE READER.
+test("a question after an ordinary source write carries nothing", async () => {
+    const frames = await askAfterWriting("src/poll.ts", "export const poll = 1;");
+
+    expect(frames.find((frame) => frame.kind === "question")?.document).toBeUndefined();
+});
+
+/* A PLAN CARD IS THE SAME PROBLEM ONE SURFACE ALONG. A model that wrote the real plan to a file and summarised
+ * it into ExitPlanMode is asking for a yes to a document the card never showed; one that pasted the plan into
+ * the tool call has already filled the card and needs nothing attached. The longer of the two is the plan. */
+const planAfterWriting = async (markdown: string, plan: string): Promise<AgentEvent[]> => {
+    withoutTmux();
+    const frames: AgentEvent[] = [];
+    const query: QueryFn = async function* (args) {
+        yield {
+            type: "assistant",
+            session_id: "s",
+            message: { content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: "docs/plan.md", content: markdown } }] },
+        } as SDKMessage;
+        yield { type: "user", session_id: "s", message: { content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } } as SDKMessage;
+        await args.options.canUseTool!("ExitPlanMode", { plan }, { signal: request.signal } as never);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    for await (const event of runAgent(request, query)) {
+        frames.push(event);
+        if (event.kind === "plan") {
+            resolveRequest({ kind: "plan", requestId: event.requestId, approve: true });
+        }
+    }
+    return frames;
+};
+
+test("a plan that points at a write-up carries it, so approving is never a yes to something unseen", async () => {
+    const frames = await planAfterWriting("# The plan\n\nStep one, at length, with the reasoning behind it.", "See docs/plan.md");
+
+    expect(frames.find((frame) => frame.kind === "plan")?.document).toMatchObject({ path: "docs/plan.md", title: "The plan" });
+});
+
+test("a plan that IS the plan carries nothing: the card already holds it", async () => {
+    const frames = await planAfterWriting("# Notes", "# The plan\n\nStep one, at length, with the reasoning behind it, in the card itself.");
+
+    expect(frames.find((frame) => frame.kind === "plan")?.document).toBeUndefined();
 });

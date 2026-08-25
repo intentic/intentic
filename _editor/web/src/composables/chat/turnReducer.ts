@@ -533,7 +533,12 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({
                 ...message,
-                plan: { requestId: event.requestId, text: event.text, status: `pending` },
+                plan: {
+                    requestId: event.requestId,
+                    text: event.text,
+                    status: `pending`,
+                    ...(event.document === undefined ? {} : { document: event.document }),
+                },
             }));
             return step({ ...attached, bubbleId: null });
         }
@@ -543,7 +548,14 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             const opened = withBubble(flushPending(state));
             const attached = mapMessage(opened.state, opened.id, (message) => ({
                 ...message,
-                question: { requestId: event.requestId, questions: event.questions, status: `pending` },
+                // The document the turn wrote and is asking about rides the frame (agent.ts): the card carries
+                // its own subject, so an answer never depends on finding the write that produced it.
+                question: {
+                    requestId: event.requestId,
+                    questions: event.questions,
+                    status: `pending`,
+                    ...(event.document === undefined ? {} : { document: event.document }),
+                },
             }));
             return step({ ...attached, bubbleId: null });
         }

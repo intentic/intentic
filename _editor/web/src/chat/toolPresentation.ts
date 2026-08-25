@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import type { ToolCallContent } from "@intentic/sandbox-contract";
+import { type CardDocument, documentOf, type ToolCallContent } from "@intentic/sandbox-contract";
 import type { ChatTool } from "../composables/chat/transcript";
 import { codeLangForPath } from "../pages/workspace/fileType";
 import { diffStat } from "./chatToolDiff";
@@ -33,6 +33,17 @@ export interface ToolFileEntry {
 
 export interface ToolPresentation {
     readonly icon: IconName;
+    /* THE DOCUMENT THIS CALL WROTE, when it wrote one, drawn as prose rather than as a diff.
+     *
+     * A markdown file written whole is the one thing an agent produces that is addressed to the READER (see the
+     * contract's documents.ts, which both sides ask). Drawn as a diff it was a gutter of green plus-signs folded
+     * behind `+135 −0`, which is the record of an act; drawn as prose it is the thing itself.
+     *
+     * Its diff leaves `diffs` below rather than riding alongside: a whole-file write carries no `oldText` on the
+     * wire, so its diff is every line with a plus in front of it, the shape of a change with none of the
+     * information. An EDIT to a markdown file keeps its diff and is no document (documents.ts claims the Write
+     * alone), which is the case where the change really is what a reader wants. */
+    readonly document: CardDocument | undefined;
     // The structured diffs to render above the body (Edit/Write and any ACP agent that sends them ready-made).
     readonly diffs: readonly Extract<ToolCallContent, { type: "diff" }>[];
     // Pictures the call produced, today a browser screenshot, carried as a workspace path the card fetches.
@@ -238,7 +249,11 @@ const presenterFor = (name: string): Presenter => {
 export const present = (tool: ChatTool): ToolPresentation => {
     const presenter = presenterFor(tool.name);
     const content = tool.content ?? [];
-    const diffs = content.filter((entry) => entry.type === `diff`);
+    /* A document is a diff the reader wants as PROSE, so it leaves the diff list and takes its own place in the
+     * card. A failed write is not one: its content is what the agent MEANT to write, and a refused plan drawn as
+     * a finished document is the card telling the reader something that never happened. */
+    const document = tool.status === `failed` ? undefined : documentOf(tool.name, content);
+    const diffs = content.filter((entry) => entry.type === `diff`).filter((entry) => entry.path !== document?.path);
     const images = content.filter((entry) => entry.type === `image`);
     const text = content
         .filter((entry) => entry.type === `text`)
@@ -254,15 +269,23 @@ export const present = (tool: ChatTool): ToolPresentation => {
     const shown = body !== undefined && (body.kind !== `command` || body.command !== `` || body.output !== ``) ? body : undefined;
 
     return {
-        icon: presenter.icon ?? CATEGORY_ICONS[tool.category],
+        // A document wears what it IS rather than the verb that produced it: the CLI's own plan files take the
+        // plan card's glyph, so the two surfaces that can show a plan are recognisably the same thing, and any
+        // other write-up takes the reading one.
+        icon: document === undefined ? (presenter.icon ?? CATEGORY_ICONS[tool.category]) : document.plan === true ? `list-check` : `book`,
+        document,
         diffs,
         images,
-        body: diffs.length === 0 && images.length === 0 && shown === undefined ? undefined : shown,
+        body: diffs.length === 0 && images.length === 0 && document === undefined && shown === undefined ? undefined : shown,
         // A failed call's own message is the summary the header wants; a successful one asks its presenter.
         summary: failed ? `failed` : presenter.summary?.(text, tool),
-        // Expanded while it runs (live output is the point) and when it failed (the error is the point);
-        // collapsed once a call settles cleanly, so a long turn stays skimmable. EXCEPT when the call came
-        // back with a picture, which is the whole reason it was made and worth nothing folded away.
-        defaultOpen: running || failed || images.length > 0,
+        /* Expanded while it runs (live output is the point) and when it failed (the error is the point);
+         * collapsed once a call settles cleanly, so a long turn stays skimmable. EXCEPT when the call came
+         * back with a picture, which is the whole reason it was made and worth nothing folded away.
+         *
+         * A DOCUMENT is the same exception for the same reason, and the more important half of it: it was
+         * written to be read, and a write-up nobody can see is the failure this whole path exists to fix. The
+         * card caps its height rather than its existence, so a long one costs a scroll, not the transcript. */
+        defaultOpen: running || failed || images.length > 0 || document !== undefined,
     };
 };

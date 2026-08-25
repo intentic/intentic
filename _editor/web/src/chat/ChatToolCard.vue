@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import type { ChatTool } from "../composables/chat/transcript";
 import { useChatSurface } from "./chatSurface";
 import ChatCodeBody from "./ChatCodeBody.vue";
+import ChatDocumentBody from "./ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
 import { present } from "./toolPresentation";
 
@@ -51,6 +52,7 @@ const statusIcon = computed<{ name: IconName; spin: boolean; class: string }>(()
 // too, so the whole delegation collapses to one line once it settles.
 const hasContent = computed(
     () =>
+        view.value.document !== undefined ||
         view.value.diffs.length > 0 ||
         view.value.images.length > 0 ||
         view.value.body !== undefined ||
@@ -167,6 +169,10 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             <!-- A delegation says WHO it handed the work to and WHAT it asked for, in the slot a path would take:
                  `Explore · Locate claimIndexer definition`. Not mono: this is a sentence, not an identifier. -->
             <span v-if="subagentTitle" class="min-w-0 truncate">{{ subagentTitle }}</span>
+            <!-- A DOCUMENT takes the same slot, and for the same reason: what it is called is what the reader
+                 came for, while its path is a mint the CLI made up (`map-of-this-wiggly-spring.md`) or a store
+                 nobody browses. The path is a click away in the document's own header. Not mono: a title. -->
+            <span v-else-if="view.document" class="min-w-0 truncate">{{ view.document.title }}</span>
             <!-- The path is a button only where there is a workspace to open it in. Published to the public
                  there is none, and it stays exactly what it always was: the record of which file was read. -->
             <button
@@ -287,6 +293,10 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
                 />
                 <span v-else class="block px-2 py-1 font-mono text-2xs text-subtle">{{ image.path }}</span>
             </component>
+            <!-- What the call WROTE FOR THE READER, above the machine-facing halves of the same card. A markdown
+                 file written whole is the one output of a turn addressed to a person, so it is drawn as prose
+                 rather than as the diff it arrived as (toolPresentation / the contract's documents.ts). -->
+            <ChatDocumentBody v-if="view.document" :document="view.document" :titled="false" max-height="32rem" class="ml-4" />
             <ChatToolDiff
                 v-for="diff in view.diffs"
                 :key="diff.path"

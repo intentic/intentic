@@ -57,7 +57,13 @@ vi.mock("@intentic/ui", async () => {
         }),
     };
 });
-vi.mock("@intentic/ui/markdown", () => ({ copyCodeFromEvent: vi.fn() }));
+// The document card renders through the ENGINE rather than the app's composable (see ChatDocumentBody), so the
+// stub answers with one prose run naming its source: enough to tell a document that is drawn from one that is
+// folded away, without a parser in a jsdom mount.
+vi.mock("@intentic/ui/markdown", () => ({
+    copyCodeFromEvent: vi.fn(),
+    renderMarkdownParts: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
+}));
 // withoutResumeNote is the real behaviour, not a stub: the errand row depends on it to recognise an errand a
 // resumed turn re-sent (errands.ts), and a mock that returned the text unchanged would hide that.
 /* The contract rides along REAL, with one part stubbed. It used to be the other way round, a hand-written list
@@ -281,6 +287,46 @@ describe(`ChatMessageView question card`, () => {
         expect(marks(element)).toEqual([`check-square`, `check-square`, `square`]);
         expect(rows[0]?.getAttribute(`aria-checked`)).toBe(`true`);
         expect(element.textContent).toContain(`2 selected`);
+    });
+
+    /* WHAT THE QUESTION IS ABOUT, carried on the card itself (the daemon attaches it, see agent.ts). A choice
+     * between options describing a write-up is unanswerable without the write-up, and by the time the card is
+     * raised, the card that WROTE it has folded itself into `Write · +135 −0` well up the scroll. */
+    const document = { path: `docs/findings.md`, title: `Why it is slow`, markdown: `# Why it is slow` };
+
+    it(`draws the document a question is about, inside the card, open`, () => {
+        const element = mount({ ...ask(false), question: { ...ask(false).question!, document } });
+        expect(element.textContent).toContain(`Why it is slow`);
+        // The prose itself, not just its name: the reader must be able to READ it where the decision is.
+        expect(element.textContent).toContain(`# Why it is slow`);
+        expect(element.textContent).toContain(`findings.md`);
+    });
+
+    it(`folds it when the write that produced it is already drawn in the same bubble`, async () => {
+        const element = mount({
+            ...ask(false),
+            question: { ...ask(false).question!, document },
+            tools: [
+                {
+                    id: `w1`,
+                    name: `Write`,
+                    category: `edit`,
+                    status: `completed`,
+                    content: [{ type: `diff`, path: `docs/findings.md`, newText: `# Why it is slow` }],
+                },
+            ],
+        });
+        // Named, so the reader knows what the question is about and can open it: two full copies of one
+        // document in a row is length, not emphasis.
+        expect(element.textContent).toContain(`Why it is slow`);
+        expect(element.textContent).not.toContain(`# Why it is slow`);
+
+        const fold = [...element.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)].find((button) =>
+            button.textContent?.includes(`Why it is slow`),
+        );
+        fold?.click();
+        await nextTick();
+        expect(element.textContent).toContain(`# Why it is slow`);
     });
 
     it(`keeps a single-select question round, silent, and one-pick-at-a-time`, async () => {
