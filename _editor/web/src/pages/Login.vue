@@ -167,7 +167,7 @@ watch(
                 <span class="beat"><span class="display">Your workspace opens</span><span class="stop">.</span></span>
             </h1>
 
-            <p class="animate-fade-in-up lede" style="animation-delay: 160ms">A workspace for coding agents, on hardware you own.</p>
+            <p class="animate-fade-in-up hero-sub" style="animation-delay: 160ms">A workspace for coding agents, on hardware you own.</p>
 
             <!-- THE GATE. The one framed object on the screen, and the only place the site's turned corner and
                  lotus finial are drawn here: an ornament earns its keep on a panel big enough to carry it and
@@ -262,7 +262,16 @@ watch(
     background: var(--canvas);
     color: var(--ink);
     font-family: var(--face-read);
+    color-scheme: dark;
     isolation: isolate;
+}
+
+/* THE SKIN STOPS HERE. These screens match the marketing site, not the workspace chrome; a selected skin's
+ * heading face, stone-ink and cut shadow must not leak in — they are a different palette from the landing hero. */
+.door :is(h1, h2, h3, h4) {
+    font-family: unset;
+    color: unset;
+    text-shadow: none;
 }
 
 /* Keyboard focus in the page's own metal. The default ring is a blue-white box, which on this ground is the
@@ -373,9 +382,11 @@ watch(
  * site's own display size: that page gives the headline a whole screen and this one has a door to fit
  * under it. */
 .headline {
-    margin-top: 1.5rem;
+    margin: 1.5rem 0 0;
+    font-family: var(--face-display);
     font-size: clamp(1.75rem, 7.2vw, 3.4rem);
-    line-height: 1.18;
+    line-height: 1.24;
+    font-weight: 600;
 }
 /* One sentence per line, and each one wraps as a block of its own rather than reflowing into the next:
    splitting on the sentence is what keeps the ember stops at the ends of thoughts. */
@@ -399,6 +410,7 @@ watch(
     font-family: var(--face-display);
     font-weight: 600;
     letter-spacing: 0.02em;
+    line-height: 1.24;
     --descender: 0.2em;
     padding-block-end: var(--descender);
     margin-block-end: calc(-1 * var(--descender));
@@ -414,6 +426,7 @@ watch(
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    -webkit-text-fill-color: transparent;
     /* The bevel, and it has to be `filter` rather than `text-shadow`: the fill here IS a background, and a
        background is painted BEFORE a text shadow, so a light shadow offset up-left would lay a flat pale
        copy of the glyph over the texture it is meant to be lighting. Chained drop-shadows composite behind
@@ -430,13 +443,14 @@ watch(
     filter: drop-shadow(0 0 14px rgba(224, 123, 39, 0.55));
 }
 
-.lede {
-    margin-top: 1.5rem;
-    max-width: 34rem;
-    font-size: 1.0625rem;
-    line-height: 1.65;
-    color: var(--ink-muted);
-    text-wrap: pretty;
+/* THE LINE UNDER THE HEADLINE — ported verbatim from `.home .hero-sub` in home.css. */
+.hero-sub {
+    margin: 1.4rem auto 0;
+    max-width: 36ch;
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: #c2a077;
+    text-wrap: balance;
 }
 
 /* ── THE GATE ──────────────────────────────────────────────────────────────────────────────────────
