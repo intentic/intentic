@@ -23,15 +23,19 @@
  * which is CI run 32871141950 — and the push after it went green with nothing between them that touched this
  * site, because the second runner's turbo cache happened to miss.
  *
- * SO WHY `src/` IS SOUND WHERE `dist/` IS NOT, since the copy holds both. The install is what reconciles it, and
- * .github/actions/pnpm-setup deletes pnpm's workspace-state file first precisely so that reconcile really runs
- * rather than answering "already up to date" — that step exists because the same staleness once deadlocked main
- * on a rename. `src/` is git-tracked, so by the time the install looks, the checkout has already put the current
- * one on disk and the copy is brought up to it. `dist/` is not tracked: turbo produces it AFTER the install, so
- * there is no later pass that could reconcile it, and pnpm's own trigger (the build script) is the thing a cache
- * hit skips. The uncovered half is exactly `dist/`, and this plugin resolves around it.
+ * SO WHY CHECKOUT `src/` IS SOUND WHERE INJECTED `dist/` IS NOT. Source is git-tracked and current before the
+ * build starts; dist is not tracked and turbo produces it only after the install. The resolver uses the injected
+ * package to prove the importer really has that dependency, then follows the package's repository directory back
+ * to the checkout and reads the source condition there.
+ *
+ * It must not join the source target onto the injected package itself. pnpm materializes those packages according
+ * to their published files: `@intentic/constants`, for example, deliberately ships `dist/` plus its hand-written
+ * Node helper, not `src/index.ts`. Its export map still carries `@intentic/src` for workspace tools, so resolving
+ * that target inside the injected copy produces an unloadable dependency even when the checkout is completely
+ * healthy. The checkout is the source of truth for both the current manifest and the file the condition names.
  */
 
+import { repoRoot } from "@intentic/constants/node";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -42,6 +46,9 @@ const WORKSPACE_SCOPES = [`@intentic/`, `@intentic-app/`, `@intentic-dev/`];
 /** The condition each package's exports map lists ahead of its `default`, pointing at the entry's `.ts`. */
 const SOURCE_CONDITION = `@intentic/src`;
 
+/** The checkout containing this private build plugin, discovered rather than inferred from the file's depth. */
+const WORKSPACE_ROOT = repoRoot(import.meta.url);
+
 /** `@scope/name/sub/path` → `["@scope/name", "./sub/path"]`; a bare package id gets the `"."` subpath. */
 const splitSubpath = (id) => {
     const parts = id.split(`/`);
@@ -50,13 +57,13 @@ const splitSubpath = (id) => {
     return [name, rest === `` ? `.` : `./${rest}`];
 };
 
-/* The package root holding a resolved entry file: walk up from the file until a package.json appears. Bounded by
- * the filesystem root, so a resolution that somehow lands outside a package ends as undefined rather than looping. */
-const packageRootOf = (file) => {
+/* The package manifest owning a resolved entry file: walk up until a package.json appears. Bounded by the
+ * filesystem root, so a resolution that somehow lands outside a package ends as undefined rather than looping. */
+const packageManifestOf = (file) => {
     let directory = dirname(file);
     for (;;) {
         try {
-            return { directory, manifest: JSON.parse(readFileSync(join(directory, `package.json`), `utf8`)) };
+            return JSON.parse(readFileSync(join(directory, `package.json`), `utf8`));
         } catch {
             const parent = dirname(directory);
             if (parent === directory) return undefined;
@@ -101,12 +108,19 @@ export const sourceFirstWorkspace = () => ({
         } catch {
             return null;
         }
-        const root = packageRootOf(resolved);
-        if (root === undefined) return null;
+        const installedManifest = packageManifestOf(resolved);
+        if (installedManifest === undefined) return null;
 
-        const target = sourceTarget(root.manifest.exports?.[subpath]);
+        const workspaceDirectory = installedManifest.repository?.directory;
+        if (workspaceDirectory === undefined) return null;
+
+        const directory = join(WORKSPACE_ROOT, workspaceDirectory);
+        const manifest = JSON.parse(readFileSync(join(directory, `package.json`), `utf8`));
+        if (manifest.name !== name) return null;
+
+        const target = sourceTarget(manifest.exports?.[subpath]);
         // No source entry for this subpath is a legitimate answer — a package may publish only built output — so
         // hand it back to Vite rather than failing the build on a package this rule has nothing to say about.
-        return target === undefined ? null : join(root.directory, target);
+        return target === undefined ? null : join(directory, target);
     },
 });
