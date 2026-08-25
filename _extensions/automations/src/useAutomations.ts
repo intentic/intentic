@@ -1,12 +1,7 @@
-import {
-    type Automation,
-    type AutomationApproval,
-    AutomationApprovalsListSchema,
-    type AutomationSummary,
-    AutomationsListSchema,
-} from "@intentic/sandbox-contract";
+import { type Automation, type AutomationApproval, type AutomationSummary, AutomationsListSchema } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
+import { approvalsQuery } from "./approvalsQuery";
 import { host } from "./host";
 
 /* The sandbox's automations manifest (.intentic/config/automations.json), read/written via the daemon's /automations
@@ -80,7 +75,10 @@ export function useAutomations() {
     const api = host();
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.key(`automations`);
-    const pendingKey = api.sandbox.key(`automation-approvals`);
+    // The queue's read model, shared with the rail badge's background poll rather than written out again here:
+    // whichever of the two asks first fills the entry the other paints from (approvalsQuery.ts).
+    const pending = approvalsQuery();
+    const pendingKey = pending.queryKey;
     const enabled = computed(() => api.sandbox.reachable());
 
     const query = useQuery({
@@ -88,12 +86,7 @@ export function useAutomations() {
         queryFn: async (): Promise<AutomationSummary[]> => AutomationsListSchema.parse(await api.sandbox.json(`/automations`)).automations,
         enabled,
     });
-    const pendingQuery = useQuery({
-        queryKey: pendingKey,
-        queryFn: async (): Promise<AutomationApproval[]> =>
-            AutomationApprovalsListSchema.parse(await api.sandbox.json(`/automations/pending`)).approvals,
-        enabled,
-    });
+    const pendingQuery = useQuery({ ...pending, enabled });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     // Approving a held wake records a run, so refresh both the queue and the automation list.
     const invalidatePending = (): Promise<void> => {

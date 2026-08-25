@@ -59,6 +59,16 @@ initial)`, which the host empties whenever the browser is pointed at another san
 takes a `sandboxScopeGuard()` before its await and asks it after, so a poll that left under the last sandbox
 cannot write its answer into the next one.
 
+**A badge is also what puts a rail tile on screen.** The app's rail seats four permanent tiles (Chat, Agents,
+Workspace, Preview) and gives every other area a seat only while it is badging, while the reader has pinned it,
+or while they are standing in it; the rest are behind the rail's More menu, which lists every area whether or not
+it is seated, and each has a `view.*` command in the palette (`core-views/registry.ts` in the web app holds the
+rule and the table). So `detect()` decides whether the AREA exists, which is what makes its route, its More row,
+its mobile menu row and its palette command work, and `badge()` decides whether it is currently worth a seat. A
+view that badges all day therefore does not merely train the reader to stop looking: it holds one of roughly nine
+seats while doing it. `ViewBadge`'s bar, something happened here that you don't already know about, is the same
+bar as before and now costs something when it is missed.
+
 **Do not hand-write the poll behind a badge.** `sandboxPoll` is that poll, and `sandboxLedger` is the file
 recording what the owner has already seen: the two things every badging surface here needed, and six packs
 had each written out. What stays yours is the judgement: `badge()` decides the count, the tone and the wording,

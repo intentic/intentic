@@ -34,19 +34,34 @@ const stubFacts = async (page: Page): Promise<void> => {
     });
 };
 
-// The shell is up once the rail has drawn at least one extension tile, the point after which the three
-// failure states below are meaningful rather than merely not-yet-rendered.
+/* The shell is up once the rail's extensions have activated, the point after which the three failure states
+ * below are meaningful rather than merely not-yet-rendered.
+ *
+ * "An extension tile is on the rail" no longer says that. The column seats a tile while it has something to
+ * report and keeps the rest behind the More menu (core-views/registry.ts), and nothing behind a badge has data
+ * on this fixture, so the honest signal is EITHER: an area seated (the one being visited, or one that is
+ * badging) or the More tile counting the ones that are not. */
 const shellReady = async (page: Page): Promise<void> => {
-    await expect(page.locator(`a[href^="/ext/"]`).first()).toBeVisible();
+    await expect(page.locator(`nav a[href^="/ext/"], nav [aria-label*="not on the rail"]`).first()).toBeVisible();
+};
+
+// Open the rail's More menu, whose rows are the areas that are not currently seated. Its label carries the
+// count, so it is matched on the stable half of it.
+const openMore = async (page: Page): Promise<void> => {
+    await page.locator(`nav [aria-label^="More areas"]`).click();
 };
 
 test.beforeEach(async ({ page }) => {
     await stubFacts(page);
 });
 
-test(`the rail shows exactly the views the fixture activates`, async ({ page }) => {
+test(`the rail and its More menu show exactly the views the fixture activates`, async ({ page }) => {
     await page.goto(`/agents`);
     await shellReady(page);
+    // BOTH RUNS TOGETHER, because the split between them is a matter of what is badging this second and this
+    // spec is about what ACTIVATED. Every area is in exactly one of the two (ShellDesktop cuts them from one
+    // list), so their union is the inventory however the seats fall on the day.
+    await openMore(page);
 
     const hrefs = await page.locator(`a[href^="/ext/"]`).evaluateAll((links) => links.map((link) => link.getAttribute(`href`) ?? ``));
     // `/ext/<id>` or `/ext/<id>/<key>`, the id is what identifies the view family.

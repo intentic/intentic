@@ -21,6 +21,6 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "workflows", "label": "Workflows", "surface": "rail" }]
+        "views": [{ "id": "workflows", "label": "Workflows", "surface": "rail", "badge": true }]
     }
 }

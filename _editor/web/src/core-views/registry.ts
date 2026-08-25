@@ -54,7 +54,8 @@ export interface ActiveExtension {
 export const extensionPath = (extension: ViewRegistration, activation: Activation): string =>
     activation.key === extension.id ? `/ext/${extension.id}` : `/ext/${extension.id}/${encodeURIComponent(activation.key)}`;
 
-/* THE RAIL'S READING ORDER AND ITS GROUPS, owned by the app rather than by whoever registered first.
+/* THE RAIL'S READING ORDER, ITS GROUPS, AND WHICH OF ITS TILES ARE ON SCREEN AT ALL, owned by the app rather
+ * than by whoever registered first.
  *
  * Without this the rail was in registration order, core views, then the `builtins.ts` array, which is an
  * implementation detail, so Acceptance landed between Automations and Documentation for no reason a user could
@@ -69,16 +70,20 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  *   Work    Agents, Workspace, the two ends of one loop: start a turn, then read what it did and land it. Both
  *           are permanent and both are the busiest tiles in the product, so they take the two seats a hand finds
  *           without looking, and NOTHING is allowed between them. The first table put Drafts and Workflows there,
- *           which split the pair with two surfaces touched weekly.
+ *           which split the pair with two surfaces touched weekly. The whole band is `always`: with the chat at
+ *           its head and the running app at its foot, these four ARE the loop, and they are the only tiles the
+ *           column carries unconditionally.
  *   Judge   Drafts, Acceptance, Pipelines, Deployments, Maintenance, "does this go out, is it good, did it ship,
  *           what is owed". The tiles you click BECAUSE one lit up, so they are together and high. Drafts heads the
  *           band: it is the only one where nothing happens at all until the owner acts, and a post carrying a send
  *           time is the most perishable thing on the rail.
  *   Set up  Workflows, Automations, the two ways a run happens without anyone sitting there. The mechanisms have
  *           little in common (a workflow forks a prompt across sessions and merges what comes back; an automation
- *           is a trigger), but their relationship to the day is identical: authored once, then left alone, and
- *           neither ever lights up. That is what makes them a shelf rather than work. Workflows previously sat
- *           third, an unbadged permanent tile holding a seat the hand reaches for by reflex.
+ *           is a trigger), but their relationship to the day is identical: authored once, then left alone. That
+ *           is what makes them a shelf rather than work. Workflows previously sat third, a permanent tile that
+ *           could not badge at all, holding a seat the hand reaches for by reflex. Each has since been given the
+ *           one thing it can honestly say (a run in flight; a wake held for a yes), which is now also the only
+ *           thing that seats it.
  *   Know    Documentation, Infrastructure, Live status, what you go and consult on your own initiative.
  *           Documentation badges, and its badge is well formed: generated docs waiting to be reviewed, which
  *           clears by looking. It fires rarely, which is the standard, rarely and meaningfully, not often.
@@ -90,6 +95,34 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * notebook, the other a feed that is always moving. The cost was never abstract. The rail can reach fourteen
  * navigation tiles and roughly nine fit above a 945px viewport before the column scrolls (see the flex-shrink
  * note in ShellDesktop), so every silent permanent tile is a badged one pushed under the fold on a laptop.
+ *
+ * SO THE RULE IS APPLIED TO EVERY TILE, not only to the two that were evicted for failing it. `seat` says which
+ * half of it a tile passes, and it is the difference between a rail of twelve tiles that are nearly all on
+ * screen at rest and a rail of four that are:
+ *
+ *   `always`  Somewhere you GO, constantly, whatever is happening: the chat, the fleet, the files, the running
+ *             app. Four ids, and the hand finds each of them without looking precisely because the run holding
+ *             them never changes length.
+ *   `signal`  Everything else: seated exactly while it HAS something to say (it badges), and in the More menu
+ *             the rest of the time. An id this table does not name is `signal` too, so a third-party bundle
+ *             joins on the same terms the first-party views hold themselves to instead of helping itself to a
+ *             permanent seat by registering.
+ *
+ * WHICH MAKES THE BADGE THE SEAT, and that is a bar on the badge as much as on the tile: `ViewBadge`'s contract
+ * ("something happened here that you don't already know about", never "here is a statistic") is now what decides
+ * whether a surface is on the rail at all. A view that badges all day no longer merely trains the reader to stop
+ * looking, it holds one of nine seats while doing it.
+ *
+ * "A SURFACE THAT EXISTS INTERMITTENTLY CANNOT BE CHECKED, ONLY STUMBLED INTO." That objection is right, it is
+ * why Drafts was a permanent tile before this, and it is ANSWERED here rather than dismissed: the More tile at
+ * the foot of the run is permanent and lists every area whether or not it is seated, each one also has a
+ * `view.*` command in the palette (composables/commands/useAreaCommands.ts), and any tile can be pinned back
+ * onto the rail for good from its own right-click menu (shell/railPins.ts). Nothing became unreachable; what
+ * changed is that twelve permanent tiles became four permanent tiles and a door.
+ *
+ * AND A TILE NEVER VANISHES UNDER THE READER STANDING ON IT: the area you are in keeps its seat while you are
+ * there, whatever its badge says. Retiring it in the frame that opened it would be the shell disowning the view
+ * still on screen, which is the same exception, and the same argument, as the chat tile's during a pop-out.
  *
  * The bands are DECLARED, not derived. `badge: true` in the manifest lands on the Judge extensions and nothing
  * else, which is good evidence the band is real, but deriving from it would reshuffle the whole rail the day
@@ -105,23 +138,68 @@ export const extensionPath = (extension: ViewRegistration, activation: Activatio
  * views added after the first table shipped: `workflows` and `deployments` were never listed, so they sorted
  * BELOW Infrastructure and Live status, the newest surfaces in the worst seats, which is the very drift this
  * table exists to prevent. Add a rail view here in the same commit that registers it. */
+// Whether a tile holds its seat unconditionally or only while it has something to say. See the seat paragraphs
+// above; `railSeated` below is the one place either answer is turned into a yes or a no.
+export type SeatPolicy = "always" | "signal";
+
+export interface RailItem {
+    readonly id: string;
+    readonly seat: SeatPolicy;
+}
+
 export interface RailGroup {
     readonly id: string;
     // Used as the mobile menu's section heading; the desktop rail is 44px wide and separates with a hairline.
     readonly label: string;
-    readonly ids: readonly string[];
+    readonly items: readonly RailItem[];
 }
 
+const always = (id: string): RailItem => ({ id, seat: `always` });
+const signal = (id: string): RailItem => ({ id, seat: `signal` });
+
 export const RAIL_GROUPS: readonly RailGroup[] = [
-    // Preview closes the Work loop's third end: start a turn, read what it did, LOOK at the running app. Its
-    // tile appears only while the workspace has something previewable (ShellDesktop.previewTile).
-    { id: `work`, label: `Work`, ids: [`chat`, `agents`, `workspace`, `preview`] },
-    { id: `judge`, label: `Judge`, ids: [`drafts`, `acceptance`, `pipelines`, `deployments`, `maintenance`] },
-    { id: `setup`, label: `Set up`, ids: [`workflows`, `automations`] },
-    { id: `know`, label: `Know`, ids: [`documentation`, `infrastructure`, `live-status`] },
+    /* Preview closes the Work loop's third end: start a turn, read what it did, LOOK at the running app. It is
+     * `always` on the first half of the rule (you go there constantly) rather than the second: its badge counts
+     * what is answering, which is an inventory and explicitly not a claim (viewBadge.ts), so a seat conditional
+     * on it would be a seat held by a statistic. The tile still appears only where there is anything previewable
+     * at all: that is its detect (ShellDesktop.previewTile), which `always` does not override. */
+    { id: `work`, label: `Work`, items: [always(`chat`), always(`agents`), always(`workspace`), always(`preview`)] },
+    // Every one of these badges when it needs the owner, which is the whole reason they are grouped: they are
+    // the tiles you press BECAUSE one lit up, so being seated by lighting up costs them nothing.
+    {
+        id: `judge`,
+        label: `Judge`,
+        items: [signal(`drafts`), signal(`acceptance`), signal(`pipelines`), signal(`deployments`), signal(`maintenance`)],
+    },
+    // Authored once, then left alone. Both were permanent tiles that could not badge at all until they were
+    // given one (ext-workflows: a run wants a gate opened; ext-automations: a fire is held for approval).
+    { id: `setup`, label: `Set up`, items: [signal(`workflows`), signal(`automations`)] },
+    // Documentation badges rarely and meaningfully (a generated set nobody has read). Infrastructure and Live
+    // status do not badge at all and are consulted deliberately, so at rest they live in More, which is exactly
+    // what the rule says about a tile that can never tell you anything.
+    { id: `know`, label: `Know`, items: [signal(`documentation`), signal(`infrastructure`), signal(`live-status`)] },
 ];
 
-const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.ids);
+const RAIL_ORDER: readonly string[] = RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id));
+
+const SEAT_POLICY: ReadonlyMap<string, SeatPolicy> = new Map(
+    RAIL_GROUPS.flatMap((group) => group.items.map((item) => [item.id, item.seat] as const)),
+);
+
+// An unlisted id is `signal`, the same default railRank gives it: a view this table has never heard of appends
+// to the end of the run and has to earn its place there by having something to say.
+export const seatPolicy = (id: string): SeatPolicy => SEAT_POLICY.get(id) ?? `signal`;
+
+/* IS THIS TILE ON THE RAIL RIGHT NOW. The whole seat decision, in one predicate, because the desktop rail asks
+ * it about navigation tiles and the More menu asks the negative of it about the same list: two answers derived
+ * from one function can't disagree about whether an area is already on screen.
+ *
+ * `pinned` is the reader overruling the table for this sandbox (shell/railPins.ts) and `active` is the standing
+ * exception: the area you are in keeps its seat while you are in it. */
+export const railSeated = (
+    tile: { readonly id: string; readonly badge?: ViewBadge | undefined },
+    context: { readonly pinned: boolean; readonly active: boolean },
+): boolean => seatPolicy(tile.id) === `always` || context.pinned || context.active || tile.badge !== undefined;
 
 /* WHAT THE MOBILE TAB BAR HAS ALREADY PROMOTED, and therefore what the mobile menu must not list again.
  *
@@ -143,7 +221,8 @@ export const railRank = (id: string): number => {
 
 // Which band a rail element renders in. An unlisted id lands in the last group, matching where railRank puts it,
 // the two must agree, or a tile would sort into one run and be drawn under another's divider.
-const railGroupOf = (id: string): RailGroup => RAIL_GROUPS.find((group) => group.ids.includes(id)) ?? RAIL_GROUPS[RAIL_GROUPS.length - 1]!;
+const railGroupOf = (id: string): RailGroup =>
+    RAIL_GROUPS.find((group) => group.items.some((item) => item.id === id)) ?? RAIL_GROUPS[RAIL_GROUPS.length - 1]!;
 
 /* Cut a rail-ordered run into its bands, dropping the ones nothing landed in, so a surface never draws a
  * separator (or a heading) over nothing on a workspace where a whole band has not activated. Shared by the

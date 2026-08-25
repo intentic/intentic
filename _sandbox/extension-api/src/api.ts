@@ -33,6 +33,13 @@ export interface Activation {
 // A badge is a claim on the user's attention, so the bar is the same one the core surfaces already hold
 // themselves to: it must mean "something happened here that you don't already know about", never "here is a
 // statistic". A count that is lit most of the day teaches the user to stop seeing the rail.
+//
+// AND IT IS WHAT PUTS THE TILE THERE. Beyond the host's few permanent areas, a rail tile holds its seat while
+// this is non-empty (or while the reader has pinned it, or is standing in it) and is reached through the rail's
+// More menu otherwise, which lists every area whether or not it is seated, as does the palette. So `detect()`
+// says whether the area EXISTS, which is what makes its route, its menu rows and its command work, and this says
+// whether it is currently worth one of the column's roughly nine seats. Badging all day now costs a seat as well
+// as the reader's trust.
 export interface ViewBadge {
     // How many, for work whose SIZE is what the user acts on, two files to review and two hundred are
     // different afternoons. Omitted or 0 ⇒ no number. The host renders anything above 99 as "99+".

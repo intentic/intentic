@@ -23,7 +23,7 @@
         ]
     },
     "contributes": {
-        "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
+        "views": [{ "id": "automations", "label": "Automations", "surface": "rail", "badge": true }],
         "files": [
             { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },

@@ -76,7 +76,14 @@ onMounted(() => {
 /* The rail's extension tiles, same detection AND same bands as ShellDesktop: Workspace/Drafts/Chat live on the
  * tab bar, so the menu lists only the remaining areas. The desktop rail separates its bands with a hairline
  * because 44px leaves no room for a word; this page has the width, so it spells the band names out. Same
- * partition either way, which is the point of railBands living in the registry. */
+ * partition either way, which is the point of railBands living in the registry.
+ *
+ * EVERY AREA, SEATED OR NOT, and deliberately not filtered by the desktop's seat rule (registry.ts's
+ * `railSeated`). That rule exists because a 44px column has about nine seats and an area that is not saying
+ * anything is spending one; this page has a scroll and no such scarcity, so hiding a quiet area here would cost
+ * a tap and buy nothing. THIS PAGE IS THE PHONE'S "More": what the desktop reaches through a menu at the foot of
+ * the rail, a phone reaches through the Menu tab, which is the same list under a different door. Badges still
+ * say which of them wants something, which is the part that was ever load-bearing. */
 const areaBands = computed(() =>
     railBands(
         detectActivations(panels.value, capabilities.value)

@@ -5,14 +5,23 @@ import { draftsQuery, owedOf } from "./useDrafts";
 
 /* ext-drafts activation: bind the host handle, then register the "Drafts" rail view.
  *
- * PERMANENT TILE, unconditional detect, the shell's old tile made this argument and it moves here with it:
- * Drafts used to appear only once something was waiting, which made the whole area unlearnable (a surface that
- * exists intermittently cannot be checked, only stumbled into). The tile is the place; the badge is the news.
+ * UNCONDITIONAL DETECT, WHICH IS NOT THE SAME AS A PERMANENT TILE, and the difference is the whole of what this
+ * paragraph used to get wrong. The AREA exists on every sandbox: that is what makes `/ext/drafts` resolve, what
+ * puts Drafts in the More list, the mobile menu and the palette, and what the phone's Review tab promotes. The
+ * rail SEAT is a separate question, and the app's seat table answers it from the badge below (the web app's
+ * core-views/registry.ts): the tile is on the column while the queue owes the owner something, and behind the
+ * More menu while it does not.
+ *
+ * The old argument here was that a surface which exists intermittently cannot be checked, only stumbled into,
+ * and it is right, which is why it is answered rather than reversed: More lists this area whether or not it is
+ * seated, `view.drafts` opens it from the palette, and a reader who wants it on the rail regardless can pin it.
+ * What is gone is the tile that sat on every workspace all day for an empty queue.
  *
  * THE BADGE READS FROM MODULE STATE, not from the view: a count that only updated while the owner was already
- * reading the queue could never tell them anything. The read and the view name the SAME HostQuery, so the
- * badge's answer is also the view's first paint, and the manifest's `.intentic/config/drafts/` file binding is
- * what makes both of them move the moment a draft file is written, approved or deleted. */
+ * reading the queue could never tell them anything, and now could never seat the tile either. The read and the
+ * view name the SAME HostQuery, so the badge's answer is also the view's first paint, and the manifest's
+ * `.intentic/config/drafts/` file binding is what makes both of them move the moment a draft file is written,
+ * approved or deleted, which is also what puts the tile on the rail within the watcher's own batch. */
 
 /* The queue as a badge, kept current while the view is closed (background.ts). Sandbox-scoped, because a
  * proposal waiting in one workspace is not a claim on the reader's attention in another: "3 waiting on you"

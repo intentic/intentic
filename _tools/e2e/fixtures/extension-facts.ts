@@ -97,14 +97,18 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `live-status`, key: `desired-state`, surface: `rail`, why: `the desired-state repo` },
     { id: `directory-ui`, key: `designer`, surface: `directory`, why: `designer ships .intentic/ui` },
 
-    // ── rail extensions ──
+    /* ── rail extensions ──
+     * An activation, NOT a seat. A rail view activates on evidence and is addressable from that moment; whether
+     * the column spends one of its ~9 seats on it is the app's own question, answered per tile by RAIL_GROUPS
+     * from its badge (core-views/registry.ts). So "always on" below means the area exists on every sandbox, not
+     * that a tile is drawn: on this fixture, with no daemon data behind any badge, most of these are reached
+     * through the rail's More menu, which is why the inventory spec opens it. */
     { id: `acceptance`, key: `acceptance`, surface: `rail`, why: `platform has user stories` },
-    { id: `activity`, key: `activity`, surface: `rail`, why: `a discord CLI capability is connected` },
     { id: `automations`, key: `automations`, surface: `rail`, why: `always on` },
     { id: `deployments`, key: `production`, surface: `rail`, why: `the komodo capability named production` },
     { id: `documentation`, key: `documentation`, surface: `rail`, why: `any repo at all` },
+    { id: `drafts`, key: `drafts`, surface: `rail`, why: `always on` },
     { id: `maintenance`, key: `maintenance`, surface: `rail`, why: `any repo at all` },
-    { id: `memory`, key: `memory`, surface: `rail`, why: `always on` },
     { id: `pipelines`, key: `pipelines`, surface: `rail`, why: `a github CLI capability is connected` },
     { id: `workflows`, key: `workflows`, surface: `rail`, why: `always on` },
 
@@ -117,8 +121,14 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     // and the rail-inventory check covers the rest.
     { id: `documentation-repo`, key: `platform`, surface: `directory`, why: `every repo gets a Docs panel` },
 
-    // ── sandbox-surface extensions (tabs on the Sandbox hub) ──
+    /* ── sandbox-surface extensions (tabs on the Sandbox hub) ──
+     * Memory, Activity and Knowledge are here rather than above because they are not rail views: each is a
+     * section of the sandbox hub (their extension.ts files carry the argument, and RAIL_GROUPS' comment carries
+     * the rule they failed). The inventory said `rail` for the first two long after they moved. */
+    { id: `activity`, key: `activity`, surface: `sandbox`, why: `always on` },
+    { id: `knowledge`, key: `knowledge`, surface: `sandbox`, why: `always on` },
     { id: `logs`, key: `logs`, surface: `sandbox`, why: `always on` },
+    { id: `memory`, key: `memory`, surface: `sandbox`, why: `always on` },
     { id: `ports`, key: `ports`, surface: `sandbox`, why: `always on` },
     { id: `public`, key: `public`, surface: `sandbox`, why: `always on` },
 ];

@@ -5,7 +5,7 @@ import * as apps from "@intentic/ext-repo-apps";
 import * as preview from "@intentic/ext-preview";
 import type { PanelSummary } from "@intentic-app/api-contract";
 import { describe, expect, it } from "vitest";
-import { RAIL_GROUPS, detectActivations, railRank, registerView } from "./registry";
+import { RAIL_GROUPS, detectActivations, railRank, railSeated, registerView, seatPolicy } from "./registry";
 
 // apps + preview are packaged extensions the app activates via loadBuiltins; the registry seeds only the still-
 // static core views (infrastructure/live-status/directory-ui). Register the packaged detects here so the
@@ -234,7 +234,7 @@ describe(`rail order`, () => {
      * table that silently demotes what it does not mention is worse than no table, so every rail view a build
      * compiles in has to appear in it. */
     it(`ranks every compiled-in rail view, so none falls through to the end unnoticed`, () => {
-        const listed = new Set(RAIL_GROUPS.flatMap((group) => group.ids));
+        const listed = new Set(RAIL_GROUPS.flatMap((group) => group.items.map((item) => item.id)));
         const capabilities: CapabilityFacts[] = [
             { id: `bot`, kind: `cli`, config: { provider: `discord` } },
             { id: `repos`, kind: `cli`, config: { provider: `github` } },
@@ -269,7 +269,7 @@ describe(`rail order`, () => {
 
     it(`heads the decisions band with Drafts, the only one where nothing moves until the owner acts`, () => {
         const judge = RAIL_GROUPS.find((group) => group.id === `judge`);
-        expect(judge?.ids[0]).toBe(`drafts`);
+        expect(judge?.items[0]?.id).toBe(`drafts`);
     });
 
     it(`keeps an unlisted view at the end instead of letting it jump the queue`, () => {
@@ -286,6 +286,16 @@ describe(`rail order`, () => {
         stray.dispose();
     });
 
+    it(`keeps the seat table and the rank table naming the same ids, so no tile sorts into a band it can't sit in`, () => {
+        // Both are read off RAIL_GROUPS, so this can only fail by someone adding an id to one derived list and
+        // not the other: cheap to check, and the failure mode (a tile drawn under the wrong band's divider) is
+        // the kind that is noticed in a screenshot months later.
+        for (const item of RAIL_GROUPS.flatMap((group) => group.items)) {
+            expect(railRank(item.id)).toBeLessThan(RAIL_GROUPS.flatMap((group) => group.items).length);
+            expect([`always`, `signal`]).toContain(seatPolicy(item.id));
+        }
+    });
+
     it(`leaves per-repo directory panels in registration order, which the rail table says nothing about`, () => {
         // Only rail ids are ranked, and the sort is stable, so directory activations pass through untouched.
         const panels = [panel({ repo: `mono`, monorepo: true, hasPanel: true })];
@@ -294,5 +304,63 @@ describe(`rail order`, () => {
             .map(({ extension }) => extension.id);
         expect(directory).toEqual(directory.toSorted((left, right) => directory.indexOf(left) - directory.indexOf(right)));
         expect(directory.length).toBeGreaterThan(0);
+    });
+});
+
+/* WHICH TILES ARE ON THE COLUMN AT ALL. The rail's scarce resource is seats, not order: roughly nine fit above a
+ * 945px viewport, and before this every extension that activated took one whether or not it had anything to say.
+ * The rule is stated in registry.ts; this is it holding. */
+describe(`rail seats`, () => {
+    const resting = { pinned: false, active: false };
+
+    it(`seats a permanent area with nothing to report: it is where you GO`, () => {
+        expect(railSeated({ id: `agents` }, resting)).toBe(true);
+        expect(railSeated({ id: `workspace` }, resting)).toBe(true);
+        expect(railSeated({ id: `chat` }, resting)).toBe(true);
+        // Preview's badge is an inventory ("2 running"), so if it were seated by badge it would be seated by a
+        // statistic. It holds its seat on the other half of the rule instead.
+        expect(railSeated({ id: `preview` }, resting)).toBe(true);
+    });
+
+    it(`keeps a quiet queue off the rail, and seats it the moment it owes the owner something`, () => {
+        // The whole complaint this table answers: Drafts was permanent, so the rail carried a tile for an empty
+        // queue on every workspace, all day.
+        expect(railSeated({ id: `drafts` }, resting)).toBe(false);
+        expect(railSeated({ id: `drafts`, badge: { count: 3, tooltip: `3 waiting on you` } }, resting)).toBe(true);
+    });
+
+    it(`keeps the surfaces you author once and leave alone off it until a run needs you`, () => {
+        for (const shelf of [`workflows`, `automations`]) {
+            expect(railSeated({ id: shelf }, resting)).toBe(false);
+            expect(railSeated({ id: shelf, badge: { count: 1 } }, resting)).toBe(true);
+        }
+    });
+
+    it(`never retires the area the reader is standing in`, () => {
+        // Opened from More, an area with nothing to say would otherwise have no tile lit while its own view is
+        // on screen: the shell disowning where you are.
+        expect(railSeated({ id: `automations` }, { pinned: false, active: true })).toBe(true);
+    });
+
+    it(`lets a pin overrule the table for one route without touching the others`, () => {
+        expect(railSeated({ id: `deployments` }, { pinned: true, active: false })).toBe(true);
+        expect(railSeated({ id: `deployments` }, resting)).toBe(false);
+    });
+
+    it(`gives an unlisted third-party view the same terms as a first-party one`, () => {
+        // Not `always`: a bundle must not be able to take one of nine seats by registering. It is seated exactly
+        // when it badges, like every listed `signal` view.
+        expect(seatPolicy(`some-third-party-view`)).toBe(`signal`);
+        expect(railSeated({ id: `some-third-party-view` }, resting)).toBe(false);
+        expect(railSeated({ id: `some-third-party-view`, badge: { mark: `arrow-up` } }, resting)).toBe(true);
+    });
+
+    it(`spends permanent seats on the work loop and nowhere else`, () => {
+        // The count is the point: four is what fits above the fold with room left for the ones that light up. A
+        // fifth permanent tile is a product decision and should have to edit this number to happen.
+        const permanent = RAIL_GROUPS.flatMap((group) => group.items)
+            .filter((item) => item.seat === `always`)
+            .map((item) => item.id);
+        expect(permanent).toEqual([`chat`, `agents`, `workspace`, `preview`]);
     });
 });

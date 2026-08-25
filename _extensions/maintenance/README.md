@@ -26,13 +26,17 @@ the daemon computed rather than by a model's impression.
 The chore definitions themselves are **not** here: they are in `@intentic/sandbox-contract` (`src/chores/`),
 because both the daemon and the browser must agree on what a chore is. This package is the surface.
 
-**One rail tile, workspace-wide, always present.** Workspace-wide because the question is "what is this workspace
-owed", answered across repos. An AREA rather than an event tile, because the book, the history, the evidence and
-the snooze controls all exist whether or not anything is due: a surface that only exists while something is
-wrong cannot be visited to check that nothing is. The badge carries the signal; the tile carries the place.
+**One rail tile, workspace-wide.** Workspace-wide because the question is "what is this workspace owed", answered
+across repos, rather than one tile per repository fragmenting one list into five.
 
-It activates on ANY repository and deliberately not on evidence of a problem: gating it on something being due
-would mean the first time an owner sees this surface is the first time it has bad news.
+It activates on ANY repository and deliberately not on evidence of a problem: gating the AREA on something being
+due would mean the first time an owner sees this surface is the first time it has bad news.
+
+**Activating is not the same as holding a seat.** The rail seats this tile while the badge has something to
+report and lists it in its More menu otherwise (`core-views/registry.ts` holds the rule). The old argument for a
+permanent tile, that a surface which only exists while something is wrong cannot be visited to check that nothing
+is, still stands: it is answered by More, by `view.maintenance` in the palette, and by pinning the tile, none of
+which cost the column a silent seat on every workspace.
 
 ## Conventions & gotchas
 

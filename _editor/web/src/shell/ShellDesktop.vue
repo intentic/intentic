@@ -14,8 +14,18 @@ import { useCapabilities } from "../composables/extensions/useCapabilities";
 import { useRole } from "../composables/sandbox/useRole";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useTerminalActivity } from "../composables/terminal/useTerminalActivity";
+import { useAreaCommands } from "../composables/commands/useAreaCommands";
 import { commandShortcut, registerCommand } from "../composables/commands/useCommands";
-import { type ActiveExtension, activationBadge, detectActivations, extensionPath, railBands, railRank } from "../core-views/registry";
+import {
+    type ActiveExtension,
+    activationBadge,
+    detectActivations,
+    extensionPath,
+    railBands,
+    railRank,
+    railSeated,
+    seatPolicy,
+} from "../core-views/registry";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { chatOnRail, lastAreaPath, toggleChatFloating, toggleChatHome } from "../composables/chat/chatSurface";
 import { useChatFloating } from "../composables/chat/chatFloating";
@@ -40,6 +50,7 @@ import { extensionsLoaded } from "../extension-host/loader";
 import AccountPanel from "./AccountPanel.vue";
 import { chatDock, terminalDock } from "./dockSlots";
 import { type RailSeat, useRailMemory } from "./railMemory";
+import { useRailPins } from "./railPins";
 import PresenceAvatars from "../presence/PresenceAvatars.vue";
 import QuickOpen from "./QuickOpen.vue";
 import SandboxGate from "../sandbox-gates/SandboxGate.vue";
@@ -339,7 +350,10 @@ const extensionTile = (active: ActiveExtension): AreaTile => {
  * table cannot order (one Deployments tile per Komodo connection) keep the order it gave them.
  *
  * Live runtime surfaces (browsers, subagents, forwarded ports, the terminal) are NOT here: they render in the
- * cluster below the divider, next to the "+" and account controls. */
+ * cluster below the divider, next to the "+" and account controls.
+ *
+ * EVERY AREA THIS WORKSPACE HAS, seated or not. What the column actually draws is `seatedTiles` below; the rest
+ * of this list is the More menu's, and the two are cut from one run so an area can never be in both or neither. */
 const tiles = computed<readonly AreaTile[]>(() =>
     [
         ...fixedTiles.value,
@@ -355,15 +369,34 @@ const tiles = computed<readonly AreaTile[]>(() =>
  * on every load; until all three are in, a missing tile is late rather than absent, which is the distinction the
  * held seats below are built on. */
 const railSettled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
+
+/* WHICH OF THEM ARE ON THE COLUMN RIGHT NOW. The rule and its exceptions live in the registry (railSeated), so
+ * this is only the two live facts it needs: what this reader has pinned in this sandbox, and where they are
+ * standing. The negative half is the More menu's list, taken from the same partition rather than recomputed,
+ * because an area in neither run would simply be gone. */
+const pins = useRailPins();
+const seatedTiles = computed<readonly AreaTile[]>(() =>
+    tiles.value.filter((tile) => railSeated(tile, { pinned: pins.pinned.value.has(tile.to), active: isNavActive(tile.to) })),
+);
+const moreTiles = computed<readonly AreaTile[]>(() => tiles.value.filter((tile) => !seatedTiles.value.includes(tile)));
+
+/* THE SEATS WORTH REMEMBERING ARE THE ONES THAT WILL BE THERE TOMORROW: the permanent tiles and this reader's
+ * pins. railMemory exists to stop the run assembling itself in front of the reader across a load (see its
+ * header), and a signal-seated tile is not part of that problem: it is seated by a badge that is live state, so
+ * a ghost held for it would be the rail promising a queue that may have been cleared since. Those tiles simply
+ * light up when their extension answers, in a run whose length no longer moves while they do. */
+const stableSeats = computed<readonly AreaTile[]>(() =>
+    tiles.value.filter((tile) => seatPolicy(tile.id) === `always` || pins.pinned.value.has(tile.to)),
+);
 // The seats the rail had last time and hasn't filled yet: see railMemory.ts. Empty once the run is complete,
 // and empty on a first-ever visit, so the rail this composes is the live one in every settled state.
-const heldSeats = useRailMemory(tiles, railSettled);
-/* What the column draws: the live tiles, plus a held seat wherever one hasn't arrived, sorted by the SAME table
+const heldSeats = useRailMemory(stableSeats, railSettled);
+/* What the column draws: the seated tiles, plus a held seat wherever one hasn't arrived, sorted by the SAME table
  * the live run uses, so each lands in the seat its tile will occupy and is replaced in place rather than shifting
  * anything. A seat and a tile of equal rank keep the live one first, which only happens between two activations
  * of one extension: adjacent, identical-looking seats where the order can't be seen. */
 const railSeats = computed<readonly AreaTile[]>(() =>
-    [...tiles.value, ...heldSeats.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
+    [...seatedTiles.value, ...heldSeats.value].toSorted((left, right) => railRank(left.id) - railRank(right.id)),
 );
 // The seats cut into their bands, so the template can draw a hairline between runs: held seats included, so
 // the hairlines don't move in either as the run fills.
@@ -382,7 +415,9 @@ const tileBands = computed(() => railBands(railSeats.value, (tile) => tile.id));
  * runtime view: there is no "next" to be relative to, so the press enters the run at the end it is heading
  * away from: ↓ opens the first tile, ↑ the last. */
 const cycleArea = (delta: number): void => {
-    const list = tiles.value;
+    // The SEATED run, which is what the eye is following while the hand does this. An area behind the More menu
+    // is reached by name (its `view.*` command) rather than by walking past it invisibly.
+    const list = seatedTiles.value;
     if (list.length === 0) {
         return;
     }
@@ -439,31 +474,110 @@ watch(
     { immediate: true },
 );
 
-/* THE CHAT TILE'S OWN MENU, where the chat goes next, asked of the thing that holds it. While the rail is the
- * chat's home, the tile IS the chat's presence in this window, so a right-click on it is the natural place to
- * ask for one of the other homes: back to the side column, or out into a window of its own. The only tile
- * with a menu: the other areas are places, not a panel that can be re-homed. Rows share the one toggle each
- * verb already runs everywhere else (chatSurface.ts), and each carries its command's chord when one is bound. */
-const chatTileMenu = ref<{ show: (event: Event) => void }>();
-const chatTileMenuItems = computed<MenuItem[]>(() => [
-    {
-        label: `Dock chat back to the side`,
-        shortcut: commandShortcut(`chat.toggleHome`),
-        command: (): void => toggleChatHome(router),
-    },
-    {
-        label: chatFloats.value ? `Dock chat back` : `Move chat into new window`,
-        shortcut: commandShortcut(`chat.toggleFloating`),
-        command: (): void => toggleChatFloating(),
-    },
-]);
+/* A TILE'S OWN MENU, which is two different menus depending on which tile it is.
+ *
+ * THE CHAT'S is where the chat goes next, asked of the thing that holds it. While the rail is the chat's home,
+ * the tile IS the chat's presence in this window, so a right-click on it is the natural place to ask for one of
+ * the other homes: back to the side column, or out into a window of its own. Rows share the one toggle each verb
+ * already runs everywhere else (chatSurface.ts), and each carries its command's chord when one is bound.
+ *
+ * EVERY OTHER SEATED AREA'S is the pin, and only where a pin means something. A `signal` tile is on the rail
+ * because it is badging and will leave when it stops; "Keep on the rail" is the reader saying that for this
+ * sandbox they want it there regardless (railPins.ts). It is a checkable row rather than two labels, so the
+ * state is legible before the press and the same row undoes it. The permanent tiles get no row at all: they
+ * cannot be pinned (they are already), and offering to unpin Agents would be offering to break the rail. */
+const tileMenu = ref<{ show: (event: Event) => void }>();
+const menuTile = ref<RailSeat>();
+const tileMenuItems = computed<MenuItem[]>(() => {
+    const tile = menuTile.value;
+    if (tile === undefined) {
+        return [];
+    }
+    if (tile.id === `chat`) {
+        return [
+            {
+                label: `Dock chat back to the side`,
+                shortcut: commandShortcut(`chat.toggleHome`),
+                command: (): void => toggleChatHome(router),
+            },
+            {
+                label: chatFloats.value ? `Dock chat back` : `Move chat into new window`,
+                shortcut: commandShortcut(`chat.toggleFloating`),
+                command: (): void => toggleChatFloating(),
+            },
+        ];
+    }
+    return [
+        {
+            label: `Keep on the rail`,
+            // What the tile does when the pin is off, so the row explains itself rather than only toggling:
+            // this is the one place the seat rule is stated to the person it applies to.
+            hint: pins.isPinned(tile.to) ? `Always seated, badge or not` : `Otherwise it shows only when it needs you`,
+            checked: pins.isPinned(tile.to),
+            command: (): void => pins.toggle(tile.to),
+        },
+    ];
+});
 const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
-    if (tile.id !== `chat`) {
-        return; // every other tile keeps the browser's own menu
+    if (tile.id !== `chat` && seatPolicy(tile.id) === `always`) {
+        return; // a permanent tile has nothing to offer here: keep the browser's own menu
     }
     event.preventDefault();
-    chatTileMenu.value?.show(event);
+    menuTile.value = tile;
+    tileMenu.value?.show(event);
 };
+
+/* THE DOOR TO EVERYTHING THAT IS NOT ON THE RAIL, and the reason the rest of the column may be short. It is a
+ * permanent tile listing every area this workspace has that is not currently seated: quiet queues, the surfaces
+ * that never badge, anything the reader has not pinned. One seat, held forever, in exchange for the eight it
+ * takes back.
+ *
+ * ROWS ARE LINKS. Every area is a real URL, so the menu's own rows carry `url` as well as the push (ContextMenu
+ * handles the pair), which is what makes middle-click, ⌘-click and "copy link address" work on a place you found
+ * through a menu rather than through the rail.
+ *
+ * IT NEVER BADGES, and it cannot: anything with something to say is seated by that very fact, so a count here
+ * could only ever be zero. A More tile that lit up would mean the seat rule had stopped working. */
+const moreMenu = ref<{ show: (event: Event) => void }>();
+const moreOpen = ref(false);
+// The count is the whole point of the hover: the tile's job is to say that there is more, and how much more is
+// the only thing a reader can't already see. Phrased like every other tile's label (see tileLabel).
+const moreLabel = computed(() => (moreTiles.value.length === 0 ? `More areas` : `More areas · ${moreTiles.value.length} not on the rail`));
+/* OPENED AT THE TILE, not at the pointer's last known position. This menu is a ContextMenu, and PrimeVue places
+ * one from the event's `pageX/pageY` alone: a press from the KEYBOARD (Enter or Space on the focused tile) is a
+ * click with `detail === 0` and no coordinates, so the list would have opened hard against the window's top-left
+ * corner, a full screen away from the control that was pressed and from the focus ring still sitting on it.
+ * Anchored to the tile's own box in that case: the same menu, beside the thing that opened it. */
+const openMore = (event: MouseEvent): void => {
+    moreOpen.value = true;
+    const box = event.detail === 0 ? (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() : undefined;
+    moreMenu.value?.show(box === undefined ? event : new MouseEvent(`click`, { clientX: box.right, clientY: box.top }));
+};
+// A row per unseated area. `url` AND `command`: the address is what a modified click takes, the push is what a
+// plain one runs. A repository tile carries no icon (it draws initials on the rail), and this menu has room for
+// a name, so a row without one simply sits flush.
+const moreRow = (tile: AreaTile): MenuItem => ({
+    label: tile.label,
+    ...(tile.icon === undefined ? {} : { icon: tile.icon }),
+    url: tile.to,
+    command: (): void => {
+        void router.push(tile.to);
+    },
+});
+const moreMenuItems = computed<MenuItem[]>(() =>
+    moreTiles.value.length === 0
+        ? [{ label: `Every area is on the rail`, disabled: true }]
+        : [
+              ...moreTiles.value.map(moreRow),
+              /* WHERE THE PIN IS, said in the one place somebody wonders. Opening an area from this menu seats
+               * its tile for as long as you are in it, so the right-click that keeps it there is available the
+               * moment you arrive: the gesture is discoverable only if something says so, and this list is what
+               * the person who wants it is already looking at. A row rather than a tooltip because it has to
+               * survive being read once and remembered. */
+              { separator: true },
+              { label: `Right-click a tile to keep it on the rail`, disabled: true },
+          ],
+);
 
 // Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
 // (popped out), on its way back to one after a page reload (so a refresh doesn't flash the column open for a
@@ -514,6 +628,9 @@ const terminalLabel = computed(() => {
 // Palette): registered on mount, disposed on unmount, so the `>` command mode is populated the moment the shell
 // is up. Each carries its own `keybinding`, so it is reachable by both the palette and a shortcut.
 useShellCommands();
+// …and one "Go to <area>" per rail area on top of them, seated or not: what keeps a surface behind the More
+// menu one keystroke away rather than one hunt away (useAreaCommands.ts).
+useAreaCommands();
 // The single global-shortcut dispatcher: it runs whichever registered command's keybinding matches the keystroke
 // (Ctrl+` → terminal, Mod+P → Go to File, Mod+Shift+P → Command Palette, plus any extension-contributed binding),
 // replacing a bespoke per-shortcut hub. All actions are sandbox-global, so it lives at the shell, not in a view.
@@ -584,6 +701,23 @@ useKeybindings();
                     </template>
                 </template>
             </div>
+
+            <!-- MORE: every area this workspace has that is not currently seated above (see moreMenuItems).
+                 OUTSIDE the scrolling run on purpose, and directly under it: it is the answer to "where did the
+                 rest go", so it is the one navigation control that must never be the thing scrolled out of
+                 sight. Dashed like the "+" below it, because both are doors rather than places, and it lights
+                 in the rail's one accent while its menu is open so the press has an answer on screen. -->
+            <button
+                type="button"
+                :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'border-link bg-primary-600/15 text-link': moreOpen }]"
+                aria-haspopup="menu"
+                :aria-expanded="moreOpen"
+                :aria-label="moreLabel"
+                v-tooltip.right="moreLabel"
+                @click="openMore"
+            >
+                <Icon name="ellipsis" class="text-lg" />
+            </button>
 
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
@@ -713,8 +847,13 @@ useKeybindings();
              regardless of where it sits in the grid. -->
         <QuickOpen />
 
-        <!-- The Chat tile's right-click menu (see chatTileMenuItems): main window only, so the default body. -->
-        <ContextMenu ref="chatTileMenu" :model="chatTileMenuItems" :min-width="15" />
+        <!-- A tile's right-click menu (see tileMenuItems): the chat's homes, or the pin. Main window only, so
+             the default body. -->
+        <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="15" />
+
+        <!-- …and the More tile's, which is a list of places rather than of verbs. Wider: these rows carry area
+             names, not two-word commands. -->
+        <ContextMenu ref="moreMenu" :model="moreMenuItems" :min-width="14" @hide="moreOpen = false" />
     </div>
 </template>
 

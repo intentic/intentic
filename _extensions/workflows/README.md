@@ -25,11 +25,23 @@ and converge: designed on a canvas, saved, and then run with its progress visibl
 - [src/workflowEdit.ts](src/workflowEdit.ts): the edit operations, as pure functions over a draft.
 - [src/templates.ts](src/templates.ts): the pre-built workflows, and what each is for.
 - [src/useWorkflows.ts](src/useWorkflows.ts): the list, and the runs against it.
+- [src/runsQuery.ts](src/runsQuery.ts): the run ledger, named once for the page and the badge, and what counts as
+  still working.
+- [src/attention.ts](src/attention.ts): the badge, filled while nothing here is on screen.
 
 ## How it fits
 
 Like automations, workflows are native to every sandbox (no capability to enable) so the view detects
-unconditionally.
+unconditionally: the area exists everywhere, which is what makes `/ext/workflows`, the More list, the mobile menu
+and the palette's "Go to Workflows" work.
+
+**The rail seats the tile while a run is in flight**, and otherwise keeps it behind the More menu
+(`core-views/registry.ts` holds the rule). A run is minutes to hours of fan-out that somebody started and walked
+away from, so a tile that appears exactly while one is working is the way back to the graph; a designer between
+visits is not worth one of the nine seats a laptop's rail has. The badge is `neutral`: runs working are an
+inventory, not a debt. Runs that ended BADLY are deliberately not counted, "unacknowledged" is the only honest
+form of that claim and there is nowhere here to acknowledge one yet; meanwhile a failed run's steps are agent
+conversations, so the fleet carries that news.
 
 ## Conventions & gotchas
 

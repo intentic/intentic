@@ -20,8 +20,8 @@ with the agent, never the UI. Approving starts a visible one-minute countdown, n
 - [src/useDrafts.ts](src/useDrafts.ts): the list and the writes, plus `owedOf`, the one definition of what the
   queue owes (the badge, the view and the phone's Review tab all count with it).
 - [src/postText.ts](src/postText.ts): platform caps, countdown words, and what makes a post a title.
-- [src/extension.ts](src/extension.ts): activation, the permanent tile, and the badge, which the queue's own
-  files refresh (the manifest's `contributes.files` binding) with a slow interval behind it as a backstop.
+- [src/extension.ts](src/extension.ts): activation, and the badge, which the queue's own files refresh (the
+  manifest's `contributes.files` binding) with a slow interval behind it as a backstop.
 
 ## How it fits
 
@@ -33,6 +33,13 @@ real port needed, which is precisely the pressure that keeps the public API hone
 
 The phone's fixed Review tab still points here: it PROMOTES this extension's registry entry (route and badge
 both) rather than reaching into its data, the same way the desktop rail ranks extension ids for placement.
+
+**The tile is on the rail while the queue owes something, and behind the More menu when it does not.** The area
+detects unconditionally, so it is always addressable (that is what the phone's Review tab, the palette's
+`view.drafts` and the More list all use); what the badge decides is the SEAT, under the app's own rule
+(`core-views/registry.ts`). This was a permanent tile on the argument that a surface appearing only when it has
+news cannot be checked, only stumbled into: true, and answered by More, the palette and a pin, rather than by a
+tile that sat on every workspace all day for an empty queue.
 
 **Deliberately not essential.** The daemon fires the publish automation on its own, but that engine acts only
 on drafts the owner already approved: switching this surface off starves it rather than blinding anyone, the

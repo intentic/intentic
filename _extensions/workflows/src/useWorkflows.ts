@@ -1,7 +1,8 @@
-import { type Workflow, type WorkflowRun, WorkflowRunsListSchema, type WorkflowSummary, WorkflowsListSchema } from "@intentic/sandbox-contract";
+import { type Workflow, type WorkflowRun, type WorkflowSummary, WorkflowsListSchema } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
+import { workflowRunsQuery } from "./runsQuery";
 
 /* The sandbox's workflow manifest (.intentic/config/workflows.json) and run ledger (.intentic/records/workflow-runs.json),
  * read/written through the daemon's /workflows routes. All daemon access goes through the host api.
@@ -18,7 +19,10 @@ export function useWorkflows() {
     const api = host();
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.key(`workflows`);
-    const runsKey = api.sandbox.key(`workflow-runs`);
+    // The ledger's read model, shared with the rail badge's background poll rather than written out again here:
+    // whichever of the two asks first fills the entry the other paints from (runsQuery.ts).
+    const runs = workflowRunsQuery();
+    const runsKey = runs.queryKey;
     const enabled = computed(() => api.sandbox.reachable());
 
     const query = useQuery({
@@ -26,11 +30,7 @@ export function useWorkflows() {
         queryFn: async (): Promise<WorkflowSummary[]> => WorkflowsListSchema.parse(await api.sandbox.json(`/workflows`)).workflows,
         enabled,
     });
-    const runsQuery = useQuery({
-        queryKey: runsKey,
-        queryFn: async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await api.sandbox.json(`/workflows/runs`)).runs,
-        enabled,
-    });
+    const runsQuery = useQuery({ ...runs, enabled });
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey });

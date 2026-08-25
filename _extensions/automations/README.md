@@ -18,11 +18,21 @@ cron expression, or a listener a connector provides) with the prompt to run when
 - [src/catalog.ts](src/catalog.ts): the daemon's catalogue, and what this browser adds to it (what is connected).
 - [src/cronSchedule.ts](src/cronSchedule.ts): schedule parsing and the plain-language sentence it renders as.
 - [src/useAutomationForm.ts](src/useAutomationForm.ts): the composer's state and its validation.
+- [src/approvalsQuery.ts](src/approvalsQuery.ts): the held-wake queue, named once for the view and the badge, and
+  which of those wakes actually want a person.
+- [src/attention.ts](src/attention.ts): the badge, filled while nothing here is on screen.
 
 ## How it fits
 
-Automations are native to every sandbox (there is no capability to enable) so the view detects
-unconditionally and the rail tile is permanent.
+Automations are native to every sandbox (there is no capability to enable) so the view detects unconditionally:
+the area exists everywhere, which is what makes `/ext/automations`, the More list, the mobile menu and the
+palette's "Go to Automations" work.
+
+**A tile on the rail is a separate question, and the app answers it.** The rail seats a tile while it has
+something to say and keeps the rest behind its More menu (`core-views/registry.ts`), which is why this extension
+badges at all: a wake held for approval is the one thing here that stops dead until the owner acts, so it is the
+one thing worth a seat. A held wake carrying an `autoRunAt` is only a delay and is deliberately not counted, the
+scheduler releases that one itself.
 
 **This package is the surface, not the vocabulary.** What can wake an agent, and what is worth starting from,
 are served together by the daemon (`GET /automations/catalog`): its own sources, the website widget and CI,
