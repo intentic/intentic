@@ -30,6 +30,8 @@ const PROMPT_LOST = [
     [`The question and plan cards`, `It writes "A) … B) …" as text instead of a card you can click`],
     [`The checklist panel`, `Long tasks run with no visible plan to follow along with`],
     [`The browser tools`, `It stops knowing a real browser is available and reaches for curl`],
+    [`Knowing how to wait`, `It polls a build with sleep instead of backgrounding it and being woken`],
+    [`Knowing which search binary`, `It walks the repo with grep, ~30× slower here than the rg that is installed`],
     [`Terse responses`, `The toggle stays on screen but no longer does anything`],
 ];
 

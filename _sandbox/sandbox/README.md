@@ -374,10 +374,12 @@ reports the profile.
   so the runtime's own loader reads that persona's prompt, skills and tools and this daemon parses none of it.
 - [src/agent/system-prompt.ts](src/agent/system-prompt.ts): what the model is told before the conversation
   starts, composed once per turn for whichever runtime is about to serve it. Its header carries the split that
-  makes the setting honest: which guidance is a fact about the WORKSPACE (the reference shelf, the public
-  outbox) and therefore travels to every runtime, and which names a mechanism only the Claude Code loop wires
-  (the question and plan cards, the checklist tools, the secret references, the outside-content envelopes, the
-  browser servers). [src/codex/codex-instructions.ts](src/codex/codex-instructions.ts) is the Codex half: two
+  makes the setting honest: which guidance is a fact about the WORKSPACE or the image (the reference shelf, the
+  public outbox, `rg` being the search binary that is installed) and therefore travels to every runtime, and
+  which names a mechanism only the Claude Code loop wires (the question and plan cards, the checklist tools, the
+  secret references, the outside-content envelopes, the browser servers, and the `run_in_background`/watch seams
+  that exist so a turn never polls a build with `sleep`).
+  [src/codex/codex-instructions.ts](src/codex/codex-instructions.ts) is the Codex half: two
   undocumented config keys, verified by reading what reached the wire.
 - [src/agent/workspace-map.ts](src/agent/workspace-map.ts): the AREAS of the project a run starts in, read off
   the filesystem when a conversation opens and prepended to its first message (opt-in: `workspaceMap`). Rooted at

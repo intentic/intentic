@@ -197,3 +197,69 @@ test("an unattended turn loses the interactive guidance but keeps the checklist"
     expect(text).not.toContain("AskUserQuestion");
     expect(text).toContain("TaskCreate");
 });
+
+/* THE TWO STEP-SPENDING STEERS, on both built-in bases and on an unattended turn.
+ *
+ * They are here because the corpus priced their absence: `sleep` inside a Bash command was a third of all tool
+ * execution time, and 23.9% of Reads re-read a path the session already had. Both are habits a model brings from
+ * training, so the prompt has to name the seam that replaces them, and both matter MOST unattended, where a turn
+ * polling a build on a timer burns a wake nobody is watching. */
+test("both built-in bases carry the waiting and context-reuse steers", () => {
+    for (const mode of ["intentic", "claude"] as const) {
+        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
+        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+        // The replacement seams are named, not merely implied: an unnamed capability is one the model falls back
+        // past to the shell primitive it already knows.
+        expect(text).toContain("run_in_background");
+        expect(text).toContain("mcp__watch__start");
+        expect(text).toContain("`sleep N`");
+        expect(text).toContain("already read this session");
+    }
+});
+
+test("an unattended turn keeps them: a wake nobody watches is where polling costs most", () => {
+    const text = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true }) as string;
+    expect(text).toContain("run_in_background");
+    expect(text).toContain("already read this session");
+});
+
+/* Same rule as the browser and the question card: these name THIS loop's seams (the Bash tool's background flag,
+ * an MCP server turn-plan wires here), so a Codex or Grok turn must not be told to reach for them. */
+test("a runtime outside the Claude Code loop is not told to use seams it has not got", () => {
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: false });
+    expect(codex.systemAppend).not.toContain("run_in_background");
+    expect(codex.systemAppend).not.toContain("mcp__watch__start");
+});
+
+/* WHICH BINARY IS INSTALLED IS NOT A MECHANISM, so unlike the two above it travels: a Codex turn shells out to
+ * the same image and pays grep's 30× on the same orientation calls. It sits with the reference shelf and the
+ * outbox for exactly that reason. */
+test("the search-binary steer travels to every runtime, like the other image facts", () => {
+    const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: false });
+    expect(codex.systemAppend).toContain("`rg` (ripgrep)");
+    const claude = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined }) as string;
+    expect(claude).toContain("`rg` (ripgrep)");
+});
+
+/* THE GATE ON `iq` IS A MEASUREMENT, NOT A PREFERENCE. iqSearch defaults off and iqSearchHoldout splits the arm
+ * that grades it (UsageTurn.iqSearchArm); when it IS on, the image-baked plugin ships the skill and the
+ * SessionStart nudge that teach the verbs. An unconditional mention here would jump that gate for every sandbox
+ * that never opted in, and put the tool's name in front of the holdout arm that exists to run without it. */
+test("the always-on prompt never advertises iq: its plugin is gated and under measurement", () => {
+    const intentic = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined }) as string;
+    const claude = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, append: undefined }) as { append: string };
+    for (const text of [intentic, claude.append]) {
+        expect(text).not.toMatch(/\biq\b/);
+    }
+});
+
+// The corpus answers 1.15 tool calls per round trip; the abstract instruction already exists and has not moved
+// it, so this one names the SITUATION (orienting) rather than restating the rule.
+test("both built-in bases name orientation as the place to batch", () => {
+    for (const mode of ["intentic", "claude"] as const) {
+        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
+        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+        expect(text).toContain("ORIENTING");
+        expect(text).toContain("ONE response");
+    }
+});

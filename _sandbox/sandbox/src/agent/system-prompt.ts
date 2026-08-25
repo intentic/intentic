@@ -59,6 +59,78 @@ const CHECKLIST_GUIDANCE =
     "task to in_progress before you start it and to completed the moment it is done. The user watches this list to see " +
     "where you are, so keep it current as you go rather than updating it in a batch at the end.";
 
+/* WHICH SEARCH BINARY, a toolchain fact rather than a convention, and the cheapest line in this file.
+ *
+ * Saying "which is installed" is safe to promise: ripgrep is an unconditional apt line in the sandbox image
+ * (_sandbox/sandbox/Dockerfile) and in _tools/ci-base, put there because the iq engine's lexical tier shells
+ * into `rg --json`. There is no image that has iq and lacks rg, and none that ships this prompt without both.
+ *
+ * Half of every Bash call in the corpus is code orientation, and 42% of them shell out to GNU `grep` (25,445
+ * calls) against 1.1% that use `rg` (670). Measured over 60 patterns taken from those very sessions, replaying
+ * each against this repo: `grep -rn` medians 440ms and 11.1KB of output, `rg` medians 17ms and 3.4KB. Thirty
+ * times the latency for three times the bytes, because grep walks node_modules and dist unless the agent
+ * remembers to scope it, and 69% of the 9,997 recursive invocations did not (only 31% carried --include or
+ * --exclude), while ripgrep honours .gitignore without being asked.
+ *
+ * Nothing here names `iq`. It is real and it is on PATH, but it is gated by the `iqSearch` setting (default OFF)
+ * and carries a running holdout (`iqSearchHoldout`, UsageTurn.iqSearchArm); when it is on, its own plugin ships
+ * the skill and the SessionStart nudge that teach it. Advertising it from the always-on prompt would both jump
+ * the gate and contaminate the arm that is measuring whether it helps. Head-to-head on those same 60 agent-written
+ * patterns it also does not dominate: recall@10 25.3% against ripgrep's 26.7%, at ~100× the latency. Its wins are
+ * elsewhere (it never returns nothing, and it bounds output), and that is the skill's argument to make, not this
+ * paragraph's. */
+const SEARCH_GUIDANCE =
+    "Search code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree and " +
+    "returns about a third of the bytes for the same hits, because it skips node_modules, dist and binaries " +
+    "without being told to. Reach for `grep` only to filter text you already have in hand (a log, a command's " +
+    "output), never to walk the repository.";
+
+/* BATCHING, and why it is worth saying again in a harness that already asks for it once.
+ *
+ * The corpus answers 104,046 tool calls in 90,835 round trips: 1.15 tools per response, and 87.3% of
+ * tool-calling responses carry exactly one. The abstract form of this instruction already sits near the end of
+ * the composed prompt, in the strongest position there is, and it has not moved that number, so repeating it
+ * louder is not the move. What is missing is WHEN: the model batches nothing while it is orienting, precisely
+ * where the calls are independent by construction. 15,690 calls sit in runs of three or more consecutive
+ * single-call read-only responses, 37.2h of latency spent deciding probes that had no need to be ordered. So
+ * this names the situation rather than restating the rule. */
+const BATCHING_GUIDANCE =
+    "While you are ORIENTING, locating code, checking what exists, reading the files around a change, put every " +
+    "probe you can already name into ONE response rather than one per response. Their results do not depend on " +
+    "each other, and what a search costs here is the round trip, not the search. Order calls one-per-response " +
+    "only when a later one genuinely needs an earlier one's output.";
+
+/* WAITING WITHOUT BURNING THE TURN, the single most expensive habit in the transcript corpus.
+ *
+ * Across 803 sessions, `sleep` inside a Bash command cost 35.2h: a third of ALL tool execution time, from 2,622
+ * commands. 935 of them sat at exactly 109-110s, hand-tuned to just under the 120s default Bash timeout so the
+ * poll would return its output rather than be killed. And a poll is never only its sleep: every one also buys a
+ * model round-trip to decide the next poll, so the real price is roughly double what the clock says. The worst
+ * single run was 24 consecutive polls of one build.
+ *
+ * Both mechanisms that make this unnecessary already exist and are the ones nobody reaches for: run_in_background
+ * was set on 1.5% of Bash calls, and mcp__watch__start was called 38 times across every session there has ever
+ * been. That gap is what an unnamed capability looks like, the model falls back on the shell primitive it knows
+ * from training rather than the harness seam it was never told about, so this says both by name. */
+const WAITING_GUIDANCE =
+    "Never idle in the shell. A command that will outlive a few seconds takes `run_in_background: true`, and you " +
+    "collect its output later, the harness re-invokes you when it exits. To wait on something OUTSIDE this sandbox " +
+    "(a CI run, a deploy, a remote queue) arm `mcp__watch__start` with a cheap check command and end your turn; it " +
+    "wakes this conversation when the check passes. `sleep N` in a Bash command is not a way to wait: it bills the " +
+    "wait to the turn and costs a model round-trip per poll, and a sleep sized to land just under the tool timeout " +
+    "is the most expensive way this harness can do nothing. If you already started work here, wait on it with the " +
+    "`wait` tool rather than re-reading its log on a timer.";
+
+/* THE CHEAPEST TOOL CALL IS THE ONE YOU ALREADY MADE. 23.9% of Read calls in the corpus re-read a path the same
+ * session had already read, 2,450 wasted calls, one file opened 33 times in a single session. An Edit already
+ * reports what the file became, so the confirming re-read after an edit is asking a question the tool result
+ * answered, and it costs a full round-trip at the ~9s that a Read-shaped response takes to compose. */
+const CONTEXT_REUSE_GUIDANCE =
+    "A file you have already read this session is still in your context, and so is the output of a command you " +
+    "already ran. Re-reading either to check it costs a round trip and tells you nothing you do not have. Read a " +
+    "path a second time only when you have reason to think it CHANGED: something you wrote, something a command " +
+    "you ran wrote. An Edit's result already states what the file became, so it never needs confirming by re-Read.";
+
 // The workspace's reference shelf (REFERENCE_DIR in @intentic/workspace-ignore; every scanner honours it).
 // Named here because the convention only works if the model knows it: without this line, a discovered
 // /work/refs gets treated as workspace code the moment a task touches it, and a "clone X so we can study it"
@@ -158,7 +230,10 @@ const TERSE_NOTE =
  * a worktree's delta into the owner's tree, so they are as true of a Codex turn as of a Claude one, and a
  * runtime that has never been told is one that will eventually commit a clone or publish a log. Everything else
  * in this file names a mechanism only the Claude Code loop is wired for; these are why the split exists. */
-const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE];
+// SEARCH_GUIDANCE rides with them for the same reason, one step further out: which binary is installed is a fact
+// about the IMAGE, so it is as true of a Codex turn as of a Claude one, and a runtime told nothing pays grep's
+// 30× on every orientation call it makes.
+const WORKSPACE_GUIDANCE: readonly string[] = [REFERENCE_GUIDANCE, PUBLIC_GUIDANCE, LANDING_GUIDANCE, SEARCH_GUIDANCE];
 
 export interface TurnPromptInput {
     // The record for the pair serving this turn: `instructions` decides what may be placed at all, and the
@@ -250,6 +325,11 @@ export interface SdkSystemPromptInput {
 const harnessGuidance = ({ append, unattended, browserOutputDir }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
     CHECKLIST_GUIDANCE,
+    // How the turn spends its steps, next to the checklist that plans them: these are about the shape of a turn
+    // rather than about the workspace it runs in, and all three are read once and applied throughout.
+    BATCHING_GUIDANCE,
+    WAITING_GUIDANCE,
+    CONTEXT_REUSE_GUIDANCE,
     ...WORKSPACE_GUIDANCE,
     SECRETS_GUIDANCE,
     OUTSIDE_GUIDANCE,
