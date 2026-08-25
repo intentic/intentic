@@ -303,6 +303,13 @@ describe("watchLine", () => {
         expect(line?.hint).toContain(`wakes this conversation`);
     });
 
+    /* AND THAT IT CAN BE ENDED. A box that explains a mechanism and names no exit is what taught users this
+     * arrangement was theirs to wait out: pinned because it is one clause at the tail of a clamped strip, the
+     * first thing a careless edit here would drop. */
+    it("names the way out, and what taking it costs", () => {
+        expect(watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW)?.hint).toContain(`Stop watching and it stays put.`);
+    });
+
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not as "1800s".
     it("says a slow cadence in minutes", () => {
         expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint).toContain(

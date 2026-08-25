@@ -67,7 +67,11 @@ const delegating = (): FleetAgent => ({
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this off the whole UI plugin. Icon
 // prints the glyph it was handed, because WHICH glyph is what says "in flight" on the button.
-const mount = (agent: FleetAgent, pending?: PendingAction, handlers: { onClose?: () => void; onReland?: () => void } = {}): HTMLElement => {
+const mount = (
+    agent: FleetAgent,
+    pending?: PendingAction,
+    handlers: { onClose?: () => void; onReland?: () => void; onUnwatch?: () => void } = {},
+): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({
@@ -320,4 +324,57 @@ it(`stays quiet when the landed work is where it was left`, () => {
     const card = mount(ready(`landed`));
     expect(relandButton(card)).toBeUndefined();
     expect(card.textContent).not.toContain(`your workspace`);
+});
+
+/* THE WAY OFF AN ARMED WATCH, ON THE CARD THAT ANNOUNCES ONE.
+ *
+ * A watch is an arrangement the AGENT entered into on the user's behalf: the conversation reads as finished,
+ * keeps a hosted machine awake, and starts working again by itself hours later. The card said all of that in
+ * its corner and offered nothing to press: the exits were a right-click menu and a drag onto Finished, two
+ * gestures you have to know about before you can find them, and the tooltip explaining the mechanism named
+ * neither. `agents.stopWatching` was there the whole time; what was missing was a press beside the fact.
+ *
+ * Four properties are pinned. The press exists where the readout is; it asks the board rather than acting
+ * locally (the store's optimistic write is what moves the card out of Active, and only the board holds it); it
+ * goes with the readout when a turn takes the corner back, since a working agent is not waiting for anything;
+ * and it survives into the archive, alone among this card's presses, because an armed watch is precisely what
+ * drags a filed-away agent back onto the board. */
+const watching = (over: Partial<FleetAgent> = {}): FleetAgent => ({
+    ...ready(`idle`),
+    watches: [{ id: `watch-1`, note: `pnpm verify gate in /work/intentic`, intervalSeconds: 30, deadlineAt: 2 + 13 * 60 * 1000 }],
+    ...over,
+});
+
+const stopWatchButton = (el: HTMLElement): HTMLButtonElement | undefined => buttonLabelled(el, `Stop watching`);
+
+it(`offers the way off a watch beside the readout that announces it`, () => {
+    const card = mount(watching());
+    expect(card.textContent).toContain(`pnpm verify gate in /work/intentic`);
+    expect(stopWatchButton(card)?.textContent?.trim()).toBe(`Stop`);
+});
+
+it(`asks the board to disarm on the press`, () => {
+    const unwatched = vi.fn();
+    stopWatchButton(mount(watching(), undefined, { onUnwatch: unwatched }))!.click();
+    expect(unwatched).toHaveBeenCalledTimes(1);
+});
+
+// Nearly every card on this board is waiting for nothing, and a Stop on one of those would be an offer to end
+// something that isn't happening.
+it(`shows no such press on a card that is waiting for nothing`, () => {
+    expect(stopWatchButton(mount(ready(`idle`)))).toBeUndefined();
+});
+
+/* The readout yields the corner to a running turn (see AgentCard.watch), and the press goes with it rather
+ * than being left behind pointing at a line that is no longer on the card. */
+it(`withdraws it while a turn is in flight, with the readout it belongs to`, () => {
+    const card = mount(watching({ status: `running`, startedAt: 1 }));
+    expect(card.textContent).not.toContain(`pnpm verify gate`);
+    expect(stopWatchButton(card)).toBeUndefined();
+});
+
+// The exception to this card's rule about the archive. Every other press is withheld there so that filing
+// something away is not undone by housekeeping; this is the press that KEEPS it filed away.
+it(`keeps it on an archived card, the one press that stops one waking back onto the board`, () => {
+    expect(stopWatchButton(mount(watching({ archivedAt: 5 })))).toBeDefined();
 });

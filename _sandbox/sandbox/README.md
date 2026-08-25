@@ -60,8 +60,9 @@ reports the profile.
   turn, so they accept schedules that can never fire. What is armed rides the fleet card
   (src/agent/watch-state.ts → `AgentSummary.watches`), which is what stops a watch from being a promise made
   in silence: the conversation reads as finished on every screen, keeps a hosted machine awake, and then
-  starts working by itself hours later. A card carrying one sits in the board's Active lane and can be
-  disarmed from there (`agents.stopWatching`).
+  starts working by itself hours later. A card carrying one sits in the board's Active lane and wears the
+  press that ends it beside the readout that announces it (`agents.stopWatching`): the arrangement is one the
+  agent entered into on the user's behalf, so the fact and the way out of it are the same line on the card.
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
   screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
   first boot now seeds a one-page starter site as its own repo and starts its dev server

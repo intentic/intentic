@@ -81,6 +81,8 @@ const emit = defineEmits<{
     // The way back after landed work was discarded: a separate event from `land`, because it lands a
     // different span (the whole of the agent's output, not the remainder) and must never be fired by accident.
     reland: [];
+    // Disarm every outside condition this conversation is parked on, from the readout that announces them.
+    unwatch: [];
     archive: [];
     restore: [];
     close: [];
@@ -785,14 +787,46 @@ const grab = (event: PointerEvent): void => {
                          watch is precisely what will drag a filed-away agent back onto the board.
                          Link-blue, the hue this board spends on work in flight and on offers to act: nothing
                          here is wrong, and an agent keeping a promise it made is not a warning. -->
-                    <span
-                        v-if="watch !== undefined"
-                        class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link"
-                        v-tooltip.top="watch.hint"
-                    >
-                        <Icon name="eye" class="shrink-0 text-2xs" />
-                        <span class="min-w-0 truncate">{{ watch.text }}</span>
-                        <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
+                    <span v-if="watch !== undefined" class="inline-flex min-w-0 items-center gap-1.5">
+                        <!-- The readout and its hint, wrapped together and separately from the press beside
+                             them: `v-tooltip` binds its own enter on whatever element it sits on, so a nested
+                             second one would raise both boxes at once over the same six words. -->
+                        <span class="inline-flex min-w-0 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
+                            <Icon name="eye" class="shrink-0 text-2xs" />
+                            <span class="min-w-0 truncate">{{ watch.text }}</span>
+                            <span class="shrink-0 tabular-nums">{{ watch.countdown }}</span>
+                        </span>
+                        <!-- THE WAY OFF THE WATCH, ON THE WATCH. This readout used to be the only thing on the
+                             card that stated a live arrangement and offered no way to end it: the ways out were
+                             a right-click menu and a drag to the Finished lane, both gestures you have to know
+                             about before you can find them, and the tooltip explaining the mechanism named
+                             neither. So the card announced, in the corner the eye lands in, an agreement the
+                             agent had entered into on the user's behalf, and every affordance for leaving it
+                             was somewhere else. That is not a missing feature (`agents.stopWatching` has
+                             always been there), it is a press filed away from its own fact.
+                             IT SITS INSIDE THE READOUT'S SPAN so a wrapping line takes the two together: the
+                             press means nothing beside a note that wrapped away from it.
+                             QUIET, AND MUTED RATHER THAN LINK-BLUE, the reasoning "Land again" already rests
+                             on one block down: the fact is what this row is FOR, the blue belongs to it, and a
+                             bright button here would be arguing with a wait the user may well want to keep.
+                             REVEALED ON HOVER like every other press on this card, opacity rather than
+                             `hidden` so the line never reflows under the pointer, and standing (dimmed) on
+                             touch, where there is no hover to reveal it and this is the ONLY exit that exists:
+                             the drag is mouse/pen only by design and nothing fires `contextmenu` there.
+                             OFFERED IN THE ARCHIVE TOO, which every other press on this card refuses. Those
+                             refuse it to keep a filed-away agent from being pulled back onto the board by a
+                             press meant as housekeeping; this one is the only press that PREVENTS that, and an
+                             armed watch is precisely what drags an archived card back into a lane. -->
+                        <button
+                            type="button"
+                            aria-label="Stop watching"
+                            v-tooltip.top="'Stop watching, this conversation stays put'"
+                            class="touch-target shrink-0 rounded px-1 text-2xs font-medium text-muted transition-opacity hover:bg-overlay hover:text-content"
+                            :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
+                            @click.stop="emit(`unwatch`)"
+                        >
+                            Stop
+                        </button>
                     </span>
 
                     <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, at the end of the line the settled

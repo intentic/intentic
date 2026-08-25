@@ -131,6 +131,7 @@ const {
     resolveNow,
     landNow,
     relandNow,
+    unwatchNow,
 } = useAgentDrag();
 // The card behind the resolve confirmation: looked up live rather than snapshotted with the drop, so a
 // rename or a status change while the dialog is open is reflected in what it is asking about.
@@ -898,14 +899,16 @@ const cardMenuItems = computed<MenuItem[]>(() => {
         /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints: the
            other forms of the name are labelled and visible before the press, on the agent's own page. */
         branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
-        /* THE WAY OFF A WATCH, and the one row here that is not already a press the card offers somewhere else
-           (see the menu's header). It cannot be: an armed watch is a fact the card REPORTS, in four characters
-           in its corner, and a control sitting mid-card in the path of the press that focuses the agent is the
-           mistake the session name already made once.
-           So it lives behind the gesture that means "about this one", which is also the right weight for it.
-           Rare, deliberate, and never in the way: nearly every card on this board has no watch and shows no
-           row. One row for however many are armed, because that is what the press means about a card, and the
-           daemon disarms them together (agents.stopWatching). */
+        /* THE WAY OFF A WATCH, which this menu no longer has to be. It was the only one for a while, next to a
+           drag onto Finished, and between them they made an arrangement the AGENT entered into on the user's
+           behalf reachable exclusively through two gestures a user has to already know about. The card's own
+           readout carries the press now, beside the fact it is about (AgentCard, the watch row).
+           The row stays anyway, and not out of symmetry: it is the one place the action is spelled with its
+           verb and its COUNT ("Stop watching (3)"), where the card has room for four characters beside a note
+           it is already truncating. A user who opened this menu having decided something about a card reads
+           what they are ending; a user who noticed the readout presses the readout. One row for however many
+           are armed, because that is what the press means about a card, and the daemon disarms them together
+           (agents.stopWatching). */
         watching(agent)
             ? [
                   {
@@ -1330,6 +1333,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @resolve="resolveNow(agent.id)"
                             @land="landNow(agent.id)"
                             @reland="relandNow(agent.id)"
+                            @unwatch="unwatchNow(agent.id)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
                             @close="closeAgent(agent)"
@@ -1418,7 +1422,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </div>
                     <!-- Real cards, not a stripped-down list: an archived agent keeps its branch, its diff
                          and its transcript, so the thing the user wants to do with a hit here: read it,
-                         restore it: is exactly what the card already offers. -->
+                         restore it: is exactly what the card already offers.
+                         `unwatch` is the one ACTION wired here beside those two, and the only press the card
+                         itself offers in the archive. Every other one is withheld to stop a filed-away agent
+                         being pulled back onto the board by a press meant as housekeeping; this is the press
+                         that keeps it filed away, since an armed watch is exactly what wakes it back into a
+                         lane hours from now. -->
                     <div class="grid gap-2.5" :class="narrow ? '' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
                             v-for="agent in archivedHits"
@@ -1434,6 +1443,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
                             @restore="restore([agent.id])"
+                            @unwatch="unwatchNow(agent.id)"
                             @contextmenu.prevent.stop="openCardMenu(agent, $event)"
                         />
                     </div>

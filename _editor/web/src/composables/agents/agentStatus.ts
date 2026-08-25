@@ -625,7 +625,14 @@ const everyOf = (seconds: number): string => (seconds < 120 ? `${seconds}s` : `$
  * newline renders as a space and a fourth watch would push the sentence that matters off the bottom. It
  * carries the three things the readout could not: every note in full, the pacing, and what reaching the end of
  * the wait actually DOES, which is the half nobody can guess. The point of a watch is not that something is
- * being polled; it is that this agent starts working again by itself. */
+ * being polled; it is that this agent starts working again by itself.
+ *
+ * AND THEN THE WAY OUT, last, which is the one placement worth defending. A tooltip that explains a mechanism
+ * and names no exit is what taught users this arrangement could not be ended: the box says the conversation
+ * will restart itself and stops there. So the sentence is here: not to be FOUND (the card's own press does
+ * that, and it is revealed by the very hover that raises this box), but to say what pressing it costs, which
+ * is nothing but the wait. It goes last for the same reason it is short: the clamp eats the tail, and of the
+ * four facts here this is the only one the reader can also get by looking half an inch to the right. */
 export const watchLine = (agent: AgentStanding, now: number): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
     const watches = agent.watches;
     if (watches === undefined || watches.length === 0) {
@@ -641,6 +648,6 @@ export const watchLine = (agent: AgentStanding, now: number): { readonly text: s
     return {
         text: watches.length === 1 ? soonest.note : `Watching ${watches.length} conditions`,
         countdown,
-        hint: `Watching for ${detail}. The first of those to happen wakes this conversation, and it carries on by itself.`,
+        hint: `Watching for ${detail}. The first of those to happen wakes this conversation, and it carries on by itself. Stop watching and it stays put.`,
     };
 };

@@ -182,6 +182,17 @@ const landNow = (id: string): Promise<void> => perform(id, `land`);
 // user has already reviewed once.
 const relandNow = (id: string): Promise<void> => perform(id, `reland`);
 
+/* THE WAY OFF A WATCH, from the card's own readout, and the fourth press to share `perform` for the reasons
+ * the three above give: one busy flag, one notice strip, one refresh, and a refusal reported the same way
+ * whichever gesture asked.
+ *
+ * It exists because the drop and the context menu were the whole of it, and both are gestures a user has to
+ * already know about: the card SAID it was watching, in the one place the eye lands, and that readout was the
+ * only thing on it that could not be acted on. No dialog, and this is the clearest case on the board for
+ * having none: the card names the condition it is ending, the wait is the only thing lost, and re-arming it is
+ * a sentence to the agent. */
+const unwatchNow = (id: string): Promise<void> => perform(id, `unwatch`);
+
 const onMove = (event: PointerEvent): void => {
     pointer.value = { x: event.clientX, y: event.clientY };
     if (!dragging.value) {
@@ -266,5 +277,6 @@ export function useAgentDrag() {
         resolveNow,
         landNow,
         relandNow,
+        unwatchNow,
     };
 }
