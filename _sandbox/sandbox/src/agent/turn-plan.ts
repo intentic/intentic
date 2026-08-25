@@ -43,6 +43,7 @@ import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import type { AgentRequest } from "./agent.js";
+import type { ChildSpawnResult, ChildSpawnSpec } from "../children/children.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -142,6 +143,11 @@ export interface TurnContext {
      * main line to move are the harness's own (the `ask` tool, the plan gate). A native codex/grok/ACP turn
      * has no seam to call it from, so handing it one would be a field nothing reads. */
     readonly resync?: () => Promise<AgentEvent | undefined>;
+    /* Start a full agent on any connected provider, the `spawn` tool's engine (children/children.ts), injected
+     * by agent.routes like `resync` and for the same cycle reason: the child runs through streamAgent, which
+     * only the route can hand down. Absent for a conversationless turn (a child needs a parent to file under)
+     * and for focused callers with no route behind them; the tool is then not offered. */
+    readonly spawn?: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
 }
 
 /* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another.
@@ -703,12 +709,17 @@ export const planHarnessTurn = async (
             : {}),
         // hashlineEdits: swap the native Edit/Write (disabled below) for hash-anchored file tools.
         ...(hashlineEdits ? { hashline: createHashlineServer(context.localCwd) } : {}),
-        // The `wait` tool: park until a child of this turn, a delegated CLI, an Agent-tool subagent, is
-        // blocked on input or finished (subagent-wait.ts). Always offered, a turn that spawns nothing simply
-        // never calls it, and settled by the turn's own signal when the user stops the turn under it.
+        // The `wait` tool: park until a child of this turn, a delegated CLI, an Agent-tool subagent, or a
+        // spawned agent, is blocked on input or finished (subagent-wait.ts). Always offered, a turn that
+        // spawns nothing simply never calls it, and settled by the turn's own signal when the user stops the
+        // turn under it. `spawn` rides the same server where the route injected its engine: start a full agent
+        // on any connected provider and supervise it with the wait beside it. Withheld from a persona without
+        // full agency (the watch server's rule, one power wider): a child is a whole agent with shell and
+        // write, so a card that narrowed this turn to less must not get them back by proxy.
         subagents: subagentWaitServer({
             conversationId: context.base.conversationId,
             signal: context.base.signal,
+            ...(context.spawn !== undefined && persona.powers.shell && persona.powers.files === "write" ? { spawn: context.spawn } : {}),
         }),
         /* The condition watch (agent/watchers.ts): the agent states an OUTSIDE condition once, a check command
          * that exits 0 when it holds, and the daemon does the polling, waking this conversation when it fires.

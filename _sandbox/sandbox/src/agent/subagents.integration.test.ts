@@ -10,10 +10,13 @@ import {
     listSubagentSessions,
     noteDelegation,
     noteDelegationSignal,
+    noteSpawnedChild,
     noteSubagentSpawn,
     noteSubagentTask,
+    openSpawnedChild,
     resetSubagents,
     settleDelegation,
+    settleSpawnedChild,
     subagentAgentId,
     subagentCountsOf,
     subagentHooks,
@@ -356,6 +359,76 @@ describe("the roster", () => {
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "call-1"]);
         vi.advanceTimersByTime(2 * 60_000);
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1"]);
+    });
+});
+
+/* The third source: children the daemon itself runs (children/children.ts), reported by direct call. The suite
+ * drives the same entry points the service calls; what it defends is that a spawned child is filed under its
+ * PARENT, carries its provider on the wire, and outlives the parent's turn instead of being killed with it. */
+describe("spawned children", () => {
+    const birth = { id: "sub-brave-otter-a1b2", description: "Port the parser", agentType: "Cursor", provider: "cursor", model: "composer-2.5" };
+
+    it("lists a spawned child under its parent, backgrounded, wearing its provider", () => {
+        openSpawnedChild(turn(), { ...birth, harness: "native", spawnDepth: 1 });
+        const [session] = listSubagentSessions();
+        expect(session).toMatchObject({
+            id: "sub-brave-otter-a1b2",
+            kind: "spawned",
+            conversationId: "conv-1",
+            agentType: "Cursor",
+            provider: "cursor",
+            model: "composer-2.5",
+            spawnDepth: 1,
+            background: true,
+            status: "running",
+        });
+        expect(subagentCountsOf("conv-1")).toEqual({ running: 1, total: 1 });
+    });
+
+    it("reports blocked with what it waits on, and running again once answered", () => {
+        openSpawnedChild(turn(), birth);
+        noteSpawnedChild(birth.id, { status: "blocked", summary: "Which port should the server bind?" });
+        expect(listSubagentSessions()[0]).toMatchObject({ status: "blocked", summary: "Which port should the server bind?" });
+        noteSpawnedChild(birth.id, { status: "running" });
+        expect(listSubagentSessions()[0]?.status).toBe("running");
+    });
+
+    /* The exemption closeSubagents carries: a spawned child's turn genuinely outlives its parent's (the
+     * backgrounded delegation's life), and the service settles it from the child's own ending. Killing it at
+     * the parent's close would report a working agent as dead. */
+    it("outlives the parent's turn: close kills the SDK child and leaves the spawned one working", () => {
+        noteSubagentTask(turn(), started());
+        openSpawnedChild(turn(), birth);
+        expect(closeSubagents("conv-1").map((frame) => update(frame).id)).toEqual(["call-1"]);
+        expect(listSubagentSessions().find((session) => session.id === birth.id)?.status).toBe("running");
+    });
+
+    it("settles with the head of the child's closing text, and wakes a parked wait", async () => {
+        openSpawnedChild(turn(), birth);
+        const parked = waitForSubagent("conv-1", { target: birth.id, until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(birth.id, { failed: false, report: "The parser now handles nested arrays. Two files changed." });
+        await expect(parked).resolves.toMatchObject({
+            outcome: "finished",
+            matched: { id: birth.id, status: "completed", summary: "The parser now handles nested arrays. Two files changed." },
+        });
+    });
+
+    it("keeps a failure's error beside whatever it managed to say", () => {
+        openSpawnedChild(turn(), birth);
+        settleSpawnedChild(birth.id, { failed: true, report: "Got as far as the lexer.", error: "provider refused the model" });
+        expect(listSubagentSessions()[0]).toMatchObject({ status: "failed", summary: "Got as far as the lexer.", error: "provider refused the model" });
+    });
+
+    it("hands the transcript reader the child's conversation key", () => {
+        openSpawnedChild(turn(), { ...birth, harness: "native" });
+        expect(subagentSource(birth.id)).toMatchObject({ kind: "spawned", conversationId: "conv-1", provider: "cursor", harness: "native" });
+    });
+
+    it("drops a late move from a child already settled", () => {
+        openSpawnedChild(turn(), birth);
+        settleSpawnedChild(birth.id, { failed: false, report: "done" });
+        noteSpawnedChild(birth.id, { status: "blocked", summary: "too late" });
+        expect(listSubagentSessions()[0]).toMatchObject({ status: "completed", summary: "done" });
     });
 });
 

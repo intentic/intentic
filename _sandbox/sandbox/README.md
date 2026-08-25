@@ -21,7 +21,8 @@ reports the profile.
 - Run one Claude Code, Codex app-server, OpenCode, ACP, Pi or Cursor turn over the workspace, normalizing each
   runtime's native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
 - Follow the agents a turn starts. Every child: an Agent-tool subagent, a delegated `codex exec` or `opencode
-  run`, is a record on one roster (src/agent/subagents.ts), and the delegates report their OWN state into it: a
+  run`, or a child spawned across providers, is a record on one roster (src/agent/subagents.ts), and the
+  delegates report their OWN state into it: a
   daemon-authored codex hook drops event files into a signal spool (src/codex/codex-config.ts →
   src/agent/delegation-signals.ts), and a delegated OpenCode session runs attached to the warm server whose
   event stream the daemon already reads (src/grok/opencode.ts). Each is stamped with the tool call that started
@@ -29,6 +30,14 @@ reports the profile.
   rather than being matched by timing. That is what gives a child a real session id, a `blocked` status, and its
   own last words as its report, and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep
   until one of this turn's own children needs input or finishes, instead of polling a terminal tail.
+- Spawn full agents from inside a turn, on ANY connected provider. The `spawn` tool beside `wait` starts a
+  child through the daemon's own turn path (src/children/children.ts): an ordinary isolated unattended
+  conversation served by whichever provider adapter the spec names, so a Claude turn starts Cursor's Composer
+  with the same call a Cursor turn would start Codex with. The daemon drives both ends, so the child's life is
+  reported onto the roster by direct call (the `spawned` kind), nothing sniffed from stdout or hooks; the
+  owner's delegation ceilings (`subagentsAtOnce` / `subagentsPerTurn` / `subagentDepth`) are enforced in the
+  daemon, because a spawned child gets the spawn tool too and a cap a model is merely told about is a cap a
+  runaway chain never reads.
 - Outwait the world on the agent's behalf. For a condition OUTSIDE the harness: a CI run, a deploy, a remote
   queue, the agent arms a condition watch (src/agent/watch-server.ts): a check command that exits 0 when the
   thing has happened. The daemon polls it between turns (src/agent/watchers.ts) and wakes the arming

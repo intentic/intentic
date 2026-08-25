@@ -6,9 +6,10 @@ import { subagentAgentId, subagentSource } from "../agent/subagents.js";
 import { turnRunOf } from "../agent/turn-runs.js";
 import { displayNameOf, toolCategoryOf } from "../agent/tool-calls.js";
 import type { OpenCodeService } from "../grok/opencode.js";
+import type { TranscriptAgent } from "./agent-transcript.js";
 import { readCodexSession } from "./codex-sessions.js";
 import { restoredSessionMessages } from "./sessions.js";
-import { subagentTurn } from "./turn-transcript.js";
+import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 /* ONE SUBAGENT'S TRANSCRIPT, in the shape every other transcript route already answers in.
  *
@@ -36,6 +37,9 @@ export interface SubagentTranscriptDeps {
     readonly root: string;
     readonly codexHome: string | undefined;
     readonly openCode: OpenCodeService;
+    // A spawned child is a conversation of its own, so its settled record is the conversation's transcript
+    // record, read under the same (id, provider, harness) its turns were filed under.
+    readonly conversation: (agent: TranscriptAgent) => Promise<RestoredMessage[]>;
 }
 
 /* WHICH delegated thread/session a record refers to, when its command did not name one.
@@ -155,6 +159,22 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
         }
         const messages = await getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
         return restoredSessionMessages(messages, deps.root);
+    }
+    /* A SPAWNED child is a conversation of its own, and the record's id IS that conversation's id, so both
+     * halves of the split read the stores a conversation already writes: live from its own detached pump (the
+     * pump holds the prompt too, so the transcript opens with what it was asked), settled from the
+     * conversation's transcript record, under the provider and harness key its turns were filed with. */
+    if (source.kind === "spawned") {
+        if (source.running) {
+            const run = turnRunOf(id);
+            if (run !== undefined) {
+                return restoredTurn({ prompt: run.prompt }, run.events, deps.root, source.startedAt);
+            }
+        }
+        if (source.provider === undefined || source.harness === undefined) {
+            return [];
+        }
+        return deps.conversation({ id, provider: source.provider, harness: source.harness });
     }
     if (source.kind === "codex") {
         if (deps.codexHome === undefined) {

@@ -1,8 +1,13 @@
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
+import type { ChildSpawnResult, ChildSpawnSpec } from "../children/children.js";
 import { waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
 
-/* "WAIT UNTIL THAT AGENT NEEDS ME", the tool a supervising turn parks on instead of polling.
+/* "WAIT UNTIL THAT AGENT NEEDS ME", the tool a supervising turn parks on instead of polling — and, beside it,
+ * "START ONE", the `spawn` tool, which is what makes the pair a supervision surface rather than a watch: a turn
+ * starts a full agent on ANY connected provider (children/children.ts) and parks here until it needs input or
+ * reports. Spawn is offered only where the route injected its engine; wait is always offered.
  *
  * A parent that starts other agents, a backgrounded `codex exec`, an Agent-tool child, used to have two ways
  * to follow them: burn turns re-reading a tmux tail on a timer, or walk away and be told only by the exit. Both
@@ -31,6 +36,11 @@ export interface SubagentWaitDeps {
     readonly conversationId: string | undefined;
     // The turn's own abort, so a parked wait settles when the turn is stopped under it.
     readonly signal: AbortSignal;
+    /* Start a full agent on any connected provider (children/children.ts), the `spawn` tool's engine. Injected
+     * by the route that owns the turn generator (agent.routes.ts), the same door every other spawned turn goes
+     * through; absent for a conversationless turn (a child needs a parent to file under) and for focused
+     * callers with no route behind them, and the tool is then simply not offered. */
+    readonly spawn?: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
@@ -48,11 +58,53 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
         // it has to go looking for is a tool it replaces with a sleep-and-poll loop.
         alwaysLoad: true,
         tools: [
+            ...(deps.spawn === undefined
+                ? []
+                : [
+                      tool(
+                          "spawn",
+                          "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. Cursor's " +
+                              "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
+                              "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
+                              "any agent's does. Returns the child's id immediately: supervise it with the wait tool (target: that id), " +
+                              "which returns when it is blocked on input or finished, with its report. Give it a self-contained prompt " +
+                              "with every path, requirement, and constraint — it sees none of this conversation. A provider nobody has " +
+                              "connected fails with the words to say so.",
+                          {
+                              prompt: z.string().min(1).describe("The child's whole task, self-contained."),
+                              description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
+                              provider: AgentProviderSchema.optional().describe("Which provider serves it. Leave it out for Claude."),
+                              harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
+                              model: z.string().optional().describe("Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default."),
+                              effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
+                          },
+                          async (args) => {
+                              const spawn = deps.spawn;
+                              if (spawn === undefined) {
+                                  return answer({ ok: false, message: "This turn cannot spawn agents." });
+                              }
+                              const result = await spawn({
+                                  prompt: args.prompt,
+                                  ...(args.description !== undefined ? { description: args.description } : {}),
+                                  ...(args.provider !== undefined ? { provider: args.provider } : {}),
+                                  ...(args.harness !== undefined ? { harness: args.harness } : {}),
+                                  ...(args.model !== undefined ? { model: args.model } : {}),
+                                  ...(args.effort !== undefined ? { effort: args.effort } : {}),
+                              });
+                              return answer(
+                                  result.ok
+                                      ? { ok: true, child: result.id, note: `Running. Supervise it with wait(target: "${result.id}").` }
+                                      : { ok: false, message: result.message },
+                              );
+                          },
+                      ),
+                  ]),
             tool(
                 "wait",
                 "Wait until an agent you started needs you. Blocks until the target is blocked on input (a question or " +
                     "permission), or finishes, whichever comes first: then returns its status and last report. Target a " +
-                    'delegated CLI run or Agent-tool child by its spawning tool call id, or "any" for whichever of this ' +
+                    "delegated CLI run or Agent-tool child by its spawning tool call id, a spawned agent by the id the " +
+                    'spawn tool returned, or "any" for whichever of this ' +
                     "conversation's children moves first. Use this instead of sleeping or re-reading terminal output in a " +
                     "loop. On timeout it returns the current state: call it again to keep waiting.",
                 {

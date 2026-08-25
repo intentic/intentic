@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentHarness, AgentProvider, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { turnRunOf } from "./turn-runs.js";
 
@@ -52,6 +52,12 @@ interface SubagentRecord {
     agentType: string | undefined;
     description: string | undefined;
     model: string | undefined;
+    /* A `spawned` child's provider and harness, undefined for every other kind, whose provider is implied.
+     * Held because they are the child conversation's transcript key: reading a settled spawned child back
+     * means asking the transcript record under the same (id, provider, harness) its turns were filed under
+     * (sessions/turn-transcript.ts transcriptAgentOf). */
+    provider: AgentProvider | undefined;
+    harness: AgentHarness | undefined;
     spawnDepth: number | undefined;
     background: boolean | undefined;
     status: SubagentStatus;
@@ -136,6 +142,7 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.agentType !== undefined ? { agentType: record.agentType } : {}),
     ...(record.description !== undefined ? { description: record.description } : {}),
     ...(record.model !== undefined ? { model: record.model } : {}),
+    ...(record.provider !== undefined ? { provider: record.provider } : {}),
     ...(record.spawnDepth !== undefined ? { spawnDepth: record.spawnDepth } : {}),
     ...(record.background !== undefined ? { background: record.background } : {}),
     status: record.status,
@@ -175,6 +182,10 @@ export const subagentSource = (
           readonly description: string | undefined;
           readonly sessionId: string | undefined;
           readonly thread: string | undefined;
+          // A `spawned` child's transcript key: its conversation id (= the record's own id), and the provider
+          // and harness its turns were filed under. Undefined for every other kind.
+          readonly provider: AgentProvider | undefined;
+          readonly harness: AgentHarness | undefined;
       }
     | undefined => {
     const record = records.get(id);
@@ -190,6 +201,8 @@ export const subagentSource = (
         description: record.description,
         sessionId: record.turn.sessionId,
         thread: record.thread,
+        provider: record.provider,
+        harness: record.harness,
     };
 };
 
@@ -233,6 +246,8 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         agentType: undefined,
         description: undefined,
         model: undefined,
+        provider: undefined,
+        harness: undefined,
         spawnDepth: undefined,
         background: backgrounded.delete(id) ? true : undefined,
         status: "running",
@@ -267,6 +282,7 @@ const bornFrame = (record: SubagentRecord): AgentEvent => ({
     ...(record.agentType !== undefined ? { agentType: record.agentType } : {}),
     ...(record.description !== undefined ? { description: record.description } : {}),
     ...(record.model !== undefined ? { model: record.model } : {}),
+    ...(record.provider !== undefined ? { provider: record.provider } : {}),
     ...(record.background !== undefined ? { background: record.background } : {}),
     ...(record.terminal !== undefined ? { terminal: record.terminal } : {}),
 });
@@ -779,6 +795,100 @@ export const noteDelegationSignal = (signal: DelegationSignal): void => {
     }
 };
 
+/* ---- spawned children: full agents the daemon itself runs (children/children.ts) ---------------------------
+ *
+ * The third source, and the simplest by construction: the other two reconstruct a child's life from outside
+ * (task messages off a stream, hook spools and stdout tails around a CLI), where here the daemon drives the
+ * child's turn itself and reports each move by direct call. Nothing is sniffed, nothing is raced, and the
+ * summary is the child's own closing text rather than a tail of whatever it printed.
+ *
+ * The record's id IS the child's conversation id, minted by the service, so the spawn tool's answer, the wait
+ * tool's target, the roster row and the child's own conversation all name each other with one string.
+ *
+ * `background: true` always: the spawn tool returns the moment the child is running, the parent supervises
+ * through `wait`, and the child's turn outlives the parent's exactly like a backgrounded delegation's process
+ * does, which is also why closeSubagents leaves these records alone. */
+
+// What reaches the parent's live frame log, the same push noteDelegationSignal does and for the same reason:
+// the in-chat card renders from streamed frames, and a service call has no stream of its own.
+const pushToParentRun = (conversationId: string, frame: AgentEvent | undefined): void => {
+    if (frame === undefined) {
+        return;
+    }
+    turnRunOf(conversationId)?.push(frame);
+};
+
+export interface SpawnedChildBirth {
+    // The child's conversation id, and therefore the record's id.
+    readonly id: string;
+    readonly description?: string;
+    // The provider's display label ("Cursor", "Codex"), the row's `Cursor · Port the parser` half.
+    readonly agentType?: string;
+    readonly model?: string;
+    readonly provider?: AgentProvider;
+    readonly harness?: AgentHarness;
+    readonly spawnDepth?: number;
+}
+
+/** A child the service just started: opened on the roster and announced into the parent's live stream. */
+export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): void => {
+    if (records.has(birth.id)) {
+        return;
+    }
+    const record = open(turn, birth.id, "spawned", {
+        background: true,
+        ...(birth.description !== undefined ? { description: birth.description } : {}),
+        ...(birth.agentType !== undefined ? { agentType: birth.agentType } : {}),
+        ...(birth.model !== undefined ? { model: birth.model } : {}),
+        ...(birth.provider !== undefined ? { provider: birth.provider } : {}),
+        ...(birth.harness !== undefined ? { harness: birth.harness } : {}),
+        ...(birth.spawnDepth !== undefined ? { spawnDepth: birth.spawnDepth } : {}),
+    });
+    pushToParentRun(turn.conversationId, bornFrame(record));
+};
+
+/** A live move in the child's own turn: working (with the tool it reached for), blocked on a question with the
+ *  reason, or its running totals. Dropped once the record is settled, a late frame from a finished child. */
+export const noteSpawnedChild = (
+    id: string,
+    move: {
+        readonly status?: "running" | "blocked";
+        // On `blocked`, WHAT it waits on. Rides `summary` raw (source unset) exactly like a delegation's
+        // blocked reason, so the child's real report replaces it the moment the wait is over.
+        readonly summary?: string;
+        readonly lastTool?: string;
+        readonly toolUses?: number;
+        readonly tokens?: number;
+    },
+): void => {
+    const record = records.get(id);
+    if (record === undefined || !subagentRunning(record)) {
+        return;
+    }
+    pushToParentRun(record.conversationId, patch(id, move));
+};
+
+/** The child's turn ended: its closing text is the report, cut at its head because it opens with the answer. */
+export const settleSpawnedChild = (id: string, outcome: { readonly failed: boolean; readonly report: string; readonly error?: string }): void => {
+    const record = records.get(id);
+    if (record === undefined) {
+        return;
+    }
+    const summary = outcome.report.trim().slice(0, REPORT_TAIL).trim();
+    pushToParentRun(
+        record.conversationId,
+        patch(
+            id,
+            ending(record, {
+                status: outcome.failed ? "failed" : "completed",
+                source: "report",
+                ...(summary !== "" ? { summary } : {}),
+                ...(outcome.error !== undefined && outcome.error !== "" ? { error: outcome.error } : {}),
+            }),
+        ),
+    );
+};
+
 /* ---- the wait: sleep until a child needs you --------------------------------------------------------------
  *
  * The primitive the wait tool (subagent-wait.ts) parks on. Race-free by construction: the listener is added
@@ -867,7 +977,11 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
 export const closeSubagents = (conversationId: string): AgentEvent[] => {
     const frames: AgentEvent[] = [];
     for (const record of records.values()) {
-        if (record.conversationId === conversationId && subagentRunning(record)) {
+        /* NOT the spawned ones: a spawned child is a conversation of its own whose turn genuinely outlives its
+         * parent's (the same life a backgrounded delegation's process has), and the service that runs it settles
+         * its record from the child's own ending, which always comes, the pump folds even a thrown child turn
+         * into an error frame and a done. Marking it killed here would report a working agent as dead. */
+        if (record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record)) {
             const frame = patch(record.id, { status: "killed" });
             if (frame !== undefined) {
                 frames.push(frame);

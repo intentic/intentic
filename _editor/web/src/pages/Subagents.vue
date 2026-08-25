@@ -143,9 +143,14 @@ const openParent = (session: SubagentSession): void => {
 /* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark, and for a delegation that is the row's
  * whole point: a `codex exec` the agent drove from its shell is another vendor's agent working in this sandbox,
  * and a row that doesn't say so reads as one of ours. An SDK subagent runs inside its parent's own turn, so it
- * wears the parent's provider, falling back to Claude once the roster no longer holds the parent. */
+ * wears the parent's provider, falling back to Claude once the roster no longer holds the parent. A spawned
+ * child names its provider on the wire, the row's whole point being that it can be ANY connected one. */
 const providerOf = (session: SubagentSession): AgentProvider =>
-    session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : session.kind;
+    session.kind === `subagent`
+        ? (agentById(session.conversationId)?.provider ?? `claude`)
+        : session.kind === `spawned`
+          ? (session.provider ?? `claude`)
+          : session.kind;
 
 /* WHICH MODEL IT RUNS ON, in the chat rail's own words (modelLabelFor): the same fact, the same short label,
  * in the same slot on the same card, because the rail here and the rail in the floating chat are read minutes

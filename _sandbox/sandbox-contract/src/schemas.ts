@@ -8329,24 +8329,28 @@ export const BrowserNameParamSchema = z.object({ name: z.string().describe("Whic
 /* ---- subagents: the agents an agent starts ----
  *
  * The third thing a turn spawns that the operator can be shown, after its shell and its browser, and the only
- * one that is itself an agent. Two kinds land in this one list, because from outside they are the same fact
+ * one that is itself an agent. Three kinds land in this one list, because from outside they are the same fact
  * (another agent, working, that you did not start):
  *   • `subagent`, the SDK's Agent/Task tool. The daemon learns of it from the SubagentStart/SubagentStop hooks
  *     and the task_* stream messages, joined on `toolUseId`.
  *   • `codex` / `grok`, a CLI the agent drove from its own Bash (agent/delegation.ts). Detected in the Bash
  *     PreToolUse hook, bound to its thread/session id from the command's output.
+ *   • `spawned`, a full agent the turn started through the daemon's own spawn tool (children/children.ts), on
+ *     ANY connected provider, Cursor's Composer, Codex, Gemini, another Claude. The daemon runs the child
+ *     itself, so its whole life is reported by direct calls rather than reconstructed from hooks or stdout.
  *
- * `id` IS THE SPAWNING TOOL CALL'S id, the Agent card's, or the Bash card's for a delegation. It is the one key
- * every source already carries (the SDK's subagent meta, its task_* messages, and the `parentToolUseId` the
- * client nests inner frames under), so nothing has to be correlated: a card links to its subagent with the id it
- * already has, and the subagent points back at the card the same way. The ids the transcripts are actually READ
- * with, the SDK's agent id, a Codex thread, an OpenCode session, stay daemon-side, because no surface asks a
- * question they answer.
+ * `id` IS THE SPAWNING TOOL CALL'S id, the Agent card's, or the Bash card's for a delegation, except for a
+ * `spawned` child, whose spawn tool returns the id the service minted (also the child's own conversation id,
+ * so the two point at each other by construction). It is the one key every side already holds: a card links to
+ * its subagent with the id it has, and the subagent points back at the card the same way. The ids the
+ * transcripts are actually READ with, the SDK's agent id, a Codex thread, an OpenCode session, stay
+ * daemon-side, because no surface asks a question they answer.
  *
  * WHAT A KIND CHANGES, and it is only ever the live view: a subagent has no process of its own to look at, so
  * watching it means reading its transcript. A delegation runs in a tmux window, so it has both, `terminal`
- * names it, and the card keeps its existing "Watch in terminal" beside the transcript door. */
-export const SubagentKindSchema = z.enum(["subagent", "codex", "grok"]);
+ * names it, and the card keeps its existing "Watch in terminal" beside the transcript door. A spawned child is
+ * a conversation of its own, so its live view is that conversation's stream. */
+export const SubagentKindSchema = z.enum(["subagent", "codex", "grok", "spawned"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 
 // running/pending/blocked are live; the rest are terminal. Deliberately the SDK's own task vocabulary
@@ -8376,6 +8380,9 @@ export const SubagentSessionSchema = z.object({
     agentType: z.string().optional().describe("What kind of helper it is."),
     description: z.string().optional().describe("What it was asked to do, in one line."),
     model: z.string().optional().describe("Which model it runs on."),
+    // Which provider serves a `spawned` child (its AgentProvider id), so the row can wear the right logo. The
+    // other kinds imply theirs: an SDK subagent runs on its parent's provider, a delegation names its own kind.
+    provider: z.string().optional().describe("Which provider serves it, for a helper spawned across providers."),
     // How deep in the spawn tree (1 = spawned by the turn itself). From the SDK's meta.json; a subagent may
     // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
     spawnDepth: z
