@@ -1,6 +1,8 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { access } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Readable } from "node:stream";
+import { promisify } from "node:util";
 import { createGunzip } from "node:zlib";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
@@ -31,24 +33,48 @@ import { repoGitDir } from "../history/history.js";
 // pack negotiation itself is chatty, and data flowing resets nothing here, the timer bounds the whole spawn.
 const GIT_RPC_TIMEOUT_MS = 10 * 60 * 1000;
 
+const execFileAsync = promisify(execFile);
+
 const SERVICES = new Set(["git-upload-pack", "git-receive-pack"]);
 
 // Which runner is calling, or undefined. Every route below starts here; there is no anonymous read.
 const callerRunner = async (services: Services, c: Context): Promise<string | undefined> =>
     await services.runners.verify(bearerFrom(c.req.header("authorization")) ?? "");
 
-// The repo the URL names, resolved to its git dir, or undefined when this workspace has no such repo. The
-// path segment is the URI-ENCODED repo id and repoGitDir re-encodes the decoded name, so a traversal attempt
-// ("..%2F..") comes back as a directory name that simply does not exist.
+/* The repo the URL names, resolved to its git dir, or undefined when this workspace has no such repo.
+ *
+ * TWO SHAPES, because the daemon has two postures and a runner may be paired to either (profile.ts). A
+ * CONTAINER parent keeps every repo's real git dir on /history (`gits/<encoded id>`), which is the first and
+ * cheapest answer. A LOCAL parent, serving a folder the user already owns, deliberately never reshapes their
+ * repos, so the git dir is wherever git itself says it is, in-tree `.git` for an ordinary clone. Asking git
+ * is what makes the door work for both without this file having an opinion about either.
+ *
+ * The smoke test is why this exists: against a local-profile parent, every fetch answered "no such
+ * repository" and no remote turn could reach its workspace at all.
+ *
+ * TRAVERSAL IS CLOSED IN BOTH ARMS. The path segment is a URI-ENCODED repo id: repoGitDir re-encodes the
+ * decoded name (so "..%2F.." is a directory name that does not exist), and the workspace arm resolves the id
+ * against the workspace root and refuses anything that lands outside it. */
 const repoDirOf = async (services: Services, c: Context): Promise<string | undefined> => {
     const repo = decodeURIComponent(c.req.param("repo") ?? "");
     if (repo === "") {
         return undefined;
     }
-    const dir = repoGitDir(services.config.historyRoot, repo);
+    const relocated = repoGitDir(services.config.historyRoot, repo);
     try {
-        await access(dir);
-        return dir;
+        await access(relocated);
+        return relocated;
+    } catch {
+        // Not the container shape; ask git where this repo's dir actually is.
+    }
+    const root = services.workspace.root;
+    const workingDir = repo === "root" ? root : resolve(root, repo);
+    if (workingDir !== root && !workingDir.startsWith(`${root}/`)) {
+        return undefined;
+    }
+    try {
+        const { stdout } = await execFileAsync("git", ["-C", workingDir, "rev-parse", "--absolute-git-dir"]);
+        return stdout.trim() === "" ? undefined : stdout.trim();
     } catch {
         return undefined;
     }

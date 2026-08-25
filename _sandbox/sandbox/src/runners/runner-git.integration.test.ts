@@ -117,6 +117,45 @@ test("push lands on the incoming ref, and the checked-out main branch refuses a 
     ).rejects.toThrow();
 });
 
+/* THE OTHER PARENT SHAPE, and the one a real run found missing: a LOCAL-profile parent never reshapes the
+ * user's repos, so there is no gits/<id> on its history root and the door has to ask git where the repo
+ * actually lives. Before this, every fetch against such a parent answered "no such repository" and no remote
+ * turn could reach its workspace at all. */
+test("the door also serves a parent whose repo keeps its in-tree .git (the local profile)", async () => {
+    const localWork = mkdtempSync(join(tmpdir(), "runner-local-work-"));
+    const localHistory = mkdtempSync(join(tmpdir(), "runner-local-hist-"));
+    await git(localWork, ["init", "-q"]);
+    await writeFile(join(localWork, "local.md"), "a repo the user owns\n");
+    await git(localWork, ["add", "."]);
+    await git(localWork, ["commit", "-m", "local"]);
+
+    const services = {
+        config: { historyRoot: localHistory },
+        workspace: { root: localWork },
+        logger: { warn: () => undefined, info: () => undefined },
+        runners: { verify: async (presented: string) => (presented === TOKEN ? "test-runner" : undefined) },
+    } as unknown as Services;
+    const app = new Hono();
+    app.get("/system/runners/git/:repo/info/refs", createRunnerGitRefsRoute(services));
+    app.post("/system/runners/git/:repo/git-upload-pack", createRunnerGitRpcRoute(services, "git-upload-pack"));
+    const local = serve({ fetch: app.fetch, port: 0 });
+    try {
+        const url = `http://127.0.0.1:${(local.address() as AddressInfo).port}`;
+        const response = await fetch(`${url}/system/runners/git/root/info/refs?service=git-upload-pack`, {
+            headers: { authorization: `Bearer ${TOKEN}` },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.text()).toContain("service=git-upload-pack");
+        // And a repo id that climbs out of the workspace is still nobody's repository.
+        const escaped = await fetch(`${url}/system/runners/git/${encodeURIComponent("../../etc")}/info/refs?service=git-upload-pack`, {
+            headers: { authorization: `Bearer ${TOKEN}` },
+        });
+        expect(escaped.status).toBe(404);
+    } finally {
+        local.close();
+    }
+});
+
 test("a second pull is incremental and reconciles the branch onto what the parent has", async () => {
     // The parent moves (a land, say): the next pull moves the runner's mirror with it.
     await writeFile(join(parentWork, "second.md"), "the parent moved\n");
