@@ -85,8 +85,7 @@ export const pageMeta: Record<string, PageMeta> = {
      * pool.ts at render time; only the framing is authored here. */
     "/earn/": {
         title: "Earn · intentic",
-        description:
-            "Membership fees fund a monthly creator pool. Members spend credits on premium installs and paid service runs, with every payment on a public ledger.",
+        description: "Credits to creators on install or run. Public ledger.",
         datePublished: "2026-08-11",
     },
     /* The numbers themselves. Deliberately not part of the argued page: /earn/fine-print/ explains what the

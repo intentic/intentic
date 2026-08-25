@@ -41,35 +41,21 @@ const spendCards = [
         tag: "One-time",
         kicker: "Premium extensions",
         heading: "Install to donate once",
-        blurb: "One credit donation per install. Free to use after.",
         figure: n(pool.donationCredits),
         unit: "credits, flat",
-        note: "Same price for every premium extension.",
-        steps: [
-            "Approve the install.",
-            `${n(pool.donationCredits)} credits go to the publisher.`,
-        ],
         guarantee: "Donation fails → no install.",
-        cadence: "Updates can re-donate once a month.",
         meter: meterBars(installsPerDay, 2.5),
-        meterLabel: `A day's credits: ${n(installsPerDay)} installs`,
+        meterLabel: `${n(installsPerDay)} installs/day`,
     },
     {
         tag: "Per run",
         kicker: "Premium services",
         heading: "Pay per run",
-        blurb: "Services with real per-run cost. Price shown before you agree.",
         figure: "Its own price",
-        unit: "shown before you agree",
-        note: `Demo run: ${n(demoServiceCredits)} credits (${n(demoRunsPerDay)}/day).`,
-        steps: [
-            "Agent shows price; you click Run.",
-            "Platform calls the service. Provider never gets your identity.",
-        ],
+        unit: "before you agree",
         guarantee: "No answer → credits returned.",
-        cadence: "",
         meter: meterBars(demoRunsPerDay, 0.45),
-        meterLabel: `A day's credits: ${n(demoRunsPerDay)} demo runs`,
+        meterLabel: `${n(demoRunsPerDay)} demo runs/day`,
     },
 ];
 
@@ -77,18 +63,9 @@ const spendCards = [
  * two policies that happen to match, and the single most reassuring thing about this model is that there is
  * one rule wearing two shapes. */
 const spendRules = [
-    {
-        title: `${creatorSharePct}% reaches the creator`,
-        body: "The rest runs the platform.",
-    },
-    {
-        title: "Spending has a daily limit",
-        body: `${n(pool.dailyCredits)} credits/day, midnight UTC reset.`,
-    },
-    {
-        title: "No background usage tracking",
-        body: "Only approved installs and runs are recorded.",
-    },
+    `${creatorSharePct}% reaches the creator`,
+    `${n(pool.dailyCredits)} credits/day`,
+    "No background tracking",
 ];
 
 /* ── THE CHAT, DRAWN ─────────────────────────────────────────────────────────────────────────────────────
@@ -168,32 +145,26 @@ const revArcs = [315, 45, 135, 225].map((m) => `M ${ringStr(m - 3)} A ${ring.r} 
 const rules = [
     {
         title: "No background tracking",
-        body: "Pays only for installs and runs you approve.",
         d: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="m1 1 22 22"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
     },
     {
         title: "The books are open",
-        body: "Public ledger: revenue, fees, pool, payments, owed.",
         d: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
     },
     {
         title: "Failed runs refund automatically",
-        body: "No answer → credits back.",
         d: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     },
     {
         title: "Every listing passes the same checks",
-        body: "Suspended automatically if it stops answering.",
         d: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
     },
     {
         title: "Fake spending loses money",
-        body: "You can only spend what your membership provides.",
         d: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
     },
     {
         title: "Payments follow a schedule",
-        body: "Paid mid-month after month-end close.",
         d: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
     },
 ];
@@ -208,22 +179,16 @@ const rules = [
                 <h1 class="display mt-3 max-w-3xl text-3xl leading-tight font-semibold sm:text-4xl">
                     Membership credits support creators.
                 </h1>
-                <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                    Credits go to creators when you install or run paid tools. {creatorSharePct}% of each credit's value; all payments on the
-                    public ledger.
-                </p>
-                {/* THREE DOORS, because this page has three readers and the hero is where they sort
-                    themselves: the service provider, and the two members who want to see what is listed on
-                    either side. The provider door is the primary because the reader who needs it usually
-                    ARRIVES at it: somebody who already runs a paid API reaches this page from a search, lands
-                    at the top, and should not have to read five screens of member economics to find the way
-                    in. The extension creator is not sent from the hero at all — the closing band and the pool
-                    section carry that path — because the hero's job here is the paid economy this page owns,
-                    and the two browse doors let a member step straight into either catalog.
-
-                    Both browse buttons name their artifact and sit side by side, so neither reads as the
-                    general case that swallows the other: "Browse extensions" goes to the free gallery,
-                    "Browse paid services" to the metered catalog. */}
+                <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+                    <div>
+                        <dt class="font-mono text-lg font-semibold tracking-tight text-content">{creatorSharePct}%</dt>
+                        <dd class="text-2xs text-subtle">to creators</dd>
+                    </div>
+                    <div>
+                        <dt class="font-mono text-lg font-semibold tracking-tight text-content">Public</dt>
+                        <dd class="text-2xs text-subtle">ledger</dd>
+                    </div>
+                </dl>
                 <div class="mt-7 flex flex-wrap gap-3">
                     <a class="btn btn-primary" href="/developers/services/">Offer a paid service</a>
                     <a class="btn btn-secondary" href="/extensions/">Browse extensions</a>
@@ -246,9 +211,6 @@ const rules = [
                         <h2 id="credits-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             One membership. Two ways to spend it.
                         </h2>
-                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Spend daily credits on premium installs or paid service runs.
-                        </p>
                         <dl class="mt-6 flex flex-wrap gap-x-6 gap-y-3">
                             {
                                 [
@@ -289,27 +251,13 @@ const rules = [
                                         <span class="eyebrow">{card.kicker}</span>
                                     </div>
                                     <h3 class="mt-3.5 text-lg font-semibold tracking-tight text-content">{card.heading}</h3>
-                                    <p class="mt-2 max-w-copy text-sm leading-relaxed text-muted">{card.blurb}</p>
                                 </header>
 
                                 <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 border-y border-line py-4">
                                     <span class="text-3xl font-semibold tracking-tight text-content">{card.figure}</span>
                                     <span class="text-sm text-muted">{card.unit}</span>
-                                    <p class="mt-1 w-full text-2xs leading-relaxed text-subtle">{card.note}</p>
                                 </div>
 
-                                <ol class="flex flex-col gap-2.5">
-                                    {card.steps.map((step, i) => (
-                                        <li class="flex gap-3 text-sm leading-relaxed text-muted">
-                                            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line bg-overlay/40 text-2xs font-semibold text-subtle">
-                                                {i + 1}
-                                            </span>
-                                            <span>{step}</span>
-                                        </li>
-                                    ))}
-                                </ol>
-
-                                {/* A day's allowance to scale, in this lane's own units: five blocks against a comb. */}
                                 <div class="mt-auto">
                                     <svg viewBox={`0 0 ${METER_W} 10`} class="h-2.5 w-full text-primary-400/70" preserveAspectRatio="none" aria-hidden="true">
                                         {card.meter.map((bar) => (
@@ -319,7 +267,7 @@ const rules = [
                                     <p class="mt-2 text-2xs text-subtle">{card.meterLabel}</p>
                                 </div>
 
-                                <div class="flex flex-col gap-2 border border-success/25 bg-success/8 px-3.5 py-3">
+                                <div class="border border-success/25 bg-success/8 px-3.5 py-3">
                                     <p class="flex items-start gap-2 text-2xs leading-relaxed text-muted">
                                         <svg
                                             class="mt-px h-3.5 w-3.5 shrink-0 text-success"
@@ -335,7 +283,6 @@ const rules = [
                                         </svg>
                                         <span>{card.guarantee}</span>
                                     </p>
-                                    {card.cadence && <p class="pl-5.5 text-2xs leading-relaxed text-subtle">{card.cadence}</p>}
                                 </div>
                             </article>
                         ))
@@ -343,13 +290,10 @@ const rules = [
                 </div>
 
                 {/* True of both lanes, which is the point of stating them once. */}
-                <div class="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-3">
+                <div class="mt-6 flex flex-wrap gap-3">
                     {
                         spendRules.map((rule) => (
-                            <div class="border-t border-line pt-4">
-                                <h3 class="text-sm font-semibold tracking-tight text-content">{rule.title}</h3>
-                                <p class="mt-1.5 text-2xs leading-relaxed text-subtle">{rule.body}</p>
-                            </div>
+                            <span class="chip border border-line bg-overlay/40 text-subtle">{rule}</span>
                         ))
                     }
                 </div>
@@ -367,13 +311,9 @@ const rules = [
                         <h2 id="chat-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             What a run looks like in chat.
                         </h2>
-                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Agent suggests a paid service in chat. You see the price and click Run.
-                        </p>
-                        <p class="mt-4 max-w-copy text-sm leading-relaxed text-muted">
-                            Per-run outside costs?{" "}
-                            <a class="font-medium text-link hover:underline" href="/developers/services/">Offer a paid service →</a>
-                        </p>
+                        <div class="mt-7">
+                            <a class="btn btn-secondary" href="/developers/services/">Offer a paid service</a>
+                        </div>
                     </div>
 
                     <figure class="w-full lg:justify-self-end">
@@ -429,9 +369,6 @@ const rules = [
                                     ))
                                 }
                             </svg>
-                            <p class="mt-2 max-w-copy text-2xs leading-relaxed text-subtle">
-                                Split by credits spent on installs and runs.
-                            </p>
                         </div>
                     </div>
                     <div>
@@ -439,23 +376,8 @@ const rules = [
                         <h2 id="pool-heading"class="display mt-3 text-2xl font-semibold sm:text-3xl">
                             Split by what members choose. Renewed monthly.
                         </h2>
-                        <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">
-                            Monthly pool, split by member spending. Creators get {creatorSharePct}%.{" "}
-                            <a class="text-link hover:underline" href="/developers/maintain/">Updates can re-donate</a>.
-                        </p>
-                        {/* ONE BUTTON, and it is the provider's. This slot has now held three things and each
-                            was wrong in the same way: "Maintain & grow" was a step three of a path the reader
-                            had not started, and "Get listed" was the neutrality trap that cost "List your
-                            work" its name in the hero. Standing beside a button that names its artifact, a
-                            label that names none does not read as the general case; it reads as the OTHER
-                            case, so the provider takes it and lands on a page about git registries.
-
-                            Disambiguating it to "List an extension" would only reprint the hero's pair one
-                            screen below the hero. So the extension path keeps the two unambiguous primaries
-                            it already has, at the top and at the foot, plus the maintenance link in the
-                            sentence above; and this section, the one that explains how BOTH artifacts get
-                            paid, keeps the door that exists nowhere else on the page above the fold. */}
                         <div class="mt-7 flex flex-wrap gap-3">
+                            <a class="btn btn-secondary" href="/developers/maintain/">Maintain an extension</a>
                             <a class="btn btn-secondary" href="/developers/services/">Offer a paid service</a>
                         </div>
                     </div>
@@ -486,7 +408,6 @@ const rules = [
                                 />
                             </span>
                             <h3 class="text-base font-semibold tracking-tight text-content">{rule.title}</h3>
-                            <p class="text-sm leading-relaxed text-muted">{rule.body}</p>
                         </article>
                     ))
                 }
