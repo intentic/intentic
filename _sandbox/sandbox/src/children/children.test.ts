@@ -630,6 +630,27 @@ describe("placing a child on the fleet", () => {
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go" })).toEqual({ kind: "runner", id: "other" });
     });
 
+    /* CROSS-PROVIDER CHILDREN ARE THE POINT OF THE SPAWN ENGINE, and half of them cannot travel: only the
+     * Claude Code runtime's family spends the origin's credentials (runner-scheduler.credentialsTravel).
+     * A Cursor child sent to a machine that has never signed into Cursor dies on its first request, which
+     * reads as a broken fleet rather than as a login that was never there. */
+    it("keeps a child here when its runtime authenticates from the machine it runs on", async () => {
+        const fleet = [{ id: "rig", online: true }];
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "cursor" })).toBeUndefined();
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "codex" })).toBeUndefined();
+        // The same provider UNDER the Claude Code harness is routed through the translator the parent
+        // re-serves, so that one travels.
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "codex", harness: "claude-code" })).toEqual({
+            kind: "runner",
+            id: "rig",
+        });
+    });
+
+    it("still honours a machine named for a runtime that authenticates locally: the person knows their fleet", async () => {
+        const placed = await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "cursor", on: "rig" });
+        expect(placed).toEqual({ kind: "runner", id: "rig" });
+    });
+
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {
         expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", on: "here" })).toBeUndefined();
     });

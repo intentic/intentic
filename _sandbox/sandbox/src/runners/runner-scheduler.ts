@@ -1,4 +1,4 @@
-import type { RunnerFacts, RunnerSummary } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, capabilitiesOf, type RunnerFacts, type RunnerSummary } from "@intentic/sandbox-contract";
 
 /* WHERE THE NEXT FAN-OUT AGENT SHOULD RUN (docs/remote-runners-plan.md §12 P4, at the workspace root).
  *
@@ -31,13 +31,30 @@ const MEMORY_PER_AGENT_MB = 2_048;
 export const runnerSlots = (facts: RunnerFacts): number =>
     Math.max(1, Math.min(16, facts.cpus - 2, Math.floor(facts.memoryMb / MEMORY_PER_AGENT_MB)));
 
+/* CAN THIS AGENT'S CREDENTIAL GET THERE? The scheduler's other question, and the one that turns a helpful
+ * placement into a broken child if nobody asks it.
+ *
+ * A runner spends the ORIGIN sandbox's model providers (§8), and what travels is what
+ * `resolveHarnessCredentials` resolves: the Claude Code runtime's family — native Claude, codex/grok/kimi
+ * ROUTED under that harness, endpoint capabilities, the trial. Every other runtime (native Codex's
+ * app-server, opencode for Grok and Gemini, Cursor's SDK, an ACP agent, Pi) authenticates from a store on
+ * the machine it runs on: a CLI's own home, with that provider's own login in it. Those stores are on THIS
+ * box, and a fresh runner has none.
+ *
+ * So an automatic placement asks first. Sending a Cursor child to a machine that has never signed into
+ * Cursor produces a child that dies on its first request with a sentence about a missing account, which
+ * reads as the fleet being broken rather than as the credential never having been there. An EXPLICIT `on`
+ * still wins: somebody who names a machine may well have signed in on it, and the feature should not argue
+ * with a person who knows their own fleet. */
+export const credentialsTravel = (provider: AgentProvider, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).runtime === "claude-code";
+
 export interface FleetPlacement {
     // The runner to place this agent on, or undefined for "this sandbox", which is the ordinary answer on a
     // sandbox with no runners and the fallback when every runner is full.
     readonly runner?: string | undefined;
     // Why, for the log line the dispatch writes. Not shown to anybody: a placement nobody chose should not
     // announce itself on a card, it should simply be the fastest place the work could have gone.
-    readonly reason: "no-runners" | "all-busy" | "free-slot" | "asked-for";
+    readonly reason: "no-runners" | "all-busy" | "free-slot" | "asked-for" | "provider-is-local";
 }
 
 export interface FleetLoad {
@@ -54,13 +71,22 @@ export interface FleetLoad {
  * ends up holding sixteen agents. Parity is deliberately NOT a filter: an outdated runner runs turns (§7), and
  * refusing to schedule onto one would quietly halve somebody's fleet over a version they were never told
  * mattered. */
-export const placeFanOut = (runners: readonly RunnerSummary[], load: FleetLoad, asked?: string | undefined): FleetPlacement => {
+export const placeFanOut = (
+    runners: readonly RunnerSummary[],
+    load: FleetLoad,
+    options: { readonly asked?: string | undefined; readonly travels?: boolean | undefined } = {},
+): FleetPlacement => {
     const usable = runners.filter((runner) => runner.online && runner.facts !== undefined);
-    if (asked !== undefined) {
-        return usable.some((runner) => runner.id === asked) ? { runner: asked, reason: "asked-for" } : { reason: "all-busy" };
+    if (options.asked !== undefined) {
+        return usable.some((runner) => runner.id === options.asked) ? { runner: options.asked, reason: "asked-for" } : { reason: "all-busy" };
     }
+    // Nothing to spread onto is checked first, so the ordinary sandbox's answer names the fleet it lacks
+    // rather than a credential rule it has never met.
     if (usable.length === 0) {
         return { reason: "no-runners" };
+    }
+    if (options.travels === false) {
+        return { reason: "provider-is-local" };
     }
     const free = usable
         .map((runner) => ({

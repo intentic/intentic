@@ -1,6 +1,6 @@
 import type { RunnerSummary } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { placeFanOut, runnerSlots } from "./runner-scheduler.js";
+import { credentialsTravel, placeFanOut, runnerSlots } from "./runner-scheduler.js";
 
 /* Where a spawned agent goes when nobody chose. Every case here is a decision made thirty times during one
  * fan-out, so the cost of a wrong rule is not one misplaced agent: it is a fleet that piles everything onto
@@ -65,7 +65,29 @@ test("an outdated runner still takes work", () => {
 });
 
 test("a stated preference wins, and an unusable one falls back rather than failing", () => {
-    expect(placeFanOut([runner("a"), runner("b")], load(), "b")).toEqual({ runner: "b", reason: "asked-for" });
+    expect(placeFanOut([runner("a"), runner("b")], load(), { asked: "b" })).toEqual({ runner: "b", reason: "asked-for" });
     // The machine somebody named went to sleep: run it here rather than refuse work over it.
-    expect(placeFanOut([runner("a", { online: false })], load(), "a")).toEqual({ reason: "all-busy" });
+    expect(placeFanOut([runner("a", { online: false })], load(), { asked: "a" })).toEqual({ reason: "all-busy" });
+});
+
+/* THE CREDENTIAL RULE. A runner spends the origin's providers only for the Claude Code runtime's family; every
+ * other runtime reads a login from the machine it runs on, and a fresh runner has none. Placing there anyway
+ * produces a child that dies on its first request and reads as a broken fleet. */
+test("a runtime whose credential cannot travel stays here, and one that can still goes", () => {
+    expect(credentialsTravel("claude", "native")).toBe(true);
+    expect(credentialsTravel("codex", "claude-code")).toBe(true);
+    expect(credentialsTravel("endpoint/local", "native")).toBe(true);
+    // Native Codex, Cursor and Gemini each authenticate from a CLI's own home on the box that runs them.
+    expect(credentialsTravel("codex", "native")).toBe(false);
+    expect(credentialsTravel("cursor", "native")).toBe(false);
+    expect(credentialsTravel("gemini", "claude-code")).toBe(false);
+
+    expect(placeFanOut([runner("rig")], load(), { travels: false })).toEqual({ reason: "provider-is-local" });
+    expect(placeFanOut([runner("rig")], load(), { travels: true }).runner).toBe("rig");
+});
+
+// Naming a machine is a person's own claim about their fleet: they may well have signed that provider in
+// there, and the scheduler should not argue with it.
+test("an explicit machine wins even for a runtime whose credential does not travel", () => {
+    expect(placeFanOut([runner("rig")], load(), { asked: "rig", travels: false })).toEqual({ runner: "rig", reason: "asked-for" });
 });

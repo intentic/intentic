@@ -10,7 +10,7 @@ import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTu
 import { startTurnRun } from "../agent/turn-runs.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { TurnFn } from "../loops/loop-runner.js";
-import { placeFanOut } from "../runners/runner-scheduler.js";
+import { credentialsTravel, placeFanOut } from "../runners/runner-scheduler.js";
 import { runnerSummaries } from "../runners/runner.routes.js";
 
 /* SPAWN, STEER AND ANSWER FULL AGENTS FROM INSIDE A TURN, on ANY connected provider — the daemon-side engine
@@ -374,7 +374,12 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
         const placement =
             spec.on === "here"
                 ? undefined
-                : placeFanOut(await runnerSummaries(services), { inFlight: services.agents.inFlightByRunner() }, spec.on).runner;
+                : placeFanOut(await runnerSummaries(services), { inFlight: services.agents.inFlightByRunner() }, {
+                      ...(spec.on !== undefined ? { asked: spec.on } : {}),
+                      // A child on a runtime whose credential cannot travel stays here unless somebody names a
+                      // machine themselves (credentialsTravel says which, and why).
+                      travels: credentialsTravel(provider, harness),
+                  }).runner;
         const id = `sub-${newConversationId()}`;
         const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
         const turn: AgentTurn & { conversationId: string } = {
