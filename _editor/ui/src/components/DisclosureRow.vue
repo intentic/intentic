@@ -69,17 +69,20 @@ const {
     density?: RowDensity;
     /* WHAT THE PRESS TARGET IS.
      *
-     * `header` — the chevron, the `#lead` mark, the title and the description are one button; `#meta` and
-     *   `#control` stay outside it. The default, and the right answer for a row whose headline is a NAME: the
-     *   biggest target the row can offer without swallowing its verbs.
-     * `pair` — the chevron and the `#lead` mark only. For a row whose headline is itself a control (a turn
-     *   whose label opens its transcript, a port whose description links to its terminal). Two nested buttons
-     *   is invalid markup and, worse, makes "open the row" and "go somewhere else" the same click.
-     * `row` — the WHOLE row, verbs and facts included. `pair`'s structure with a click handler over the top,
-     *   for the one list whose product answer is "there is no second way in: people click the row" (the
-     *   personas list). It is the mode with a rule attached, and the rule is the reason it is not the default:
-     *   EVERY interactive child inside the header must `@click.stop`, or pressing it also toggles the row. A
-     *   `drawer` body is outside that handler and needs no guard; a `rail` body is inside it and does. */
+     * IT SETS THE ACCESSIBLE BUTTON, NOT THE PRESS TARGET. Pressing the row opens it in every mode (see
+     * `onRowClick` for the arithmetic that makes that necessary); what this decides is how much of the row is
+     * inside the real <button> a keyboard tabs to, and that turns on one question: does the headline carry a
+     * control of its own?
+     *
+     * `header` — no. The chevron, the `#lead` mark, the title and the description are one button. The default.
+     * `pair` — yes. The button is the chevron and the `#lead` mark, and the headline block swallows its own
+     *   clicks (<Row>'s `headlineGuard`), because a button inside a button is invalid markup and a press that
+     *   both opened the row and left for the vendor would be neither. Everything else on the row still opens
+     *   it. For a turn whose label opens its transcript, a port whose sentence links to its terminal, a run
+     *   whose title goes to the CI provider.
+     * `row` — yes, but the product answer is "people click the row and there is no second way in" (the personas
+     *   list, whose name is click-to-rename). Same button as `pair`, no headline guard, so the name is the
+     *   caller's to protect with `@click.stop`. `#control` and the `rail` body are guarded here for everyone. */
     hit?: `header` | `pair` | `row`;
     /** `rail`: evidence about this row · `drawer`: a place of its own. See the note above. */
     body?: `rail` | `drawer`;
@@ -106,6 +109,34 @@ const toggle = (): void => {
     }
 };
 
+/* THE WHOLE ROW IS THE TARGET, except where it is a control.
+ *
+ * The button alone is not enough, and the reason is arithmetic: <Row>'s tier padding is `py-3.5` at
+ * `comfortable`, so a press target that stops at the text leaves ~28px of a ~68px row dead, top and bottom,
+ * plus the left padding and the gap before the trailing verbs. A row that ignores two presses in five reads as
+ * broken, and it read exactly that way on the deployments board, which had also just given up the duplicate
+ * chevron that used to catch them.
+ *
+ * `pair` gets it too, minus the one part it exists to protect: those rows carry a control in the headline (a
+ * link to a run, a terminal, a transcript), so <Row>'s `headlineGuard` makes the title-and-description block
+ * swallow its own clicks. Everything around it — the padding, the lead cluster, the facts, the empty middle —
+ * still opens the row, which is the difference between a 90px target and the whole line. */
+const onRowClick = (): void => {
+    toggle();
+};
+
+/* THE TOGGLE CLUSTER'S OWN CLICK, with `.stop` written out rather than spelled as a modifier, because it must
+ * NOT always apply. In `header` the cluster is a plain <span> INSIDE <Row>'s header button, and a modifier
+ * there stops the press before the button that owns it ever sees it: chevron and mark go dead while the title
+ * beside them still works, which is precisely how this shipped broken. */
+const onPairClick = (event: MouseEvent): void => {
+    if (hit === `header`) {
+        return;
+    }
+    event.stopPropagation();
+    toggle();
+};
+
 // The tier's own gap between the toggle cluster and the title, and the tighter one INSIDE the cluster. Read
 // from <Row>'s table rather than restated, because the hidden mirror below is only right while they match.
 const gap = computed(() => ROW_TIERS[density].gap);
@@ -127,7 +158,7 @@ const tint = computed(() => {
     if (open) {
         return `bg-content/6`;
     }
-    return hit === `row` ? `` : `transition-colors hover:bg-content/4`;
+    return ``;
 });
 
 // Padding for a drawer, matched to the row's own so the two read as one block rather than as a panel that
@@ -159,9 +190,10 @@ const DRAWER_PAD = {
                 :header-button="hit === `header` && !disabled"
                 :header-expanded="disabled ? undefined : open"
                 :header-controls="disabled ? undefined : bodyId"
-                :interactive="hit === `row` && !disabled"
+                :interactive="!disabled"
+                :headline-guard="hit === `pair`"
                 @header-click="toggle"
-                @click="hit === `row` ? toggle() : undefined"
+                @click="onRowClick"
             >
                 <template #lead>
                     <!-- `pair` and `row`: the cluster IS the button, and in `row` it is the KEYBOARD's way in,
@@ -181,7 +213,7 @@ const DRAWER_PAD = {
                                 ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
                                 : ``,
                         ]"
-                        @click.stop="hit !== `header` ? toggle() : undefined"
+                        @click="onPairClick"
                     >
                         <!-- ROTATION, NOT AN ICON SWAP. It animates, which is the cheapest way to say a press
                          landed, and it is the one spelling that cannot drift: `chevron-up` and `chevron-down`
@@ -205,7 +237,10 @@ const DRAWER_PAD = {
                 <!-- THE RAIL. Inside <Row>'s padding, so it aligns with the row above it, and offset by a hidden
                  copy of the toggle cluster, so it starts under the TITLE. -->
                 <template v-if="open && body === `rail`" #below>
-                    <div class="flex" :class="gap">
+                    <!-- `@click.stop` because this block is INSIDE <Row>, and the row-wide handler would read a
+                         press on the evidence as "close the thing you just opened". The drawer needs no guard:
+                         it is drawn as a sibling of <Row>, outside that handler entirely. -->
+                    <div class="flex" :class="gap" @click.stop>
                         <span class="invisible flex shrink-0 items-center" :class="toggleGap" aria-hidden="true">
                             <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
                             <slot name="lead" />

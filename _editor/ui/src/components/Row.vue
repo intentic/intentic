@@ -50,6 +50,7 @@ const {
     flush = false,
     wideControl = false,
     headerButton = false,
+    headlineGuard = false,
 } = defineProps<{
     icon?: IconName;
     title?: string;
@@ -112,9 +113,32 @@ const {
     headerExpanded?: boolean;
     /** `aria-controls` for the header button: the id of the block it opens. */
     headerControls?: string;
+    /* THE HEADLINE BLOCK (title + description) SWALLOWS ITS OWN CLICKS. For the row whose headline carries a
+     * control — a turn whose label opens its transcript, a port whose sentence links to its terminal, a run
+     * whose title leaves for the vendor — so that <DisclosureRow> can make the REST of the row pressable
+     * (padding, lead, facts, empty space) without "open this" and "go somewhere else" becoming one click. */
+    headlineGuard?: boolean;
 }>();
 
-defineEmits<{ headerClick: [event: MouseEvent] }>();
+const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
+
+/* THE HEADER BUTTON EATS ITS OWN CLICK. <DisclosureRow> makes the whole row pressable (the tier's padding is
+ * ~40% of a comfortable row's height, and a target that stops at the text leaves a dead strip above and below
+ * it), so without this the button's press and the row's press both fire and the row toggles straight back. */
+const onHeaderClick = (event: MouseEvent): void => {
+    if (!headerButton) {
+        return;
+    }
+    event.stopPropagation();
+    emit(`headerClick`, event);
+};
+
+// See `headlineGuard`. Written out rather than as a `.stop` modifier because it must apply only when asked.
+const onHeadlineClick = (event: MouseEvent): void => {
+    if (headlineGuard) {
+        event.stopPropagation();
+    }
+};
 
 /* A ROW YOU PICK FROM IS MUTED UNTIL YOU REACH FOR IT. All four selectable lists in the app had this rule and
  * all four spelled it themselves: the source rail, the memory index, the documentation contents and the log
@@ -160,11 +184,11 @@ const picked = as === `button`;
                         ? `flex-1 cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
                         : ``,
                 ]"
-                @click="headerButton ? $emit(`headerClick`, $event) : undefined"
+                @click="onHeaderClick"
             >
                 <slot name="lead" />
                 <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[density].icon, TONES[tone]]" />
-                <div class="min-w-0">
+                <div class="min-w-0" @click="onHeadlineClick">
                     <component
                         :is="heading === undefined ? `div` : `h${heading}`"
                         v-if="title !== undefined || $slots[`title`]"
@@ -192,7 +216,13 @@ const picked = as === `button`;
                 <div v-if="$slots[`meta`]" class="flex shrink-0 items-center gap-2 text-2xs tabular-nums text-subtle">
                     <slot name="meta" />
                 </div>
-                <slot name="control" />
+                <!-- ACTIONS NEVER TOGGLE THE ROW. `display: contents` so the cluster's layout is untouched: the
+                     wrapper draws no box, but it is still in the tree, so a press on a Stop button or a switch
+                     stops here instead of reaching the row-wide handler <DisclosureRow> puts on this component.
+                     Owned here rather than left to call sites, because "remember `@click.stop` on every control"
+                     is a rule that gets remembered until it doesn't. #meta is deliberately NOT wrapped: facts
+                     are not controls, and a press on one may as well open the row. -->
+                <div v-if="$slots[`control`]" class="contents" @click.stop><slot name="control" /></div>
                 <Icon v-if="chevron || href !== undefined" name="chevron-right" class="text-2xs text-subtle" />
             </div>
         </div>

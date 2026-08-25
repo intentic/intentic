@@ -93,6 +93,17 @@ const secondary = computed<{ action: DeployAction; label: string } | undefined>(
     return props.resource.state === `stopped` ? { action: `start`, label: `Start` } : undefined;
 });
 
+/* Ragged on purpose: a log tail is lines of unequal length, and six identical bars read as a table. Six of
+ * them, because <Code>'s own clamp is fourteen and a placeholder taller than the answer usually is would make
+ * the block SHRINK when the real tail arrives, which is the one reflow an outline exists to prevent.
+ *
+ * FRACTIONS, NOT PERCENTAGES. An extension bundle is not scanned by the app's Tailwind build: it draws from the
+ * class surface `extension-surface.css` promises, which enumerates the fraction scale and cannot enumerate an
+ * arbitrary bracket value. One of those here is a bar with no width at all in the shipped bundle, and
+ * extensionSurface.test.ts fails the build over it — including, as this comment learned, over a bracket value
+ * merely QUOTED in prose, since it scans the source rather than parsing it. */
+const LOG_SKELETON = [`w-11/12`, `w-3/5`, `w-3/4`, `w-2/5`, `w-5/6`, `w-1/2`] as const;
+
 const logText = computed(() => {
     const log = props.logs;
     if (log === undefined) {
@@ -215,7 +226,18 @@ const logText = computed(() => {
                 <Button label="Refresh logs" size="small" severity="secondary" text :disabled="logsPending" @click="emit(`logs`, resource)" />
             </div>
 
-            <div v-if="logsPending && logText === ``" class="text-2xs text-subtle">Reading logs…</div>
+            <!-- THE SHAPE OF THE LOG, WHILE IT IS BEING FETCHED, rather than the words "Reading logs…" on one
+                 grey line. The row opens instantly and the tail arrives over a network hop to Komodo, so what
+                 that line did was open a row onto almost nothing and then reflow it a second later. An outline
+                 the size of the block that is coming holds the space, says "working" without a sentence, and
+                 lets the real tail land in place. Built from the same label + bordered band <Code> draws, so it
+                 cannot drift from the thing it stands in for. -->
+            <div v-if="logsPending && logText === ``" class="flex flex-col gap-1.5" role="status" aria-busy="true" aria-label="Reading logs">
+                <span class="skeleton h-2.5 w-24"></span>
+                <div class="flex flex-col gap-1.5 rounded-md border border-line bg-canvas px-3 py-2.5">
+                    <span v-for="(width, line) in LOG_SKELETON" :key="line" class="skeleton h-2.5" :class="width"></span>
+                </div>
+            </div>
             <!-- The shared code block: a copy button (a log tail's whole point is that it goes somewhere else)
                  and a clamp, so a 200-line tail does not push the next row off the screen. -->
             <Code v-else-if="logText !== ``" :code="logText" lang="log" label="Container log" :clamp-lines="14" />
