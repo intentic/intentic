@@ -3,10 +3,13 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    AdminActionResultSchema,
     AdminAttentionSchema,
     AdminCostsSchema,
     AdminFunnelSchema,
+    AdminMarketSchema,
     AdminOverviewSchema,
+    AdminTrendsSchema,
     AdminUserDetailSchema,
     AdminUserListSchema,
     ClaimableNamesSchema,
@@ -377,6 +380,43 @@ export const adminContract = {
         .route({ method: "GET", path: "/admin/user" })
         .input(z.object({ idOrEmail: z.string().min(1).max(200) }))
         .output(AdminUserDetailSchema),
+    // The marketplace: demand (wants aggregate) beside supply (every listing against the published rules).
+    market: oc.route({ method: "GET", path: "/admin/market" }).output(AdminMarketSchema),
+    // The trend lines: the daily rollup rows, oldest first, up to 90 days.
+    trends: oc.route({ method: "GET", path: "/admin/trends" }).output(AdminTrendsSchema),
+
+    /* MUTATIONS — the only writes on the admin surface, and triple-gated: requireAdmin (who), the
+     * ADMIN_MUTATIONS deployment switch (whether this deployment allows them at all — off until the panel
+     * is a pinned install), and a typed `confirm` input that must name the target exactly (the retype-it
+     * pattern; a mistyped confirmation is a 400, not a warning). Every one audit-logs its target. */
+    serviceSuspend: oc
+        .route({ method: "POST", path: "/admin/service/suspend" })
+        .input(z.object({ slug: z.string().min(1), reason: z.string().min(1).max(500), confirm: z.string() }))
+        .output(AdminActionResultSchema),
+    // Reinstates into PROBATION, not `listed`: the price cap and the badge are exactly what a listing that
+    // was just suspended should re-enter under.
+    serviceReinstate: oc
+        .route({ method: "POST", path: "/admin/service/reinstate" })
+        .input(z.object({ slug: z.string().min(1), confirm: z.string() }))
+        .output(AdminActionResultSchema),
+    // Re-attempt one reserved-but-unpaid payout under its original idempotency key.
+    payoutRetry: oc
+        .route({ method: "POST", path: "/admin/payout/retry" })
+        .input(z.object({ payoutId: z.string().min(1), confirm: z.string() }))
+        .output(AdminActionResultSchema),
+    // Stop a hosted machine (abuse/cost brake). The owner can wake it again; nothing is destroyed.
+    machineStop: oc
+        .route({ method: "POST", path: "/admin/machine/stop" })
+        .input(z.object({ sandboxId: z.string().min(1), confirm: z.string() }))
+        .output(AdminActionResultSchema),
+    /* GDPR erasure on the operator's side (Art. 17 requests arriving by email rather than through
+     * Settings). Confirm is the account's EMAIL retyped — the strongest of these confirmations because this
+     * is the one action with nothing on the other side of it. Tears down each sandbox the way the owner's
+     * own delete does (reachability grant, hosted machine), then lets the cascade take every row. */
+    userDelete: oc
+        .route({ method: "POST", path: "/admin/user/delete" })
+        .input(z.object({ userId: z.string().min(1), confirmEmail: z.string().min(3) }))
+        .output(AdminActionResultSchema),
 };
 
 // Aggregated contract router, consumed by the oRPC client (ContractRouterClient<typeof apiContract>)

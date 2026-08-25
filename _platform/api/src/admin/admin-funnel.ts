@@ -56,5 +56,46 @@ export const adminFunnel = async (prisma: PrismaClient, now: () => Date = () => 
         signups: { today, last7, last30, total },
         signupSeries: [...buckets.entries()].map(([day, count]) => ({ day, count })),
         funnel: { accounts: total, withSandbox, setupEngaged, connected, activeLast7 },
+        activation: await timeToActivate(prisma, at),
     };
+};
+
+/* Sign-up → first announce, median hours, over accounts whose FIRST activation landed in the last 30 days.
+ * Bounded reads: the window's activated sandboxes, then one distinct-owner probe that excludes anyone who
+ * had already activated before the window (their first time was not this month). Null when nobody
+ * activated — including every row from before firstAnnouncedAt existed, which honestly has no answer. */
+const timeToActivate = async (prisma: PrismaClient, at: Date): Promise<{ medianHours: number; count: number } | null> => {
+    const windowStart = new Date(at.getTime() - 30 * DAY_MS);
+    const activated = await prisma.sandbox.findMany({
+        where: { firstAnnouncedAt: { gte: windowStart } },
+        select: { ownerId: true, firstAnnouncedAt: true, owner: { select: { createdAt: true } } },
+    });
+    if (activated.length === 0) {
+        return null;
+    }
+    const veterans = await prisma.sandbox.findMany({
+        where: { ownerId: { in: [...new Set(activated.map((row) => row.ownerId))] }, firstAnnouncedAt: { lt: windowStart } },
+        select: { ownerId: true },
+        distinct: [`ownerId`],
+    });
+    const alreadyActive = new Set(veterans.map((row) => row.ownerId));
+    const firstByOwner = new Map<string, { announcedAt: Date; signedUpAt: Date }>();
+    for (const row of activated) {
+        if (alreadyActive.has(row.ownerId) || row.firstAnnouncedAt === null) {
+            continue;
+        }
+        const existing = firstByOwner.get(row.ownerId);
+        if (existing === undefined || row.firstAnnouncedAt < existing.announcedAt) {
+            firstByOwner.set(row.ownerId, { announcedAt: row.firstAnnouncedAt, signedUpAt: row.owner.createdAt });
+        }
+    }
+    const hours = [...firstByOwner.values()]
+        .map((entry) => Math.max(0, (entry.announcedAt.getTime() - entry.signedUpAt.getTime()) / (60 * 60 * 1000)))
+        .toSorted((a, b) => a - b);
+    if (hours.length === 0) {
+        return null;
+    }
+    const mid = Math.floor(hours.length / 2);
+    const median = hours.length % 2 === 1 ? hours[mid]! : (hours[mid - 1]! + hours[mid]!) / 2;
+    return { medianHours: Math.round(median * 10) / 10, count: hours.length };
 };

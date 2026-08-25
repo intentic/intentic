@@ -103,6 +103,30 @@ const resumePending = async (deps: PayoutDeps, at: Date): Promise<PayoutOutcome[
     return outcomes;
 };
 
+/* One payout, retried NOW — the admin panel's "try again" on a stuck row, sharing `settle` with the
+ * scheduled run so a hand-triggered attempt is byte-identical to tomorrow morning's (same idempotency key,
+ * same destination lookup). Answers in sentences because the operator reads this verbatim. */
+export const retryPayout = async (deps: PayoutDeps, payoutId: string): Promise<{ paid: boolean; message: string }> => {
+    const payout = await deps.prisma.creatorPayout.findUnique({
+        where: { id: payoutId },
+        select: { id: true, userId: true, amountCents: true, currency: true, status: true },
+    });
+    if (payout === null) {
+        return { paid: false, message: `No payout with that id.` };
+    }
+    if (payout.status !== `pending`) {
+        return { paid: false, message: `This payout is ${payout.status}; only a pending one can be retried.` };
+    }
+    const destination = await destinationOf(deps.prisma, payout.userId);
+    if (destination === undefined) {
+        return { paid: false, message: `The creator's payout account is not accepting transfers; the payout stays pending until Stripe will take it.` };
+    }
+    const outcome = await settle(deps, payout, destination, (deps.now ?? (() => new Date()))());
+    return outcome.paid
+        ? { paid: true, message: `Paid: $${(payout.amountCents / 100).toFixed(2)} transferred.` }
+        : { paid: false, message: `Transfer failed again: ${outcome.error ?? `unknown error`}. The payout stays pending under the same key.` };
+};
+
 /* One creator's fresh payment. The reservation is guarded by `payoutId: null` in the WHERE rather than trusting
  * the read that preceded it: two runs racing, different replicas, or a tick overlapping a slow predecessor,
  * would otherwise both believe they own the same statements. Whoever updates fewer rows than it expected has

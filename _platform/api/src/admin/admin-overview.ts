@@ -70,5 +70,6 @@ export const adminOverview = async (prisma: PrismaClient, config: Config, now: (
             wallet: walletEnabled(config),
             push: config.apns.keyP8 !== ``,
         },
+        mutationsEnabled: config.admin.mutations,
     };
 };

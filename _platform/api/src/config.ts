@@ -51,6 +51,13 @@ export const configSchema = z.object({
     admin: z
         .object({
             emails: z.string().default(``),
+            /* The second gate, for the admin surface's MUTATIONS (suspend a service, retry a payout, stop a
+             * machine, delete an account). Off by default and separate from `emails` on purpose: the panel's
+             * bytes are workspace-authored until it graduates to a pinned install, and a read-only surface
+             * is the stated safety of that arrangement. Flip this only on a deployment whose panel is
+             * pinned. Every mutation also requires a typed confirmation input naming its target.
+             * ADMIN_MUTATIONS. */
+            mutations: z.stringbool().default(false),
         })
         .prefault({}),
     // Transactional email (Resend), sandbox invites, and the setup link a phone sends itself to finish on a

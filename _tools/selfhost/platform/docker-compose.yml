@@ -63,6 +63,9 @@ services:
             # Comma-separated emails whose signed-in session may call the /admin surface (the operator's
             # platform-admin panel). Empty (the default) disables it outright — no route, no exposure.
             ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+            # The admin surface's writes (suspend/retry/stop/erase). Leave off until the panel is a pinned
+            # install — see the platform-admin extension's README.
+            ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-false}
             # Cloudflare is DNS-ONLY now (the tunnel fabric is the zrok hub above): the loopback-certificate
             # records for same-machine sandboxes, and the sweep that clears their residue.
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}

@@ -242,6 +242,10 @@ model Sandbox {
     daemonUrl          String?
     // When the daemon last announced — the setup wizard treats a recent value as "connected".
     lastSeenAt         DateTime?
+    // When the daemon FIRST announced — the activation moment, written once and never updated. lastSeenAt
+    // cannot answer "when did this sandbox come alive" (it moves on every check-in), and time-to-activate
+    // and retention cohorts both need the moment that does not move. Null = never announced.
+    firstAnnouncedAt   DateTime?
     // Short-lived setup code the connect script redeems at POST /setup/claim for the values the one-liner used
     // to carry inline (so no raw token lands in shell history). Re-claimable until expiry — a failed run stays
     // re-runnable from the same copied command — and overwritten whenever setup mints a fresh one.
@@ -858,6 +862,38 @@ model CreatorPayout {
     // The run resumes every unfinished payment before it builds any new ones.
     @@index([status])
     @@map("creator_payout")
+}
+
+/* ONE UTC DAY OF PLATFORM HISTORY, written by the daily rollup (api admin/admin-rollup.ts) so the admin
+ * panel's trend lines survive the retention sweeps that take the raw rows (ledgers at 13 months, trial days
+ * sooner). Two kinds of column, told apart in the comments: WINDOW counts are exact facts about that day
+ * (immutable timestamps), SNAPSHOT counts are the platform as it stood when the rollup ran (typically the
+ * morning after), kept because the raw signal (lastSeenAt) moves and cannot be re-asked later.
+ *
+ * Rows are the panel's own bookkeeping, never user data: counts only, no ids, no emails — so retention
+ * never needs to sweep them and a decade of trend history costs a few thousand rows. Upsert-keyed on `day`
+ * so a re-run (boot after a crash) rewrites the row instead of doubling it. */
+model AdminDailyStat {
+    id                 String   @id @default(cuid())
+    day                String   @unique
+    // WINDOW: accounts created during this day.
+    newUsers           Int
+    // WINDOW: metered service runs during this day.
+    serviceRuns        Int
+    // WINDOW: trial messages metered on this day's rows.
+    trialMessages      Int
+    // SNAPSHOT: totals as of the rollup.
+    totalUsers         Int
+    connectedUsers     Int
+    activeSandboxes24h Int
+    membershipsActive  Int
+    hostedMachines     Int
+    // When the day's operator digest went out (admin/admin-digest.ts) — the "once per day" latch, on this
+    // row because the rollup's create is already the day's first-run signal.
+    digestAt           DateTime?
+    createdAt          DateTime @default(now())
+
+    @@map("admin_daily_stat")
 }
 
 model SandboxMember {

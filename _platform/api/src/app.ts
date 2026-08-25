@@ -281,10 +281,17 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
             return c.text(`error: this sandbox announces at ${expected}`, 409);
         }
         // Cleared on the way through: a stored refusal must describe a LIVE disagreement, and a sandbox that
-        // has just been accepted at its proper address no longer has one.
+        // has just been accepted at its proper address no longer has one. firstAnnouncedAt is the activation
+        // moment, written exactly once — the loaded row says whether this announce is the first accepted one
+        // (two racing first announces would stamp the same moment, which is the same fact).
         await prisma.sandbox.update({
             where: { id: sandbox.id },
-            data: { daemonUrl, lastSeenAt: new Date(), announceRefusal: Prisma.DbNull },
+            data: {
+                daemonUrl,
+                lastSeenAt: new Date(),
+                announceRefusal: Prisma.DbNull,
+                ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: new Date() } : {}),
+            },
         });
         return c.json({ ok: true });
     });

@@ -58,7 +58,7 @@ export const adminAttention = async (prisma: PrismaClient, config: Config, now: 
                 where: { status: `pending`, attempts: { gt: 0 } },
                 orderBy: { createdAt: `desc` },
                 take: TAKE,
-                select: { amountCents: true, attempts: true, lastError: true, createdAt: true, user: { select: { email: true } } },
+                select: { id: true, amountCents: true, attempts: true, lastError: true, createdAt: true, user: { select: { email: true } } },
             }),
             // Unclaimed earnings whose window is closing — a nudge now still reaches the publisher.
             prisma.creatorStatement.findMany({
@@ -158,6 +158,7 @@ export const adminAttention = async (prisma: PrismaClient, config: Config, now: 
                 detail: payout.lastError ?? undefined,
                 at: payout.createdAt.toISOString(),
                 email: payout.user.email,
+                payoutId: payout.id,
             }),
         ),
         ...expiringStatements.map(

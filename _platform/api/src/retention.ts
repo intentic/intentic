@@ -1,3 +1,5 @@
+import { sendAdminDigest } from "./admin/admin-digest.js";
+import { rollupAdminDaily } from "./admin/admin-rollup.js";
 import { JOB_RETENTION, runExclusive } from "./jobs-lock.js";
 import { expireOffers } from "./mcp/mcp-offer.js";
 import { reapOrphanDnsRecords } from "./sandbox/cloudflare.js";
@@ -125,6 +127,17 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
             logger.info(await reapIdleHosted(prisma, config, logger), `hosted idle sweep completed`);
         } catch (error) {
             logger.error({ err: error }, `hosted idle sweep failed`);
+        }
+        /* The admin panel's history and its morning mail, last so the day it records reflects the sweeps
+         * above. The rollup freezes yesterday into admin_daily_stat (counts only, retention never touches
+         * them); the digest pushes the attention feed to ADMIN_EMAILS, latched to once per day on that
+         * same row, so a redeploy morning rolls up again (upsert) but never mails twice. */
+        try {
+            const rollup = await rollupAdminDaily(prisma);
+            logger.info(rollup, `admin daily rollup completed`);
+            await sendAdminDigest(prisma, config, logger, rollup.day);
+        } catch (error) {
+            logger.error({ err: error }, `admin rollup/digest failed`);
         }
     };
     const tick = (): void => {

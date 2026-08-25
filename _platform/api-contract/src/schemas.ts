@@ -1220,6 +1220,9 @@ export const AdminOverviewSchema = z.object({
         wallet: z.boolean(),
         push: z.boolean(),
     }),
+    // Whether ADMIN_MUTATIONS is on — what tells the panel to render action buttons at all. The server
+    // re-checks on every mutation; this is display, never permission.
+    mutationsEnabled: z.boolean(),
 });
 export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
 
@@ -1243,6 +1246,10 @@ export const AdminFunnelSchema = z.object({
         connected: z.number(),
         activeLast7: z.number(),
     }),
+    /* Sign-up → first daemon announce, over the accounts whose FIRST activation (Sandbox.firstAnnouncedAt,
+     * written once) landed in the last 30 days. Null when no account activated in the window — including
+     * every deployment from before the column existed, which honestly has no answer. */
+    activation: z.object({ medianHours: z.number(), count: z.number() }).nullable(),
 });
 export type AdminFunnel = z.infer<typeof AdminFunnelSchema>;
 
@@ -1268,10 +1275,11 @@ export const AdminAttentionItemSchema = z.object({
     detail: z.string().optional(),
     // The relevant moment (ISO): when the setup was claimed, the payout created, the statement expires…
     at: z.iso.datetime().optional(),
-    // Drill-down anchors, present where they apply.
+    // Drill-down anchors, present where they apply. `payoutId` is also the retry action's target.
     email: z.email().optional(),
     sandboxId: z.string().optional(),
     serviceSlug: z.string().optional(),
+    payoutId: z.string().optional(),
 });
 export type AdminAttentionItem = z.infer<typeof AdminAttentionItemSchema>;
 
@@ -1426,3 +1434,70 @@ export const AdminUserListSchema = z.object({
     nextCursor: z.string().optional(),
 });
 export type AdminUserList = z.infer<typeof AdminUserListSchema>;
+
+/* THE MARKETPLACE, both sides at once: what agents asked for and did not find (the operator's build-next
+ * list — the platform's only demand signal), and how the supply that exists is behaving, each listing shown
+ * against the published thresholds it is judged by. `refunds7d`/`runs7d` are the recent-health window the
+ * panel derives a rate from; `servedRuns` is the all-time graduation counter. */
+export const AdminMarketSchema = z.object({
+    // Grouped by normalized text, counted by DISTINCT owners (one noisy sandbox is one voice), newest
+    // phrasing shown. The same reduction the public catalog serves, unbounded by its display cap.
+    wants: z.array(z.object({ text: z.string(), owners: z.number(), lastAt: z.iso.datetime() })),
+    services: z.array(
+        z.object({
+            slug: z.string(),
+            publisher: z.string(),
+            name: z.string(),
+            status: z.string(),
+            creditsPerRun: z.number(),
+            // Operator rows (no owner) answer to nobody and are exempt from the gates; said explicitly so
+            // the panel never renders a probation bar for one.
+            owned: z.boolean(),
+            servedRuns: z.number(),
+            runs7d: z.number(),
+            refunds7d: z.number(),
+            canaryFails: z.number(),
+            probedAt: z.iso.datetime().nullable(),
+            suspendedFor: z.string().nullable(),
+        }),
+    ),
+    // The published rules the numbers above are judged by, echoed so the panel renders promise vs. actual.
+    thresholds: z.object({
+        graduationRuns: z.number(),
+        watchWindowRuns: z.number(),
+        maxRefundRate: z.number(),
+        canaryFailures: z.number(),
+    }),
+    creators: z.object({
+        publishers: z.number(),
+        payoutEnabled: z.number(),
+        // Money reserved in pending payouts, and money frozen in unclaimed/unexpired statements.
+        pendingPayoutCents: z.number(),
+        unclaimedCents: z.number(),
+    }),
+});
+export type AdminMarket = z.infer<typeof AdminMarketSchema>;
+
+/* THE TREND LINES — the daily rollup rows (admin_daily_stat), oldest first, up to 90 days. Two kinds of
+ * column, and the panel labels them: window counts are exact facts about that day, snapshot counts are the
+ * platform as it stood when the rollup ran (the morning after). */
+export const AdminTrendsSchema = z.object({
+    days: z.array(
+        z.object({
+            day: z.string(),
+            newUsers: z.number(),
+            serviceRuns: z.number(),
+            trialMessages: z.number(),
+            totalUsers: z.number(),
+            connectedUsers: z.number(),
+            activeSandboxes24h: z.number(),
+            membershipsActive: z.number(),
+            hostedMachines: z.number(),
+        }),
+    ),
+});
+export type AdminTrends = z.infer<typeof AdminTrendsSchema>;
+
+// What every admin mutation answers: what happened, in a sentence the panel can show verbatim.
+export const AdminActionResultSchema = z.object({ ok: z.boolean(), message: z.string() });
+export type AdminActionResult = z.infer<typeof AdminActionResultSchema>;

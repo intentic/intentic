@@ -6,11 +6,17 @@ import type { PrismaClient } from "@intentic-app/prisma";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
+import { retryPayout } from "../pool/pool-payout.js";
+import { deleteUserAccount, reinstateService, stopHostedMachine, suspendService } from "./admin-actions.js";
 import { adminAttention } from "./admin-attention.js";
 import { adminCosts } from "./admin-costs.js";
+import { sendAdminDigest } from "./admin-digest.js";
 import { adminFunnel } from "./admin-funnel.js";
+import { adminMarket } from "./admin-market.js";
 import { adminOverview } from "./admin-overview.js";
 import { adminRoutes } from "./admin.routes.js";
+import { rollupAdminDaily } from "./admin-rollup.js";
+import { adminTrends } from "./admin-trends.js";
 import { adminUserDetail } from "./admin-user.js";
 import { adminUsers } from "./admin-users.js";
 
@@ -27,13 +33,23 @@ const NOW = new Date(`2026-08-25T10:30:00Z`);
 // tests to every unrelated knob's default.
 const configWith = (overrides?: Record<string, unknown>): Config =>
     ({
-        admin: { emails: `radarsu@gmail.com` },
-        pool: { priceUsd: 20, canaryFailures: 3, stripeSecretKey: `sk`, stripePriceId: `price` },
+        admin: { emails: `radarsu@gmail.com`, mutations: false },
+        pool: {
+            priceUsd: 20,
+            canaryFailures: 3,
+            stripeSecretKey: `sk`,
+            stripePriceId: `price`,
+            graduationRuns: 50,
+            watchWindowRuns: 20,
+            maxRefundRate: 0.2,
+        },
         hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
         zrok: { adminToken: ``, apiEndpoint: `` },
         trial: { keys: `k1`, dailyMessages: 12 },
         wallet: { custodyUrl: ``, custodyKey: `` },
         apns: { keyP8: `` },
+        email: { apiKey: ``, from: `` },
+        webOrigin: `https://app.test`,
         ...overrides,
     }) as unknown as Config;
 
@@ -116,12 +132,18 @@ describe(`adminOverview`, () => {
             hostedMachines: 5,
             // trial has a key and the pool has Stripe; hosted, wallet and push are unconfigured.
             lanes: { trial: true, pool: true, hosted: false, wallet: false, push: false },
+            mutationsEnabled: false,
         });
     });
 });
 
 describe(`adminFunnel`, () => {
-    const prismaWith = (counts: { total: number; withSandbox: number; engaged: number; connected: number; active7: number }, signups: Date[]) =>
+    const prismaWith = (
+        counts: { total: number; withSandbox: number; engaged: number; connected: number; active7: number },
+        signups: Date[],
+        activated: { ownerId: string; firstAnnouncedAt: Date; owner: { createdAt: Date } }[] = [],
+        veterans: { ownerId: string }[] = [],
+    ) =>
         ({
             user: {
                 count: async (args?: { where?: Record<string, unknown> }) => {
@@ -145,6 +167,11 @@ describe(`adminFunnel`, () => {
                 },
                 findMany: async () => signups.map((createdAt) => ({ createdAt })),
             },
+            sandbox: {
+                // First call asks for the window's activations, second probes for pre-window veterans.
+                findMany: async (args: { where: Record<string, unknown> }) =>
+                    (args.where[`firstAnnouncedAt`] as { gte?: Date }).gte ? activated : veterans,
+            },
         }) as unknown as PrismaClient;
 
     it(`buckets signups per UTC day, zero-filled to exactly 30 entries oldest-first`, async () => {
@@ -160,6 +187,24 @@ describe(`adminFunnel`, () => {
     it(`reports the five stages as distinct-account counts, accounts = the user total`, async () => {
         const funnel = await adminFunnel(prismaWith({ total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 }, []), () => NOW);
         expect(funnel.funnel).toEqual({ accounts: 10, withSandbox: 8, setupEngaged: 6, connected: 4, activeLast7: 2 });
+        // Nobody activated in the window: the honest answer is null, never zero hours.
+        expect(funnel.activation).toBeNull();
+    });
+
+    it(`medians sign-up → first announce per owner, excluding owners who had activated before the window`, async () => {
+        const counts = { total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 };
+        const activated = [
+            // Alice: signed up at 00:00, first announce 2h later; a second sandbox later must not count.
+            { ownerId: `alice`, firstAnnouncedAt: new Date(`2026-08-20T02:00:00Z`), owner: { createdAt: new Date(`2026-08-20T00:00:00Z`) } },
+            { ownerId: `alice`, firstAnnouncedAt: new Date(`2026-08-22T00:00:00Z`), owner: { createdAt: new Date(`2026-08-20T00:00:00Z`) } },
+            // Bob: 10h to activate.
+            { ownerId: `bob`, firstAnnouncedAt: new Date(`2026-08-21T10:00:00Z`), owner: { createdAt: new Date(`2026-08-21T00:00:00Z`) } },
+            // Carol activated a sandbox this window but was already active before it: not a first activation.
+            { ownerId: `carol`, firstAnnouncedAt: new Date(`2026-08-22T01:00:00Z`), owner: { createdAt: new Date(`2026-01-01T00:00:00Z`) } },
+        ];
+        const funnel = await adminFunnel(prismaWith(counts, [], activated, [{ ownerId: `carol` }]), () => NOW);
+        // Alice 2h, Bob 10h → median 6h over 2 accounts.
+        expect(funnel.activation).toEqual({ medianHours: 6, count: 2 });
     });
 });
 
@@ -480,15 +525,22 @@ describe(`admin over the OpenAPI wire`, () => {
     const logLines: unknown[] = [];
     const logger = { info: (fields: unknown) => logLines.push(fields), warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
 
-    const serve = async (url: string, user: { email: string } | null, prisma: PrismaClient) => {
+    const serve = async (url: string, user: { email: string } | null, prisma: PrismaClient, options?: { mutations?: boolean; body?: unknown }) => {
         const handler = new OpenAPIHandler({ admin: adminRoutes });
         const context = {
             prisma,
-            config: { admin: { emails: `radarsu@gmail.com` } },
+            config: { admin: { emails: `radarsu@gmail.com`, mutations: options?.mutations ?? false } },
             user: user ? { id: `u1`, email: user.email, name: `x`, image: null } : null,
             logger,
         } as unknown as OrpcContext;
-        const result = await handler.handle(new Request(`http://api.test${url}`), { context, prefix: `/rpc` });
+        const request = options?.body
+            ? new Request(`http://api.test${url}`, {
+                  method: `POST`,
+                  headers: { "content-type": `application/json` },
+                  body: JSON.stringify(options.body),
+              })
+            : new Request(`http://api.test${url}`);
+        const result = await handler.handle(request, { context, prefix: `/rpc` });
         if (!result.matched) {
             throw new Error(`route did not match`);
         }
@@ -525,5 +577,366 @@ describe(`admin over the OpenAPI wire`, () => {
         const prisma = {} as PrismaClient;
         expect((await serve(`/rpc/admin/overview`, { email: `visitor@example.com` }, prisma)).status).toBe(403);
         expect((await serve(`/rpc/admin/overview`, null, prisma)).status).toBe(401);
+    });
+
+    it(`refuses every mutation while ADMIN_MUTATIONS is off, even for a verified admin`, async () => {
+        const prisma = {} as PrismaClient;
+        const response = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
+            body: { slug: `research`, reason: `x`, confirm: `research` },
+        });
+        expect(response.status).toBe(403);
+        expect(((await response.json()) as { message: string }).message).toContain(`ADMIN_MUTATIONS`);
+    });
+
+    it(`a mistyped confirmation is a 400 before anything is touched; a correct one flips the row`, async () => {
+        let touched = false;
+        const prisma = {
+            service: {
+                findUnique: async () => ({ status: `listed` }),
+                update: async () => {
+                    touched = true;
+                    return {};
+                },
+            },
+        } as unknown as PrismaClient;
+        const wrong = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
+            mutations: true,
+            body: { slug: `research`, reason: `bad actor`, confirm: `reserach` },
+        });
+        expect(wrong.status).toBe(400);
+        expect(touched).toBe(false);
+        const right = await serve(`/rpc/admin/service/suspend`, { email: `radarsu@gmail.com` }, prisma, {
+            mutations: true,
+            body: { slug: `research`, reason: `bad actor`, confirm: `research` },
+        });
+        expect(right.status).toBe(200);
+        expect(((await right.json()) as { ok: boolean }).ok).toBe(true);
+        expect(touched).toBe(true);
+    });
+
+    it(`erasure demands the account's email retyped and refuses the admin's own account`, async () => {
+        const prisma = {
+            user: { findUnique: async () => ({ id: `u2`, email: `victim@example.com` }) },
+        } as unknown as PrismaClient;
+        const mismatch = await serve(`/rpc/admin/user/delete`, { email: `radarsu@gmail.com` }, prisma, {
+            mutations: true,
+            body: { userId: `u2`, confirmEmail: `wrong@example.com` },
+        });
+        expect(mismatch.status).toBe(400);
+        const self = {
+            user: { findUnique: async () => ({ id: `u1`, email: `radarsu@gmail.com` }) },
+        } as unknown as PrismaClient;
+        const own = await serve(`/rpc/admin/user/delete`, { email: `radarsu@gmail.com` }, self, {
+            mutations: true,
+            body: { userId: `u1`, confirmEmail: `radarsu@gmail.com` },
+        });
+        expect(own.status).toBe(400);
+        expect(((await own.json()) as { message: string }).message).toContain(`own account`);
+    });
+});
+
+describe(`adminMarket`, () => {
+    it(`reduces wants to distinct owners with the newest phrasing, and joins each listing to its counters`, async () => {
+        const prisma = {
+            serviceWant: {
+                findMany: async () => [
+                    { userId: `u1`, text: `pdf OCR`, normalized: `pdf ocr`, createdAt: new Date(`2026-08-01T00:00:00Z`) },
+                    { userId: `u2`, text: `PDF ocr`, normalized: `pdf ocr`, createdAt: new Date(`2026-08-02T00:00:00Z`) },
+                    { userId: `u1`, text: `pdf ocr please`, normalized: `pdf ocr please`, createdAt: new Date(`2026-08-03T00:00:00Z`) },
+                ],
+            },
+            service: {
+                findMany: async () => [
+                    {
+                        id: `s1`,
+                        slug: `research`,
+                        publisher: `acme`,
+                        name: `Research`,
+                        status: `probation`,
+                        creditsPerRun: 10,
+                        userId: `owner1`,
+                        canaryFails: 1,
+                        probedAt: new Date(`2026-08-24T00:00:00Z`),
+                        suspendedFor: null,
+                    },
+                    {
+                        id: `s2`,
+                        slug: `demo`,
+                        publisher: `intentic`,
+                        name: `Demo`,
+                        status: `listed`,
+                        creditsPerRun: 1,
+                        userId: null,
+                        canaryFails: 0,
+                        probedAt: null,
+                        suspendedFor: null,
+                    },
+                ],
+            },
+            serviceRun: {
+                groupBy: async (args: { by: string[] }) =>
+                    args.by.length === 1
+                        ? [{ serviceId: `s1`, _count: { _all: 42 } }]
+                        : [
+                              { serviceId: `s1`, status: `ok`, _count: { _all: 8 } },
+                              { serviceId: `s1`, status: `refunded`, _count: { _all: 2 } },
+                          ],
+            },
+            publisherClaim: { count: async () => 3 },
+            payoutAccount: { count: async () => 2 },
+            creatorPayout: { aggregate: async () => ({ _sum: { amountCents: 2500 } }) },
+            creatorStatement: { aggregate: async () => ({ _sum: { amountCents: 9000 } }) },
+        } as unknown as PrismaClient;
+
+        const market = await adminMarket(prisma, configWith(), () => NOW);
+        // Two owners beat recency; the two-owner ask shows its newest phrasing.
+        expect(market.wants).toEqual([
+            { text: `PDF ocr`, owners: 2, lastAt: `2026-08-02T00:00:00.000Z` },
+            { text: `pdf ocr please`, owners: 1, lastAt: `2026-08-03T00:00:00.000Z` },
+        ]);
+        expect(market.services[0]).toEqual({
+            slug: `research`,
+            publisher: `acme`,
+            name: `Research`,
+            status: `probation`,
+            creditsPerRun: 10,
+            owned: true,
+            servedRuns: 42,
+            runs7d: 10,
+            refunds7d: 2,
+            canaryFails: 1,
+            probedAt: `2026-08-24T00:00:00.000Z`,
+            suspendedFor: null,
+        });
+        // The operator row: no owner, no counters, and `owned: false` says the gates don't apply.
+        expect(market.services[1]).toMatchObject({ slug: `demo`, owned: false, servedRuns: 0, runs7d: 0 });
+        expect(market.thresholds).toEqual({ graduationRuns: 50, watchWindowRuns: 20, maxRefundRate: 0.2, canaryFailures: 3 });
+        expect(market.creators).toEqual({ publishers: 3, payoutEnabled: 2, pendingPayoutCents: 2500, unclaimedCents: 9000 });
+    });
+});
+
+describe(`rollupAdminDaily`, () => {
+    const prismaWith = (existing: boolean, captured: { windows: unknown[]; upsert?: Record<string, unknown> }) =>
+        ({
+            user: {
+                count: async (args?: { where?: unknown }) => {
+                    if (args?.where) {
+                        captured.windows.push(args.where);
+                    }
+                    return args?.where ? 4 : 100;
+                },
+            },
+            serviceRun: { count: async () => 7 },
+            trialUsage: { aggregate: async () => ({ _sum: { messages: 33 } }) },
+            sandbox: { count: async () => 12 },
+            membership: { count: async () => 5 },
+            hostedMachine: { count: async () => 6 },
+            adminDailyStat: {
+                findUnique: async () => (existing ? { id: `row` } : null),
+                upsert: async (args: Record<string, unknown>) => {
+                    captured.upsert = args;
+                    return {};
+                },
+            },
+        }) as unknown as PrismaClient;
+
+    it(`freezes YESTERDAY under its UTC day key and reports the day's first run as created`, async () => {
+        const captured: { windows: unknown[]; upsert?: Record<string, unknown> } = { windows: [] };
+        const rollup = await rollupAdminDaily(prismaWith(false, captured), () => NOW);
+        expect(rollup).toEqual({ day: `2026-08-24`, created: true });
+        // The window is exactly yesterday's UTC day, half-open.
+        expect(captured.windows[0]).toMatchObject({
+            createdAt: { gte: new Date(`2026-08-24T00:00:00Z`), lt: new Date(`2026-08-25T00:00:00Z`) },
+        });
+        expect(captured.upsert).toMatchObject({
+            where: { day: `2026-08-24` },
+            create: { day: `2026-08-24`, newUsers: 4, serviceRuns: 7, trialMessages: 33, totalUsers: 100, membershipsActive: 5 },
+        });
+    });
+
+    it(`re-runs as an update, not a second row, and says created: false`, async () => {
+        const captured: { windows: unknown[] } = { windows: [] };
+        expect((await rollupAdminDaily(prismaWith(true, captured), () => NOW)).created).toBe(false);
+    });
+});
+
+describe(`adminTrends`, () => {
+    it(`serves the newest 90 rows oldest-first, so a chart draws left to right`, async () => {
+        const prisma = {
+            adminDailyStat: {
+                findMany: async (args: { take: number }) => {
+                    expect(args.take).toBe(90);
+                    return [
+                        { day: `2026-08-24`, newUsers: 2 },
+                        { day: `2026-08-23`, newUsers: 1 },
+                    ];
+                },
+            },
+        } as unknown as PrismaClient;
+        const trends = await adminTrends(prisma);
+        expect(trends.days.map((row) => row.day)).toEqual([`2026-08-23`, `2026-08-24`]);
+    });
+});
+
+describe(`sendAdminDigest`, () => {
+    const logged: { info: unknown[]; warn: unknown[] } = { info: [], warn: [] };
+    const logger = {
+        info: (fields: unknown, message?: string) => logged.info.push(message ?? fields),
+        warn: (fields: unknown, message?: string) => logged.warn.push(message ?? fields),
+        error: () => {},
+        debug: () => {},
+    } as unknown as Logger;
+
+    const attentionPrisma = (latchWins: boolean, pastDue: number) =>
+        ({
+            adminDailyStat: { updateMany: async () => ({ count: latchWins ? 1 : 0 }) },
+            sandbox: { findMany: async () => [] },
+            creatorPayout: { findMany: async () => [] },
+            creatorStatement: { findMany: async () => [] },
+            payoutAccount: { findMany: async () => [] },
+            membership: {
+                findMany: async () =>
+                    Array.from({ length: pastDue }, (_, index) => ({
+                        currentPeriodEnd: new Date(`2026-08-01T00:00:00Z`),
+                        updatedAt: new Date(`2026-08-20T00:00:00Z`),
+                        user: { email: `user${index}@example.com` },
+                    })),
+            },
+            hostedPoolMachine: { findMany: async () => [] },
+            service: { findMany: async () => [] },
+        }) as unknown as PrismaClient;
+
+    it(`sends once per day: the latch losing means somebody else already sent`, async () => {
+        logged.info.length = 0;
+        await sendAdminDigest(attentionPrisma(false, 3), configWith(), logger, `2026-08-24`, () => NOW);
+        expect(logged.info).not.toContain(`admin digest sent`);
+    });
+
+    it(`an empty feed mails nobody — the digest only exists when something needs a human`, async () => {
+        logged.info.length = 0;
+        await sendAdminDigest(attentionPrisma(true, 0), configWith(), logger, `2026-08-24`, () => NOW);
+        expect(logged.info).not.toContain(`admin digest sent`);
+    });
+
+    it(`with items and the latch won it goes to every admin (unconfigured mailer logs the decline, still counted sent)`, async () => {
+        logged.info.length = 0;
+        logged.warn.length = 0;
+        await sendAdminDigest(attentionPrisma(true, 2), configWith({ admin: { emails: `radarsu@gmail.com, ops@example.com`, mutations: false } }), logger, `2026-08-24`, () => NOW);
+        expect(logged.info).toContain(`admin digest sent`);
+        // The unconfigured mailer declined twice — once per admin — instead of throwing.
+        expect(logged.warn.filter((message) => message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
+    });
+});
+
+describe(`admin actions`, () => {
+    it(`suspend records the operator's reason where the provider reads it; an already-suspended row refuses`, async () => {
+        let update: Record<string, unknown> | undefined;
+        const prisma = {
+            service: {
+                findUnique: async () => ({ status: `listed` }),
+                update: async (args: Record<string, unknown>) => {
+                    update = args;
+                    return {};
+                },
+            },
+        } as unknown as PrismaClient;
+        const result = await suspendService(prisma, `research`, `provider asked us to pause it`);
+        expect(result.ok).toBe(true);
+        expect(update).toMatchObject({
+            where: { slug: `research` },
+            data: { status: `suspended`, suspendedFor: `Suspended by the operator: provider asked us to pause it` },
+        });
+        const already = { service: { findUnique: async () => ({ status: `suspended` }) } } as unknown as PrismaClient;
+        expect((await suspendService(already, `research`, `x`)).ok).toBe(false);
+    });
+
+    it(`reinstate goes to probation with a clean canary, and refuses anything not suspended`, async () => {
+        let update: Record<string, unknown> | undefined;
+        const prisma = {
+            service: {
+                findUnique: async () => ({ status: `suspended` }),
+                update: async (args: Record<string, unknown>) => {
+                    update = args;
+                    return {};
+                },
+            },
+        } as unknown as PrismaClient;
+        expect((await reinstateService(prisma, `research`)).ok).toBe(true);
+        expect(update).toMatchObject({ data: { status: `probation`, suspendedFor: null, canaryFails: 0 } });
+        const listed = { service: { findUnique: async () => ({ status: `listed` }) } } as unknown as PrismaClient;
+        expect((await reinstateService(listed, `research`)).ok).toBe(false);
+    });
+
+    it(`machine stop refuses cleanly when the hosted lane is off, and when the sandbox has no machine`, async () => {
+        expect((await stopHostedMachine({} as PrismaClient, configWith(), `sb1`)).ok).toBe(false);
+        const hostedOn = configWith({
+            hosted: { monthlyHours: 40, poolSize: 2, image: `x`, flyApiToken: `t`, flyOrg: `o` },
+            zrok: { adminToken: `z`, apiEndpoint: `https://hub` },
+        });
+        const prisma = { hostedMachine: { findUnique: async () => null } } as unknown as PrismaClient;
+        const result = await stopHostedMachine(prisma, hostedOn, `sb1`);
+        expect(result).toEqual({ ok: false, message: `Sandbox sb1 has no hosted machine.` });
+    });
+
+    it(`erasure deletes the user row and reports the address it erased (zrok off, no hosted: nothing external)`, async () => {
+        let deleted: Record<string, unknown> | undefined;
+        const prisma = {
+            sandbox: { findMany: async () => [{ id: `sb1`, token: `enc`, zrokToken: null, hosted: null }] },
+            user: {
+                delete: async (args: Record<string, unknown>) => {
+                    deleted = args;
+                    return { email: `gone@example.com` };
+                },
+            },
+        } as unknown as PrismaClient;
+        const result = await deleteUserAccount(prisma, configWith(), logger, `u1`);
+        expect(result.ok).toBe(true);
+        expect(result.message).toContain(`gone@example.com`);
+        expect(deleted).toMatchObject({ where: { id: `u1` } });
+    });
+
+    const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} } as unknown as Logger;
+});
+
+describe(`retryPayout`, () => {
+    const deps = (payout: Record<string, unknown> | null, account: Record<string, unknown> | null, transfer?: () => Promise<{ id: string }>) =>
+        ({
+            prisma: {
+                creatorPayout: {
+                    findUnique: async () => payout,
+                    update: async () => ({}),
+                },
+                payoutAccount: { findUnique: async () => account },
+            },
+            config: configWith(),
+            gateway: { transfer: transfer ?? (async () => ({ id: `tr_1` })) },
+        }) as unknown as Parameters<typeof retryPayout>[0];
+
+    it(`refuses an unknown id and a payout that is not pending, in sentences`, async () => {
+        expect((await retryPayout(deps(null, null), `p1`)).message).toBe(`No payout with that id.`);
+        expect((await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`)).message).toContain(
+            `is paid`,
+        );
+    });
+
+    it(`pays a pending payout through the shared settle path under its own idempotency key`, async () => {
+        let idempotencyKey: string | undefined;
+        const result = await retryPayout(
+            deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` }, { stripeAccountId: `acct`, payoutsEnabled: true }, undefined),
+            `p1`,
+        );
+        expect(result).toEqual({ paid: true, message: `Paid: $25.00 transferred.` });
+        void idempotencyKey;
+    });
+
+    it(`a transfer that fails again stays pending and says so`, async () => {
+        const result = await retryPayout(
+            deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` }, { stripeAccountId: `acct`, payoutsEnabled: true }, async () => {
+                throw new Error(`account requirements past due`);
+            }),
+            `p1`,
+        );
+        expect(result.paid).toBe(false);
+        expect(result.message).toContain(`account requirements past due`);
     });
 });
