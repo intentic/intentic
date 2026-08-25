@@ -1603,7 +1603,7 @@ const submitLabel = computed(() => {
 
                             <div
                                 :class="[
-                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 border-t border-line bg-canvas px-1 py-3',
+                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 bg-canvas px-1 py-3',
                                     auditable ? 'justify-between' : 'justify-end',
                                     shaking ? 'ui-shake' : '',
                                 ]"
@@ -1628,13 +1628,13 @@ const submitLabel = computed(() => {
                                     label="Test"
                                     size="small"
                                     severity="secondary"
-                                    :text="true"
+                                    text
                                     :loading="probing"
                                     @click="runProbe"
                                 >
                                     <template #icon><Icon name="wave-pulse" /></template>
                                 </Button>
-                                <Button type="submit" :label="submitLabel" :loading="submitting">
+                                <Button type="submit" size="small" :label="submitLabel" :loading="submitting">
                                     <template #icon><Icon name="check" /></template>
                                 </Button>
                             </div>

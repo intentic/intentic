@@ -23,7 +23,7 @@
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import type { HostSummary } from "@intentic/sandbox-contract";
-import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge } from "@intentic/ui";
+import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
 import { useMenuLink } from "../composables/menuLink";
@@ -172,9 +172,9 @@ const items = computed<MenuItem[]>(() => {
                     <Button v-if="primary" :label="primary.label" size="small" :text="true" @click="primary.run()">
                         <template #icon><Icon :name="primary.icon" /></template>
                     </Button>
-                    <Button size="small" severity="secondary" :text="true" :rounded="true" aria-label="More actions" @click="menu?.show($event)">
-                        <template #icon><Icon name="ellipsis" /></template>
-                    </Button>
+                    <button type="button" :class="ui.iconButton()" aria-label="More actions" @click="menu?.show($event)">
+                        <Icon name="ellipsis" />
+                    </button>
                     <ContextMenu ref="menu" :model="items" :min-width="11" />
                 </div>
             </template>
