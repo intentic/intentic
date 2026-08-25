@@ -478,7 +478,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // The shared OpenCode runtime backing the Grok provider: the warm server/client plus xAI OAuth
     // connect/disconnect. OpenCode owns the xAI credential, so there's no GrokStore twin.
     readonly openCode: OpenCodeService;
-    // The AI-provider credential root (also OpenCode's XDG_DATA_HOME), the delegation note points the
+    // The AI-provider credential root (also OpenCode's XDG_DATA_HOME), the CLIs point at it, an absolute
     // agent's `opencode run` commands at it.
     readonly authRoot: string;
     // Daemon-owned workspace snapshots on /history (outside the agent's reach): auto-captured per turn + on an
@@ -757,13 +757,13 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * reference is safe — the extensionBackend holder two pages down is the same pattern for the same reason.
      *
      * OpenCode itself stays CORE rather than becoming Grok's: one warm server serves Grok's turns, Gemini's
-     * native runtime and the delegation watchers, so no single provider may own it. Its data dir (OpenCode's
+     * native runtime and the permission watchers, so no single provider may own it. Its data dir (OpenCode's
      * XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts. Gemini brings no
      * credential of its own here — the translator holds Google's, exactly as for a routed turn; an unbaked
      * translator (the dev profile) leaves the config absent and the loop serves Grok alone. */
     let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
-        // Where a non-isolated conversation delegates from, and so the one directory whose delegation watcher is
+        // Where a non-isolated conversation runs, and so the one directory whose permission watcher is
         // worth opening at boot, event streams are per-directory, and a turn registers its own worktree itself.
         workspaceRoot: config.workspaceRoot,
         ...(config.translator.url === ""

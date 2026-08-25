@@ -33,7 +33,7 @@ import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
-import { type ChildSpawnResult, type ChildSpawnSpec, spawnChild } from "../children/children.js";
+import { type ChildSupervisor, childSupervisor } from "../children/children.js";
 import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { withAttachmentNote } from "./attachment-note.js";
@@ -880,18 +880,18 @@ async function* runTurn(
      * A refusal is one of them: an ordinary state of a sandbox (a session id that outlived its transcript, a
      * subscription nobody connected, an uninstalled Agent capability), reported as the error frame the
      * composer's connect gate reads. */
-    // The `spawn` tool's engine: start a full agent on any connected provider as a conversation of its own
-    // (children/children.ts). Built HERE because the child runs through streamAgent, which only this module can
-    // hand down without a cycle — the same argument as `resync`. Withheld from a conversationless turn (a child
-    // files under its parent on the roster, and a turn with no conversation has nowhere to file one) and from a
-    // turn OUTSIDE CONTENT caused: a stranger's message must not start turns that spend the owner's accounts,
-    // whatever tools its prompt talked it into — the same reasoning as the outside-wake taint floor.
+    // The child-agent supervision surface: spawn on any connected provider, steer or follow-up a child, answer
+    // its questions (children/children.ts). Built HERE because a child runs through streamAgent, which only
+    // this module can hand down without a cycle — the same argument as `resync`. Withheld from a
+    // conversationless turn (a child files under its parent on the roster, and a turn with no conversation has
+    // nowhere to file one) and from a turn OUTSIDE CONTENT caused: a stranger's message must not start turns
+    // that spend the owner's accounts, whatever tools its prompt talked it into — the same reasoning as the
+    // outside-wake taint floor.
     const spawnParent = input.conversationId;
-    const spawn =
+    const children: ChildSupervisor | undefined =
         spawnParent === undefined || input.outsideWake !== undefined
             ? undefined
-            : (spec: ChildSpawnSpec): Promise<ChildSpawnResult> =>
-                  spawnChild(services, { conversationId: spawnParent, cwd: localCwd }, spec, streamAgent);
+            : childSupervisor(services, { conversationId: spawnParent, cwd: localCwd }, streamAgent);
     const plan = await planTurn(services, planned, {
         base,
         attachmentPaths,
@@ -903,7 +903,7 @@ async function* runTurn(
         // per turn rather than once per thing that needs it.
         settings,
         ...(worktree !== undefined ? { resync: worktree.resync } : {}),
-        ...(spawn !== undefined ? { spawn } : {}),
+        ...(children !== undefined ? { children } : {}),
     });
     if (!plan.ok) {
         // The namespace anchor was built before the gates ran, so a refusal has to take it down too, it is a

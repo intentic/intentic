@@ -19,7 +19,7 @@ import { connectedCount } from "./presence.js";
  *     that reported itself idle; stopping under a watcher is the one unforgivable version of this feature.
  *   - a turn in flight?, turns outlive the tab that started them by design (close the laptop, the agent
  *     works on); the machine must too.
- *   - a delegate child alive?, same reason, one level down: codex/opencode runs the roster tracks as
+ *   - a child agent alive?, same reason, one level down: the runs the roster tracks as
  *     pending/running/blocked/paused are work in progress even between their parent turns.
  *   - a condition watch armed?, a promise made between turns: the agent told the user it would act when an
  *     outside thing happens, and this daemon is the only process that can notice it happening.

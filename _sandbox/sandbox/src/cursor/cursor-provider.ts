@@ -102,10 +102,12 @@ export const planCursorTurn = async (
         model,
         cursorApiKey: account.apiKey,
         ...(context.steering !== undefined ? { steering: context.steering } : {}),
-        // The spawn engine, for the custom-tool pair (cursor-tools.ts). The same full-agency predicate the
-        // harness arm applies at its own mount: a child is a whole agent with shell and write, so a card that
-        // narrowed this turn to less must not get them back by proxy.
-        ...(context.spawn !== undefined && persona.powers.shell && persona.powers.files === "write" ? { spawn: context.spawn } : {}),
+        // The supervision surface, for the custom-tool set (cursor-tools.ts). The same predicate the harness
+        // arm applies at its own mount — the delegate shelf open and full agency — because a child is a whole
+        // agent with shell and write, and a card that narrowed this turn to less must not get them back by proxy.
+        ...(context.children !== undefined && persona.powers.delegate && persona.powers.shell && persona.powers.files === "write"
+            ? { children: context.children }
+            : {}),
     };
     const withBrowser =
         Object.keys(browser.servers).length === 0

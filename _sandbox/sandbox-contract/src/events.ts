@@ -621,12 +621,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         agentType: z.string().optional(),
         description: z.string().optional(),
         model: z.string().optional(),
-        // Which provider serves a `spawned` child (SubagentSessionSchema.provider), absent for the kinds
-        // whose provider is implied.
+        // Which provider serves a `spawned` child (SubagentSessionSchema.provider), absent for an SDK
+        // subagent, whose provider is its parent's.
         provider: z.string().optional(),
         background: z.boolean().optional(),
-        // A delegation's tmux session, the one live view a subagent doesn't have (SubagentSessionSchema).
-        terminal: z.string().optional(),
     }),
     z.object({
         kind: z.literal("subagent_update"),

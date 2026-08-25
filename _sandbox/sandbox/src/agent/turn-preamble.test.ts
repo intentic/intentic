@@ -1,11 +1,11 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
-import { DELEGATION_NOTE_HEADER } from "./delegation.js";
+import { SPAWN_NOTE_HEADER } from "../children/spawn-note.js";
 import { LITERAL_SLASH_NOTE, preambleNotes, stripTurnPreamble, unwrapStoredPrompt, withTurnPreamble } from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
-const note = `${DELEGATION_NOTE_HEADER}\n\nThe user's connected agent accounts are runnable from your shell.`;
+const note = `${SPAWN_NOTE_HEADER}\n\nThis sandbox can start full agents on any connected provider from your shell.`;
 
 test("strip is the builder's inverse, for one note and for both", () => {
     expect(stripTurnPreamble(withTurnPreamble([notice], "fix the bug"))).toBe("fix the bug");
@@ -71,7 +71,7 @@ test("a second pass of notes merges into the first rather than nesting a separat
 
     expect(outer.split("\n\n---\n\n")).toHaveLength(2);
     expect(outer.startsWith(SETUP_NOTICE_HEADER)).toBe(true);
-    expect(outer).toContain(DELEGATION_NOTE_HEADER);
+    expect(outer).toContain(SPAWN_NOTE_HEADER);
     expect(stripTurnPreamble(outer)).toBe("fix the bug");
 });
 
@@ -85,7 +85,7 @@ test("what strip removes, the split hands back: titled, whole, and in the order 
     const sent = withTurnPreamble([note, notice], "fix the bug");
 
     expect(preambleNotes(sent)).toEqual([
-        { title: "Delegating to other coding agents", text: note },
+        { title: "Spawning helper agents", text: note },
         { title: "Dependencies aren't installed yet", text: notice },
     ]);
     // …and the user's words are untouched by the disclosure, exactly as before it existed.

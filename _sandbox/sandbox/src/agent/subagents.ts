@@ -12,8 +12,7 @@ import { turnRunOf } from "./turn-runs.js";
  * "no UI mapping", so the only trace of a child was the tool rows the client nested under its Agent card. That
  * is thin for a foreground child and nothing at all for a BACKGROUNDED one, which is the Agent tool's default:
  * the parent fires it and walks away, so the card sits on a spinner for minutes with no status, no spend, and no
- * way to see what it is doing. A `codex exec` the agent drove from its own Bash was worse still, a command card
- * and a tmux window, with nothing saying an agent had run at all.
+ * way to see what it is doing.
  *
  * This module is the record those surfaces read, and it is deliberately the third of its kind rather than a new
  * idea: the agent's shell (terminal/terminal-session.ts) and the agent's browser (browser/browser-sessions.ts)
@@ -24,15 +23,13 @@ import { turnRunOf } from "./turn-runs.js";
  *
  * WHAT IS DIFFERENT is what "look at it" means. A shell is one stream of bytes and a browser is a live page; a
  * subagent has neither. What it has is a TRANSCRIPT, so there is no third WebSocket here, sessions/
- * subagent-transcript.ts serves one, live from the parent turn's frame log while it runs and from the provider's
- * own store once it has finished. The one exception is a delegation, which does have a process: it runs in the
- * turn's tmux session, and `terminal` names it so the card can keep offering to watch that too.
+ * subagent-transcript.ts serves one: an SDK child live from the parent turn's frame log and settled from the
+ * SDK's own per-child store, a spawned child from the conversation it IS (its own pump, then its own record).
  *
- * A RECORD IS KEYED BY THE SPAWNING TOOL CALL'S ID. That is the only key every source already carries, the
- * SDK's per-subagent meta file, its task messages, and the `parentToolUseId` the client nests inner frames
- * under, so the card that spawned a child and the child itself point at each other with an id both already
- * hold. The ids the transcripts are actually read with (the SDK's agent id, a Codex thread, an OpenCode
- * session) never reach the wire, because no surface asks a question they answer. */
+ * A RECORD IS KEYED BY THE SPAWNING TOOL CALL'S ID for an SDK child (the one key its meta file, its task
+ * messages and the client's `parentToolUseId` nesting all carry), and by the child's own conversation id for a
+ * spawned one (the spawn tool returns it, so both sides hold it). The ids the transcripts are actually read
+ * with (the SDK's agent id) never reach the wire, because no surface asks a question they answer. */
 
 /* A finished subagent stays listable this long, so its report is still readable just after the turn that ran it
  * ended, then it goes. SHORT on purpose, and shorter than the browsers' two hours: a turn spawns children at a
@@ -41,8 +38,8 @@ import { turnRunOf } from "./turn-runs.js";
  * looking at for is the minutes right after it reports; past that the parent's own transcript is the record. */
 const RETAIN_FINISHED_MS = 5 * 60_000;
 
-// A delegation's report is the tail of what its CLI printed. Bounded because this rides on a card and in a list
-// row: the whole of a Codex run's stdout is the transcript's job, not the summary's.
+// How much of a child's report rides on a card and in a list row: the whole of it is the transcript's job,
+// not the summary's.
 const REPORT_TAIL = 500;
 
 interface SubagentRecord {
@@ -69,7 +66,6 @@ interface SubagentRecord {
     lastTool: string | undefined;
     summary: string | undefined;
     error: string | undefined;
-    terminal: string | undefined;
     /* --- how its transcript is READ. Daemon-side only; see the header. ---
      * The TURN itself rather than a copy of what it knew when the child was born: its session id is filled from
      * the stream's first frame and the directory below from the first child's start hook, both of which can land
@@ -79,12 +75,6 @@ interface SubagentRecord {
     // only the child's meta file can pair to the tool call that spawned it. Cached here once resolved; see
     // subagentAgentId for when that happens and why it cannot happen sooner.
     agentId: string | undefined;
-    /* A delegated thread/session id. Named by the command when it resumed one (`codex exec resume <id>`,
-     * `opencode run --session <id>`); a FRESH delegation's id arrives by signal instead, and either way the
-     * signal that carries it also carries the delegation id it belongs to, the codex hook reads that from the
-     * pane environment, the opencode session from its own title (grok/opencode.ts). Nothing is inferred from
-     * timing, and stdout is never parsed for it. Daemon-side only. */
-    thread: string | undefined;
     // WHERE the current summary came from, so a weaker source arriving later cannot overwrite a stronger one
     // (see `ending`). Undefined ⇒ nothing final has spoken yet: a progress digest or a blocked reason, both of
     // which anything may replace.
@@ -154,7 +144,6 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.lastTool !== undefined ? { lastTool: record.lastTool } : {}),
     ...(record.summary !== undefined ? { summary: record.summary } : {}),
     ...(record.error !== undefined ? { error: record.error } : {}),
-    ...(record.terminal !== undefined ? { terminal: record.terminal } : {}),
 });
 
 /** Every subagent this sandbox knows about, live first, then most recently active, which is the order a roster
@@ -181,7 +170,6 @@ export const subagentSource = (
           // prompt of their own to start from.
           readonly description: string | undefined;
           readonly sessionId: string | undefined;
-          readonly thread: string | undefined;
           // A `spawned` child's transcript key: its conversation id (= the record's own id), and the provider
           // and harness its turns were filed under. Undefined for every other kind.
           readonly provider: AgentProvider | undefined;
@@ -200,11 +188,16 @@ export const subagentSource = (
         startedAt: record.startedAt,
         description: record.description,
         sessionId: record.turn.sessionId,
-        thread: record.thread,
         provider: record.provider,
         harness: record.harness,
     };
 };
+
+/** Whether any live child of this conversation is working IN THE PARENT'S OWN TREE, the quiet-worktree gate's
+ *  question (agent.ts syncOnAnswer): an SDK subagent edits the turn's checkout, so rebasing under one swaps
+ *  files mid-read; a spawned child has a worktree of its own and holds nothing here. */
+export const subagentInParentTree = (conversationId: string): boolean =>
+    [...records.values()].some((record) => record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record));
 
 /** How many of a conversation's children are live, and how many it has had, the fleet card's count chip. */
 export const subagentCountsOf = (conversationId: string): { readonly running: number; readonly total: number } => {
@@ -259,10 +252,8 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         lastTool: undefined,
         summary: undefined,
         error: undefined,
-        terminal: undefined,
         turn,
         agentId: undefined,
-        thread: undefined,
         summarySource: undefined,
         ...fields,
     };
@@ -284,7 +275,6 @@ const bornFrame = (record: SubagentRecord): AgentEvent => ({
     ...(record.model !== undefined ? { model: record.model } : {}),
     ...(record.provider !== undefined ? { provider: record.provider } : {}),
     ...(record.background !== undefined ? { background: record.background } : {}),
-    ...(record.terminal !== undefined ? { terminal: record.terminal } : {}),
 });
 
 // Apply a patch and report it, or report nothing when the record is gone or nothing actually moved, a frame per
@@ -341,8 +331,8 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
  * The text is bounded by the CALLER, because where to cut differs by source and the difference is meaningful: a
  * report is cut at its head (it opens with the answer), a stdout tail at its end (it closes with one). */
 
-type SummarySource = "notification" | "exit" | "report";
-const SUMMARY_RANK: Record<SummarySource, number> = { notification: 1, exit: 2, report: 3 };
+type SummarySource = "notification" | "report";
+const SUMMARY_RANK: Record<SummarySource, number> = { notification: 1, report: 2 };
 
 const ending = (
     record: SubagentRecord,
@@ -614,187 +604,6 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
     ],
 });
 
-/* ---- delegations: the CLI agents an agent drives from its own Bash ------------------------------------------
- *
- * `codex exec` and `opencode run` (see delegation.ts) are agents by every measure that matters here, they take
- * a prompt, work for minutes, and report back, so they belong in the same list as the SDK's own children rather
- * than in a separate concept the operator has to learn. What is detectable is the COMMAND: every Bash call
- * already passes through the turn's stream on its way to a card, so the spawn is caught there, with no hook and
- * no output parsing (see `thread` on the record for why the ids are resolved at read time instead).
- *
- * Deliberately matched loosely, the leading token may be an env assignment, a `cd … &&` prefix, or `nice`, and
- * the flags vary, but anchored on the two-word verb, so a command that merely MENTIONS codex (a grep, an echo)
- * is not filed as an agent. */
-const DELEGATIONS: readonly { readonly kind: SubagentKind; readonly verb: RegExp; readonly resume: RegExp }[] = [
-    { kind: "codex", verb: /(?:^|[\s;&|])codex\s+exec\b/u, resume: /\bresume\s+([0-9a-fA-F-]{8,})/u },
-    { kind: "grok", verb: /(?:^|[\s;&|])opencode\s+run\b/u, resume: /--session[\s=]+(\S+)/u },
-];
-
-// Whether a Bash command starts a delegation, the same test noteDelegation runs, exported for the tmux
-// rewrite, which stamps INTENTIC_DELEGATION_ID into exactly these commands' environment (agent-terminals.ts).
-export const isDelegationCommand = (command: string): boolean => DELEGATIONS.some((entry) => entry.verb.test(command));
-
-// A command's own words as the row's description: the delegated PROMPT is the interesting part, and it is the
-// last quoted argument. Falls back to the command itself, trimmed of the env/prefix noise.
-const promptOf = (command: string): string | undefined => {
-    const quoted = [...command.matchAll(/'([^']{4,})'|"([^"]{4,})"/gu)].map((match) => match[1] ?? match[2]).filter((text) => text !== undefined);
-    const text = quoted.at(-1) ?? command;
-    const line = text.replaceAll(/\s+/gu, " ").trim();
-    return line === "" ? undefined : line.slice(0, 200);
-};
-
-/** A Bash command the turn is about to run: opens a delegation record when it starts one. `terminal` is the tmux
- *  session the command runs in, a delegation's live view, which an SDK subagent has no equivalent of.
- *  `background` is the call's own `run_in_background`, and it decides what may settle this record, see
- *  settleDelegation. */
-export const noteDelegation = (
-    turn: SubagentTurn,
-    call: { readonly id: string; readonly command: string; readonly terminal?: string; readonly background: boolean },
-): AgentEvent | undefined => {
-    const match = DELEGATIONS.find((entry) => entry.verb.test(call.command));
-    if (match === undefined || records.has(call.id)) {
-        return undefined;
-    }
-    const resumed = match.resume.exec(call.command)?.[1];
-    return bornFrame(
-        open(turn, call.id, match.kind, {
-            agentType: match.kind === "codex" ? "Codex" : "Grok",
-            ...(promptOf(call.command) !== undefined ? { description: promptOf(call.command) } : {}),
-            ...(resumed !== undefined ? { thread: resumed } : {}),
-            ...(call.terminal !== undefined ? { terminal: call.terminal } : {}),
-            ...(call.background ? { background: true } : {}),
-        }),
-    );
-};
-
-/** That command's result: the delegate stopped, and what it last said is its report.
- *
- * NOT FOR A BACKGROUNDED ONE, whose result says only that the command started. Taking that as the ending is a
- * measured lie: a `codex exec` sent to the background was marked `completed` 0.2 seconds in and the roster went
- * on saying "done" for the 103 seconds the delegate actually worked. What ends it instead is the background
- * task's own notification, which lands when the command exits and carries its report (noteSubagentTask), and
- * until it does, the delegate counts as one of the children the session is still waiting on. */
-export const settleDelegation = (id: string, outcome: { readonly failed: boolean; readonly output: string }): AgentEvent | undefined => {
-    const record = records.get(id);
-    if (record === undefined || record.background === true) {
-        return undefined;
-    }
-    const tail = outcome.output.trim().slice(-REPORT_TAIL).trim();
-    return patch(
-        id,
-        ending(record, {
-            status: outcome.failed ? "failed" : "completed",
-            source: "exit",
-            ...(tail !== "" ? { summary: tail } : {}),
-            // A failure's tail is kept whatever the delegate said about itself, because the error is usually in
-            // what was printed AFTER its last message.
-            ...(outcome.failed && tail !== "" ? { error: tail } : {}),
-        }),
-    );
-};
-
-/* ---- delegation signals: what the delegate itself says, folded into the same records ------------------------
- *
- * The Bash stream above can only see a delegation from OUTSIDE: the command opened it, the exit settles it, and
- * everything in between is a spinner. These two entry points carry what the delegate's own runtime reports,
- * the codex hook spool (delegation-signals.ts) and the warm OpenCode server's event stream (grok/opencode.ts),
- * which is where `blocked`, the real session id, and the child's own last words come from.
- *
- * A signal arrives on its own clock, a hook process, an SSE stream, so it may well land after the record it
- * names has finished. The mid-run moves below are therefore gated on the record still being LIVE, and the two
- * that END one go through `ending`, which owns that rule for all three of the endings at once. */
-
-export interface DelegationSignal {
-    // The spawning Bash tool call's id, when the transport carries it (the codex hook inherits it from the pane
-    // environment). Absent for opencode events, which only know their session, hence `thread`.
-    readonly delegationId?: string;
-    // The provider's own session id, to bind (on a start signal) or to look up (on everything after).
-    readonly thread?: string;
-    readonly event: "session" | "working" | "blocked" | "report" | "failed";
-    // The delegate's own last words (codex Stop's last_assistant_message), an error's text, or, on `blocked`,
-    // WHAT it is waiting on ("waiting on permission for Bash: rm -rf build"), which is the difference between a
-    // card the user can act on and one that sends them hunting for the question.
-    readonly summary?: string;
-    // What it is doing right now (a tool-use event's tool name), the same live line SDK children get.
-    readonly tool?: string;
-}
-
-const findByThread = (thread: string): SubagentRecord | undefined => [...records.values()].find((record) => record.thread === thread);
-
-/** One signal from the delegate's own runtime, folded into its record. Unknown ids are dropped without a trace:
- *  the spool hears every hook-carrying codex run and the event stream every warm-server session, and the ones
- *  that are not delegations of this daemon are simply not its news. */
-export const noteDelegationSignal = (signal: DelegationSignal): void => {
-    const record =
-        signal.delegationId !== undefined ? records.get(signal.delegationId) : signal.thread !== undefined ? findByThread(signal.thread) : undefined;
-    if (record === undefined) {
-        return;
-    }
-    const summary = signal.summary !== undefined && signal.summary !== "" ? signal.summary.slice(0, REPORT_TAIL) : undefined;
-    const frames: (AgentEvent | undefined)[] = [];
-    if (signal.thread !== undefined && record.thread === undefined) {
-        frames.push(patch(record.id, { thread: signal.thread }));
-    }
-    const live = subagentRunning(record);
-    switch (signal.event) {
-        case "session":
-            break;
-        case "working":
-            if (live) {
-                frames.push(patch(record.id, { status: "running", ...(signal.tool !== undefined ? { lastTool: signal.tool } : {}) }));
-            }
-            break;
-        case "blocked":
-            if (live) {
-                // The reason rides in `summary`, transient on purpose, so it goes in RAW rather than through
-                // `ending`: it is not an ending, and leaving the source unset is what lets the delegate's real
-                // report (or the settle tail) replace it the moment the wait is over.
-                frames.push(patch(record.id, { status: "blocked", ...(summary !== undefined ? { summary } : {}) }));
-            }
-            break;
-        case "report":
-            frames.push(
-                patch(
-                    record.id,
-                    ending(record, {
-                        source: "report",
-                        ...(summary !== undefined ? { summary } : {}),
-                        /* The delegate's turn is over, which ends a BACKGROUNDED record here and now, the
-                         * alternative is waiting for the SDK's exit notification, minutes of "running" on a
-                         * child that already reported. A foreground one is left for its own tool_result seconds
-                         * later (settleDelegation), which is also the only one of the two that knows whether it
-                         * failed; a blocked flicker in between would be noise. */
-                        ...(record.background === true ? { status: "completed" as const } : {}),
-                    }),
-                ),
-            );
-            break;
-        case "failed":
-            frames.push(
-                patch(
-                    record.id,
-                    ending(record, {
-                        source: "report",
-                        ...(record.background === true ? { status: "failed" as const, ...(summary !== undefined ? { error: summary } : {}) } : {}),
-                    }),
-                ),
-            );
-            break;
-    }
-    /* The same update, into the spawning conversation's live frame log, the roster push above moves the
-     * Subagents area, but the in-chat card under the turn renders from streamed frames, and a signal is the
-     * one event with no stream of its own. No live run (a backgrounded delegate outliving its turn) is fine:
-     * the roster stays current, and the transcript's record is the settle frame it already gets. */
-    const run = turnRunOf(record.conversationId);
-    if (run !== undefined) {
-        for (const frame of frames) {
-            if (frame !== undefined) {
-                run.push(frame);
-            }
-        }
-    }
-};
-
 /* ---- spawned children: full agents the daemon itself runs (children/children.ts) ---------------------------
  *
  * The third source, and the simplest by construction: the other two reconstruct a child's life from outside
@@ -809,8 +618,8 @@ export const noteDelegationSignal = (signal: DelegationSignal): void => {
  * through `wait`, and the child's turn outlives the parent's exactly like a backgrounded delegation's process
  * does, which is also why closeSubagents leaves these records alone. */
 
-// What reaches the parent's live frame log, the same push noteDelegationSignal does and for the same reason:
-// the in-chat card renders from streamed frames, and a service call has no stream of its own.
+// What reaches the parent's live frame log: the in-chat card renders from streamed frames, and a service
+// call has no stream of its own.
 const pushToParentRun = (conversationId: string, frame: AgentEvent | undefined): void => {
     if (frame === undefined) {
         return;
@@ -830,11 +639,16 @@ export interface SpawnedChildBirth {
     readonly spawnDepth?: number;
 }
 
-/** A child the service just started: opened on the roster and announced into the parent's live stream. */
+/** A child the service just started: opened on the roster and announced into the parent's live stream. A
+ *  SETTLED record under the same id is replaced whole — that is a follow-up `send` reopening the child for
+ *  another turn — where a LIVE one stands: two turns cannot run on one conversation, and the pump refuses the
+ *  second anyway. */
 export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): void => {
-    if (records.has(birth.id)) {
+    const existing = records.get(birth.id);
+    if (existing !== undefined && subagentRunning(existing)) {
         return;
     }
+    records.delete(birth.id);
     const record = open(turn, birth.id, "spawned", {
         background: true,
         ...(birth.description !== undefined ? { description: birth.description } : {}),

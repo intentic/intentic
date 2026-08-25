@@ -46,7 +46,7 @@ import { parseProcStat } from "./proc-stat.js";
  * WHAT IS DELIBERATELY EXEMPT is anything under a LIVE tmux pane. A pane is a place with a watcher: the user has
  * a tab on it, the terminals list shows it, and the reaper (platform/reaper.ts) retires the SESSION as a unit
  * once its conversation has stopped, killing a pane's tree out from under a session that is about to die whole
- * would only race that. A `codex exec` delegation inherits its parent turn's stamp and can legitimately run on
+ * would only race that. A backgrounded child process inherits its parent turn's stamp and can legitimately run on
  * briefly past the turn that started it, with the owner reading along. Ancestry is walked rather than matched on
  * the pane's own pid, because the thing actually holding the memory is several forks below the shell.
  *

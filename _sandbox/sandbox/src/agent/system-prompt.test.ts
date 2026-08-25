@@ -16,7 +16,6 @@ import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
  * which adds and which takes nothing is that file's answer, and a second copy of it in a test is a copy that
  * keeps passing after the real one changes. */
 
-const NOTE = "## Delegating\nUse codex exec.";
 const CUSTOM = "You are a release-notes writer. Never edit code.";
 const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
 const BASE = { append: undefined, unattended: false, browserOutputDir: undefined } as const;
@@ -28,39 +27,21 @@ const CODEX = capabilitiesOf("codex", "native");
 const GROK = capabilitiesOf("grok", "native");
 const ACP = capabilitiesOf("some-installed-agent", "native");
 
-test("a built-in base appends the note then the terse steer, in that order", () => {
+test("a built-in base appends the terse steer", () => {
     const placement = turnPromptPlacement({
         capabilities: CLAUDE,
         mode: "intentic",
         systemPrompt: "",
-        note: NOTE,
         stableSystemPrompt: false,
         terseOutput: true,
     });
     expect(placement.systemPrompt).toBeUndefined();
-    expect(placement.systemAppend?.startsWith(NOTE)).toBe(true);
     expect(placement.systemAppend).toContain("be concise");
-    // Nothing to move: the note reached the model through the system prompt.
     expect(placement.userNotes).toBeUndefined();
     // Claude's preset is the same deal: the base differs, the composition around it does not.
     expect(
-        turnPromptPlacement({ capabilities: CLAUDE, mode: "claude", systemPrompt: "", note: NOTE, stableSystemPrompt: false, terseOutput: true }),
+        turnPromptPlacement({ capabilities: CLAUDE, mode: "claude", systemPrompt: "", stableSystemPrompt: false, terseOutput: true }),
     ).toEqual(placement);
-});
-
-test("stableSystemPrompt moves the note to the user message instead of the append", () => {
-    const placement = turnPromptPlacement({
-        capabilities: CLAUDE,
-        mode: "intentic",
-        systemPrompt: "",
-        note: NOTE,
-        stableSystemPrompt: true,
-        terseOutput: true,
-    });
-    expect(placement.userNotes).toEqual([NOTE]);
-    expect(placement.systemAppend).not.toContain(NOTE);
-    // The steer still rides: it is a fixed suffix, which is exactly what keeps the prefix byte-stable.
-    expect(placement.systemAppend).toContain("be concise");
 });
 
 test("nothing to append is undefined, not an empty string", () => {
@@ -75,7 +56,6 @@ test("custom replaces everything: nothing is appended to it", () => {
         capabilities: CLAUDE,
         mode: "custom",
         systemPrompt: CUSTOM,
-        note: NOTE,
         stableSystemPrompt: false,
         terseOutput: true,
         personaNote: PERSONA,
@@ -85,9 +65,7 @@ test("custom replaces everything: nothing is appended to it", () => {
     // says so rather than leaving the switch looking live. So is the persona note: the owner is doing their own
     // instructing, and the accounts a card withholds are withheld by absence rather than by that sentence.
     expect(placement.systemAppend).toBeUndefined();
-    // The delegation note is the one survivor, and only via the door it already had: the user-message preamble
-    // stableSystemPrompt uses. Losing it would silently un-teach the agent that Codex is reachable.
-    expect(placement.userNotes).toEqual([NOTE]);
+    expect(placement.userNotes).toBeUndefined();
 });
 
 /* THE WORKSPACE CONVENTIONS TRAVEL, AND ONLY WHERE THEY ARE MISSING. The Claude Code loop composes them itself
@@ -145,15 +123,13 @@ test("a runtime with no system prompt still hears which persona it is wearing", 
         capabilities: ACP,
         mode: "custom",
         systemPrompt: CUSTOM,
-        note: NOTE,
         stableSystemPrompt: false,
         terseOutput: true,
         personaNote: PERSONA,
     });
     expect(placement.systemPrompt).toBeUndefined();
     expect(placement.systemAppend).toBeUndefined();
-    // Persona first: who the turn is, then what else it may reach.
-    expect(placement.userNotes).toEqual([PERSONA, NOTE]);
+    expect(placement.userNotes).toEqual([PERSONA]);
     // Nothing at all to say is nothing at all sent: an empty list would put a bare separator in front of the
     // user's own words.
     expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: true })).toEqual({});

@@ -2,13 +2,13 @@ import { type ResumeDisclosure, resumeDisclosure, type TurnNote, withoutResumeNo
 import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { PERSONA_NOTE_HEADER } from "../personas/personas.js";
-import { DELEGATION_NOTE_HEADER } from "./delegation.js";
+import { SPAWN_NOTE_HEADER } from "../children/spawn-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
-// Turn preambles: notes the daemon prepends to a user message before it reaches the model, the delegation
-// how-to (when stableSystemPrompt keeps it out of the system prompt), the dependency-readiness notice (which
+// Turn preambles: notes the daemon prepends to a user message before it reaches the model, the spawn
+// how-to for shell-only runtimes, the dependency-readiness notice (which
 // must ride the user message because it changes the moment an install finishes, while the system prefix stays
 // byte-stable for the prompt cache), and the literal-slash note below. They are protocol, not something the
 // user said, but the SDK transcript stores the combined prompt verbatim, so a reopened tab would redraw them
@@ -90,7 +90,7 @@ export const worktreeReminder = (root: string): string =>
  * The TITLE is the row the reader clicks. It says what the note is about in their terms, not the daemon's, the
  * text behind it is addressed to a model and reads like it. */
 const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
-    { header: DELEGATION_NOTE_HEADER, title: "Delegating to other coding agents" },
+    { header: SPAWN_NOTE_HEADER, title: "Spawning helper agents" },
     // The persona note reaches the user message only where the runtime has no system prompt to hold it (Pi,
     // ACP). It is listed here for the same three reasons every other note is, and for a fourth: it is the one
     // note that says what the turn may NOT touch, so a reader who cannot see it cannot tell a refusal from a

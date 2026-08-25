@@ -43,14 +43,13 @@ import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import type { AgentRequest } from "./agent.js";
-import { armSpawn, type ChildSpawnResult, type ChildSpawnSpec } from "../children/children.js";
+import { armSupervisor, type ChildSupervisor } from "../children/children.js";
 import { spawnNote } from "../children/spawn-note.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
 import { withAttachmentNote } from "./attachment-note.js";
 import { contextShortfall } from "./context-budget.js";
-import { delegationNote } from "./delegation.js";
 import { subagentWaitServer } from "./subagent-wait.js";
 import { watchServer } from "./watch-server.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
@@ -135,11 +134,6 @@ export interface TurnContext {
      * Set only on the context the arms receive, the route builds this object before a card has been read, so
      * it is absent there and present everywhere it is used. */
     readonly persona?: TurnPersona;
-    /* Cross-provider delegation, resolved once by planTurn for the Claude Code loop alone (delegationEnv). Its
-     * NOTE is already folded into the turn's instructions by the time an arm sees this; what is left for the
-     * arm is the env. CODEX_HOME and the local bearer, which only that loop's Bash receives. Absent on every
-     * other runtime, and on a sandbox with nothing to delegate to. */
-    readonly delegation?: { readonly env: Record<string, string>; readonly note?: string };
     /* Re-take the pre-turn rebase while the turn is parked on a card (agent.routes.ts owns the git and the
      * bookkeeping; agent.ts picks the moments). Isolated turns only, a main-tree turn has no branch to move.
      *
@@ -147,11 +141,11 @@ export interface TurnContext {
      * main line to move are the harness's own (the `ask` tool, the plan gate). A native codex/grok/ACP turn
      * has no seam to call it from, so handing it one would be a field nothing reads. */
     readonly resync?: () => Promise<AgentEvent | undefined>;
-    /* Start a full agent on any connected provider, the `spawn` tool's engine (children/children.ts), injected
-     * by agent.routes like `resync` and for the same cycle reason: the child runs through streamAgent, which
-     * only the route can hand down. Absent for a conversationless turn (a child needs a parent to file under)
-     * and for focused callers with no route behind them; the tool is then not offered. */
-    readonly spawn?: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
+    /* The child-agent supervision surface (children/children.ts childSupervisor), injected by agent.routes
+     * like `resync` and for the same cycle reason: a child runs through streamAgent, which only the route can
+     * hand down. Absent for a conversationless turn (a child needs a parent to file under) and for focused
+     * callers with no route behind them; the tools are then not offered. */
+    readonly children?: ChildSupervisor;
 }
 
 /* WHY EVERY STEP IN HERE IS MEASURED, and why they run together rather than one after another.
@@ -194,13 +188,10 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
-    /* SETTINGS FIRST AND ALONE, which costs one small local JSON read and buys the delegation lookup a place in
-     * the round below. That lookup needs `stableSystemPrompt` to decide how its note is worded, and the note is
-     * now an input to the one composition of this turn's instructions (honoured, below) rather than something
-     * the harness arm assembled for itself, so it has to be resolved before the arms are dispatched to. Reading
-     * it here rather than serialising the lookup after the round is what keeps that move free. */
+    // SETTINGS FIRST AND ALONE, one small local JSON read, resolved before the arms are dispatched to because
+    // the composition of this turn's instructions reads it (honoured, below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
-    const [installed, setup, cast, delegation] = await Promise.all([
+    const [installed, setup, cast] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
         // the record above, these are what the OWNER installed, that is what the runtime can DO.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -227,19 +218,6 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
         // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
-        /* CROSS-PROVIDER DELEGATION, for the one loop that wires it. The env it returns reaches the agent's
-         * Bash (planHarnessTurn), and its note is one of the pieces composed into this turn's instructions
-         * below, which is why it is resolved here, above the split, rather than in the arm that consumes it.
-         * A native Codex, Grok, Pi or ACP turn gets neither: nothing puts CODEX_HOME into its shell, so a note
-         * telling it to delegate would name a credential it has not got.
-         *
-         * The move costs it its place BEHIND the credential gate: a turn about to be refused for a missing
-         * subscription now pays this lookup. Same trade the settings read makes one line up, one size larger,
-         * and bounded, because the expensive half (booting the warm OpenCode server) is single-flight, warmed
-         * at boot, and only reached when an xAI account is connected at all. */
-        capabilities.runtime === "claude-code"
-            ? services.perf.track("turn.plan.delegation", {}, () => delegationEnv(services, settings.stableSystemPrompt))
-            : Promise.resolve(undefined),
     ]);
     /* WHO THIS TURN IS AND WHAT IT MAY DO, resolved ABOVE the provider split, which is the whole reason this
      * moved here from the harness arm.
@@ -263,15 +241,21 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
     const granted = personaCapabilities(installed, persona);
     const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
-    /* THE SPAWN DOOR, decided once here for every runtime, in both of its shapes. A persona with full agency
-     * (shell and write — a child is a whole agent holding both) gets to start agents on any connected
-     * provider; one without must not get them back by proxy. The TOOL mounts read this same predicate at their
-     * seams (the harness arm's subagents server, Cursor's custom tools); the SHELL door (`agents` CLI →
-     * /children routes) has no mount to gate, so the decision is recorded as the armed closure itself
-     * (children/children.ts armSpawn), and the note below is only ever offered where the door is actually open. */
-    const maySpawn = context.spawn !== undefined && input.conversationId !== undefined && persona.powers.shell && persona.powers.files === "write";
-    if (maySpawn && context.spawn !== undefined && input.conversationId !== undefined) {
-        armSpawn(input.conversationId, context.spawn);
+    /* THE SPAWN DOOR, decided once here for every runtime, in both of its shapes. A persona with the delegate
+     * shelf open AND full agency (shell and write — a child is a whole agent holding both) gets to start
+     * agents on any connected provider; one without must not get them back by proxy. The TOOL mounts read this
+     * same predicate at their seams (the harness arm's subagents server, Cursor's custom tools); the SHELL
+     * door (`agents` CLI → /children routes) has no mount to gate, so the decision is recorded as the armed
+     * closure itself (children/children.ts armSpawn), and the note below is only ever offered where the door
+     * is actually open. */
+    const maySpawn =
+        context.children !== undefined &&
+        input.conversationId !== undefined &&
+        persona.powers.delegate &&
+        persona.powers.shell &&
+        persona.powers.files === "write";
+    if (maySpawn && context.children !== undefined && input.conversationId !== undefined) {
+        armSupervisor(input.conversationId, context.children);
     }
     /* The CLI teaching, for the runtimes whose only door is the shell: not the Claude Code loop (it carries
      * the spawn/wait MCP tools in its prompt) and not Cursor (same pair as custom tools), and only on the
@@ -322,7 +306,6 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         iqSearchEnabled,
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
-        ...(delegation !== undefined ? { delegation } : {}),
         ...(spawnNoteText !== undefined ? { spawnNote: spawnNoteText } : {}),
     };
     /* WHO GETS THE PROJECT MAP: the opening message of a conversation, once, and never again in it.
@@ -457,7 +440,6 @@ const honoured = (
     const placement = turnPromptPlacement({
         capabilities,
         ...prompt,
-        ...(context.delegation?.note !== undefined ? { note: context.delegation.note } : {}),
         stableSystemPrompt: settings.stableSystemPrompt,
         // The arm decides when the experiment is running; the plain setting decides when it isn't.
         terseOutput: terseArm ?? settings.terseOutput,
@@ -536,7 +518,7 @@ const honoured = (
      * absent from the request rather than present-and-refused. Its environment is the same filtered one the
      * shell gets, a script must not read a credential the command line could not. */
     const jsExecution = capabilities.execution.includes("js")
-        ? jsExecutionPlanOf(persona, { root: context.effectiveCwd, cwd: startPath ?? context.base.cwd }, { ...shellEnv, ...context.delegation?.env })
+        ? jsExecutionPlanOf(persona, { root: context.effectiveCwd, cwd: startPath ?? context.base.cwd }, { ...shellEnv })
         : undefined;
     /* The folder limit and the sandbox switch, carried on the request for the runtime that can enforce them.
      * The folders resolve against the workspace root rather than `startPath`, the card spells them
@@ -622,8 +604,7 @@ export const planHarnessTurn = async (
             }),
         ),
         // Per-sandbox agent toggles. stableSystemPrompt keeps the preset system prompt byte-stable so the
-        // provider prompt cache survives the turn, the cross-provider delegation note then rides the user
-        // message instead of the system prompt.
+        // provider prompt cache survives the turn.
         context.settings === undefined
             ? services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get())
             : Promise.resolve(context.settings),
@@ -650,10 +631,8 @@ export const planHarnessTurn = async (
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
     const turnEndingRules = standing(rules, "turn.ending");
-    /* THE SECOND ROUND, and the last of the planning I/O: an extension scan, the browser bring-up, and the
-     * delegation lookup that reaches the translator. Only `delegation` waited on anything above it (it needs
-     * `stableSystemPrompt`), which is why these could not join the round before it, and why they had no
-     * business being three more awaits in a row. */
+    /* THE SECOND ROUND, and the last of the planning I/O: an extension scan and the browser bring-up, which
+     * had no business being more awaits in a row. */
     /* WHICH PERSONA THIS TURN WEARS, resolved by planTurn, above the provider split, and arriving here already
      * applied to `granted`: an account this turn may not act through is not in that list, so it gets no MCP
      * server, no Chromium and no open profile. Absent rather than present-and-discouraged, which is the only
@@ -735,12 +714,14 @@ export const planHarnessTurn = async (
         // spawns nothing simply never calls it, and settled by the turn's own signal when the user stops the
         // turn under it. `spawn` rides the same server where the route injected its engine: start a full agent
         // on any connected provider and supervise it with the wait beside it. Withheld from a persona without
-        // full agency (the watch server's rule, one power wider): a child is a whole agent with shell and
-        // write, so a card that narrowed this turn to less must not get them back by proxy.
+        // the delegate shelf and full agency: a child is a whole agent with shell and write, so a card that
+        // narrowed this turn to less must not get them back by proxy.
         subagents: subagentWaitServer({
             conversationId: context.base.conversationId,
             signal: context.base.signal,
-            ...(context.spawn !== undefined && persona.powers.shell && persona.powers.files === "write" ? { spawn: context.spawn } : {}),
+            ...(context.children !== undefined && persona.powers.delegate && persona.powers.shell && persona.powers.files === "write"
+                ? { children: context.children }
+                : {}),
         }),
         /* The condition watch (agent/watchers.ts): the agent states an OUTSIDE condition once, a check command
          * that exits 0 when it holds, and the daemon does the polling, waking this conversation when it fires.
@@ -795,14 +776,10 @@ export const planHarnessTurn = async (
             ? {}
             : { diagnostics: createDiagnosticsServer({ historyRoot: services.config.historyRoot, usage: services.usage }) }),
     };
-    /* CODEX_HOME and the local bearer, for the one loop whose Bash can delegate. The NOTE that goes with them
-     * is already in this turn's instructions, both were resolved above the provider split (planTurn), because
-     * an agent told it may delegate and handed no credential is worse than one never told.
-     *
-     * Merged over the BASE's env, not the context's raw one: the base is where `honoured` already withheld the
-     * connector credentials this persona was not granted (personaCliEnv), and rebuilding from the raw context
-     * env here was silently handing every one of them back to the harness arm alone. */
-    const shellEnv = { ...context.base.cliEnv, ...context.delegation?.env };
+    /* The BASE's env, not the context's raw one: the base is where `honoured` already withheld the connector
+     * credentials this persona was not granted (personaCliEnv), and rebuilding from the raw context env here
+     * was silently handing every one of them back to the harness arm alone. */
+    const shellEnv = { ...context.base.cliEnv };
     // The turn's user message: attachment note folded in as before.
     const promptWithAttachments =
         context.attachmentPaths.length > 0 ? withAttachmentNote(context.base.prompt, [...context.attachmentPaths]) : context.base.prompt;
@@ -958,50 +935,5 @@ export const planHarnessTurn = async (
             // The rebase the cards take back while the user is answering them, isolated turns only.
             ...(context.resync !== undefined ? { resync: context.resync } : {}),
         },
-    };
-};
-
-/* CROSS-PROVIDER DELEGATION VIA THE SHELL. When Codex is reachable, the agent's Bash gets the shared CODEX_HOME
- * (whose config.toml selects the translator subscription) plus the local bearer, and the system prompt a short
- * how-to note. Codex is reachable when the translator holds the ChatGPT subscription, or a dev OPENAI_API_KEY is
- * set; nothing ⇒ no env, no note, delegation isn't offered. The env and the note are one decision (an agent
- * told it may delegate but handed no credential is worse than one never told), so they are resolved together. */
-const delegationEnv = async (
-    services: Services,
-    stableSystemPrompt: boolean,
-): Promise<{ readonly env: Record<string, string>; readonly note?: string }> => {
-    const translatorReady = services.config.translator.url !== "" && (await services.cliProxy.accounts()).codex.length > 0;
-    const codexHome = translatorReady || services.config.openaiApiKey !== "" ? services.codexHome : undefined;
-    const grokConnected = await services.openCode.connected("xai");
-    /* The warm server's URL, which the note's `opencode run --attach` command points at so the delegated
-     * session runs where the daemon's event stream can see it (grok/opencode.ts). Resolving it boots the
-     * server when the boot warmup hasn't, the same cost the model lookup below already pays, and a boot
-     * that fails withholds the Grok offer entirely: a command template pointing at a server that isn't
-     * there is worse than no offer, and Grok turns are broken then anyway. */
-    const openCodeUrl = grokConnected ? await services.openCode.url().catch(() => undefined) : undefined;
-    // Resolve the xAI model the note names from xAI's live catalog (default, else first), so it never hardcodes a
-    // since-renamed id. Tolerate a transient xAI blip, a Claude turn must not fail on this lookup; the note then
-    // omits the model and tells the agent to list xAI's models itself. Skipped in stable mode, where the note
-    // stays model-agnostic (it points the agent at `opencode models`) so no volatile id enters the turn at all.
-    const grokModel =
-        grokConnected && !stableSystemPrompt
-            ? await services.openCode
-                  .xaiModels()
-                  .then((catalog) => catalog.default ?? catalog.models[0]?.id)
-                  .catch(() => undefined)
-            : undefined;
-    const note = delegationNote({
-        ...(codexHome !== undefined ? { codexHome } : {}),
-        ...(openCodeUrl !== undefined ? { openCodeUrl } : {}),
-        ...(grokModel !== undefined ? { grokModel } : {}),
-    });
-    return {
-        env: {
-            ...(codexHome !== undefined ? { CODEX_HOME: codexHome } : {}),
-            // The translator provider (config.toml) reads the bearer from CODEX_API_KEY; the dev api-key path
-            // uses the container's own OPENAI_API_KEY, already in the shell env.
-            ...(translatorReady ? { CODEX_API_KEY: services.config.translator.token } : {}),
-        },
-        ...(note !== undefined ? { note } : {}),
     };
 };

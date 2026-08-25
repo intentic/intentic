@@ -531,7 +531,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             stop: async () => {},
             events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
             watch: async () => {},
-            url: async () => "http://127.0.0.1:4096",
+
             connected: async () => false,
             sessionExists: async () => true,
             xaiModels: async () => ({ models: [{ id: "grok-4", label: "Grok 4" }], default: "grok-4" }),

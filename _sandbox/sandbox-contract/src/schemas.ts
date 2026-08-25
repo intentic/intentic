@@ -8387,36 +8387,32 @@ export const BrowserNameParamSchema = z.object({ name: z.string().describe("Whic
 /* ---- subagents: the agents an agent starts ----
  *
  * The third thing a turn spawns that the operator can be shown, after its shell and its browser, and the only
- * one that is itself an agent. Three kinds land in this one list, because from outside they are the same fact
+ * one that is itself an agent. Two kinds land in this one list, because from outside they are the same fact
  * (another agent, working, that you did not start):
  *   • `subagent`, the SDK's Agent/Task tool. The daemon learns of it from the SubagentStart/SubagentStop hooks
  *     and the task_* stream messages, joined on `toolUseId`.
- *   • `codex` / `grok`, a CLI the agent drove from its own Bash (agent/delegation.ts). Detected in the Bash
- *     PreToolUse hook, bound to its thread/session id from the command's output.
- *   • `spawned`, a full agent the turn started through the daemon's own spawn tool (children/children.ts), on
+ *   • `spawned`, a full agent the turn started through the daemon's own spawn door (children/children.ts), on
  *     ANY connected provider, Cursor's Composer, Codex, Gemini, another Claude. The daemon runs the child
  *     itself, so its whole life is reported by direct calls rather than reconstructed from hooks or stdout.
  *
- * `id` IS THE SPAWNING TOOL CALL'S id, the Agent card's, or the Bash card's for a delegation, except for a
- * `spawned` child, whose spawn tool returns the id the service minted (also the child's own conversation id,
- * so the two point at each other by construction). It is the one key every side already holds: a card links to
- * its subagent with the id it has, and the subagent points back at the card the same way. The ids the
- * transcripts are actually READ with, the SDK's agent id, a Codex thread, an OpenCode session, stay
- * daemon-side, because no surface asks a question they answer.
+ * `id` IS THE SPAWNING TOOL CALL'S id for an SDK child (the one key its meta file, its task messages and the
+ * client's `parentToolUseId` nesting all carry), and the child's own conversation id for a `spawned` one (the
+ * spawn door returns it, so both sides hold it). A card links to its subagent with the id it has, and the
+ * subagent points back at the card the same way. The ids the transcripts are actually READ with, the SDK's
+ * agent id, stay daemon-side, because no surface asks a question they answer.
  *
- * WHAT A KIND CHANGES, and it is only ever the live view: a subagent has no process of its own to look at, so
- * watching it means reading its transcript. A delegation runs in a tmux window, so it has both, `terminal`
- * names it, and the card keeps its existing "Watch in terminal" beside the transcript door. A spawned child is
- * a conversation of its own, so its live view is that conversation's stream. */
-export const SubagentKindSchema = z.enum(["subagent", "codex", "grok", "spawned"]);
+ * WHAT A KIND CHANGES, and it is only ever the live view: an SDK subagent has no process of its own to look
+ * at, so watching it means reading its transcript; a spawned child is a conversation of its own, so its live
+ * view is that conversation's stream. */
+export const SubagentKindSchema = z.enum(["subagent", "spawned"]);
 export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 
 // running/pending/blocked are live; the rest are terminal. Deliberately the SDK's own task vocabulary
 // (SDKTaskUpdatedMessage.patch.status) rather than AgentStatus: this is not a fleet card's lifecycle (no
 // draft/landed/conflict), and mapping the two would invent states neither side reports. `blocked` is the one
-// addition the SDK never says: it comes from a delegated CLI's own signals (a Codex PermissionRequest hook, an
-// OpenCode permission ask, agent/delegation-signals.ts), and it exists because "the child needs an answer" is
-// the one live state a parent or an operator acts on differently from "the child is working".
+// addition the SDK never says: a spawned child's own question/permission/plan card raises it
+// (children/children.ts), and it exists because "the child needs an answer" is the one live state a parent or
+// an operator acts on differently from "the child is working".
 export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 
@@ -8424,22 +8420,22 @@ export const SubagentSessionSchema = z.object({
     id: z
         .string()
         .describe(
-            "The id of the tool call that started it, which every side already holds, so a card links to its helper with the id it has and the helper points back the same way.",
+            "The id of the tool call that started it (an SDK child) or the child's own conversation id (a spawned one); either way both sides already hold it, so a card links to its helper with the id it has and the helper points back the same way.",
         ),
     kind: SubagentKindSchema.describe(
-        "What sort of helper: one the runtime spawned, or a separate tool the agent drove from a shell. It changes only how you watch it.",
+        "What sort of helper: one the runtime's own Task tool spawned in-process, or a full agent the daemon started for the turn. It changes only how you watch it.",
     ),
     // The conversation whose turn spawned this, what the area groups its rows by, and the way back to the chat
     // the card lives in.
     conversationId: z.string().describe("The conversation whose turn started it, and the way back to the chat it belongs to."),
-    // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or the delegated
-    // provider's model, and the caller's one-line description. The area's row and the card's title read as
-    // `Explore · Locate claimIndexer definition`.
+    // What it is and what it was asked to do: the subagent type (`Explore`, `general-purpose`) or a spawned
+    // child's provider label, and the caller's one-line description. The area's row and the card's title read
+    // as `Explore · Locate claimIndexer definition`.
     agentType: z.string().optional().describe("What kind of helper it is."),
     description: z.string().optional().describe("What it was asked to do, in one line."),
     model: z.string().optional().describe("Which model it runs on."),
-    // Which provider serves a `spawned` child (its AgentProvider id), so the row can wear the right logo. The
-    // other kinds imply theirs: an SDK subagent runs on its parent's provider, a delegation names its own kind.
+    // Which provider serves a `spawned` child (its AgentProvider id), so the row can wear the right logo. An
+    // SDK subagent implies its own: it runs on its parent's provider.
     provider: z.string().optional().describe("Which provider serves it, for a helper spawned across providers."),
     // How deep in the spawn tree (1 = spawned by the turn itself). From the SDK's meta.json; a subagent may
     // itself delegate, and a flat list that cannot say so reads as though the turn started all of them.
@@ -8478,14 +8474,6 @@ export const SubagentSessionSchema = z.object({
         .optional()
         .describe("Its report: what it concluded, without opening its record. The question a finished helper gets read for."),
     error: z.string().optional().describe("Why it failed, when it did."),
-    // A delegation's live view: the tmux session its command runs in. Absent for an SDK subagent, which has no
-    // process of its own to attach to.
-    terminal: z
-        .string()
-        .optional()
-        .describe(
-            "The terminal its command runs in, when there is one. Absent for a helper with no process of its own, which is watched by reading its record instead.",
-        ),
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({

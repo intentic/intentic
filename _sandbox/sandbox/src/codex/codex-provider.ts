@@ -5,7 +5,6 @@ import { browserOutputDir } from "../browser/browser-artifacts.js";
 import { browserServersOf } from "../browser/browser-tools.js";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../agent/adapter.js";
 import { withAttachments } from "../agent/attachment-note.js";
-import { AGENT_SIGNALS_DIR } from "../agent/delegation-signals.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../agent/provider-module.js";
 import { connectedTranslatorProviders } from "../agent/translator.js";
 import type { TurnContext, TurnPlan } from "../agent/turn-plan.js";
@@ -27,7 +26,7 @@ export interface CodexSlice {
     // ids the subscription proved valid. Neither is a question the shared record asks.
     readonly codexModels: CodexCatalog;
     // The sandbox-wide CODEX_HOME (sessions + the config.toml selecting the translator provider). The codex
-    // adapter defaults to it, and the Claude agent's shell delegation points `codex` at it.
+    // adapter defaults to it.
     readonly codexHome: string;
     // Whether a Codex thread's rollout still exists in the sandbox-wide CODEX_HOME, so a resume of a
     // deleted/lost thread opens a fresh thread seeded from the record instead of failing opaquely mid-turn.
@@ -131,7 +130,7 @@ const CODEX_ADAPTER: AgentAdapter<"codex"> = {
 
 /* A Codex turn is served by the ChatGPT subscription the translator holds, or, on a bare dev run, by the
  * container's OPENAI_API_KEY. Either way the turn spawns the `codex` CLI, so either one wants the pack. This is
- * the same reachability test planCodexTurn and the shell-delegation note gate on.
+ * the same reachability test planCodexTurn gates on.
  *
  * CONNECTED IS READ FROM DISK, never from the helper it would start (the provider-packs rule): the translator
  * holds this credential, and on a core image the translator binary is absent, so every live probe answers
@@ -146,12 +145,11 @@ export const codexProvider: ProviderModule = {
     // Ready = the translator holds a ChatGPT subscription. Deliberately NOT the OPENAI_API_KEY fallback: this
     // rung feeds the ROUTED-turn pickers, and the container key serves native turns only.
     ready: async (services, shared) => services.config.translator.url !== "" && (await shared.translatorAccounts()).codex.length > 0,
-    /* Write the sandbox-wide CODEX_HOME's config.toml + signal hooks at boot: the `translator` model_provider on
-     * the ChatGPT subscription, the default that serves the Claude agent's shell delegation (its freeform
-     * `codex exec` can't pass per-turn overrides). Best-effort; authoritative overwrite.
+    /* Write the sandbox-wide CODEX_HOME's config.toml at boot: the `translator` model_provider on the ChatGPT
+     * subscription. Best-effort; authoritative overwrite.
      *
      * "Baked" is the BINARY, not TRANSLATOR_URL. The runner sets that URL on every image, so on a core one it
-     * would select a model_provider nothing is listening on and every delegated `codex exec` would fail against
+     * would select a model_provider nothing is listening on and any `codex exec` run in a shell would fail against
      * a dead port. Empty instead ⇒ Codex's own OPENAI_API_KEY provider, which is the one credential such a
      * sandbox may still have. */
     boot: (services, role, logger) => {
@@ -160,7 +158,7 @@ export const codexProvider: ProviderModule = {
                 return;
             }
             const translatorUrl = (await onPath("cli-proxy-api")) ? services.config.translator.url : "";
-            await writeCodexConfig(services.codexHome, translatorUrl, AGENT_SIGNALS_DIR);
+            await writeCodexConfig(services.codexHome, translatorUrl);
         })().catch((error: unknown) => logger.warn({ err: error }, "codex config not written"));
     },
     packs: async (services) => ((await codexConnected(services)) ? ["codex"] : []),

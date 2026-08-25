@@ -9,7 +9,6 @@ import {
     type OpencodeClient,
     type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
-import { noteDelegationSignal } from "../agent/subagents.js";
 import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGate, consultWith, vendorSubject } from "../guard/command-gate.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
@@ -46,13 +45,12 @@ export interface OpenCodeService {
     // This directory's session-event stream, for a caller that watches one turn. Scoped, because an unscoped
     // subscription carries no session events at all, subscribeEvents has the whole story.
     readonly events: (directory: string) => Promise<{ stream: AsyncIterable<OpenCodeEvent> }>;
-    // Keep a delegation watcher running for this directory, for the daemon's life. Idempotent per directory,
-    // every turn calls it and only the first opens a stream. The boot covers the workspace root; this is what
-    // covers an isolated conversation's worktree, which the daemon cannot know about until a turn runs there.
+    // Keep a permission watcher running for this directory, for the daemon's life: the stream it drains is
+    // where OpenCode raises the asks the owner's command rulebook answers (answerPermission). Idempotent per
+    // directory, every turn calls it and only the first opens a stream. The boot covers the workspace root;
+    // this is what covers an isolated conversation's worktree, which the daemon cannot know about until a
+    // turn runs there.
     readonly watch: (directory: string) => Promise<void>;
-    // The warm server's base URL, what a delegated `opencode run --attach <url>` points at, so its session
-    // runs where the daemon's event stream can see it (the delegation note names it; agent/delegation.ts).
-    readonly url: () => Promise<string>;
     // Whether the given provider (e.g. "xai") is authenticated, read from OpenCode's persisted auth store on disk
     // (the ground truth a device sign-in writes), NOT provider.list().connected, which OpenCode computes once at
     // server-init and never refreshes after a runtime auth.set() on our long-lived server.
@@ -103,73 +101,6 @@ const BOOT_TIMEOUT_MS = 60_000;
 // and rebuild for a product they were not using, see openCodeBackendLabel.
 export const openCodeBinaryMissing = (backend: string): string =>
     `This sandbox's image doesn't include the OpenCode CLI yet: rebuild it from the Environment card in Sandbox ▸ Environment to run ${backend} here.`;
-
-/* THE TITLE IS THE DELEGATION'S NAME TAG, `intentic-delegation-<spawning tool call id>`.
- *
- * A delegated session has to be told apart from the OTHER sessions on the same warm server (the Grok provider
- * adapter's own turns), AND paired with the exact Bash call that started it. `opencode run` forwards no
- * environment to the server, so the id stamp that binds a codex delegation has no road here, but the title
- * does, and the same PreToolUse rewrite that stamps the environment stamps the id into this flag on its way
- * past (agent/agent-terminals.ts).
- *
- * It replaced a guess: the session used to be paired with the youngest grok delegation that did not have one
- * yet, which two concurrent runs could cross. A session whose title carries no id is simply never bound, which
- * fails toward the old blindness rather than toward binding one child's session to another's record. */
-export const DELEGATION_SESSION_TITLE = "intentic-delegation";
-
-// The id out of a delegated session's title, or undefined for every other session on the server. Anchored and
-// charset-bounded (the SDK's own tool-call charset), so a title the CLI decorated after the id still pairs.
-export const delegationIdOfTitle = (title: string): string | undefined =>
-    new RegExp(`^${DELEGATION_SESSION_TITLE}-([A-Za-z0-9_-]+)`, "u").exec(title)?.[1];
-
-// A session-error's human sentence, out of whichever member of OpenCode's error union carried one.
-const errorText = (error: unknown): string | undefined => {
-    const data = (error as { data?: { message?: unknown } } | undefined)?.data;
-    return typeof data?.message === "string" && data.message !== "" ? data.message : undefined;
-};
-
-/* The warm server's news, folded into the subagent roster. A session binds on `created`, by the id its title
- * carries; everything after that is a status move keyed by session id, and noteDelegationSignal drops ids that
- * belong to no delegation, which is every primary Grok turn. `busy`/`retry` say working; `idle` is the turn's
- * end (report, a backgrounded record completes on it, a foreground one is settled by its own tool_result); a
- * pending permission is the `blocked` a waiting parent is woken for, though the warm server's allow-all config
- * makes it rare. */
-const foldSessionEvent = (event: OpenCodeEvent): void => {
-    switch (event.type) {
-        case "session.created": {
-            const info = event.properties.info;
-            const delegationId = info.parentID === undefined ? delegationIdOfTitle(info.title) : undefined;
-            if (delegationId !== undefined) {
-                noteDelegationSignal({ delegationId, thread: info.id, event: "session" });
-            }
-            return;
-        }
-        case "session.status": {
-            const { sessionID, status } = event.properties;
-            noteDelegationSignal({ thread: sessionID, event: status.type === "idle" ? "report" : "working" });
-            return;
-        }
-        case "session.idle":
-            noteDelegationSignal({ thread: event.properties.sessionID, event: "report" });
-            return;
-        case "session.error": {
-            const { sessionID, error } = event.properties;
-            if (sessionID !== undefined) {
-                const message = errorText(error);
-                noteDelegationSignal({ thread: sessionID, event: "failed", ...(message !== undefined ? { summary: message } : {}) });
-            }
-            return;
-        }
-        case "permission.updated":
-            noteDelegationSignal({ thread: event.properties.sessionID, event: "blocked" });
-            return;
-        case "permission.replied":
-            noteDelegationSignal({ thread: event.properties.sessionID, event: "working" });
-            return;
-        default:
-            return;
-    }
-};
 
 /* EVERY PERMISSION OPENCODE HAS, ANSWERED, because the ones this block forgets do not fail, they HANG.
  *
@@ -239,8 +170,8 @@ const ALLOW_EVERY_PERMISSION: Required<NonNullable<OpenCodeConfig["permission"]>
  *
  * A session id is the only key both halves share: the runner knows it the moment the session exists and
  * registers there (grok-agent.ts), the watcher reads it off `permission.updated`. An ask for a session with no
- * entry, a delegation, a sibling conversation, an arrival after its turn settled, gets the standing yes, which
- * is where it already was before any of this. */
+ * entry, a sibling conversation, an arrival after its turn settled, gets the standing yes, which is where it
+ * already was before any of this. */
 const sessionGates = new Map<string, CommandGate>();
 
 export const registerSessionGate = (sessionId: string, gate: CommandGate): void => {
@@ -339,7 +270,7 @@ const STREAM_RETRY_MS = 5_000;
  * events; the same turn on a scoped stream saw all of them, through `session.idle`.
  *
  * The scope is an EXACT directory match, not a prefix, a stream scoped to a parent sees nothing from a session
- * in its subdirectory, which is why this takes the caller's own cwd and why the delegation watcher can no
+ * in its subdirectory, which is why this takes the caller's own cwd and why the permission watcher can no
  * longer be a single server-wide subscription (see watch()).
  *
  * One helper rather than the query spelled out at each call site: a subscription that forgets the scope does not
@@ -348,8 +279,8 @@ const subscribeEvents = async (client: OpencodeClient, directory: string): Retur
     client.event.subscribe({ query: { directory } });
 
 /* Watch ONE DIRECTORY's session events for the daemon's life, detached, started per directory the daemon runs
- * sessions in. Failures are counted, not logged loudly: losing this stream loses liveness (a delegation settles
- * only by its exit), never correctness.
+ * sessions in. What the drain serves is the owner's command rulebook: OpenCode raises its permission asks on
+ * this stream, and answerPermission is what answers them. Failures are counted, not logged loudly.
  *
  * A directory, not the whole server, because that is the only stream the server will give: see subscribeEvents. */
 const watchSessionEvents = (client: OpencodeClient, directory: string): void => {
@@ -359,7 +290,6 @@ const watchSessionEvents = (client: OpencodeClient, directory: string): void => 
                 const sse = await subscribeEvents(client, directory);
                 for await (const event of sse.stream) {
                     failures = 0;
-                    foldSessionEvent(event as OpenCodeEvent);
                     if (event.type === "permission.updated") {
                         /* Detached: the reply is a round-trip of its own, and awaiting it here would stop reading
                          * the very stream the answer's effects arrive on. A failed one leaves the ask standing,
@@ -475,18 +405,17 @@ export const createOpenCodeService = (
     const { gemini, workspaceRoot } = options;
     const fetchImpl = options.fetchImpl ?? fetch;
     let booting: Promise<OpencodeClient> | undefined;
-    // The directories a delegation watcher is already running for. Event streams are scoped to one exact
+    // The directories a permission watcher is already running for. Event streams are scoped to one exact
     // directory (subscribeEvents), so "watch everything" is a set of streams rather than one, and this is what
     // keeps it one PER directory however many turns run there.
     const watched = new Set<string>();
-    // xAI's catalog rarely changes, so cache it briefly: a grok turn AND every Claude turn's delegation note read
-    // it, and each read is an api.x.ai round-trip. Only a real result (live discovery or recordModels) is cached,
+    // xAI's catalog rarely changes, so cache it briefly: each read is an api.x.ai round-trip. Only a real
+    // result (live discovery or recordModels) is cached,
     // the seed/persisted fallbacks stay uncached so a freshened token is retried on the next read. Cleared on
     // disconnect.
     let modelsCache: { value: { models: { id: string; label: string }[]; default: string }; expiresAt: number } | undefined;
     const MODELS_TTL_MS = 60_000;
     // Where the warm server listens, set by the boot that created it, so `url()` can answer after `ensure`.
-    let serverUrl: string | undefined;
     // The handle that can shut it down again, kept for `stop()` alone; every other caller wants the client.
     let serverHandle: { close(): void } | undefined;
     const opencodeDir = join(xdgDataHome, "opencode");
@@ -533,12 +462,11 @@ export const createOpenCodeService = (
                 process.env["XDG_DATA_HOME"] = previous;
             }
         }
-        serverUrl = server.url;
         serverHandle = server;
         const client = createOpencodeClient({ baseUrl: server.url });
-        // The delegation watcher rides the boot that made the server, so nothing ever boots one just to listen.
-        // The workspace root is where a non-isolated conversation delegates from, and therefore the one scope
-        // worth opening unasked; an isolated turn's worktree is registered by the turn itself (watch()).
+        // The permission watcher rides the boot that made the server, so nothing ever boots one just to listen.
+        // The workspace root is where a non-isolated conversation runs, and therefore the one scope worth
+        // opening unasked; an isolated turn's worktree is registered by the turn itself (watch()).
         if (workspaceRoot !== undefined) {
             watched.add(workspaceRoot);
             watchSessionEvents(client, workspaceRoot);
@@ -607,7 +535,6 @@ export const createOpenCodeService = (
         stop: async () => {
             serverHandle?.close();
             serverHandle = undefined;
-            serverUrl = undefined;
             booting = undefined;
             watched.clear();
         },
@@ -620,14 +547,6 @@ export const createOpenCodeService = (
             // get past the guard and open a stream each.
             watched.add(directory);
             watchSessionEvents(await ensure(), directory);
-        },
-        url: async () => {
-            await ensure();
-            if (serverUrl === undefined) {
-                // Unreachable once ensure resolved, boot sets the url before it returns the client.
-                throw new Error("OpenCode server url unknown after boot");
-            }
-            return serverUrl;
         },
         connected: async (providerID) => {
             // Read the persisted credential directly, NOT provider.list().connected: OpenCode computes that set

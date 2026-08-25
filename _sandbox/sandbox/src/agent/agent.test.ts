@@ -6,7 +6,7 @@ import { mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { resolveRequest } from "./agent-requests.js";
 import { SteeringQueue } from "./agent-steering.js";
-import { noteDelegation, resetSubagents, settleDelegation } from "./subagents.js";
+import { noteSubagentTask, resetSubagents } from "./subagents.js";
 
 // Build a fake QueryFn yielding canned SDK messages (cast to SDKMessage: tests exercise only the fields
 // runAgent reads), so the agent loop is verified without the SDK, a binary, or network.
@@ -553,9 +553,9 @@ test("a subagent still running holds the rebase off", async () => {
     resetSubagents();
     const conversationId = "c-parked";
     let calls = 0;
-    noteDelegation(
+    noteSubagentTask(
         { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
-        { id: "bash-1", command: "codex exec --sandbox danger-full-access --cd /work 'port the tests'", background: false },
+        { subtype: "task_started", task_id: "task-park", tool_use_id: "agent-1", description: "port the tests", subagent_type: "general-purpose" },
     );
 
     await decide(
@@ -574,7 +574,10 @@ test("a subagent still running holds the rebase off", async () => {
 
     expect(calls).toBe(0);
     // Settled, and the same approval now takes the rebase it just skipped.
-    settleDelegation("bash-1", { failed: false, output: "done" });
+    noteSubagentTask(
+        { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+        { subtype: "task_updated", task_id: "task-park", patch: { status: "completed" } },
+    );
     await decide(
         {
             ...request,
@@ -1391,48 +1394,6 @@ test("the Agent call's run_in_background reaches the frame that announces the ch
         description: "audit chapter 4",
         background: true,
     });
-});
-
-/* A DELEGATION SENT TO THE BACKGROUND, whose result says only that the command started. Settling on it marked a
- * codex run completed 0.2 seconds in and left the roster reading "done" for the 103 seconds it actually worked,
- * so the result now ends nothing: the card keeps the child, and the background task's own notification is what
- * finishes it. */
-test("a backgrounded delegation is not ended by the result that says it started", async () => {
-    withoutTmux();
-    resetSubagents();
-    const events = await collect(
-        { ...request, conversationId: "c-bgdel" },
-        fakeQuery(
-            {
-                type: "assistant",
-                session_id: "s",
-                message: {
-                    content: [
-                        { type: "tool_use", id: "bash-1", name: "Bash", input: { command: "codex exec 'audit the gate'", run_in_background: true } },
-                    ],
-                },
-            },
-            {
-                type: "user",
-                session_id: "s",
-                message: { content: [{ type: "tool_result", tool_use_id: "bash-1", content: "Command running in background with ID: b1" }] },
-            },
-            { type: "result", subtype: "success" },
-        ),
-    );
-    expect(events).toContainEqual({
-        kind: "subagent",
-        id: "bash-1",
-        subagentKind: "codex",
-        agentType: "Codex",
-        description: "audit the gate",
-        background: true,
-    });
-    // The result moved nothing. What ends the child here is the turn ending under it: the existing rule for
-    // every live child, and the only honest one once the stream it would have reported on is gone.
-    expect(events.filter((event) => event.kind === "subagent_update" && event.id === "bash-1")).toEqual([
-        { kind: "subagent_update", id: "bash-1", status: "killed" },
-    ]);
 });
 
 // The other way a hold can end: every child settled and no wake turn announced itself within the grace

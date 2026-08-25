@@ -175,8 +175,6 @@ export interface ChatTool {
         readonly summary?: string;
         readonly error?: string;
         readonly background?: boolean;
-        // A delegation's tmux session, the live view a subagent has no equivalent of.
-        readonly terminal?: string;
     };
 }
 

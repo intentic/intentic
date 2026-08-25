@@ -320,31 +320,6 @@ test("the account the credential resolver answered with becomes the turn's attri
     expect(plan).toMatchObject({ ok: true, account: "acc-1" });
 });
 
-/* Delegation is offered only where the credential to act on it exists. An agent told in its system prompt that
- * it may shell out to Codex, whose Bash then has no CODEX_HOME, burns a tool call discovering that, so the note
- * and the env are one decision, made together. */
-test("no reachable Codex means neither the delegation env nor the note that promises it", async () => {
-    const plan = await planTurn(harnessServices(), turn(), context);
-
-    expect((plan as { request: AgentRequest }).request.cliEnv?.["CODEX_HOME"]).toBeUndefined();
-    expect((plan as { request: AgentRequest }).request.systemAppend ?? "").not.toContain("codex");
-});
-
-test("a translator holding the ChatGPT subscription puts CODEX_HOME and the bearer in the agent's shell", async () => {
-    const plan = await planTurn(
-        harnessServices({
-            config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
-            cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
-                accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
-            }),
-        }),
-        turn(),
-        context,
-    );
-
-    expect((plan as { request: AgentRequest }).request.cliEnv).toMatchObject({ CODEX_HOME: "/root/.codex", CODEX_API_KEY: "local" });
-});
-
 // --- what the runtime's declared record takes off the request ---------------------------------------------
 
 /* The composer offers every permission mode to every provider, because until an adapter is running there is

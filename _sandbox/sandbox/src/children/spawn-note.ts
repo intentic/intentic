@@ -22,6 +22,8 @@ export const spawnNote = (): string =>
     "of the repos, on the named provider's account (claude, codex, grok, kimi, gemini, cursor — e.g. " +
     "`--provider cursor --model composer-2.5`), and its finished work lands the workspace's ordinary way. " +
     "It sees nothing of this conversation: give it a self-contained task with every path, requirement and " +
-    "constraint. Follow it with `agents wait <id>` (blocks until it needs input or finishes, then prints its " +
-    "status and report) or `agents list` (all of this conversation's children). A provider nobody has " +
+    "constraint. Supervise it with `agents wait <id>` (blocks until it needs input or finishes; a blocked " +
+    "child's question is printed whole), `agents answer <id> '<text>'` (settle its question — its permission " +
+    "and plan cards are the owner's, not yours), `agents send <id> '<message>'` (steer it mid-turn, or run a " +
+    "follow-up turn on a finished one, continuing its session), and `agents list`. A provider nobody has " +
     "connected fails with the words to say so.";

@@ -11,7 +11,6 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 import { sandboxJson } from "../composables/sandbox/sandboxClient";
 import { SUBAGENT_TRANSCRIPT } from "../composables/queryKeys";
 import { subagentLive, useSubagentsQuery } from "../composables/subagents/subagentsQuery";
-import { openWorkTerminal } from "../composables/terminal/useWorkTerminals";
 import { CHAT_SURFACE } from "../chat/chatSurface";
 import { workspaceSurface } from "../chat/workspaceSurface";
 import ChatToolCard from "../chat/ChatToolCard.vue";
@@ -38,16 +37,16 @@ import { fileLinkDecorator } from "../composables/renderMarkdown";
  * wide. This used to be its own thing: a flat column of bordered rows, its own status glyphs, its own facts in
  * its own order, no identity tile and no card surface, so the agents an AGENT started looked like a different
  * kind of object from the agents the user started, two screens apart in the same app. Everything a row needs
- * beyond the shared card is a fact about delegation and only that: which turn started it, that it was
- * backgrounded, and (for a delegation) the shell it runs in.
+ * beyond the shared card is a fact about parentage and only that: which turn started it, and that it was
+ * backgrounded.
  *
  * SAME CARD MEANS SAME FORM AND SAME FACTS. It is the card's `tight` shape here as it is in the chat, so a row
  * is the same height in both lists, and the model rides the facts line here as it does there, so the one thing
  * this list used to leave unanswered ("which model is that child burning?") is answered where it is asked.
  *
- * TWO KINDS IN ONE LIST, deliberately: an Agent/Task subagent and a `codex exec` the agent drove from its own
- * shell are the same fact from out here: another agent, working, that you did not start. What differs is only
- * how you watch it live, and a delegation says so by offering its terminal. */
+ * TWO KINDS IN ONE LIST, deliberately: an Agent/Task subagent and a full agent the daemon spawned for the turn
+ * are the same fact from out here: another agent, working, that you did not start. What differs is only how you
+ * watch it live: a spawned child is a conversation of its own. */
 
 // The transcript is the one thing here still read on a clock: a running child's frames arrive in bursts, and
 // nothing announces a line of transcript the way the registry announces the child itself. The roster beside it
@@ -140,17 +139,12 @@ const openParent = (session: SubagentSession): void => {
     void router.push(parentTo(session));
 };
 
-/* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark, and for a delegation that is the row's
- * whole point: a `codex exec` the agent drove from its shell is another vendor's agent working in this sandbox,
- * and a row that doesn't say so reads as one of ours. An SDK subagent runs inside its parent's own turn, so it
- * wears the parent's provider, falling back to Claude once the roster no longer holds the parent. A spawned
- * child names its provider on the wire, the row's whole point being that it can be ANY connected one. */
+/* WHO IS ACTUALLY RUNNING IT, for the identity tile's fallback mark. An SDK subagent runs inside its parent's
+ * own turn, so it wears the parent's provider, falling back to Claude once the roster no longer holds the
+ * parent. A spawned child names its provider on the wire, the row's whole point being that it can be ANY
+ * connected one. */
 const providerOf = (session: SubagentSession): AgentProvider =>
-    session.kind === `subagent`
-        ? (agentById(session.conversationId)?.provider ?? `claude`)
-        : session.kind === `spawned`
-          ? (session.provider ?? `claude`)
-          : session.kind;
+    session.kind === `subagent` ? (agentById(session.conversationId)?.provider ?? `claude`) : (session.provider ?? `claude`);
 
 /* WHICH MODEL IT RUNS ON, in the chat rail's own words (modelLabelFor): the same fact, the same short label,
  * in the same slot on the same card, because the rail here and the rail in the floating chat are read minutes
@@ -525,15 +519,6 @@ watch(
                          the card said the short name read as two different models. -->
                     <span v-if="modelOf(current) !== undefined" class="shrink-0">{{ modelOf(current) }}</span>
                     <Icon v-bind="STATUS[current.status]" class="shrink-0" />
-                    <button
-                        v-if="current.terminal"
-                        type="button"
-                        :class="HEADER_ACTION"
-                        v-tooltip.bottom="`Watch the shell this agent runs in`"
-                        @click="openWorkTerminal(current.terminal)"
-                    >
-                        <Icon name="terminal" class="text-2xs" />Terminal
-                    </button>
                     <!-- A control AND an address (ActionLink): the plain click points the docked chat at the
                          parent, which is better than a page load; Ctrl/⌘-click opens that conversation's own
                          page in a tab, which a <button> could never offer. -->

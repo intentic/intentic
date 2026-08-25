@@ -20,16 +20,12 @@ reports the profile.
 - Serve the daemon API (`/agent`, `/intentic`, `/git/:repo/*`, `/inventory`, `/info`, `/preview`, `/health`); the browser calls it directly over the sandbox's tunnel, each request authenticated by a daemon session minted from verified Google identity (`/health` carved out for liveness).
 - Run one Claude Code, Codex app-server, OpenCode, ACP, Pi or Cursor turn over the workspace, normalizing each
   runtime's native stream into typed `AgentEvent`s and serving them as SSE `data:` frames.
-- Follow the agents a turn starts. Every child: an Agent-tool subagent, a delegated `codex exec` or `opencode
-  run`, or a child spawned across providers, is a record on one roster (src/agent/subagents.ts), and the
-  delegates report their OWN state into it: a
-  daemon-authored codex hook drops event files into a signal spool (src/codex/codex-config.ts →
-  src/agent/delegation-signals.ts), and a delegated OpenCode session runs attached to the warm server whose
-  event stream the daemon already reads (src/grok/opencode.ts). Each is stamped with the tool call that started
-  it (codex through the pane environment, opencode through its session title) so a signal names its own record
-  rather than being matched by timing. That is what gives a child a real session id, a `blocked` status, and its
-  own last words as its report, and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep
-  until one of this turn's own children needs input or finishes, instead of polling a terminal tail.
+- Follow the agents a turn starts. Every child — an Agent-tool subagent the runtime runs in-process, or a full
+  agent the daemon spawned for the turn — is a record on one roster (src/agent/subagents.ts). An SDK child's
+  life arrives on the harness's own task stream; a spawned child's is reported by the service driving it, by
+  direct call at each move. That is what gives a child a `blocked` status and its own last words as its
+  report, and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep until one of this
+  turn's own children needs input or finishes, instead of polling.
 - Spawn full agents from inside a turn, on ANY connected provider, from ANY runtime. The engine is one
   (src/children/children.ts): a child is an ordinary isolated unattended conversation served by whichever
   provider adapter the spec names, so a Claude turn starts Cursor's Composer with the same call a Cursor turn
@@ -38,11 +34,18 @@ reports the profile.
   same pair as custom tools (src/cursor/cursor-tools.ts), and every runtime with a shell — Codex, OpenCode,
   Kimi, Pi, ACP — gets the `agents` CLI (bin/agents → /children routes), taught once by a note on the
   conversation's opening turn (src/children/spawn-note.ts). The persona gate is decided once at plan time and
-  recorded as the armed closure itself (children.routes.ts), because the agent token names the sandbox, never
-  a persona. The daemon drives both ends of every child, so its life is reported onto the roster by direct
-  call (the `spawned` kind), nothing sniffed from stdout or hooks; the owner's delegation ceilings
+  recorded as the armed supervisor itself (children.routes.ts), because the agent token names the sandbox,
+  never a persona. The daemon drives both ends of every child, so its life is reported onto the roster by
+  direct call (the `spawned` kind), nothing sniffed from stdout or hooks; the owner's delegation ceilings
   (`subagentsAtOnce` / `subagentsPerTurn` / `subagentDepth`) are enforced in the daemon, because a spawned
   child gets the spawn door too and a cap a model is merely told about is a cap a runaway chain never reads.
+  The ESCALATION LADDER is part of the same surface, with one hard rule: a child parked on a QUESTION is the
+  parent's to answer (`answer`, through the very request registry the child's ask parked on), a child parked
+  on CONSENT — a permission hold, a plan approval — is the owner's alone and refuses by kind, because a parent
+  that could approve its child's held commands would be a model approving its own dangerous actions through a
+  proxy. `send` steers a working child where its runtime takes mid-turn input, and runs a follow-up turn on a
+  settled one, continuing the session its last turn reported, so refinement costs a message rather than a
+  fresh agent.
 - Outwait the world on the agent's behalf. For a condition OUTSIDE the harness: a CI run, a deploy, a remote
   queue, the agent arms a condition watch (src/agent/watch-server.ts): a check command that exits 0 when the
   thing has happened. The daemon polls it between turns (src/agent/watchers.ts) and wakes the arming
@@ -250,7 +253,7 @@ reports the profile.
   ([src/platform/leftovers.ts](src/platform/leftovers.ts)) and go a couple of minutes after the stop; the
   conversation's `agent-*` tmux sessions: live panes included, so a left-behind dev server no longer outlives
   its turn by days: go minutes later unless somebody is attached; its browser records close; and the temp
-  state turns mint (tmux-run capture dirs, land/classify patch dirs, delegation signals) is swept by prefix and
+  state turns mint (tmux-run capture dirs, land/classify patch dirs) is swept by prefix and
   age. Archive and discard are the hard stop: their press reaps the conversation on the spot. WHICH of those
   processes are this daemon's at all is the PROCESS GROUP for everything it forked itself: a container can
   hold two daemons, a second one is in the group of the shell that started it, and a sweep enumerates its own

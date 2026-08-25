@@ -1282,6 +1282,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     const childrenRoutes = createChildrenRoutes();
     app.post("/children/spawn", childrenRoutes.spawn);
     app.post("/children/wait", childrenRoutes.wait);
+    app.post("/children/send", childrenRoutes.send);
+    app.post("/children/answer", childrenRoutes.answer);
     app.get("/children", childrenRoutes.list);
 
     // The realtime-listener control surface for an extension's gateway process (ext-discord): it reconciles via

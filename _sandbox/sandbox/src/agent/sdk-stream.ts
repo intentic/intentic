@@ -19,7 +19,7 @@ import type { SteeringQueue } from "./agent-steering.js";
 import { errorFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
 import type { TurnAllowance } from "./harness-credentials.js";
 import { opt } from "./opt.js";
-import { noteDelegation, noteSubagentSpawn, noteSubagentTask, settleDelegation, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
+import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "./subagents.js";
 import { TaskChecklist } from "./task-checklist.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "./tool-calls.js";
 
@@ -304,8 +304,6 @@ class TurnFold {
     // session (browser/browser-sessions.ts); this frame only tells the client its name.
     private browserSent = false;
     private readonly bashToolIds = new Set<string>();
-    // Bash calls that turned out to be a delegated CLI agent, so their result settles the registry record too.
-    private readonly delegationToolIds = new Set<string>();
     // tool_use ids of browser screenshots, so the result can be turned into a picture the chat actually shows
     // instead of the literal "[image]" a non-text block collapses to (browser/browser-artifacts.ts).
     private readonly screenshotToolIds = new Set<string>();
@@ -519,31 +517,6 @@ class TurnFold {
                 }
             }
         }
-        /* A Bash command can also BE an agent: `codex exec` / `opencode run` drive the user's other
-         * connected accounts (delegation.ts), and the command line is the only place that is visible.
-         * Registered off the same block the terminal frame comes from, so a delegation and the shell
-         * it runs in are named together, and detected for every Bash call, tmux or not, because
-         * whether the daemon can WATCH it is a different question from whether it happened. */
-        if (this.args.subagents === undefined) {
-            return;
-        }
-        const input = block.input as { command?: unknown; run_in_background?: unknown } | undefined;
-        const command = input?.command;
-        if (typeof command !== "string") {
-            return;
-        }
-        const spawned = noteDelegation(this.args.subagents, {
-            id: block.id,
-            command,
-            // A backgrounded command's result announces its START, so it may not end the record it opens
-            // (settleDelegation).
-            background: input?.run_in_background === true,
-            ...opt("terminal", this.agentSession),
-        });
-        if (spawned !== undefined) {
-            this.delegationToolIds.add(block.id);
-            yield spawned;
-        }
     }
 
     private *onBrowserCall(block: ToolUseBlock, sessionId: unknown): Generator<AgentEvent> {
@@ -615,14 +588,6 @@ class TurnFold {
             return;
         }
         const text = resultText(content);
-        // The delegate stopped. Its last words are its report, which is what a finished child is read for,
-        // so the registry takes them from the same text the card shows.
-        if (this.delegationToolIds.has(toolUseId)) {
-            const settled = settleDelegation(toolUseId, { failed, output: text });
-            if (settled !== undefined) {
-                yield settled;
-            }
-        }
         // A screenshot's answer names the file it wrote; carry the picture alongside the text so the card
         // can show what the agent looked at, not just say that it looked.
         const image =

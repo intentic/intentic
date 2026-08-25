@@ -29,7 +29,6 @@ import { writeAgentToken } from "./auth/agent-token.js";
 import { createCiPoller } from "./ci/poller.js";
 import { restoreExits } from "./exit/exit-links.js";
 import { reconnectVpns } from "./vpn/vpn-links.js";
-import { AGENT_SIGNALS_DIR, watchDelegationSignals } from "./agent/delegation-signals.js";
 import { startProviderBoot } from "./agent/provider-registry.js";
 import { createServices } from "./composition.js";
 import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
@@ -300,16 +299,6 @@ const main = async (): Promise<void> => {
      * Each task is fire-and-forget and best-effort by the seam's contract: a provider that cannot start is its
      * own log line, never a failed daemon. */
     startProviderBoot(services, role, logger);
-
-    // The other end of those hooks: fold what delegated CLIs report (their session id, blocked, their last
-    // words) into the subagent roster. Best-effort like the config write above, a sandbox without the spool
-    // still settles every delegation through the Bash result path.
-    // The spool is one fixed container path, so a second watcher would fold every signal onto two rosters.
-    if (role.container) {
-        void watchDelegationSignals(AGENT_SIGNALS_DIR, (error: unknown) => logger.warn({ err: error }, "delegation signal dropped")).catch(
-            (error: unknown) => logger.warn({ err: error }, "delegation signals not watched"),
-        );
-    }
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
     // No-op once that token has been redeemed, the burn is recorded on /history, so the copy living in the

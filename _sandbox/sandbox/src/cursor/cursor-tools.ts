@@ -88,13 +88,12 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
  * its tool calls still arrive on the same delta stream, and the model plans around having it. */
 export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 
-/* THE SPAWN/WAIT PAIR, the cross-provider supervision surface on Cursor's runtime — the same two calls the
- * Claude Code loop mounts as an SDK MCP server (agent/subagent-wait.ts), through the seam Cursor actually
- * has. The engine arrives on the request (planCursorTurn sets it under the full-agency predicate), so this
- * module never re-derives the gate; the wait reads the same roster primitive the harness's tool does, which
- * is what makes a child spawned from a Cursor turn and one spawned from a Claude turn indistinguishable to
- * everything that watches. */
-const spawnTool = (spawn: NonNullable<AgentRequest["spawn"]>): SDKCustomTool => ({
+/* THE SUPERVISION SET — spawn, wait, send, answer — the same calls the Claude Code loop mounts as an SDK MCP
+ * server (agent/subagent-wait.ts), through the seam Cursor actually has. The engine arrives on the request
+ * (planCursorTurn sets it under the full-agency predicate), so this module never re-derives the gate; the
+ * wait reads the same roster primitive the harness's tool does, which is what makes a child spawned from a
+ * Cursor turn and one spawned from a Claude turn indistinguishable to everything that watches. */
+const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
     description:
         "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
         "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
@@ -119,7 +118,7 @@ const spawnTool = (spawn: NonNullable<AgentRequest["spawn"]>): SDKCustomTool => 
         }
         const text = (key: string): string | undefined => (typeof args[key] === "string" && args[key] !== "" ? (args[key] as string) : undefined);
         const [description, provider, model, effort] = [text("description"), text("provider"), text("model"), text("effort")];
-        const result = await spawn({
+        const result = await children.spawn({
             prompt,
             ...(description !== undefined ? { description } : {}),
             ...(provider !== undefined ? { provider } : {}),
@@ -136,6 +135,61 @@ const spawnTool = (spawn: NonNullable<AgentRequest["spawn"]>): SDKCustomTool => 
 // short enough that a forgotten wait returns within the turn; a parent that wants longer calls again.
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 1800;
+
+const sendTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+    description:
+        "Steer or continue an agent you started. A working child gets the message mid-turn (where its runtime " +
+        "takes one); a finished child runs a follow-up turn on its own conversation, continuing its session, so " +
+        "refinement costs a message rather than a fresh agent. Supervise the follow-up with the wait tool.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            child: { type: "string", description: "The child's id, from spawn." },
+            message: { type: "string", description: "What to tell it, self-contained." },
+        },
+        required: ["child", "message"],
+    },
+    execute: async (args) => {
+        const child = typeof args["child"] === "string" ? args["child"] : "";
+        const message = typeof args["message"] === "string" ? args["message"] : "";
+        if (child === "" || message === "") {
+            return JSON.stringify({ ok: false, message: "Pass the child's id and a message." });
+        }
+        return JSON.stringify(await children.send(child, message));
+    },
+});
+
+const answerTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+    description:
+        "Answer a QUESTION a child you started is parked on (the wait tool reports blocked and carries the " +
+        "question). Pass your picks keyed by the question's own text, values as chosen option labels or your own " +
+        "words. Only questions: a permission hold or a plan approval is the owner's consent to give, and this " +
+        "tool refuses those.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            child: { type: "string", description: "The child's id, from spawn." },
+            answers: {
+                type: "object",
+                additionalProperties: { type: "array", items: { type: "string" } },
+                description: "Your picks, keyed by question text; each value is the chosen labels (or your own words).",
+            },
+        },
+        required: ["child", "answers"],
+    },
+    execute: async (args) => {
+        const child = typeof args["child"] === "string" ? args["child"] : "";
+        const raw = args["answers"];
+        if (child === "" || typeof raw !== "object" || raw === null) {
+            return JSON.stringify({ ok: false, message: "Pass the child's id and your answers." });
+        }
+        const answers: Record<string, string[]> = {};
+        for (const [question, picks] of Object.entries(raw)) {
+            answers[question] = Array.isArray(picks) ? picks.filter((entry): entry is string => typeof entry === "string") : [String(picks)];
+        }
+        return JSON.stringify(children.answer(child, answers));
+    },
+});
 
 const waitTool = (request: AgentRequest): SDKCustomTool => ({
     description:
@@ -167,7 +221,14 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
             timeoutMs: Math.round(seconds * 1000),
             signal: request.signal,
         });
-        return JSON.stringify({ outcome: result.outcome, ...(result.matched !== undefined ? { agent: result.matched } : {}) });
+        // A blocked child's whole question rides along, options included: the difference between a parent
+        // that can answer and one that can only report.
+        const question = result.outcome === "blocked" && result.matched !== undefined ? request.children?.pendingQuestion(result.matched.id) : undefined;
+        return JSON.stringify({
+            outcome: result.outcome,
+            ...(result.matched !== undefined ? { agent: result.matched } : {}),
+            ...(question !== undefined ? { question } : {}),
+        });
     },
 });
 
@@ -175,11 +236,13 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
  * and it is the same rule the Claude Code loop and the Codex adapter both apply: a benchmark, a schedule or
  * another program started this turn, so a card is not merely useless but a DEADLOCK — it parks the turn on an
  * answer that can never arrive and burns until something aborts it. A turn nobody is watching decides for
- * itself. The spawn/wait pair is NOT card-shaped and rides unattended turns too: a child of a loop iteration
+ * itself. The supervision set is NOT card-shaped and rides unattended turns too: a child of a loop iteration
  * settles on its own clock, deadlocking nothing. */
 export const cursorCustomTools = (request: AgentRequest, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
     ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
-    ...(request.spawn !== undefined ? { spawn: spawnTool(request.spawn), wait: waitTool(request) } : {}),
+    ...(request.children !== undefined
+        ? { spawn: spawnTool(request.children), wait: waitTool(request), send: sendTool(request.children), answer: answerTool(request.children) }
+        : {}),
 });
 
 /* The turn's MCP servers, in Cursor's own spelling.

@@ -17,7 +17,7 @@ import type { JsonValue } from "./codex-app-server.js";
  *      where it is. That is the append.
  *
  * They ride the per-thread `config` block the adapter already sends to `thread/start`, so nothing here touches
- * the shared CODEX_HOME's config.toml, a turn's instructions are that turn's, and a delegated `codex exec`
+ * the shared CODEX_HOME's config.toml, a turn's instructions are that turn's, and a user's own `codex exec`
  * from some other agent's shell is unaffected.
  *
  * CONTENT-ADDRESSED, which is what makes the file safe. Several turns plan concurrently against one CODEX_HOME;

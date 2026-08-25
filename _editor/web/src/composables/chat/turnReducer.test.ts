@@ -154,7 +154,7 @@ describe(`tool calls`, () => {
     // Nothing to hang it off. Unlike a nested tool_call there is no top-level fallback: a subagent with no
     // delegation card above it is not a thing the transcript can render.
     it(`drops a subagent frame whose card is not there`, () => {
-        const { state } = run(started(), { kind: `subagent`, id: `gone`, subagentKind: `codex` }, { kind: `subagent_update`, id: `gone`, tokens: 9 });
+        const { state } = run(started(), { kind: `subagent`, id: `gone`, subagentKind: `spawned` }, { kind: `subagent_update`, id: `gone`, tokens: 9 });
         expect(state.messages[1]?.tools).toBeUndefined();
     });
 

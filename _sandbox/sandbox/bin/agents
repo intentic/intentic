@@ -34,7 +34,14 @@ const USAGE = `agents — start and supervise full agents on any connected provi
                                        start a child agent; prints its id and returns immediately
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a child needs input or finishes (default: either,
-                                       whichever comes first); no id means whichever child moves first
+                                       whichever comes first); no id means whichever child moves first.
+                                       A blocked child's question is printed whole, options included
+  agents send <id> '<message>'         steer a working child, or run a follow-up turn on a finished
+                                       one, continuing its session
+  agents answer <id> '<text>'          answer the QUESTION a child is parked on (one-question cards);
+  agents answer <id> --json '<obj>'    or pass picks keyed by question text: {"<question>": ["<pick>"]}.
+                                       Questions only: permission and plan cards are the owner's to
+                                       answer, and the daemon refuses them here
   agents list                          this conversation's children, live first
 
 The child runs as its own conversation in an isolated copy of the repos, on the named provider's connected
@@ -151,14 +158,56 @@ const wait = async (argv) => {
     if (status !== 200) {
         return die(`agents: ${refusalOf(text)}`);
     }
-    // The whole answer as JSON on stdout, so it composes into pipes; the human line rides stderr.
+    // The whole answer as JSON on stdout, so it composes into pipes; the human lines ride stderr.
     process.stdout.write(`${text}\n`);
-    const { outcome, agent } = JSON.parse(text);
+    const { outcome, agent, question } = JSON.parse(text);
     if (outcome === "timeout") {
         process.stderr.write("Still working. Call `agents wait` again to keep following it.\n");
+    } else if (question !== undefined) {
+        process.stderr.write(`blocked on a question — answer with \`agents answer ${agent?.id ?? "<id>"} '<text>'\`\n`);
     } else if (agent?.summary !== undefined) {
         process.stderr.write(`${outcome}: ${agent.summary}\n`);
     }
+};
+
+const send = async (argv) => {
+    const { positional } = parseFlags(argv, []);
+    const [id, ...rest] = positional;
+    const message = rest.join(" ").trim();
+    if (id === undefined || message === "") {
+        return die(`agents: send needs a child id and a message\n\n${USAGE}`);
+    }
+    const { status, text } = await call("POST", "/children/send", JSON.stringify({ child: id, message }));
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { note } = JSON.parse(text);
+    process.stdout.write(`${note ?? "sent"}\n`);
+};
+
+const answerChild = async (argv) => {
+    const { flags, positional } = parseFlags(argv, ["json"]);
+    const [id, ...rest] = positional;
+    const freeText = rest.join(" ").trim();
+    if (id === undefined || (freeText === "" && flags.json === undefined)) {
+        return die(`agents: answer needs a child id and an answer\n\n${USAGE}`);
+    }
+    let body;
+    if (flags.json !== undefined) {
+        try {
+            body = JSON.stringify({ child: id, answers: JSON.parse(flags.json) });
+        } catch {
+            return die("agents: --json did not parse; pass an object like {\"<question>\": [\"<pick>\"]}");
+        }
+    } else {
+        body = JSON.stringify({ child: id, text: freeText });
+    }
+    const { status, text } = await call("POST", "/children/answer", body);
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { note } = JSON.parse(text);
+    process.stdout.write(`${note ?? "answered"}\n`);
 };
 
 const list = async () => {
@@ -182,6 +231,8 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     if (command === "spawn") return spawn(rest);
     if (command === "wait") return wait(rest);
+    if (command === "send") return send(rest);
+    if (command === "answer") return answerChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);
     if (command !== undefined && command !== "--help" && command !== "help") {

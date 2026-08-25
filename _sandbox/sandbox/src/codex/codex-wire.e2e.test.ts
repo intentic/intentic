@@ -77,7 +77,7 @@ const AUTH_TOKEN = "intentic-conformance-bearer";
 const scratch = async (): Promise<{ cwd: string; codexHome: string }> => {
     const root = await mkdtemp(join(tmpdir(), "codex-wire-"));
     const codexHome = join(root, "home");
-    await writeCodexConfig(codexHome, "", join(root, "signals"));
+    await writeCodexConfig(codexHome, "");
     return { cwd: root, codexHome };
 };
 

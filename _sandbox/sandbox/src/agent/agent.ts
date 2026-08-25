@@ -31,7 +31,7 @@ import { z } from "zod";
 import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../agents/isolation.js";
 import { worktreeRedirectHooks } from "../agents/worktree-redirect.js";
 import type { AccountsServerFactory } from "../browser/accounts-tools.js";
-import type { ChildSpawnResult, ChildSpawnSpec } from "../children/children.js";
+import type { ChildSupervisor } from "../children/children.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { browserSessionHooks } from "../browser/browser-sessions.js";
 import { depsNoticeHooks } from "./agent-deps.js";
@@ -62,7 +62,7 @@ import { opt } from "./opt.js";
 import { readClaudeUsage } from "../usage/claude-usage.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
-import { closeSubagents, subagentCountsOf, subagentHooks, type SubagentTurn } from "./subagents.js";
+import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "./subagents.js";
 
 export interface AgentRequest {
     readonly prompt: string;
@@ -290,12 +290,13 @@ export interface AgentRequest {
     // turn burns until something aborts it. So an unattended turn is given no plan tools and no ask tool, and
     // its permission gate refuses rather than waits.
     readonly unattended?: boolean;
-    /* Start a full agent on any connected provider (children/children.ts), for the runtimes that mount it as
-     * a tool of their own rather than through the harness's SDK server: Cursor's custom tools read it here
-     * (cursor/cursor-tools.ts). Present exactly when the turn's persona holds full agency and the route
-     * injected the engine — the same predicate that arms the shell door — so an adapter never has to re-derive
-     * the gate. Absent ⇒ the runtime offers no spawn tool. */
-    readonly spawn?: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
+    /* The child-agent supervision surface (children/children.ts) — spawn on any connected provider, steer or
+     * follow-up a child, answer its questions — for the runtimes that mount it as tools of their own rather
+     * than through the harness's SDK server: Cursor's custom tools read it here (cursor/cursor-tools.ts).
+     * Present exactly when the turn's persona holds the delegate shelf and full agency and the route injected
+     * the engine — the same predicate that arms the shell door — so an adapter never has to re-derive the
+     * gate. Absent ⇒ the runtime offers no supervision tools. */
+    readonly children?: ChildSupervisor;
 }
 
 // Render the user's question picks (or a dismissal) as the `ask` tool's text result. A dismissal is not a
@@ -344,7 +345,7 @@ const syncOnAnswer = async (
     if (!answered || request.resync === undefined) {
         return;
     }
-    if (request.conversationId !== undefined && subagentCountsOf(request.conversationId).running > 0) {
+    if (request.conversationId !== undefined && subagentInParentTree(request.conversationId)) {
         return;
     }
     if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {

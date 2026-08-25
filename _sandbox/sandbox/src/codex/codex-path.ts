@@ -9,7 +9,7 @@ import { resolveOnPath } from "../platform/on-path.js";
  * but the ~350 MB @openai/codex platform package it pins is pruned from the deployed tree
  * (prepare-image-trees.sh). The one copy of the CLI is the codex PACK's global install at
  * /usr/local/bin/codex, pinned to that exact dependency version, so PATH makes app-server and the agent's own
- * `codex exec` delegation provably the same engine.
+ * the CLI on PATH provably the same engine.
  *
  * The SDK dependency also provides the DEV fallback's location, and only when its pinned platform package is
  * really there: a checkout that still has the package (a `pnpm install` outside the image) keeps working with
