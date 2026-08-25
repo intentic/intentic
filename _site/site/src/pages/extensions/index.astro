@@ -64,6 +64,12 @@ const scannedNote =
 
 const n = (value: number) => value.toLocaleString(`en-GB`);
 
+const publishSteps = [
+    { title: "Build an extension", body: "Create a directory with an intentic-extension.json at its root." },
+    { title: "Add the topic" },
+    { title: "Get listed", body: "The registry bot opens a listing pull request for you." },
+];
+
 /* The three headline figures of the economy: the WHOLE of the money story this page tells. Everything they
  * summarize (the spend cards, the diamond, the revenue ring, the fine print) is /earn/'s job; a band that
  * grew past one row would be the old page growing back. */
@@ -141,11 +147,28 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
                 groups.length === 0 && (
                     <section class="card px-6 py-12 text-center">
                         <h2 class="text-lg font-semibold tracking-tight text-content">Nothing listed yet.</h2>
-                        <p class="mx-auto mt-3 max-w-copy text-sm leading-relaxed text-muted">
-                            Be the first to publish one. Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your repository, and
-                            the registry bot will open a listing pull request for you.
-                        </p>
-                        <a class="btn btn-primary mt-6" href={developersHref("build")}>
+                        <ol class="mx-auto mt-6 max-w-copy list-none space-y-4 p-0 text-left">
+                            {
+                                publishSteps.map((step, i) => (
+                                    <li class="flex gap-4">
+                                        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-primary-500/40 text-sm font-semibold text-link">
+                                            {i + 1}
+                                        </span>
+                                        <div>
+                                            <div class="text-sm font-medium text-content">{step.title}</div>
+                                            <p class="mt-1 text-sm leading-relaxed text-muted">
+                                                {step.body ?? (
+                                                    <>
+                                                        Add the <code class="text-content">{REGISTRY_TOPIC}</code> topic to your GitHub repository.
+                                                    </>
+                                                )}
+                                            </p>
+                                        </div>
+                                    </li>
+                                ))
+                            }
+                        </ol>
+                        <a class="btn btn-primary mt-8" href={developersHref("build")}>
                             Build an extension
                         </a>
                     </section>
@@ -309,10 +332,7 @@ const coreChips = corePrimitives.map((p, i) => ({ ...p, x: CORE.x + 70 + i * 90,
             </section>
 
             <section aria-labelledby="lifecycle-heading">
-                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout, and around again</h2>
-                    <p class="text-xs text-subtle">Delivered once. Paid when people choose it. Renewed when you maintain it.</p>
-                </div>
+                <h2 id="lifecycle-heading" class="text-lg font-semibold tracking-tight text-content">From your repo to a payout, and around again</h2>
 
                 {/* The whole cycle as chips. Every chip goes to the page that explains it, and the Earn chip
                     leaves this track for the economy's own page. */}
