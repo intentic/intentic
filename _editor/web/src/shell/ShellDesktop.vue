@@ -3,7 +3,7 @@ import type { Disposable, ViewBadge } from "@intentic/extension-api";
 import { STARTER_APP, STARTER_REPO } from "@intentic/sandbox-contract";
 // `initialsOf` is the rail tile's glyph for a repository (my-shop-api → MS), so repositories stay
 // distinguishable instead of all sharing one icon: the same monogram <Avatar> and <BrandMark> fall back to.
-import { ui, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
+import { AnchoredOverlay, browserOwnsClick, ui, ContextMenu, type IconName, initialsOf } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -474,21 +474,11 @@ watch(
     { immediate: true },
 );
 
-/* WHERE A RAIL MENU OPENS: hung off the COLUMN'S right edge, level with the tile it belongs to, never under the
- * pointer. Shared by both menus below, which is the point: two menus launched from one column that opened in
- * two different ways would be two habits to learn.
- *
- * Both are PrimeVue ContextMenus, and PrimeVue places one from the event's `pageX/pageY` alone. That is right
- * for a menu ABOUT A POINT (a spot in a file tree, a word in a transcript) and wrong for every menu here,
- * because the thing they are about is a 40px tile inside a 56px column: opened at the pointer, the box landed
- * half over the rail it was launched from, a few pixels differently every time, with its first row under the
- * cursor and the tile's own hover label across it. Anchored, they open in the same place every time, clear of
- * the column, and the eye already knows where to look.
- *
- * The RAIL's edge rather than the tile's, so the menu clears the column's padding instead of overlapping the
- * gap between a tile and the rail's border. Vertically it is the tile's own top, so a menu launched from the
- * seventh tile appears beside the seventh tile; PrimeVue still flips it upward by itself near the foot of the
- * window, which is exactly what the More tile, low in the column, needs.
+/* WHERE A TILE'S CONTEXT MENU OPENS: hung off the COLUMN'S right edge, level with the tile it belongs to, never
+ * under the pointer. PrimeVue's ContextMenu places one from the event's `pageX/pageY` alone, which is right for
+ * a menu ABOUT A POINT (a spot in a file tree, a word in a transcript) and wrong for a 40px tile inside a 56px
+ * column: opened at the pointer, the box landed half over the rail it was launched from. The synthetic event
+ * below hangs it off the rail's right edge at the tile's top instead.
  *
  * A synthetic MouseEvent rather than a bare object: `show` calls `preventDefault`/`stopPropagation` on what it
  * is handed, and one missing them throws inside the menu instead of merely failing to be positioned. */
@@ -557,39 +547,21 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
  * that never badge, anything the reader has not pinned. One seat, held forever, in exchange for the eight it
  * takes back.
  *
- * ROWS ARE LINKS. Every area is a real URL, so the menu's own rows carry `url` as well as the push (ContextMenu
- * handles the pair), which is what makes middle-click, ⌘-click and "copy link address" work on a place you found
- * through a menu rather than through the rail.
+ * ROWS ARE LINKS, same as the sandbox switcher and account menus: real URLs so middle-click, ⌘-click and "copy
+ * link address" work on a place found through the menu rather than through the rail.
  *
  * IT NEVER BADGES, and it cannot: anything with something to say is seated by that very fact, so a count here
  * could only ever be zero. A More tile that lit up would mean the seat rule had stopped working. */
-const moreMenu = ref<{ show: (event: Event) => void }>();
+const moreTrigger = ref<HTMLButtonElement | null>(null);
 const moreOpen = ref(false);
 // The count is the whole point of the hover: the tile's job is to say that there is more, and how much more is
 // the only thing a reader can't already see. Phrased like every other tile's label (see tileLabel).
 const moreLabel = computed(() => (moreTiles.value.length === 0 ? `More areas` : `More areas · ${moreTiles.value.length} not on the rail`));
-const openMore = (event: MouseEvent): void => {
-    moreOpen.value = true;
-    showBesideRail(moreMenu.value, event);
+const dismissMore = (event: MouseEvent): void => {
+    if (!browserOwnsClick(event)) {
+        moreOpen.value = false;
+    }
 };
-// A row per unseated area. `url` AND `command`: the address is what a modified click takes, the push is what a
-// plain one runs. A repository tile carries no icon (it draws initials on the rail), and this menu has room for
-// a name, so a row without one simply sits flush.
-const moreRow = (tile: AreaTile): MenuItem => ({
-    label: tile.label,
-    ...(tile.icon === undefined ? {} : { icon: tile.icon }),
-    url: tile.to,
-    command: (): void => {
-        void router.push(tile.to);
-    },
-});
-/* A LIST OF PLACES AND NOTHING ELSE. It carried a muted "right-click a tile to keep it on the rail" footer for
- * one release, to teach the pin; it read as chrome hanging off the bottom of a short list, and a hint that is
- * shown on every open is paying rent forever for something learned once. The pin is where a pin has always
- * been, under a right-click. */
-const moreMenuItems = computed<MenuItem[]>(() =>
-    moreTiles.value.length === 0 ? [{ label: `Every area is on the rail`, disabled: true }] : moreTiles.value.map(moreRow),
-);
 
 // Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
 // (popped out), on its way back to one after a page reload (so a refresh doesn't flash the column open for a
@@ -714,8 +686,7 @@ useKeybindings();
                 </template>
             </div>
 
-            <!-- MORE: every area this workspace has that is not currently seated above (see moreMenuItems).
-                 OUTSIDE the scrolling run on purpose, and directly under it: it is the answer to "where did the
+            <!-- MORE: every area this workspace has that is not currently seated above. OUTSIDE the scrolling run on purpose, and directly under it: it is the answer to "where did the
                  rest go", so it is the one navigation control that must never be the thing scrolled out of
                  sight. Dashed like the "+" below it, because both are doors rather than places, and it lights
                  in the rail's one accent while its menu is open so the press has an answer on screen.
@@ -725,16 +696,37 @@ useKeybindings();
                  label answers "what is this button", and once the list is up that question has been answered at
                  length. The directive drops its box when the value goes away (ui/lib/tooltip.ts). -->
             <button
+                ref="moreTrigger"
                 type="button"
                 :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'border-link bg-primary-600/15 text-link': moreOpen }]"
                 aria-haspopup="menu"
                 :aria-expanded="moreOpen"
                 :aria-label="moreLabel"
                 v-tooltip.right="moreOpen ? undefined : moreLabel"
-                @click="openMore"
+                @click="moreOpen = !moreOpen"
             >
                 <Icon name="ellipsis" class="text-lg" />
             </button>
+
+            <!-- Same surface as the sandbox switcher and account avatar: AnchoredOverlay rows, not PrimeVue's
+                 ContextMenu, which paints a different box on the same rail. -->
+            <AnchoredOverlay v-model="moreOpen" :anchor="moreTrigger ?? undefined" side="right" cross="start">
+                <div class="flex w-48 flex-col gap-0.5 p-1">
+                    <p v-if="moreTiles.length === 0" class="px-2 py-1.5 text-xs text-subtle">Every area is on the rail</p>
+                    <RouterLink
+                        v-for="tile in moreTiles"
+                        :key="tile.to"
+                        :to="tile.to"
+                        class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-content transition-colors hover:bg-content/5"
+                        @click="dismissMore"
+                    >
+                        <span v-if="tile.icon !== undefined" class="flex h-5 w-5 shrink-0 items-center justify-center">
+                            <Icon :name="tile.icon" class="text-xs text-muted" />
+                        </span>
+                        <span class="min-w-0 flex-1 truncate">{{ tile.label }}</span>
+                    </RouterLink>
+                </div>
+            </AnchoredOverlay>
 
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
@@ -867,11 +859,6 @@ useKeybindings();
         <!-- A tile's right-click menu (see tileMenuItems): the chat's homes, or the pin. Main window only, so
              the default body. -->
         <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="15" />
-
-        <!-- …and the More tile's, which is a list of places rather than of verbs. Narrower than the verb menus
-             above: an area's name is one or two words, and a box sized for a sentence around "Drafts" reads as
-             a panel that failed to fill rather than as a list. -->
-        <ContextMenu ref="moreMenu" :model="moreMenuItems" :min-width="11" @hide="moreOpen = false" />
     </div>
 </template>
 
