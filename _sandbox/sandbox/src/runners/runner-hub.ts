@@ -23,8 +23,9 @@ export type RunnerClient = ContractRouterClient<typeof runnerContract>;
 // stay inside every idle timeout in the path, the host hub's number for the host hub's reasons.
 const HEARTBEAT_MS = 30_000;
 
-// What a runner's hello asserts about its build, kept beside the live socket so the parity card can read it.
-type RunnerParity = Pick<RunnerHello, "version" | "image" | "channel" | "overlayHash">;
+// What a runner's hello asserts about its build and declared shape, kept beside the live socket so the parity
+// card can read it.
+type RunnerParity = Pick<RunnerHello, "version" | "image" | "channel" | "overlayHash" | "definitionToml">;
 
 interface LiveRunner {
     readonly client: RunnerClient;
@@ -42,6 +43,11 @@ export interface RunnerHub {
     readonly attach: (id: string, connection: { client: RunnerClient; close: (code: number, reason: string) => void; parity: RunnerParity }) => () => void;
     // What the runner answered to `describe`, refreshed whenever the parent asks it fresh.
     readonly observe: (id: string, facts: RunnerFacts) => void;
+    /* The runner's declared shape as its hello last claimed it (a settings-only sandbox.toml), and the door
+     * that updates the claim after a successful applyDefinition push — the runner's settings just changed to
+     * exactly what was sent, and waiting for a reconnect would show stale drift on a fixed runner. */
+    readonly definitionToml: (id: string) => string | undefined;
+    readonly adoptDefinition: (id: string, toml: string) => void;
     // The typed client for a connected runner, or undefined when it is offline.
     readonly client: (id: string) => RunnerClient | undefined;
     // Cut a runner off now: the owner revoking it, or the capability being removed.
@@ -102,6 +108,16 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
             }
             runner.facts = facts;
             runner.lastSeen = Date.now();
+        },
+        // Read from live OR remembered: a sleeping runner's drift is still worth showing, its settings did
+        // not change by going offline.
+        definitionToml: (id) => (live.get(id) ?? seen.get(id))?.parity.definitionToml,
+        adoptDefinition: (id, toml) => {
+            const runner = live.get(id);
+            if (runner === undefined) {
+                return;
+            }
+            runner.parity = { ...runner.parity, definitionToml: toml };
         },
         client: (id) => live.get(id)?.client,
         disconnect: (id, reason) => {

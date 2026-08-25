@@ -1,4 +1,5 @@
 import type { HostSummary, MachineFlowLine, MachineReport, MachineSandboxFlow } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { afterEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { computers, manageMachineSandbox, mergeComputers, type PullResult, reportFrom, sandboxesFromTool } from "./machine-reports.js";
@@ -284,7 +285,7 @@ test("a machine that refuses to answer at all reads as offline", async () => {
 // The flow the machine was actually asked to run, plus the store the parent kept: enough to see both halves of
 // starting a runner, the pairing this side mints and the argv the far side gets.
 const runnerServices = (
-    overrides: { publicUrl?: string; online?: boolean } = {},
+    overrides: { publicUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
 ): { services: Services; sent: MachineSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
     const sent: MachineSandboxFlow[] = [];
     const minted: string[] = [];
@@ -292,6 +293,12 @@ const runnerServices = (
     const disconnected: string[] = [];
     const services = {
         config: { historyRoot: NO_HISTORY, sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" } },
+        // The shape sources runner-up reads, present so the injection's best-effort reads answer rather than
+        // throw: a workspace with nothing approved and default settings ships no shape, which is what the
+        // exact-equality assertions above depend on.
+        workspace: { root: "/nowhere" },
+        files: { read: async () => overrides.approved },
+        sandboxSettings: { get: async () => ({ ...(overrides.settings ?? {}) }) },
         runners: {
             mintPairing: (id: string) => {
                 minted.push(id);
@@ -352,6 +359,23 @@ test("no other op grows a pairing", async () => {
     await drain(manageMachineSandbox(services, "rog", { op: "update", slug: "work" }));
     expect(sent[0]).toEqual({ op: "update", slug: "work" });
     expect(minted).toEqual([]);
+});
+
+/* THE PARENT'S SHAPE RIDES THE FLOW: its approved overlay byte-exact with the sha256 that pins it (the
+ * `ic sandbox rebuild` pair, checked again on the machine before anything builds), and its non-default
+ * settings as a definition seed. A sandbox with nothing approved and default settings ships neither — the
+ * exact-equality test above is that half's pin. */
+test("starting a runner ships the approved overlay with its pinning hash and the settings as a seed", async () => {
+    const approved = "FROM ghcr.io/intentic/sandbox:stable\nRUN true\n";
+    const { services, sent } = runnerServices({ approved, settings: { terseOutput: true } });
+    await drain(manageMachineSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
+    const flow = sent[0] as MachineSandboxFlow;
+    expect(flow.overlay).toBe(approved);
+    expect(flow.overlayHash).toBe(sha256Hex(approved));
+    // The seed is a settings-only definition: the flag travels, and nothing else grew a section.
+    expect(flow.definition).toContain("terseOutput = true");
+    expect(flow.definition).not.toContain("[[capabilities]]");
+    expect(flow.definition).not.toContain("secrets");
 });
 
 /* A RUNNER REMOVED FROM ITS MACHINE IS REMOVED HERE TOO, and only on the machine's own success: a removal that

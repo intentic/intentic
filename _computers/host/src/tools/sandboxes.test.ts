@@ -122,8 +122,40 @@ test("both runner ops ride the sandboxes switch, and removal does NOT take the r
     // A runner's /work is a mirror of the parent's git, so removing it destroys nothing the parent still has:
     // the switch that guards somebody's workspace is not the switch that guards this.
     const off = scopes({ sandboxes: "off", sandboxRemove: "on" });
-    await expect(runnerFlow("runner-up", "rig", "https://x", "p", off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
-    await expect(runnerFlow("runner-remove", "rig", undefined, undefined, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
+    await expect(runnerFlow("runner-up", "rig", "https://x", "p", {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
+    await expect(runnerFlow("runner-remove", "rig", undefined, undefined, {}, off, () => undefined)).rejects.toBeInstanceOf(ScopeError);
+});
+
+/* The parent's SHAPE files, appended only when they exist: the definition seed, and the overlay pinned to its
+ * hash. The hash is the trust anchor — an overlay riding without one would ask this machine to build content
+ * nobody's approval pins — so the pair is enforced where the argv is built, before anything spawns. */
+test("shape files ride the runner-up argv, and an overlay without its hash is refused", () => {
+    expect(icRunnerArgs("runner-up", "rig", "https://x", "p", { definitionFile: "/tmp/d/sandbox.toml" })).toEqual([
+        "runner",
+        "up",
+        "https://x",
+        "--pair",
+        "p",
+        "--name",
+        "rig",
+        "--definition-file",
+        "/tmp/d/sandbox.toml",
+    ]);
+    expect(icRunnerArgs("runner-up", "rig", "https://x", "p", { overlayFile: "/tmp/d/overlay.Dockerfile", environmentHash: "a".repeat(64) })).toEqual([
+        "runner",
+        "up",
+        "https://x",
+        "--pair",
+        "p",
+        "--name",
+        "rig",
+        "--overlay-file",
+        "/tmp/d/overlay.Dockerfile",
+        "--environment-hash",
+        "a".repeat(64),
+    ]);
+    expect(() => icRunnerArgs("runner-up", "rig", "https://x", "p", { overlayFile: "/tmp/d/overlay.Dockerfile" })).toThrow(/hash/);
+    expect(() => icRunnerArgs("runner-up", "rig", "https://x", "p", { environmentHash: "a".repeat(64) })).toThrow(/overlay/);
 });
 
 /* The agent's own install is preferred over whatever is on PATH, per platform: the same rule the desktop app

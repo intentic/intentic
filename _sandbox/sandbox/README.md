@@ -242,7 +242,10 @@ reports the profile.
   doors), and applying a definition keeps the consent model: the overlay lands as a proposal at the approval
   gate, capabilities arrive unauthenticated, credentials never ride along. A runner can stamp
   `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition` option) and an empty workspace boots pre-shaped — the
-  fleet door.
+  fleet door. This sandbox's own runners are the first fleet through it: `runner-up` ships a settings-only
+  definition plus the approved overlay with its pinning hash (approval by provenance — this owner already
+  reviewed those bytes, and a runner has no owner of its own), so a runner starts as this sandbox's twin, and
+  the definition machinery is also what itemizes runner drift and fixes the settings half over the live link.
 
 ## Key files
 
@@ -341,7 +344,11 @@ reports the profile.
   file ever leaves. Runner half: identity, the outbound link serving the runner contract, a workspace
   mirror moved by git both ways, and the parent-first credential source harness-credentials consults. A
   dispatched turn re-enters `streamAgent` on the far side, which is the whole design: same code, different
-  machine. `docs/remote-runners-plan.md` at the workspace root says why every seam sits where it does.
+  machine. Parity is itemized through the definition surface: a runner's hello declares its settings as a
+  settings-only `sandbox.toml`, the parent diffs that (plus the overlay hashes) into per-line drift on the
+  runner's summary, and the sync door pushes this sandbox's settings down the live link (replace semantics —
+  the parent is a runner's whole authority). `docs/remote-runners-plan.md` at the workspace root says why
+  every seam sits where it does.
 - [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
 - [src/guard/outside-content.ts](src/guard/outside-content.ts): the envelope around anything the owner did not
   write, and the neutralizer that keeps content from forging one. Two seams apply it: a stranger's message at

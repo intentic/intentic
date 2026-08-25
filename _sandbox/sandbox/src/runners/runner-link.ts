@@ -1,6 +1,7 @@
 import { runnerConnectUrl } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
 import type { Services } from "../composition.js";
+import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";
@@ -35,17 +36,25 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): R
             attempt = 0;
             // Handler before hello, the host agent's rule: the parent may call the moment the token verifies.
             handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]);
-            ws.send(
-                JSON.stringify({
-                    type: "runner-hello",
-                    token: identity.token,
-                    version,
-                    image: services.config.sandbox.image === "" ? "dev" : services.config.sandbox.image,
-                    ...(services.config.sandbox.channel !== "" ? { channel: services.config.sandbox.channel } : {}),
-                    ...(services.config.sandbox.environmentHash !== "" ? { overlayHash: services.config.sandbox.environmentHash } : {}),
-                }),
-            );
-            services.logger.info({ parent: identity.parentUrl, id: identity.id }, "runner: connected to the parent");
+            void (async () => {
+                // The parity claim's settings half (runner-protocol.ts says what the parent does with it).
+                // Best-effort: a settings store that cannot be read costs the drift lines, never the link.
+                const definitionToml = await settingsDefinition(services)
+                    .then((definition) => emitDefinitionToml(definition))
+                    .catch(() => undefined);
+                ws.send(
+                    JSON.stringify({
+                        type: "runner-hello",
+                        token: identity.token,
+                        version,
+                        image: services.config.sandbox.image === "" ? "dev" : services.config.sandbox.image,
+                        ...(services.config.sandbox.channel !== "" ? { channel: services.config.sandbox.channel } : {}),
+                        ...(services.config.sandbox.environmentHash !== "" ? { overlayHash: services.config.sandbox.environmentHash } : {}),
+                        ...(definitionToml !== undefined ? { definitionToml } : {}),
+                    }),
+                );
+                services.logger.info({ parent: identity.parentUrl, id: identity.id }, "runner: connected to the parent");
+            })();
         });
         ws.addEventListener("close", (event) => {
             socket = undefined;

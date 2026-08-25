@@ -9,10 +9,13 @@ import {
     type MachineSandboxFlow,
     MachineSandboxSchema,
 } from "@intentic/sandbox-contract";
+import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../composition.js";
+import { approvedPath } from "../environment/environment.js";
 import { enrolledFleet } from "../platform/sync.js";
+import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { hostSummaries } from "./host.routes.js";
 
 /* THE COMPUTERS VIEW'S DATA, every machine on the other end of this sandbox, however it is reachable.
@@ -365,7 +368,32 @@ export async function* manageMachineSandbox(services: Services, id: string, inpu
                           message: "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
                       });
                   }
-                  return { ...input, parentUrl, pair: services.runners.mintPairing(input.slug, id).token };
+                  /* THE PARENT'S SHAPE RIDES ALONG, so the runner starts as this sandbox's twin rather than a
+                   * bare base image (docs/remote-runners-plan.md §7 — until this, "outdated → rebuild" was
+                   * structurally dead for the overlay half: the recipe lived only on this volume, and nothing
+                   * carried it to the machine).
+                   *
+                   * The overlay travels as the APPROVED composed bytes plus their sha256 — the exact pair
+                   * `ic sandbox rebuild` verifies — because this owner already approved those bytes and the
+                   * runner has no owner of its own to re-approve them: approval by provenance, checked
+                   * byte-exact again on the machine before anything builds. The definition is scoped to
+                   * settings before it leaves (capabilities and secret names never ride to a runner), and an
+                   * all-defaults sandbox sends none at all rather than an empty document. Both best-effort in
+                   * derivation: a runner without its twin's shape still runs turns, the drift lines say the rest. */
+                  const definition = await Promise.resolve()
+                      .then(() => settingsDefinition(services))
+                      .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
+                      .catch(() => undefined);
+                  const overlay = await Promise.resolve()
+                      .then(() => services.files.read(approvedPath(services)))
+                      .catch(() => undefined);
+                  return {
+                      ...input,
+                      parentUrl,
+                      pair: services.runners.mintPairing(input.slug, id).token,
+                      ...(definition !== undefined ? { definition } : {}),
+                      ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
+                  };
               })()
             : input;
     try {

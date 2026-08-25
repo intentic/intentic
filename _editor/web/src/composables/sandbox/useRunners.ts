@@ -57,3 +57,9 @@ export const updateRunner = (hostId: string, name: string, onLine?: (line: strin
 export const forgetRunner = async (id: string): Promise<void> => {
     await sandboxRequest(`/system/runners/${encodeURIComponent(id)}`, { method: `DELETE` });
 };
+
+// Push this sandbox's settings onto one runner over its live link — the fix for the "Setting …" drift lines
+// its summary carries. Settings only: an overlay line takes a remove-and-re-add, which rebuilds the container.
+export const syncRunnerSettings = async (id: string): Promise<void> => {
+    await sandboxRequest(`/system/runners/${encodeURIComponent(id)}/definition/sync`, { method: `POST` });
+};

@@ -42,6 +42,13 @@ export const runnerContract = {
     steer: oc
         .input(z.object({ conversationId: z.string().min(1), text: z.string(), attachments: z.array(z.string()).optional(), editorContext: EditorContextSchema.optional() }))
         .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
+    /* The parent pushing its declared shape onto this runner: a settings-only definition (sandbox.toml text,
+     * runner-protocol.ts's hello says why settings are all a runner declares). REPLACE semantics, not the
+     * owner-facing apply's merge-beside: a key the definition omits returns to its default, because the parent
+     * is a runner's whole authority and "make this runner match" must also unset what the parent unset. The
+     * answer names the keys now holding non-default values, which is what the parent adopts as the runner's
+     * new declared shape without waiting for a reconnect. */
+    applyDefinition: oc.input(z.object({ toml: z.string() })).output(z.object({ settings: z.array(z.string()) })),
     // Stop the running turn; the parent's stop button reaching through.
     interrupt: oc.input(RunnerTurnSchema.pick({ conversationId: true })).output(OkSchema),
     // Liveness, driven by the parent: keepalive and gone-detection in one, the host hub's heartbeat verbatim.

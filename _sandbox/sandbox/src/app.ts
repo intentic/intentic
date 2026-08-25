@@ -61,7 +61,7 @@ import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironm
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { createDefinitions } from "./portability/apply-definition.js";
-import { DefinitionFormatError } from "./portability/definition.js";
+import { DefinitionFormatError, emitDefinitionToml, settingsDefinition } from "./portability/definition.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { MigrationFormatError } from "./migrations/archive.js";
 import { createMigrations } from "./migrations/migrations.js";
@@ -1492,6 +1492,27 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         const id = c.req.param("id") ?? "";
         services.runnerHub.disconnect(id, "this runner's access was revoked");
         return (await services.runners.revoke(id)) ? c.json({ ok: true }) : c.json({ error: "no such runner" }, 404);
+    });
+    /* Push this sandbox's settings onto one runner, the fix for the drift lines its summary carries: the
+     * settings-only definition travels down the runner's own live link and REPLACES the runner's settings
+     * (the runner contract says why replace). Owner-only like every other runner mutation, and refused rather
+     * than queued when the runner is offline — a deferred settings push landing hours later, after the owner
+     * changed their mind again, is drift manufactured by the fix. */
+    app.post("/system/runners/:id/definition/sync", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.param("id") ?? "";
+        const client = services.runnerHub.client(id);
+        if (client === undefined) {
+            return c.json({ error: "that runner is offline — wake its machine, then sync again." }, 409);
+        }
+        const toml = emitDefinitionToml(await settingsDefinition(services));
+        const report = await client.applyDefinition({ toml });
+        // The runner now runs exactly what was sent; adopting it here clears the drift without a reconnect.
+        services.runnerHub.adoptDefinition(id, toml);
+        return c.json(report);
     });
     app.get("/system/runners/connect", createRunnerConnectRoute(services));
     // The git door runners fetch and push through (runner-git.routes.ts): stock smart HTTP off the real git

@@ -25,6 +25,10 @@ pub struct RunRequest<'a> {
     pub mounts: Option<&'a str>,
     /// Resolvers, space-separated (fresh public resolvers dodge negatively-cached tunnel NXDOMAINs).
     pub dns: Option<&'a str>,
+    /// A sandbox definition (sandbox.toml), base64 in one line: the image emits it as
+    /// SANDBOX_DEFINITION_SEED and the daemon seeds an empty workspace from it on first boot. Base64 because
+    /// this argv is quoted into logs, and a raw multi-line TOML there is noise pretending to be structure.
+    pub definition_b64: Option<&'a str>,
 }
 
 /// The `docker run … sandbox run-command …` argv that ASKS the image for its run command. Split from the
@@ -94,6 +98,9 @@ fn run_command_argv(
     }
     if let Some(dns) = request.dns {
         flag("--dns", dns);
+    }
+    if let Some(definition) = request.definition_b64 {
+        flag("--definition-b64", definition);
     }
     args.push("--format".to_string());
     args.push("json".to_string());
@@ -240,6 +247,7 @@ mod tests {
             runtime: None,
             mounts: None,
             dns: None,
+            definition_b64: None,
         }
     }
 
@@ -310,6 +318,7 @@ mod tests {
             "--runtime",
             "--mounts",
             "--dns",
+            "--definition-b64",
             "--no-local-publish",
         ] {
             assert!(
@@ -325,6 +334,7 @@ mod tests {
         full.runtime = Some("# intentic:runtime --gpus=all");
         full.mounts = Some("vol:/agent-auth");
         full.dns = Some("1.1.1.1 1.0.0.1");
+        full.definition_b64 = Some("c2NoZW1hVmVyc2lvbiA9IDEK");
         let argv = run_command_argv(&full, false, &[], None);
         assert_eq!(value_of(&argv, "--slug"), Some("abc"));
         assert_eq!(value_of(&argv, "--base-image"), Some("img"));
@@ -338,6 +348,10 @@ mod tests {
         assert_eq!(value_of(&argv, "--mounts"), Some("vol:/agent-auth"));
         // Space-separated resolvers stay ONE argv element — the run contract splits them, not the shell.
         assert_eq!(value_of(&argv, "--dns"), Some("1.1.1.1 1.0.0.1"));
+        assert_eq!(
+            value_of(&argv, "--definition-b64"),
+            Some("c2NoZW1hVmVyc2lvbiA9IDEK")
+        );
     }
 
     #[test]

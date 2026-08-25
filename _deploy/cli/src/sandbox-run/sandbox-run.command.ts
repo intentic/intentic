@@ -53,6 +53,7 @@ export const sandboxRunCommandCli = buildCommand<{
     runtime?: string;
     mounts?: string;
     dns?: string;
+    definitionB64?: string;
     format?: string;
     noLocalPublish: boolean;
     unsupported?: string;
@@ -103,6 +104,12 @@ export const sandboxRunCommandCli = buildCommand<{
                 optional: true,
                 brief: "DNS resolvers, space-separated (fresh public resolvers dodge negatively-cached tunnel NXDOMAINs)",
             },
+            definitionB64: {
+                kind: "parsed",
+                parse: String,
+                optional: true,
+                brief: "A sandbox definition (sandbox.toml), base64 — seeds an empty workspace on first boot (SANDBOX_DEFINITION_SEED)",
+            },
             format: { kind: "parsed", parse: String, optional: true, brief: "sh (default): one quoted command line; json: the docker argv" },
             noLocalPublish: {
                 kind: "boolean",
@@ -151,6 +158,11 @@ export const sandboxRunCommandCli = buildCommand<{
             ...(flags.environmentHash !== undefined && flags.environmentHash !== "" ? { environmentHash: flags.environmentHash } : {}),
             ...(flags.channel !== undefined && flags.channel !== "" ? { channel: flags.channel } : {}),
             ...(flags.previousImage !== undefined && flags.previousImage !== "" ? { previousImage: flags.previousImage } : {}),
+            // Decoded here and re-encoded by the emitter: the contract's `definition` field is the TOML text,
+            // so every caller (this CLI, the hosted provisioner) hands over the same thing.
+            ...(flags.definitionB64 !== undefined && flags.definitionB64 !== ""
+                ? { definition: Buffer.from(flags.definitionB64, "base64").toString("utf8") }
+                : {}),
             env,
             // The caller hands the directive LINES through; extraction + allowlist validation both live in the
             // contract, so a typo'd or smuggled token stops the recreate with its name.

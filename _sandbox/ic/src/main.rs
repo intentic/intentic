@@ -152,6 +152,18 @@ enum RunnerCommand {
         /// A name for the runner (defaults to a generated one)
         #[arg(long)]
         name: Option<String>,
+        /// A settings-only sandbox definition (sandbox.toml) the runner's daemon seeds itself from on first
+        /// boot — how the parent's agent settings arrive without an owner in the loop
+        #[arg(long = "definition-file")]
+        definition_file: Option<String>,
+        /// The parent's approved environment overlay (a Dockerfile), built here before boot so the runner
+        /// starts as the parent's twin; requires --environment-hash
+        #[arg(long = "overlay-file")]
+        overlay_file: Option<String>,
+        /// The sha256 pinning the overlay to the bytes the parent's owner approved — only content that still
+        /// hashes to it is ever built (the `ic sandbox rebuild` rule)
+        #[arg(long = "environment-hash")]
+        environment_hash: Option<String>,
     },
     /// List the runners on this machine
     List,
@@ -220,7 +232,17 @@ fn main() {
                 parent_url,
                 pair_token,
                 name,
-            } => runner::up(parent_url, pair_token, name),
+                definition_file,
+                overlay_file,
+                environment_hash,
+            } => runner::up(runner::Up {
+                parent_url,
+                pair_token,
+                name,
+                definition_file,
+                overlay_file,
+                environment_hash,
+            }),
             RunnerCommand::List => runner::list(),
             RunnerCommand::Remove { name, yes } => runner::remove(name, yes),
         },

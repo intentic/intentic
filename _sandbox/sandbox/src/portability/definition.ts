@@ -169,6 +169,42 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     };
 };
 
+/* ---- the runner-scoped definition: settings only, the shape a runner declares and is held to ----
+ *
+ * Runners speak the definition format on three surfaces (the hello's parity claim, the parent's drift lines,
+ * the sync push down the link), and on all three the document is a full SandboxDefinition whose only populated
+ * section is settings: capabilities and secrets never travel to a runner, its repos are a git mirror rather
+ * than clones with remotes, and its overlay parity rides the hash the run contract stamped. One helper, so the
+ * three surfaces cannot disagree about what "a runner's definition" contains. */
+export const settingsDefinition = async (services: Services): Promise<SandboxDefinition> =>
+    SandboxDefinitionSchema.parse({
+        schemaVersion: 1,
+        environment: {},
+        repositories: [],
+        capabilities: [],
+        secrets: [],
+        settings: settledSettings((await services.sandboxSettings.get()) as unknown as Record<string, unknown>),
+    });
+
+/* Where a runner's settings stand against its parent's, one line per differing key. Pure, and separate from
+ * definitionDiff for its wording alone: that surface speaks of "the definition" a person uploaded, while these
+ * lines sit on a runner's card where the two sides are the parent and the runner. Same defaults rule — a key
+ * absent on either side means that side runs the default, so omission never reads as drift against a default. */
+export const settingsDrift = (parent: SandboxDefinition, runner: SandboxDefinition): DefinitionAction[] => {
+    const defaults = SandboxSettingsSchema.parse({}) as Record<string, unknown>;
+    const parentSettings = parent.settings as Record<string, unknown>;
+    const runnerSettings = runner.settings as Record<string, unknown>;
+    const differences: DefinitionAction[] = [];
+    for (const key of [...new Set([...Object.keys(parentSettings), ...Object.keys(runnerSettings)])].toSorted()) {
+        const here = parentSettings[key] ?? defaults[key];
+        const there = runnerSettings[key] ?? defaults[key];
+        if (canon(here) !== canon(there)) {
+            differences.push({ subject: `Setting ${key}`, detail: `This sandbox runs ${shortValue(here)}; the runner has ${shortValue(there)}.` });
+        }
+    }
+    return differences;
+};
+
 /* ---- the emitter: deterministic TOML with the comments a reviewed file owes its reader ----
  *
  * Hand-rolled rather than a library's stringify for two properties no library promises together: byte-identical

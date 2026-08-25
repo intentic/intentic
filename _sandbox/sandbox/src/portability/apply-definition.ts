@@ -186,6 +186,17 @@ export const applyDefinitionItems = async (
     return { applied, failed, needsAction: actionsFor(definition) };
 };
 
+/* The RUNNER'S way of taking a definition's settings: REPLACE, not the merge-beside applyDefinitionItems does.
+ * The owner-facing apply lands beside what a sandbox already has because the file may be anyone's; a runner's
+ * parent is its whole authority, so "make this runner match" must also return to default every key the parent
+ * no longer sets — schema-parsing the stripped section does exactly that, absent keys re-materialize as
+ * defaults. Returns the keys now holding non-default values, the answer the runner contract promises. */
+export const adoptDefinitionSettings = async (services: Services, definition: SandboxDefinition): Promise<string[]> => {
+    const stripped = strippedSettings(definition);
+    await services.sandboxSettings.set(SandboxSettingsSchema.parse(stripped));
+    return Object.keys(stripped).toSorted();
+};
+
 export interface Definitions {
     // The live sandbox as sandbox.toml, derived on every call, never stored.
     readonly derive: () => Promise<DefinitionExport>;

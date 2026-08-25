@@ -44,7 +44,8 @@ use crate::util::{bail, sha256_hex, Fail, Result};
 
 const APPROVED_FILE: &str = "/work/.intentic/local/environment.approved.Dockerfile";
 const DEV_TAG: &str = "intentic-sandbox:dev";
-const DEFAULT_REGISTRY: &str = "ghcr.io/intentic/sandbox";
+// pub(crate): runner.rs names the same registry in its refusal when a shipped overlay's base is not allowed.
+pub(crate) const DEFAULT_REGISTRY: &str = "ghcr.io/intentic/sandbox";
 
 pub enum Mode {
     Rebuild { hash: String },
@@ -496,6 +497,9 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
         runtime: (!runtime_lines.is_empty()).then_some(runtime_lines.as_str()),
         mounts: mounts_joined.as_deref(),
         dns: dns.as_deref(),
+        // Never on a recreate: the seed is a first-boot thing, already consumed on the volume this container
+        // keeps, and the daemon guards against replays anyway (workspaceArrivedEmpty).
+        definition_b64: None,
     };
     let argv = contract::run_command(&request, &env_nul, false, &unsupported, &log)?;
 
@@ -743,7 +747,8 @@ fn stage_overlay(container: &str, dest: &Path) -> Result<bool> {
 
 /// Stdin build (`docker build -t <tag> -`), progress live on the terminal and teed into the log. Failure is
 /// detected by the caller via `image_exists` — mirroring the script, where the pipeline's status was tee's.
-fn build_overlay(tag: &str, overlay: &Path, pull: bool, log: &Log) {
+/// pub(crate): `ic runner up` builds a parent-shipped overlay through this same door (runner.rs).
+pub(crate) fn build_overlay(tag: &str, overlay: &Path, pull: bool, log: &Log) {
     log.section(&format!("docker build {tag}"));
     let content = std::fs::read(overlay).unwrap_or_default();
     let mut args = vec!["build"];
@@ -776,7 +781,8 @@ fn rewrite_from(overlay: &str, base: &str) -> String {
 
 /// The image an overlay's FIRST `FROM` names — comments and blank lines skipped, so a Dockerfile that opens
 /// with a comment block still reads correctly. None when there is no FROM at all.
-fn overlay_base(overlay: &str) -> Option<String> {
+/// pub(crate): the runner-up overlay path reads its base the same way (runner.rs).
+pub(crate) fn overlay_base(overlay: &str) -> Option<String> {
     overlay
         .lines()
         .map(str::trim)
@@ -794,7 +800,7 @@ fn overlay_base(overlay: &str) -> Option<String> {
 /// reach), or the rollback target the host-side channel record names (the rollback pre-step rewrites the
 /// FROM to it, and the record is not agent-writable either). Anything else would let an approved-looking
 /// overlay swap the base for an image of its choosing.
-fn base_is_allowed(
+pub(crate) fn base_is_allowed(
     base_image: &str,
     current_base: Option<&str>,
     rollback_target: Option<&str>,

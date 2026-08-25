@@ -53,6 +53,23 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     hex
 }
 
+/// Standard base64 with padding, one unwrapped line — how a definition file rides the run contract's argv
+/// (`--definition-b64`, decoded by @intentic/sandbox-run into SANDBOX_DEFINITION_SEED). Hand-rolled for the
+/// binary-size reason the Cargo.toml states: twenty lines against a crate every bootstrap shim re-downloads.
+pub fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(ALPHABET[(n >> 18) as usize & 63] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { ALPHABET[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
 /// The per-sandbox slug the connect token derives when no explicit subdomain/hostname names it:
 /// sha256(token) truncated to 12 hex chars — the same key the public hostname uses (sandbox-<id>.<zone>),
 /// derived identically everywhere or a flow targets someone else's container/volumes.
@@ -181,6 +198,18 @@ mod tests {
             "prefix of a key must not match it"
         );
         assert_eq!(lookup("MISSING"), None);
+    }
+
+    /// Vectors from RFC 4648 §10, plus a two-byte tail: the encoder feeds SANDBOX_DEFINITION_SEED, where a
+    /// wrong padding character is a seed the daemon silently fails to decode at boot.
+    #[test]
+    fn base64_matches_rfc_4648() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64(b"schemaVersion = 1\n"), "c2NoZW1hVmVyc2lvbiA9IDEK");
     }
 
     #[cfg(unix)]

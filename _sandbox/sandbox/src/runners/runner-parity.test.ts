@@ -1,6 +1,10 @@
+import { runnerSlug, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { runnerSlug } from "@intentic/sandbox-contract";
+import type { Services } from "../composition.js";
+import { adoptDefinitionSettings } from "../portability/apply-definition.js";
+import { emitDefinitionToml, parseDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { runnerParity } from "./runner-parity.js";
+import { runnerSummaries } from "./runner.routes.js";
 
 /* What a runner's row is allowed to say about its build. Every case here decides a badge and an update button,
  * and the two wrong answers cost opposite things: a false "outdated" nags about a machine that is fine, and a
@@ -42,4 +46,84 @@ test("nothing to compare, or nothing to compare against, reads as unknown rather
  * sandbox" about a runner sitting right there in the list. */
 test("a runner's container is its name under ic's prefix", () => {
     expect(runnerSlug("rig")).toBe("runner-rig");
+});
+
+/* THE PARITY LOOP, both halves without a socket: the parent's drift lines (what a runner's card says when its
+ * environment or settings differ from this sandbox's) and the runner's adopt (what the sync door does to its
+ * settings store). Together they are the loop's invariant: adopt what the parent would send, and the drift
+ * lines go empty. */
+
+const summaryServices = (input: {
+    parentSettings?: Record<string, unknown>;
+    parentOverlayHash?: string;
+    runnerToml?: string;
+    state?: Record<string, unknown>;
+}): Services =>
+    ({
+        config: { sandbox: { image: "", channel: "", environmentHash: input.parentOverlayHash ?? "" } },
+        sandboxSettings: { get: async () => ({ ...(input.parentSettings ?? {}) }) },
+        runners: { list: async () => [{ id: "rig" }] },
+        runnerHub: {
+            state: () => ({ online: true, ...(input.state ?? {}) }),
+            definitionToml: () => input.runnerToml,
+        },
+    }) as unknown as Services;
+
+// A runner's hello claim, built by the same helper the real link uses, so this test moves with the format.
+const runnerClaim = async (settings: Record<string, unknown>): Promise<string> =>
+    emitDefinitionToml(await settingsDefinition({ sandboxSettings: { get: async () => settings } } as unknown as Services));
+
+test("agreement is an EMPTY drift list, distinct from the absent one a silent runner gets", async () => {
+    const toml = await runnerClaim({ terseOutput: true });
+    const agreeing = await runnerSummaries(
+        summaryServices({ parentSettings: { terseOutput: true }, parentOverlayHash: "h1", runnerToml: toml, state: { image: "img", overlayHash: "h1" } }),
+    );
+    expect(agreeing[0]?.drift).toEqual([]);
+
+    // Never connected: no image in the state, nothing to compare — absent, so the card stays quiet instead
+    // of claiming an agreement nobody measured.
+    const silent = await runnerSummaries(summaryServices({ state: {} }));
+    expect(silent[0]?.drift).toBeUndefined();
+});
+
+test("a differing overlay hash and a differing setting each earn their line, with their own remedies", async () => {
+    const toml = await runnerClaim({});
+    const summaries = await runnerSummaries(
+        summaryServices({ parentSettings: { terseOutput: true }, parentOverlayHash: "h1", runnerToml: toml, state: { image: "img", overlayHash: "h2" } }),
+    );
+    const drift = summaries[0]?.drift ?? [];
+    expect(drift.map((line) => line.subject)).toEqual(["Environment overlay", "Setting terseOutput"]);
+    // The overlay's remedy is a rebuild (remove and re-add); the setting's is the sync door, which the UI
+    // keys off the "Setting " subject prefix.
+    expect(drift[0]?.detail).toContain("Remove and re-add");
+});
+
+test("a claim that does not parse costs its drift lines, never the list", async () => {
+    const summaries = await runnerSummaries(
+        summaryServices({ parentOverlayHash: "", runnerToml: "not = [valid", state: { image: "img" } }),
+    );
+    expect(summaries[0]?.drift?.map((line) => line.subject)).toEqual(["Declared settings"]);
+});
+
+test("adopt REPLACES: an omitted key returns to its default, and adopting the parent's claim ends the drift", async () => {
+    let stored: Record<string, unknown> | undefined;
+    const runner = {
+        sandboxSettings: {
+            get: async () => stored ?? { hashlineEdits: true },
+            set: async (settings: Record<string, unknown>) => {
+                stored = settings;
+            },
+        },
+    } as unknown as Services;
+
+    // The parent stopped setting hashlineEdits and turned terseOutput on; the runner had the opposite.
+    const parentClaim = await runnerClaim({ terseOutput: true });
+    const applied = await adoptDefinitionSettings(runner, parseDefinitionToml(parentClaim));
+    expect(applied).toEqual(["terseOutput"]);
+    expect(stored?.["terseOutput"]).toBe(true);
+    // Replace semantics, the whole point: the key the definition omits is BACK AT DEFAULT, not kept.
+    expect(stored?.["hashlineEdits"]).toBe(SandboxSettingsSchema.parse({}).hashlineEdits);
+
+    // And the loop closes: the runner's next claim equals the parent's, so the drift lines are gone.
+    expect(await runnerClaim(stored ?? {})).toBe(parentClaim);
 });

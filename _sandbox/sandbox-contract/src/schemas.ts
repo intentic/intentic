@@ -7945,6 +7945,18 @@ export const MachineSandboxFlowSchema = z.object({
      * surface between here and that machine. */
     parentUrl: z.string().optional(),
     pair: z.string().optional().meta({ secret: true }),
+    /* `runner-up` only, daemon-filled like the pair: the parent's SHAPE, riding to the machine so the runner
+     * starts as this sandbox's twin instead of a bare base image.
+     *
+     * `definition` is a settings-only sandbox.toml the container boots with as SANDBOX_DEFINITION_SEED (the
+     * fleet door in @intentic/sandbox-run); the daemon scopes it before sending, capabilities and secret
+     * names deliberately never ride to a runner. `overlay`/`overlayHash` are the parent's APPROVED composed
+     * overlay, byte-exact with its sha256: the parent's owner already approved those bytes, so `ic runner up`
+     * re-checks the hash and builds them at creation — approval by provenance, the same byte-exact check
+     * `ic sandbox rebuild` runs, where a definition handed to a STRANGER must park at an approval gate. */
+    definition: z.string().optional(),
+    overlay: z.string().optional(),
+    overlayHash: z.string().optional(),
 });
 export type MachineSandboxFlow = z.infer<typeof MachineSandboxFlowSchema>;
 

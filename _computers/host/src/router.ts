@@ -73,14 +73,29 @@ async function* streamFlow(run: (onLine: (line: string) => void) => Promise<stri
 // Which function each op is. Start/stop/restart are a docker call and say one sentence, `logs` is a read whose
 // lines ARE the answer, and the rest run `ic` and narrate themselves for minutes. One switch so the machine has a
 // single answer to "what does this op mean".
-const flowFor = ({ op, slug, hash, parentUrl, pair }: MachineSandboxFlow, scopes: HostScopes): ((onLine: (line: string) => void) => Promise<string>) => {
+const flowFor = ({ op, slug, hash, parentUrl, pair, definition, overlay, overlayHash }: MachineSandboxFlow, scopes: HostScopes): ((onLine: (line: string) => void) => Promise<string>) => {
     switch (op) {
         case "remove":
             return (onLine) => removeSandbox(slug, scopes, onLine);
         // A container that belongs to the asking sandbox rather than to a person; `slug` is the runner's name.
+        // The parent's shape (a settings definition, its approved overlay + pinning hash) rides to `ic` as
+        // files, so the runner starts as the asking sandbox's twin instead of a bare base image.
         case "runner-up":
         case "runner-remove":
-            return (onLine) => runnerFlow(op, slug, parentUrl, pair, scopes, onLine);
+            return (onLine) =>
+                runnerFlow(
+                    op,
+                    slug,
+                    parentUrl,
+                    pair,
+                    {
+                        ...(definition !== undefined ? { definition } : {}),
+                        ...(overlay !== undefined ? { overlay } : {}),
+                        ...(overlayHash !== undefined ? { overlayHash } : {}),
+                    },
+                    scopes,
+                    onLine,
+                );
         case "logs":
             return (onLine) => tailSandboxLogs(slug, scopes, onLine);
         case "prepare":

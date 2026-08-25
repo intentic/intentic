@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DefinitionActionSchema } from "./definition-action.js";
 import { CapabilitySchema, SandboxSettingsSchema } from "./schemas.js";
 
 /* THE SANDBOX DEFINITION: the declarable SHAPE of a sandbox, split off from its state.
@@ -82,9 +83,9 @@ export const SandboxDefinitionSchema = z.object({
 export type SandboxDefinition = z.infer<typeof SandboxDefinitionSchema>;
 
 // One "do this by hand" line, the same honesty unit ImportReportSchema carries: a subject the UI bolds and a
-// detail written as an instruction to the owner.
-export const DefinitionActionSchema = z.object({ subject: z.string(), detail: z.string() });
-export type DefinitionAction = z.infer<typeof DefinitionActionSchema>;
+// detail written as an instruction to the owner. Defined in its own leaf module (definition-action.ts says
+// why) and re-exported here, where every consumer of the definition surface finds it.
+export { DefinitionActionSchema, type DefinitionAction } from "./definition-action.js";
 
 // What GET /definition answers: the emitted TOML, plus what the derivation could not express (a repo with no
 // remote), listed rather than silent, the export's own `excluded` discipline.

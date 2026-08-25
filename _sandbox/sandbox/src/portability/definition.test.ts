@@ -1,6 +1,6 @@
 import type { SandboxDefinition } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
+import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift } from "./definition.js";
 
 /* The format's promises, held without a daemon: what the emitter writes, the parser reads back IDENTICALLY
  * (a definition is reviewed and committed, so a lossy round-trip is a corrupted review); emission is
@@ -85,4 +85,39 @@ test("diff answers empty for agreement and one line per real difference", () => 
 test("a setting spelled at its default is no drift against one that omits it", () => {
     const explicit: SandboxDefinition = { ...definition, settings: { ...definition.settings, terseOutput: false } };
     expect(definitionDiff(definition, explicit)).toEqual([]);
+});
+
+/* ---- the runner-scoped surfaces: the settings-only definition and its drift lines ---- */
+
+test("settingsDefinition is settings-only: non-defaults in, every other section empty", async () => {
+    const services = { sandboxSettings: { get: async () => ({ terseOutput: true, hashlineEdits: false }) } };
+    const scoped = await settingsDefinition(services as unknown as Parameters<typeof settingsDefinition>[0]);
+    // The default-valued flag is dropped (stating it would freeze today's default into every future apply);
+    // nothing else grows a section, which is what makes this safe to ship to a runner.
+    expect(scoped.settings).toEqual({ terseOutput: true });
+    expect(scoped.repositories).toEqual([]);
+    expect(scoped.capabilities).toEqual([]);
+    expect(scoped.secrets).toEqual([]);
+    expect(scoped.environment).toEqual({});
+    // And it rides the ordinary emitter/parser unchanged — the property the hello and the sync door lean on.
+    expect(parseDefinitionToml(emitDefinitionToml(scoped))).toEqual(scoped);
+});
+
+test("settingsDrift names each differing key once, with defaults meaning agreement", () => {
+    const scoped = (settings: SandboxDefinition["settings"]): SandboxDefinition => ({
+        schemaVersion: 1,
+        environment: {},
+        repositories: [],
+        capabilities: [],
+        secrets: [],
+        settings,
+    });
+    // Agreement, spelled two ways: both omit, and one side states the default the other omits.
+    expect(settingsDrift(scoped({}), scoped({}))).toEqual([]);
+    expect(settingsDrift(scoped({ terseOutput: false }), scoped({}))).toEqual([]);
+    // One real difference, one line, subject the sync surfaces key off ("Setting …").
+    const lines = settingsDrift(scoped({ terseOutput: true }), scoped({}));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.subject).toBe("Setting terseOutput");
+    expect(lines[0]?.detail).toContain("This sandbox runs true");
 });

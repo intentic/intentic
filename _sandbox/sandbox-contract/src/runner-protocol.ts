@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DefinitionActionSchema } from "./definition-action.js";
 
 /* THE RUNNER LINK'S EDGES: the handshake on /system/runners/connect, the env a runner boots with, and the
  * placement value a turn request carries. The procedures spoken over the link once it exists live in
@@ -30,6 +31,13 @@ export const RunnerHelloSchema = z.object({
     image: z.string(),
     channel: z.string().optional(),
     overlayHash: z.string().optional(),
+    /* The runner's DECLARED SHAPE, as the definition format spells it (definition.ts): a sandbox.toml whose
+     * only populated section is settings, because that is all a runner declares — capabilities and secrets
+     * never travel to one, and its repos are a mirror of the parent's git rather than clones with remotes.
+     * The parent diffs this against its own settings to itemize drift (a stale toolchain is a rebuild; a
+     * drifted setting is one applyDefinition call over this same socket), so parity stops being a bare
+     * "outdated" and becomes lines naming what differs. Absent on an image too old to derive one. */
+    definitionToml: z.string().optional(),
 });
 export type RunnerHello = z.infer<typeof RunnerHelloSchema>;
 
@@ -158,6 +166,11 @@ export const RunnerSummarySchema = z.object({
     // Computed by the daemon (runners/runner-parity.ts) rather than by each surface, so the badge on a row and
     // the note in the placement picker cannot disagree about the same runner.
     parity: RunnerParitySchema,
+    /* Where the runner's environment stands against this sandbox's, one line per difference (the definition
+     * surface's drift unit, computed parent-side from the hello's definitionToml plus the overlay hashes).
+     * Absent when the runner never said, empty when they agree. Lines whose subject is a Setting are fixable
+     * over the live link (the sync door); an overlay line takes a rebuild. */
+    drift: z.array(DefinitionActionSchema).optional(),
 });
 export type RunnerSummary = z.infer<typeof RunnerSummarySchema>;
 

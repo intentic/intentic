@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import type { Computer } from "@intentic/sandbox-contract";
 import { Button, MachineRunLog, Notice, type NoticeModel, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { createRunner, removeRunner, updateRunner, useRunners } from "../composables/sandbox/useRunners";
+import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "../composables/sandbox/useRunners";
 
 /* THIS SANDBOX'S RUNNERS ON ONE COMPUTER: the containers it keeps there to run agents in, listed under the
  * machine that holds them, with the two buttons that make and unmake one (docs/remote-runners-plan.md in the
@@ -36,6 +36,37 @@ const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: numb
     return runner.facts === undefined
         ? `Ready`
         : `${runner.facts.cpus} cores · ${Math.round(runner.facts.memoryMb / 1024)} GB · load ${runner.facts.load.toFixed(2)}`;
+};
+
+/* PARITY, itemized (the drift lines the daemon computes per runner): what differs and which remedy each line
+ * takes. A "Setting …" line is fixable in place over the runner's live link, so it earns the Sync button; an
+ * overlay line takes a remove-and-re-add (the rebuild), and the line's own words say so. */
+const driftSummary = (runner: { drift?: { subject: string; detail: string }[] }): string | undefined => {
+    if (runner.drift === undefined || runner.drift.length === 0) {
+        return undefined;
+    }
+    return `Differs from this sandbox: ${runner.drift.map((line) => line.subject).join(", ")}`;
+};
+const driftDetail = (runner: { drift?: { subject: string; detail: string }[] }): string =>
+    (runner.drift ?? []).map((line) => `${line.subject} — ${line.detail}`).join("\n");
+const syncable = (runner: { online: boolean; drift?: { subject: string }[] }): boolean =>
+    runner.online && (runner.drift ?? []).some((line) => line.subject.startsWith(`Setting `));
+
+const syncing = ref<string | undefined>();
+const sync = async (id: string): Promise<void> => {
+    if (syncing.value !== undefined) {
+        return;
+    }
+    syncing.value = id;
+    failure.value = undefined;
+    try {
+        await syncRunnerSettings(id);
+    } catch (error) {
+        failure.value = noticeFrom(error, `The settings didn't reach that runner.`);
+    } finally {
+        syncing.value = undefined;
+        refetch();
+    }
 };
 
 /* A NAME THAT READS AS A PLACE. It is what the placement picker shows and what the machine files the
@@ -124,30 +155,46 @@ const add = async (): Promise<void> => {
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-xs text-content">{{ runner.id }}</span>
                     <span class="text-2xs text-subtle">{{ facts(runner) }}</span>
+                    <!-- Every line's detail rides the title: the row stays one glance, the tooltip is the story. -->
+                    <span v-if="driftSummary(runner)" class="truncate text-2xs text-warning" :title="driftDetail(runner)">
+                        {{ driftSummary(runner) }}
+                    </span>
                 </span>
                 <StatusBadge v-if="!runner.online" variant="neutral" size="xs" label="offline" />
                 <!-- A runner months behind the parent runs turns fine until the day it does not, and then the
                  failure reads as a link error rather than as an old machine. So the drift is said on the row,
                  with the one button that ends it. -->
                 <StatusBadge v-else-if="runner.parity === `outdated`" variant="warning" size="xs" label="outdated" />
-                <Button
-                    v-if="runner.parity === `outdated` && runner.online"
-                    class="ml-auto"
-                    size="small"
-                    severity="secondary"
-                    label="Update"
-                    :disabled="busy !== undefined || computer.online !== true"
-                    @click="run(`update`, runner.id)"
-                />
-                <Button
-                    :class="runner.parity === `outdated` && runner.online ? `` : `ml-auto`"
-                    size="small"
-                    severity="secondary"
-                    :text="true"
-                    label="Remove"
-                    :disabled="busy !== undefined || computer.online !== true"
-                    @click="run(`remove`, runner.id)"
-                />
+                <!-- Two remedies, one row: Update rebuilds an outdated container (image/channel/overlay drift);
+                 Sync settings pushes the fixable half over the runner's live link. Each shows only when it has
+                 something to do. -->
+                <span class="ml-auto flex items-center gap-1">
+                    <Button
+                        v-if="runner.parity === `outdated` && runner.online"
+                        size="small"
+                        severity="secondary"
+                        label="Update"
+                        :disabled="busy !== undefined || computer.online !== true"
+                        @click="run(`update`, runner.id)"
+                    />
+                    <Button
+                        v-if="syncable(runner)"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        :label="syncing === runner.id ? `Syncing…` : `Sync settings`"
+                        :disabled="syncing !== undefined || busy !== undefined"
+                        @click="sync(runner.id)"
+                    />
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        label="Remove"
+                        :disabled="busy !== undefined || computer.online !== true"
+                        @click="run(`remove`, runner.id)"
+                    />
+                </span>
             </li>
         </ul>
 

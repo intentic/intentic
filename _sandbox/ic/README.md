@@ -33,8 +33,12 @@ once, here, in Rust: a single static binary with no runtime to ship.
 - `ic runner up / list / remove`, RUNNERS: sandbox-image containers that belong to a parent sandbox instead
   of a person, executing turns it dispatches. `up` is `sandbox connect` minus the platform — the same
   image-spoken run contract with the runner seed (parent URL + single-use pairing) in the env, no setup
-  code, no tunnel, no local publish; removal IS sandbox removal under the `runner-` slug prefix. Design:
-  `docs/remote-runners-plan.md` in the workspace the sandbox serves.
+  code, no tunnel, no local publish; removal IS sandbox removal under the `runner-` slug prefix. `up` may
+  also carry the parent's shape: `--overlay-file` + `--environment-hash` build the parent's approved overlay
+  BEFORE boot under the rebuild flow's byte-exact hash check (the parent's owner approved those bytes; a
+  runner has no owner to re-approve them), and `--definition-file` rides in as `SANDBOX_DEFINITION_SEED` for
+  the daemon to seed itself from on first boot. Design: `docs/remote-runners-plan.md` in the workspace the
+  sandbox serves.
 - `ic machine enroll / remove`, a Linux server as a deploy target: service user, sshd, its own tunnel, the
   POST /enroll self-registration: and the full teardown.
 

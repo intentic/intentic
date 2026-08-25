@@ -1,5 +1,7 @@
 import { execFile, spawn } from "node:child_process";
-import { homedir } from "node:os";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { HostScopes, MachineSandbox } from "@intentic/sandbox-contract";
 import { z } from "zod";
@@ -177,18 +179,43 @@ export const icSwapArgs = (swap: SandboxSwap, slug: string, hash: string | undef
 // The consent happened in the browser, on a card that named what is lost.
 export const icRemoveArgs = (slug: string): string[] => ["sandbox", "remove", slug, "-y"];
 
+/* The parent sandbox's SHAPE, riding along on runner-up so the container starts as its twin: a settings-only
+ * definition the runner boots with, and the parent's approved overlay with the sha256 that pins it. All
+ * optional — a bare-image runner still runs turns — and file-based below because the overlay is a Dockerfile
+ * and the definition is TOML, neither of which belongs on a process command line. */
+export interface RunnerShapeFiles {
+    readonly definitionFile?: string;
+    readonly overlayFile?: string;
+    readonly environmentHash?: string;
+}
+
 /* The argv for the two RUNNER ops (a sandbox-image container that belongs to a parent sandbox rather than to
  * a person). Asserted without a machine for icSwapArgs' reason, and with one extra worth stating: the pairing
  * is single-use and short-lived, so an argv that dropped it produces a container that boots, dials, is
  * refused, and sits there looking like a network problem. */
-export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, parentUrl: string | undefined, pair: string | undefined): string[] => {
+export const icRunnerArgs = (op: "runner-up" | "runner-remove", name: string, parentUrl: string | undefined, pair: string | undefined, shape: RunnerShapeFiles = {}): string[] => {
     if (op === "runner-remove") {
         return ["runner", "remove", name, "-y"];
     }
     if (parentUrl === undefined || parentUrl === "" || pair === undefined || pair === "") {
         throw new Error(`starting a runner needs the parent sandbox's address and a pairing, and this request carried ${parentUrl ? "no pairing" : "neither"}.`);
     }
-    return ["runner", "up", parentUrl, "--pair", pair, "--name", name];
+    // Both or neither, `ic`'s own rule restated where the argv is built: the hash is the trust anchor for the
+    // overlay bytes, and an overlay riding without it would ask the machine to build unreviewed content.
+    if ((shape.overlayFile === undefined) !== (shape.environmentHash === undefined)) {
+        throw new Error(`an overlay travels with the hash that pins it, and this request carried ${shape.overlayFile === undefined ? "only the hash" : "only the overlay"}.`);
+    }
+    return [
+        "runner",
+        "up",
+        parentUrl,
+        "--pair",
+        pair,
+        "--name",
+        name,
+        ...(shape.definitionFile === undefined ? [] : ["--definition-file", shape.definitionFile]),
+        ...(shape.overlayFile === undefined || shape.environmentHash === undefined ? [] : ["--overlay-file", shape.overlayFile, "--environment-hash", shape.environmentHash]),
+    ];
 };
 
 /* Start or remove a runner on this computer.
@@ -202,19 +229,45 @@ export const runnerFlow = async (
     name: string,
     parentUrl: string | undefined,
     pair: string | undefined,
+    shape: { definition?: string; overlay?: string; overlayHash?: string },
     scopes: HostScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    // Built first, so a request missing its pairing is refused before anything is spawned.
-    const args = icRunnerArgs(op, name, parentUrl, pair);
-    const { code, output } = await runIc(args, onLine);
-    if (code !== 0) {
-        throw new Error(`That runner ${op === "runner-up" ? "start" : "removal"} failed on this computer.\n\n${output}`);
+    /* The definition and overlay arrive as TEXT on the flow and reach `ic` as files: a Dockerfile on a command
+     * line is unreadable in every log that quotes it, and the hash check `ic` runs wants bytes on disk anyway.
+     * A private temp dir per flow, removed when the run ends either way — nothing here is secret (settings and
+     * an owner-approved Dockerfile), but a machine is not a place to accumulate other sandboxes' droppings. */
+    const dir = op === "runner-up" && (shape.definition !== undefined || shape.overlay !== undefined) ? await mkdtemp(join(tmpdir(), "intentic-runner-")) : undefined;
+    try {
+        const withDefinition = dir !== undefined && shape.definition !== undefined;
+        const withOverlay = dir !== undefined && shape.overlay !== undefined;
+        if (withDefinition) {
+            await writeFile(join(dir, "sandbox.toml"), shape.definition ?? "", "utf8");
+        }
+        if (withOverlay) {
+            await writeFile(join(dir, "overlay.Dockerfile"), shape.overlay ?? "", "utf8");
+        }
+        const files: RunnerShapeFiles = {
+            ...(withDefinition ? { definitionFile: join(dir, "sandbox.toml") } : {}),
+            ...(withOverlay ? { overlayFile: join(dir, "overlay.Dockerfile") } : {}),
+            ...(withOverlay && shape.overlayHash !== undefined ? { environmentHash: shape.overlayHash } : {}),
+        };
+        // Built first, so a request missing its pairing (or an overlay missing its hash) is refused before
+        // anything is spawned.
+        const args = icRunnerArgs(op, name, parentUrl, pair, files);
+        const { code, output } = await runIc(args, onLine);
+        if (code !== 0) {
+            throw new Error(`That runner ${op === "runner-up" ? "start" : "removal"} failed on this computer.\n\n${output}`);
+        }
+        return op === "runner-up"
+            ? `Runner "${name}" is up on this computer and pairing with the sandbox that asked for it.`
+            : `Removed runner "${name}". Its work lives in the parent sandbox's git, so nothing was lost with it.`;
+    } finally {
+        if (dir !== undefined) {
+            await rm(dir, { recursive: true, force: true });
+        }
     }
-    return op === "runner-up"
-        ? `Runner "${name}" is up on this computer and pairing with the sandbox that asked for it.`
-        : `Removed runner "${name}". Its work lives in the parent sandbox's git, so nothing was lost with it.`;
 };
 
 /* An `ic` run, narrated as it goes. Every line it prints is handed to `onLine` the moment it arrives, which is

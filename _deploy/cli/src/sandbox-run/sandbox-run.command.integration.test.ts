@@ -51,6 +51,20 @@ test("prints the canonical run command: replayed env filtered here, multi-line k
     expect(stdout).not.toContain("CONNECT_TOKEN");
 });
 
+/* The seed's round trip through the verb: base64 in on the argv (how `ic runner up` carries a definition
+ * file's content), base64 out on the emitted container env — with a decode/encode in between, so the
+ * contract's `definition` field stays the TOML text every OTHER caller hands it. A corrupted trip here is a
+ * runner that boots, serves, and silently opens as a bare workspace. */
+test("--definition-b64 rides through to SANDBOX_DEFINITION_SEED on the emitted command", async () => {
+    const toml = 'schemaVersion = 1\n\n[settings]\nautoLand = false\n';
+    const b64 = Buffer.from(toml, "utf8").toString("base64");
+    const { stdout } = await runVerb(["--slug", "s9", "--image", "i", "--base-image", "i", "--definition-b64", b64], "");
+    expect(stdout).toContain(`-e SANDBOX_DEFINITION_SEED=${b64}`);
+    // Absent means absent: a sandbox with no seed must not carry an empty one for the daemon to trip on.
+    const bare = await runVerb(["--slug", "s9", "--image", "i", "--base-image", "i"], "");
+    expect(bare.stdout).not.toContain("SANDBOX_DEFINITION_SEED");
+});
+
 test("--format json prints the argv for PowerShell to splat", async () => {
     const { stdout } = await runVerb(["--slug", "s2", "--image", "i", "--base-image", "i", "--format", "json"], "");
     const argv = JSON.parse(stdout) as string[];

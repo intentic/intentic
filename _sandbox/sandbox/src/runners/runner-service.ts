@@ -16,6 +16,8 @@ import { implement } from "@orpc/server";
 import { streamAgent } from "../agent/agent.routes.js";
 import { applyReply, applySteer, composeSteerText } from "../agent/turn-interactions.js";
 import type { Services } from "../composition.js";
+import { adoptDefinitionSettings } from "../portability/apply-definition.js";
+import { parseDefinitionToml } from "../portability/definition.js";
 import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
@@ -172,6 +174,12 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
             }
             return { applied: applySteer(input.conversationId, composed.text) };
         }),
+        /* The parent pushing its settings onto this runner (the contract says why this is a REPLACE): parsed
+         * by the same strict reader every definition takes, so a malformed push fails with the field named
+         * instead of half-applying, and adopted through the settings store so the next turn reads it. */
+        applyDefinition: os.applyDefinition.handler(async ({ input }) => ({
+            settings: await adoptDefinitionSettings(services, parseDefinitionToml(input.toml)),
+        })),
         interrupt: os.interrupt.handler(({ input }) => {
             running.get(input.conversationId)?.abort();
             return { ok: true };

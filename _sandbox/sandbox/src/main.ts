@@ -642,7 +642,14 @@ const main = async (): Promise<void> => {
         }
         try {
             const definition = parseDefinitionToml(Buffer.from(config.sandbox.definitionSeed, "base64").toString("utf8"));
-            const report = await applyDefinitionItems(services, definition, () => true);
+            /* On a RUNNER, settings only, whatever the seed carries: a runner has no owner to reconnect a
+             * capability, approve an overlay proposal, or fill a secret slot, so those items would land as
+             * dead weight wearing "needs action" nobody can take. The parent scopes the seed before sending
+             * (hosts/machine-reports.ts); this filter is the belt to that braces, holding even for a seed
+             * stamped by hand. Repos stay out too — a runner's repos arrive through the parent's git door
+             * (runner-sync.ts), which carries the parent's exact branches where a remote clone cannot. */
+            const pick = runnerEnv !== undefined ? (item: { kind: string }): boolean => item.kind === "settings" : (): boolean => true;
+            const report = await applyDefinitionItems(services, definition, pick);
             logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
         } catch (error) {
             logger.warn({ err: error }, "sandbox definition not seeded, the workspace opens as it arrived");

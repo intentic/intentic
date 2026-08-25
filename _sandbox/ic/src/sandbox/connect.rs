@@ -439,6 +439,8 @@ fn connect(
         runtime: None,
         mounts: mounts.as_deref(),
         dns: (!sandbox_dns.is_empty()).then_some(sandbox_dns.as_str()),
+        // A person's sandbox is set up by its owner in the browser; the seed is the runner/fleet door.
+        definition_b64: None,
     };
     let argv = contract::run_command(&request, &env_pairs, false, &[], &log)?;
     log.section(&format!("docker run {sandbox_image}"));
