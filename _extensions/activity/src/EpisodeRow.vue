@@ -145,8 +145,8 @@ const facts = computed(() =>
                     <span v-if="episode.sessionId">session {{ episode.sessionId }}</span>
                     <span>source {{ sourceLabel(episode.sourceKey) }}</span>
                 </div>
-                <button v-if="episode.sessionId" type="button" :class="ui.linkButton('text-2xs')" @click="api.chat.openSession(episode.sessionId)">
-                    <Icon name="external-link" /> Open transcript
+                <button v-if="episode.sessionId" type="button" :class="ui.linkButton('gap-1 text-2xs')" @click="api.chat.openSession(episode.sessionId)">
+                    <Icon name="external-link" class="shrink-0" /> Open transcript
                 </button>
             </div>
         </template>
