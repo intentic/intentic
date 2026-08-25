@@ -56,10 +56,9 @@ import definition from "@dicebear/styles/adventurer.json";
 import { computed } from "vue";
 import type { PersonaLike } from "./personaFace.js";
 
-/* THE SIZE DEFAULTS TO THE LIST SIZE, so the two surfaces that show a persona AS A PERSON: its own page and
- * the chat's persona rail: both say `<PersonaFace :persona />` and cannot drift apart the way a 32 here and a
- * 56 there did. The smaller numbers are the ones worth writing down: a picker row and a folder card are lists
- * of something else that happen to name a persona. */
+/* THE SIZE DEFAULTS TO THE CARD SIZE — the chat's persona rail, the one surface where a face is the subject of
+ * a card of its own and sets that card's height. Every other surface is a ROW in a list, and a row's mark is
+ * the list's size, not the face's: the personas page, a picker row and a folder card all name their own. */
 const { persona, size = 56 } = defineProps<{ persona: PersonaLike; size?: number }>();
 
 // The name somebody chose, or the id it was filed under: see the note above for why this lives here and not

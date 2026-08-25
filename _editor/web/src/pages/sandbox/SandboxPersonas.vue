@@ -351,18 +351,17 @@ const confirmRemove = async (): Promise<void> => {
                 <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
-                    density="comfortable"
+                    density="compact"
                     hit="row"
                     body="drawer"
                     :open="isOpen(persona)"
                     @update:open="toggleOpen(persona)"
                 >
-                    <!-- A persona is a person, so it gets a person's face: the SAME one, at the same size and
-                         in the same colours, that the chat's persona rail draws it with. This page is where you
-                         come to look at your personas, so of all the surfaces it is the last one that should
-                         show them smaller or greyer than everywhere else; it used to do both. Neither the size
-                         nor the colour is decided here any more (PersonaFace holds both), which is what keeps
-                         the two lists in step.
+                    <!-- A persona is a person, so it gets a person's face in full colour (PersonaFace holds
+                         that). THE FACE IS A ROW'S MARK HERE, NOT A CARD'S SUBJECT: this is a record list, one
+                         tab along from the extensions and environment lists. The rail draws faces at 56 for its
+                         cards; a row's mark is sized like the add-persona line below (32) and the BrandMark
+                         lead marks on the neighbouring lists (22), not like the rail.
 
                          The disclosure arrow rides in front of the face, where a reader looks for one, rather
                          than in the row's trailing cluster, which is where facts and actions live. It is
@@ -370,7 +369,7 @@ const confirmRemove = async (): Promise<void> => {
                          files away another drew `chevron-right` + `rotate-90`, and they were the same control.
                          It is also a real button now, so the face is where a keyboard gets in. -->
                     <template #lead>
-                        <PersonaFace :persona />
+                        <PersonaFace :persona :size="32" />
                     </template>
 
                     <!-- THE NAME READS AS A NAME until you ask to change it: click-to-rename, on the app's one
@@ -413,12 +412,14 @@ const confirmRemove = async (): Promise<void> => {
 
                     <template #meta>
                         <!-- The sites this persona speaks on, as marks: two logos side by side say "spans
-                             platforms" faster than any wording under them can. -->
+                             platforms" faster than any wording under them can. A notch under the face that
+                             leads the row (and the size the secrets list gives its marks), because these are
+                             facts ABOUT the card, not the card itself. -->
                         <span v-if="persona.capabilities.length > 0" class="flex items-center gap-1">
                             <BrandMark
                                 v-for="mark in marks(persona)"
                                 :key="mark.id"
-                                :size="20"
+                                :size="22"
                                 :name="mark.account?.site ?? mark.id"
                                 :logo="mark.account?.logo"
                                 :icon="mark.account?.icon ?? `globe`"
@@ -467,6 +468,8 @@ const confirmRemove = async (): Promise<void> => {
                      than a form standing in front of thirty answers nobody has an opinion about yet. -->
                 <div v-if="newName !== undefined" class="flex flex-col gap-2 px-4 py-4">
                     <div class="flex flex-wrap items-center gap-2">
+                        <!-- The face the row above it will have, at the size those rows draw it: this line
+                             becomes one of them the moment the name is committed. -->
                         <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="32" />
                         <!-- A name is three words. Capped, because an input stretched across the card reads as a
                              field expecting a paragraph. Enter commits it, like any single-field form. -->

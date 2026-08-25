@@ -330,9 +330,9 @@ const sessionsOf = (row: PersonaRow) =>
                      without reading, and the row's text sits beside it. Generated from the persona's id, so
                      it is the same face here, in the composer's picker and on the personas page. -->
                     <template #aside>
-                        <!-- NO SIZE HERE, which is deliberate: the face's own default is this list size, and
-                             the personas page asks for it the same way, so the two cannot drift apart the way a
-                             hand-written 56 here and a 32 there did. It is a fixed number rather than a share of
+                        <!-- NO SIZE HERE, which is deliberate: this is the card the face's own default exists
+                             for, so the number lives once, in <PersonaFace>, rather than as a hand-written 56
+                             here. It is a fixed number rather than a share of
                              the card because it is what SETS the row's height: a face this size is taller than
                              the two lines of text beside it, so the card is as tall as its mark and every row in
                              the column matches. Sizing it from the card instead (`h-full`) reads as the tidier
