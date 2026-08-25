@@ -336,6 +336,24 @@ export const resolveHarnessCredentials = async (
     services: Services,
     input: { readonly agent: AgentProvider | undefined; readonly account?: string; readonly model?: string },
 ): Promise<HarnessCredentialsResult> => {
+    /* A RUNNER'S TURNS SPEND THE ORIGIN'S PROVIDERS (runners/runner-credentials.ts): when this daemon is a
+     * runner, the parent resolves first, with this very function on its own stores, and the answer arrives
+     * already in this function's shape — including its refusals, so a subscription missing at the ORIGIN
+     * reads exactly as it would there. Local stores are the fallback for one case only, the parent being
+     * unreachable: a runner may legitimately hold its own auth (the shared dev agent-auth volume), and a
+     * network blip should degrade to that rather than refuse a turn two sandboxes could serve. */
+    const parent = services.runnerParent.current;
+    if (parent !== undefined) {
+        try {
+            return await parent.resolve({
+                ...(input.agent !== undefined ? { agent: input.agent } : {}),
+                ...(input.account !== undefined ? { account: input.account } : {}),
+                ...(input.model !== undefined ? { model: input.model } : {}),
+            });
+        } catch (error) {
+            services.logger.warn({ err: error }, "runner: the parent's credential door is unreachable — falling back to this runner's own accounts");
+        }
+    }
     const endpointId = input.agent === undefined ? undefined : endpointIdOf(input.agent);
     if (endpointId !== undefined) {
         return resolveEndpointCredentials(services, endpointId, input.model);

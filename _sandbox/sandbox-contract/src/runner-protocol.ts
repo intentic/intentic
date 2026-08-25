@@ -37,6 +37,87 @@ export type RunnerHello = z.infer<typeof RunnerHelloSchema>;
 // daemon route cannot disagree about where the door is (hostConnectUrl's rule).
 export const runnerConnectUrl = (parentUrl: string): string => `${parentUrl.replace(/^http/, "ws").replace(/\/$/, "")}/system/runners/connect`;
 
+// Where a runner redeems its pairing for the durable token, once, over plain HTTPS.
+export const runnerEnrollUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/enroll`;
+
+/* The parent's git door for ONE repository: stock `git fetch`/`git push` against the smart-HTTP pair the
+ * parent serves from its real git dirs (<historyRoot>/gits/<encoded id>), authenticated by the runner's own
+ * token as a bearer. One builder because three parties spell it: the parent's route, the runner's sync, and
+ * anyone debugging with a hand-typed clone. */
+export const runnerGitUrl = (parentUrl: string, repo: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/git/${encodeURIComponent(repo)}`;
+
+/* Where a runner's push LANDS in the parent's git dirs. Never refs/heads/agent/<id> directly: that branch is
+ * checked out in the parent's mirror worktree, and git itself refuses updating a checked-out ref, which is a
+ * safety property worth keeping rather than configuring away. The parent moves the branch by hard-resetting
+ * the mirror worktree to this ref, which advances the checked-out branch through the door git sanctions. */
+export const runnerIncomingRef = (conversationId: string): string => `refs/runner-incoming/${conversationId}`;
+
+/* THE CREDENTIAL DOORS: a runner's turns spend the ORIGIN sandbox's model providers, never accounts of their
+ * own. The shape is a service, not a sync: the parent resolves each turn's credential with the same code its
+ * local turns use and answers with the least that travels — an access token minted for the turn, or a route.
+ * Refresh tokens never leave the parent, which is what closes the rotation race two daemons refreshing one
+ * account would otherwise run. Design: docs/remote-runners-plan.md §8 (workspace root). */
+export const runnerCredentialsUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/credentials`;
+export const runnerCredentialRefreshUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/credentials/refresh`;
+
+/* The parent's model translator, re-served to runners: subscription-routed turns (codex/grok/kimi under the
+ * Claude Code harness, OpenAI-protocol endpoints, the trial) authenticate against a translator whose auth
+ * files live on the PARENT's /history. Rather than syncing those (the same rotation race), the runner's
+ * harness dials this authenticated proxy and the parent forwards to its loopback translator. The bearer is
+ * the runner's own token. */
+export const runnerTranslatorPath = "/system/runners/translator";
+export const runnerTranslatorUrl = (parentUrl: string): string => `${parentUrl.replace(/\/$/, "")}${runnerTranslatorPath}`;
+
+export const RunnerCredentialRequestSchema = z.object({
+    // The provider as the turn names it (absent = claude), an open vocabulary: endpoint/<id> included.
+    agent: z.string().optional(),
+    account: z.string().optional(),
+    model: z.string().optional(),
+});
+export type RunnerCredentialRequest = z.infer<typeof RunnerCredentialRequestSchema>;
+
+/* What travels back, by kind:
+ *   oauth             — a native-Claude access token minted for this turn; `account` present when it is a
+ *                       stored account (then the refresh door re-mints mid-turn), absent for the parent's
+ *                       container-env fallback, which has nothing to rotate.
+ *   parent-translator — run against the parent's translator through the proxy above; the runner supplies its
+ *                       own token as the bearer (the parent never echoes a credential it only holds hashed).
+ *   endpoint          — a foreign endpoint the runner can dial directly (an anthropic-protocol Endpoint
+ *                       capability), with the bearer that endpoint wants.
+ * A refusal is a value with the same codes local resolution uses, so the composer's connect gates read a
+ * remote refusal exactly as a local one. */
+export const RunnerCredentialSchema = z.union([
+    z.object({ ok: z.literal(true), kind: z.literal("oauth"), accessToken: z.string(), account: z.string().optional() }),
+    z.object({ ok: z.literal(true), kind: z.literal("parent-translator"), model: z.string(), trial: z.boolean().optional() }),
+    z.object({
+        ok: z.literal(true),
+        kind: z.literal("endpoint"),
+        baseUrl: z.string(),
+        authToken: z.string(),
+        model: z.string(),
+        trial: z.boolean().optional(),
+    }),
+    z.object({
+        ok: z.literal(false),
+        code: z.enum(["subscription-required", "claude-reauth", "trial-unavailable"]).optional(),
+        message: z.string(),
+    }),
+]);
+export type RunnerCredential = z.infer<typeof RunnerCredentialSchema>;
+
+export const RunnerCredentialRefreshRequestSchema = z.object({
+    account: z.string().min(1),
+    // The token the harness was refused with, so the parent's rotation supersedes exactly that one and a
+    // token another turn already rotated is adopted, never re-refreshed (claude-credentials' own rule).
+    rejected: z.string().min(1),
+});
+export type RunnerCredentialRefreshRequest = z.infer<typeof RunnerCredentialRefreshRequestSchema>;
+
+// `accessToken` absent ⇒ the parent could not re-mint (a revoked account); the harness gives up exactly as a
+// local turn whose refresh returned nothing does.
+export const RunnerCredentialRefreshSchema = z.object({ accessToken: z.string().optional() });
+export type RunnerCredentialRefresh = z.infer<typeof RunnerCredentialRefreshSchema>;
+
 // What a runner is, hardware-wise: what the placement picker shows and what a future scheduler weighs.
 export const RunnerFactsSchema = z.object({
     cpus: z.number().int().positive(),
@@ -63,12 +144,25 @@ export type RunnerSummary = z.infer<typeof RunnerSummarySchema>;
 
 /* A workspace sync, narrated as it happens: a first contact clones whole repositories, and a person may be
  * watching the "preparing runner" state, so the lines travel while they are produced (runSandboxFlow's
- * argument). `op` says which direction: `pull` brings the conversation's branch up to date before a turn,
- * `push` returns the result after one. */
+ * argument). `op` says which direction: `pull` brings the runner's checkout of the conversation's branch (and
+ * each repo's main line) up to date before a turn, `push` returns the branch after one.
+ *
+ * `repos` is the conversation's composition as the parent recorded it, because only the parent can know it:
+ * the runner's own discovery would see whatever its mirror held from LAST time, and a repo added to the
+ * workspace since would silently fall out of the conversation. Each entry names the repo id (the git-door
+ * address), the workspace-relative dir the checkout lives at, and the repo's own main branch name. */
 export const RunnerSyncSchema = z.object({
     op: z.enum(["pull", "push"]),
     conversationId: z.string().min(1),
     branch: z.string().min(1),
+    repos: z.array(
+        z.object({
+            repo: z.string().min(1),
+            // "" for the workspace root itself; every other repo sits at its root-relative dir.
+            dir: z.string(),
+            mainBranch: z.string().min(1),
+        }),
+    ),
 });
 export type RunnerSync = z.infer<typeof RunnerSyncSchema>;
 
@@ -90,9 +184,15 @@ export const RunnerTurnSchema = z.object({
     harness: z.string(),
     model: z.string().optional(),
     effort: z.string().optional(),
+    thinking: z.boolean().optional(),
+    fast: z.boolean().optional(),
+    // Which of the ORIGIN sandbox's connected accounts pays for the turn: the runner resolves credentials
+    // against the parent (the credential doors below), so this names an account THERE.
+    account: z.string().optional(),
     sessionId: z.string().optional(),
     // Base64 because frames are JSON: small by policy (the request schema already caps attachment count), and
-    // a turn's attachments are the one payload with no git road to travel.
+    // a turn's attachments are the one payload with no git road to travel. `path` is the workspace-relative
+    // path the prompt already names; the runner writes the bytes there so the words and the file agree.
     attachments: z.array(z.object({ path: z.string().min(1), bytesBase64: z.string() })).optional(),
 });
 export type RunnerTurn = z.infer<typeof RunnerTurnSchema>;

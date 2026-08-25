@@ -74,6 +74,35 @@ describe("agents registry", () => {
         expect(summary?.startedAt).toBe(1_000);
     });
 
+    /* PLACEMENT ON A RUNNER LATCHES WITH THE IDENTITY, the same rule as `isolated` and for the same reason:
+     * a stale tab re-sending its old posture must not move a conversation between machines mid-life. And a
+     * remote conversation is isolated by construction — its branch is the unit that travels — so naming a
+     * runner forces a branch even when the request forgot `isolated`. */
+    it("a runner latches on the first turn, survives turns that name none, and cannot be moved", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        expect(await registry.begin(turn({ runner: "rog", isolated: false }), 1_000)).toBe(true);
+        expect(registry.entry("c1")?.runner).toBe("rog");
+        expect(registry.entry("c1")?.branch).toBe("agent/c1");
+        await registry.finish("c1", 1_500);
+        // A follow-up that says nothing keeps executing where the conversation lives…
+        expect(await registry.begin(turn(), 2_000)).toBe(true);
+        expect(registry.entry("c1")?.runner).toBe("rog");
+        await registry.finish("c1", 2_500);
+        // …and one that names a DIFFERENT runner is a stale tab, not a migration.
+        expect(await registry.begin(turn({ runner: "other" }), 3_000)).toBe(true);
+        expect(registry.entry("c1")?.runner).toBe("rog");
+    });
+
+    it("a conversation that ran here never picks up a runner from a later request", async () => {
+        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        await registry.init();
+        expect(await registry.begin(turn(), 1_000)).toBe(true);
+        await registry.finish("c1", 1_500);
+        expect(await registry.begin(turn({ runner: "rog" }), 2_000)).toBe(true);
+        expect(registry.entry("c1")?.runner).toBeUndefined();
+    });
+
     /* The rewind lease and the turn mutex are the SAME mutex, and these are the two directions that matter.
      * Both would pass against a naive "check, then act" too: what they pin is that the two operations see each
      * other at all, so a later refactor that gives either one its own flag fails here rather than in a

@@ -159,14 +159,12 @@ const extensionSource = (path: string): boolean =>
     path === stateRelPath(".intentic/config/extension-enablement.json");
 
 const main = async (): Promise<void> => {
-    /* Runner mode, consulted before ANYTHING else builds: a runner container (another sandbox's execution
-     * container, runners/runner-mode.ts) must never bind an owner, open a tunnel or serve a browser surface,
-     * so the fork sits ahead of every step that could. Currently an honest crash-loop with the reason in
-     * `docker logs`, the misassembled-container posture below. */
+    /* Runner mode, validated before anything else builds: a misassembled runner container (one env value
+     * without the other, runners/runner-mode.ts) crashes here with the reason in `docker logs` rather than
+     * booting as something it half is. A well-formed runner boots as any loopback sandbox does — its env
+     * simply carries no tunnel, no Google client, no connect token — and the parent link starts after the
+     * boot chain converges, far below. */
     const runnerEnv = runnerModeRequested(process.env);
-    if (runnerEnv !== undefined) {
-        startRunnerMode(runnerEnv);
-    }
     const config = loadConfig();
     requireAuthWhenReachable(config);
     requireLocalContract(config);
@@ -774,6 +772,12 @@ const main = async (): Promise<void> => {
     // The state the data routes serve is converged, open the gate. Everything below is background machinery
     // that no queued request depends on.
     boot.finish();
+
+    /* THE PARENT LINK, when this container is a runner (or ever was: an identity on /history outlives a
+     * rebuild that stripped the env). After the gate on purpose: the first thing a parent does with a live
+     * link is dispatch a turn at machinery the boot chain just built. Never fatal — a failed enrollment logs
+     * its sentence once instead of crash-looping against an already-burned pairing. */
+    void startRunnerMode(services, runnerEnv).catch((error: unknown) => logger.error({ err: error }, "runner: could not come online"));
 
     /* THE PROMISES THIS DAEMON MAKES TO ITSELF (invariants/), driven from here because this is the file that
      * knows the moments. Detached and never awaited: a check is a diagnostic, and a boot that waited on one

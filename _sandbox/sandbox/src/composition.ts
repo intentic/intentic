@@ -88,6 +88,7 @@ import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
 import { createRunnerHub, type RunnerHub } from "./runners/runner-hub.js";
+import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { fileRunnersStore, type RunnersStore } from "./runners/runners-store.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
@@ -318,6 +319,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // workspace root): the hosts pair retold, enrollment on /history and the live sockets in memory.
     readonly runners: RunnersStore;
     readonly runnerHub: RunnerHub;
+    /* Set only when THIS daemon is a runner (startRunnerMode): the parent sandbox as a credential source,
+     * consulted first by resolveHarnessCredentials so a dispatched turn spends the ORIGIN's model providers.
+     * A mutable slot rather than a field, because runner identity is read off /history after the boot chain,
+     * long after this object is frozen shut. */
+    readonly runnerParent: { current?: ParentCredentials };
     // Owner-minted, hashed, revocable tokens for anything driving this sandbox from outside the browser, the
     // ACP editor bridge today (x-intentic-control header). Each carries the scope it was minted with; what a
     // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
@@ -1186,6 +1192,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostHub: createHostHub(logger),
         runners: fileRunnersStore(config.historyRoot),
         runnerHub: createRunnerHub(logger),
+        runnerParent: {},
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,

@@ -30,10 +30,11 @@ once, here, in Rust: a single static binary with no runtime to ship.
   A later `update` recognises the staged build and swaps straight onto it, which is what turns an update from
   an unbounded wait into a restart of seconds. Safe to run at any moment, and free to abandon.
 - `ic sandbox list / remove`: what is on this machine, and its careful removal (named volumes included).
-- `ic runner up / list / remove`, the verb surface for RUNNERS: sandbox-image containers that belong to a
-  parent sandbox instead of a person, executing turns it dispatches. Arguments are final and guarded by the
-  surface test; the bodies refuse until the feature lands (design: `docs/remote-runners-plan.md` in the
-  workspace the sandbox serves).
+- `ic runner up / list / remove`, RUNNERS: sandbox-image containers that belong to a parent sandbox instead
+  of a person, executing turns it dispatches. `up` is `sandbox connect` minus the platform — the same
+  image-spoken run contract with the runner seed (parent URL + single-use pairing) in the env, no setup
+  code, no tunnel, no local publish; removal IS sandbox removal under the `runner-` slug prefix. Design:
+  `docs/remote-runners-plan.md` in the workspace the sandbox serves.
 - `ic machine enroll / remove`, a Linux server as a deploy target: service user, sshd, its own tunnel, the
   POST /enroll self-registration: and the full teardown.
 

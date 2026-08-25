@@ -148,6 +148,9 @@ export type AgentTurnIdentity = Pick<AgentTurn, "prompt"> &
     Partial<Pick<AgentTurn, "title" | "model" | "effort" | "thinking" | "fast" | "tierHold" | "account" | "origin">> & {
         readonly conversationId: string;
         readonly isolated: boolean;
+        // The runner this conversation executes on, latched like `isolated` directly below: only a
+        // conversation the registry has never seen takes the request's choice. Implies isolation.
+        readonly runner?: string;
         readonly provider: NonNullable<AgentTurn["agent"]>;
         readonly harness: NonNullable<AgentTurn["harness"]>;
     };
@@ -711,6 +714,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // existing workspace conversation stays in /work and an existing worktree conversation keeps its
             // branch. Only a conversation the registry has never seen takes the request's placement choice.
             const isolated = existing === undefined ? turn.isolated : existing.branch !== undefined;
+            // WHERE it executes latches by the same rule: the runner is part of the conversation's identity,
+            // and a remote conversation is isolated by construction (its branch is what moves between machines).
+            const runner = existing === undefined ? turn.runner : existing.runner;
             // An authored title, the browser's own derivation, or a rename that landed mid-turn, is taken as
             // written. A turn that arrived WITHOUT one (an automation, a Discord mention, a webchat visitor)
             // is named by the same rule the browser runs, so one prompt opens under one name wherever it
@@ -731,7 +737,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             const origin = existing?.origin ?? turn.origin;
             replace({
                 id: turn.conversationId,
-                ...(isolated ? { branch: existing?.branch ?? `agent/${turn.conversationId}` } : {}),
+                ...(isolated || runner !== undefined ? { branch: existing?.branch ?? `agent/${turn.conversationId}` } : {}),
+                ...(runner !== undefined ? { runner } : {}),
                 provider: turn.provider,
                 harness: turn.harness,
                 repos: existing?.repos ?? [],

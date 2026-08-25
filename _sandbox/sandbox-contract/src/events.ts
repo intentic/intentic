@@ -493,6 +493,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         base: z.string(),
         unenforced: z.boolean().optional(),
         sync: z.object({ commits: z.number(), blocked: z.array(z.string()) }).optional(),
+        // The runner this turn executes on, when the conversation is placed remotely (runners/): the
+        // transcript's own statement of where the work is happening. Absent ⇒ this sandbox.
+        remote: z.string().optional(),
     }),
     // Emitted after a clean isolated turn whose delta auto-landed (or failed to): landed ⇒ the work is now
     // UNCOMMITTED changes in the main tree (the Changes panel is the review); conflicts ⇒ it stayed safely in

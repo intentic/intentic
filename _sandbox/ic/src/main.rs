@@ -159,6 +159,9 @@ enum RunnerCommand {
     Remove {
         /// The runner to remove
         name: String,
+        /// Skip the confirmation (headless runs)
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
 }
 
@@ -219,7 +222,7 @@ fn main() {
                 name,
             } => runner::up(parent_url, pair_token, name),
             RunnerCommand::List => runner::list(),
-            RunnerCommand::Remove { name } => runner::remove(name),
+            RunnerCommand::Remove { name, yes } => runner::remove(name, yes),
         },
         Command::Docker(DockerCommand::Prepare { yes, dry_run }) => prepare::run(prepare::Args {
             // The desktop app has no terminal to answer a question on, so its consent arrives as the same

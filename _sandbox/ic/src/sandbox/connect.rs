@@ -29,7 +29,7 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())
 }
 
-fn env_or(name: &str, fallback: &str) -> String {
+pub(crate) fn env_or(name: &str, fallback: &str) -> String {
     env(name).unwrap_or_else(|| fallback.to_string())
 }
 
@@ -624,7 +624,7 @@ fn is_registryless(image: &str) -> bool {
 /// to Docker Hub, so it is never pulled — it runs the local build (the dev wrapper is what rebuilds it from a
 /// checkout; this binary ships without one). Registry images are pulled even when cached so the moving
 /// `stable` tag always runs the newest release.
-fn ensure_image(image: &str, log: &Log) -> Result<()> {
+pub(crate) fn ensure_image(image: &str, log: &Log) -> Result<()> {
     if is_registryless(image) {
         if docker::image_exists(image) {
             step(

@@ -9,6 +9,7 @@ import {
     MigrationScanSchema,
     REQUEST_ID_HEADER,
     roleAtLeast,
+    runnerTranslatorPath,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -66,6 +67,8 @@ import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
 import { createRunnerConnectRoute, runnerSummaries } from "./runners/runner.routes.js";
+import { createRunnerCredentialRefreshRoute, createRunnerCredentialsRoute, createRunnerTranslatorProxyRoute } from "./runners/runner-credentials.routes.js";
+import { createRunnerGitRefsRoute, createRunnerGitRpcRoute } from "./runners/runner-git.routes.js";
 import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
@@ -161,10 +164,18 @@ const gatePath = /^\/workflows\/[^/]+\/gate$/;
 const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
 const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
 
-// A RUNNER's two doors, the same pair for the same reason: the caller is a container on another machine with
-// no Google identity to present, authenticated by its pairing (enroll) or its first frame (connect). See
-// runners/runner.routes.ts and docs/remote-runners-plan.md (workspace root).
-const runnerPublicPath = (path: string): boolean => path === "/system/runners/connect" || path === "/system/runners/enroll";
+// A RUNNER's doors, the same exemption for the same reason: the caller is a container on another machine
+// with no Google identity to present, authenticated by its pairing (enroll), its first frame (connect), or
+// its durable token as a bearer the git routes verify themselves (runner-git.routes.ts). See runners/ and
+// docs/remote-runners-plan.md (workspace root).
+const runnerGitPath = /^\/system\/runners\/git\/[^/]+\/(?:info\/refs|git-upload-pack|git-receive-pack)$/;
+const runnerPublicPath = (path: string): boolean =>
+    path === "/system/runners/connect" ||
+    path === "/system/runners/enroll" ||
+    path === "/system/runners/credentials" ||
+    path === "/system/runners/credentials/refresh" ||
+    path.startsWith("/system/runners/translator/") ||
+    runnerGitPath.test(path);
 
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
@@ -1386,6 +1397,16 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         return (await services.runners.revoke(id)) ? c.json({ ok: true }) : c.json({ error: "no such runner" }, 404);
     });
     app.get("/system/runners/connect", createRunnerConnectRoute(services));
+    // The git door runners fetch and push through (runner-git.routes.ts): stock smart HTTP off the real git
+    // dirs, authenticated by the runner's own token, spawned per request. Before the oRPC catch-all.
+    app.get("/system/runners/git/:repo/info/refs", createRunnerGitRefsRoute(services));
+    app.post("/system/runners/git/:repo/git-upload-pack", createRunnerGitRpcRoute(services, "git-upload-pack"));
+    app.post("/system/runners/git/:repo/git-receive-pack", createRunnerGitRpcRoute(services, "git-receive-pack"));
+    // The credential doors (runner-credentials.routes.ts): a runner's turns spend THIS sandbox's providers —
+    // per-turn access tokens, mid-turn re-mints, and the translator re-served behind the runner's own bearer.
+    app.post("/system/runners/credentials", createRunnerCredentialsRoute(services));
+    app.post("/system/runners/credentials/refresh", createRunnerCredentialRefreshRoute(services));
+    app.all(`${runnerTranslatorPath}/*`, createRunnerTranslatorProxyRoute(services));
     const hostMcp = createHostMcpRoute(services);
     app.post("/mcp/hosts/:id", hostMcp);
     app.get("/mcp/hosts/:id", hostMcp);

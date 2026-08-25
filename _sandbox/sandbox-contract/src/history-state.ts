@@ -135,5 +135,8 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // digest would admit a socket whose runner still dials the old parent. Identity, both files, hosts' reasons.
     { path: "runner-enrollments.json", portability: "identity" },
     { path: "runner-pair-consumed.json", portability: "identity" },
+    // The runner-SIDE half: who this container belongs to and the token its reconnects present
+    // (runners/runner-identity.ts). Carried into another box it would dial the parent as this runner.
+    { path: "runner-identity.json", portability: "identity" },
     { path: "local-cert/", portability: "identity" },
 ];

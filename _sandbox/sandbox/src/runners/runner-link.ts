@@ -1,0 +1,78 @@
+import { runnerConnectUrl } from "@intentic/sandbox-contract";
+import { RPCHandler } from "@orpc/server/websocket";
+import type { Services } from "../composition.js";
+import { version } from "../version.js";
+import type { RunnerIdentity } from "./runner-identity.js";
+import { createRunnerService } from "./runner-service.js";
+
+/* THE ONE SOCKET a runner holds to its parent, the host agent's connection loop retold inside the daemon
+ * (_computers/host/src/connection.ts is the original, comment for comment where the reasoning carries over).
+ * Outbound only: the runner has no tunnel and no public name, so it can only ever be the side that dials,
+ * and everything the parent asks arrives on this socket as oRPC against runnerContract.
+ *
+ * Reconnection is the normal case: lids close on the machines runners share, parents restart on rebuilds.
+ * A dropped socket comes back on exponential backoff; the one close that is NOT retried is 1008, the parent
+ * refusing the enrollment, which only re-pairing heals and which retrying would turn into log spam. */
+
+const RETRY_MIN_MS = 1_000;
+const RETRY_MAX_MS = 30_000;
+const UNAUTHORIZED = 1008;
+
+export interface RunnerLink {
+    readonly stop: () => void;
+}
+
+export const startRunnerLink = (services: Services, identity: RunnerIdentity): RunnerLink => {
+    const handler = new RPCHandler(createRunnerService(services, identity));
+    let stopped = false;
+    let socket: WebSocket | undefined;
+    let attempt = 0;
+
+    const open = (): void => {
+        const ws = new WebSocket(runnerConnectUrl(identity.parentUrl));
+        socket = ws;
+        ws.addEventListener("open", () => {
+            attempt = 0;
+            // Handler before hello, the host agent's rule: the parent may call the moment the token verifies.
+            handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]);
+            ws.send(
+                JSON.stringify({
+                    type: "runner-hello",
+                    token: identity.token,
+                    version,
+                    image: services.config.sandbox.image === "" ? "dev" : services.config.sandbox.image,
+                    ...(services.config.sandbox.channel !== "" ? { channel: services.config.sandbox.channel } : {}),
+                    ...(services.config.sandbox.environmentHash !== "" ? { overlayHash: services.config.sandbox.environmentHash } : {}),
+                }),
+            );
+            services.logger.info({ parent: identity.parentUrl, id: identity.id }, "runner: connected to the parent");
+        });
+        ws.addEventListener("close", (event) => {
+            socket = undefined;
+            if (stopped) {
+                return;
+            }
+            if (event.code === UNAUTHORIZED) {
+                services.logger.error(
+                    { id: identity.id },
+                    "runner: the parent refused this runner's enrollment — it was revoked there. Re-pair from the parent sandbox and recreate this runner.",
+                );
+                stopped = true;
+                return;
+            }
+            attempt += 1;
+            const delay = Math.min(RETRY_MIN_MS * 2 ** (attempt - 1), RETRY_MAX_MS);
+            services.logger.warn({ code: event.code, delayMs: delay }, "runner: parent link dropped, reconnecting");
+            setTimeout(open, delay);
+        });
+        ws.addEventListener("error", () => services.logger.warn({ parent: identity.parentUrl }, "runner: parent link error"));
+    };
+
+    open();
+    return {
+        stop: () => {
+            stopped = true;
+            socket?.close(1000, "stopping");
+        },
+    };
+};

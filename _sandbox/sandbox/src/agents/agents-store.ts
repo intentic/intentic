@@ -70,6 +70,12 @@ export const PersistedAgentSchema = z.object({
     // absent for one that works directly in the shared workspace.
     id: z.string(),
     branch: z.string().optional(),
+    /* WHERE THE CONVERSATION EXECUTES: the paired runner's id, absent for one that runs here. Latched with
+     * the identity exactly as `branch` is (registry.begin): the first turn's request chooses, every later
+     * turn follows the entry, so a stale tab cannot move a conversation between machines mid-life. Always
+     * beside a `branch`: a remote conversation is isolated by construction, its branch being the unit that
+     * moves between machines (runners/, docs/remote-runners-plan.md at the workspace root). */
+    runner: z.string().optional(),
     // The display name, sanitized to one bounded line, derived from the opening prompt, promoted to a plan's
     // heading, or chosen outright by a rename. `titleSource` says which, and gates the next promotion.
     title: z.string().optional(),

@@ -294,6 +294,13 @@ export const REPLAY_ENV = [
      * Unlike SANDBOX_CHANNEL and the directive-fate vars above, this one SHOULD outlive the run that set it: it
      * describes the machine's standing arrangement with its owner, not a decision the runner makes per launch. */
     "SANDBOX_MEMORY",
+    /* A RUNNER's identity seed (the runner mode of the daemon, sandbox/src/runners/): which parent sandbox
+     * this container belongs to, and the single-use pairing it redeems on first boot. Replayed for the host
+     * seed's reason — a recreate does not move the container off its parent, and the daemon cannot re-derive
+     * either value from inside. The pairing is burned at the parent on first redemption, so the copy a
+     * recreate replays is inert, exactly like HOST_PAIR_TOKEN above. */
+    "RUNNER_PARENT_URL",
+    "RUNNER_PAIR_TOKEN",
 ] as const;
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:

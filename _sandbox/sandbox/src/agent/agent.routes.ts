@@ -53,6 +53,7 @@ import {
     recordOutageFailure,
     startConversationTurn,
 } from "./turn-resume.js";
+import { dispatchRemoteTurn } from "../runners/runner-dispatch.js";
 import { withRuntimeHistory } from "./runtime-history.js";
 import { turnRunOf } from "./turn-runs.js";
 import { nameAgentTitle } from "./title-namer.js";
@@ -163,19 +164,14 @@ async function* runConversationTurn(
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
-    /* Placement on a runner is contract-visible ahead of the machinery behind it (docs/remote-runners-plan.md
-     * at the workspace root; runners/). Refused HERE, as a readable frame, rather than accepted-and-run-
-     * locally: a turn the user placed on their other computer must never quietly spend this sandbox's cores
-     * and claim it ran where it was asked to. `local` (and absent) is today's behavior. */
-    if (input.placement?.kind === "runner") {
-        yield {
-            kind: "error",
-            message: `Running on a runner ("${input.placement.id}") is not implemented yet — this conversation was not started. Leave placement out to run it here.`,
-        };
-        yield { kind: "done" };
-        return;
-    }
     if (input.conversationId === undefined) {
+        // A runner needs a conversation: its branch is the unit that moves between machines, and a
+        // conversationless one-shot has no branch to move. Refused as a frame, never silently run here.
+        if (input.placement?.kind === "runner") {
+            yield { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels." };
+            yield { kind: "done" };
+            return;
+        }
         yield* runTurn(services, input, signal, undefined, steering);
         return;
     }
@@ -192,11 +188,23 @@ async function* runConversationTurn(
      * So placement is the conversation's, decided once: the request's own choice on the first turn, and the
      * registry entry it already owns on every turn after. That entry is read before the turn is planned because
      * the worktree has to exist before there is a cwd to plan against. */
-    const isolated = existing === undefined ? input.isolated === true : existing.branch !== undefined;
+    /* WHERE it executes latches by the same rule (docs/remote-runners-plan.md at the workspace root): the
+     * first turn's request chooses the runner, every later turn follows the entry, and a remote conversation
+     * is isolated by construction — its branch is what moves between machines. A FRESH conversation naming a
+     * runner this sandbox never enrolled is refused before begin() could latch the typo forever. */
+    const requestedRunner = input.placement?.kind === "runner" ? input.placement.id : undefined;
+    const runnerId = existing === undefined ? requestedRunner : existing.runner;
+    if (existing === undefined && runnerId !== undefined && !(await services.runners.enrolled(runnerId))) {
+        yield { kind: "error", message: `No runner named "${runnerId}" is paired with this sandbox — pair one first, or leave placement out to run here.` };
+        yield { kind: "done" };
+        return;
+    }
+    const isolated = runnerId !== undefined || (existing === undefined ? input.isolated === true : existing.branch !== undefined);
     const began = await services.agents.begin(
         {
             conversationId,
             isolated,
+            ...(runnerId !== undefined ? { runner: runnerId } : {}),
             prompt: input.prompt,
             provider: input.agent ?? "claude",
             harness: input.harness ?? "native",
@@ -243,6 +251,46 @@ async function* runConversationTurn(
      * fire-and-forget: it is one read of an already-open record, and a checkpoint that arrives without its
      * binding is a message the user cannot rewind to. */
     const turn: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
+    /* THE REMOTE ARM (runners/runner-dispatch.ts). The parent's stations only: the worktree here is a MIRROR
+     * — ensured so diff, standing and land read the conversation exactly as a local isolated one, never
+     * synced or anchored here, because the rebase and the anchor run on the runner, whose CPU the placement
+     * bought. The finally settles the books in `measure` (the same pass an ended local turn takes), which is
+     * what turns the pushed branch into the card's diffstat and its "Ready to land" standing. */
+    if (runnerId !== undefined) {
+        let remoteFailed = false;
+        try {
+            const entry = services.agents.entry(conversationId);
+            const worktree = await services.agentWorktrees.ensure(conversationId, entry?.repos ?? [], input.worktreeBase);
+            if ((entry?.repos.length ?? 0) === 0) {
+                await services.agents.recordWorktree(conversationId, worktree.repos);
+            }
+            const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
+            yield { kind: "worktree", branch: worktree.branch, base: (root?.base ?? "").slice(0, 7), remote: runnerId };
+            for await (const event of dispatchRemoteTurn(services, { ...input, conversationId }, runnerId, worktree, signal)) {
+                services.agents.observe(conversationId, event);
+                if (event.kind === "error") {
+                    remoteFailed = true;
+                }
+                yield event;
+            }
+        } catch (error) {
+            if (!(typeof error === "object" && error !== null && (error as { name?: string }).name === "AbortError")) {
+                services.agents.observe(conversationId, {
+                    kind: "error",
+                    message: error instanceof Error ? error.message : "the remote turn failed",
+                });
+                remoteFailed = true;
+            }
+            throw error;
+        } finally {
+            await settleLandBooks(services, conversationId);
+            await services.agents.finish(conversationId, Date.now());
+        }
+        // Referenced so the two arms report symmetrically if a chore emit is added here later; today the
+        // error frame the user saw is the record.
+        void remoteFailed;
+        return;
+    }
     if (!isolated) {
         try {
             for await (const event of runTurn(services, input, signal, undefined, steering, turn)) {
