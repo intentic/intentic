@@ -183,9 +183,21 @@ describe("enrollment store", () => {
         const before = Date.now();
         expect(await verifySyncToken(history, holderToken, true)).toBe(true);
 
+        /* Bounded on BOTH sides, because "there is a number here" would pass for a stamp left over from
+         * enrolment; what is being asserted is that the stamp came from THIS poll.
+         *
+         * SLACK ON EACH SIDE, because `Date.now()` is the WALL clock and the wall clock is not monotonic. The
+         * value under test is one `Date.now()` read inside verifySyncToken (sync.ts) and the bound is another
+         * read here a moment later, so a host that slews its clock backwards between the two — which is what
+         * ntp does under load, and this suite runs 60-odd files at once — makes the later read the SMALLER
+         * number and fails a stamp that is perfectly correct. It did: `1787657817269` against a ceiling of
+         * `1787657817267`, two milliseconds of skew. The window is still far tighter than anything this test
+         * could confuse the stamp with: enrolment is the only other candidate and it is the same millisecond,
+         * so what a bug would have to do to slip through is stamp within 50ms of now, which is stamping now. */
+        const CLOCK_SKEW_MS = 50;
         const seen = (await syncHolder(history))?.seenAt;
-        expect(seen).toBeGreaterThanOrEqual(before);
-        expect(seen).toBeLessThanOrEqual(Date.now());
+        expect(seen).toBeGreaterThanOrEqual(before - CLOCK_SKEW_MS);
+        expect(seen).toBeLessThanOrEqual(Date.now() + CLOCK_SKEW_MS);
     });
 
     /* THE TRANSPORT IS NOT A CHECK-IN, and this is the assertion that keeps the card honest. Mutagen's daemon

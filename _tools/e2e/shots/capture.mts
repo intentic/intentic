@@ -366,6 +366,21 @@ const SHOTS: Shot[] = [
         settleMs: 3200,
         dpr: DENSE_DPR,
     },
+    /* THE OTHER FOUR MOBILE SURFACES, shot so a person can look at them. The geometry gate next door
+     * (_tools/e2e/mobile/audit.mts) proves nothing is blank, off-screen or too small to hit, and that is all it
+     * can prove: it cannot see that a label is squeezed to two useless words, that a row reads as texture, or
+     * that a control landed in the wrong corner — every P0 in the audit that produced it was found by LOOKING.
+     * Two shots covered the fleet and the chat and left the rest of the shell unseen, which is how a blank
+     * Files tab shipped in the first place.
+     *
+     * One per thing that can go wrong differently: a drill-down list, a review panel dense with per-row
+     * controls, a menu of long-labelled rows, and a hub with a scrolling sub-nav under a title that varies in
+     * length. Named `mobile-*` like the two above; nothing on the marketing site references them, which is the
+     * point — they are for review, and the site picks what it publishes. */
+    { name: "mobile-files", path: "/workspace", mobile: true, waitFor: "text=README.md", settleMs: 1600, dpr: DENSE_DPR },
+    { name: "mobile-changes", path: "/workspace?panel=changes", mobile: true, waitFor: "text=CheckoutPanel.tsx", settleMs: 1600, dpr: DENSE_DPR },
+    { name: "mobile-menu", path: "/menu", mobile: true, waitFor: "text=SANDBOXES", settleMs: 1400, dpr: DENSE_DPR },
+    { name: "mobile-sandbox", path: "/sandbox", mobile: true, waitFor: "text=Installed version", settleMs: 1400, dpr: DENSE_DPR },
     /* ── THE MEGA-MENU'S PREVIEW RAIL ────────────────────────────────────────────────────────────────────
      *
      * The Features menu previews the row you are hovering in a 16:10 box 544px wide (Nav.astro). Every row

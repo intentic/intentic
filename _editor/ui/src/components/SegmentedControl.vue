@@ -56,6 +56,19 @@ const model = defineModel<T>({ required: true });
  * DERIVED, NOT A PROP. A call site cannot know which pointer is reading it, and asking 40 of them to pass a
  * flag is how the prose above came to be true and unenforced. */
 const { coarse } = useDevice();
+
+/* ONE NAME PER PILL, BADGE INCLUDED — the tab bar's `tabLabel` rule, for the tab bar's reason. `title` and
+ * `markTitle` reach a pointer through the tooltip and reach NOTHING on a phone, where the chip beside the
+ * label is a bare glyph or a bare number and the sentence saying what it counts has nowhere else to go. Folded
+ * into the accessible name, it is at least readable by the one reader who can still ask for it.
+ *
+ * PREFIXED WITH THE LABEL, never replacing it: an `aria-label` overrides the visible text, so a name that did
+ * not start with the word on the pill would leave "activate what you see" untrue. Absent where there is no
+ * hint, so the visible text stays the name and nothing is restated. */
+const nameOf = (option: { label: string; title?: string; markTitle?: string; mark?: unknown }): string | undefined => {
+    const hint = (option.mark === undefined ? option.title : (option.markTitle ?? option.title))?.trim();
+    return hint === undefined || hint === `` ? undefined : `${option.label} · ${hint}`;
+};
 </script>
 
 <template>
@@ -73,6 +86,7 @@ const { coarse } = useDevice();
             type="button"
             role="tab"
             :aria-selected="model === option.value"
+            :aria-label="nameOf(option)"
             v-tooltip.bottom="option.markTitle ?? option.title"
             class="cursor-pointer rounded-md font-medium transition-colors"
             :class="[

@@ -153,8 +153,9 @@ const changesMark = computed(() => {
 });
 const segmentOptions = computed(() => [
     // Files and Changes are the everyday views; restore history is the quieter icon beside this control. Touch
-    // has no hover, so no hint here says anything a finger can reach: see the desktop twin. The mark spread
-    // stays: `markTitle` is inert on this form factor, but the CHIP is what the tab is here for.
+    // has no hover, so the tooltip half of `markTitle` says nothing a finger can reach: what carries it here is
+    // the pill's accessible name, which <SegmentedControl> folds the hint into (nameOf) exactly the way the tab
+    // bar folds a badge's sentence into its link's. The CHIP is still what the tab is here for.
     { label: `Files`, value: `files` as const },
     { label: `Changes`, value: `changes` as const, badge: changes.count.value, ...changesMark.value },
 ]);

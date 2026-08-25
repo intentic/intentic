@@ -4,10 +4,8 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { badgeClass, badgeText } from "../core-views/viewBadge";
-import { activationBadge, detectActivations, DRAFTS_VIEW_ID, extensionPath } from "../core-views/registry";
 import { useAgents } from "../composables/agents/useAgents";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
-import { usePanels } from "../composables/extensions/usePanels";
+import { useDraftsTile } from "./mobileTabs";
 import { outgoingMark, outgoingSummary } from "../composables/workspace/outgoingWork";
 import { pushBadge } from "../composables/workspace/pushBadge";
 import { useChanges } from "../composables/workspace/useChanges";
@@ -53,13 +51,11 @@ const { badge: sandboxBadge } = useSandboxAttention();
  * (`intentic.drafts`, the publisher-and-name pair the sandbox's extension routes speak) against a list that
  * only ever carries view ids, so nothing ever matched, the tab never once reached the queue it is named for,
  * and its count was the changes half alone. TAB_BAR_IDS is the shared statement of that promotion, so the
- * mobile menu drops the same row rather than listing it a second time under its own name. */
-const { panels } = usePanels();
-const { capabilities } = useCapabilities();
-const draftsTile = computed(() => {
-    const active = detectActivations(panels.value, capabilities.value).find(({ extension }) => extension.id === DRAFTS_VIEW_ID);
-    return active === undefined ? undefined : { to: extensionPath(active.extension, active.activation), badge: activationBadge(active) };
-});
+ * mobile menu drops the same row rather than listing it a second time under its own name.
+ *
+ * Resolved in mobileTabs.ts rather than here, because ShellMobile needs the same answer to decide which routes
+ * are already one thumb press from home and therefore must NOT grow a back arrow. */
+const draftsTile = useDraftsTile();
 
 // Things to act on: the drafts that owe a decision plus uncommitted changes. Once that total is zero but the
 // workspace still owes its remotes a push, the same glyph the desktop rail and the Changes tab wear takes over:

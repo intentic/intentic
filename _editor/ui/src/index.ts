@@ -125,6 +125,9 @@ export { default as Page } from "./components/Page.vue";
 // PrimeVue Button's variant matrix out of the one slot every view fills.
 export { default as PageAction } from "./components/PageAction.vue";
 export { default as PageHeader } from "./components/PageHeader.vue";
+/* The way out of a full-screen view, which <PageHeader> wears and the mobile shell publishes. Exported because
+ * the shell that provides it lives in the web app, not here; nothing else should need either half. */
+export { type PageBack, providePageBack, usePageBack } from "./components/pageBack.js";
 /* <Avatar>'s counterpart for a name nobody has a photograph of: a cartoon character assembled from the name
  * itself, so a persona looks like somebody rather than like a label. It sat in the web app until the two
  * surfaces where you CHOOSE a persona turned out to be extensions, which could reach nothing in there, the

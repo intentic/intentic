@@ -83,12 +83,25 @@ const SURFACES: readonly Surface[] = [
     { path: "/menu", waitFor: "text=SANDBOXES", primary: "text=Add sandbox", settleMs: 1_200 },
     { path: "/capabilities", waitFor: "text=Connected", settleMs: 1_200 },
     { path: "/sandbox", waitFor: "text=Installed version", settleMs: 1_200 },
-    { path: "/settings", settleMs: 1_200 },
-    { path: "/terminal", settleMs: 1_600 },
+    /* EVERY SURFACE ANCHORS ON SOMETHING IT RENDERS. These four ran on `settleMs` alone, and a fixed wait is
+     * not a wait for the page — on a cold runner (a CI job that has just fetched the browser, which is exactly
+     * when this gate runs) their views had not mounted at 1.2–1.6s, so all three assertions measured an EMPTY
+     * document and reported "0 targets, clean". A gate that passes hardest when the page fails to render is
+     * worse than no gate on those routes, because the row still says ✓. Warm, they measure 16 / 20 / 19 / 11.
+     * `waitFor` holds until the view is actually there and `primary` fails the run if what the reader came for
+     * has no height — the same pair every surface above already carries. */
+    { path: "/settings", waitFor: "text=Keybindings", primary: "text=Display name", settleMs: 1_200 },
+    // The accessory key row, which is the whole reason this route is gated: it is `coarse`-only, so a run that
+    // is not in a touch context finds nothing here and says so instead of passing quietly.
+    { path: "/terminal", waitFor: "text=Esc", primary: "text=Ctrl", settleMs: 1_600 },
     { path: "/agents/cnv_checkout_stripe", waitFor: 'textarea[name="draft"]', settleMs: 2_600 },
     { path: "/ext/pipelines", waitFor: "text=pass rate", primary: "text=Draft the release note", settleMs: 1_600 },
-    { path: "/ext/acceptance", settleMs: 1_400 },
-    { path: "/ext/documentation", settleMs: 1_400 },
+    { path: "/ext/acceptance", waitFor: "text=criteria", primary: "text=Sign up for an account", settleMs: 1_400 },
+    /* `primary` matches raw `textContent`, not rendered text, so it must not name anything CSS uppercases —
+     * this view's group headings ("The storefront") are drawn in caps and read as caps on screen, and an
+     * anchor copied off the screen matched nothing and reported the page blank. A path is safe: nothing
+     * transforms it, and it is the row the reader actually came for. */
+    { path: "/ext/documentation", waitFor: "text=documented", primary: "text=src/pricing", settleMs: 1_400 },
 ];
 
 interface Offender {

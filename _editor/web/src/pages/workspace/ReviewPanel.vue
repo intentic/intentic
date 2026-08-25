@@ -1304,14 +1304,29 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              worth offering mid-run: stop the suite, go and watch it. No verdict, because a verdict that needs
              answering is raised above the router where the user can be found (shell/PushNotice.vue), and no
              output, because the output is the terminal's (composables/terminal/useTerminalPanel.ts). -->
-        <div v-if="stageLine !== undefined" class="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5" v-tooltip.right="stageHint">
+        <!-- THE HINT IS A LINE ON A PHONE AND A HOVER ON A DESKTOP, which is the same decision the two form
+             factors have room for. `stageHint` is the command and how long the suite usually takes — the two
+             facts that turn "it is running" into "I can go and do something else" — and a hover paragraph
+             never reaches a touch device (tooltip.ts, rule 7). It rode the tooltip because the desktop panel
+             is ~270px wide and the elapsed clock is what has to stay legible in it; on a phone this panel IS
+             the screen, so the width objection does not apply and the sentence simply goes under the line it
+             qualifies. Tooltip suppressed there rather than left alongside: a box that cannot open is not
+             harmless, it is the thing that made this unreachable in the first place. -->
+        <div
+            v-if="stageLine !== undefined"
+            class="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5"
+            v-tooltip.right="mobile ? undefined : stageHint"
+        >
             <Icon
                 :name="pushFlow.running.value ? `spinner` : `check-circle`"
                 :spin="pushFlow.running.value"
                 class="shrink-0 text-2xs"
                 :class="pushFlow.running.value ? `text-link` : `text-success`"
             />
-            <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
+            <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
+                <span v-if="mobile" class="truncate whitespace-nowrap text-2xs text-subtle">{{ stageHint }}</span>
+            </span>
             <!-- Drawn only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
                  invisible shell, and a button that opens an empty panel is worse than none. -->
             <button
@@ -1713,9 +1728,20 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                     >
                                         <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
                                     </button>
+                                    <!-- HELD OFF THE INDEX VERB ON A PHONE, and only there. These two sit 4px
+                                         apart, which is a mouse's spacing: on a desktop the pointer is exact
+                                         and both are revealed on hover, so the pair reads as one cluster and
+                                         costs nothing. On touch both are permanently visible, they are 32px
+                                         each, and the two outcomes are not symmetrical — Discard asks first
+                                         (askDiscardRow raises a modal), Stage does not, so the mis-tap that
+                                         actually hurts is the one aimed at the trash that lands on the verb
+                                         and silently moves the file into the index with no dialog and nothing
+                                         to undo it from. A finger's width between them is the cheapest repair:
+                                         it costs a row nothing (the name still takes the slack) and it does not
+                                         move Discard somewhere the reader has to learn about. -->
                                     <button
                                         type="button"
-                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:h-8 max-md:w-8 max-md:opacity-100"
+                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100"
                                         :disabled="changes.actionBusy.value"
                                         @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
                                         v-tooltip.top="'Discard'"
