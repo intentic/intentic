@@ -57,6 +57,15 @@ export interface RuleCommandRequest {
 
 export const runRuleCommand = async (deps: RuleCommandDeps, request: RuleCommandRequest): Promise<RuleCommandRun> => {
     const { logger, terminalRun } = deps;
+    /* A signal that is ALREADY aborted fires no event, so the relay attached below would wait forever while
+     * the command it exists to kill runs to completion. The window is real: prepush holds a run behind its
+     * memory gate before spawning it, and a Stop clicked during that wait arrives here as a signal that
+     * aborted before anything was listening. Cancelled before the spawn is still cancelled. (Checked on
+     * `request` before the destructure: the catch below re-reads `signal.aborted` after real time has passed,
+     * which a guard on the same reference would narrow into a compile error.) */
+    if (request.signal?.aborted === true) {
+        return { status: "cancelled", output: "" };
+    }
     const { command, timeoutMs, cwd, session, window, outputBytes, signal, onStarted } = request;
     const abort = new AbortController();
     let timedOut = false;

@@ -65,74 +65,52 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 // its own daemon, and an owner-authored overlay still may not ask for it.
 export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 
-/* A LOCAL SANDBOX MUST NOT BE ABLE TO TAKE ITS WHOLE HOST DOWN. The workspace is deliberately broad inside
- * the container (compilers, browsers, local models), so an unbounded cgroup turns one accidental context or
- * parallel build into a WSL/desktop-wide swap storm.
+/* A LOCAL SANDBOX GETS THE MACHINE, MINUS WHAT THE HOST NEEDS TO STAY ALIVE. The workspace is deliberately
+ * broad inside the container (compilers, browsers, local models, whole monorepo test runs), and every attempt
+ * to bound it by a defensive fraction of the machine has produced the same result: a box that freezes on the
+ * work it exists to run. The 35% share this replaced derived 6 GiB on the 20 GiB WSL guest this repo develops
+ * on — a figure its own comments conceded "a turbo fan-out plus a handful of live agent sessions does not
+ * fit" — and the 10 GiB its owner widened it to still pinned solid under one pre-push test run. The sandbox
+ * is the machine's primary workload; it is sized like one. What the host keeps is a fixed reserve (below),
+ * not the larger share of its own RAM.
  *
- * SIZE THIS FOR SEVERAL SANDBOXES AT ONCE, NOT ONE. A cap is a per-container ceiling, and a host runs as many
- * containers as the owner has sandboxes open, so the bound that matters is cap x count. An earlier 14 GiB was
- * reasoned about as a single box on a 20 GiB WSL guest; with two open that is 28 GiB of ceiling against ~18 GiB
- * of guest RAM, which bounds nothing. The guest then sat at its low-memory watermark during ordinary work,
- * and the userspace OOM killer watching that watermark spent the day shooting the owner's dev server.
- *
- * THIS IS THE FALLBACK, for a caller that cannot measure its machine. Sized for the smallest host that
- * plausibly runs several sandboxes: three of them stay under the ~14 GiB a 20 GiB WSL guest can give away while
- * Docker, the editor, the sync agent and the OOM killer's own margin keep the rest. Every flow that CAN measure
- * passes `memory` instead, from localSandboxMemory() below.
+ * THIS IS THE FALLBACK, for a caller that cannot measure its machine. Conservative because it is applied
+ * blind — a 16g cap handed to an 8 GiB machine is an unbounded container with extra steps. Every flow that
+ * CAN measure passes `memory` instead, from localSandboxMemory() below, and gets the machine-sized figure.
  *
  * Hosted providers own their machine sizing separately and opt out through their existing `init: false`
  * shape, which is also why this cap only ever governs the local shape. */
 export const LOCAL_SANDBOX_MEMORY = "7g";
 
 const GIB = 1024 ** 3;
-/* The share of a machine ONE sandbox may cap at, and the bounds that share is held between.
+/* WHAT THE HOST KEEPS, and the point below which a cap breaks the workload it applies to.
  *
- * 35% lets two sandboxes run without the pair exceeding what a host can give away, while a third still fits
- * inside the fallback's reasoning. The 4 GiB floor is the point below which the cap stops protecting anything
- * and starts breaking the workload it applies to (the image carries compilers, a browser and local models). The
- * 24 GiB ceiling is where a bigger cap stops buying safety: a runaway build does not need 40 GiB of rope to be
- * caught, and headroom left unclaimed by the cap is headroom the desktop keeps. */
-const SANDBOX_MEMORY_SHARE = 0.35;
+ * The reserve covers what must stay responsive OUTSIDE the cgroup while the sandbox works: the host distro's
+ * own processes (the sync agent, the editor tooling, an owner's dev server), docker, and the sibling
+ * containers (postgres, the tunnel). 3 GiB is what those actually sum to on the guest this was measured on,
+ * with margin; everything above it belongs to the sandbox. The 4 GiB floor is the point below which the cap
+ * stops protecting anything and starts breaking the image's own toolchain (compilers, a browser, local
+ * models) — a machine too small to grant it gets the floor anyway and the reserve gives way. */
+const SANDBOX_MEMORY_RESERVE = 3 * GIB;
 const SANDBOX_MEMORY_FLOOR = 4 * GIB;
-const SANDBOX_MEMORY_CEILING = 24 * GIB;
-/* NO SWAP FOR A SANDBOX. `--memory-swap` is always set EQUAL to `--memory`, which is docker's spelling for
- * "this cgroup may not page", and every emitter below derives it from the cap rather than carrying its own.
+/* SWAP IS UNBOUNDED, docker's `-1`: the cgroup pages into whatever swap the engine's kernel has.
  *
- * A swap allowance does not bound a runaway, it SLOWS ONE DOWN, and slowed down is the worse failure. At the
- * ceiling with swap underneath it, an allocation is served by reclaim instead of refused: the container goes on
- * answering, `ls` stays fast, /health keeps returning 200, and meanwhile every process inside spends ~87% of
- * wall-clock stalled. That is not a degraded sandbox, it is a dead one that reads as healthy, and it stays dead
- * for as long as the workload keeps asking. This repo's own dev machine sat exactly there for an hour, 5.3M
- * allocation stalls deep, and had to be stopped from the HOST, because by then `docker exec` could not be
- * scheduled either — the one failure mode where nothing inside the box can be used to fix the box.
+ * The no-swap doctrine this reverses promised that an overrun "resolves in milliseconds: the cgroup OOM
+ * killer takes the largest process". Measured on 2026-08-25, it does not. A 10 GiB no-swap cgroup pinned to
+ * within 12 KB of its ceiling recorded 1.05M allocation stalls, PSI `memory full avg10=96.9`, a daemon event
+ * loop lag of 352 SECONDS — and `oom_kill 0`. The kill never comes because a node-heavy tree is mostly
+ * FILE-BACKED memory: mapped binaries and page cache are always reclaimable, so the kernel serves every
+ * allocation by evicting hot executable pages and faulting them straight back, and the cgroup livelocks
+ * below its ceiling without ever declaring OOM. Refusing swap did not buy the loud crash; it only forbade
+ * anonymous pages the one overflow that degrades gracefully. `docker exec` could not schedule `cat` inside
+ * 120s — the failure mode the doctrine was written to prevent, delivered by the doctrine.
  *
- * With no swap the same overrun resolves in milliseconds: the cgroup OOM killer takes the largest process, one
- * `vue-tsc` or one agent session dies, `memory.events` records it, and everything else keeps serving. A loud,
- * local, attributable failure beats a quiet global one — and the daemon already samples `memory.events` every
- * minute (platform/resource-metrics.ts), so the kill surfaces as a number that moved rather than a mystery.
- *
- * This is also why a userspace early-OOM daemon has no job here: earlyoom and friends read /proc/meminfo, which
- * inside a container reports the HOST's memory, not this cgroup's ceiling — it would watch 19 GiB of guest and
- * never fire while the sandbox strangled at 10. The kernel's cgroup OOM killer is the one killer that measures
- * the right thing, and refusing swap is what lets it act at the ceiling instead of long after it.
- *
- * The cost is a brief legitimate peak that would have paged now dying instead. That trade got much cheaper once
- * the build fan-out was bounded (turbo.json's `concurrency`), which is what makes those peaks a few GiB rather
- * than the ~10 GiB that made an allowance look necessary in the first place. */
-
-/* WHAT AN EXPLICIT ASK MAY CLAIM — the ceiling on SANDBOX_MEMORY (see localSandboxMemory below).
- *
- * The share above is sized for a host running SEVERAL sandboxes, and on a machine that runs exactly ONE it
- * answers the wrong question: a 20 GiB guest derives 6 GiB, which one `turbo` fan-out plus a handful of live
- * agent sessions does not fit, and its owner is left widening the cgroup by hand after every recreate. Rather
- * than loosen the default and thereby un-bound every multi-sandbox host, that owner names their number here.
- *
- * Still BOUNDED, because a cap an override can lift to anything is the uncapped container with extra steps,
- * and the uncapped container is the whole failure this section exists to prevent. 60% sits deliberately below
- * the 72% (14 GiB of a 19.53 GiB guest) that had this repo's own dev machine parked at its low-memory
- * watermark while the userspace OOM killer shot the owner's dev server: an override buys a single-sandbox
- * machine real headroom without buying that incident back. */
-const SANDBOX_MEMORY_OVERRIDE_SHARE = 0.6;
+ * So the runaway is not contained here, at the cgroup, where the only tools are the two bad ones (thrash or
+ * kill). It is contained at the SOURCES that create the memory: turbo.json's `concurrency` bounds the task
+ * fan-out, the vitest configs bound each run's worker pool, and the daemon refuses new work on a pinned box
+ * by measuring its own cgroup's PSI (platform/memory-admission.ts). The cap then only has to catch what
+ * slips past all of that, and with swap under it a peak means minutes of slow instead of a frozen box. */
+export const SANDBOX_MEMORY_SWAP = "-1";
 
 // The docker string for a chosen cap. Split out because a derived share and an explicit ask agree on
 // everything downstream of "how many bytes": the rounding, and the `<n>g` spelling.
@@ -142,26 +120,26 @@ const capString = (capBytes: number): string => `${Math.max(1, Math.floor(capByt
  *
  * Whole GiB only, `<n>g`, the SAME spelling this module emits, so the figure a person reads out of `docker
  * inspect` is the figure they can write back. Anything else THROWS rather than quietly falling through to the
- * derived share: an override that silently reverts leaves an owner believing they hold headroom they do not,
+ * derived cap: an override that silently reverts leaves an owner believing they hold headroom they do not,
  * which is exactly the invisible drift runtimeDirectivesOf refuses, for the same reason.
  *
- * An UNMEASURABLE machine still honours the ask, bounded by the absolute ceiling alone — a caller that could
- * not read /proc/meminfo knows strictly less about the machine than the person who typed a number into it. */
+ * Bounded above by the same machine-minus-reserve the derived cap answers, because a cap the machine cannot
+ * physically honour is not headroom, it is an unbounded container wearing a number. An UNMEASURABLE machine
+ * still honours the ask as typed — a caller that could not read /proc/meminfo knows strictly less about the
+ * machine than the person who typed a number into it. */
 const overrideCapBytes = (override: string, totalBytes: number): number => {
     const asked = /^(\d+)g$/u.exec(override.trim());
     if (asked === null) {
         throw new Error(`SANDBOX_MEMORY must be whole GiB spelled '<n>g' (e.g. '10g'), got '${override}'`);
     }
-    const ceiling =
-        Number.isFinite(totalBytes) && totalBytes > 0
-            ? Math.min(SANDBOX_MEMORY_CEILING, totalBytes * SANDBOX_MEMORY_OVERRIDE_SHARE)
-            : SANDBOX_MEMORY_CEILING;
-    return Math.min(Math.max(Number(asked[1]) * GIB, SANDBOX_MEMORY_FLOOR), ceiling);
+    const askedBytes = Math.max(Number(asked[1]) * GIB, SANDBOX_MEMORY_FLOOR);
+    const measured = Number.isFinite(totalBytes) && totalBytes > 0;
+    return measured ? Math.min(askedBytes, Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR)) : askedBytes;
 };
 
-/* THE PER-MACHINE CAP, as docker's `<n>g` string, derived from the memory the docker engine actually has.
- * One figure, not two: `--memory-swap` is this same string (see the no-swap doctrine above), so there is no
- * second number for a caller to get out of step with.
+/* THE PER-MACHINE CAP, as docker's `<n>g` string, derived from the memory the docker engine actually has:
+ * everything the machine holds, minus the fixed reserve the host keeps. Swap is not derived from it —
+ * `--memory-swap` is always SANDBOX_MEMORY_SWAP (see the doctrine above), so there is still only one number.
  *
  * Pure arithmetic on a byte count, deliberately: this module stays importable by a browser (see README), so it
  * cannot read /proc/meminfo itself. The caller that can — `intentic sandbox run-command`, which runs INSIDE an
@@ -169,13 +147,13 @@ const overrideCapBytes = (override: string, totalBytes: number): number => {
  * so the policy still lives in one place and is tested without a machine to measure.
  *
  * A total of 0 or less means the caller could not measure, and gets the fallback constant rather than a cap
- * derived from a lie. The cap rounds DOWN, away from breaking something: a cap that rounded up would bound the
- * machine less than the reasoning above allows.
+ * derived from a lie. The cap rounds DOWN, away from breaking something: a cap that rounded up would grant
+ * bytes the machine does not have.
  *
  * `override` is the sandbox's own SANDBOX_MEMORY, replayed off the container being replaced (REPLAY_ENV). When
- * set it REPLACES the derived share rather than raising a floor under it: the point is an owner who knows their
- * machine better than a fraction does, and that includes knowing when to ask for LESS. See overrideCapBytes for
- * what an ask may claim and why a malformed one stops the recreate. */
+ * set it REPLACES the derived cap rather than raising a floor under it: the point is an owner who knows their
+ * machine better than the reserve does, and that includes knowing when to ask for LESS. See overrideCapBytes
+ * for what an ask may claim and why a malformed one stops the recreate. */
 export const localSandboxMemory = (totalBytes: number, override?: string): string => {
     // Empty is ABSENT, not invalid: replayableEnv drops empty values, so an unset cap arrives either way.
     if (override !== undefined && override.trim() !== "") {
@@ -184,7 +162,7 @@ export const localSandboxMemory = (totalBytes: number, override?: string): strin
     if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
         return LOCAL_SANDBOX_MEMORY;
     }
-    return capString(Math.min(Math.max(totalBytes * SANDBOX_MEMORY_SHARE, SANDBOX_MEMORY_FLOOR), SANDBOX_MEMORY_CEILING));
+    return capString(Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR));
 };
 
 // Extra privileges ride in ONLY through "# intentic:runtime" directive lines in the owner-approved overlay
@@ -408,9 +386,8 @@ export interface SandboxRun {
      * real memory. Omitted by a caller that could not measure its machine, which then gets LOCAL_SANDBOX_MEMORY.
      * Ignored entirely by the hosted shape (`init: false`), which carries no cap at all.
      *
-     * There is no companion swap field: `--memory-swap` is emitted as this same value, because a sandbox that
-     * may page is a sandbox that livelocks instead of failing (see the no-swap doctrine above). Two fields would
-     * be two things to keep in lockstep, which is the drift this whole module exists to end. */
+     * There is no companion swap field: `--memory-swap` is always SANDBOX_MEMORY_SWAP (unbounded, see the
+     * doctrine above), never a per-run figure. One field, nothing to keep in lockstep. */
     readonly memory?: string;
     // Hosted-provider extras: -p specs, --label key=values, --dns resolvers.
     readonly ports?: readonly string[];
@@ -467,9 +444,9 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         "max-size=10m",
         "--log-opt",
         "max-file=3",
-        // `--memory-swap` REPEATS the cap rather than exceeding it: equal values are docker's spelling for "no
-        // swap at all", so an overrun is refused at the ceiling instead of paged into a container-wide stall.
-        ...(run.init === false ? [] : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", run.memory ?? LOCAL_SANDBOX_MEMORY]),
+        // `--memory-swap -1` rides with every cap: the cgroup may page into whatever swap the engine has, so
+        // a peak that clears the cap degrades into paging instead of a reclaim livelock (doctrine above).
+        ...(run.init === false ? [] : ["--memory", run.memory ?? LOCAL_SANDBOX_MEMORY, "--memory-swap", SANDBOX_MEMORY_SWAP]),
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
         ...(run.runtime ?? []).filter((token) => !dropped.has(token)),
         ...(run.ports ?? []).flatMap((port) => ["-p", port]),

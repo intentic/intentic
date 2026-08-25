@@ -151,9 +151,10 @@ test("a running check names its terminal and carries no output of its own", asyn
     const { services } = fakeServices({ prepushCommand: "echo working; sleep 2" });
     const check = createPrepushCheck(services);
     await check.run();
-    const state = await check.state();
-    expect(state.session).toBe(CHECKS_SESSION);
-    expect(state.output).toBe("");
+    // Polled rather than read once: the memory gate holds the spawn behind a headroom reading, so the
+    // terminal is named a beat after the run is first visible — which is exactly how the dialog consumes it.
+    await vi.waitFor(async () => expect((await check.state()).session).toBe(CHECKS_SESSION), SETTLES);
+    expect((await check.state()).output).toBe("");
 });
 
 /* THE REPORTED BUG. `session` is not a label: it is the instruction the app acts on by opening its terminal

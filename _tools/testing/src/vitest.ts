@@ -34,8 +34,10 @@ const NOT_TESTS = ["**/node_modules/**", "**/dist/**", "**/.cache/**", "**/.turb
  * anything, so whatever a test spends it spends on a core.
  *
  * VITEST'S OWN 5s WAS THAT CEILING AND IT MEASURED THE MACHINE INSTEAD. It is the default for a package run by
- * itself; `pnpm test` runs sixty-four suites at once (turbo at 200% concurrency, each vitest forking per core)
- * on a box that is also running the agents that produced the change. Measured on this workspace, at load ~35 on
+ * itself; `pnpm test` runs every package's suite through turbo on a box that is also running the agents that
+ * produced the change (bounded since 2026-08 by turbo's `concurrency: 4` and the root script's
+ * VITEST_MAX_WORKERS=4 — the measurement below predates those bounds and is why they exist). Measured on this
+ * workspace, under the then-unbounded fan-out (turbo at 200%, each vitest forking per core), at load ~35 on
  * 16 cores: _platform/api's unit suite spends 1283s importing against 53s asserting, and a route test costing
  * 4ms with the package to itself took over 5000ms in the full run. Two of them died on the ceiling and blocked
  * a push, and they were the FIRST test in their file both times, which is the tell: a file's own imports land

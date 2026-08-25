@@ -1,5 +1,6 @@
 import type { PrepushRun, Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
+import { waitForMemoryHeadroom } from "../platform/memory-admission.js";
 import { prepushFailed } from "../push/notifications.js";
 import { type RuleCommandRun, runRuleCommand } from "../rules/rule-command.js";
 import { matching } from "../rules/rules.js";
@@ -140,9 +141,21 @@ export const createPrepushCheck = (services: PrepushDeps): PrepushCheck => {
                     continue;
                 }
                 const { command, timeoutMs } = rule.action;
-                logger.info({ rule: rule.id, command, session }, "prepush: check started");
                 opened = undefined;
                 current = { status: "running", command, startedAt, output: "" };
+                /* THE MEMORY GATE, before the spawn and after `current` is published (so the dialog already
+                 * shows the check underway while it queues). A whole-monorepo suite is the biggest thing this
+                 * daemon ever starts of its own accord, and starting one onto a box that is already pinned is
+                 * how the 2026-08-25 freeze happened. The wait is bounded and then the suite runs regardless —
+                 * see waitForMemoryHeadroom for why neither refusing nor barging in is right here. */
+                const headroom = await waitForMemoryHeadroom({ signal: abort.signal });
+                if (headroom.waitedMs > 0) {
+                    logger.info({ rule: rule.id, waitedMs: headroom.waitedMs, admitted: headroom.admitted }, "prepush: waited for memory headroom");
+                }
+                if (!headroom.admitted) {
+                    logger.warn({ rule: rule.id, message: headroom.message }, "prepush: starting without memory headroom");
+                }
+                logger.info({ rule: rule.id, command, session }, "prepush: check started");
                 // `window` names the tmux window rather than the command, so a session holding several runs
                 // reads as a list of checks.
                 const run = await runRuleCommand(services, {

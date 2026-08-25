@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { admitTurn, type MemoryHeadroom, readMemoryHeadroom, type TurnAdmission } from "./memory-admission.js";
+import { admitTurn, type MemoryHeadroom, readMemoryHeadroom, type TurnAdmission, waitForMemoryHeadroom } from "./memory-admission.js";
 
 const GIB = 1024 ** 3;
 
@@ -74,4 +74,47 @@ test("reading headroom degrades to an admitting verdict instead of throwing", as
     const headroom = await readMemoryHeadroom();
     expect(typeof headroom.stalledPercent).toBe("number");
     expect(admitTurn(headroom)).toHaveProperty("admit");
+});
+
+// The common case pays for exactly one reading: a box with room must not brush a 5s interval against a wait
+// that had nothing to wait for.
+test("a box with room is admitted on the first reading, with no wait", async () => {
+    const wait = await waitForMemoryHeadroom({ read: () => Promise.resolve(box(10, 4)) });
+    expect(wait).toEqual({ admitted: true, waitedMs: 0 });
+});
+
+test("a transient peak is waited out, and the wait is reported", async () => {
+    const readings = [box(10, 9.5), box(10, 9.5), box(10, 4)];
+    const wait = await waitForMemoryHeadroom({ intervalMs: 1, read: () => Promise.resolve(readings.shift() ?? box(10, 4)) });
+    expect(wait.admitted).toBe(true);
+    expect(wait.waitedMs).toBeGreaterThan(0);
+});
+
+/* The deadline is a CAP on patience, not a veto: on exhaustion the caller runs anyway, so what this returns is
+ * the refusal's wording for the caller's log line rather than a reason to drop the work. */
+test("an exhausted deadline reports unadmitted with the refusal's own words, never hangs", async () => {
+    const wait = await waitForMemoryHeadroom({ intervalMs: 1, deadlineMs: 3, read: () => Promise.resolve(box(10, 9.9)) });
+    expect(wait.admitted).toBe(false);
+    expect(wait.message).toContain("GiB");
+});
+
+// The gate holds queued work to the unattended bar: room enough for a turn is not room enough for a suite.
+test("the wait is held to the unattended reserve, not the interactive one", async () => {
+    const oneTurn = { ...box(10, 8.5), freeBytes: 1.5 * GIB };
+    const wait = await waitForMemoryHeadroom({ intervalMs: 1, deadlineMs: 3, read: () => Promise.resolve(oneTurn) });
+    expect(wait.admitted).toBe(false);
+});
+
+// An aborted caller stops waiting immediately: the suite it was queueing is being cancelled, and five more
+// minutes of polling would outlive the run it was for.
+test("an abort ends the wait without the deadline", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 5);
+    const wait = await waitForMemoryHeadroom({
+        intervalMs: 60_000,
+        deadlineMs: 600_000,
+        signal: controller.signal,
+        read: () => Promise.resolve(box(10, 9.9)),
+    });
+    expect(wait.admitted).toBe(false);
 });

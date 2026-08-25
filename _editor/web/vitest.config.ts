@@ -48,8 +48,12 @@ export default defineConfig({
          *    what a crashing worker takes down with it.
          *  - `isolate: false`: 21 failures paired with threads, and with forks it shares a module registry
          *    across files in a package built on singletons, a pass there means the file order was lucky.
-         *  - capping `maxWorkers` (turbo runs every package's vitest at once): 2.5× SLOWER, 55s vs 22s for the
-         *    whole repo. Over-subscription is not what hurts; the scheduler handles it.
+         *  - capping `maxWorkers` IN THIS CONFIG: 2.5× SLOWER solo, 55s vs 22s for the whole repo, so no cap
+         *    lives here and a package run by itself still gets every core. The REPO-WIDE run is bounded
+         *    instead, at the fan-out: the root `pnpm test` sets VITEST_MAX_WORKERS=4 (sized against turbo's
+         *    `concurrency: 4`), because the thing over-subscription does hurt is MEMORY — 2026-08-25, sixteen
+         *    uncapped forks plus vue-tsc pinned a 10 GiB cgroup into a reclaim livelock that froze the
+         *    daemon for six minutes. The CPU scheduler handles over-subscription; the cgroup does not.
          * What is left is the shape of the tests themselves: ~90 `await import()` calls, most of them a
          * singleton being reset. Those are relied on, and this is the budget that covers them.
          *

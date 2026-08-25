@@ -37,7 +37,7 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
         "--network", "intentic-workspace-abc-123", "--network-alias", ORIGIN_HOST,
         "--add-host", "host.docker.internal:host-gateway",
         "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
-        "--memory", "7g", "--memory-swap", "7g",
+        "--memory", "7g", "--memory-swap", "-1",
         "--cap-add=SYS_ADMIN", "--cap-add=SYS_PTRACE",
         "-v", "intentic-workspace-abc-123:/work", "-v", "intentic-history-abc-123:/history", "-v", "intentic-docker-abc-123:/var/lib/docker",
         "-e", "SANDBOX_NAME=intentic-sandbox-abc-123", "-e", "SANDBOX_IMAGE=img:1", "-e", "SANDBOX_BASE_IMAGE=img:1",
@@ -47,16 +47,18 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
 
 test("a measured caller's cap reaches the argv; an unmeasured one falls back to the constant", () => {
     const measured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" });
-    expect(measured.join(" ")).toContain("--memory 22g --memory-swap 22g");
+    expect(measured.join(" ")).toContain("--memory 22g --memory-swap -1");
     const unmeasured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
-    expect(unmeasured.join(" ")).toContain(`--memory ${LOCAL_SANDBOX_MEMORY} --memory-swap ${LOCAL_SANDBOX_MEMORY}`);
+    expect(unmeasured.join(" ")).toContain(`--memory ${LOCAL_SANDBOX_MEMORY} --memory-swap -1`);
 });
 
-/* THE PROPERTY THAT TURNS A LIVELOCK INTO A CRASH, asserted on the argv because it is a docker spelling and not
- * a number: equal --memory/--memory-swap means "no swap", and any value ABOVE the cap silently restores the
- * paging that let one runaway build stall a whole container for an hour. Every shape that carries a cap at all
- * must satisfy it, which is why this walks them rather than checking the local default alone. */
-test("no sandbox may page: --memory-swap never exceeds --memory, on every shape that carries a cap", () => {
+/* THE PROPERTY THAT TURNS A FREEZE INTO A SLOWDOWN, asserted on the argv because it is a docker spelling and
+ * not a number: `-1` is "page into whatever swap the engine has". The equal-values spelling this replaced
+ * ("no swap at all") promised an instant OOM kill at the ceiling and delivered a reclaim livelock instead —
+ * a node-heavy tree is mostly file-backed pages, so the kernel thrashed hot executables for 20 minutes and
+ * `oom_kill` stayed 0 (see the doctrine in index.ts). Every shape that carries a cap must carry the
+ * allowance, which is why this walks them rather than checking the local default alone. */
+test("every capped sandbox may page: --memory-swap is unbounded on every shape that carries a cap", () => {
     const shapes = [
         sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" }),
         sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" }),
@@ -64,34 +66,35 @@ test("no sandbox may page: --memory-swap never exceeds --memory, on every shape 
         sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: localSandboxMemory(0, "10g") }),
     ];
     for (const argv of shapes) {
-        const at = argv.indexOf("--memory");
-        expect(at).toBeGreaterThan(-1);
-        expect(argv[argv.indexOf("--memory-swap") + 1]).toBe(argv[at + 1]);
+        expect(argv.indexOf("--memory")).toBeGreaterThan(-1);
+        expect(argv[argv.indexOf("--memory-swap") + 1]).toBe("-1");
     }
 });
 
-/* The cap is a SHARE of the machine, so the property that matters is that two sandboxes fit and the desktop
- * still has room. Checked as arithmetic on real machine sizes rather than as remembered numbers. */
-test("the per-machine cap leaves room for a second sandbox on every machine size", () => {
+/* The cap is the MACHINE MINUS THE RESERVE, so the property that matters is that the sandbox gets nearly
+ * everything while the host's fixed footprint (sync agent, editor tooling, docker, sibling containers) keeps
+ * its 3 GiB. Checked as arithmetic on real machine sizes rather than as remembered numbers. */
+test("the per-machine cap grants the machine minus the host reserve, floored where the machine is small", () => {
     const GIB = 1024 ** 3;
     for (const totalGib of [8, 16, 20, 32, 64, 128]) {
         const memGib = Number(localSandboxMemory(totalGib * GIB).replace("g", ""));
-        // Never so small the image's own toolchain cannot work, never so large one box owns the whole machine.
+        // Never so small the image's own toolchain cannot work.
         expect(memGib).toBeGreaterThanOrEqual(4);
-        expect(memGib).toBeLessThanOrEqual(24);
-        // Two concurrent sandboxes still leave the host something on any machine big enough to run two.
-        if (totalGib >= 16) expect(memGib * 2).toBeLessThan(totalGib);
+        // The host keeps its reserve (rounding-down can leave it slightly more, never less)…
+        expect(totalGib - memGib).toBeGreaterThanOrEqual(Math.min(3, totalGib - 4));
+        // …and not much more than it: the sandbox is the machine's primary workload, sized like one.
+        expect(totalGib - memGib).toBeLessThanOrEqual(4);
     }
 });
 
 /* The machine that prompted all of this, from its own /proc/meminfo rather than the round number its
  * .wslconfig asks for: `memory=20GB` yields a guest that reports 20479632 kB, i.e. 19.53 GiB, because the
  * kernel's own reservations come off the top. Pinned with the real figure precisely because the round one
- * derives a different cap (7g), and the value that ships is the one the probe container actually measures. */
+ * derives a different cap (17g), and the value that ships is the one the probe container actually measures. */
 test("the WSL guest that prompted the cap: measured, not the round number its config asks for", () => {
-    expect(localSandboxMemory(20479632 * 1024)).toBe("6g");
-    // Two sandboxes at that cap still leave the desktop, docker and the sync agent the larger half.
-    expect(6 * 2).toBeLessThan(19.53);
+    expect(localSandboxMemory(20479632 * 1024)).toBe("16g");
+    // What stays outside the cgroup covers what actually runs there: distro + docker + sibling containers.
+    expect(19.53 - 16).toBeGreaterThan(3);
 });
 
 test("an unmeasurable machine gets the fallback, never a cap derived from zero", () => {
@@ -100,29 +103,26 @@ test("an unmeasurable machine gets the fallback, never a cap derived from zero",
     }
 });
 
-/* THE ESCAPE HATCH, for the machine the share is wrong about: one sandbox, many agent sessions inside it.
- * Pinned on the same guest as the test above, whose derived 6g is exactly the cap that is too small for it —
- * a `turbo` fan-out plus a handful of open agents does not fit, and the owner widens it by hand every rebuild. */
-test("an explicit SANDBOX_MEMORY replaces the derived share", () => {
+/* THE ESCAPE HATCH, for the machine the reserve is wrong about: an owner who wants the sandbox SMALLER than
+ * the derived cap (other workloads on the machine), or a specific figure they have measured for themselves. */
+test("an explicit SANDBOX_MEMORY replaces the derived cap", () => {
     const guest = 20479632 * 1024;
-    expect(localSandboxMemory(guest)).toBe("6g");
+    expect(localSandboxMemory(guest)).toBe("16g");
     expect(localSandboxMemory(guest, "10g")).toBe("10g");
-    // Asking for LESS is an ask too: the override replaces the share, it does not raise a floor under it.
+    // Asking for LESS is an ask too: the override replaces the cap, it does not raise a floor under it.
     expect(localSandboxMemory(guest, "5g")).toBe("5g");
 });
 
-/* An override that could claim anything would just be the uncapped container the cap exists to prevent, so the
- * ask is held between the same floor and ceiling the derived share is, plus its own share of the machine. */
-test("an override is bounded: it may claim more of the machine than the share, never all of it", () => {
+/* An override that could claim anything would just be the uncapped container the cap exists to prevent, so
+ * the ask is held to the same machine-minus-reserve the derived cap answers, and to the same floor. */
+test("an override is bounded: it may claim up to the machine minus the reserve, never all of it", () => {
     const guest = 20479632 * 1024;
-    // 60% of 19.53 GiB is ~11.7, so a greedy ask lands there rather than on the number it asked for.
-    expect(localSandboxMemory(guest, "18g")).toBe("11g");
-    // Never above the absolute ceiling, however large the machine.
-    expect(localSandboxMemory(256 * 1024 ** 3, "200g")).toBe("24g");
+    // 19.53 GiB minus the 3 GiB reserve floors to 16, so a greedy ask lands there, not on the number it typed.
+    expect(localSandboxMemory(guest, "18g")).toBe("16g");
+    // A machine with real room honours a big ask: the bound is the machine's, not a universal ceiling.
+    expect(localSandboxMemory(256 * 1024 ** 3, "200g")).toBe("200g");
     // And the floor holds from below: an override cannot starve the image's own toolchain.
     expect(localSandboxMemory(guest, "1g")).toBe("4g");
-    // The 72% that caused the incident is not reachable by asking for it.
-    expect(Number(localSandboxMemory(guest, "14g").replace("g", "")) / 19.53).toBeLessThan(0.62);
 });
 
 test("an override is honoured on a machine the caller could not measure", () => {
@@ -133,8 +133,8 @@ test("a malformed SANDBOX_MEMORY stops the recreate by name rather than revertin
     for (const bad of ["10", "10G", "10gb", "ten", "10.5g", "-4g", "10 g"]) {
         expect(() => localSandboxMemory(20479632 * 1024, bad), bad).toThrowError(/SANDBOX_MEMORY/u);
     }
-    // Empty is ABSENT, not malformed: replayableEnv drops empty values, and an unset cap is the derived share.
-    expect(localSandboxMemory(20479632 * 1024, "")).toBe("6g");
+    // Empty is ABSENT, not malformed: replayableEnv drops empty values, and an unset cap is the derived cap.
+    expect(localSandboxMemory(20479632 * 1024, "")).toBe("16g");
 });
 
 /* The cap must OUTLIVE the container it sizes, which is the whole reason it is an env var and not a flag:
@@ -149,7 +149,7 @@ test("SANDBOX_MEMORY survives the replay allowlist and is re-emitted onto the co
         memory: "10g",
         env: [["SANDBOX_MEMORY", "10g"]],
     });
-    expect(argv.join(" ")).toContain("--memory 10g --memory-swap 10g");
+    expect(argv.join(" ")).toContain("--memory 10g --memory-swap -1");
     expect(argv.join(" ")).toContain("-e SANDBOX_MEMORY=10g");
 });
 
