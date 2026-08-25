@@ -64,17 +64,40 @@ describe(`repoTargets`, () => {
 
     it(`names the terminal there IS: the daemon's own pane when running, else the answering server's`, () => {
         expect(repoTargets([panel({ running: true })])[0]?.session).toBe(`panel-shop`);
-        expect(repoTargets([panel({ servers: [{ url: `http://127.0.0.1:3000`, session: `web-1` }] })])[0]?.session).toBe(`web-1`);
+        expect(repoTargets([panel({ servers: [{ port: 3000, url: `http://127.0.0.1:3000`, session: `web-1` }] })])[0]?.session).toBe(`web-1`);
         expect(repoTargets([panel({})])[0]?.session).toBeUndefined();
     });
 
-    /* The preview hostname routes to the port the DAEMON assigned this panel, so a repo answering from a
-     * terminal-started server has a hostname that 502s: a target with no url, which the panel explains
-     * instead of framing an error page. */
-    it(`carries the preview address only while the daemon runs the panel`, () => {
+    /* The address is the daemon's to give: it advertises the preview hostname exactly while its own proxy
+     * resolves it to something serving, terminal-started servers included, and withholds it while the repo is
+     * merely installing or is answering on several ports at once. The row carries that verdict verbatim,
+     * because second-guessing it here is what produced a target whose url was a 502. */
+    it(`carries the preview address exactly as the daemon advertises it`, () => {
         const url = `https://preview-shop-s.zone`;
         expect(repoTargets([panel({ previewUrl: url, running: true, healthy: true })])[0]?.url).toBe(url);
-        expect(repoTargets([panel({ previewUrl: url, running: false, healthy: true })])[0]?.url).toBeUndefined();
+        // Serving from a dev server somebody started by hand: no assignment, still previewable.
+        expect(repoTargets([panel({ previewUrl: url, running: false, healthy: true })])[0]?.url).toBe(url);
+        // Running, nothing advertised: installing, or fanned out across ports of its own.
+        expect(repoTargets([panel({ running: true, healthy: true })])[0]?.url).toBeUndefined();
+    });
+
+    /* What it is REALLY serving, for the one screen that has to name them: a monorepo's `dev` fans a turbo run
+     * out across packages that pin their own ports, and no single hostname can stand for three servers. */
+    it(`carries the repo's answering servers, so the panel can name them instead of framing nothing`, () => {
+        const servers = [
+            { port: 4321, url: `http://localhost:4321`, dir: `_site/site` },
+            { port: 47145, url: `http://localhost:47145`, dir: `_editor/web` },
+        ];
+        expect(repoTargets([panel({ servers, healthy: true, running: true })])[0]?.servers).toEqual(servers);
+        expect(repoTargets([panel({})])[0]?.servers).toEqual([]);
+    });
+
+    // Start is offered where there is something to start. A monorepo with no root `dev` script and no
+    // operator/ panel is listed (its apps carry their own rows) and used to offer a button whose only possible
+    // answer was "no runnable panel".
+    it(`offers Start only for a repo that has a dev server to start`, () => {
+        expect(repoTargets([panel({})])[0]?.startable).toBe(true);
+        expect(repoTargets([panel({ repo: `mono`, monorepo: true, hasPanel: false })])[0]?.startable).toBe(false);
     });
 });
 

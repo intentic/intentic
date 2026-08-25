@@ -8,6 +8,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
+import { resolvePanelUpstream } from "./panel-upstream.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
 import { detectScheme } from "../ports/port-probe.js";
 import type { ListeningPort } from "../ports/port-scan.js";
@@ -50,7 +51,7 @@ const detectServers = async (
     repo: string,
     listeners: readonly ListeningPort[],
     panel: { readonly port: number; readonly session: string } | undefined,
-): Promise<{ url: string; dir?: string; session?: string }[]> => {
+): Promise<{ port: number; url: string; dir?: string; session?: string }[]> => {
     const candidates =
         panel === undefined || listeners.some((listener) => listener.port === panel.port)
             ? listeners
@@ -68,7 +69,7 @@ const detectServers = async (
                 // the very checks a story walks through. The family the scan recorded is for OUR dial only.
                 const url = `${scheme}://localhost:${listener.port}`;
                 const dir = listenerDir(listener, workspaceRoot, repo);
-                const server: { url: string; dir?: string; session?: string } = { url };
+                const server: { port: number; url: string; dir?: string; session?: string } = { port: listener.port, url };
                 if (dir !== undefined) {
                     server.dir = dir;
                 }
@@ -91,20 +92,37 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             const discovered = await discoverPanels(services.workspace);
             // ONE procfs walk for the whole list: the scan is a per-sandbox fact, and asking it per repo would
             // re-read every process's fd table once per repository.
+            const listeners = await services.scanPorts();
             const attributed = listenersByRepo(
-                await services.scanPorts(),
+                listeners,
                 services.workspace.root,
                 discovered.map(({ repo }) => repo),
             );
+            const dirs = discovered.map(({ repo }) => join(services.workspace.root, repo));
             const panels = await Promise.all(
                 discovered.map(async ({ repo, hasPanel }) => {
                     const key = panelKey(repo);
                     const port = key !== undefined ? services.processes.portOf(key) : undefined;
-                    const url = key !== undefined ? previewUrl(key, zone, sandboxId) : undefined;
                     const dir = join(services.workspace.root, repo);
                     // The panel the daemon runs, when it runs one: its assigned port and the terminal it put it in.
                     const panel = key !== undefined && port !== undefined ? { port, session: panelSession(key) } : undefined;
+                    // The port rides along with the URL: a repo answering on several of them is previewable
+                    // only by forwarding one, and that call takes the number, not a localhost address.
                     const servers = await detectServers(services.workspace.root, repo, attributed.get(repo) ?? [], panel);
+                    /* THE PREVIEW URL IS A PROMISE, so it is only made where the proxy can keep it: the same
+                     * resolution the proxy routes on (panel-upstream.ts), off the scan already in hand. A repo
+                     * whose `dev` fans out across packages that pin their own ports is answering and NOT
+                     * previewable at this one hostname, and the panel above has a screen for exactly that,
+                     * which it can only show if this is honest. `assignedAnswers` comes from the dial above
+                     * rather than the scan: it is the stronger evidence, and it is already paid for. */
+                    const upstream = resolvePanelUpstream({
+                        dir,
+                        siblings: dirs,
+                        listeners,
+                        assignedPort: port,
+                        assignedAnswers: port !== undefined && servers.some((server) => server.port === port),
+                    });
+                    const url = key !== undefined && upstream.state === "serving" ? previewUrl(key, zone, sandboxId) : undefined;
                     // Content facts, computed in one pass so the browser never N+1-scans /work: each extension
                     // decides its own presence from this evidence (see the web app's extensions/extension.ts).
                     const summary = {

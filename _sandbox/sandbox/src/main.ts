@@ -422,7 +422,7 @@ const main = async (): Promise<void> => {
     const previewProxy = !traits.extraListeners
         ? undefined
         : createPreviewProxy({
-              portOf: services.processes.portOf,
+              panelOf: services.panelUpstreamOf,
               slotTargetOf: services.portForwards.targetOf,
               sandboxId: sandboxIdFromToken(config.connectToken),
               outbox:

@@ -9,9 +9,11 @@ export {
     type ForwardedPortTab,
     openForwardedPort,
     parseLoopbackLink,
+    type PreviewProbe,
+    type PreviewServer,
+    type PreviewState,
     type ProbeOptions,
-    type ProbeOutcome,
-    probeUntilReachable,
+    probePreview,
 } from "./lib/portPreview.js";
 export { ui } from "./lib/ui.js";
 export { default as AgentRunButton } from "./components/AgentRunButton.vue";

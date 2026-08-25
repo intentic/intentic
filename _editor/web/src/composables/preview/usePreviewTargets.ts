@@ -1,13 +1,15 @@
 import { AppsListSchema } from "@intentic-app/api-contract";
+import type { PortForwardResult } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { usePanels } from "../extensions/usePanels";
-import { APPS } from "../queryKeys";
+import { APPS, PORTS } from "../queryKeys";
+import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxJson } from "../sandbox/sandboxClient";
 import { usePorts } from "../sandbox/usePorts";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { usePublicOutbox } from "../workspace/usePublicOutbox";
-import { addressTarget, appTargets, mergeTargets, portTargets, type PreviewTarget, publicTarget, repoTargets } from "./previewModel";
+import { addressTarget, appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId, publicTarget, repoTargets } from "./previewModel";
 import { previewAddress } from "./previewSurface";
 
 /* The live list. `active` gates the per-monorepo apps fan-out to while the preview panel is actually mounted,
@@ -64,6 +66,18 @@ export function usePreviewTargets(active: Ref<boolean>) {
     const start = async (target: PreviewTarget): Promise<void> => act(target, `start`);
     const stop = async (target: PreviewTarget): Promise<void> => act(target, `stop`);
 
+    /* Forward one port of a repo that is answering on several, and answer with the target it just became. This
+     * is the way out of the one state a repo-level preview address cannot express: `dev` fanned out across
+     * packages that pinned their own ports, so the user has to say which of them they meant, and saying it
+     * should not mean leaving for the Ports view. The wait for the refetch is deliberate, the target does not
+     * exist until the ports read lands, and selecting an id that isn't in the list drops the panel onto
+     * whatever pickTarget likes best in the meantime. */
+    const forward = async (port: number): Promise<string | undefined> => {
+        const { previewUrl } = await sandboxJson<PortForwardResult>(`/ports/forward`, jsonBody(`POST`, { port }));
+        await queryClient.invalidateQueries({ queryKey: PORTS.every });
+        return previewUrl === undefined ? undefined : portTargetId(port);
+    };
+
     return {
         targets,
         // Both always-on reads have answered (or definitively failed), what the empty state waits on before
@@ -71,5 +85,6 @@ export function usePreviewTargets(active: Ref<boolean>) {
         settled: computed(() => panelsSettled.value && publicSettled.value),
         start,
         stop,
+        forward,
     };
 }

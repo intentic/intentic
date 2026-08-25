@@ -3,7 +3,8 @@ import https from "node:https";
 import { type AddressInfo } from "node:net";
 import { afterAll, expect, test } from "vitest";
 import type { PortTarget } from "../ports/port-forwards.js";
-import { createPreviewProxy, type PortResolver, type SlotResolver } from "./preview-proxy.js";
+import type { PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
+import { createPreviewProxy, PREVIEW_PROBE_PATH, type SlotResolver } from "./preview-proxy.js";
 
 const servers: (http.Server | https.Server)[] = [];
 afterAll(async () => {
@@ -17,6 +18,12 @@ const listen = async (server: http.Server | https.Server): Promise<number> => {
 };
 
 const noSlots: SlotResolver = () => undefined;
+// A panel resolver over a fixed table: anything not in it is a repo with nothing running.
+const panelsOf =
+    (table: Record<string, PanelUpstream>): PanelUpstreamResolver =>
+    (key) =>
+        Promise.resolve(table[key] ?? { state: "stopped" });
+const noPanels: PanelUpstreamResolver = panelsOf({});
 
 // One upstream panel echoing which Host it saw; the proxy resolves "app" to it and everything else to nothing.
 const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxyPort: number; appPort: number }> => {
@@ -26,10 +33,24 @@ const setup = async (slots?: (appPort: number) => SlotResolver): Promise<{ proxy
             res.end(`hello from ${req.headers.host ?? "?"}${req.url ?? ""}`);
         }),
     );
-    const portOf: PortResolver = (repo) => (repo === "app" ? appPort : undefined);
-    const proxyPort = await listen(createPreviewProxy({ portOf, slotTargetOf: slots === undefined ? noSlots : slots(appPort) }));
+    const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: true } });
+    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: slots === undefined ? noSlots : slots(appPort) }));
     return { proxyPort, appPort };
 };
+
+// The same call keeping the response headers, for the probe (whose CORS header IS the thing under test).
+const raw = (proxyPort: number, host: string, path: string): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> =>
+    new Promise((resolve, reject) => {
+        const request = http.request({ host: "127.0.0.1", port: proxyPort, path, headers: { host } }, (response) => {
+            let body = "";
+            response.on("data", (chunk: Buffer) => {
+                body += chunk.toString();
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 0, body, headers: response.headers }));
+        });
+        request.on("error", reject);
+        request.end();
+    });
 
 // fetch (undici) refuses to override the Host header, so drive the proxy with a raw http.request.
 const get = (proxyPort: number, host: string, path = "/", extra: Record<string, string> = {}): Promise<{ status: number; body: string }> =>
@@ -86,7 +107,7 @@ test("a ::1-only upstream (a `localhost`-bound dev server) is dialed at ::1, not
     const v6Port = (v6Server.address() as AddressInfo).port;
     const proxyPort = await listen(
         createPreviewProxy({
-            portOf: () => undefined,
+            panelOf: noPanels,
             slotTargetOf: (slot) => (slot === "a" ? { port: v6Port, host: "::1", scheme: "http" } : undefined),
         }),
     );
@@ -111,7 +132,7 @@ test("a port target rewrites Origin alongside Host", async () => {
     );
     const proxyPort = await listen(
         createPreviewProxy({
-            portOf: () => undefined,
+            panelOf: noPanels,
             slotTargetOf: (slot) => (slot === "a" ? { port: echoPort, host: "127.0.0.1", scheme: "http" } : undefined),
         }),
     );
@@ -177,7 +198,7 @@ test("an https-scheme slot target is dialed over TLS with verification off (self
         }),
     );
     const target: PortTarget = { port: tlsPort, host: "127.0.0.1", scheme: "https" };
-    const proxyPort = await listen(createPreviewProxy({ portOf: () => undefined, slotTargetOf: (slot) => (slot === "a" ? target : undefined) }));
+    const proxyPort = await listen(createPreviewProxy({ panelOf: noPanels, slotTargetOf: (slot) => (slot === "a" ? target : undefined) }));
     const response = await get(proxyPort, "port-a.example.com");
     expect(response.status).toBe(200);
     expect(response.body).toBe(`secure hello from localhost:${tlsPort}`);
@@ -193,9 +214,9 @@ const idSetup = async (): Promise<{ proxyPort: number; appPort: number }> => {
             res.end(`hello from ${req.headers.host ?? "?"}`);
         }),
     );
-    const portOf: PortResolver = (repo) => (repo === "app" ? appPort : undefined);
+    const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: true } });
     const slotTargetOf: SlotResolver = (slot) => (slot === "a" ? { port: appPort, host: "127.0.0.1", scheme: "http" } : undefined);
-    return { proxyPort: await listen(createPreviewProxy({ portOf, slotTargetOf, sandboxId: ID })), appPort };
+    return { proxyPort: await listen(createPreviewProxy({ panelOf, slotTargetOf, sandboxId: ID })), appPort };
 };
 
 test("with a sandbox id, the -<id> suffix is stripped to route and Host is forwarded unchanged", async () => {
@@ -218,4 +239,93 @@ test("with a sandbox id, a port slot host routes and rewrites like the id-less f
     const response = await get(proxyPort, `port-a-${ID}.example.com`);
     expect(response.status).toBe(200);
     expect(response.body).toBe(`hello from localhost:${appPort}`);
+});
+
+/* --- What the hostname resolves to, when it isn't simply "the assigned port" -----------------------------
+ * The proxy routes on what the repo is SERVING (panel-upstream.ts owns that rule); these are the three
+ * answers that are not a plain forward, and each has a page a person can act on. */
+
+test("a panel serving on a port it pinned itself is dialed there, with Host rewritten to localhost", async () => {
+    const appPort = await listen(
+        http.createServer((req, res) => {
+            res.writeHead(200, { "content-type": "text/plain" });
+            res.end(`hello from ${req.headers.host ?? "?"}`);
+        }),
+    );
+    // `assigned: false` ⇒ nothing agreed to answer at the preview hostname, so the app's own host check
+    // (vite/webpack allow localhost and nothing else) must see localhost, exactly as a forwarded port does.
+    const panelOf = panelsOf({ app: { state: "serving", port: appPort, assigned: false } });
+    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    const response = await get(proxyPort, "preview-app.example.com");
+    expect(response.status).toBe(200);
+    expect(response.body).toBe(`hello from localhost:${appPort}`);
+});
+
+test("a panel whose dev servers each pinned their own port is a 502 that names them", async () => {
+    const panelOf = panelsOf({
+        mono: {
+            state: "several",
+            servers: [
+                { port: 4321, dir: "_site/site" },
+                { port: 47145, dir: "_editor/web" },
+            ],
+        },
+    });
+    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    const response = await get(proxyPort, "preview-mono.example.com");
+    expect(response.status).toBe(502);
+    expect(response.body).toContain("_site/site:4321");
+    expect(response.body).toContain("_editor/web:47145");
+});
+
+test("a panel the daemon runs that hasn't opened a port yet reads as starting, not as missing", async () => {
+    const proxyPort = await listen(createPreviewProxy({ panelOf: panelsOf({ app: { state: "starting" } }), slotTargetOf: noSlots }));
+    const response = await get(proxyPort, "preview-app.example.com");
+    expect(response.status).toBe(502);
+    expect(response.body).toContain("hasn't opened a port yet");
+});
+
+/* --- The probe, which is how a BROWSER can tell "this name doesn't reach the sandbox" from "it does, and the
+ * server is down". Cross-origin it can read nothing else: a no-cors fetch settles on any answer, including the
+ * edge's 502 for an unrouted name, which is what used to get framed. */
+
+test("the probe path answers with CORS open and the panel's live state, without touching the upstream", async () => {
+    const { proxyPort, appPort } = await setup();
+    const response = await raw(proxyPort, "preview-app.example.com", PREVIEW_PROBE_PATH);
+    expect(response.status).toBe(200);
+    expect(response.headers["access-control-allow-origin"]).toBe("*");
+    expect(JSON.parse(response.body)).toEqual({ proxy: "intentic-preview", target: "panel", name: "app", state: "serving" });
+    // The upstream never saw it: it echoes its own greeting for anything it does receive.
+    expect(response.body).not.toContain(`${appPort}`);
+});
+
+test("the probe reports a panel that isn't running, and the ports it is really serving when several", async () => {
+    const panelOf = panelsOf({ mono: { state: "several", servers: [{ port: 4321, dir: "_site/site" }] } });
+    const proxyPort = await listen(createPreviewProxy({ panelOf, slotTargetOf: noSlots }));
+    expect(JSON.parse((await raw(proxyPort, "preview-idle.example.com", PREVIEW_PROBE_PATH)).body)).toMatchObject({ state: "stopped" });
+    expect(JSON.parse((await raw(proxyPort, "preview-mono.example.com", PREVIEW_PROBE_PATH)).body)).toMatchObject({
+        state: "several",
+        servers: [{ port: 4321, dir: "_site/site" }],
+    });
+});
+
+test("the probe on a stray subdomain is a 404: only a name this sandbox serves may claim to be a preview", async () => {
+    const { proxyPort } = await setup();
+    const response = await raw(proxyPort, "app.example.com", PREVIEW_PROBE_PATH);
+    expect(response.status).toBe(404);
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+});
+
+test("the probe answers for an unforwarded slot too, which is a live address with nothing behind it", async () => {
+    const { proxyPort } = await setup((port) => (slot) => (slot === "a" ? { port, host: "127.0.0.1", scheme: "http" } : undefined));
+    expect(JSON.parse((await raw(proxyPort, "port-a.example.com", PREVIEW_PROBE_PATH)).body)).toEqual({
+        proxy: "intentic-preview",
+        target: "port",
+        state: "serving",
+    });
+    expect(JSON.parse((await raw(proxyPort, "port-b.example.com", PREVIEW_PROBE_PATH)).body)).toEqual({
+        proxy: "intentic-preview",
+        target: "port",
+        state: "unforwarded",
+    });
 });

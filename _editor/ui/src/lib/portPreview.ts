@@ -1,58 +1,122 @@
 /* WAITING FOR A PREVIEW ADDRESS TO COME UP, and opening a forwarded port in a tab.
  *
- * A sandbox port is previewed at a port-<slot>-<sandboxId>.<zone> hostname minted by the daemon's preview proxy.
- * A slot's FIRST forward mints DNS, so the address exists before it resolves, and the two ways of showing it
- * both fail badly if handed the address too early: an iframe that error-pages never retries, and a tab
- * navigated to an unresolvable host shows the browser's own "site can't be reached" with nothing to retry from.
+ * A sandbox address is previewed at a `preview-<panel>-<id>` / `port-<slot>-<id>` hostname served by the
+ * daemon's preview proxy. A slot's FIRST forward mints the name, so the address exists before it resolves, and
+ * both ways of showing one fail badly if handed it too early: an iframe that error-pages never retries, and a
+ * tab navigated to an unresolvable host shows the browser's own "site can't be reached" with nothing to retry
+ * from. So the address is probed until it answers.
  *
- * `no-cors` IS THE PROBE. It resolves on ANY HTTP response: 200, 404, 500, a redirect, an opaque response with
- * nothing readable in it, and rejects only on DNS or socket failure. That is exactly the question being asked
- * ("does this name resolve to something listening yet?") and no narrower request can ask it cross-origin.
+ * WHAT THE PROBE ASKS, and why it is not a plain fetch of the page. Cross-origin, a `no-cors` request settles on
+ * ANY response and lets you read none of it, so the old probe called an edge's "502, no route for this name" a
+ * success — and the panel framed it. Chrome then rendered that error page's own `X-Frame-Options` as
+ * "<host> refused to connect", which is how "this sandbox has no preview address" reached the user as a
+ * browser-level connection error with no explanation anywhere.
  *
- * Three surfaces had each written this loop: the preview panel's iframe gate, the terminal's Ctrl+click on a
- * localhost link, and the Ports view's Preview button. The last of those is an extension, which could reach
- * neither of the first two, so the loop, the intervals, and the sentence a user reads while waiting all lived
- * in triplicate, with the two tab-opening copies identical down to their wording. */
+ * The proxy therefore answers ONE reserved path with CORS open (`/__intentic/preview-probe`, see the daemon's
+ * panels/preview-proxy.ts, which owns this string and this shape) and tells the truth about itself: whether the
+ * hostname reached the sandbox at all, and what it currently resolves to there. A readable answer means the
+ * address is real; anything else means it is not, however plausibly the edge answered.
+ *
+ * Three surfaces had each written the waiting loop: the preview panel's iframe gate, the terminal's Ctrl+click
+ * on a localhost link, and the Ports view's Preview button. The last of those is an extension, which could
+ * reach neither of the first two, so the loop, the intervals, and the sentence a user reads while waiting all
+ * lived in triplicate. */
 
-// Fixed rather than per-caller: how long a freshly-minted DNS record takes to propagate is a property of the
-// preview proxy, not of the button that is waiting on it, and three surfaces disagreeing about it was the bug.
+// The proxy's own path (daemon: PREVIEW_PROBE_PATH). One string, two packages, no shared dependency between
+// them: the kit is presentational and takes none.
+const PROBE_PATH = "/__intentic/preview-probe";
+
+// Fixed rather than per-caller: how long a freshly-minted name takes to answer is a property of the preview
+// fabric, not of the button waiting on it, and three surfaces disagreeing about it was the bug.
 const PROBE_INTERVAL_MS = 3000;
 const PROBE_SLOW_AFTER_MS = 30_000;
-// Generous, because a first start can legitimately spend a minute on propagation, but bounded, so a host that
-// will never resolve is not polled for the life of the tab.
+// Generous, because a first start can legitimately spend a minute on propagation, but bounded, so a name that
+// will never answer is not polled for the life of the tab.
 const PROBE_GIVE_UP_MS = 180_000;
 
-export type ProbeOutcome = "reachable" | "gaveUp" | "abandoned";
+// What the sandbox says the address resolves to. `serving` is the only one worth framing; the rest are screens
+// to show, which is why they are carried rather than flattened into a boolean.
+export type PreviewState = "serving" | "starting" | "several" | "stopped" | "unforwarded";
+
+export interface PreviewServer {
+    readonly port: number;
+    // Which package inside the repo bound it (`_editor/web`), absent when the process sits at the repo root.
+    readonly dir?: string;
+}
+
+/* The outcome of a probe:
+ *   · reached      , the hostname IS this sandbox's preview proxy, and `state` is what it serves there
+ *   · unreachable  , nothing answered as a preview before the deadline: no route, no DNS, nothing listening at
+ *                    the edge. NOT "the dev server is down", which is `reached` with a state that says so
+ *   · abandoned    , the caller stopped wanting it (tab closed, component unmounted, newer probe) */
+export type PreviewProbe =
+    | { readonly outcome: "reached"; readonly state: PreviewState; readonly servers: readonly PreviewServer[] }
+    | { readonly outcome: "unreachable" }
+    | { readonly outcome: "abandoned" };
 
 export interface ProbeOptions {
-    /* Called after each failed attempt with how long the wait has run. A caller that narrates progress uses the
-     * `slow` flag to say "this is taking a while" rather than inventing its own threshold. */
+    /* Called after each attempt that did not reach the proxy, with how long the wait has run. A caller that
+     * narrates progress uses the `slow` flag rather than inventing its own threshold. */
     readonly onWaiting?: (elapsedMs: number, slow: boolean) => void;
-    /* Checked before every attempt and after every response. Returning false ends the probe as `abandoned`,
-     * the tab was closed, the component unmounted, a newer probe superseded this one. */
+    /* Checked before every attempt and after every response. Returning false ends the probe as `abandoned`. */
     readonly stillWanted?: () => boolean;
 }
 
-/* Poll `url` until something answers. Never throws: a caller is deciding what to SHOW, and every outcome here
- * is a thing to show rather than an error to handle. */
-export const probeUntilReachable = async (url: string, options: ProbeOptions = {}): Promise<ProbeOutcome> => {
+interface ProbeBody {
+    readonly proxy?: unknown;
+    readonly state?: unknown;
+    readonly servers?: unknown;
+}
+
+const STATES: readonly PreviewState[] = ["serving", "starting", "several", "stopped", "unforwarded"];
+
+// One attempt. Undefined for every way of not being a preview proxy: a rejected fetch (DNS, refused, an
+// opaque cross-origin answer), a non-200, a body that is anybody else's. Never throws.
+const askOnce = async (url: string): Promise<{ state: PreviewState; servers: readonly PreviewServer[] } | undefined> => {
+    try {
+        const response = await fetch(new URL(PROBE_PATH, url).toString(), { cache: "no-store" });
+        if (!response.ok) {
+            return undefined;
+        }
+        const body = (await response.json()) as ProbeBody;
+        const state = STATES.find((known) => known === body.state);
+        if (body.proxy !== "intentic-preview" || state === undefined) {
+            return undefined;
+        }
+        const servers = Array.isArray(body.servers)
+            ? body.servers.flatMap((server: unknown) => {
+                  const entry = server as { port?: unknown; dir?: unknown };
+                  return typeof entry.port === "number" ? [{ port: entry.port, ...(typeof entry.dir === "string" ? { dir: entry.dir } : {}) }] : [];
+              })
+            : [];
+        return { state, servers };
+    } catch {
+        return undefined;
+    }
+};
+
+/* Poll `url` until its preview proxy answers. Never throws: a caller is deciding what to SHOW, and every
+ * outcome here is a thing to show rather than an error to handle. */
+export const probePreview = async (url: string, options: ProbeOptions = {}): Promise<PreviewProbe> => {
     const { onWaiting, stillWanted } = options;
     const startedAt = Date.now();
     for (;;) {
         if (stillWanted?.() === false) {
-            return "abandoned";
+            return { outcome: "abandoned" };
         }
-        try {
-            await fetch(url, { mode: "no-cors", cache: "no-store" });
-            return stillWanted?.() === false ? "abandoned" : "reachable";
-        } catch {
-            const elapsed = Date.now() - startedAt;
-            if (elapsed > PROBE_GIVE_UP_MS) {
-                return "gaveUp";
-            }
-            onWaiting?.(elapsed, elapsed > PROBE_SLOW_AFTER_MS);
-            await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
+        const answer = await askOnce(url);
+        if (stillWanted?.() === false) {
+            return { outcome: "abandoned" };
         }
+        if (answer !== undefined) {
+            return { outcome: "reached", state: answer.state, servers: answer.servers };
+        }
+        const elapsed = Date.now() - startedAt;
+        if (elapsed > PROBE_GIVE_UP_MS) {
+            return { outcome: "unreachable" };
+        }
+        onWaiting?.(elapsed, elapsed > PROBE_SLOW_AFTER_MS);
+        await new Promise((resolve) => setTimeout(resolve, PROBE_INTERVAL_MS));
     }
 };
 
@@ -105,13 +169,19 @@ export const openForwardedPort = ({ port, path = "", forward, onError }: Forward
                 return;
             }
             show(`Waiting for ${previewUrl} to come up…`);
-            const outcome = await probeUntilReachable(previewUrl, { stillWanted: () => live() !== undefined });
-            if (outcome === "gaveUp") {
-                fail(`The preview address didn't come up: the server may have stopped, or DNS is still propagating. Close this tab and try again.`);
+            const probe = await probePreview(previewUrl, { stillWanted: () => live() !== undefined });
+            if (probe.outcome === "unreachable") {
+                fail(
+                    `${previewUrl} doesn't reach this sandbox: the address may still be propagating, or this sandbox publishes no preview hostnames. Close this tab and try again.`,
+                );
+                return;
+            }
+            if (probe.outcome === "reached" && probe.state !== "serving") {
+                fail(`The forward for port ${port} has lapsed: re-open the preview from the Ports view.`);
                 return;
             }
             const arrived = live();
-            if (outcome === "reachable" && arrived !== undefined) {
+            if (probe.outcome === "reached" && arrived !== undefined) {
                 arrived.location.href = `${previewUrl}${path}`;
             }
         } catch (error) {

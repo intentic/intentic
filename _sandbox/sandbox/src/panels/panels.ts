@@ -110,7 +110,7 @@ export const listenerDir = (listener: ListeningPort, workspaceRoot: string, repo
  * The lowest port in a directory is the app's: it is the one the package pinned or was assigned, while the
  * sidecars take whatever ephemeral port they are handed next. Expects `servers` already ordered by port, and a
  * package genuinely serving two things keeps the free-text field as its way out. */
-export const oneServerPerDir = <T extends { dir?: string }>(servers: readonly T[]): T[] => {
+export const oneServerPerDir = <T extends { dir?: string | undefined }>(servers: readonly T[]): T[] => {
     const byDir = new Map<string, T>();
     for (const server of servers) {
         const dir = server.dir ?? ``;

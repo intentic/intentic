@@ -47,35 +47,55 @@ test("panels.list enumerates every repo with its operator panel + runtime status
         config: { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } },
         // "app" is running on a dead port (nothing answers it in either scheme ⇒ no servers ⇒ healthy false);
         // "desired-state" isn't running. Neither repo is a temp dir any real listener was launched from, so the
-        // procfs attribution finds nothing for them either.
+        // procfs attribution finds nothing for them either — so NEITHER gets a previewUrl: the address is only
+        // advertised where the preview proxy has something to route it to.
         processes: fakeProcesses({ app: 1 }),
     });
     const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
-            {
-                repo: "app",
-                hasPanel: true,
-                running: true,
-                healthy: false,
-                servers: [],
-                port: 1,
-                role: "app",
-                ...facts,
-                previewUrl: "https://preview-app-3c469e9d6c58.example.com",
-            },
-            {
-                repo: "desired-state",
-                hasPanel: false,
-                running: false,
-                healthy: false,
-                servers: [],
-                role: "desired-state",
-                ...facts,
-                previewUrl: "https://preview-desired-state-3c469e9d6c58.example.com",
-            },
+            { repo: "app", hasPanel: true, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
+            { repo: "desired-state", hasPanel: false, running: false, healthy: false, servers: [], role: "desired-state", ...facts },
         ],
     });
+});
+
+/* THE ADDRESS IS ADVERTISED WHERE IT WORKS, AND NOWHERE ELSE. It used to be spelled out of the zone and the
+ * repo name alone, so a repo that was merely INSTALLING, and a monorepo whose `dev` fans a turbo run out across
+ * packages that pin their own ports (the assigned one bound by nobody), both handed the browser a hostname that
+ * could only 502 — which the preview panel then framed, and a frame that error-pages never retries. */
+test("panels.list advertises previewUrl only while the preview hostname really serves the repo", async () => {
+    const workspace = tempWorkspace([{ name: "app", panel: true }]);
+    const server = http.createServer((_request, response) => response.end("ok"));
+    const port = await serve(server);
+    const config = { ...testConfig, connectToken: "token", sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" } };
+    const url = "https://preview-app-3c469e9d6c58.example.com";
+
+    // Serving on the port the daemon assigned: the ordinary scaffolded app.
+    const running = panelsClient(workspace, { config, processes: fakeProcesses({ app: port }) });
+    expect((await running.list()).panels[0]?.previewUrl).toBe(url);
+
+    // Serving on a port it pinned itself, nothing on the assigned one: still one address, still previewable.
+    const pinned = panelsClient(workspace, {
+        config,
+        processes: fakeProcesses({ app: 1 }),
+        scanPorts: async () => [{ port, host: "127.0.0.1", forwardable: true, cwd: join(workspace.root, "app") }],
+    });
+    expect((await pinned.list()).panels[0]?.previewUrl).toBe(url);
+
+    // Three dev servers on ports of their own: healthy, and NOT something one hostname can stand for.
+    const fanned = panelsClient(workspace, {
+        config,
+        processes: fakeProcesses({ app: 1 }),
+        scanPorts: async () => [
+            { port, host: "127.0.0.1", forwardable: true, cwd: join(workspace.root, "app", "_editor", "web") },
+            { port: port + 1, host: "127.0.0.1", forwardable: true, cwd: join(workspace.root, "app", "_site", "site") },
+        ],
+    });
+    const several = (await fanned.list()).panels[0];
+    expect(several?.healthy).toBe(true);
+    expect(several?.previewUrl).toBeUndefined();
+    server.close();
 });
 
 test("panels.list reports the content facts extensions detect on", async () => {
@@ -158,9 +178,7 @@ test("panels.list names the terminal each answering dev server is running in", a
         [
             { port: sitePort, url: `http://localhost:${sitePort}`, dir: join("_site", "site"), session: "web-3f2a" },
             { port: webPort, url: `http://localhost:${webPort}`, dir: join("_editor", "web") },
-        ]
-            .toSorted((a, b) => a.port - b.port)
-            .map(({ port: _port, ...server }) => server),
+        ].toSorted((a, b) => a.port - b.port),
     );
     site.close();
     web.close();
@@ -175,7 +193,7 @@ test("panels.list gives the panel's own terminal to the assigned port the scan c
     const client = panelsClient(workspace, { processes: fakeProcesses({ app: port }) });
 
     const [panel] = (await client.list()).panels;
-    expect(panel?.servers).toEqual([{ url: `http://localhost:${port}`, session: "panel-app" }]);
+    expect(panel?.servers).toEqual([{ port, url: `http://localhost:${port}`, session: "panel-app" }]);
     server.close();
 });
 

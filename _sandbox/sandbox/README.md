@@ -79,6 +79,13 @@ reports the profile.
   entry routes an empty model list and every turn on it is refused while the card reads "active".
 - Manage the app dev server and report preview status, including what is ACTUALLY answering inside the box: each
   listening port with the process that took it and the terminal that process descends from, whoever started it.
+  A repo's preview hostname routes on those sockets rather than on the port the panel manager assigned
+  (src/panels/panel-upstream.ts): a `dev` that fans a turbo run out across packages pinning their own ports binds
+  none of the assigned one, and a server somebody started by hand was assigned nothing at all. A preview URL is
+  reported only where that hostname really serves the repo, so the three answers that are not one previewable
+  address (starting, several servers at once, nothing running) reach the browser as themselves instead of as a
+  URL that 502s. The proxy also answers `/__intentic/preview-probe` with CORS open, which is the only way a
+  browser can tell "this name never reached the sandbox" from "it did, and the dev server is down".
 - Keep the tree true after lands: reinstall drifted dependencies, run the project's own checks, and announce the
   edges (`deps.broken`/`deps.fixed`) that wake a fix chore the owner picked from the Automations templates: every
   step in a visible terminal panel and the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts →

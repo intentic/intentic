@@ -33,8 +33,16 @@ export interface PreviewTarget {
     readonly repo: string | undefined;
     // The app instance's name, for the per-app start/stop routes; only `app` targets carry one.
     readonly app: string | undefined;
-    // The URL the iframe loads; absent while the sandbox has no zone (nothing routable to show).
+    /* The URL to show, and ONLY while it is real: the daemon advertises a repo's preview hostname exactly
+     * while its preview proxy has something to route it to (PanelSummary.previewUrl), so this being absent is
+     * a state to explain rather than a spinner to spin. Absent on a sandbox with no zone at all. */
     readonly url: string | undefined;
+    /* What the target is REALLY serving, when that is not one previewable address: a monorepo whose `dev` fans
+     * a turbo run out across packages that pin their own ports answers on three, and no single hostname can
+     * stand for it. Naming them is the only useful thing to say there, and the port is what makes each one
+     * previewable (forward it, and it becomes a target of its own). Empty for everything with one address,
+     * which is everything else. */
+    readonly servers: readonly { readonly port: number; readonly url: string; readonly dir: string | undefined }[];
     readonly running: boolean;
     readonly healthy: boolean;
     /* The tmux session whose pane shows this target's dev server, the daemon's own when it started it, a
@@ -66,10 +74,9 @@ export const repoTargetId = (repo: string): string => `repo:${repo}`;
 export const frameSandbox = (kind: PreviewKind): string | undefined => (kind === `public` ? `allow-scripts allow-forms allow-popups` : undefined);
 
 /* Every runnable repository, MONOREPOS INCLUDED. A monorepo's root `dev` fans out across packages, so its
- * repo-level preview host answers for whichever of them bound the assigned port, imprecise, but it is what
- * the daemon actually serves, and the alternative (showing nothing) is what produced the empty screen this
- * list now can't produce. Where a monorepo DOES have `_apps/` instances, `mergeTargets` drops this row in
- * favour of the per-app ones, which are the precise answer. */
+ * repo-level row can turn out to be several dev servers rather than one previewable address, which the row
+ * SAYS (`servers`) instead of pretending otherwise. Where a monorepo has `_apps/` instances, `mergeTargets`
+ * drops this row in favour of the per-app ones, which are the precise answer. */
 export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
     panels
         .filter((panel) => panel.hasPanel || panel.monorepo)
@@ -80,20 +87,23 @@ export const repoTargets = (panels: readonly PanelSummary[]): PreviewTarget[] =>
             detail: undefined,
             repo: panel.repo,
             app: undefined,
-            /* ONLY WHILE THE DAEMON RUNS IT. `preview-<repo>-…` resolves to the port the process manager
-             * assigned this panel, so a repo answering from a dev server somebody started in their own
-             * terminal has a hostname that routes to nothing and 502s. `healthy` cannot stand in for that,
-             * it means "something this repo owns is answering", terminal-started servers included, so a
-             * healthy target with no url is a real state the panel explains (forward its port, or start it
-             * from here) rather than an error page in an iframe. */
-            url: panel.running ? panel.previewUrl : undefined,
+            /* TAKEN AS THE DAEMON GIVES IT, which is the point: the daemon advertises `preview-<repo>-…` only
+             * while its preview proxy resolves that hostname to something serving (panels.routes.ts), so
+             * absent-with-servers means "answering, on ports no single hostname can stand for" and
+             * absent-while-running means "still starting". Both are screens the panel draws, and neither is
+             * an iframe pointed at a 502. */
+            url: panel.previewUrl,
+            servers: panel.servers.map((server) => ({ port: server.port, url: server.url, dir: server.dir })),
             running: panel.running,
             healthy: panel.healthy,
             /* The terminal there IS, not the one a Start would make: `panel-<repo>` whenever the daemon runs
              * this panel (after a failed start that pane holds the error and is the only place it exists); a
              * repo answering from a server somebody else started names that server's own session. */
             session: panel.running ? `panel-${panel.repo}` : panel.servers.find((server) => server.session !== undefined)?.session,
-            startable: true,
+            // Start means something only where there is a dev server to start: a monorepo with no root `dev`
+            // script and no operator/ panel is listed (its apps may be startable) and refuses one, which used
+            // to be a button that could only ever answer "no runnable panel".
+            startable: panel.hasPanel,
         }));
 
 // One app instance's target id. Named because a second caller now builds one without the list in hand: the
@@ -110,11 +120,17 @@ export const appTargets = (repo: string, apps: readonly RepoApp[]): PreviewTarge
         repo,
         app: app.app,
         url: app.previewUrl,
+        // One app instance is one dev server on the port the daemon assigned it: never the ambiguous shape.
+        servers: [],
         running: app.running,
         healthy: app.healthy,
         session: app.running ? `panel-${repo}--${app.app}` : undefined,
         startable: true,
     }));
+
+// One forwarded port's target id. Named for the same reason the repo's and the app's are: the panel forwards a
+// port itself now (a repo answering on several of them previews no other way) and has to name what it made.
+export const portTargetId = (port: number): string => `port:${port}`;
 
 /* FORWARDED PORTS, the answer for a dev server this app never started: an agent's ad-hoc process, a published
  * container port, `pnpm dev` run by hand in a terminal. Forwarding is already the explicit "make this
@@ -125,7 +141,7 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
     ports
         .filter((port) => port.forwarded && port.previewUrl !== undefined)
         .map((port) => ({
-            id: `port:${port.port}`,
+            id: portTargetId(port.port),
             kind: `port`,
             label: `Port ${port.port}`,
             // What is answering there, in the daemon's own words (ports/port-identity.ts). It used to be the
@@ -134,6 +150,7 @@ export const portTargets = (ports: readonly PortSummary[]): PreviewTarget[] =>
             repo: undefined,
             app: undefined,
             url: port.previewUrl,
+            servers: [],
             // A listening socket IS the running server; there is nothing here to start or stop.
             running: true,
             healthy: true,
@@ -157,6 +174,7 @@ export const publicTarget = (files: readonly PublicFile[]): PreviewTarget | unde
               repo: undefined,
               app: undefined,
               url: page.url,
+              servers: [],
               running: true,
               healthy: true,
               session: undefined,
@@ -196,6 +214,7 @@ export const addressTarget = (typed: string | undefined): PreviewTarget | undefi
         repo: undefined,
         app: undefined,
         url: url.toString(),
+        servers: [],
         running: true,
         healthy: true,
         session: undefined,

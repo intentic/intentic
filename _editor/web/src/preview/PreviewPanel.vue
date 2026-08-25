@@ -6,7 +6,8 @@ import {
     noticeOf,
     Picker,
     type PickerGroup,
-    probeUntilReachable,
+    type PreviewProbe,
+    probePreview,
     SegmentedControl,
     StatusBadge,
     type StatusVariant,
@@ -38,7 +39,7 @@ import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 
 const router = useRouter();
 // Mounted ⇔ opened (PoppablePanels), so the panel's own lifetime gates the per-monorepo apps fan-out.
-const { targets, settled, start, stop } = usePreviewTargets(previewOpened);
+const { targets, settled, start, stop, forward } = usePreviewTargets(previewOpened);
 const target = computed(() => pickTarget(targets.value, previewSelectedId.value));
 
 const { floats } = usePreviewFloating();
@@ -140,23 +141,52 @@ const act = async (action: (entry: PreviewTarget) => Promise<void>): Promise<voi
     }
 };
 
+/* Preview ONE of the servers a fanned-out repo is really running: forward that port and land on the target it
+ * becomes. The forward is a publish (that address is open to anyone holding it), which the screen says next to
+ * the button rather than here, and the Ports view is where one is taken back. */
+const forwarding = ref<number | undefined>(undefined);
+const previewServer = async (port: number): Promise<void> => {
+    actionError.value = undefined;
+    forwarding.value = port;
+    try {
+        const id = await forward(port);
+        if (id === undefined) {
+            actionError.value = `This sandbox has no public preview address, so its ports can't be previewed from a browser.`;
+            return;
+        }
+        selectPreviewTarget(id);
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : `Forwarding port ${port} failed.`;
+    } finally {
+        forwarding.value = undefined;
+    }
+};
+
 // --- The iframe, probe-gated --------------------------------------------------------------------
-/* Hand the browser the hostname only once a fetch proves it resolves: an iframe that error-pages never
- * retries, and a freshly-minted DNS record can lag at the user's resolver. The loop and its intervals are the
- * kit's (@intentic/ui portPreview); what is local is the generation counter, which is how a superseded probe
- * stops being allowed to write this panel's state. The public page skips the probe entirely: its address is the
- * sandbox's own, which everything on screen already resolved to load. */
+/* NOTHING IS FRAMED UNTIL THE ADDRESS HAS ANSWERED FOR ITSELF. An iframe that error-pages never retries, a
+ * freshly-minted name lags at the user's resolver, and, worst of the three, an address that reaches no sandbox
+ * at all still gets an answer: the edge's own 502, whose error page carries X-Frame-Options, which the browser
+ * renders as a bare "<host> refused to connect" inside the frame. So the kit's probe (@intentic/ui
+ * portPreview) asks the preview proxy about ITSELF over a CORS-open path, and this panel shows the answer it
+ * gives instead of guessing from a request that settled. What is local here is the generation counter, which is
+ * how a superseded probe stops being allowed to write this panel's state.
+ *
+ * Everything the sandbox serves is probed, panels, forwarded ports and the outbox alike; only a typed address
+ * is not, because it is somebody else's site, it has no probe to answer, and a wrong one deserves the browser's
+ * own plain "this didn't load" rather than a three-minute spinner. */
 const previewSrc = ref<string | undefined>(undefined);
 const probeSlow = ref(false);
-const probeFailed = ref(false);
+const probing = ref(false);
+const reach = ref<PreviewProbe | undefined>(undefined);
 let probeGeneration = 0;
 
 const probeThenShow = async (url: string): Promise<void> => {
     const generation = ++probeGeneration;
     const current = (): boolean => generation === probeGeneration;
     probeSlow.value = false;
-    probeFailed.value = false;
-    const outcome = await probeUntilReachable(url, {
+    probing.value = true;
+    reach.value = undefined;
+    const probe = await probePreview(url, {
         stillWanted: current,
         onWaiting: (_elapsed, slow) => {
             probeSlow.value = slow;
@@ -165,28 +195,27 @@ const probeThenShow = async (url: string): Promise<void> => {
     if (!current()) {
         return;
     }
-    if (outcome === `reachable`) {
+    probing.value = false;
+    reach.value = probe;
+    if (probe.outcome === `reached` && probe.state === `serving`) {
         previewSrc.value = url;
     }
-    probeFailed.value = outcome === `gaveUp`;
 };
 
-// Resolved when the target is HEALTHY: on `running` the dev server may still be installing/booting.
+/* Resolved when the daemon has published an address for this target: `url` is present exactly while the
+ * sandbox's own preview proxy resolves it to something serving, so its absence is one of the explained states
+ * below (starting, several servers, nothing running) rather than a wait. */
 const resolvePreview = (): void => {
     const entry = target.value;
-    if (entry === undefined || !entry.healthy || entry.url === undefined) {
-        probeGeneration += 1;
-        previewSrc.value = undefined;
-        probeSlow.value = false;
-        probeFailed.value = false;
+    probeGeneration += 1;
+    previewSrc.value = undefined;
+    probeSlow.value = false;
+    probing.value = false;
+    reach.value = undefined;
+    if (entry === undefined || entry.url === undefined) {
         return;
     }
-    /* Only a freshly minted preview hostname is worth waiting on. A forwarded port, the outbox and a typed
-     * address are all addresses that already exist: probing them would turn a site that simply refuses this
-     * browser's fetch into a preview that never appears, and a wrong address into a three-minute spinner
-     * instead of the browser's own plain "this didn't load". */
-    if (entry.kind !== `repo` && entry.kind !== `app`) {
-        probeGeneration += 1;
+    if (entry.kind === `address`) {
         previewSrc.value = entry.url;
         return;
     }
@@ -194,15 +223,15 @@ const resolvePreview = (): void => {
 };
 
 // (Re)resolve on the facts that matter: primitive deps, so the poll's object churn doesn't re-fire it, and
-// re-key the iframe when the target changes or turns healthy again (a restarted server keeps its src, and Vue
-// would otherwise leave the stale error frame in place instead of re-navigating).
+// re-key the iframe when the target changes or its address comes back (a restarted server keeps its src, and
+// Vue would otherwise leave the stale error frame in place instead of re-navigating).
 const previewEpoch = ref(0);
 watch(
-    () => [target.value?.id, target.value?.healthy, target.value?.url] as const,
+    () => [target.value?.id, target.value?.url] as const,
     (now, was) => {
         actionError.value = undefined;
         // `was` is absent on the immediate first run, which is also a fresh mount: a fresh key either way.
-        if (was === undefined || now[0] !== was[0] || (now[1] === true && was[1] !== true)) {
+        if (was === undefined || now[0] !== was[0] || (now[1] !== undefined && was[1] === undefined)) {
             previewEpoch.value += 1;
         }
         resolvePreview();
@@ -223,6 +252,30 @@ const reload = (): void => {
  * in place instead of through devtools on a cross-origin frame. Full is the default and the panel's whole
  * width; phone centres a 390px column (a current iPhone's CSS width) on the canvas. */
 const fit = ref<`full` | `phone`>(`full`);
+
+/* --- WHAT START IS ABOUT TO DO -------------------------------------------------------------------
+ * A button labelled "Start" in a workspace of several repositories says nothing about WHICH thing starts,
+ * WHAT it runs, or where the output goes, and it is not a small action: it installs dependencies on first use
+ * and then runs the repository's own dev command, which can take minutes and can bring up whatever that
+ * command brings up. So the sentence next to it names all three, and the terminal it names is real, the
+ * daemon's own convention (`panel-<repo>` / `panel-<repo>--<app>`), which is where the output, and any failure,
+ * actually lands. */
+const startSession = computed<string | undefined>(() => {
+    const entry = target.value;
+    if (entry?.repo === undefined || !entry.startable) {
+        return undefined;
+    }
+    return entry.app === undefined ? `panel-${entry.repo}` : `panel-${entry.repo}--${entry.app}`;
+});
+const startHint = computed<string | undefined>(() => {
+    const entry = target.value;
+    if (entry === undefined || !entry.startable || startSession.value === undefined) {
+        return undefined;
+    }
+    const what =
+        entry.app === undefined ? `${entry.repo}'s own dev server (its operator/ panel, or its dev script)` : `the ${entry.app} app's dev server`;
+    return `Runs ${what} in the sandbox, installing its dependencies first if they're missing. It appears in the terminal ${startSession.value}, and a first start can take a few minutes.`;
+});
 </script>
 
 <template>
@@ -262,7 +315,14 @@ const fit = ref<`full` | `phone`>(`full`);
                     aria-label="Which app to preview"
                     header="Preview"
                 />
-                <StatusBadge v-if="target && target.startable" :variant="statusVariant" :label="stateOf(target)" size="xs" />
+                <!-- Up or down, for the things that can be either. On kind, not on `startable`: a monorepo with
+                     no root `dev` script can't be started from here and is still plainly running or not. -->
+                <StatusBadge
+                    v-if="target && (target.kind === `repo` || target.kind === `app`)"
+                    :variant="statusVariant"
+                    :label="stateOf(target)"
+                    size="xs"
+                />
                 <!-- Point it somewhere of your own. Always offered, including with nothing discovered at all:
                      that is exactly the state where a typed address is the only preview there can be. -->
                 <button
@@ -279,7 +339,16 @@ const fit = ref<`full` | `phone`>(`full`);
             <span class="flex-1"></span>
 
             <template v-if="target">
-                <Button v-if="target.startable && !target.running" label="Start" size="small" :disabled="busy" @click="act(start)">
+                <!-- The verb carries what it will do: in a workspace of several repositories the button alone
+                     names neither the target nor the command, and this one installs and runs things. -->
+                <Button
+                    v-if="target.startable && !target.running"
+                    label="Start"
+                    size="small"
+                    :disabled="busy"
+                    v-tooltip.bottom="startHint"
+                    @click="act(start)"
+                >
                     <template #icon><Icon name="play" /></template>
                 </Button>
                 <Button v-else-if="target.startable" label="Stop" size="small" severity="secondary" :disabled="busy" @click="act(stop)">
@@ -387,43 +456,96 @@ const fit = ref<`full` | `phone`>(`full`);
                 ></iframe>
             </div>
 
-            <!-- ANSWERING, BUT NOT THROUGH ANYTHING THIS PANEL CAN REACH: a dev server started in a terminal
-                 binds a port the preview proxy was never told about, so the repo's own preview hostname routes
-                 to nothing. Both ways out are here, and the ports page is the one that keeps the running
-                 server (starting it from here would leave two). -->
-            <div v-else-if="target.healthy && !target.url" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <!-- THE ADDRESS REACHES NO SANDBOX. The name resolved and something answered, and it was not this
+                 sandbox's preview proxy: no route was ever attached for it (a box with no tunnel grant
+                 publishes none), or the record is still propagating. This is the state the panel used to have
+                 no words for, because the probe called any answer a success and framed it, leaving the user
+                 with the browser's own "refused to connect" and nowhere to go. Forwarded ports are the way out
+                 that does not depend on a per-panel name. -->
+            <div v-else-if="reach?.outcome === `unreachable`" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                <Icon name="exclamation-triangle" class="text-2xl text-subtle" />
+                <p class="text-sm text-muted">This preview address doesn't reach your sandbox.</p>
+                <p class="max-w-sm text-2xs text-subtle">
+                    <span class="font-mono">{{ target.url }}</span> answers from somewhere that isn't this sandbox's preview proxy: its name may still
+                    be propagating, or this sandbox publishes no preview hostnames at all.
+                </p>
+                <div class="flex items-center gap-2">
+                    <Button label="Try again" size="small" severity="secondary" @click="resolvePreview()" />
+                    <RouterLink
+                        to="/sandbox/ports"
+                        class="rounded-md border border-line px-2.5 py-1 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
+                    >
+                        Open Ports
+                    </RouterLink>
+                </div>
+            </div>
+
+            <!-- ANSWERING ON PORTS NO ONE HOSTNAME CAN STAND FOR. The ordinary monorepo: `dev` fans a turbo run
+                 out across packages that each pin their own port, so the repo is plainly up and its repo-level
+                 preview address means nothing. Naming what it IS serving is the whole answer, and picking one
+                 finishes it right here: forwarding is what makes a port previewable, and it is one press. -->
+            <div v-else-if="!target.url && target.servers.length > 0" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                 <Icon name="globe" class="text-2xl text-subtle" />
                 <p class="text-sm text-muted">
-                    <span class="font-mono">{{ target.label }}</span> is answering, but not from a preview this panel can open.
+                    <span class="font-mono">{{ target.label }}</span> is running
+                    {{ target.servers.length === 1 ? `a dev server` : `${target.servers.length} dev servers` }} on
+                    {{ target.servers.length === 1 ? `a port` : `ports` }} of {{ target.servers.length === 1 ? `its` : `their` }} own, so one preview
+                    address can't stand for it. Pick the one you mean:
                 </p>
+                <ul class="flex w-full max-w-md flex-col gap-1">
+                    <li
+                        v-for="server in target.servers"
+                        :key="server.port"
+                        class="flex items-center justify-between gap-3 rounded-md border border-line px-2.5 py-1.5 text-left"
+                    >
+                        <span class="min-w-0 truncate font-mono text-2xs text-subtle">
+                            {{ server.dir ? `${server.dir} · ` : `` }}{{ server.url }}
+                        </span>
+                        <Button
+                            :label="forwarding === server.port ? `Opening…` : `Preview`"
+                            size="small"
+                            severity="secondary"
+                            :disabled="forwarding !== undefined"
+                            @click="previewServer(server.port)"
+                        />
+                    </li>
+                </ul>
                 <p class="max-w-sm text-2xs text-subtle">
-                    Something started it outside this panel: a terminal, a container. Forward its port and it appears here as its own entry.
+                    Previewing one forwards its port, which publishes it at an address anyone with the link can open. The Ports view lists every
+                    forward and takes them back.
                 </p>
-                <RouterLink
-                    to="/sandbox/ports"
-                    class="rounded-md border border-line px-2.5 py-1 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
-                >
-                    Open Ports
-                </RouterLink>
             </div>
-            <div v-else-if="target.running && probeFailed" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                <Icon name="exclamation-triangle" class="text-muted" />
-                <p class="text-sm text-muted">The preview address didn't come up.</p>
-                <p class="text-2xs text-subtle">The dev server may still be starting: its terminal shows it live.</p>
-                <Button label="Retry" size="small" @click="resolvePreview()" />
-            </div>
-            <div v-else-if="target.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+
+            <!-- STARTED, NOT YET SERVING: installing, compiling, or failing in its terminal, which is the one
+                 place that says which. Also covers the wait on a freshly minted name. -->
+            <div v-else-if="probing || target.running" class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <Icon name="spinner" class="text-muted" spin />
                 <p class="text-sm text-muted">Preparing the preview…</p>
-                <p v-if="probeSlow" class="max-w-sm text-2xs text-subtle">
-                    A first start can take a minute while the preview address propagates: the terminal shows the dev server live.
+                <p v-if="probeSlow || target.running" class="max-w-sm text-2xs text-subtle">
+                    A first start can take a few minutes while dependencies install and the address propagates: the terminal shows the dev server
+                    live.
                 </p>
+                <Button
+                    v-if="target.session"
+                    label="Open its terminal"
+                    size="small"
+                    severity="secondary"
+                    @click="terminal.openFocused(target.session!)"
+                />
             </div>
-            <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+
+            <!-- NOT RUNNING, and the one screen where a button is about to do something substantial: it says
+                 what, where, and how long, because "Start" alone answers none of the three. -->
+            <div v-else class="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
                 <p class="text-sm text-muted">
                     <span class="font-mono">{{ target.label }}</span> isn't running.
                 </p>
-                <Button v-if="target.startable" label="Start" size="small" :disabled="busy" @click="act(start)">
+                <p v-if="startHint" class="max-w-md text-2xs text-subtle">{{ startHint }}</p>
+                <p v-else class="max-w-md text-2xs text-subtle">
+                    It has no dev server this panel can start: no <span class="font-mono">operator/</span> panel and no
+                    <span class="font-mono">dev</span> script at its root. Anything it runs from a terminal shows up under Forwarded ports.
+                </p>
+                <Button v-if="target.startable" label="Start" size="small" :disabled="busy" class="mt-1" @click="act(start)">
                     <template #icon><Icon name="play" /></template>
                 </Button>
             </div>

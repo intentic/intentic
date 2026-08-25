@@ -7625,6 +7625,9 @@ export const PanelSummarySchema = z.object({
     servers: z
         .array(
             z.object({
+                // The port itself, not just the URL it appears in: forwarding one is how a repo answering on
+                // several ports becomes previewable at all, and that call takes a number.
+                port: z.number().describe("The port it is listening on, which is what forwarding it takes."),
                 url: z.string().describe("Where it answers, with the right scheme: a server on its own certificate is served over https."),
                 dir: z
                     .string()
@@ -7641,8 +7644,15 @@ export const PanelSummarySchema = z.object({
             }),
         )
         .describe("Every server this repository is really serving, found by looking at what is listening. Empty when nothing answers."),
-    // https://preview-<repo>-<sandboxId>.<zone>; absent when the sandbox has no zone or connect token (loopback/tests).
-    previewUrl: z.string().optional().describe("Where to open it from outside. Absent on a sandbox with no outside address."),
+    /* https://preview-<repo>-<sandboxId>.<zone>, and ONLY where that address actually serves this repo: absent
+     * on a sandbox with no zone or connect token (loopback/tests), and absent whenever the preview proxy has
+     * nothing to route it to — nothing running, still starting, or (the ordinary monorepo) several dev servers
+     * on ports of their own, none of which one hostname can stand for. Present ⇒ safe to open or frame, which
+     * is what stops a surface from showing a 502 as if it were the app. */
+    previewUrl: z
+        .string()
+        .optional()
+        .describe("Where to open it from outside, present only while that address really serves it. Absent on a sandbox with no outside address."),
     // The workspace role this repo dir occupies (the three fixed dirs); absent for extra clones.
     role: z
         .enum(["intent", "desired-state", "app"])

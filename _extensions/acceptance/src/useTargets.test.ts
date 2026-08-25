@@ -35,9 +35,9 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
 // address comes to be occupied: the panel the daemon started, something outside this sandbox's terminals, and a
 // dev server someone launched in a terminal of their own.
 const MONOREPO = [
-    { url: `https://localhost:47145`, dir: `_editor/web`, session: `panel-intentic` },
-    { url: `https://localhost:6480`, dir: `_platform/api` },
-    { url: `http://localhost:4321`, dir: `_site/site`, session: `web-3f2a` },
+    { port: 47145, url: `https://localhost:47145`, dir: `_editor/web`, session: `panel-intentic` },
+    { port: 6480, url: `https://localhost:6480`, dir: `_platform/api` },
+    { port: 4321, url: `http://localhost:4321`, dir: `_site/site`, session: `web-3f2a` },
 ];
 
 const hostFor = (panels: readonly PanelSummary[]): IntenticApi =>
@@ -93,7 +93,7 @@ describe(`useTargets`, () => {
 
     it(`offers the loopback address only once something actually answers`, async () => {
         const { stateOf, localUrl } = await read([
-            panel({ repo: `app`, running: true, healthy: true, port: 5173, servers: [{ url: `http://localhost:5173` }] }),
+            panel({ repo: `app`, running: true, healthy: true, port: 5173, servers: [{ port: 5173, url: `http://localhost:5173` }] }),
         ]);
 
         expect(stateOf(`app`)).toBe(`ready`);
@@ -105,7 +105,13 @@ describe(`useTargets`, () => {
      * the address comes from what the daemon FOUND listening, scheme and all. */
     it(`takes the address from what is serving, not from the port the daemon handed out`, async () => {
         const { stateOf, localUrl } = await read([
-            panel({ repo: `app`, running: true, healthy: true, port: 39481, servers: [{ url: `https://localhost:47145`, dir: `_editor/web` }] }),
+            panel({
+                repo: `app`,
+                running: true,
+                healthy: true,
+                port: 39481,
+                servers: [{ port: 47145, url: `https://localhost:47145`, dir: `_editor/web` }],
+            }),
         ]);
 
         expect(stateOf(`app`)).toBe(`ready`);
@@ -115,7 +121,7 @@ describe(`useTargets`, () => {
     // A dev server someone started in their own terminal is exactly as walkable, and offering Start for it would
     // collide on the very ports it pinned.
     it(`counts a dev server the daemon never spawned as ready`, async () => {
-        const { stateOf, localUrl } = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173` }] })]);
+        const { stateOf, localUrl } = await read([panel({ repo: `app`, running: false, servers: [{ port: 5173, url: `http://localhost:5173` }] })]);
 
         expect(stateOf(`app`)).toBe(`ready`);
         expect(localUrl(`app`)).toBe(`http://localhost:5173`);
@@ -125,11 +131,13 @@ describe(`useTargets`, () => {
      * `panel-<repo>`: the session a Start WOULD have made. For a dev server started by hand that session has
      * never existed, so the terminals panel opened onto an empty strip. */
     it(`opens the terminal a lone dev server is actually served from, and offers none when it has one`, async () => {
-        const byHand = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173`, session: `web-3f2a` }] })]);
+        const byHand = await read([
+            panel({ repo: `app`, running: false, servers: [{ port: 5173, url: `http://localhost:5173`, session: `web-3f2a` }] }),
+        ]);
         expect(byHand.terminalOf(`app`)).toBe(`web-3f2a`);
 
         // Answering from outside this sandbox's terminals: green, walkable, and nothing to open.
-        const outside = await read([panel({ repo: `app`, running: false, servers: [{ url: `http://localhost:5173` }] })]);
+        const outside = await read([panel({ repo: `app`, running: false, servers: [{ port: 5173, url: `http://localhost:5173` }] })]);
         expect(outside.stateOf(`app`)).toBe(`ready`);
         expect(outside.terminalOf(`app`)).toBeUndefined();
 
@@ -219,7 +227,7 @@ describe(`useTargets`, () => {
      * is shared and the addresses are not, which is what the list draws as one chip on the repo's heading and a
      * second one on the group's row. */
     it(`aims each of a repo's groups separately while they share its one dev server`, async () => {
-        const targets = await read([panel({ repo: `site`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })], {
+        const targets = await read([panel({ repo: `site`, running: true, healthy: true, servers: [{ port: 5173, url: `http://localhost:5173` }] })], {
             "site/marketing": `https://staging.example.dev`,
         });
 
@@ -260,13 +268,13 @@ describe(`useTargets`, () => {
 
     // The ordinary repo: one dev server, every group inheriting it, nothing to state.
     it(`asks for nothing while the repo's own dev server answers for the group`, async () => {
-        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })]);
+        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ port: 5173, url: `http://localhost:5173` }] })]);
 
         expect(targets.needsAddress(`app`, `checkout`)).toBe(false);
     });
 
     it(`hands a group back to the dev server when its typed address is cleared`, async () => {
-        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ url: `http://localhost:5173` }] })]);
+        const targets = await read([panel({ repo: `app`, running: true, healthy: true, servers: [{ port: 5173, url: `http://localhost:5173` }] })]);
 
         targets.aimAt(`app`, ``, `https://preview.example.dev`);
         expect(targets.addressOf(`app`, ``)).toBe(`https://preview.example.dev`);
@@ -286,7 +294,7 @@ describe(`useTargets`, () => {
 describe(`aimOf`, () => {
     // The ordinary repo: one dev server, bound at the repo root, which is why it carries no package `dir`. That
     // absence is load-bearing: it is what makes this address the REPO's rather than one app's.
-    const ONE = [{ url: `http://localhost:5173` }];
+    const ONE = [{ port: 5173, url: `http://localhost:5173` }];
     const THREE = MONOREPO;
     // The same monorepo caught mid-boot: `pnpm dev` has brought the web app up and the other two are still
     // compiling. One address, and still no answer to "which app does this group walk".

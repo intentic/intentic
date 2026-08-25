@@ -146,7 +146,9 @@ import { type ProviderCatalog, providerCatalogsOf } from "./agent/provider-regis
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
+import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
+import { discoverRepos } from "./workspace/repo-discovery.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
@@ -694,6 +696,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Attaches a batch of share names (`preview-<panel>` / `port-<slot>` labels) to this box's own account on
     // the tunnel fabric before the hostnames reach a browser; never rejects (see panels/preview-route.ts).
     readonly ensurePreviewRoutes: (labels: readonly string[]) => Promise<void>;
+    // What a panel's preview hostname actually serves right now, listening sockets over assignments (see
+    // panels/panel-upstream.ts). The preview proxy routes on it, and the panels list advertises a preview URL
+    // only where it answers, so no surface can offer an address that resolves to a dead port.
+    readonly panelUpstreamOf: PanelUpstreamResolver;
     // Shared-access grants, the emails authorized besides the owner. Always present; the /members routes read
     // and write it, and the authorizer consults it. The daemon is the enforcer; the platform only mirrors these.
     readonly members: MembersStore;
@@ -1391,6 +1397,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
             }
         },
         ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
+        // Reads the live sockets (through the shared scan, cached for a beat inside the resolver) rather than
+        // the port the panel manager handed out: a repo whose `dev` pins its own ports is the ordinary
+        // monorepo, and the assignment is fiction there.
+        panelUpstreamOf: createPanelUpstreamResolver({
+            workspaceRoot: workspace.root,
+            repos: () => discoverRepos(workspace.root),
+            listeners: () => services.scanPorts(),
+            portOf: (key) => processes.portOf(key),
+        }),
         members,
         auth,
     };
