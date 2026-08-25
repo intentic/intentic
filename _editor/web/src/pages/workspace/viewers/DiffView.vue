@@ -9,6 +9,7 @@ import { lineStat, type LineStat } from "../../../composables/workspace/codeStat
 import { landingChange, type ImportSide } from "../../../composables/workspace/codeLanding";
 import { editorType, useMonaco, watchEditorType } from "../../../composables/workspace/useMonaco";
 import { highlightLangFor } from "../fileType";
+import { PATCH_GAP } from "./diffPatch";
 
 /* Diff of one file across a snapshot (before = parent, after = the snapshot) on Monaco's diff editor: the
  * same engine VSCode uses, so it brings its own minimap, change overview ruler, and diff computation. Side-by-side
@@ -22,7 +23,17 @@ import { highlightLangFor } from "../fileType";
  * A third, where the diff OPENS (useLayout.diffOpen), is set in Settings rather than up there: it decides
  * where this lands the reader on the way in, so a control over the code would look like it did nothing. */
 
-const { before, after, path } = defineProps<{ before?: string; after?: string; path: string }>();
+const { before, after, path, lines } = defineProps<{
+    before?: string;
+    after?: string;
+    path: string;
+    /* WHERE THE PANES' LINES REALLY CAME FROM, for a diff whose sides are not the whole file. A file too big
+     * to ship arrives as its changed regions (diffPatch.ts), so model line 12 may be line 4,182 of the file,
+     * and numbering the gutter 1..n would be a quiet lie about a file the reader cannot open. One entry per
+     * model line, 1-based, 0 for a gap marker between two regions. Absent for an ordinary whole-file diff,
+     * which numbers itself. */
+    lines?: { readonly before: readonly number[]; readonly after: readonly number[] };
+}>();
 /* How much this pane is actually showing, for the bar above it. Reported from HERE because here is the one place
  * that has already stripped both sides: a toolbar working it out for itself would tokenize the same two files a
  * second time, and could reach a different answer than the panes underneath it. Undefined for a file with no
@@ -91,17 +102,55 @@ const modelImports = (analysis: CodeAnalysis): ReadonlySet<number> => {
     return imports;
 };
 
-const side = async (text: string): Promise<DisplaySide> => {
+/* The gutter, as a lookup rather than a count. Two things can shift a pane's lines away from the file's: the
+ * comment strip (which shortens the model) and a partial diff (whose model holds only the changed regions).
+ * They COMPOSE, and in this order: the strip reports which line of the TEXT IT WAS GIVEN each kept line came
+ * from, and `source` says which line of the FILE that text's line was. Getting the order backwards, or letting
+ * either one number the gutter alone, is how a hunk at line 4,182 ends up labelled 12. */
+const gutter = (source: readonly number[] | undefined, strip: readonly number[] | undefined): Monaco.editor.LineNumbersType => {
+    if (source === undefined) {
+        return strip === undefined ? `on` : (line) => String(strip[line - 1] ?? ``);
+    }
+    const fileLine = (line: number): number => source[(strip === undefined ? line : (strip[line - 1] ?? 0)) - 1] ?? 0;
+    // 0 is a gap marker between two regions: it came from nowhere in the file, so it gets no number.
+    return (line) => (fileLine(line) === 0 ? `` : String(fileLine(line)));
+};
+
+/* Draw the gap markers as gaps rather than as a line of code that happens to read "⋯". One collection per
+ * pane, kept so the next render replaces its own marks instead of stacking a second set over them. The class
+ * itself lives in the design system's file-viewer.css, beside the search-match flash: both are whole-line
+ * Monaco decorations, and Monaco builds its rows imperatively, so neither can be a scoped rule here. */
+const gapMarks = new WeakMap<Monaco.editor.ICodeEditor, Monaco.editor.IEditorDecorationsCollection>();
+const markGaps = (pane: Monaco.editor.ICodeEditor, text: string): void => {
+    const marks = text.split(`\n`).flatMap((line, index) =>
+        line === PATCH_GAP
+            ? [
+                  {
+                      range: { startLineNumber: index + 1, startColumn: 1, endLineNumber: index + 1, endColumn: 1 },
+                      options: { isWholeLine: true, className: `ws-diff-gap` },
+                  },
+              ]
+            : [],
+    );
+    const existing = gapMarks.get(pane);
+    if (existing !== undefined) {
+        existing.set(marks);
+        return;
+    }
+    gapMarks.set(pane, pane.createDecorationsCollection(marks));
+};
+
+const side = async (text: string, source: readonly number[] | undefined): Promise<DisplaySide> => {
     // Hiding comments needs the analysis; showing them only needs it when the landing rule will consume the other
     // half of the same result, which is both rules that read imports. In either case a warmed review normally
     // answers from the client cache.
     const analysis = !showComments.value || diffOpen.value !== `top` ? await requestCodeAnalysis(text, stripLang) : undefined;
     if (showComments.value || analysis === undefined) {
-        return { text, lineNumbers: `on`, stripped: false, imports: new Set(analysis?.imports ?? []) };
+        return { text, lineNumbers: gutter(source, undefined), stripped: false, imports: new Set(analysis?.imports ?? []) };
     }
     return {
         text: analysis.code.text,
-        lineNumbers: (line) => String(analysis.code.lines[line - 1] ?? ``),
+        lineNumbers: gutter(source, analysis.code.lines),
         stripped: true,
         imports: modelImports(analysis),
     };
@@ -109,7 +158,7 @@ const side = async (text: string): Promise<DisplaySide> => {
 
 // Load both sides into the panes. Also the toggle's whole effect: same editor, same file, comments in or out.
 const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void> => {
-    const [left, right] = await Promise.all([side(before ?? ``), side(after ?? ``)]);
+    const [left, right] = await Promise.all([side(before ?? ``, lines?.before), side(after ?? ``, lines?.after)]);
     if (disposed) {
         return; // unmounted (fast file-switch) while the grammar tokenized
     }
@@ -117,14 +166,18 @@ const render = async (editor: Monaco.editor.IStandaloneDiffEditor): Promise<void
     modified?.setValue(right.text);
     editor.getOriginalEditor().updateOptions({ lineNumbers: left.lineNumbers });
     editor.getModifiedEditor().updateOptions({ lineNumbers: right.lineNumbers });
+    // Re-marked on every render because the strip moves the markers up and down the model.
+    markGaps(editor.getOriginalEditor(), left.text);
+    markGaps(editor.getModifiedEditor(), right.text);
     importSides = [
         { lines: left.text.split(`\n`), imports: left.imports },
         { lines: right.text.split(`\n`), imports: right.imports },
     ];
     changeless.value = (before ?? ``) === (after ?? ``) ? `identical` : left.text === right.text ? `comments` : undefined;
     // Unstripped means the reader asked for the comments back, or the file has no grammar: either way what is
-    // on screen is the whole file, which is what git already counted.
-    emit(`stat`, left.stripped && right.stripped ? lineStat(left.text, right.text) : undefined);
+    // on screen is the whole file, which is what git already counted. A PARTIAL diff never counts at all: the
+    // panes hold the changed regions and nothing else, so a count taken here would describe the excerpt.
+    emit(`stat`, left.stripped && right.stripped && lines === undefined ? lineStat(left.text, right.text) : undefined);
 };
 
 /* Land the reader on a change instead of line 1: the change is often mid-file, and Monaco opens at the top,
@@ -197,8 +250,11 @@ onMounted(async () => {
         // redundant next to them. Size 0 too: `hidden` alone still reserves the 14px strip in the layout.
         // Horizontal only ever appears for what wrapping can't fold (a long token).
         scrollbar: { vertical: `hidden`, verticalScrollbarSize: 0 },
-        // Collapse runs of unchanged lines to a few lines of context, like the old collapseUnchanged.
-        hideUnchangedRegions: { enabled: true, contextLineCount: CONTEXT_LINES, minimumLineCount: 3, revealLineCount: 20 },
+        /* Collapse runs of unchanged lines to a few lines of context, like the old collapseUnchanged. OFF for a
+         * partial diff, whose model is already nothing but changed regions with that same context around them:
+         * there is nothing left to collapse, and what it WOULD reach for is the gap marker holding two regions
+         * apart, which is the one line in the pane that must not be hidden. */
+        hideUnchangedRegions: { enabled: lines === undefined, contextLineCount: CONTEXT_LINES, minimumLineCount: 3, revealLineCount: 20 },
         scrollBeyondLastLine: false,
         renderMarginRevertIcon: false,
         fontFamily: mono,

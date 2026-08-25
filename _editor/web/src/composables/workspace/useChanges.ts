@@ -206,14 +206,17 @@ export const workingStatKey = (repo: string, side: GitDiffSide, path: string): s
  * answered from the cache. It used to be the warm walk's job, so a row the walk hadn't reached showed git's
  * number until it was opened AND a second watch existed to catch that case.
  *
- * Bytes and oversized files are WRITTEN OFF rather than left alone: neither has text to strip, so git's counts are
- * exactly what their pane shows, and a row left unrecorded was indistinguishable from one whose count had simply
- * not been taken yet, which is how a badge ends up printing a number it is about to replace. The store turns away a
- * second ask for content it has already counted, so overlapping callers cost nothing. */
+ * Bytes and oversized files are WRITTEN OFF rather than left alone. A code-only count needs both whole sides, and
+ * neither of those has them: a picture has no text to strip, and an oversized file arrives as a patch of its
+ * changed regions, which is an excerpt, so counting it would describe the excerpt rather than the change. Git's
+ * own counts stand for both. Written off EXPLICITLY, because a row left unrecorded was indistinguishable from one
+ * whose count had simply not been taken yet, which is how a badge ends up printing a number it is about to
+ * replace. The store turns away a second ask for content it has already counted, so overlapping callers cost
+ * nothing. */
 const countDiff = (repo: string, path: string, side: GitDiffSide, body: FileDiffResponse): void => {
     const stats = useCodeStats();
     const key = workingStatKey(repo, side, path);
-    if (body.truncated === true || rendersAsBytes(path, body.binary)) {
+    if (body.partial !== undefined || rendersAsBytes(path, body.binary)) {
         stats.noCode(key);
         return;
     }

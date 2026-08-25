@@ -347,10 +347,11 @@ const TEXT_MODES: ReadonlySet<TextMode> = new Set<TextMode>(["code", "markdown"]
 // needed:
 //   - the daemon read NUL bytes out of a file whose extension told us nothing (`binary` on the response), or
 //   - the path itself says there was never any text here, a .png, a .pdf, a .zip.
-// The second is what stops an image from falling into the "too large to diff" message. The daemon flags a side
-// over its 512 KiB text cap as `truncated` BEFORE it ever looks for NUL bytes, so a megabyte screenshot arrives
-// claiming to be an oversized text file. It isn't one, and /diff/raw serves it to 25 MiB, the size that
-// matters for showing a picture, not the size that matters for tokenizing source. `truncated` keeps its
-// meaning for what it actually describes: a genuinely huge TEXT file, which this leaves alone.
+// The second is what keeps an image out of the oversized-text path. The daemon sizes a side BEFORE it ever
+// looks for NUL bytes, so over its 512 KiB text cap it never reads the bytes at all, and a megabyte screenshot
+// arrives described as a big file rather than as a picture. (Git's own "Binary files differ" verdict on the
+// patch it computes instead does usually catch it — but only when a patch could be computed at all, and this
+// answer is free.) /diff/raw serves it to 25 MiB, the size that matters for showing a picture, not the size
+// that matters for tokenizing source.
 export const rendersAsBytes = (path: string, binary: boolean | undefined): boolean =>
     binary === true || !TEXT_MODES.has(resolveFile(path, undefined).mode);

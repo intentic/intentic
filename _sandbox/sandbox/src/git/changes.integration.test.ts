@@ -739,3 +739,155 @@ test("refFileDiff pairs the base blob with the branch blob, and handles a one-si
     // Added by the agent: no before side, exactly as the working-tree pair reports it.
     expect(await refFileDiff(dir, "added.txt", base, "agent/c1")).toEqual({ after: "new\n" });
 });
+
+/* ---- files too big to ship whole -------------------------------------------------------------------------
+ *
+ * Over MAX_FILE_DIFF_BYTES neither side travels, and what goes instead is a patch of the changed regions
+ * (diff-partial.ts). What these pin is the PAIRING: every source has to ask git for the same comparison its
+ * row is listed under, and a wrong rev-spec here shows a reviewer a diff of something they never opened. The
+ * clipping and the degraded cases are diff-partial.test.ts's; this is about which two things got compared. */
+
+// A file comfortably over the 512 KiB cap, with a known line to edit in the middle of it.
+const BIG_LINES = 40_000;
+const bigFile = (marker: string): string =>
+    Array.from({ length: BIG_LINES }, (_, index) => (index === 20_000 ? marker : `line ${index} ${"x".repeat(10)}`)).join("\n");
+
+test("an oversized unstaged file sends the changed region, at the file's own line numbers", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "big.txt"), bigFile("before"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "big");
+    await writeFile(join(dir, "big.txt"), bigFile("after"));
+
+    const diff = await unstagedFileDiff(dir, "big.txt");
+    // Neither whole side: that is the whole point of the cap.
+    expect(diff.before).toBeUndefined();
+    expect(diff.after).toBeUndefined();
+    expect(diff.partial?.beforeBytes).toBeGreaterThan(512 * 1024);
+    expect(diff.partial?.afterBytes).toBeGreaterThan(512 * 1024);
+    // One region, at line 20,001 of the file, holding the one line that moved.
+    expect(diff.partial?.patch).toContain("@@ -19998,7 +19998,7 @@");
+    expect(diff.partial?.patch).toContain("-before");
+    expect(diff.partial?.patch).toContain("+after");
+    expect(diff.partial?.more).toBeUndefined();
+});
+
+test("an oversized staged file is HEAD↔index, not HEAD↔worktree", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "big.txt"), bigFile("committed"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "big");
+    await writeFile(join(dir, "big.txt"), bigFile("staged"));
+    await sh(dir, "add", "-A");
+    // Edited again after staging: the two sides of the row are now two different diffs, and the staged one
+    // must not mention the worktree's edit at all.
+    await writeFile(join(dir, "big.txt"), bigFile("worktree"));
+
+    const staged = await stagedFileDiff(dir, "big.txt");
+    expect(staged.partial?.patch).toContain("-committed");
+    expect(staged.partial?.patch).toContain("+staged");
+    expect(staged.partial?.patch).not.toContain("worktree");
+
+    const unstaged = await unstagedFileDiff(dir, "big.txt");
+    expect(unstaged.partial?.patch).toContain("-staged");
+    expect(unstaged.partial?.patch).toContain("+worktree");
+});
+
+test("an oversized file in an agent's checkout is diffed against the conversation's base", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "big.txt"), bigFile("base"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "big");
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "big.txt"), bigFile("agent edit"));
+
+    const working = await workingFileDiff(dir, "big.txt", base);
+    expect(working.partial?.patch).toContain("-base");
+    expect(working.partial?.patch).toContain("+agent edit");
+
+    // The archived counterpart: same comparison, both sides read as blobs off the branch.
+    await sh(dir, "checkout", "-q", "-b", "agent/c1");
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "Agent: work");
+    const archived = await refFileDiff(dir, "big.txt", base, "agent/c1");
+    expect(archived.partial?.patch).toBe(working.partial?.patch);
+});
+
+test("an oversized file at a commit is diffed against that commit's first parent", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "big.txt"), bigFile("first"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "big");
+    await writeFile(join(dir, "big.txt"), bigFile("second"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "edit");
+
+    const diff = await commitFileDiff(dir, await sh(dir, "rev-parse", "HEAD"), "big.txt");
+    expect(diff.partial?.patch).toContain("-first");
+    expect(diff.partial?.patch).toContain("+second");
+});
+
+/* A file with no counterpart is the case a patch cannot shrink: the whole thing IS the change. It still gets
+ * clipped to the budget rather than refused, which makes the pane the head of the file, the peek a reader
+ * opening a 6 MB new file is actually after. And an oversized file in a repo's FIRST commit has no `<sha>^`
+ * to name at all, which is the one pairing that has to be decided rather than spelled out. */
+test("an oversized added file arrives as the head of itself, and says there is more", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "intentic-changes-"));
+    tempDirs.push(dir);
+    await sh(dir, "init", "-q");
+    await writeFile(join(dir, "big.txt"), bigFile("root"));
+    await sh(dir, "add", "-A");
+    await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "root commit");
+
+    const diff = await commitFileDiff(dir, await sh(dir, "rev-parse", "HEAD"), "big.txt");
+    expect(diff.partial?.beforeBytes).toBeUndefined();
+    expect(diff.partial?.patch?.startsWith("@@ -0,0 +1,")).toBe(true);
+    expect(diff.partial?.patch).toContain("+line 0 xxxxxxxxxx");
+    // Cut at the budget: what is on screen is the start of the file, and `more` is what stops that reading as
+    // the whole of it.
+    expect(diff.partial?.more).toBe(true);
+    expect(diff.partial?.patch).not.toContain(`line ${BIG_LINES - 1} `);
+});
+
+/* An UNTRACKED file is the one git diff cannot answer for at all: it compares the index against the tree, and
+ * a path in neither is invisible to it. Common here, a dropped dataset, a bundle an agent has just generated,
+ * and until the daemon wrote the patch itself it was the case that still ended on an empty pane. */
+test("an oversized untracked file arrives as the head of itself, which git could not have produced", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "dropped.txt"), bigFile("untracked"));
+
+    // The row it is listed under. Nothing in git's index or tree holds this path.
+    expect(await sh(dir, "diff", "--", "dropped.txt")).toBe("");
+
+    const diff = await unstagedFileDiff(dir, "dropped.txt");
+    expect(diff.partial?.beforeBytes).toBeUndefined();
+    expect(diff.partial?.afterBytes).toBeGreaterThan(512 * 1024);
+    expect(diff.partial?.patch?.startsWith("@@ -0,0 +1,")).toBe(true);
+    expect(diff.partial?.patch).toContain("+line 0 xxxxxxxxxx");
+    expect(diff.partial?.more).toBe(true);
+    // The head, not the whole file: the budget is what the reader is peeking through.
+    expect(diff.partial?.patch).not.toContain(`line ${BIG_LINES - 1} `);
+});
+
+test("a file the agent created in its own checkout is diffed the same way, against no base side", async () => {
+    const dir = await tempRepo();
+    const base = await sh(dir, "rev-parse", "HEAD");
+    await writeFile(join(dir, "generated.txt"), bigFile("agent wrote this"));
+
+    const diff = await workingFileDiff(dir, "generated.txt", base);
+    expect(diff.partial?.patch?.startsWith("@@ -0,0 +1,")).toBe(true);
+    expect(diff.partial?.beforeBytes).toBeUndefined();
+});
+
+// An oversized untracked file is SIZED and never read, so the head written for it is the only look anyone gets
+// at its bytes, and so the only chance to notice they are not text at all. Without that check, an archive with
+// an extension nothing recognises arrives as a page of replacement characters "added" to the workspace.
+test("an oversized untracked file that is not text says so instead of shipping decoded rubbish", async () => {
+    const dir = await tempRepo();
+    await writeFile(join(dir, "dump.unknownext"), Buffer.concat([Buffer.from("PK"), Buffer.alloc(700 * 1024)]));
+
+    const diff = await unstagedFileDiff(dir, "dump.unknownext");
+    expect(diff.binary).toBe(true);
+    expect(diff.partial?.patch).toBeUndefined();
+    expect(diff.partial?.afterBytes).toBeGreaterThan(512 * 1024);
+});

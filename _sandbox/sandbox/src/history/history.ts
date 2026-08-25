@@ -13,6 +13,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
+import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/diff-partial.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { discoverRepos, hasGitEntry, isValidRepoId } from "../workspace/repo-discovery.js";
 import type { WorkspacePaths } from "../workspace/workspace.js";
@@ -42,9 +43,6 @@ const VISIBLE_TRIGGERS: ReadonlySet<SnapshotTrigger> = new Set(["turn", "user", 
 const MAX_LABEL_LENGTH = 160;
 // git's well-known empty tree, the diff base for a scope's first snapshot (and an unborn HEAD in git/changes.ts).
 export const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
-// File contents above this are flagged `truncated` instead of shipped to the diff UI (shared with the git
-// routes' working-tree file diff so both diff surfaces guard identically).
-export const MAX_FILE_DIFF_BYTES = 512 * 1024;
 
 // Runs git with the scope's detached-worktree env; injectable so the command sequences are unit-testable
 // without a real repo (mirrors git.ts's GitRunner seam, which can't carry env/cwd separately).
@@ -252,6 +250,18 @@ const looksEmptied = async (worktree: string): Promise<boolean> => {
     const entries = await readdir(worktree, { withFileTypes: true }).catch(() => []);
     return entries.every((entry) => entry.name.startsWith(".") || IGNORED_DIRS.has(entry.name));
 };
+
+// One side of a checkpoint's file diff, as `fileAt` below reports it.
+interface CheckpointSide {
+    readonly content?: string;
+    readonly binary?: boolean;
+    readonly bytes?: number;
+}
+
+// Present, not binary, and no content: a side over the text cap, sized but deliberately never read. Its diff
+// travels as a patch of the changed regions instead of as two whole sides (git/diff-partial.ts).
+const overCap = (side: CheckpointSide | undefined): boolean =>
+    side !== undefined && side.bytes !== undefined && side.content === undefined && side.binary !== true;
 
 export const createWorkspaceHistory = (
     options: { readonly workspace: WorkspacePaths; readonly historyRoot: string; readonly logger: Logger },
@@ -544,24 +554,21 @@ export const createWorkspaceHistory = (
         return changes;
     };
 
-    // A file's content at <commit>:<path>; undefined when absent, flagged instead of shipped when huge/binary.
-    const fileAt = async (
-        scope: Scope,
-        sha: string,
-        path: string,
-    ): Promise<{ content?: string; binary?: boolean; truncated?: boolean } | undefined> => {
+    // A file's content at <commit>:<path>; undefined when absent, its size alone when too big to ship (the
+    // patch below stands in for it), flagged when binary.
+    const fileAt = async (scope: Scope, sha: string, path: string): Promise<CheckpointSide | undefined> => {
         const spec = `${sha}:${path}`;
-        let size: number;
+        let bytes: number;
         try {
-            size = Number((await git(["cat-file", "-s", spec], bare(scope))).stdout.trim());
+            bytes = Number((await git(["cat-file", "-s", spec], bare(scope))).stdout.trim());
         } catch {
             return undefined;
         }
-        if (size > MAX_FILE_DIFF_BYTES) {
-            return { truncated: true };
+        if (bytes > MAX_FILE_DIFF_BYTES) {
+            return { bytes };
         }
         const content = (await git(["cat-file", "-p", spec], bare(scope))).stdout;
-        return content.includes("\0") ? { binary: true } : { content };
+        return content.includes("\0") ? { binary: true, bytes } : { content, bytes };
     };
 
     // Serialize snapshot + restore, they share the per-scope snapshot.index files.
@@ -716,11 +723,23 @@ export const createWorkspaceHistory = (
             const from = base !== undefined ? await stateAt(scope, base) : undefined;
             const before = from !== undefined ? await fileAt(scope, from, path) : undefined;
             const after = await fileAt(scope, to, path);
+            const flagged = before?.binary === true || after?.binary === true;
+            /* Over the cap, so the changed regions ship as a patch instead of two whole sides (diff-partial.ts).
+             * The commits are the same pair the sides above were read from, so the patch describes exactly this
+             * checkpoint against the previous VISIBLE one rather than the raw git parent; `from` absent (the
+             * scope's first capture) pairs against the empty tree, which renders the file as the addition it was. */
+            if (overCap(before) || overCap(after)) {
+                const { binary, partial } = await partialDiff(
+                    async (args) => (await git(args, bare(scope))).stdout,
+                    [from ?? EMPTY_TREE, to, "--", path],
+                    { before: before?.bytes, after: after?.bytes },
+                );
+                return { ...(binary || flagged ? { binary: true } : {}), partial };
+            }
             return {
                 ...(before?.content !== undefined ? { before: before.content } : {}),
                 ...(after?.content !== undefined ? { after: after.content } : {}),
-                ...(before?.binary === true || after?.binary === true ? { binary: true } : {}),
-                ...(before?.truncated === true || after?.truncated === true ? { truncated: true } : {}),
+                ...(flagged ? { binary: true } : {}),
             };
         },
         // The same two commits fileDiff pairs, handed over as rev-specs instead of read as text, so the raw

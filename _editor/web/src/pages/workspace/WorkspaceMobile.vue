@@ -17,11 +17,9 @@ import { type SearchScope, useWorkspaceSearch } from "../../composables/workspac
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { useReceipts } from "../../composables/receipts";
-import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffSkeleton from "./viewers/DiffSkeleton.vue";
-import DiffView from "./viewers/DiffView.vue";
-import { rendersAsBytes } from "./fileType";
+import FileDiffPane from "./viewers/FileDiffPane.vue";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
@@ -336,17 +334,21 @@ const onPick = (event: Event): void => {
                     <!-- Still being read. Nothing below it can be decided yet, whether the file is binary is part
                          of the answer, so this branch comes first, and the viewer mounts once, with content. -->
                     <template v-if="diffTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
-                    <!-- No text to diff is not the same as nothing to see: an image renders as its two sides
-                         (stacked here: two panes don't fit a phone). -->
-                    <BinaryDiffView
-                        v-else-if="rendersAsBytes(diffTab.path, diffTab.binary)"
+                    <!-- Bytes, a patch of the changed regions, or two whole sides: FileDiffPane decides, the
+                         same way it does on the desktop and in an agent's review (an image stacks its two
+                         sides here, because two panes don't fit a phone). -->
+                    <FileDiffPane
+                        v-else
                         :key="diffTab.id"
                         :path="diffTab.path"
-                        :before="diffTab.beforeRaw"
-                        :after="diffTab.afterRaw"
+                        :before="diffTab.before"
+                        :after="diffTab.after"
+                        :binary="diffTab.binary"
+                        :partial="diffTab.partial"
+                        :before-raw="diffTab.beforeRaw"
+                        :after-raw="diffTab.afterRaw"
+                        @stat="setDiffStat"
                     />
-                    <p v-else-if="diffTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                    <DiffView v-else :key="diffTab.id" :before="diffTab.before" :after="diffTab.after" :path="diffTab.path" @stat="setDiffStat" />
                 </template>
                 <FileViewer
                     v-else-if="openPath"

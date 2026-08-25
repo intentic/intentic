@@ -19,6 +19,19 @@
     .monaco-editor .ws-line-flash {
         animation: ws-line-flash 1.5s ease-out;
     }
+
+    /* The seam between two changed regions of a file too big to diff whole (DiffView → diffPatch.ts). The
+       lines either side of it are thousands apart in the real file, so it has to read as a join in the view
+       rather than as a line of code that happens to say "⋯" — dimmed, on its own band, and with no number in
+       the gutter beside it. The descendant rule is for the token spans Monaco may nest inside the mark. */
+    .monaco-editor .ws-diff-gap,
+    .monaco-editor .ws-diff-gap span {
+        color: var(--color-subtle);
+    }
+
+    .monaco-editor .ws-diff-gap {
+        background: color-mix(in srgb, var(--color-line) 35%, transparent);
+    }
 }
 
 @keyframes ws-line-flash {

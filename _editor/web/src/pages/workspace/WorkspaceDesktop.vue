@@ -32,11 +32,10 @@ import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { dragOffer, watchDragSource } from "./dragSource";
 import { filesToEntries } from "./dropEntries";
-import BinaryDiffView from "./viewers/BinaryDiffView.vue";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffSkeleton from "./viewers/DiffSkeleton.vue";
-import DiffView from "./viewers/DiffView.vue";
+import FileDiffPane from "./viewers/FileDiffPane.vue";
 import DirectoryOperator from "./DirectoryOperator.vue";
 import DirectoryPersonas from "./DirectoryPersonas.vue";
 import DirectoryUiHost from "./DirectoryUiHost.vue";
@@ -51,7 +50,6 @@ import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
 import ExtensionDocument from "../../core-views/ExtensionDocument.vue";
-import { rendersAsBytes } from "./fileType";
 import { type RowAction, rowActionsFor } from "./rowActions";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
@@ -1022,21 +1020,18 @@ const endResize = (event: PointerEvent): void => {
                              part of the answer, so this branch comes first, and the viewer mounts once, with
                              content, rather than being remounted when the content replaces the empty panes. -->
                         <template v-if="activeTab.pending"><DiffSkeleton v-if="diffOutline" /></template>
-                        <!-- No text to diff is not the same as nothing to see: an image renders as its two sides. -->
-                        <BinaryDiffView
-                            v-else-if="rendersAsBytes(activeTab.path, activeTab.binary)"
-                            :key="activeTab.id"
-                            :path="activeTab.path"
-                            :before="activeTab.beforeRaw"
-                            :after="activeTab.afterRaw"
-                        />
-                        <p v-else-if="activeTab.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                        <DiffView
+                        <!-- Bytes, a patch of the changed regions, or two whole sides: FileDiffPane decides,
+                             for this surface and for the two others that render the same diff. -->
+                        <FileDiffPane
                             v-else
                             :key="activeTab.id"
+                            :path="activeTab.path"
                             :before="activeTab.before"
                             :after="activeTab.after"
-                            :path="activeTab.path"
+                            :binary="activeTab.binary"
+                            :partial="activeTab.partial"
+                            :before-raw="activeTab.beforeRaw"
+                            :after-raw="activeTab.afterRaw"
                             @stat="setDiffStat"
                         />
                     </div>

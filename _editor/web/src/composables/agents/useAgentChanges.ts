@@ -104,13 +104,14 @@ export const readAgentFileDiff = async (agentId: string, repo: string, path: str
      * count needs both whole sides of the file, this read just paid for them, and every caller then gets it at the
      * same price.
      *
-     * Bytes and oversized files have no text to strip, and that is an ANSWER rather than an absence: their pane
-     * shows the file as it is, so git's counts are what the reader is looking at. Written off explicitly, because
+     * Bytes and oversized files have no whole sides to count, and that is an ANSWER rather than an absence: a
+     * picture has no text to strip, and an oversized file arrives as a patch of its changed regions, which is an
+     * excerpt, so git's own counts are the ones that describe the whole change. Written off explicitly, because
      * leaving them unrecorded left the badge unable to tell them from a file whose count had not been taken yet,
      * so it printed git's number for both, and for one of the two that number was about to change. */
     const stats = useCodeStats();
     const key = agentStatKey(agentId, repo, path);
-    if (body.truncated === true || rendersAsBytes(path, body.binary)) {
+    if (body.partial !== undefined || rendersAsBytes(path, body.binary)) {
         stats.noCode(key);
     } else {
         void stats.record(key, path, body.before ?? ``, body.after ?? ``);

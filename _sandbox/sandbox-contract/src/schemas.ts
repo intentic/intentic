@@ -3812,13 +3812,43 @@ export const SnapshotFileDiffQuerySchema = z.object({
     scope: z.string().min(1).describe("Which part of the workspace the path belongs to."),
     path: z.string().min(1).describe("The file, relative to that scope."),
 });
+/* WHAT A FILE TOO BIG TO SEND WHOLE ANSWERS WITH INSTEAD, and why that is not simply "no".
+ *
+ * Both whole sides of a half-megabyte file are a megabyte of JSON per click, so above the cap they are not
+ * sent, which used to be the end of it: the response said "too large" and every review surface printed one
+ * sentence over an empty pane. That is the wrong trade, because the thing a reader wants out of a big file is
+ * almost never the file: it is the handful of lines that MOVED, and those are small however big the file is.
+ *
+ * So the daemon diffs it and sends the CHANGED REGIONS as a unified patch, at the same three lines of context
+ * a collapsed region keeps elsewhere. A 40 KB patch stands in for a 60 MB pair, and the reader gets the actual
+ * review rather than a refusal. `patch` carries the `@@` sections only, the file headers git prints above them
+ * name rev-specs no one can apply anyway.
+ *
+ * An added or deleted file has no counterpart to diff against, so its patch IS the file, one region of pure
+ * +/− lines. That is still the right answer: cut to the budget, it is the head of the file, which is the peek
+ * the reader came for.
+ *
+ * `patch` is absent only when there was nothing to make one from: a change too large even to render as a
+ * patch, or a git that refused. The sizes are still there, so a surface can at least say how big the thing it
+ * is not showing is. */
+export const PartialFileDiffSchema = z.object({
+    beforeBytes: z.number().int().nonnegative().optional().describe("How big the before side is, in bytes. Absent when the file did not exist yet."),
+    afterBytes: z.number().int().nonnegative().optional().describe("How big the after side is, in bytes. Absent when the file was deleted."),
+    patch: z
+        .string()
+        .optional()
+        .describe("The changed regions as unified-diff hunks (`@@` sections only). Absent when the change was too large to render even as a patch."),
+    more: z.boolean().optional().describe("There were more changed regions than fit; the patch stops at a region boundary."),
+});
+export type PartialFileDiff = z.infer<typeof PartialFileDiffSchema>;
+
 // Both sides of a file diff, a snapshot vs its parent, or a working tree vs HEAD; an absent side means the
-// file was added/deleted. Binary or oversized content is flagged instead of shipped.
+// file was added/deleted. Binary content is flagged instead of shipped; oversized content arrives as `partial`.
 export const FileDiffSchema = z.object({
-    before: z.string().optional().describe("The whole file as it was. Absent when it did not exist yet."),
-    after: z.string().optional().describe("The whole file as it is now. Absent when it was deleted."),
+    before: z.string().optional().describe("The whole file as it was. Absent when it did not exist yet, or when `partial` is set."),
+    after: z.string().optional().describe("The whole file as it is now. Absent when it was deleted, or when `partial` is set."),
     binary: z.boolean().optional().describe("The file is not text, so neither side is sent."),
-    truncated: z.boolean().optional().describe("The file was too large to send whole, so what you have is the start of it."),
+    partial: PartialFileDiffSchema.optional().describe("Set when the file was too large to send whole: what is sent instead of the two sides."),
 });
 export type FileDiff = z.infer<typeof FileDiffSchema>;
 

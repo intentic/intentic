@@ -21,10 +21,8 @@ import { useLayout } from "../composables/useLayout";
 import { toAppPx, uiLength } from "../composables/uiScale";
 import { diffRawUrls } from "../composables/workspace/diffRaw";
 import { useWorkspaceTabs } from "../composables/workspace/useWorkspaceTabs";
-import BinaryDiffView from "../pages/workspace/viewers/BinaryDiffView.vue";
 import DiffToolbar from "../pages/workspace/viewers/DiffToolbar.vue";
-import DiffView from "../pages/workspace/viewers/DiffView.vue";
-import { rendersAsBytes } from "../pages/workspace/fileType";
+import FileDiffPane from "../pages/workspace/viewers/FileDiffPane.vue";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../composables/workspace/changeModules";
 import { useChangeGrouping } from "../composables/workspace/useChangeGrouping";
 import ChangeRowName from "../components/ChangeRowName.vue";
@@ -909,17 +907,20 @@ const endResize = (event: PointerEvent): void => {
                         <p v-else-if="diff === undefined" class="p-4 text-xs text-subtle">
                             <Icon v-if="diffLoading" name="spinner" spin class="mr-1 text-xs" />Loading the diff…
                         </p>
-                        <!-- No text to diff is not the same as nothing to see: an image renders as its two
-                             sides, which is most of what reviewing an agent's asset change consists of. -->
-                        <BinaryDiffView
-                            v-else-if="rendersAsBytes(selected.change.path, diff.binary)"
+                        <!-- Bytes, a patch of the changed regions, or two whole sides: FileDiffPane decides,
+                             the same way it does in the workspace editor. An image renders as its two sides,
+                             which is most of what reviewing an agent's asset change consists of. -->
+                        <FileDiffPane
+                            v-else
                             :key="diffKey"
                             :path="selected.change.path"
-                            :before="rawSides.beforeRaw"
-                            :after="rawSides.afterRaw"
+                            :before="diff.before"
+                            :after="diff.after"
+                            :binary="diff.binary"
+                            :partial="diff.partial"
+                            :before-raw="rawSides.beforeRaw"
+                            :after-raw="rawSides.afterRaw"
                         />
-                        <p v-else-if="diff.truncated" class="p-4 text-xs text-subtle">File too large to diff in the browser.</p>
-                        <DiffView v-else :key="diffKey" :before="diff.before" :after="diff.after" :path="selected.change.path" />
                     </div>
                 </template>
                 <p v-else class="p-4 text-2xs text-subtle">Pick a file to see what the agent did to it.</p>

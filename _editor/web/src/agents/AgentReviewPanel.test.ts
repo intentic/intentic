@@ -24,8 +24,9 @@ vi.hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 
-// The only stand-ins: the two viewers, which the panel mounts for whichever file is selected. Monaco is a real
-// editor with real workers and nothing about it is under test here: the list is.
+// The only stand-ins: the two viewers FileDiffPane picks between for whichever file is selected (the pane
+// itself is real, it is cheap and decides nothing this suite cares about). Monaco is a real editor with real
+// workers and nothing about it is under test here: the list is.
 vi.mock("../pages/workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
 vi.mock("../pages/workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
 

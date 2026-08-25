@@ -152,7 +152,7 @@ const diffTab = (payload: DiffPayload): WorkspaceTab => ({
     before: payload.before,
     after: payload.after,
     binary: payload.binary,
-    truncated: payload.truncated,
+    partial: payload.partial,
     beforeRaw: payload.beforeRaw,
     afterRaw: payload.afterRaw,
     additions: payload.additions,

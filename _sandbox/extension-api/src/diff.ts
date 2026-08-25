@@ -1,3 +1,5 @@
+import type { PartialFileDiff } from "@intentic/sandbox-contract";
+
 /* WHAT AN EXTENSION HANDS THE HOST TO OPEN A DIFF, the argument to `api.workspace.openDiff`.
  *
  * A diff belongs in the editor area beside the files it is about, in the same tab strip as everything else the
@@ -36,11 +38,15 @@ export interface DiffPayload extends DiffRawSides {
     readonly status: ChangeStatus;
     readonly path: string;
     // The two sides as text. Absent where the side does not exist, or where the content is binary/oversized,
-    // `binary` and `truncated` are what the viewer renders instead of an empty pane.
+    // `binary` and `partial` are what the viewer renders instead of an empty pane.
     readonly before?: string;
     readonly after?: string;
     readonly binary?: boolean;
-    readonly truncated?: boolean;
+    /* A file too big to hand over whole, described by its changed regions instead (a unified patch) plus the
+     * sizes of the two sides. The host's viewer rebuilds a real diff out of it, with the file's own line
+     * numbers, so an extension that has computed a huge before/after pair has something better to offer than
+     * a refusal: set this and leave `before`/`after` off. See PartialFileDiff for how the patch is read. */
+    readonly partial?: PartialFileDiff;
     // What the row that opened this diff already knew about its size, carried onto the tab's toolbar. Absent
     // where the source has no numstat to give (a binary file, a change list without line counts), the toolbar
     // then renders nothing rather than a zero.

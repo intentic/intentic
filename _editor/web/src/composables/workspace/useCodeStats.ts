@@ -90,7 +90,8 @@ const record = async (key: string, path: string, before: string, after: string):
     }
 };
 
-/** Settle `key` as a file with nothing to strip, bytes, or a diff too large to send. Git's counts are its reading. */
+/** Settle `key` as a file with nothing to strip, bytes, or a diff that arrived as an excerpt of a file too large
+ *  to send whole. Git's counts are its reading: they describe the whole change, which the excerpt cannot. */
 const noCode = (key: string): void => {
     const entry = stats.value.get(key);
     // Already written off. Re-settling would repaint every badge in every review for no change at all.
