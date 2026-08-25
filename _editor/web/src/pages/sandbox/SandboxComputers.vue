@@ -24,6 +24,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
+import MachineRunners from "../../components/MachineRunners.vue";
 import { type RouteLocationRaw, RouterLink, useRoute } from "vue-router";
 import BridgeTokensCard from "./BridgeTokensCard.vue";
 import {
@@ -730,6 +731,12 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                                 </template>
                             </MachineDetail>
                         </div>
+
+                        <!-- WHAT THIS SANDBOX KEEPS HERE, as opposed to what the person does: the runners it can
+                         hand a conversation to, with the buttons that make and unmake one. Outside the report
+                         gate above, deliberately, a machine that never reported still holds runners this
+                         sandbox created, and the list of them is this side's own knowledge. -->
+                        <MachineRunners :computer="row.computer" />
                     </div>
                 </div>
             </div>

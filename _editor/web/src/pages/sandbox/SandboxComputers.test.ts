@@ -70,6 +70,17 @@ vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
     };
 });
 
+/* THIS SANDBOX'S RUNNERS ON A MACHINE, mocked for the reason the computers list is: the real hook is a
+ * vue-query read, and this bare `createApp` has no plugin to provide a client. What the row draws from it is
+ * the subject here. */
+const runnersList = ref<{ id: string; host?: string; online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }[]>([]);
+vi.mock(`../../composables/sandbox/useRunners`, () => ({
+    useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
+    createRunner: () => Promise.resolve(`made`),
+    removeRunner: () => Promise.resolve(`removed`),
+    forgetRunner: () => Promise.resolve(),
+}));
+
 const { default: SandboxComputers } = await import("./SandboxComputers.vue");
 
 let app: App | undefined;
@@ -96,6 +107,7 @@ const openRow = async (el: HTMLElement, name: string): Promise<void> => {
 
 afterEach(() => {
     latest.value = `1.183.0`;
+    runnersList.value = [];
     computersLoading.value = false;
     capabilities.value = [];
     app?.unmount();
@@ -556,4 +568,42 @@ it(`does not re-derive the whole list on every tick of the app clock`, async () 
     await vi.advanceTimersByTimeAsync(3_000);
     await nextTick();
     expect(derivations).toBe(derivedOnce);
+});
+
+/* ---- this sandbox's runners, under the machine that holds them ---- */
+
+/* THE SECOND KIND OF CONTAINER ON SOMEBODY'S COMPUTER. The list above a runner's row is workspaces belonging
+ * to a PERSON; a runner belongs to this sandbox, and the row exists so the machine that holds it can be told
+ * to make or unmake one. Filtered by host, because the buttons are that machine's: a runner on another
+ * computer must not offer a Remove that would be sent to this one. */
+it(`lists this sandbox's runners under the computer holding them, with what that machine has to offer`, async () => {
+    runnersList.value = [
+        { id: `rig`, host: `host-1`, online: true, facts: { cpus: 16, memoryMb: 26_048, load: 0.25 } },
+        { id: `elsewhere`, host: `other-host`, online: true },
+    ];
+    const el = mount([managed(true)]);
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Runners for this sandbox`);
+    expect(text).toContain(`rig`);
+    expect(text).toContain(`16 cores`);
+    // A runner on a different machine belongs under that machine's row, never this one's.
+    expect(text).not.toContain(`elsewhere`);
+});
+
+// A runner that is paired but whose machine is asleep keeps its row and says so: it is still this sandbox's
+// runner, and the fix is to wake the machine rather than to make another one.
+it(`keeps an offline runner's row and names the state rather than hiding it`, async () => {
+    runnersList.value = [{ id: `rig`, host: `host-1`, online: false }];
+    const el = mount([managed(true)]);
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Offline`);
+});
+
+// A machine with none says what one is FOR, because the button beside it asks for a decision the reader has
+// never had to make before.
+it(`explains what a runner is on a machine that has none`, async () => {
+    const el = mount([managed(true)]);
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`None here yet`);
 });

@@ -77,4 +77,4 @@ export const createRunnerConnectRoute = (services: Services) =>
 // The owner's view: every enrolled runner, with whatever the hub knows about it right now. "Enrolled but
 // never connected" must be distinguishable from "connected but asleep", the hosts view's rule.
 export const runnerSummaries = async (services: Services): Promise<RunnerSummary[]> =>
-    (await services.runners.ids()).map((id) => Object.assign({ id }, services.runnerHub.state(id)));
+    (await services.runners.list()).map((runner) => Object.assign({ id: runner.id }, runner.host !== undefined ? { host: runner.host } : {}, services.runnerHub.state(runner.id)));

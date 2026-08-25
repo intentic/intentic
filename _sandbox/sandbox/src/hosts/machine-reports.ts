@@ -365,7 +365,7 @@ export async function* manageMachineSandbox(services: Services, id: string, inpu
                           message: "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
                       });
                   }
-                  return { ...input, parentUrl, pair: services.runners.mintPairing(input.slug).token };
+                  return { ...input, parentUrl, pair: services.runners.mintPairing(input.slug, id).token };
               })()
             : input;
     try {

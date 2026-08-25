@@ -27,6 +27,13 @@ const StoredRunnersSchema = z.object({
             id: z.string(),
             hash: z.string(),
             enrolledAt: z.number(),
+            /* WHICH CONNECTED COMPUTER HOLDS IT, when this sandbox is the one that asked for it (the Computers
+             * view's create flow, hosts/machine-reports.ts). It is the only way back to the machine that can
+             * stop or remove this container, and the runner itself cannot supply it: from inside, a container
+             * knows its own hostname and nothing about the capability its host is filed under. Absent for a
+             * runner somebody started by hand with `ic runner up`, which is not a lesser runner, only one this
+             * sandbox cannot offer machine buttons for. */
+            host: z.string().optional(),
         }),
     ),
 });
@@ -36,16 +43,22 @@ type StoredRunners = z.infer<typeof StoredRunnersSchema>;
 // a chat log is inert by the time anyone reads it. The hosts pairing's window, for the same reasons.
 const PAIR_TTL_MS = 10 * 60 * 1000;
 
+export interface RunnerRecord {
+    readonly id: string;
+    readonly host?: string | undefined;
+}
+
 export interface RunnersStore {
     // Bind a pairing to one runner id. Single-use, expiring; the raw token is handed to the provisioner once.
-    readonly mintPairing: (id: string) => { token: string; expiresIn: number };
+    // `host` is the computer being asked to create it, carried onto the enrollment when the pairing is spent.
+    readonly mintPairing: (id: string, host?: string) => { token: string; expiresIn: number };
     // Redeem a pairing: the runner gets its durable token, the pairing is spent and burned whether or not the
     // runner ever connects. Undefined ⇒ unknown, expired, or replayed, which the route answers as 401.
     readonly enroll: (pairToken: string) => Promise<{ id: string; runnerToken: string } | undefined>;
     // Which runner is presenting this token, or undefined. The only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<string | undefined>;
     readonly enrolled: (id: string) => Promise<boolean>;
-    readonly ids: () => Promise<string[]>;
+    readonly list: () => Promise<RunnerRecord[]>;
     // Drop a runner's enrollment; its next connect is refused and its live socket is closed by the caller.
     readonly revoke: (id: string) => Promise<boolean>;
 }
@@ -71,12 +84,12 @@ export const fileRunnersStore = (historyRoot: string): RunnersStore => {
     });
     // In memory, the hosts store's stance: a pairing outliving a daemon restart buys nothing (the flow that
     // wants one mints another) and would mean persisting a live credential to protect.
-    const pairings = new Map<string, { id: string; expiresAt: number }>();
+    const pairings = new Map<string, { id: string; host?: string; expiresAt: number }>();
 
     return {
-        mintPairing: (id) => {
+        mintPairing: (id, host) => {
             const token = randomBytes(32).toString("base64url");
-            pairings.set(token, { id, expiresAt: Date.now() + PAIR_TTL_MS });
+            pairings.set(token, { id, ...(host !== undefined ? { host } : {}), expiresAt: Date.now() + PAIR_TTL_MS });
             for (const [key, pairing] of pairings) {
                 if (pairing.expiresAt < Date.now()) {
                     pairings.delete(key);
@@ -97,7 +110,7 @@ export const fileRunnersStore = (historyRoot: string): RunnersStore => {
             pairings.delete(pairToken);
             await burned.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
             const runnerToken = `irt_${randomBytes(32).toString("base64url")}`;
-            const entry = { id: pairing.id, hash: sha256Hex(runnerToken), enrolledAt: Date.now() };
+            const entry = { id: pairing.id, hash: sha256Hex(runnerToken), enrolledAt: Date.now(), ...(pairing.host !== undefined ? { host: pairing.host } : {}) };
             // Re-pairing a runner ROTATES it: the old token stops verifying the moment the new one lands.
             await file.update((stored) => ({ runners: [...stored.runners.filter((runner) => runner.id !== entry.id), entry] }));
             return { id: pairing.id, runnerToken };
@@ -111,7 +124,7 @@ export const fileRunnersStore = (historyRoot: string): RunnersStore => {
             return (await file.read()).runners.find((runner) => tokenEquals(runner.hash, hash))?.id;
         },
         enrolled: async (id) => (await file.read()).runners.some((runner) => runner.id === id),
-        ids: async () => (await file.read()).runners.map((runner) => runner.id),
+        list: async () => (await file.read()).runners.map((runner) => ({ id: runner.id, ...(runner.host !== undefined ? { host: runner.host } : {}) })),
         revoke: async (id) => {
             let revoked = false;
             await file.update((stored) => {
