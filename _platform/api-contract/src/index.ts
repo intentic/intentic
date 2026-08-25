@@ -3,7 +3,11 @@ import { oc } from "@orpc/contract";
 import { z } from "zod";
 import {
     AddressOfferSchema,
+    AdminAttentionSchema,
+    AdminCostsSchema,
+    AdminFunnelSchema,
     AdminOverviewSchema,
+    AdminUserDetailSchema,
     AdminUserListSchema,
     ClaimableNamesSchema,
     ClaimChallengeSchema,
@@ -347,6 +351,14 @@ export const pushRelayContract = {
  * namespace, behind the same guard, with its own explicit confirmation input. */
 export const adminContract = {
     overview: oc.route({ method: "GET", path: "/admin/overview" }).output(AdminOverviewSchema),
+    // The activation funnel + signups: the panel's most important read (see AdminFunnelSchema).
+    funnel: oc.route({ method: "GET", path: "/admin/funnel" }).output(AdminFunnelSchema),
+    // The red-rows feed: every row that is a person's setup, money, or listing waiting on a human, as one
+    // ordered list of server-composed sentences. One endpoint on purpose — the operator's first question is
+    // "what needs me today", not seven cards to scan.
+    attention: oc.route({ method: "GET", path: "/admin/attention" }).output(AdminAttentionSchema),
+    // The bills before the invoice: hosted machines + warm pool, and the trial meter.
+    costs: oc.route({ method: "GET", path: "/admin/costs" }).output(AdminCostsSchema),
     users: oc
         .route({ method: "GET", path: "/admin/users" })
         .input(
@@ -359,6 +371,12 @@ export const adminContract = {
             }),
         )
         .output(AdminUserListSchema),
+    // The support page: one account, everything operational, by id or email (case-insensitive). 404 when
+    // neither matches.
+    user: oc
+        .route({ method: "GET", path: "/admin/user" })
+        .input(z.object({ idOrEmail: z.string().min(1).max(200) }))
+        .output(AdminUserDetailSchema),
 };
 
 // Aggregated contract router, consumed by the oRPC client (ContractRouterClient<typeof apiContract>)

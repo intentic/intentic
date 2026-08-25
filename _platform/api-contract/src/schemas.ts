@@ -1189,8 +1189,18 @@ export const AdminOverviewSchema = z.object({
     users: z.number(),
     sandboxes: z.number(),
     activeDaemons: z.number(),
-    // Memberships whose Stripe status is active/trialing — the premium answer, not the row count.
-    activeMemberships: z.number(),
+    // Sandboxes whose daemon announced within the last 24h / 7d / 30d — the engagement proxies. Honest
+    // caveat rendered in-UI: lastSeenAt is an announce, so a long-running box reads as active all along.
+    activeSandboxes: z.object({ day: z.number(), week: z.number(), month: z.number() }),
+    // The membership book, by Stripe's own words. past_due is churn about to happen; canceled30d is churn
+    // that did. mrrUsd is the honest approximation active × POOL_PRICE_USD — display, never accounting.
+    memberships: z.object({
+        active: z.number(),
+        trialing: z.number(),
+        pastDue: z.number(),
+        canceled30d: z.number(),
+        mrrUsd: z.number(),
+    }),
     // Service listings by lifecycle status (pool-admission.ts vocabulary).
     services: z.object({
         draft: z.number(),
@@ -1201,8 +1211,198 @@ export const AdminOverviewSchema = z.object({
     // Metered service runs since UTC midnight.
     runsToday: z.number(),
     hostedMachines: z.number(),
+    /* Which optional lanes this deployment actually runs — "is prod configured the way I think" as a card
+     * rather than an ssh session. Booleans only: the switches are secrets, their being set is not. */
+    lanes: z.object({
+        trial: z.boolean(),
+        pool: z.boolean(),
+        hosted: z.boolean(),
+        wallet: z.boolean(),
+        push: z.boolean(),
+    }),
 });
 export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
+
+/* THE ACTIVATION FUNNEL — the panel's most important read. Stages are DISTINCT ACCOUNTS, each a superset of
+ * the next, so per-stage conversion is a subtraction the UI can render without re-deriving the rules:
+ *   accounts        — every user row
+ *   withSandbox     — created at least one sandbox (clicked past the landing)
+ *   setupEngaged    — a setup actually started somewhere: a setup code was claimed by a machine, a hosted
+ *                     machine exists, or a daemon has announced (the lanes differ in which stamp they leave,
+ *                     so this is the union — anything narrower undercounts a whole lane)
+ *   connected       — a daemon has EVER announced: the product moment
+ *   activeLast7     — announced within the last seven days: still here
+ * `signupSeries` is per-UTC-day counts, oldest first, exactly `days` entries with zeroes filled in. */
+export const AdminFunnelSchema = z.object({
+    signups: z.object({ today: z.number(), last7: z.number(), last30: z.number(), total: z.number() }),
+    signupSeries: z.array(z.object({ day: z.string(), count: z.number() })),
+    funnel: z.object({
+        accounts: z.number(),
+        withSandbox: z.number(),
+        setupEngaged: z.number(),
+        connected: z.number(),
+        activeLast7: z.number(),
+    }),
+});
+export type AdminFunnel = z.infer<typeof AdminFunnelSchema>;
+
+/* ONE ROW OF "THIS NEEDS A HUMAN" — the attention feed's unit. The sentence is composed SERVER-SIDE
+ * (title/detail) so the vocabulary lives in one place and the panel stays a renderer; `kind` and the anchor
+ * ids exist for grouping and drill-down, never for the UI to re-derive the words from. */
+export const AdminAttentionItemSchema = z.object({
+    kind: z.enum([
+        `stuck-setup`,
+        `announce-refusal`,
+        `unreachable-sandbox`,
+        `payout-stuck`,
+        `statement-expiring`,
+        `payout-account-disabled`,
+        `membership-past-due`,
+        `pool-claim-lingering`,
+        `pool-build-stale`,
+        `service-canary`,
+        `service-suspended`,
+    ]),
+    severity: z.enum([`danger`, `warning`]),
+    title: z.string(),
+    detail: z.string().optional(),
+    // The relevant moment (ISO): when the setup was claimed, the payout created, the statement expires…
+    at: z.iso.datetime().optional(),
+    // Drill-down anchors, present where they apply.
+    email: z.email().optional(),
+    sandboxId: z.string().optional(),
+    serviceSlug: z.string().optional(),
+});
+export type AdminAttentionItem = z.infer<typeof AdminAttentionItemSchema>;
+
+// Ordered most-severe first, then newest. `truncated` says a category hit its cap (each list is bounded
+// server-side), so "the feed is short" is never read as "the problem is small".
+export const AdminAttentionSchema = z.object({
+    items: z.array(AdminAttentionItemSchema),
+    truncated: z.boolean(),
+});
+export type AdminAttention = z.infer<typeof AdminAttentionSchema>;
+
+/* THE BILLS, BEFORE THE INVOICE: the two places the platform spends real money on users' behalf. Config
+ * knobs ride along (cap, image, pool size) so every figure is rendered AGAINST the promise it is spent
+ * under, not as a bare number. */
+export const AdminCostsSchema = z.object({
+    hosted: z.object({
+        machines: z.number(),
+        // Machines with an open wokeAt — awake right now, or stopped with the stretch not yet counted;
+        // either way the meter is running on them.
+        awakeOrUncounted: z.number(),
+        idleWarned: z.number(),
+        // Awake minutes billed to owners this calendar month, and the per-owner free ceiling (0 = uncapped).
+        monthMinutes: z.number(),
+        monthlyHoursCap: z.number(),
+        topOwners: z.array(z.object({ email: z.email(), minutes: z.number() })),
+        pool: z.array(
+            z.object({
+                region: z.string(),
+                building: z.number(),
+                ready: z.number(),
+                claimed: z.number(),
+                // Machines pulled on an image that is no longer the configured one — the reconcile will
+                // rebuild them; a count that stays up is the reconcile not doing so.
+                staleImage: z.number(),
+            }),
+        ),
+        poolSize: z.number(),
+        image: z.string(),
+    }),
+    trial: z.object({
+        enabled: z.boolean(),
+        dailyMessages: z.number(),
+        messagesToday: z.number(),
+        usersToday: z.number(),
+        messages7d: z.number(),
+        users7d: z.number(),
+        // Which real model served each account's most recent trial message, over the last 7 days — the only
+        // model-mix signal the meter keeps (TrialUsage.lastModel), stated as accounts, not messages.
+        models: z.array(z.object({ model: z.string(), accounts: z.number() })),
+    }),
+});
+export type AdminCosts = z.infer<typeof AdminCostsSchema>;
+
+/* THE SUPPORT PAGE — one account, everything operational the platform knows, so "it doesn't work" is
+ * answerable without psql. Operational rows and aggregates only: no credentials, no tokens, no content
+ * (the platform holds none). Sessions carry ip/userAgent because "is this sign-in you?" is a support
+ * question; the GDPR export already shows the subject the same rows. */
+export const AdminUserSandboxSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    createdAt: z.iso.datetime(),
+    lastSeenAt: z.iso.datetime().nullable(),
+    daemonUrl: z.string().nullable(),
+    setupClaimedAt: z.iso.datetime().nullable(),
+    setupReport: SetupReportSchema.nullable(),
+    bootReport: BootReportSchema.nullable(),
+    announceRefusal: AnnounceRefusalSchema.nullable(),
+    hosted: z
+        .object({
+            region: z.string(),
+            appName: z.string(),
+            wokeAt: z.iso.datetime().nullable(),
+            idleWarnedAt: z.iso.datetime().nullable(),
+        })
+        .nullable(),
+    // The cloud lane's display stamp, verbatim (provider/region/server id — never a credential by design).
+    cloud: z.unknown().nullable(),
+    members: z.array(z.object({ email: z.email(), role: z.string(), accepted: z.boolean() })),
+});
+
+export const AdminUserDetailSchema = z.object({
+    user: z.object({
+        id: z.string(),
+        email: z.email(),
+        name: z.string(),
+        image: z.string().nullable(),
+        createdAt: z.iso.datetime(),
+        termsVersion: z.string().nullable(),
+    }),
+    sessions: z.array(
+        z.object({
+            createdAt: z.iso.datetime(),
+            expiresAt: z.iso.datetime(),
+            ipAddress: z.string().nullable(),
+            userAgent: z.string().nullable(),
+        }),
+    ),
+    // Auth providers on the account ("google", …).
+    providers: z.array(z.string()),
+    membership: z.object({ status: z.string(), currentPeriodEnd: z.iso.datetime() }).nullable(),
+    creditsToday: z.number(),
+    trialDays: z.array(z.object({ day: z.string(), messages: z.number(), lastModel: z.string().nullable() })),
+    hostedMonthMinutes: z.number(),
+    wallets: z.array(
+        z.object({
+            network: z.string(),
+            address: z.string(),
+            perPaymentMaxUsd: z.string(),
+            dailyCapUsd: z.string(),
+            payments30d: z.number(),
+        }),
+    ),
+    sandboxes: z.array(AdminUserSandboxSchema),
+    // Sandboxes this account is a MEMBER of (owned ones are above).
+    memberOf: z.array(z.object({ sandboxName: z.string(), ownerEmail: z.email(), role: z.string(), accepted: z.boolean() })),
+    creator: z
+        .object({
+            publishers: z.array(z.string()),
+            services: z.array(z.object({ slug: z.string(), status: z.string(), creditsPerRun: z.number() })),
+            payouts: z.array(
+                z.object({
+                    amountCents: z.number(),
+                    status: z.string(),
+                    createdAt: z.iso.datetime(),
+                    lastError: z.string().nullable(),
+                }),
+            ),
+        })
+        .nullable(),
+});
+export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
 
 // One account in the operator's directory. Counts and status ride along so the list renders without a
 // per-row round trip; nothing here is a secret (the GDPR export shows the subject strictly more).

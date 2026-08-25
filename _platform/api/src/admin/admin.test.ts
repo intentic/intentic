@@ -3,16 +3,39 @@ import { ORPCError } from "@orpc/server";
 import { describe, expect, it } from "vitest";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
+import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { requireAdmin } from "../guards.js";
+import { adminAttention } from "./admin-attention.js";
+import { adminCosts } from "./admin-costs.js";
+import { adminFunnel } from "./admin-funnel.js";
 import { adminOverview } from "./admin-overview.js";
 import { adminRoutes } from "./admin.routes.js";
+import { adminUserDetail } from "./admin-user.js";
 import { adminUsers } from "./admin-users.js";
 
 /* THE ADMIN SURFACE'S WHOLE SECURITY STORY IS ONE GUARD, so the things worth pinning are the refusals: an
  * empty allowlist refusing everyone (a fresh self-hosted platform has no admin surface), a signed-in
  * non-admin reading FORBIDDEN rather than data, and the allowlist matching by address rather than by
- * spelling (case and whitespace are presentation, not identity). */
+ * spelling (case and whitespace are presentation, not identity). Below that, each read module is pinned on
+ * the arithmetic that would lie silently if it drifted: funnel stages, attention sentences and ordering,
+ * cost aggregation against config knobs, and the support page's shape. */
+
+const NOW = new Date(`2026-08-25T10:30:00Z`);
+
+// The slice of Config the admin modules read, cast whole — parsing the full schema here would couple these
+// tests to every unrelated knob's default.
+const configWith = (overrides?: Record<string, unknown>): Config =>
+    ({
+        admin: { emails: `radarsu@gmail.com` },
+        pool: { priceUsd: 20, canaryFailures: 3, stripeSecretKey: `sk`, stripePriceId: `price` },
+        hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
+        zrok: { adminToken: ``, apiEndpoint: `` },
+        trial: { keys: `k1`, dailyMessages: 12 },
+        wallet: { custodyUrl: ``, custodyKey: `` },
+        apns: { keyP8: `` },
+        ...overrides,
+    }) as unknown as Config;
 
 const contextWith = (emails: string, user: { email: string } | null): OrpcContext =>
     ({ user: user ? { id: `u1`, email: user.email, name: `x`, image: null } : null, config: { admin: { emails } } }) as OrpcContext;
@@ -53,53 +76,323 @@ describe(`requireAdmin`, () => {
 });
 
 describe(`adminOverview`, () => {
-    it(`assembles the counts and fills every service status, absent group-by rows included`, async () => {
-        const now = new Date(`2026-08-25T10:30:00Z`);
-        const captured: { sandboxWheres: unknown[]; membershipWhere?: unknown; runWhere?: unknown } = { sandboxWheres: [] };
+    it(`assembles counts, the membership book, activity windows and lanes — absent group-by rows zero-filled`, async () => {
+        // The sandbox mock answers by window: the where's gte names which count is being asked for.
+        const windows = new Map([
+            [new Date(`2026-08-25T10:25:00Z`).getTime(), 3], // 5 min — connected now
+            [new Date(`2026-08-24T10:30:00Z`).getTime(), 4], // 24h
+            [new Date(`2026-08-18T10:30:00Z`).getTime(), 5], // 7d
+            [new Date(`2026-07-26T10:30:00Z`).getTime(), 6], // 30d
+        ]);
         const prisma = {
             user: { count: async () => 7 },
             sandbox: {
-                count: async (args?: { where?: unknown }) => {
-                    captured.sandboxWheres.push(args?.where);
-                    return args?.where ? 3 : 9;
+                count: async (args?: { where?: { lastSeenAt?: { gte: Date } } }) => {
+                    const gte = args?.where?.lastSeenAt?.gte;
+                    return gte ? (windows.get(gte.getTime()) ?? -1) : 9;
                 },
             },
             membership: {
-                count: async (args: { where: unknown }) => {
-                    captured.membershipWhere = args.where;
-                    return 2;
-                },
-            },
-            service: {
                 groupBy: async () => [
-                    { status: `listed`, _count: { _all: 4 } },
-                    { status: `suspended`, _count: { _all: 1 } },
+                    { status: `active`, _count: { _all: 2 } },
+                    { status: `past_due`, _count: { _all: 1 } },
                 ],
+                count: async () => 1,
             },
-            serviceRun: {
-                count: async (args: { where: unknown }) => {
-                    captured.runWhere = args.where;
-                    return 11;
-                },
-            },
+            service: { groupBy: async () => [{ status: `listed`, _count: { _all: 4 } }] },
+            serviceRun: { count: async () => 11 },
             hostedMachine: { count: async () => 5 },
         } as unknown as PrismaClient;
 
-        const overview = await adminOverview(prisma, () => now);
+        const overview = await adminOverview(prisma, configWith(), () => NOW);
         expect(overview).toEqual({
             users: 7,
             sandboxes: 9,
             activeDaemons: 3,
-            activeMemberships: 2,
-            services: { draft: 0, probation: 0, listed: 4, suspended: 1 },
+            activeSandboxes: { day: 4, week: 5, month: 6 },
+            memberships: { active: 2, trialing: 0, pastDue: 1, canceled30d: 1, mrrUsd: 40 },
+            services: { draft: 0, probation: 0, listed: 4, suspended: 0 },
             runsToday: 11,
             hostedMachines: 5,
+            // trial has a key and the pool has Stripe; hosted, wallet and push are unconfigured.
+            lanes: { trial: true, pool: true, hosted: false, wallet: false, push: false },
         });
-        // The active window is five minutes back from "now", and today starts at UTC midnight.
-        expect(captured.sandboxWheres).toContainEqual({ lastSeenAt: { gte: new Date(`2026-08-25T10:25:00Z`) } });
-        expect(captured.runWhere).toEqual({ createdAt: { gte: new Date(`2026-08-25T00:00:00Z`) } });
-        // The premium rule verbatim: active + trialing, never past_due.
-        expect(captured.membershipWhere).toEqual({ status: { in: [`active`, `trialing`] } });
+    });
+});
+
+describe(`adminFunnel`, () => {
+    const prismaWith = (counts: { total: number; withSandbox: number; engaged: number; connected: number; active7: number }, signups: Date[]) =>
+        ({
+            user: {
+                count: async (args?: { where?: Record<string, unknown> }) => {
+                    const where = args?.where;
+                    if (!where) {
+                        return counts.total;
+                    }
+                    if (where[`createdAt`]) {
+                        // Window signup counts answer by how far back the window reaches.
+                        const gte = (where[`createdAt`] as { gte: Date }).gte;
+                        return signups.filter((at) => at >= gte).length;
+                    }
+                    const some = (where[`sandboxes`] as { some: Record<string, unknown> }).some;
+                    if (some[`OR`]) {
+                        return counts.engaged;
+                    }
+                    if (some[`lastSeenAt`]) {
+                        return (some[`lastSeenAt`] as { not?: null }).not === null ? counts.connected : counts.active7;
+                    }
+                    return counts.withSandbox;
+                },
+                findMany: async () => signups.map((createdAt) => ({ createdAt })),
+            },
+        }) as unknown as PrismaClient;
+
+    it(`buckets signups per UTC day, zero-filled to exactly 30 entries oldest-first`, async () => {
+        const signups = [new Date(`2026-08-25T09:00:00Z`), new Date(`2026-08-25T01:00:00Z`), new Date(`2026-08-20T23:59:00Z`)];
+        const funnel = await adminFunnel(prismaWith({ total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 }, signups), () => NOW);
+        expect(funnel.signupSeries).toHaveLength(30);
+        expect(funnel.signupSeries[0]).toEqual({ day: `2026-07-27`, count: 0 });
+        expect(funnel.signupSeries.at(-1)).toEqual({ day: `2026-08-25`, count: 2 });
+        expect(funnel.signupSeries.find((entry) => entry.day === `2026-08-20`)).toEqual({ day: `2026-08-20`, count: 1 });
+        expect(funnel.signups).toEqual({ today: 2, last7: 3, last30: 3, total: 10 });
+    });
+
+    it(`reports the five stages as distinct-account counts, accounts = the user total`, async () => {
+        const funnel = await adminFunnel(prismaWith({ total: 10, withSandbox: 8, engaged: 6, connected: 4, active7: 2 }, []), () => NOW);
+        expect(funnel.funnel).toEqual({ accounts: 10, withSandbox: 8, setupEngaged: 6, connected: 4, activeLast7: 2 });
+    });
+});
+
+describe(`adminAttention`, () => {
+    const emptyPrisma = () =>
+        ({
+            sandbox: { findMany: async () => [] },
+            creatorPayout: { findMany: async () => [] },
+            creatorStatement: { findMany: async () => [] },
+            payoutAccount: { findMany: async () => [] },
+            membership: { findMany: async () => [] },
+            hostedPoolMachine: { findMany: async () => [] },
+            service: { findMany: async () => [] },
+        }) as unknown as PrismaClient;
+
+    it(`answers empty and untruncated when nothing needs a human`, async () => {
+        expect(await adminAttention(emptyPrisma(), configWith(), () => NOW)).toEqual({ items: [], truncated: false });
+    });
+
+    it(`composes sentences server-side, orders danger before warning then newest, and anchors drill-downs`, async () => {
+        const prisma = emptyPrisma();
+        // A stuck setup WITH a failure (danger), a payout failing (danger), a canary climbing (warning).
+        (prisma.sandbox as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
+            args.where[`setupCodeClaimedAt`]
+                ? [
+                      {
+                          id: `sb1`,
+                          name: `dev box`,
+                          setupCodeClaimedAt: new Date(`2026-08-25T08:00:00Z`),
+                          setupReport: { stage: `creating-tunnel`, failed: [{ check: `tunnel`, problem: `zrok enable refused`, remedy: `` }], at: `x` },
+                          owner: { email: `alice@example.com` },
+                      },
+                  ]
+                : [];
+        (prisma.creatorPayout as { findMany: unknown }).findMany = async () => [
+            {
+                amountCents: 2500,
+                attempts: 2,
+                lastError: `account requirements past due`,
+                createdAt: new Date(`2026-08-24T00:00:00Z`),
+                user: { email: `creator@example.com` },
+            },
+        ];
+        (prisma.service as { findMany: unknown }).findMany = async (args: { where: Record<string, unknown> }) =>
+            args.where[`canaryFails`] ? [{ slug: `research`, canaryFails: 2, updatedAt: new Date(`2026-08-25T09:00:00Z`) }] : [];
+
+        const attention = await adminAttention(prisma, configWith(), () => NOW);
+        expect(attention.truncated).toBe(false);
+        expect(attention.items.map((item) => item.kind)).toEqual([`stuck-setup`, `payout-stuck`, `service-canary`]);
+        const [stuck, payout, canary] = attention.items;
+        expect(stuck).toMatchObject({
+            severity: `danger`,
+            title: `Setup stuck for alice@example.com (“dev box”)`,
+            detail: `tunnel: zrok enable refused`,
+            email: `alice@example.com`,
+            sandboxId: `sb1`,
+        });
+        expect(payout).toMatchObject({ severity: `danger`, title: `$25.00 payout to creator@example.com failing (2 attempts)` });
+        // The canary sentence quotes the configured suspension threshold, not a constant.
+        expect(canary).toMatchObject({ severity: `warning`, detail: `Suspends at 3.`, serviceSlug: `research` });
+    });
+
+    it(`says truncated when any category hits its cap, so a bounded feed never reads as complete`, async () => {
+        const prisma = emptyPrisma();
+        (prisma.membership as { findMany: unknown }).findMany = async () =>
+            Array.from({ length: 20 }, (_, index) => ({
+                currentPeriodEnd: new Date(`2026-08-01T00:00:00Z`),
+                updatedAt: new Date(`2026-08-20T00:00:00Z`),
+                user: { email: `user${index}@example.com` },
+            }));
+        const attention = await adminAttention(prisma, configWith(), () => NOW);
+        expect(attention.items).toHaveLength(20);
+        expect(attention.truncated).toBe(true);
+    });
+});
+
+describe(`adminCosts`, () => {
+    it(`aggregates the month's hosted spend and the trial week against their config knobs`, async () => {
+        const captured: { usageWhere?: unknown; trialWeekWhere?: unknown } = {};
+        const prisma = {
+            hostedMachine: {
+                count: async (args?: { where?: Record<string, unknown> }) => (args?.where?.[`wokeAt`] ? 2 : args?.where?.[`idleWarnedAt`] ? 1 : 6),
+            },
+            hostedUsage: {
+                aggregate: async (args: { where: unknown }) => {
+                    captured.usageWhere = args.where;
+                    return { _sum: { minutes: 480 } };
+                },
+                findMany: async () => [
+                    { minutes: 300, userId: `u1` },
+                    { minutes: 180, userId: `gone` },
+                ],
+            },
+            hostedPoolMachine: {
+                findMany: async () => [
+                    { region: `iad`, state: `ready`, image: `ghcr.io/intentic/sandbox:stable` },
+                    { region: `iad`, state: `building`, image: `ghcr.io/intentic/sandbox:old` },
+                    { region: `arn`, state: `claimed`, image: `ghcr.io/intentic/sandbox:stable` },
+                ],
+            },
+            trialUsage: {
+                aggregate: async () => ({ _sum: { messages: 9 }, _count: { _all: 4 } }),
+                findMany: async (args: { where: unknown }) => {
+                    captured.trialWeekWhere = args.where;
+                    return [
+                        { userId: `u1`, messages: 5, lastModel: `gemini-2.5-flash` },
+                        { userId: `u1`, messages: 3, lastModel: `gemini-2.5-pro` },
+                        { userId: `u2`, messages: 1, lastModel: `gemini-2.5-flash` },
+                        { userId: `u3`, messages: 2, lastModel: null },
+                    ];
+                },
+            },
+            user: { findMany: async () => [{ id: `u1`, email: `heavy@example.com` }] },
+        } as unknown as PrismaClient;
+
+        const costs = await adminCosts(prisma, configWith(), () => NOW);
+        expect(costs.hosted).toEqual({
+            machines: 6,
+            awakeOrUncounted: 2,
+            idleWarned: 1,
+            monthMinutes: 480,
+            monthlyHoursCap: 40,
+            // The unresolvable owner is dropped, never invented: the schema promises real addresses.
+            topOwners: [{ email: `heavy@example.com`, minutes: 300 }],
+            pool: [
+                { region: `arn`, building: 0, ready: 0, claimed: 1, staleImage: 0 },
+                { region: `iad`, building: 1, ready: 1, claimed: 0, staleImage: 1 },
+            ],
+            poolSize: 2,
+            image: `ghcr.io/intentic/sandbox:stable`,
+        });
+        expect(costs.trial).toEqual({
+            enabled: true,
+            dailyMessages: 12,
+            messagesToday: 9,
+            usersToday: 4,
+            messages7d: 11,
+            users7d: 3,
+            // Accounts per model, distinct — u1 served by two rungs counts once under each.
+            models: [
+                { model: `gemini-2.5-flash`, accounts: 2 },
+                { model: `gemini-2.5-pro`, accounts: 1 },
+            ],
+        });
+        // The month key and the week's day keys are the same strings the meters bill by.
+        expect(captured.usageWhere).toEqual({ month: `2026-08` });
+        expect(captured.trialWeekWhere).toEqual({ day: { in: [`2026-08-19`, `2026-08-20`, `2026-08-21`, `2026-08-22`, `2026-08-23`, `2026-08-24`, `2026-08-25`] } });
+    });
+});
+
+describe(`adminUserDetail`, () => {
+    it(`answers null when neither id nor email matches`, async () => {
+        const prisma = { user: { findFirst: async () => null } } as unknown as PrismaClient;
+        expect(await adminUserDetail(prisma, `nobody@example.com`, () => NOW)).toBeNull();
+    });
+
+    it(`assembles the support page: sandboxes with their operational columns, meters, and the creator side`, async () => {
+        const captured: { lookup?: unknown } = {};
+        const prisma = {
+            user: {
+                findFirst: async (args: { where: unknown }) => {
+                    captured.lookup = args.where;
+                    return {
+                        id: `u1`,
+                        email: `Alice@Example.com`,
+                        name: `Alice`,
+                        image: null,
+                        createdAt: new Date(`2026-08-01T00:00:00Z`),
+                        termsVersion: `2026-05`,
+                    };
+                },
+            },
+            session: {
+                findMany: async () => [
+                    { createdAt: new Date(`2026-08-25T09:00:00Z`), expiresAt: new Date(`2026-09-25T09:00:00Z`), ipAddress: `1.2.3.4`, userAgent: `Firefox` },
+                ],
+            },
+            account: { findMany: async () => [{ providerId: `google` }, { providerId: `google` }] },
+            membership: { findUnique: async () => ({ status: `active`, currentPeriodEnd: new Date(`2026-09-01T00:00:00Z`) }) },
+            creditSpend: { findUnique: async () => ({ credits: 40 }) },
+            trialUsage: { findMany: async () => [{ day: `2026-08-25`, messages: 3, lastModel: `gemini-2.5-flash` }] },
+            hostedUsage: { findUnique: async () => ({ minutes: 120 }) },
+            wallet: { findMany: async () => [{ id: `w1`, network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }] },
+            walletPayment: { count: async () => 4 },
+            sandbox: {
+                findMany: async () => [
+                    {
+                        id: `sb1`,
+                        name: `dev box`,
+                        createdAt: new Date(`2026-08-02T00:00:00Z`),
+                        lastSeenAt: null,
+                        daemonUrl: null,
+                        setupCodeClaimedAt: new Date(`2026-08-02T01:00:00Z`),
+                        setupReport: { stage: `pulling-image`, failed: [], at: `x` },
+                        bootReport: null,
+                        announceRefusal: null,
+                        cloud: null,
+                        hosted: { region: `arn`, appName: `intentic-sbx-1`, wokeAt: new Date(`2026-08-25T08:00:00Z`), idleWarnedAt: null },
+                        members: [{ email: `bob@example.com`, role: `collaborator`, acceptedAt: null }],
+                    },
+                ],
+            },
+            sandboxMember: {
+                findMany: async () => [
+                    { role: `viewer`, acceptedAt: new Date(`2026-08-10T00:00:00Z`), sandbox: { name: `team box`, owner: { email: `boss@example.com` } } },
+                ],
+            },
+            publisherClaim: { findMany: async () => [{ publisher: `alice` }] },
+            service: { findMany: async () => [] },
+            creatorPayout: { findMany: async () => [] },
+        } as unknown as PrismaClient;
+
+        const detail = await adminUserDetail(prisma, ` alice@example.COM `, () => NOW);
+        // The lookup tried both identities, email case-insensitively, needle trimmed.
+        expect(captured.lookup).toEqual({
+            OR: [{ id: `alice@example.COM` }, { email: { equals: `alice@example.COM`, mode: `insensitive` } }],
+        });
+        expect(detail?.user).toMatchObject({ id: `u1`, email: `Alice@Example.com`, termsVersion: `2026-05` });
+        expect(detail?.providers).toEqual([`google`]);
+        expect(detail?.membership).toEqual({ status: `active`, currentPeriodEnd: `2026-09-01T00:00:00.000Z` });
+        expect(detail?.creditsToday).toBe(40);
+        expect(detail?.hostedMonthMinutes).toBe(120);
+        expect(detail?.wallets).toEqual([{ network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, payments30d: 4 }]);
+        expect(detail?.sandboxes[0]).toMatchObject({
+            id: `sb1`,
+            setupClaimedAt: `2026-08-02T01:00:00.000Z`,
+            setupReport: { stage: `pulling-image` },
+            hosted: { region: `arn`, wokeAt: `2026-08-25T08:00:00.000Z`, idleWarnedAt: null },
+            members: [{ email: `bob@example.com`, role: `collaborator`, accepted: false }],
+        });
+        expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, role: `viewer`, accepted: true }]);
+        // A publisher claim alone makes the account a creator, even with no listing and no payout yet.
+        expect(detail?.creator).toEqual({ publishers: [`alice`], services: [], payouts: [] });
     });
 });
 
@@ -220,6 +513,12 @@ describe(`admin over the OpenAPI wire`, () => {
         expect(findArgs).toMatchObject({ take: 3 });
         // The audit line names who asked for what.
         expect(logLines).toContainEqual({ admin: `radarsu@gmail.com`, route: `admin.users` });
+    });
+
+    it(`answers 404 for an unknown account on /admin/user, and 400 when idOrEmail is missing`, async () => {
+        const prisma = { user: { findFirst: async () => null } } as unknown as PrismaClient;
+        expect((await serve(`/rpc/admin/user?idOrEmail=nobody`, { email: `radarsu@gmail.com` }, prisma)).status).toBe(404);
+        expect((await serve(`/rpc/admin/user`, { email: `radarsu@gmail.com` }, prisma)).status).toBe(400);
     });
 
     it(`answers 403 to a signed-in non-admin and 401 to no session, as HTTP statuses the panel reads`, async () => {
