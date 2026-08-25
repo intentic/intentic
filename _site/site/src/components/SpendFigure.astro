@@ -79,9 +79,7 @@ const n = (value: number) => value.toLocaleString(`en-GB`);
 // from the membership to the allowance is where $5 of the $20 stops being the pool's — because a screen reader
 // gets this sentence INSTEAD of the shape, not alongside it, and the shape's own claims are about a credit's
 // value rather than the membership's.
-const label = `A $${pool.priceUsd} membership gives you ${n(pool.dailyCredits)} credits per day. $${pool.infraUsd} runs the platform. The rest funds your credits. Spend credits by installing a premium extension (${n(
-    pool.donationCredits,
-)} credits once) or running a premium service (price set by the service, per run). ${creatorSharePct}% of each credit's value goes to the creator.`;
+const label = `$${pool.priceUsd}/mo → ${n(pool.dailyCredits)} credits/day. Install (${n(pool.donationCredits)} once) or run a service (per-run price). ${creatorSharePct}% to creator.`;
 ---
 
 {
