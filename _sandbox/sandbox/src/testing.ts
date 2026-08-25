@@ -89,6 +89,7 @@ export const testConfig: Config = {
         environmentHash: "",
         channel: "",
         previousImage: "",
+        definitionSeed: "",
     },
     preview: { port: 5173 },
     google: { clientId: "" },

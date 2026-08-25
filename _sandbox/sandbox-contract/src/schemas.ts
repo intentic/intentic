@@ -8594,33 +8594,10 @@ export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
  * by entry in WORKSPACE_STATE_FILES / HISTORY_STATE_FILES. It cannot carry the other two, and the honest
  * consequence is that an import ends in a REPORT rather than a claim of equivalence, the container has no
  * docker socket, so only the host can rebuild the image the overlay describes.
- */
-
-// What the bundle says about itself, written as its first tar entry so a reader learns the shape before the
-// bytes. `secrets` is the owner's export-time choice; the restorer re-derives every decision from the manifests
-// rather than trusting this, and uses it only to explain what is missing.
-export const BundleManifestSchema = z.object({
-    // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at.
-    version: z.literal(1),
-    // Where it came from, for the report's first line. Never used to authorize anything.
-    sandbox: z.object({ name: z.string() }).optional(),
-    createdAt: z.number(),
-    secrets: z.boolean(),
-    /* The environment the target has to reproduce, carried as FACTS rather than as the composed file (which the
-     * target recomposes against its OWN base image on first boot). `customDockerfile` is the owner-approved
-     * source section; `capabilities` names what contributed the remaining fragments, so the report can list what
-     * to re-add when the configs themselves did not travel. */
-    environment: z.object({
-        customDockerfile: z.string().optional(),
-        baseImage: z.string().optional(),
-        approvedHash: z.string().optional(),
-        capabilities: z.array(z.object({ id: z.string(), kind: z.string() })),
-    }),
-    // Every path class the bundle deliberately left out, with the manifest's own note where it has one. This is
-    // what turns "the export skipped things" from a silence into a list the owner can act on.
-    excluded: z.array(z.object({ path: z.string(), portability: z.string(), note: z.string().optional() })),
-});
-export type BundleManifest = z.infer<typeof BundleManifestSchema>;
+ *
+ * The bundle's manifest (BundleManifestSchema) lives in definition.ts beside the sandbox DEFINITION it embeds:
+ * a bundle is definition + state, and keeping the two schemas together is what keeps the two export doors from
+ * drifting into different answers about what an environment is. */
 
 // What a restore actually did. `needsAction` is the part that matters: the environment rebuild command, the
 // credentials to re-enter, the logins to redo, each one a thing the target cannot do for itself.

@@ -207,6 +207,12 @@ const configSchema = z.object({
              * and the Update card offers none. */
             channel: z.string().default(""),
             previousImage: z.string().default(""),
+            /* A sandbox definition (sandbox.toml, base64) to seed an EMPTY workspace from on first boot: the
+             * fleet door, sandbox-run's `definition` option stamps it. Applied only while the workspace is
+             * still as it arrived (scaffold's workspaceArrivedEmpty), so a rebuild replaying this env cannot
+             * re-run it over work; and applying it keeps the definition's consent shape, the overlay lands as
+             * a proposal for the owner, never as an approved build. */
+            definitionSeed: z.string().default(""),
         })
         .prefault({}),
     preview: z

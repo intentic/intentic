@@ -35,6 +35,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
                 baseImage: "",
                 channel: "",
                 previousImage: "",
+                definitionSeed: "",
             },
             extensionsDir: EXTENSIONS_DIR,
             openaiApiKey: "",

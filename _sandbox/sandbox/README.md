@@ -232,6 +232,17 @@ reports the profile.
   the one-transfer EIP-3009 authorization is minted by the platform (src/wallet/wallet-signer.ts), which
   re-checks the same caps where the key lives: the daemon's checks are the UX, the platform's are the
   guarantee. A payment that fails after signing spends nothing, because the authorization expires unused.
+- Move a sandbox, two ways that share one truth (src/portability). A **bundle** is the whole environment as a
+  gzipped tar of the two volumes, driven entirely by the state manifests' portability classes (carry / secret /
+  identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
+  **definition** is the declarable half of the same thing as a `sandbox.toml`: repositories by remote,
+  connections by shape, secret NAMES, agent settings, the overlay as source — derived from the live manifests
+  on every export (never stored), applied preview-first through the same native write paths the UI uses, and
+  diffable against the running sandbox for drift. The bundle manifest embeds the definition (one schema, two
+  doors), and applying a definition keeps the consent model: the overlay lands as a proposal at the approval
+  gate, capabilities arrive unauthenticated, credentials never ride along. A runner can stamp
+  `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition` option) and an empty workspace boots pre-shaped — the
+  fleet door.
 
 ## Key files
 

@@ -19,6 +19,11 @@ import {
     DraftStatusSchema,
     DraftsListSchema,
     DraftSummarySchema,
+    DefinitionDiffSchema,
+    DefinitionExportSchema,
+    DefinitionItemSchema,
+    DefinitionPlanSchema,
+    DefinitionReportSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -127,6 +132,12 @@ export {
     DraftStatusSchema,
     DraftsListSchema,
     DraftSummarySchema,
+    DefinitionActionSchema,
+    DefinitionDiffSchema,
+    DefinitionExportSchema,
+    DefinitionItemSchema,
+    DefinitionPlanSchema,
+    DefinitionReportSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -186,6 +197,11 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 export type EnvironmentItem = EnvironmentContents["items"][number];
 export type ImportReport = z.infer<typeof ImportReportSchema>;
+export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
+export type DefinitionItem = z.infer<typeof DefinitionItemSchema>;
+export type DefinitionPlan = z.infer<typeof DefinitionPlanSchema>;
+export type DefinitionReport = z.infer<typeof DefinitionReportSchema>;
+export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
 export type MigrationHost = z.infer<typeof MigrationHostSchema>;
 export type MigrationItem = z.infer<typeof MigrationItemSchema>;
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;

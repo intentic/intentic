@@ -41,6 +41,8 @@ import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "./git/root-repo.js";
 import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
+import { applyDefinitionItems } from "./portability/apply-definition.js";
+import { parseDefinitionToml } from "./portability/definition.js";
 import { sweepStaleExports } from "./portability/exports.js";
 import { queueVerify, type VerifyDeps } from "./workspace/verify-deps.js";
 import { type Config, loadConfig } from "./env.config.js";
@@ -106,6 +108,7 @@ const BOOT_STEPS = [
     { key: "referenceShelf", label: "Ensuring the reference shelf" },
     { key: "staleExports", label: "Sweeping interrupted exports" },
     { key: "repoGitDirs", label: "Healing repository git dirs" },
+    { key: "definitionSeed", label: "Seeding the sandbox definition" },
     { key: "agentsRegistry", label: "Loading conversations" },
     { key: "skills", label: "Converging agent skills" },
     { key: "baseline", label: "Taking the workspace baseline" },
@@ -627,6 +630,24 @@ const main = async (): Promise<void> => {
     await boot.step("repoGitDirs", async () =>
         role.roots && traits.relocateGitDirs ? ensureRepoGitDirs(services.workspace, config.historyRoot, logger) : undefined,
     );
+
+    /* Seed a definition into an EMPTY workspace, the fleet door: a runner that stamped SANDBOX_DEFINITION_SEED
+     * gets its repos cloned, its connections listed (unauthenticated), its settings set and its overlay parked
+     * as a proposal before anyone opens the app. Guarded by workspaceArrivedEmpty so a rebuild replaying the
+     * env can never run it over work, and by ownsWorkspaceConfig for the same reason every config write above
+     * is. Log-and-continue like every boot step: a bad seed costs its report, never the daemon. */
+    await boot.step("definitionSeed", async () => {
+        if (!role.roots || !traits.ownsWorkspaceConfig || config.sandbox.definitionSeed === "" || !services.workspaceArrivedEmpty) {
+            return;
+        }
+        try {
+            const definition = parseDefinitionToml(Buffer.from(config.sandbox.definitionSeed, "base64").toString("utf8"));
+            const report = await applyDefinitionItems(services, definition, () => true);
+            logger.info({ report }, "sandbox definition seeded; its needsAction list is the owner's arrival checklist");
+        } catch (error) {
+            logger.warn({ err: error }, "sandbox definition not seeded, the workspace opens as it arrived");
+        }
+    });
 
     // The fleet registry: load persisted conversations and broadcast the roster (an /events stream opened
     // during boot is already holding an empty fleet). Awaited, the /agents routes assume a loaded registry,

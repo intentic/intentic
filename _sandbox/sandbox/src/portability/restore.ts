@@ -88,7 +88,7 @@ const healGitPointers = async (workspaceRoot: string, historyRoot: string): Prom
  */
 const actionsFor = (manifest: BundleManifest): ImportReport["needsAction"] => {
     const actions: ImportReport["needsAction"] = [];
-    if (manifest.environment.customDockerfile !== undefined) {
+    if (manifest.definition.environment.dockerfile !== undefined) {
         actions.push({
             subject: "Rebuild the environment image",
             detail: "The overlay Dockerfile was restored, but the IMAGE it describes is built outside the container. Open the Environment card and run the rebuild command it shows, until then this sandbox is on the stock image and none of the tools the overlay installs are present.",
@@ -99,10 +99,18 @@ const actionsFor = (manifest: BundleManifest): ImportReport["needsAction"] => {
      * each connection and travels in every bundle (workspace-state.ts argues it on the entry). So the target
      * arrives with the cards already there and no way to authenticate them, the failure this has to name,
      * because a list that looks complete is worse than one that is visibly missing. */
-    if (!manifest.secrets && manifest.environment.capabilities.length > 0) {
+    if (!manifest.secrets && manifest.definition.capabilities.length > 0) {
         actions.push({
             subject: "Reconnect capabilities",
-            detail: `Exported without secrets, so each connection arrived listed but unauthenticated. Open these on the Capabilities view and re-enter the credential each one asks for: ${manifest.environment.capabilities.map((capability) => `${capability.id} (${capability.kind})`).join(", ")}.`,
+            detail: `Exported without secrets, so each connection arrived listed but unauthenticated. Open these on the Capabilities view and re-enter the credential each one asks for: ${manifest.definition.capabilities.map((capability) => `${capability.id} (${capability.kind})`).join(", ")}.`,
+        });
+    }
+    // Named secrets are the definition's honesty carried over: the values stayed behind (or, with secrets on,
+    // travelled inside the state), and the names are what let the owner check rather than discover.
+    if (!manifest.secrets && manifest.definition.secrets.length > 0) {
+        actions.push({
+            subject: "Enter secret values",
+            detail: `Exported without secrets. Store values for: ${manifest.definition.secrets.join(", ")}.`,
         });
     }
     for (const entry of manifest.excluded) {

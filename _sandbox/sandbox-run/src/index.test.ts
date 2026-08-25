@@ -45,6 +45,16 @@ test("the local shape carries the full posture: init, alias, all three volumes, 
     ]);
 });
 
+test("a definition rides as base64 in SANDBOX_DEFINITION_SEED, so its quotes and newlines never meet a shell", () => {
+    const toml = 'schemaVersion = 1\n[[repositories]]\nid = "app"\nremote = "https://example.com/app.git"\n';
+    const argv = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", definition: toml });
+    const stamped = argv.find((entry) => entry.startsWith("SANDBOX_DEFINITION_SEED="));
+    expect(stamped).toBeDefined();
+    expect(Buffer.from((stamped ?? "").slice("SANDBOX_DEFINITION_SEED=".length), "base64").toString("utf8")).toBe(toml);
+    // And absent means absent: no empty var for the daemon to misread as a seed.
+    expect(sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" }).some((entry) => entry.includes("SANDBOX_DEFINITION_SEED"))).toBe(false);
+});
+
 test("a measured caller's cap reaches the argv; an unmeasured one falls back to the constant", () => {
     const measured = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", memory: "22g" });
     expect(measured.join(" ")).toContain("--memory 22g --memory-swap -1");

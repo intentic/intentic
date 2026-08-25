@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import BundleCard from "./BundleCard.vue";
+import DefinitionCard from "./DefinitionCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
 import MigrationCard from "./MigrationCard.vue";
 
@@ -45,6 +46,10 @@ const outline = useSandboxOutline(reading);
         </div>
 
         <BundleCard />
+
+        <!-- The bundle's other half: the same environment as a declarable sandbox.toml, references instead of
+             bytes, safe to publish where a bundle never is. -->
+        <DefinitionCard />
 
         <!-- Beside the bundle card because they are the two crossings: a bundle moves an INTENTIC environment,
              this one translates a foreign assistant's home directory into native pieces. -->

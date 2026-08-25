@@ -364,6 +364,9 @@ catalogs:
     shiki:
       specifier: 4.4.1
       version: 4.4.1
+    smol-toml:
+      specifier: 1.7.1
+      version: 1.7.1
     sqlite-vec:
       specifier: 0.1.9
       version: 0.1.9
@@ -2605,6 +2608,9 @@ importers:
       playwright:
         specifier: 'catalog:'
         version: 1.62.1
+      smol-toml:
+        specifier: 'catalog:'
+        version: 1.7.1
       tar-stream:
         specifier: 'catalog:'
         version: 3.2.0

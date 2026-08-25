@@ -7,8 +7,8 @@ import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from 
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
-import { baseImageOf, customPath } from "../environment/environment.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
+import { deriveDefinition } from "./definition.js";
 
 /* PACKING A SANDBOX'S ENVIRONMENT, a gzipped tar of the two volumes that hold it, driven entirely by the
  * state manifests so that adding a store is what adds it to the bundle.
@@ -127,18 +127,6 @@ const excludedEntries = (secrets: boolean): BundleManifest["excluded"] =>
         )
         .toSorted((left, right) => left.path.localeCompare(right.path));
 
-// The facts the target needs to reproduce this environment, as opposed to the composed file it must not reuse.
-const environmentFacts = async (services: Services): Promise<BundleManifest["environment"]> => {
-    const custom = await services.files.read(customPath(services));
-    const capabilities = await services.capabilities.list();
-    return {
-        ...(custom === undefined ? {} : { customDockerfile: custom }),
-        baseImage: baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image),
-        ...(services.config.sandbox.environmentHash === "" ? {} : { approvedHash: services.config.sandbox.environmentHash }),
-        capabilities: capabilities.map((capability) => ({ id: capability.id, kind: capability.kind })),
-    };
-};
-
 /* One credential sweep, best-effort. The thunk is what makes it best-effort in BOTH directions: a seam that
  * throws where it stands rather than rejecting (a fake that was never given this member) becomes a rejection
  * here, so an export can never fail on the way to protecting itself. */
@@ -177,12 +165,16 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
              * and the packer reads what the sweep left. Best-effort by the same argument as at boot: a manifest
              * this daemon cannot rewrite must not be the thing that fails an export. */
             await Promise.all([sweptOut(() => services.vaultManifestSecrets()), sweptOut(() => services.vaultExtensionSettingSecrets())]);
+            /* The manifest EMBEDS the sandbox definition, the same document GET /definition emits: a bundle is
+             * definition + state, so the restore report reasons over facts either export door delivers. What
+             * the definition could not express (a remoteless repo) is no loss HERE, the bundle's own tar
+             * carries those repos' git dirs whole. */
             const manifest: BundleManifest = {
-                version: 1,
+                version: 2,
                 ...(services.config.sandbox.name === "" ? {} : { sandbox: { name: services.config.sandbox.name } }),
                 createdAt: options.now,
                 secrets: options.secrets,
-                environment: await environmentFacts(services),
+                definition: (await deriveDefinition(services)).definition,
                 excluded: excludedEntries(options.secrets),
             };
             const body = Buffer.from(`${JSON.stringify(manifest, undefined, 2)}\n`);

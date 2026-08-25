@@ -383,6 +383,12 @@ export interface SandboxRun {
      * created on forever and make its rollback target permanently the same one. */
     readonly channel?: string;
     readonly previousImage?: string;
+    /* A sandbox definition (sandbox.toml text) the daemon seeds an EMPTY workspace from on first boot, the
+     * fleet door: one definition, N sandboxes stamped from it. Carried base64 in SANDBOX_DEFINITION_SEED
+     * because a Dockerfile block full of quotes and newlines has no business in a shell-quoted argv. Not in
+     * the replay allowlist: the seed is guarded by workspace-arrived-empty on the daemon side, so replaying
+     * it is inert, but a runner that recreates decides per run what a fresh workspace opens as. */
+    readonly definition?: string;
     // Replayed/wizard env pairs, already filtered through replayableEnv.
     readonly env?: readonly (readonly [string, string])[];
     // Allowlisted runtime directive tokens (runtimeDirectivesOf).
@@ -478,6 +484,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
         ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
         ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
+        ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
         ...asked.flatMap((entry) => ["-e", `${entry.env}=${dropped.has(entry.token) ? "unsupported" : "all"}`]),
         ...(run.env ?? []).flatMap(([name, value]) => ["-e", `${name}=${value}`]),
         run.image,

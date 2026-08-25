@@ -17,6 +17,10 @@ app); this package is why they cannot disagree about what one is.
   browser-importable; the caller that can measure passes the result as `memory`/`memorySwap`, and one that
   cannot gets `LOCAL_SANDBOX_MEMORY`. Hosted providers keep owning their machine limits.
 - Define the environment allowlist: what is allowed to cross into the box.
+- Carry an optional sandbox definition (`definition`, a `sandbox.toml` text) into the box as
+  `SANDBOX_DEFINITION_SEED` (base64, so its quotes and newlines never meet a shell): the daemon seeds an EMPTY
+  workspace from it on first boot — repos cloned, connections listed unauthenticated, the overlay parked at the
+  approval gate — which is how one definition stamps out a fleet.
 - Emit the `docker run` invocation, correctly quoted.
 
 ## Key files

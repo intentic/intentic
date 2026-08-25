@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+    DefinitionApplySchema,
     type EnrollHostInput,
     EnrollHostInputSchema,
     type GrantedRole,
@@ -59,6 +60,8 @@ import { readEnvironmentContents } from "./environment/contents.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
+import { createDefinitions } from "./portability/apply-definition.js";
+import { DefinitionFormatError } from "./portability/definition.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { MigrationFormatError } from "./migrations/archive.js";
 import { createMigrations } from "./migrations/migrations.js";
@@ -1096,6 +1099,75 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }
             throw error;
         }
+    });
+
+    /* THE DEFINITION: the declarable shape of this sandbox as `sandbox.toml`, the reference half of what a
+     * bundle carries whole (portability/definition.ts). Owner-only like the bundles beside it: the derivation
+     * reads every connection's shape and every repo's remote, and the apply writes capabilities, settings and
+     * clones. Preview-first like the migrations below: `plan` parses a document into a checklist held in
+     * memory under a token, `apply` names the ticked ids, and `diff` answers where this sandbox stands
+     * relative to a file without writing anything at all. */
+    const definitions = createDefinitions(services);
+    app.get("/definition", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json(await definitions.derive());
+    });
+    app.post("/definition/plan", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        try {
+            return c.json(await definitions.plan(await c.req.text()));
+        } catch (error) {
+            if (error instanceof DefinitionFormatError) {
+                return c.json({ error: error.message }, 400);
+            }
+            throw error;
+        }
+    });
+    app.post("/definition/apply", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = DefinitionApplySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ error: "expected { token, items }" }, 400);
+        }
+        try {
+            return c.json(await definitions.apply(parsed.data));
+        } catch (error) {
+            // A stale/consumed token is the caller's staleness, not breakage: 409 so the UI re-uploads.
+            if (error instanceof DefinitionFormatError) {
+                return c.json({ error: error.message }, 409);
+            }
+            throw error;
+        }
+    });
+    app.post("/definition/diff", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        try {
+            return c.json(await definitions.diff(await c.req.text()));
+        } catch (error) {
+            if (error instanceof DefinitionFormatError) {
+                return c.json({ error: error.message }, 400);
+            }
+            throw error;
+        }
+    });
+    app.delete("/definition/plan", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json({ ok: definitions.abandon() });
     });
 
     /* MIGRATIONS: importing a FOREIGN assistant's setup (a packed `~/.hermes`), preview-first. Raw Hono beside

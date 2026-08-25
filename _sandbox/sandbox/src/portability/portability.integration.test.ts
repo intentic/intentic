@@ -268,7 +268,7 @@ test("the report names the capabilities a no-secrets bundle left unauthenticated
     const source = await makeRoots();
     const target = await makeRoots();
     const report = await restoreBundle(
-        await bundleOf(source, false, [{ id: "docker", kind: "cli", config: {} } as Capability]),
+        await bundleOf(source, false, [{ id: "docker", kind: "cli", config: { provider: "docker" } } as Capability]),
         { workspaceRoot: target.work, historyRoot: target.history },
         LIMIT,
     );

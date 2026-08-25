@@ -47,6 +47,12 @@ mismatch is a type error rather than a runtime surprise.
   reason by its three consumers: the daemon's seeder, the recipe gallery, and the drafts routes' instant fire.
 - [src/workflow-faults.ts](src/workflow-faults.ts) and [src/output-fields.ts](src/output-fields.ts): graph and
   structured-output invariants shared by the designer and daemon, including duplicate field-name rejection.
+- [src/definition.ts](src/definition.ts): the SANDBOX DEFINITION, the declarable shape of a sandbox
+  (`sandbox.toml`): repositories by remote, connections by shape, secret names, the overlay as source, the
+  non-default agent settings — plus the bundle manifest that embeds it, since a bundle is definition + state.
+  Shared because the daemon derives and applies definitions and the browser renders their plans, diffs and
+  reports; the definition never carries a credential value or an approval hash, so it is the export that is
+  safe to publish.
 - [src/index.ts](src/index.ts): the public surface.
 - [src/contract-lock.ts](src/contract-lock.ts) and [contract.lock.json](contract.lock.json): every exported
   schema serialized to one committed, comparable document. Regenerate with `pnpm --filter
