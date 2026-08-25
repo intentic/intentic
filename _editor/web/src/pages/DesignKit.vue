@@ -396,13 +396,18 @@ const pickedTier = ref(`collaborator`);
                         </DisclosureRow>
                     </RowGroup>
 
-                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline is its own control">
+                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
                         <DisclosureRow v-model:open="kitDrawer" density="compact" body="drawer" hit="pair">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
+                            <!-- THE LINK HUGS ITS TEXT (`w-fit`), which is the half of this mode a picture has to
+                                 show: underlined is where you GO, and every other pixel of the row — including
+                                 the blank after a short name — is where you OPEN. Drawn `block` instead, as the
+                                 activity feed's turn labels were, the link's hit area silently runs the whole
+                                 width of the headline and the row stops opening where it looks like it should. -->
                             <template #title>
-                                <a href="#" class="hover:text-link">A headline that navigates</a>
+                                <a href="#" class="block w-fit max-w-full hover:text-link hover:underline">A headline that navigates</a>
                             </template>
-                            <template #description>so the disclosure takes the chevron and the mark, not the name</template>
+                            <template #description>press this line and the row opens; press the name and it navigates</template>
                             <template #control><Button size="small" severity="secondary" label="Run" /></template>
                             <template #below>
                                 <p class="text-xs text-muted">A drawer takes the full width and no surface of its own: one row, one wash.</p>

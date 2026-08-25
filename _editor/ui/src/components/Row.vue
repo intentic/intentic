@@ -113,10 +113,22 @@ const {
     headerExpanded?: boolean;
     /** `aria-controls` for the header button: the id of the block it opens. */
     headerControls?: string;
-    /* THE HEADLINE BLOCK (title + description) SWALLOWS ITS OWN CLICKS. For the row whose headline carries a
-     * control — a turn whose label opens its transcript, a port whose sentence links to its terminal, a run
-     * whose title leaves for the vendor — so that <DisclosureRow> can make the REST of the row pressable
-     * (padding, lead, facts, empty space) without "open this" and "go somewhere else" becoming one click. */
+    /* THE HEADLINE'S CONTROLS SWALLOW THEIR OWN CLICKS — the headline BLOCK does not. For the row whose
+     * headline carries a control — a turn whose label opens its transcript, a port whose sentence links to its
+     * terminal, a run whose title leaves for the vendor — so that <DisclosureRow> can make the REST of the row
+     * pressable without "open this" and "go somewhere else" becoming one press.
+     *
+     * IT USED TO SWALLOW THE WHOLE BLOCK, and that is the bug it was reported as: on the activity feed only a
+     * turn WITH a transcript has a link for a title, so on every message and every loose event the biggest,
+     * most obvious target on the row — its name — did nothing, and the row opened only from a 10px chevron.
+     * The `pair` rows that DO carry a link were no better off: the link is a few words, and the facts line
+     * under it, the preview beside it and the empty space after it were all dead on the same rule. Worse, the
+     * row still painted `ui-row-select` over all of it, so the cursor and the hover wash promised a press the
+     * headline had no intention of honouring — which is what "clunky" means when someone reports it.
+     *
+     * So the guard asks the only question that was ever being asked: DID THIS PRESS LAND ON A CONTROL. It is a
+     * fact about the click, not about the block, so it cannot go stale when a caller's title stops being a
+     * link — which is the exact drift the block-wide version was built to survive and did not. */
     headlineGuard?: boolean;
 }>();
 
@@ -133,9 +145,29 @@ const onHeaderClick = (event: MouseEvent): void => {
     emit(`headerClick`, event);
 };
 
-// See `headlineGuard`. Written out rather than as a `.stop` modifier because it must apply only when asked.
+/* WHAT COUNTS AS A CONTROL, for `headlineGuard`. Everything a press can mean something else on: the native
+ * interactives, plus the ARIA spellings of them, because a headline's "link" is regularly a <button> and its
+ * chip is regularly a <span role="button"> with a handler. A bare `[tabindex]` is deliberately NOT here — a
+ * focusable text block is not a control, and a caller who wants one guarded says so with `@click.stop`. */
+const HEADLINE_CONTROLS = `a[href], button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="checkbox"], [role="switch"], [contenteditable="true"]`;
+
+/* See `headlineGuard`. Written out rather than as a `.stop` modifier for two reasons now: it must apply only
+ * when asked, AND it must apply only to the presses that landed on a control.
+ *
+ * SCOPED TO THIS BLOCK with `contains`, not left to `closest` alone: `closest` walks the whole ancestor chain,
+ * so in a row whose header IS a button (`hit="header"`, where this guard is off anyway) it would match that
+ * button and stop the press the button itself is waiting for. The guard is about controls INSIDE the headline;
+ * anything above it is the row's business. */
 const onHeadlineClick = (event: MouseEvent): void => {
-    if (headlineGuard) {
+    if (!headlineGuard) {
+        return;
+    }
+    const { target, currentTarget } = event;
+    if (!(target instanceof Element) || !(currentTarget instanceof Element)) {
+        return;
+    }
+    const control = target.closest(HEADLINE_CONTROLS);
+    if (control !== null && currentTarget.contains(control)) {
         event.stopPropagation();
     }
 };

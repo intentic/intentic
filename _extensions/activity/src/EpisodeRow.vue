@@ -67,20 +67,30 @@ const facts = computed(() =>
 </script>
 
 <template>
-    <!-- `hit="pair"` — the chevron and the kind glyph, and not the headline: on a turn the headline already
-         has a job of its own (it opens the transcript). -->
+    <!-- `hit="pair"` — the KEYBOARD's way in is the chevron and the kind glyph, not the headline, because on a
+         turn the headline already has a job of its own (it opens the transcript) and a button cannot nest in a
+         button. It bounds the tab stop, not the press: the whole row still opens on a click, the transcript
+         link excepted. -->
     <DisclosureRow v-model:open="open" density="compact" hit="pair">
         <template #lead>
             <Icon :name="KIND_ICONS[episode.kind]" class="text-xs" :class="open ? `` : KIND_TINTS[episode.kind]" />
         </template>
 
         <!-- A turn with a transcript opens it; anything else is plain text, because a dead link is worse than no
-             affordance. -->
+             affordance.
+
+             `w-fit` IS THE WHOLE POINT OF THIS BLOCK, and it is what the two affordances on this line cost.
+             The label was `block`, so the link's hit area ran the full width of the headline while its underline
+             ran only under the words: press the empty space after a four-word turn title and the app LEFT FOR
+             THE TRANSCRIPT, when the row it was in — and every row above and below it — opens on that same
+             press. A link that hugs its text makes the rule legible without a word of explanation: underlined
+             is where you go, everything else is where you open. `max-w-full` keeps `truncate` doing its job on
+             a long one. -->
         <template #title>
             <button
                 v-if="episode.sessionId"
                 type="button"
-                class="block min-w-0 cursor-pointer truncate text-left hover:text-link hover:underline"
+                class="block w-fit max-w-full cursor-pointer truncate text-left hover:text-link hover:underline"
                 :title="episode.label"
                 @click="api.chat.openSession(episode.sessionId)"
             >

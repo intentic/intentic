@@ -75,11 +75,12 @@ const {
      * control of its own?
      *
      * `header` — no. The chevron, the `#lead` mark, the title and the description are one button. The default.
-     * `pair` — yes. The button is the chevron and the `#lead` mark, and the headline block swallows its own
-     *   clicks (<Row>'s `headlineGuard`), because a button inside a button is invalid markup and a press that
-     *   both opened the row and left for the vendor would be neither. Everything else on the row still opens
-     *   it. For a turn whose label opens its transcript, a port whose sentence links to its terminal, a run
-     *   whose title goes to the CI provider.
+     * `pair` — yes. The button is the chevron and the `#lead` mark, because a button inside a button is invalid
+     *   markup and a press that both opened the row and left for the vendor would be neither. The headline's
+     *   own CONTROLS keep their presses (<Row>'s `headlineGuard`); every other pixel of the headline — a title
+     *   that is plain text on this row, the facts line, the preview, the space after a short name — opens the
+     *   row like the rest of it. For a turn whose label opens its transcript, a port whose sentence links to
+     *   its terminal, a run whose title goes to the CI provider.
      * `row` — yes, but the product answer is "people click the row and there is no second way in" (the personas
      *   list, whose name is click-to-rename). Same button as `pair`, no headline guard, so the name is the
      *   caller's to protect with `@click.stop`. `#control` and the `rail` body are guarded here for everyone. */
@@ -109,6 +110,27 @@ const toggle = (): void => {
     }
 };
 
+/* A DRAG IS NOT A PRESS, and this row has to know the difference because so much of it is now pressable.
+ *
+ * A record row's evidence is there to be READ and copied out of — an error string, a command line, a session
+ * id — and the moment the headline and the row's whitespace became targets, sweeping a selection across them
+ * ended in a `click` on the row and closed the thing being copied from. Selecting text to lose it is a worse
+ * failure than a dead target, because you cannot even see what you did wrong.
+ *
+ * MEASURED AGAINST WHERE THE POINTER WENT DOWN rather than asked of `getSelection()`: a selection made
+ * somewhere else on the page is still live when you come back and press a row, and that row must still open.
+ * `event.detail > 0` keeps the keyboard out of it — Enter and Space on the toggle synthesise a click at (0, 0)
+ * with `detail === 0`, which against a real pointer's last position is a "drag" the length of the viewport. */
+const PRESS_SLOP_PX = 6;
+let pressedAt: { x: number; y: number } | undefined;
+
+const onPointerDown = (event: PointerEvent): void => {
+    pressedAt = { x: event.clientX, y: event.clientY };
+};
+
+const dragged = (event: MouseEvent): boolean =>
+    event.detail > 0 && pressedAt !== undefined && Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) > PRESS_SLOP_PX;
+
 /* THE WHOLE ROW IS THE TARGET, except where it is a control.
  *
  * The button alone is not enough, and the reason is arithmetic: <Row>'s tier padding is `py-3.5` at
@@ -117,12 +139,14 @@ const toggle = (): void => {
  * broken, and it read exactly that way on the deployments board, which had also just given up the duplicate
  * chevron that used to catch them.
  *
- * `pair` gets it too, minus the one part it exists to protect: those rows carry a control in the headline (a
- * link to a run, a terminal, a transcript), so <Row>'s `headlineGuard` makes the title-and-description block
- * swallow its own clicks. Everything around it — the padding, the lead cluster, the facts, the empty middle —
- * still opens the row, which is the difference between a 90px target and the whole line. */
-const onRowClick = (): void => {
-    toggle();
+ * `pair` gets it too, minus the one part it exists to protect: the CONTROLS its headline carries (a link to a
+ * run, a terminal, a transcript) keep their own presses via <Row>'s `headlineGuard`. Everything around them —
+ * the padding, the lead cluster, the facts, the empty middle, and the headline's own text where that text is
+ * not itself a link — still opens the row, which is the difference between a 90px target and the whole line. */
+const onRowClick = (event: MouseEvent): void => {
+    if (!dragged(event)) {
+        toggle();
+    }
 };
 
 /* THE TOGGLE CLUSTER'S OWN CLICK, with `.stop` written out rather than spelled as a modifier, because it must
@@ -134,7 +158,9 @@ const onPairClick = (event: MouseEvent): void => {
         return;
     }
     event.stopPropagation();
-    toggle();
+    if (!dragged(event)) {
+        toggle();
+    }
 };
 
 // The tier's own gap between the toggle cluster and the title, and the tighter one INSIDE the cluster. Read
@@ -171,7 +197,7 @@ const DRAWER_PAD = {
 </script>
 
 <template>
-    <div class="group" :class="[tint, $slots[`before`] ? `flex flex-col` : ``]">
+    <div class="group" :class="[tint, $slots[`before`] ? `flex flex-col` : ``]" @pointerdown="onPointerDown">
         <!-- `#before` IS THE SELECTION COLUMN, and it is outside the toggle rather than in `#lead` because a
              checkbox nested in a <button> is invalid and unusable: every attempt to tick it would open the row
              instead. It rides inside the tint so the whole line still lights up as one row, which is the part a
@@ -192,7 +218,7 @@ const DRAWER_PAD = {
                 :header-controls="disabled ? undefined : bodyId"
                 :interactive="!disabled"
                 :headline-guard="hit === `pair`"
-                @header-click="toggle"
+                @header-click="onRowClick"
                 @click="onRowClick"
             >
                 <template #lead>
@@ -237,15 +263,28 @@ const DRAWER_PAD = {
                 <!-- THE RAIL. Inside <Row>'s padding, so it aligns with the row above it, and offset by a hidden
                  copy of the toggle cluster, so it starts under the TITLE. -->
                 <template v-if="open && body === `rail`" #below>
-                    <!-- `@click.stop` because this block is INSIDE <Row>, and the row-wide handler would read a
-                         press on the evidence as "close the thing you just opened". The drawer needs no guard:
-                         it is drawn as a sibling of <Row>, outside that handler entirely. -->
-                    <div class="flex" :class="gap" @click.stop>
-                        <span class="invisible flex shrink-0 items-center" :class="toggleGap" aria-hidden="true">
-                            <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
-                            <slot name="lead" />
+                    <div class="flex" :class="gap">
+                        <!-- THE TOGGLE COLUMN RUNS THE FULL HEIGHT OF AN OPEN ROW. The spacer that aligns the
+                             rail was already sitting in the one column a reader has learnt is the toggle's —
+                             directly under the chevron — and it was inert, inside a block that stopped every
+                             press. So an open row could only be closed from the header line it had just pushed
+                             upward, which is the other half of "I can't close this". Left as a press that
+                             BUBBLES to the row-wide handler rather than given a handler of its own: this block
+                             is inside <Row>, so both would fire and the row would toggle straight back.
+                             `cursor-pointer` is stated rather than left to inherit from the row, so this column
+                             goes on saying "pressable" beside a body that deliberately says the opposite. -->
+                        <span class="flex shrink-0 cursor-pointer items-center" aria-hidden="true">
+                            <span class="invisible flex items-center" :class="toggleGap">
+                                <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
+                                <slot name="lead" />
+                            </span>
                         </span>
-                        <div :id="bodyId" class="min-w-0 flex-1 border-l border-line-strong pl-3">
+                        <!-- `@click.stop` because this block is INSIDE <Row>, and the row-wide handler would
+                             read a press on the evidence as "close the thing you just opened". The drawer needs
+                             no guard: it is drawn as a sibling of <Row>, outside that handler entirely.
+                             `cursor-auto` says the same thing to the pointer, which <Row>'s `ui-row-select`
+                             would otherwise have promising a press over an error string nobody can press. -->
+                        <div :id="bodyId" class="min-w-0 flex-1 cursor-auto border-l border-line-strong pl-3" @click.stop>
                             <slot name="below" />
                         </div>
                     </div>
