@@ -1,3 +1,20 @@
+; WHOSE INSTALLER THIS IS, SAID ON THE INSTALLER — the one line of branding that is reachable from here.
+;
+; MUI stamps a footer across the bottom of every page of the wizard and, left alone, fills it with its own
+; name and build: a first-run install of this product spent five screens captioned
+; "Nullsoft Install System v3.08-3+deb12u1". Two things are wrong with that and only one of them is vanity.
+; The user is being asked to run an UNSIGNED binary they downloaded — the one moment in onboarding where they
+; are actively looking for a reason to trust or distrust what is on screen — and the only proper noun on the
+; window is a build toolchain they have never heard of, wearing a Debian package version, because this
+; installer is cross-built on a Linux runner. It reads as somebody else's software.
+;
+; Tauri includes this file at the top of its template (ahead of everything MUI draws) and defines
+; MUI_BRANDINGTEXT nowhere itself, so defining it here is simply the supported way to set it: MUI's own
+; default is `!ifndef`-guarded and yields to whatever is already defined. It is a literal rather than
+; "Intentic ${VERSION}" on purpose — PRODUCTNAME and VERSION are defined further DOWN the template than this
+; include, so referencing them here would name nothing.
+!define MUI_BRANDINGTEXT "Intentic"
+
 ; WHY AN UNINSTALL HOOK AT ALL — this app is meant to be running when you uninstall it.
 ;
 ; The tray is where Intentic lives once its window is closed (windows.rs, `apply_close`), so the ordinary

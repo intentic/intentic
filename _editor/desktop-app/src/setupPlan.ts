@@ -69,7 +69,14 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         { phase: `waiting-health`, label: `Wait for it to come up`, weight: 40 },
         { phase: `verifying`, label: `Check it answers`, weight: 20 },
         ...(input.syncing ? [{ phase: `desktop-sync`, label: `Set up folder sync`, weight: 45 }] : []),
-        { phase: `connecting-machine`, label: `Connect this computer`, weight: 20 },
+        /* THE THIRD DOWNLOAD, and it was weighted as if it were a handshake. This step fetches the host agent,
+         * a ~100 MB single-file binary, and it prints one line before it ("Downloading the intentic-host
+         * agent…") and nothing at all until it lands. At weight 20 the bar reached 99% and the estimate read
+         * "less than a minute left" before the download had started, so the last thing a first install showed
+         * was a full bar not moving — the exact "is it stuck?" this plan exists to answer, arriving at the one
+         * moment the user is most ready to believe the install had finished and something else had gone wrong.
+         * Sized against `pulling-image` (240) by what each actually transfers. */
+        { phase: `connecting-machine`, label: `Connect this computer`, weight: 75 },
     ];
 };
 

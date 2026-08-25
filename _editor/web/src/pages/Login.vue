@@ -25,7 +25,7 @@ import { useRouter } from "vue-router";
 import AppBrand from "../components/AppBrand.vue";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
-import { desktopVersion, signInThroughBrowser } from "../environments/desktop";
+import { desktopInstaller, desktopVersion, signInThroughBrowser } from "../environments/desktop";
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton } = useGoogleIdentity();
@@ -58,10 +58,20 @@ const year = new Date().getFullYear();
  * beats the site's "Getting started" band walks through, in its words, so a reader who scrolled that far
  * meets them again rather than something new. The first is what the button above does, and it is marked as
  * the one happening now: this is a progress rail, not a feature list, and the order carries the meaning. */
+/* …AND THE THIRD BEAT HAS TO BE THE ONE THIS VISITOR WILL ACTUALLY GET. It read "Paste one command / One line
+ * starts it on your own machine" for everybody, which is the promise the setup page then breaks for the two
+ * platforms we ship a build for: they are handed a Download button and never see a command at all. It is the
+ * product's first description of itself, so the version a Windows or Linux visitor read was "there will be a
+ * terminal" — the single thing this flow spent a release removing, advertised on the way in, to the exact
+ * reader most likely to be put off by it. Same `desktopInstaller()` the setup page decides with, so the two
+ * screens cannot promise different things. */
+const install = desktopInstaller();
 const steps: readonly { title: string; body: string }[] = [
     { title: `Sign in with Google`, body: `No forms and no card.` },
     { title: `Your sandbox is waiting`, body: `The private room your agents live and work in, with a web address of its own.` },
-    { title: `Paste one command`, body: `One line starts it on your own machine.` },
+    install === undefined
+        ? { title: `Paste one command`, body: `One line starts it on your own machine.` }
+        : { title: `Install the app`, body: `One click starts it on your own machine. No terminal.` },
 ];
 
 /* ONE GOOGLE SIGN-IN, NOT TWO.

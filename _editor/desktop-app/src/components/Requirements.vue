@@ -77,7 +77,21 @@ const STATE_BADGE: Record<string, string | undefined> = {
     failed: `didn't work`,
 };
 
-const ours = computed(() => props.requirements.some((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`));
+const ourCount = computed(
+    () => props.requirements.filter((requirement) => requirement.action === `fix` || requirement.action === `fixElevated`).length,
+);
+const ours = computed(() => ourCount.value > 0);
+/* WHAT THE BUTTON PROMISES, IN THE WORDS THE ROWS ABOVE IT ALREADY USE.
+ *
+ * It read "Install and continue" for every list — including the commonest one on a developer's machine, where
+ * Docker Desktop is installed and merely not running and the entire job is to start it. Naming an install that
+ * is not going to happen is the kind of small wrongness that makes somebody stop and re-read a screen they
+ * were about to click through, on the single click this whole flow is built to earn. It also contradicted the
+ * row directly above it, whose remedy said "start it and wait for its engine to come up".
+ *
+ * `BADGE` already promises "we'll do this" per row; the button is that promise collected, so the two cannot
+ * drift apart and neither has to guess which verb the list deserves. */
+const doLabel = computed(() => (ourCount.value > 1 ? `Do these and continue` : `Do this and continue`));
 const restarting = computed(() => props.requirements.some((requirement) => requirement.action === `restart`));
 /* The one that had no button. Adding an account to `docker-users` succeeds immediately and does nothing at
  * all until Windows re-issues the login token, which it does on the next sign-in, so this row's only
@@ -152,19 +166,26 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
 
         <!-- True, and worth saying BEFORE the click rather than as a surprise a second later: an elevation
              prompt nobody expected reads as something having gone wrong. -->
-        <p v-if="needsAdmin && ours" class="text-2xs text-subtle">Windows will ask for permission once.</p>
+        <!-- …and only while it is still ahead of them: once the run is going, the prompt has either happened or
+             is happening, and a warning about it in the future tense is one more stale sentence on the card. -->
+        <p v-if="needsAdmin && ours && !busy" class="text-2xs text-subtle">Windows will ask for permission once.</p>
 
-        <div class="flex flex-wrap items-center gap-2">
-            <Button v-if="ours" :disabled="busy" label="Install and continue" @click="emit(`install`)">
+        <!-- THE BUTTONS ARE THE QUESTION, SO THEY LEAVE WITH IT. They used to stay behind, greyed, for the
+             whole run the click started: "Do this and continue" sitting disabled above its own install, next
+             to "Check again", for the four minutes it takes. A disabled control is still a control on screen,
+             and three of them under a list that is now reporting live progress read as a card that had not
+             noticed it had been answered. The rows carry the state from here on. -->
+        <div v-if="!busy" class="flex flex-wrap items-center gap-2">
+            <Button v-if="ours" :label="doLabel" @click="emit(`install`)">
                 <template #icon><Icon name="bolt" /></template>
             </Button>
-            <Button v-if="restarting" :disabled="busy" label="Restart now" @click="emit(`restart`)">
+            <Button v-if="restarting" label="Restart now" @click="emit(`restart`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button v-if="signingOut" :disabled="busy" label="Sign out now" @click="emit(`signout`)">
+            <Button v-if="signingOut" label="Sign out now" @click="emit(`signout`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
-            <Button severity="secondary" :text="true" :disabled="busy" label="Check again" @click="emit(`recheck`)">
+            <Button severity="secondary" :text="true" label="Check again" @click="emit(`recheck`)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
         </div>
@@ -177,9 +198,9 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
              computer" is the whole point of being here: true until this computer cannot, and then it is a
              dead end. One quiet line, under the loud default. -->
         <button
+            v-if="!busy"
             type="button"
             class="flex items-center gap-2 self-start text-2xs text-muted hover:text-content"
-            :disabled="busy"
             @click="emit(`elsewhere`)"
         >
             <Icon name="cloud" class="shrink-0" />

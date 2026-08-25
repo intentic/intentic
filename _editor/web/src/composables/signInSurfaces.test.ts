@@ -34,6 +34,9 @@ vi.mock(`../environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     DESKTOP_DOWNLOADS: {},
     desktopVersion: () => desktopVersion(),
+    // Which build this machine could install, which the login screen reads only to decide whether its third
+    // step promises a pasted command or an installer. Nothing here is about that step, so it answers "none".
+    desktopInstaller: () => undefined,
     desktopSetupLink: () => ``,
     openDesktopLink: vi.fn(),
     signInThroughBrowser: () => signInThroughBrowser(),

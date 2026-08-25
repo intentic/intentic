@@ -30,9 +30,13 @@ vi.mock(`../composables/useAuth`, () => ({
 const getIdToken = vi.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
 const renderButton = vi.fn<() => Promise<boolean>>();
 vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
+// Which build, if any, this visitor's machine can run. `undefined` is "none" (macOS today), which is the
+// steady state for every test below except the pair that assert the third step follows it.
+const desktopInstaller = vi.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
 vi.mock(`../environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: ``,
     desktopVersion: () => undefined,
+    desktopInstaller: () => desktopInstaller(),
     openDesktopLink: vi.fn(),
 }));
 
@@ -71,6 +75,7 @@ beforeEach(() => {
     // The steady state: Google's button renders, and a credential arrives from it.
     renderButton.mockReset().mockResolvedValue(true);
     getIdToken.mockReset().mockResolvedValue(`google-id-token`);
+    desktopInstaller.mockReset().mockReturnValue(undefined);
 });
 
 afterEach(() => {
@@ -137,6 +142,29 @@ it(`always offers a way in that does not depend on Google's embedded button`, as
     // and each of them looks like a sign-in page that simply does nothing.
     expect(escape).toBeDefined();
     expect(signInWithGoogle).toHaveBeenCalled();
+});
+
+/* THE THIRD STEP HAS TO DESCRIBE THE FLOW THIS VISITOR WILL ACTUALLY BE GIVEN.
+ *
+ * This band is the product's first description of itself, and it promised "Paste one command / One line starts
+ * it on your own machine" to everybody — including Windows and Linux, where the setup page then hands over a
+ * Download button and no command is ever shown. The reader most likely to be put off by a terminal was told,
+ * on the way in, that there would be one. Both directions are asserted because the copy is only right when it
+ * tracks `desktopInstaller`, and a single case would pass with the value hardcoded either way. */
+it(`promises the pasted command only where there is no build to install`, async () => {
+    const el = await mount();
+
+    expect(el.textContent).toContain(`Paste one command`);
+    expect(el.textContent).not.toContain(`Install the app`);
+});
+
+it(`promises the installer on a machine we ship a build for`, async () => {
+    desktopInstaller.mockReturnValue({ platform: `windows`, label: `Windows`, href: `https://intentic.dev/desktop/windows` });
+
+    const el = await mount();
+
+    expect(el.textContent).toContain(`Install the app`);
+    expect(el.textContent).not.toContain(`Paste one command`);
 });
 
 it(`leaves the page usable when the user dismisses Google`, async () => {

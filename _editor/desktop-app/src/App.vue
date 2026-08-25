@@ -32,8 +32,7 @@ import {
     onPendingSetup,
     onRun,
     onUpdate,
-    parseRequirement,
-    parseRequirementState,
+    readMarker,
     parseStep,
     restartForSetup,
     resumableSetup,
@@ -208,6 +207,28 @@ const openWorkspace = (path?: string): void => void workspaceOpen(path);
 
 const eventsOf = (run: string): RunEvent[] => runs.value[run] ?? [];
 const running = computed(() => activeRun.value !== undefined);
+
+/* THE PAUSE THAT IS NOT A FAILURE, named once so the bar can stop calling it one.
+ *
+ * Every Windows install that needs anything ends its first pass non-zero on purpose: the flow reports what it
+ * would change and stops, because there is no terminal here to ask the question on. `runSetup` already knows
+ * that (`deferredToTheList`) and withholds the red error box — but the progress bar underneath derived
+ * "failed" from the exit code alone, so the screen still went `Stopped`, in danger red, over a 4% bar, while
+ * the requirements card above it waited politely for a click. The one moment in the flow where the user has to
+ * choose to keep going was dressed as the moment it broke.
+ *
+ * This is the same fact `runSetup` computes, hoisted so both halves of the card can read it. */
+const awaitingConsent = computed(() => !running.value && requirements.value.length > 0 && expectedStop(setupExit.value ?? null));
+
+/* …AND WHEN THE LIST HAS BEEN ANSWERED, IT GOES. `carried` keeps the previous run's rows up while the new one
+ * re-examines the machine, which is right for the seconds it was written for and wrong for the four minutes
+ * that follow: a run whose requirements are all `done` still drew "Before your sandbox can run here: / Docker
+ * Desktop is not running." with a dead "Install and continue" under it — above a green ten-step plan at 97%.
+ * The rows report themselves now (RequirementProgress), so "all of them are done" is a fact on screen rather
+ * than a guess, and the honest thing to do with a question that has been answered is to stop asking it. */
+const requirementsSettled = computed(
+    () => requirements.value.length > 0 && requirements.value.every((requirement) => requirementState.value[requirement.id]?.state === `done`),
+);
 // A handed-over setup owns the window from the moment it arrives until it hands the window back, which
 // includes having failed, because a failure is the one state the user most needs undivided. See `setupOpen`
 // for why that is held rather than inferred.
@@ -768,7 +789,20 @@ onMounted(async () => {
      * would show an empty log through its first, most informative seconds. */
     stop = await Promise.all([
         onRun((event) => {
-            runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
+            /* THE MARKERS ARE PROTOCOL, NOT OUTPUT, and they are read here so they never reach the log pane.
+             *
+             * `intentic-requirement:` and `intentic-requirement-state:` are how the CLI talks to THIS WINDOW
+             * (desktop.ts owns the grammar); the requirement rows above ARE their rendering. Appending them to
+             * the log as well showed the reader raw
+             * `intentic-requirement: {"action":"fix","detail":null,"id":"docker-running","problem":…}` — JSON,
+             * mid-sentence, wrapped off the right edge — inside the one pane this app asks people to copy into
+             * a support thread. Parsed once, here, and dropped: what is left in the pane is what the same
+             * command prints in a terminal. The transcript on disk (scripts.rs) still records every byte,
+             * which is the right place for the machine's half of the conversation. */
+            const marker = event.run === `setup` && event.kind === `line` ? readMarker(event.text) : undefined;
+            if (marker === undefined) {
+                runs.value = { ...runs.value, [event.run]: [...eventsOf(event.run), event] };
+            }
             // Folded as it arrives rather than derived from the whole log afterwards: the model needs to know
             // WHEN each phase started to estimate anything, and a line carries no clock of its own.
             if (event.run === `setup` && progress.value !== undefined) {
@@ -788,7 +822,7 @@ onMounted(async () => {
             }
             // What this computer still needs, collected as the installer names it. Keyed by id so a run that
             // reports the same requirement twice (the fixer re-examines between passes) draws one row.
-            const requirement = parseRequirement(event.text);
+            const requirement = marker?.kind === `requirement` ? marker.requirement : undefined;
             if (requirement !== undefined) {
                 // The first one of a new run replaces whatever the last run left on screen; the rest of that
                 // run's requirements join it. Keyed by id, so a run that reports the same one twice: the
@@ -800,7 +834,7 @@ onMounted(async () => {
             }
             // …and how each one is going while it is being dealt with, which is the difference between a
             // checklist and one spinner sitting on "Set up Docker" for ten minutes.
-            const state = parseRequirementState(event.text);
+            const state = marker?.kind === `state` ? marker.state : undefined;
             if (state !== undefined) {
                 requirementState.value = { ...requirementState.value, [state.id]: state };
             }
@@ -899,7 +933,7 @@ onUnmounted(() => {
                  the button" and the same text again as stderr underneath is one message written twice, and
                  the second copy is the one that reads like a crash. -->
                 <Requirements
-                    v-if="requirements.length > 0 && !expired"
+                    v-if="requirements.length > 0 && !expired && !requirementsSettled"
                     :requirements="requirements"
                     :busy="running"
                     :progress="requirementState"
@@ -920,7 +954,13 @@ onUnmounted(() => {
                     <span>You stopped this install. Nothing else is running on this computer.</span>
                 </p>
 
-                <SetupProgress v-if="progressShown && !expired" :events="eventsOf(`setup`)" :view="progressShown" :running="activeRun === `setup`" />
+                <SetupProgress
+                    v-if="progressShown && !expired"
+                    :events="eventsOf(`setup`)"
+                    :view="progressShown"
+                    :running="activeRun === `setup`"
+                    :awaiting="awaitingConsent"
+                />
 
                 <!-- Only on failure. A setup that stopped is the one place this app can strand someone, so
                  "try again" is never the only control on screen — the way out is the header's, which is up

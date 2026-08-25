@@ -316,8 +316,25 @@ it(`resumes an unfinished sandbox rather than making a second`, async () => {
     list.mockResolvedValue([unfinished]);
     const el = await mount();
     expect(create).not.toHaveBeenCalled();
-    // Said as where the reader left off rather than as bookkeeping about a row they never knowingly made.
+    /* …AND SAYS NOTHING ABOUT IT, because nothing has happened to this row. It exists only because this page
+     * makes one on arrival, and every ordinary second visit lands here: a reload, a tab reopened, `/` bouncing
+     * off requireSetup — and above all the DESKTOP APP, whose webview loads the SPA at `/` and is redirected
+     * here on its first frame. "Picking up where you left off: nothing has run yet. Use a new sandbox instead."
+     * was therefore the first sentence the app showed a person who had been signed up for thirty seconds,
+     * telling them they had a past here and offering to throw away the only sandbox they had. */
+    expect(el.textContent).not.toContain(`Picking up where you left off`);
+    expect(el.textContent).not.toContain(`Use a new sandbox instead`);
+});
+
+it(`does say where you left off once something has actually happened to the sandbox`, async () => {
+    // A machine redeemed the code: the command demonstrably ran somewhere, so this IS an errand in progress
+    // and the offer to start over is a real one.
+    const started = sandboxRow({ id: `s1`, name: `my-laptop`, setupCodeClaimedAt: new Date().toISOString() });
+    sandboxes.value = [started];
+    list.mockResolvedValue([started]);
+    const el = await mount();
     expect(el.textContent).toContain(`Picking up where you left off`);
+    expect(el.textContent).toContain(`Use a new sandbox instead`);
 });
 
 /* ON A PLATFORM THAT HOSTS, A FRESH SANDBOX DEFAULTS TO THE READER'S OWN COMPUTER.

@@ -1,7 +1,7 @@
 import type { Log } from "@intentic/local-agent";
 import { hostConnectUrl, type HostScopes } from "@intentic/sandbox-contract";
 import { RPCHandler } from "@orpc/server/websocket";
-import type { HostConfigFile } from "./config.js";
+import { type HostLink, rememberScopes } from "./config.js";
 import { createHostRouter } from "./router.js";
 
 /* The one socket. This computer dials the sandbox and keeps the connection open; everything the agent asks for
@@ -35,7 +35,7 @@ export interface HostConnection {
     readonly stop: () => void;
 }
 
-export const connect = (config: HostConfigFile, version: string, log: Log): HostConnection => {
+export const connect = (config: HostLink, version: string, log: Log): HostConnection => {
     /* The live grant. Starts as whatever the last session cached and is replaced by the sandbox's `setScopes`,
      * which arrives immediately after every connect, so a scope the owner turned off is enforced from the first
      * call of the new session, not from the next restart of this agent. */
@@ -45,6 +45,12 @@ export const connect = (config: HostConfigFile, version: string, log: Log): Host
             scopes: () => scopes,
             setScopes: (next) => {
                 scopes = next;
+                /* …AND THE CACHE FOR THIS LINK ALONE. The router used to write it, which was fine while a
+                 * computer answered to exactly one sandbox and is wrong now that it answers to a list: the
+                 * router has no idea which of them pushed. The connection does, because it IS one link, so the
+                 * persistence moved to the side that holds the identity. Best-effort and unawaited for the
+                 * reason it always was: the live grant above is already enforcing. */
+                void rememberScopes(config.sandboxUrl, next);
             },
             log,
         }),

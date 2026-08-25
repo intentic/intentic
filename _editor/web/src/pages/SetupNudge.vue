@@ -20,6 +20,7 @@ import { CopyButton, Notice } from "@intentic/ui";
  *   `terminal`: the command is on screen and was, apparently, never pasted anywhere
  *   `phone`   : a phone with the command still folded away, which has not been told anything wrong yet
  *   `install` : a browser offered the desktop app, which hasn't been installed and opened yet
+ *   `downloaded`: the installer was taken from this page, so the remaining steps are Windows' and not ours
  *   `app`     : the desktop app was handed the setup and its own window has the log
  *   `button`  : in the app, with nothing pressed yet */
 const {
@@ -30,7 +31,7 @@ const {
     command = ``,
     copyable = false,
 } = defineProps<{
-    variant: "cloud" | "emailed" | "terminal" | "phone" | "install" | "app" | "button";
+    variant: "cloud" | "emailed" | "terminal" | "phone" | "install" | "downloaded" | "app" | "button";
     cloudName?: string;
     cloudProvider?: string;
     // Past the long fuse: stop assuming the command was never run and start helping the person whose terminal
@@ -49,29 +50,37 @@ const emit = defineEmits<{ copied: [] }>();
     <Notice tone="warning" icon="clock">
         <span class="flex flex-col gap-2">
             <p>
-            <span v-if="variant === `cloud`" class="min-w-0">
-                <span class="font-medium">Still building.</span> Check {{ cloudName }} in your {{ cloudProvider }} console. Its boot log is
-                <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh sandbox here is always safe.
-            </span>
-            <span v-else-if="variant === `emailed`" class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host your sandbox. The command
-                is waiting there.
-            </span>
-            <span v-else-if="variant === `terminal`" class="min-w-0">
-                <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will run your sandbox.
-            </span>
-            <span v-else-if="variant === `phone`" class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that will host your sandbox.
-            </span>
-            <span v-else-if="variant === `install`" class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Nothing starts until you install the app above and open it.
-            </span>
-            <span v-else-if="variant === `app`" class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.
-            </span>
-            <span v-else class="min-w-0">
-                <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
-            </span>
+                <span v-if="variant === `cloud`" class="min-w-0">
+                    <span class="font-medium">Still building.</span> Check {{ cloudName }} in your {{ cloudProvider }} console. Its boot log is
+                    <code>/var/log/cloud-init-output.log</code>. Deleting the machine there and creating a fresh sandbox here is always safe.
+                </span>
+                <span v-else-if="variant === `emailed`" class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> Open the link we emailed you on the computer that will host your sandbox. The
+                    command is waiting there.
+                </span>
+                <span v-else-if="variant === `terminal`" class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> This has to be pasted into a terminal on the machine that will run your sandbox.
+                </span>
+                <span v-else-if="variant === `phone`" class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> Email yourself the link above and open it on the computer that will host your
+                    sandbox.
+                </span>
+                <span v-else-if="variant === `install`" class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> Nothing starts until you install the app above and open it.
+                </span>
+                <!-- The one variant that is not a correction. This reader did the right thing and is somewhere in
+                 Windows' half of it; the useful thing to say is where they are and that they can stop watching
+                 this tab, not that nothing has happened. -->
+                <span v-else-if="variant === `downloaded`" class="min-w-0">
+                    <span class="font-medium">Waiting on the installer.</span> Run the file your browser downloaded, then open Intentic and press "Set
+                    it up now". This page picks it up on its own, so you can leave it.
+                </span>
+                <span v-else-if="variant === `app`" class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> Check the Intentic window. It shows what the setup is doing, and any error it hit.
+                </span>
+                <span v-else class="min-w-0">
+                    <span class="font-medium">Still nothing.</span> Nothing starts until you press "Set it up now" above.
+                </span>
             </p>
             <p v-if="stalled && variant === `terminal`" class="opacity-90">
                 Already ran it? Check that terminal: an error there stops the sandbox before it can report in. Safe to run again.

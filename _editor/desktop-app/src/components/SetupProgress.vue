@@ -22,14 +22,22 @@ import type { ProgressView } from "../setupPlan";
  * said why on stderr, and hiding that behind a click is how a stuck user ends up with nothing to paste into a
  * support thread. */
 
-const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean }>();
+/* `awaiting` is the run that stopped ON PURPOSE, waiting for the requirements card above to be answered. The
+ * card owns that conversation; this component only needs to know not to call it a crash. */
+const props = defineProps<{ events: RunEvent[]; view: ProgressView; running: boolean; awaiting?: boolean }>();
 
 const open = ref(false);
 const logEnd = ref<HTMLElement | undefined>(undefined);
 
 const lines = computed(() => props.events.flatMap((event) => (event.kind === `line` ? [event] : [])));
 const exit = computed(() => props.events.find((event) => event.kind === `exit`));
-const failed = computed(() => exit.value?.kind === `exit` && !exit.value.ok);
+/* A NON-ZERO EXIT IS NOT AUTOMATICALLY A FAILURE, and this component was the last place that still thought so.
+ *
+ * The first pass of every Windows install that needs anything ends non-zero by design — it reports what it
+ * would change and stops. App.vue already knows that and withholds the error box; here the exit code alone
+ * drove a `Stopped` heading and a danger-red bar. The result was the screen calling its own two-pass consent
+ * flow a crash: red bar, "Stopped", 4%, directly above a card politely asking for one click. */
+const failed = computed(() => !props.awaiting && exit.value?.kind === `exit` && !exit.value.ok);
 
 /* PowerShell's ERROR RECORD, which is four lines of furniture around one line of meaning:
  *
@@ -85,13 +93,21 @@ watch(
              estimate answers "should I wait": the two questions the old single line could not. -->
         <div class="flex flex-col gap-1.5">
             <div class="flex items-baseline gap-2 text-2xs">
-                <span class="flex-1 font-medium text-content">{{ failed ? `Stopped` : (view.position ?? `Starting…`) }}</span>
-                <span v-if="view.remaining && !failed" class="text-subtle">{{ view.remaining }}</span>
+                <!-- Three headings, not two: a run that stopped for an ANSWER is neither working nor broken,
+                     and the estimate is meaningless while nothing is running, so it goes rather than counting
+                     down against a clock the user controls. -->
+                <span class="flex-1 font-medium text-content">{{
+                    awaiting ? `Waiting for you` : failed ? `Stopped` : (view.position ?? `Starting…`)
+                }}</span>
+                <span v-if="view.remaining && !failed && !awaiting" class="text-subtle">{{ view.remaining }}</span>
                 <span class="font-mono tabular-nums text-muted">{{ view.percent }}%</span>
             </div>
             <div class="h-1.5 overflow-hidden rounded-full bg-canvas">
                 <div
-                    :class="['h-full rounded-full transition-[width] duration-500 ease-out', failed ? 'bg-danger' : 'bg-primary-400']"
+                    :class="[
+                        'h-full rounded-full transition-[width] duration-500 ease-out',
+                        failed ? 'bg-danger' : awaiting ? 'bg-warning' : 'bg-primary-400',
+                    ]"
                     :style="{ width: `${Math.max(view.percent, 2)}%` }"
                 />
             </div>

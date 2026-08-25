@@ -508,7 +508,14 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
                   value: `mine` as const,
                   title: `My own computer`,
                   meta: `Most power · no limits`,
-                  note: `One pasted command`,
+                  /* THE NOTE HAS TO NAME THE STEP THE READER WILL ACTUALLY BE GIVEN. This card said "One
+                   * pasted command" on every platform, including the two we ship an installer for — where
+                   * the step under it is a Download button and no command is ever shown. A picker whose
+                   * caption describes a different flow from the one it opens is the picker teaching the
+                   * reader to distrust it, on the decision the whole of onboarding hangs off; and it aimed
+                   * the terminal-shy reader away from the rung that no longer asks for a terminal. It reads
+                   * off the same `installer` the step below does, so the two cannot disagree. */
+                  note: installer.value === undefined ? `One pasted command` : `A ${installer.value.label} installer`,
               },
           ]
         : []),
@@ -690,6 +697,16 @@ const handoff = computed<Handoff>(() => {
  * elapsed time can trigger the correction. `armedAt` is when the command became runnable: reset by a re-mint,
  * which hands out a different command. */
 const armedAt = ref<number | undefined>(undefined);
+/* THE LAST THING THIS PAGE WATCHED THE READER DO, and the point the fuses below count from.
+ *
+ * `armedAt` is when a command became runnable, which is the right clock for somebody who has been shown one
+ * and done nothing. It is the wrong clock the moment they visibly move: pressing "Download for Windows" is an
+ * act this page can see, and it is followed by a browser download, an unsigned-binary warning, a five-screen
+ * installer and a sign-in — minutes of work, all of it correct, none of it visible from here. Counting from
+ * the mint meant the card interrupted that with "Still nothing. Nothing starts until you install the app
+ * above and open it." roughly forty seconds after the click that started it: the page contradicting the
+ * reader while they did exactly what it asked. */
+const actedAt = ref<number | undefined>(undefined);
 // The app's one wall clock, armed only while a command is on screen: nothing below reads it before then
 // (waitedMs is 0 without an armedAt, and `claimed` implies one), so an unarmed step 2 costs no tick.
 const now = useNow(() => armedAt.value !== undefined || hostedSince.value !== undefined);
@@ -730,6 +747,16 @@ const hostedWait = computed(() =>
 // so the own-computer lane borrows the phone's long fuse while the app is the path. It drops back to forty
 // seconds the moment the command is unfolded, because from then on the wait IS about a clipboard again.
 const installing = computed(() => appFirst.value && !commandVisible.value);
+/* The installer was fetched from this page. Not proof of anything — a browser download is not an install, and
+ * this page never learns whether it finished — but it is the difference between a reader who has not started
+ * and one who is several minutes into a process with nothing left for this tab to ask of them. It changes what
+ * the nudge SAYS as well as when it fires, because "install the app above" names a step they are past. */
+const downloaded = ref(false);
+const onDownload = (): void => {
+    downloaded.value = true;
+    actedAt.value = Date.now();
+    track(`desktop_installer_downloaded`, { platform: installer.value?.platform ?? `unknown` });
+};
 const nudgeAfterMs = computed(() =>
     cloudMachine.value !== null ? 6 * 60_000 : composeShown.value || mobile.value || installing.value ? 3 * 60_000 : 40_000,
 );
@@ -739,7 +766,10 @@ const STALLED_MS = 3 * 60_000;
 // longer before suggesting the terminal has something to say.
 const SLOW_BUILD_MS = 6 * 60_000;
 
-const waitedMs = computed(() => (armedAt.value === undefined ? 0 : now.value - armedAt.value));
+const waitedFrom = computed(() =>
+    actedAt.value !== undefined && armedAt.value !== undefined ? Math.max(actedAt.value, armedAt.value) : armedAt.value,
+);
+const waitedMs = computed(() => (waitedFrom.value === undefined ? 0 : now.value - waitedFrom.value));
 // Every fuse below is a GUESS from elapsed time, and a machine report makes guessing obsolete: a failure
 // card names the real problem (nudging beside it would say "you haven't run it" about a command that
 // demonstrably ran and died), and live stage narration IS the answer slowBuild's "check that terminal" was
@@ -763,7 +793,11 @@ const nudgeVariant = computed(() => {
     // A browser that was offered an installer: nothing has been pasted because nothing was meant to be, and
     // "press the button above" would name a button that is in the app this reader has not installed yet.
     if (installing.value) {
-        return `install` as const;
+        /* …and once they have taken it, the correction has to move on with them. "Nothing starts until you
+         * install the app above" is addressed to somebody who has not pressed the button; saying it to
+         * somebody who pressed it three minutes ago reads as the page not having noticed, which is exactly
+         * the impression this whole card exists to avoid. The next real step is Windows', not ours. */
+        return downloaded.value ? (`downloaded` as const) : (`install` as const);
     }
     if (mobile.value) {
         return `phone` as const;
@@ -1357,6 +1391,29 @@ const composeArgs = computed<ComposeArgs | undefined>(() => {
  *
  * Owned only: a member can't mint someone else's setup code, so their id gets them a sandbox of their own
  * instead. The check loop acts on the ACTIVE sandbox, so select it to make the URL self-contained. */
+/* HAS ANYTHING EVER HAPPENED TO THIS SANDBOX: the difference between resuming an errand and adopting a draft.
+ *
+ * A row exists from the moment /setup is opened (autoCreate), and it outlives the visit. So the ordinary way to
+ * meet this page a second time — a reload, a tab reopened, `/` bouncing off requireSetup, and above all THE
+ * DESKTOP APP, whose webview loads the SPA at `/` and is redirected here on its very first frame — finds a row
+ * the account made seconds ago and never acted on. Calling that "picking up where you left off" tells a person
+ * who has been signed up for thirty seconds that they have a past here, and offers to throw away the only
+ * sandbox they have. It was the first sentence on the app's first screen.
+ *
+ * Every clause below is an ACT somebody took, the same set the draft rule is written against (`committed`): a
+ * machine redeemed the code, a machine reported on its run, a daemon checked in, or hardware was provisioned
+ * for it. None of them, and this is the same draft the page would have created for itself — so it says nothing,
+ * and the card reads exactly as it does on a first arrival. */
+const touched = (row: SandboxSummary): boolean =>
+    // `?? null` on every one of them: these fields are optional as well as nullable (an older platform sends
+    // some of them not at all), and `undefined !== null` is true, which would have made every row "touched"
+    // and quietly restored the exact behaviour this replaces.
+    (row.lastSeenAt ?? null) !== null ||
+    (row.setupCodeClaimedAt ?? null) !== null ||
+    (row.setupReport ?? null) !== null ||
+    (row.cloud ?? null) !== null ||
+    (row.hosted ?? null) !== null;
+
 const arrive = async (): Promise<void> => {
     const [rows, offer, address] = await Promise.all([
         sandbox.list(),
@@ -1395,7 +1452,7 @@ const arrive = async (): Promise<void> => {
     }
     sandbox.select(found.id);
     created.value = found;
-    resuming.value = true;
+    resuming.value = touched(found);
     // A resumed sandbox that was provisioned last visit continues as the story it is: hosted machines may
     // still be booting (or asleep: the wake reflex handles that), and cloud machines hold a code the command
     // lane must not re-ask for.
@@ -2274,6 +2331,7 @@ watch(commandReady, (ready) => {
                                     :href="installer.href"
                                     :label="`Download for ${installer.label}`"
                                     class="w-full justify-center md:w-fit"
+                                    @click="onDownload"
                                 >
                                     <template #icon><Icon name="download" /></template>
                                 </Button>

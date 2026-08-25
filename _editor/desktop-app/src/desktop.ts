@@ -312,6 +312,27 @@ export const parseRequirement = (line: string): Requirement | undefined => {
     }
 };
 
+/* IS THIS LINE ADDRESSED TO THE WINDOW RATHER THAN TO THE READER, asked once so the answer can do two jobs.
+ *
+ * Both markers above are JSON the CLI writes for this app to parse, and both used to be appended to the log
+ * pane on their way past — so a reader watching an install saw the rows AND the raw records behind them,
+ * unwrapped, running off the right edge. The two calls happened at different points in App.vue's handler, one
+ * after the other, which is why the "is it a marker" question could not gate the append.
+ *
+ * So: one call, one answer, and a line the window recognises never reaches the transcript on screen. The
+ * discriminated union is what lets the caller keep the two behaviours apart without parsing twice. */
+export type RunMarker =
+    { readonly kind: `requirement`; readonly requirement: Requirement } | { readonly kind: `state`; readonly state: RequirementProgress };
+
+export const readMarker = (line: string): RunMarker | undefined => {
+    const requirement = parseRequirement(line);
+    if (requirement !== undefined) {
+        return { kind: `requirement`, requirement };
+    }
+    const state = parseRequirementState(line);
+    return state === undefined ? undefined : { kind: `state`, state };
+};
+
 /* --- the native side of a Windows restart, and of coming back from one --- */
 
 /** Save this setup so the app can pick it up after Windows restarts, then restart Windows. */

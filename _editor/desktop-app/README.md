@@ -234,6 +234,19 @@ and how long, were both unanswerable. `setupPlan.ts` answers them:
   script gets to say a step is over.
 - **The estimate is the plan corrected by the run.** Remaining weight at the pace this machine has actually
   managed so far, so a slow disk stretches the number instead of being contradicted by it.
+- **A weight is a claim about how long something takes, and a wrong one is a lie the bar tells at the worst
+  moment.** `connecting-machine` was 20 — the same as `Check it answers` — for a step that downloads the
+  ~100 MB host agent and prints nothing between "Downloading…" and "done". So a first install reached 99% and
+  "less than a minute left" *before* that download began, and then stopped moving: the full-bar freeze is the
+  shape people read as a hang, arriving at the one point where they are readiest to believe the install had
+  finished and something afterwards had broken. It is 75 now, sized against `pulling-image` by what each
+  actually transfers.
+- **Only what the reader is meant to read reaches the log pane.** The `intentic-requirement:` and
+  `intentic-requirement-state:` markers are protocol — the requirement rows *are* their rendering — and they
+  used to be parsed *and* appended, so the pane showed raw JSON running off its right edge, inside the one
+  surface this app asks people to copy into a support thread. `readMarker` (`desktop.ts`) answers once and the
+  handler drops what it recognises. The transcript on disk still records every byte, which is the right place
+  for the machine's half of the conversation.
 
 ### When it stops, somebody has to find out
 
@@ -248,6 +261,13 @@ separate causes and all five are closed here, because any one of them alone repr
   here to ask the one question on. `ic` now says which stop that was with a documented exit code
   (`docs/cli-output-protocol.md` §2c), and the screen renders it as the list, never as `connect.ps1 exited
   with status 3`.
+
+  **The progress bar was the last thing that still disagreed.** It derived "failed" from the exit code alone,
+  so a run stopped for consent drew `Stopped` in danger red over a 4% bar, directly above a card politely
+  asking for one click — the screen calling its own two-pass design a crash, on the single click the flow
+  exists to earn. `awaitingConsent` is that fact hoisted out of `runSetup` so both halves read it: the heading
+  becomes *Waiting for you*, the bar goes amber, and the estimate disappears rather than counting down against
+  a clock the user is holding.
 - **The setup face is latched, not derived.** It used to be `pending !== undefined || activeRun === 'setup'`,
   where `pending` is cleared by the run that starts and re-read from two directions: so ordinary orderings
   could end with both halves false while a failed setup was on screen, handing the window back to the manager
@@ -273,6 +293,20 @@ Two more things the screen gained at the same time:
 - **Live requirement rows.** `ic` reports each requirement's own state as it works through it
   (`intentic-requirement-state:`), so the list ticks over in place: instead of one spinner on "Set up Docker"
   for the ten minutes it takes to switch WSL2 on, download 600 MB, run an installer and wait for an engine.
+
+  **A question that has been answered stops being asked.** `carried` keeps the previous run's rows up while
+  the next one re-examines the machine, which is right for the seconds it was written for and wrong for the
+  four minutes after: an install at 97%, every step green, still carried "Before your sandbox can run here: /
+  Docker Desktop is not running." above it with a dead **Install and continue** under that. The buttons now
+  leave when the run starts (a disabled control is still a control, and three of them under a list reporting
+  live progress read as a card that had not noticed), and `requirementsSettled` retires the whole card once
+  every row reports `done`.
+
+- **The button says what will actually happen.** It read *Install and continue* for every list, including the
+  commonest one on a developer's machine — Docker Desktop installed and merely not running, where nothing is
+  installed and the entire job is to start it. It is *Do this and continue* / *Do these and continue* now,
+  which is the promise each row already carries ("we'll do this") collected into the control that grants it,
+  so the two cannot drift.
 
 ### The way out that is not giving up
 
@@ -471,6 +505,39 @@ and they are now *told* so (below), rather than retrying a signature check that 
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is exported (empty) by `build-desktop.sh` because the signer prints
 `Signing without password.` and then BLOCKS on a prompt when the variable is absent: a release that hangs
 rather than one that fails.
+
+### What the installer looks like, and the two things still wrong with it
+
+The Windows installer is the **first artifact of this product that touches a stranger's machine**, and it is
+stock NSIS: five screens and four clicks for a per-user app with no options, over MUI's default assets. Two of
+its problems are worth naming because neither is cosmetic.
+
+**It is unsigned.** Windows shows *"Windows protected your PC"* with **Don't run** as the default button for a
+binary it cannot attribute to anybody, and no amount of testing retires that — SmartScreen wants an
+Authenticode signature from a certificate issued to a verified legal entity. Everything to use one is already
+here: `bundle.windows.signCommand` points at
+[`_tools/scripts/sign-windows.sh`](../../_tools/scripts/sign-windows.sh), which signs through jsign or
+osslsigncode, no-ops silently when its variables are unset, and is documented in
+[`docs/windows-code-signing.md`](../../docs/windows-code-signing.md). **The only missing piece is a purchased
+certificate.** Until there is one, every download ends at a scare dialog, and it is the largest single drop in
+this funnel.
+
+**The footer said somebody else's name.** MUI stamps a brand line across every page and, undefined, fills it
+with its own: a first install was captioned `Nullsoft Install System v3.08-3+deb12u1` — a build toolchain the
+reader has never heard of, wearing a Debian package version because this installer is cross-built on a Linux
+runner, on the one screen where they are actively deciding whether to trust an unsigned binary.
+`installer-hooks.nsh` defines `MUI_BRANDINGTEXT` now; Tauri includes that file ahead of everything MUI draws,
+and defines the symbol nowhere itself, so this is simply the supported way to set it.
+
+**Still open: the page count.** Tauri's NSIS config has no flag for it (`headerImage`, `sidebarImage`,
+`installerIcon`, `template`, and no more), but its template already carries `SkipIfPassive` on *every* page
+except the progress bar, driven by `$PassiveMode` — which is set from `/P` and nothing else. So passive mode
+already **is** the one-screen install, and it is what a background update runs; only the first, double-clicked
+install is loud, because a double-click passes no flags. Getting it needs `bundle.windows.nsis.template`
+pointing at a vendored copy of Tauri's `installer.nsi` with `.onInit` defaulting `$PassiveMode` to 1 — a
+977-line file held in lockstep with the bundler version for a one-line change, which is the same trade this
+repo refuses for the connect scripts. Worth doing with a Windows runner to verify against; not worth guessing
+at, since nothing in this workspace can build NSIS.
 
 ### How the app takes one ([`src/update.rs`](src-tauri/src/update.rs))
 

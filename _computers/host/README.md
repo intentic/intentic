@@ -97,12 +97,31 @@ the card. See `_sandbox/sandbox/src/hosts/host-seed.ts`.
 intentic-host setup --url https://sandbox-… --pair <token>   # what the card's one-liner runs
 intentic-host status                                          # what it is connected to, and what it may do
 intentic-host run --foreground                                # the connection loop, watchable
-intentic-host uninstall                                       # disconnect and forget the credential
+intentic-host uninstall [--sandbox <url>]                     # disconnect one sandbox, or all of them
 ```
 
-State lives in `~/.intentic/host`: `config.json` (0600, sandbox URL, machine id, enrollment token, cached
-scopes), `audit.jsonl` (every call, kept even across an uninstall: it is the user's record, not the agent's),
-`host.log`, and `trash/`.
+### One computer, several sandboxes
+
+A computer answers to a **list** of sandboxes, each with its own enrollment token and its own grant, and
+`setup` adds to that list rather than replacing it. One process holds one ordinary outbound websocket per
+link (`run`), which is why running several is just running several: nothing is multiplexed and nothing is
+shared but the log.
+
+That was not always true, and the way it was wrong is worth keeping written down. `setup` wrote `config.json`
+wholesale, so connecting a computer to a second sandbox silently disconnected it from the first — and the
+caller that does this most is not a person typing a command, it is **the last step of onboarding**
+(`connect.ps1` → `computer.ps1` → `intentic-host setup`). Setting up a new sandbox on a computer that already
+had one therefore took the computer away from the sandbox that owned it: no prompt, nothing about it on the
+install's progress screen, and the replacement link arriving with every scope `off`, so for a while the machine
+answered to nobody. It was found by doing it — a laptop dropped off its owner's sandbox at 99% of an install
+and had to be re-paired by hand. `src/config.test.ts` pins the shape of the fix.
+
+`uninstall` follows from the same fact: naming a sandbox disconnects that one and leaves the agent running for
+the rest; naming none disconnects everything and takes the autostart entry and the credential file with it.
+
+State lives in `~/.intentic/host`: `config.json` (0600, one entry per linked sandbox: its URL, this machine's
+id there, the enrollment token and the cached scopes), `audit.jsonl` (every call, kept even across an
+uninstall: it is the user's record, not the agent's), `host.log`, and `trash/`.
 
 ## Gotchas worth knowing before editing
 

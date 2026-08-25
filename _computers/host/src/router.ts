@@ -1,6 +1,5 @@
 import { type HostScopes, type MachineFlowLine, type MachineSandboxFlow, hostContract } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
-import { rememberScopes } from "./config.js";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { manageSandbox, removeSandbox, swapSandbox, tailSandboxLogs } from "./tools/sandboxes.js";
@@ -97,9 +96,9 @@ export const createHostRouter = (runtime: HostRuntime) => {
         setScopes: os.setScopes.handler(({ input }) => {
             runtime.setScopes(input);
             runtime.log(`permissions updated: commands ${input.shell}, writes ${input.write}, screen ${input.screen}`);
-            // The cache on disk is best-effort and deliberately not awaited into the answer: the live grant is
-            // already enforcing, and a read-only disk must not make the sandbox think the push failed.
-            void rememberScopes(input);
+            // Caching it on disk belongs to whoever knows WHICH sandbox pushed, which is the connection and not
+            // this router (see connection.ts): a computer answers to a list of sandboxes now, each with its own
+            // grant, and a writer that could not name the link would have to guess which one to overwrite.
             return { ok: true };
         }),
         ping: os.ping.handler(() => ({ ok: true })),
