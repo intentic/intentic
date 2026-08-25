@@ -474,6 +474,31 @@ watch(
     { immediate: true },
 );
 
+/* WHERE A RAIL MENU OPENS: hung off the COLUMN'S right edge, level with the tile it belongs to, never under the
+ * pointer. Shared by both menus below, which is the point: two menus launched from one column that opened in
+ * two different ways would be two habits to learn.
+ *
+ * Both are PrimeVue ContextMenus, and PrimeVue places one from the event's `pageX/pageY` alone. That is right
+ * for a menu ABOUT A POINT (a spot in a file tree, a word in a transcript) and wrong for every menu here,
+ * because the thing they are about is a 40px tile inside a 56px column: opened at the pointer, the box landed
+ * half over the rail it was launched from, a few pixels differently every time, with its first row under the
+ * cursor and the tile's own hover label across it. Anchored, they open in the same place every time, clear of
+ * the column, and the eye already knows where to look.
+ *
+ * The RAIL's edge rather than the tile's, so the menu clears the column's padding instead of overlapping the
+ * gap between a tile and the rail's border. Vertically it is the tile's own top, so a menu launched from the
+ * seventh tile appears beside the seventh tile; PrimeVue still flips it upward by itself near the foot of the
+ * window, which is exactly what the More tile, low in the column, needs.
+ *
+ * A synthetic MouseEvent rather than a bare object: `show` calls `preventDefault`/`stopPropagation` on what it
+ * is handed, and one missing them throws inside the menu instead of merely failing to be positioned. */
+const showBesideRail = (menu: { show: (event: Event) => void } | undefined, event: MouseEvent): void => {
+    const tile = event.currentTarget as HTMLElement | null;
+    const rail = (tile?.closest(`nav`) ?? tile)?.getBoundingClientRect();
+    const top = tile?.getBoundingClientRect().top;
+    menu?.show(rail === undefined || top === undefined ? event : new MouseEvent(`click`, { clientX: rail.right, clientY: top }));
+};
+
 /* A TILE'S OWN MENU, which is two different menus depending on which tile it is.
  *
  * THE CHAT'S is where the chat goes next, asked of the thing that holds it. While the rail is the chat's home,
@@ -524,7 +549,7 @@ const onTileContextMenu = (tile: RailSeat, event: MouseEvent): void => {
     }
     event.preventDefault();
     menuTile.value = tile;
-    tileMenu.value?.show(event);
+    showBesideRail(tileMenu.value, event);
 };
 
 /* THE DOOR TO EVERYTHING THAT IS NOT ON THE RAIL, and the reason the rest of the column may be short. It is a
@@ -543,15 +568,9 @@ const moreOpen = ref(false);
 // The count is the whole point of the hover: the tile's job is to say that there is more, and how much more is
 // the only thing a reader can't already see. Phrased like every other tile's label (see tileLabel).
 const moreLabel = computed(() => (moreTiles.value.length === 0 ? `More areas` : `More areas · ${moreTiles.value.length} not on the rail`));
-/* OPENED AT THE TILE, not at the pointer's last known position. This menu is a ContextMenu, and PrimeVue places
- * one from the event's `pageX/pageY` alone: a press from the KEYBOARD (Enter or Space on the focused tile) is a
- * click with `detail === 0` and no coordinates, so the list would have opened hard against the window's top-left
- * corner, a full screen away from the control that was pressed and from the focus ring still sitting on it.
- * Anchored to the tile's own box in that case: the same menu, beside the thing that opened it. */
 const openMore = (event: MouseEvent): void => {
     moreOpen.value = true;
-    const box = event.detail === 0 ? (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() : undefined;
-    moreMenu.value?.show(box === undefined ? event : new MouseEvent(`click`, { clientX: box.right, clientY: box.top }));
+    showBesideRail(moreMenu.value, event);
 };
 // A row per unseated area. `url` AND `command`: the address is what a modified click takes, the push is what a
 // plain one runs. A repository tile carries no icon (it draws initials on the rail), and this menu has room for
@@ -564,19 +583,12 @@ const moreRow = (tile: AreaTile): MenuItem => ({
         void router.push(tile.to);
     },
 });
+/* A LIST OF PLACES AND NOTHING ELSE. It carried a muted "right-click a tile to keep it on the rail" footer for
+ * one release, to teach the pin; it read as chrome hanging off the bottom of a short list, and a hint that is
+ * shown on every open is paying rent forever for something learned once. The pin is where a pin has always
+ * been, under a right-click. */
 const moreMenuItems = computed<MenuItem[]>(() =>
-    moreTiles.value.length === 0
-        ? [{ label: `Every area is on the rail`, disabled: true }]
-        : [
-              ...moreTiles.value.map(moreRow),
-              /* WHERE THE PIN IS, said in the one place somebody wonders. Opening an area from this menu seats
-               * its tile for as long as you are in it, so the right-click that keeps it there is available the
-               * moment you arrive: the gesture is discoverable only if something says so, and this list is what
-               * the person who wants it is already looking at. A row rather than a tooltip because it has to
-               * survive being read once and remembered. */
-              { separator: true },
-              { label: `Right-click a tile to keep it on the rail`, disabled: true },
-          ],
+    moreTiles.value.length === 0 ? [{ label: `Every area is on the rail`, disabled: true }] : moreTiles.value.map(moreRow),
 );
 
 // Collapse the chat column to nothing whenever the panel does not live in it: teleported into its own window
@@ -706,14 +718,19 @@ useKeybindings();
                  OUTSIDE the scrolling run on purpose, and directly under it: it is the answer to "where did the
                  rest go", so it is the one navigation control that must never be the thing scrolled out of
                  sight. Dashed like the "+" below it, because both are doors rather than places, and it lights
-                 in the rail's one accent while its menu is open so the press has an answer on screen. -->
+                 in the rail's one accent while its menu is open so the press has an answer on screen.
+
+                 NO HOVER LABEL WHILE THE LIST IS OPEN: the tooltip opens to the right of this tile and so does
+                 the menu, so a pointer coming back over the tile drew the label across the menu's first row. The
+                 label answers "what is this button", and once the list is up that question has been answered at
+                 length. The directive drops its box when the value goes away (ui/lib/tooltip.ts). -->
             <button
                 type="button"
                 :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'border-link bg-primary-600/15 text-link': moreOpen }]"
                 aria-haspopup="menu"
                 :aria-expanded="moreOpen"
                 :aria-label="moreLabel"
-                v-tooltip.right="moreLabel"
+                v-tooltip.right="moreOpen ? undefined : moreLabel"
                 @click="openMore"
             >
                 <Icon name="ellipsis" class="text-lg" />
@@ -851,9 +868,10 @@ useKeybindings();
              the default body. -->
         <ContextMenu ref="tileMenu" :model="tileMenuItems" :min-width="15" />
 
-        <!-- …and the More tile's, which is a list of places rather than of verbs. Wider: these rows carry area
-             names, not two-word commands. -->
-        <ContextMenu ref="moreMenu" :model="moreMenuItems" :min-width="14" @hide="moreOpen = false" />
+        <!-- …and the More tile's, which is a list of places rather than of verbs. Narrower than the verb menus
+             above: an area's name is one or two words, and a box sized for a sentence around "Drafts" reads as
+             a panel that failed to fill rather than as a list. -->
+        <ContextMenu ref="moreMenu" :model="moreMenuItems" :min-width="11" @hide="moreOpen = false" />
     </div>
 </template>
 
