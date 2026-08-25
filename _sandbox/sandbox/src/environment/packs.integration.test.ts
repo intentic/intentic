@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
@@ -114,6 +114,63 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
      * either end to notice. */
     const cursor = (await readPack("cursor"))!;
     expect(pin(cursor.content, /@cursor\/sdk@(\S+) /)).toBe(version("@cursor/sdk"));
+});
+
+/* THE OTHER HALF OF THE LOCKSTEP: not what the pack file SAYS, but what the machine running this actually has.
+ *
+ * The test above compares two strings in the repository, which catches a bump on one side and not the other and
+ * catches nothing at all about the binary a turn will really drive. Those are different failures. A pack whose
+ * RUN line silently resolved something else, an image built before the last bump, a developer with an older
+ * global install shadowing it on PATH, all leave the pins in perfect agreement and the product running a
+ * version nothing in this repository has ever been checked against. That matters most for the conformance tier
+ * (codex-wire.e2e.test.ts), whose entire claim is that it exercises the shipped article: run against the wrong
+ * CLI it still passes, and proves something about a version nobody ships.
+ *
+ * ABSENT IS NOT A FAILURE, WRONG IS. A dev checkout with no packs installed has nothing to check and must not
+ * go red for it; that is the same judgement `e2eTier` makes about credentials. But a CLI that IS here and
+ * reports a version the packs do not name is a skew, and it is named as one. */
+test("a provider CLI present on this machine reports the version its pack pins", async () => {
+    const pinOf = async (pack: string, pattern: RegExp): Promise<string> => {
+        const match = pattern.exec((await readPack(pack))!.content);
+        expect(match?.[1], `no pin matching ${String(pattern)} in the ${pack} pack`).toBeDefined();
+        return match![1]!;
+    };
+    // `--version` output with the surrounding words dropped: codex answers "codex-cli 0.147.0", opencode answers
+    // a bare number. Asserting on the NUMBER rather than the whole line keeps this from failing on a vendor
+    // reformatting its banner, which is not a skew.
+    const reported = (binary: string): string | undefined => {
+        try {
+            const output = execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 });
+            return /(\d+\.\d+\.\d+)/.exec(output)?.[1];
+        } catch {
+            // Not installed here, or not answering: nothing to compare, which is the dev-checkout case.
+            return undefined;
+        }
+    };
+
+    const codexVersion = reported("codex");
+    if (codexVersion !== undefined) {
+        expect(codexVersion, "the codex on PATH is not the version packs/codex.Dockerfile pins").toBe(await pinOf("codex", /@openai\/codex@(\S+) /));
+    }
+
+    const opencodeVersion = reported("opencode");
+    if (opencodeVersion !== undefined) {
+        expect(opencodeVersion, "the opencode on PATH is not the version packs/opencode.Dockerfile pins").toBe(
+            await pinOf("opencode", /opencode-ai@(\S+) /),
+        );
+    }
+
+    /* @cursor/sdk is a MODULE the daemon imports rather than a binary, so it is read where the daemon resolves
+     * it from (cursor-sdk.ts). This is the skew with no symptom until a turn is already running: the daemon
+     * type-checked against the catalog's version and imports whatever is in that prefix, and a mismatch surfaces
+     * as a TypeError inside somebody's turn. */
+    const cursorDir = process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";
+    const cursorManifest = join(cursorDir, "node_modules/@cursor/sdk/package.json");
+    if (existsSync(cursorManifest)) {
+        expect(JSON.parse(readFileSync(cursorManifest, "utf8")).version, `the @cursor/sdk in ${cursorDir} is not the version packs/cursor.Dockerfile pins`).toBe(
+            await pinOf("cursor", /@cursor\/sdk@(\S+) /),
+        );
+    }
 });
 
 /* The image-compose splice and the daemon must agree on the stamp hash byte for byte: they are two

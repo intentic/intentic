@@ -1,0 +1,37 @@
+{
+    "name": "@intentic/fake-model",
+    "version": "0.0.0",
+    "description": "A model that does what the test says, so a provider's real CLI can be driven with no token, no network and no vendor",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_tools/fake-model"
+    },
+    "files": [
+        "src"
+    ],
+    "exports": {
+        ".": {
+            "types": "./src/server.ts",
+            "default": "./src/server.ts"
+        },
+        "./responses": {
+            "types": "./src/responses.ts",
+            "default": "./src/responses.ts"
+        }
+    },
+    "scripts": {
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

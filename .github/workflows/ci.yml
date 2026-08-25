@@ -521,6 +521,48 @@ jobs:
       filters: "--filter=@intentic-app/*..."
     secrets: inherit
 
+  # THE PROVIDER CONFORMANCE GATE: every provider's REAL CLI, driven by the real adapter, against a local
+  # scripted model. It is the answer to "never release a version where some provider is broken", and it is
+  # separate from verify-core because it needs a provisioning verify-core does not: the provider CLIs, at the
+  # versions the packs pin.
+  #
+  # IT GATES THE RELEASE, and it can, because it is hermetic. Every turn here talks to @intentic/fake-model on
+  # loopback instead of to a vendor, so there is no token to expire, no quota to exhaust and no outage to be
+  # reddened by — the failure modes that make a real-model test unfit to block a release. The tiers that DO
+  # spend real tokens run nightly and alert instead (nightly.yml, provider-smoke).
+  #
+  # It does not stand down quietly: with the switch on and a CLI missing, the suite FAILS naming the pack, on
+  # the principle that a release gate which skips itself is not a gate.
+  verify-providers:
+    needs: preflight
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+      # The daemon resolves @cursor/sdk from here (cursor/cursor-sdk.ts); the pack's own prefix is not writable
+      # in this container and the licence keeps it out of the image anyway.
+      INTENTIC_CURSOR_SDK_DIR: /ci-cache/cursor-sdk
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # At the PACK's pins, never `@latest`: the tier's claim is that it exercises the shipped article, and the
+      # newest CLI is by definition not what the image runs. The canary that does ask for latest is nightly.
+      - run: bash _tools/scripts/install-provider-clis.sh
+      - run: pnpm e2e:providers
+
   # The marketing site and the content/integration libs behind it. It gates no deploy — the site publishes from
   # Cloudflare's own git integration, outside this pipeline, so nothing here can stop a bad one — which makes
   # this the pull-request gate and the `needs` a future site-deploy job would hang off.
@@ -1065,11 +1107,16 @@ jobs:
   # OS boundary before semantic-release may publish. The call holds the `release` concurrency lock throughout:
   # plan version → cross-build once → execute on Windows → stage those same bytes → publish. A lock on only the
   # final Linux job would let two pipelines plan the same next version while the first candidate was on Windows.
+  # verify-providers is a REQUIRED success, spelled the same way verify-core is rather than the permissive
+  # `!= 'failure'` the two image jobs get. Those two are allowed to be skipped; this one is not, because the
+  # whole point of it is that a release cannot be cut without every provider's real CLI having been driven. A
+  # gate that a skip satisfies is a gate that disappears exactly when someone disables it.
   release:
-    needs: [verify-core, ci-base, ci-desktop]
+    needs: [verify-core, verify-providers, ci-base, ci-desktop]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       && needs.verify-core.result == 'success'
+      && needs.verify-providers.result == 'success'
       && needs.ci-base.result != 'failure'
       && needs.ci-desktop.result != 'failure'
     concurrency:

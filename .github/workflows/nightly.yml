@@ -252,6 +252,45 @@ jobs:
           clean: false
       - run: bash _tools/scripts/verify-images-public.sh
 
+  # THE VENDOR CANARY: the conformance tier again, but against each provider's NEWEST CLI instead of the
+  # version the packs pin.
+  #
+  # This is the job that changes when we find out. Every provider break this repository has shipped was
+  # discovered by a user after a pin bump landed: the config key that became a table, the tool that started
+  # fabricating consent. Running the same assertions against `@latest` moves that discovery to the night a
+  # vendor publishes, which is before anyone has decided to bump. Red here does not mean the product is broken
+  # — it means DO NOT BUMP YET, and it names which assertion stops holding.
+  #
+  # It is deliberately NOT a gate on anything. Nothing in this repository ships `@latest`, so a red canary must
+  # never be able to stop a release that is pinned to a version still passing in CI.
+  provider-canary:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    # Reports; it does not gate — see above. The nightly's own summary is where a red canary is read.
+    continue-on-error: true
+    env:
+      # Not the shared /ci-cache prefix the pinned gate uses: installing @latest there would leave the next
+      # verify-providers run resolving a module the packs never pinned, and the gate would quietly stop
+      # testing the shipped article.
+      INTENTIC_CURSOR_SDK_DIR: /ci-cache/cursor-sdk-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - run: bash _tools/scripts/install-provider-clis.sh --latest
+      # The versions that were actually tested, printed into the log: a red canary is only actionable if the
+      # run says which release it was red against.
+      - run: pnpm e2e:providers
+
   # THE UPDATE PROMISES, DRILLED ON A REAL SANDBOX — verify-update-survival.sh connects a sandbox on the
   # published stable image, plants sentinels in /work and /history, then updates, rolls back, and forces a
   # FAILED update, asserting after each that the daemon is healthy, the files survived, and (for the failure)

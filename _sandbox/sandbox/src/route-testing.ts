@@ -528,6 +528,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         },
         openCode: {
             client: async () => ({}) as never,
+            stop: async () => {},
             events: async () => ({ stream: { async *[Symbol.asyncIterator]() {} } }),
             watch: async () => {},
             url: async () => "http://127.0.0.1:4096",

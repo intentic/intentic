@@ -37,6 +37,12 @@ import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from
 export interface OpenCodeService {
     // Ensure the server is up and return its client (lazy: the first turn or auth call boots it).
     readonly client: () => Promise<OpencodeClient>;
+    /* Shut the server down and leave this service able to boot a fresh one. Idempotent.
+     *
+     * The daemon never calls it, one warm server per container for the container's life is the design. It
+     * exists for anything that creates a service it does not own forever: without it, a caller could start
+     * `opencode serve` and had no way to stop it, leaking a ~350 MB process per construction. */
+    readonly stop: () => Promise<void>;
     // This directory's session-event stream, for a caller that watches one turn. Scoped, because an unscoped
     // subscription carries no session events at all, subscribeEvents has the whole story.
     readonly events: (directory: string) => Promise<{ stream: AsyncIterable<OpenCodeEvent> }>;
@@ -451,7 +457,20 @@ export const geminiProviderConfig = (
  * the next parameter goes in the wrong slot. Both are optional and both are named. */
 export const createOpenCodeService = (
     xdgDataHome: string,
-    options: { readonly gemini?: OpenCodeGeminiConfig; readonly fetchImpl?: typeof fetch; readonly workspaceRoot?: string } = {},
+    options: {
+        readonly gemini?: OpenCodeGeminiConfig;
+        readonly fetchImpl?: typeof fetch;
+        readonly workspaceRoot?: string;
+        /* WHICH PORT THIS SERVER LISTENS ON. Absent ⇒ the SDK's own default, which is what the daemon uses and
+         * what every existing caller gets.
+         *
+         * It is nameable because the default is FIXED, and a fixed port means only one of these can exist on a
+         * machine. That is correct for the daemon, one warm server per container is the design, but it also
+         * means a second one cannot be stood up beside it, and the failure is an opaque `ServeError` from inside
+         * the SDK rather than a sentence about a port. The conformance tier needs its own server precisely
+         * because provider config is fixed at spawn and cannot be pointed at a scripted model afterwards. */
+        readonly port?: number;
+    } = {},
 ): OpenCodeService => {
     const { gemini, workspaceRoot } = options;
     const fetchImpl = options.fetchImpl ?? fetch;
@@ -468,6 +487,8 @@ export const createOpenCodeService = (
     const MODELS_TTL_MS = 60_000;
     // Where the warm server listens, set by the boot that created it, so `url()` can answer after `ensure`.
     let serverUrl: string | undefined;
+    // The handle that can shut it down again, kept for `stop()` alone; every other caller wants the client.
+    let serverHandle: { close(): void } | undefined;
     const opencodeDir = join(xdgDataHome, "opencode");
     const authPath = join(opencodeDir, "auth.json");
     // The last-known-good catalog, persisted next to auth.json so it survives daemon restarts.
@@ -493,6 +514,7 @@ export const createOpenCodeService = (
         try {
             server = await createOpencodeServer({
                 timeout: BOOT_TIMEOUT_MS,
+                ...(options.port === undefined ? {} : { port: options.port }),
                 // No provider key, xAI auth is OAuth (stored by OpenCode). Run autonomously: the container IS the
                 // isolation boundary (same posture as Claude's bypassPermissions / Codex's danger-full-access),
                 // and every permission is answered here rather than most of them (ALLOW_EVERY_PERMISSION).
@@ -512,6 +534,7 @@ export const createOpenCodeService = (
             }
         }
         serverUrl = server.url;
+        serverHandle = server;
         const client = createOpencodeClient({ baseUrl: server.url });
         // The delegation watcher rides the boot that made the server, so nothing ever boots one just to listen.
         // The workspace root is where a non-isolated conversation delegates from, and therefore the one scope
@@ -571,6 +594,23 @@ export const createOpenCodeService = (
 
     return {
         client: ensure,
+        /* SHUT THE SERVER DOWN AGAIN, and leave this service able to boot a fresh one.
+         *
+         * The daemon never calls it: one warm server per container for the container's life is the design. What
+         * needs it is anything that creates a service it does not own forever, which until now was impossible to
+         * do cleanly, a caller could start `opencode serve` and had no way to stop it. That leaked a ~350 MB
+         * process per construction, and on a machine where a suite constructs one per run it accumulates until
+         * the box is too loaded to time anything reliably.
+         *
+         * Idempotent, and it clears `booting` rather than only closing the handle: a stopped service that still
+         * remembered its promise would hand out a client pointed at a dead port forever. */
+        stop: async () => {
+            serverHandle?.close();
+            serverHandle = undefined;
+            serverUrl = undefined;
+            booting = undefined;
+            watched.clear();
+        },
         events: async (directory) => subscribeEvents(await ensure(), directory),
         watch: async (directory) => {
             if (watched.has(directory)) {

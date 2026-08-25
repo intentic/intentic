@@ -1,0 +1,18 @@
+/* Source-consumed by the suites that drive a provider CLI (exports → ./src/*.ts), so there is nothing to emit;
+ * this config exists for the standalone type check, exactly like @intentic/testing's.
+ *
+ * Relative imports here name `.js`, the repo-wide convention, NOT the `.ts` that a package whose files are
+ * copied into a container and run by node's type-erasure uses (fake-upstream). The difference is who compiles
+ * them: this package is imported by another package's program, and `allowImportingTsExtensions` is not
+ * inherited across that boundary, so a `.ts` specifier type-checks here and fails in every consumer. */
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "noEmit": true,
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

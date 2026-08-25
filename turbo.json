@@ -167,6 +167,19 @@
             "cache": false,
             "passThroughEnv": ["INTENTIC_E2E_HERMETIC", "INTENTIC_HOST_IMAGE", "INTENTIC_LOG_DIR"]
         },
+        // THE PROVIDER CONFORMANCE TIER, and the only e2e task here that GATES a release.
+        //
+        // Named apart from `e2e` for the reason the two tasks below are: it asks for a provisioning of its own,
+        // the provider CLIs at their pinned versions (_tools/scripts/install-provider-clis.sh). What it does
+        // NOT ask for is a credential or a network: each turn drives the real CLI against a local scripted
+        // model (@intentic/fake-model), so it is deterministic, costs nothing, and cannot be reddened by a
+        // vendor's outage. That is precisely what makes it safe to block a release on, where the tiers that
+        // spend real tokens are not.
+        "e2e:providers": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "passThroughEnv": ["INTENTIC_E2E_PROVIDERS", "INTENTIC_CURSOR_SDK_DIR"]
+        },
         // The browser tier (@intentic-app/e2e), named apart from `e2e` for the same reason e2e:hermetic is: it
         // asks for a provisioning of its own. Its whole stack is addressed on LOCALHOST: compose postgres on
         // :5440, the https API on :6480, vite on :47145, the daemon container on :18787: and CI jobs run in a

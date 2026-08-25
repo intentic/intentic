@@ -1,0 +1,13 @@
+/* Type-checks this package's tests along with its source. Nothing is excluded: the package emits no dist, so
+ * its build config already reads every file. It exists so `pnpm typecheck` names one config per package. */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "tsBuildInfoFile": "./.cache/tsbuildinfo-typecheck"
+    },
+    "include": ["./src/**/*"],
+    "exclude": []
+}
