@@ -9,6 +9,7 @@ mod machine;
 mod platform;
 mod prepare;
 mod record;
+mod runner;
 mod sandbox;
 #[cfg(unix)]
 mod selfhost;
@@ -46,6 +47,9 @@ enum Command {
     /// This machine as a deploy target for a sandbox
     #[command(subcommand)]
     Machine(MachineCommand),
+    /// Runners on this machine — execution containers a parent sandbox dispatches turns to
+    #[command(subcommand)]
+    Runner(RunnerCommand),
     /// Docker on this machine — what it needs, and getting it there
     #[command(subcommand)]
     Docker(DockerCommand),
@@ -132,6 +136,32 @@ enum SandboxCommand {
     },
 }
 
+// The runner verb surface (runner.rs says what each will do; all refuse until Phase 1 lands). Spellings are
+// final: the host agent and the platform's cards will build command lines against them, so they are guarded
+// by the same surface test as every other verb from the first commit.
+#[derive(Subcommand)]
+enum RunnerCommand {
+    /// Create a runner here and point it at its parent sandbox (same run contract as `sandbox connect`,
+    /// runner env instead of a setup code, no tunnel container)
+    Up {
+        /// The parent sandbox's public URL — where the runner dials in
+        parent_url: String,
+        /// The single-use pairing the parent minted (or RUNNER_PAIR_TOKEN env)
+        #[arg(long = "pair", env = "RUNNER_PAIR_TOKEN")]
+        pair_token: String,
+        /// A name for the runner (defaults to a generated one)
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// List the runners on this machine
+    List,
+    /// Remove a runner: container and volumes — its work lives in the parent's git, so nothing user-owned dies
+    Remove {
+        /// The runner to remove
+        name: String,
+    },
+}
+
 #[derive(Subcommand)]
 enum MachineCommand {
     /// Enroll this machine as a deploy target for an existing sandbox (the Infra screen's one-liner)
@@ -182,6 +212,15 @@ fn main() {
             }),
         },
         Command::Machine(command) => run_machine(command),
+        Command::Runner(command) => match command {
+            RunnerCommand::Up {
+                parent_url,
+                pair_token,
+                name,
+            } => runner::up(parent_url, pair_token, name),
+            RunnerCommand::List => runner::list(),
+            RunnerCommand::Remove { name } => runner::remove(name),
+        },
         Command::Docker(DockerCommand::Prepare { yes, dry_run }) => prepare::run(prepare::Args {
             // The desktop app has no terminal to answer a question on, so its consent arrives as the same
             // environment variable connect.sh has always used for a headless install.

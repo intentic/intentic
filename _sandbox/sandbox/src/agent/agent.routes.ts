@@ -163,6 +163,18 @@ async function* runConversationTurn(
     signal: AbortSignal | undefined,
     steering: SteeringQueue | undefined,
 ): AsyncGenerator<AgentEvent> {
+    /* Placement on a runner is contract-visible ahead of the machinery behind it (docs/remote-runners-plan.md
+     * at the workspace root; runners/). Refused HERE, as a readable frame, rather than accepted-and-run-
+     * locally: a turn the user placed on their other computer must never quietly spend this sandbox's cores
+     * and claim it ran where it was asked to. `local` (and absent) is today's behavior. */
+    if (input.placement?.kind === "runner") {
+        yield {
+            kind: "error",
+            message: `Running on a runner ("${input.placement.id}") is not implemented yet — this conversation was not started. Leave placement out to run it here.`,
+        };
+        yield { kind: "done" };
+        return;
+    }
     if (input.conversationId === undefined) {
         yield* runTurn(services, input, signal, undefined, steering);
         return;

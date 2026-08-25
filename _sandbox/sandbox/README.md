@@ -285,6 +285,11 @@ reports the profile.
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
   slowest of those actions pulls an image for minutes; the scope behind it is checked on the machine and never
   here.
+- [src/runners](src/runners), this sandbox's own execution containers on other machines: the hosts pair
+  retold (enrollment on /history, live sockets in memory) for a container that dials in to run turns this
+  daemon dispatches, plus the boot-side switch a runner container starts under. Phase-1 skeleton, the doors
+  and stores exist, dispatching does not yet; the design is `docs/remote-runners-plan.md` at the workspace
+  root.
 - [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
 - [src/guard/outside-content.ts](src/guard/outside-content.ts): the envelope around anything the owner did not
   write, and the neutralizer that keeps content from forging one. Two seams apply it: a stranger's message at

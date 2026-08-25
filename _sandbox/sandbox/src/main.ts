@@ -70,6 +70,7 @@ import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
 import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
+import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { seedStarterSite } from "./scaffold/starter-site.js";
 import { reapFinishedSessions } from "./terminal/terminal-session.js";
 import { startVersionCheck } from "./platform/version-check.js";
@@ -159,6 +160,14 @@ const extensionSource = (path: string): boolean =>
     path === stateRelPath(".intentic/config/extension-enablement.json");
 
 const main = async (): Promise<void> => {
+    /* Runner mode, consulted before ANYTHING else builds: a runner container (another sandbox's execution
+     * container, runners/runner-mode.ts) must never bind an owner, open a tunnel or serve a browser surface,
+     * so the fork sits ahead of every step that could. Currently an honest crash-loop with the reason in
+     * `docker logs`, the misassembled-container posture below. */
+    const runnerEnv = runnerModeRequested(process.env);
+    if (runnerEnv !== undefined) {
+        startRunnerMode(runnerEnv);
+    }
     const config = loadConfig();
     requireAuthWhenReachable(config);
     requireLocalContract(config);

@@ -131,5 +131,9 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // The burn list for setup-time computer pairings. Identity, like sync's beside it, and for a sharper reason:
     // carrying it into another sandbox would mark that sandbox's own fresh pairing as already spent.
     { path: "host-pair-consumed.json", portability: "identity" },
+    // A runner's enrollment names THIS sandbox as its parent (runners/runners-store.ts): in another sandbox the
+    // digest would admit a socket whose runner still dials the old parent. Identity, both files, hosts' reasons.
+    { path: "runner-enrollments.json", portability: "identity" },
+    { path: "runner-pair-consumed.json", portability: "identity" },
     { path: "local-cert/", portability: "identity" },
 ];

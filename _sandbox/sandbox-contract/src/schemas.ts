@@ -3,6 +3,7 @@ import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { RegistryEntrySchema } from "@intentic/registry";
 import { z } from "zod";
 import { OutputFieldsSchema } from "./output-fields.js";
+import { AgentPlacementSchema } from "./runner-protocol.js";
 
 // All request/response wire schemas for the sandbox daemon. Inputs that carry a `{param}` in their route path
 // (repo / id / name) merge the path param into the same flat object, oRPC fills the path placeholder from the
@@ -253,6 +254,13 @@ export const AgentTurnSchema = z
             .describe(
                 "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
             ),
+        /* WHERE the conversation executes, decided like `isolated` directly above: the request's choice on the
+         * first turn, the registry entry's on every turn after. `runner` implies isolation (the branch is what
+         * moves between machines) and needs a conversation id for the same reason `isolated` does. Absent =
+         * local. Design: docs/remote-runners-plan.md; refused until runners ship. */
+        placement: AgentPlacementSchema.optional().describe(
+            "Where this conversation runs: this sandbox (leave it out), or a paired runner by id. Decided on the first turn; later turns follow the conversation.",
+        ),
         /* Pin a NEW isolated conversation's worktree composition to these repository commits. Daemon-owned:
          * ordinary chats omit it and keep rebasing onto the current workspace; a workflow supplies the one
          * snapshot all of its candidates must share. Repeated iterations carry it too, which suppresses the

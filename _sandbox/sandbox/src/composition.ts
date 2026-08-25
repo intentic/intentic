@@ -87,6 +87,8 @@ import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/pro
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
+import { createRunnerHub, type RunnerHub } from "./runners/runner-hub.js";
+import { fileRunnersStore, type RunnersStore } from "./runners/runners-store.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
 import type { Config } from "./env.config.js";
@@ -312,6 +314,10 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly hosts: HostsStore;
     // … and who is actually holding a socket right now, with the JSON-RPC correlation over it.
     readonly hostHub: HostHub;
+    // This sandbox's RUNNERS, its own execution containers on other machines (docs/remote-runners-plan.md,
+    // workspace root): the hosts pair retold, enrollment on /history and the live sockets in memory.
+    readonly runners: RunnersStore;
+    readonly runnerHub: RunnerHub;
     // Owner-minted, hashed, revocable tokens for anything driving this sandbox from outside the browser, the
     // ACP editor bridge today (x-intentic-control header). Each carries the scope it was minted with; what a
     // scope reaches is auth/control-tokens.ts. Persisted in /work/.intentic like owner/members.
@@ -1178,6 +1184,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostBridgeToken: randomBytes(32).toString("hex"),
         hosts: fileHostsStore(config.historyRoot),
         hostHub: createHostHub(logger),
+        runners: fileRunnersStore(config.historyRoot),
+        runnerHub: createRunnerHub(logger),
         info,
         tools: internalTools(config.intenticAgentTools),
         capabilities,

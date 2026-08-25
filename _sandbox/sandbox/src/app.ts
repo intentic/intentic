@@ -65,6 +65,7 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
+import { createRunnerConnectRoute, runnerSummaries } from "./runners/runner.routes.js";
 import { computers } from "./hosts/machine-reports.js";
 import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
@@ -160,6 +161,11 @@ const gatePath = /^\/workflows\/[^/]+\/gate$/;
 const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
 const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
 
+// A RUNNER's two doors, the same pair for the same reason: the caller is a container on another machine with
+// no Google identity to present, authenticated by its pairing (enroll) or its first frame (connect). See
+// runners/runner.routes.ts and docs/remote-runners-plan.md (workspace root).
+const runnerPublicPath = (path: string): boolean => path === "/system/runners/connect" || path === "/system/runners/enroll";
+
 // The lowercased email in a member-management request body, or undefined when absent/malformed.
 const memberEmail = async (c: Context): Promise<string | undefined> => {
     const body = (await c.req.json().catch(() => undefined)) as { email?: unknown } | undefined;
@@ -209,6 +215,8 @@ const READY_EXEMPT = new Set([
     // A connected computer reconnects on its own backoff, which a booting daemon would otherwise park just long
     // enough to look like an outage on the card. Its socket needs nothing the boot chain builds.
     "/system/hosts/connect",
+    // A runner's socket, for the same reason.
+    "/system/runners/connect",
 ]);
 
 // The HTTP API the browser drives DIRECTLY over the sandbox's own Cloudflare tunnel. When services.auth is set
@@ -392,6 +400,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 ciWebhookPath.test(c.req.path) ||
                 gatePath.test(c.req.path) ||
                 hostPublicPath(c.req.path) ||
+                runnerPublicPath(c.req.path) ||
                 hostMcpPath.test(c.req.path)
             ) {
                 return next();
@@ -1342,6 +1351,39 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
     // The machine's own socket, and the agent's door onto it. Both before the oRPC catch-all, like the terminal.
     app.get("/system/hosts/connect", createHostConnectRoute(services));
+    /* This sandbox's RUNNERS (runners/, docs/remote-runners-plan.md at the workspace root): the hosts block
+     * retold for a container this sandbox provisions on another machine. Pairing is owner-minted and bound to
+     * one runner id; enrollment is authorized by the pairing alone (the runner has no Google identity, only
+     * the env `ic runner up` wrote); the socket authenticates in its first frame. */
+    app.post("/system/runners/pair", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.query("id") ?? "";
+        if (id === "") {
+            return c.json({ error: "name the runner: /system/runners/pair?id=<name>" }, 400);
+        }
+        return c.json(services.runners.mintPairing(id));
+    });
+    app.post("/system/runners/enroll", async (c) => {
+        const enrolled = await services.runners.enroll(c.req.header("x-intentic-pair") ?? "");
+        if (enrolled === undefined) {
+            return c.json({ error: "pairing expired or already used, mint a fresh one from the parent sandbox." }, 401);
+        }
+        return c.json(enrolled);
+    });
+    app.get("/system/runners", async (c) => c.json({ runners: await runnerSummaries(services) }));
+    app.delete("/system/runners/:id", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.param("id") ?? "";
+        services.runnerHub.disconnect(id, "this runner's access was revoked");
+        return (await services.runners.revoke(id)) ? c.json({ ok: true }) : c.json({ error: "no such runner" }, 404);
+    });
+    app.get("/system/runners/connect", createRunnerConnectRoute(services));
     const hostMcp = createHostMcpRoute(services);
     app.post("/mcp/hosts/:id", hostMcp);
     app.get("/mcp/hosts/:id", hostMcp);
