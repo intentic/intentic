@@ -12,7 +12,6 @@ import {
     type PickerOption,
     Row,
     RowGroup,
-    SegmentedControl,
     SkeletonRows,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -58,10 +57,10 @@ const members = ref<InviteRecord[]>([]);
 const email = ref(``);
 
 /* The three tiers an invite can grant, in the order they nest, each with the sentence that IS the model: ONE
- * list, read by both controls that hand a tier out. The form asks with a segmented control (three options, all
- * worth seeing at once, and the sentence for the pending choice sits under it); a roster row asks with the
- * design system's <Picker>, which shows the same sentences ON the options, because there is no room beside a
- * member's address for a paragraph and no reason to re-grade someone blind. */
+ * list, read by both controls that hand a tier out. The invite form and each roster row both use <Picker>:
+ * the form puts it beside the address and Invite button (role is a refinement on who you're inviting, not a
+ * step before you know the address), with the sentence for the pending choice on the line below; a roster row
+ * uses the ghost variant because the row already has an address, a status pill and buttons on it. */
 const ROLE_OPTIONS: readonly PickerOption<GrantedRole>[] = [
     { label: `Viewer`, value: `viewer`, icon: `eye`, hint: `Can watch everything, agents, chats, files. Can't change anything.` },
     {
@@ -398,27 +397,44 @@ const revoke = async (target: string): Promise<void> => {
                     <Notice v-if="notice" :of="notice">
                         <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
                     </Notice>
-                    <form class="flex flex-col gap-2" @submit.prevent="invite">
-                        <!-- The tier goes with the address: an invite IS a role decision, and the sentence
-                             under the picker is where the model is taught. Collaborator preselected. -->
-                        <SegmentedControl v-model="inviteRole" :options="ROLE_OPTIONS.map(({ label, value }) => ({ label, value }))" />
-                        <span class="text-xs text-muted">{{ roleHint(inviteRole) }}</span>
-                        <div class="flex items-center gap-2">
+                    <form class="flex flex-col gap-1.5" @submit.prevent="invite">
+                        <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
+                             is a refinement on that row. Collaborator preselected; the sentence below teaches
+                             the model without sitting between two unrelated controls. -->
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
                             <input
                                 v-model="email"
                                 type="email"
                                 autocomplete="off"
                                 placeholder="teammate@example.com"
                                 :class="[
-                                    ui.input('w-full'),
+                                    ui.input('min-w-0 sm:flex-1'),
                                     emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase()) ? 'ui-field-input-error' : '',
                                 ]"
                                 @blur="emailTouched = true"
                             />
-                            <Button type="submit" label="Invite" :loading="busy" :disabled="busy || !validEmail(email.trim().toLowerCase())">
-                                <template #icon><Icon name="send" /></template>
-                            </Button>
+                            <div class="flex items-center gap-2">
+                                <Picker
+                                    v-model="inviteRole"
+                                    :options="ROLE_OPTIONS"
+                                    variant="input"
+                                    :disabled="busy"
+                                    aria-label="Invite role"
+                                    header="Invite as"
+                                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                                />
+                                <Button
+                                    type="submit"
+                                    label="Invite"
+                                    :loading="busy"
+                                    :disabled="busy || !validEmail(email.trim().toLowerCase())"
+                                    class="shrink-0"
+                                >
+                                    <template #icon><Icon name="send" /></template>
+                                </Button>
+                            </div>
                         </div>
+                        <p class="text-xs text-muted">{{ roleHint(inviteRole) }}</p>
                         <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
                             <Icon name="exclamation-triangle" class="text-2xs" />
                             Enter a valid email address.
