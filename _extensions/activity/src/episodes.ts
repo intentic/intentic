@@ -45,6 +45,13 @@ export interface Episode {
     readonly at: number;
     readonly kind: "turn" | "message" | "event";
     readonly label: string;
+    /* WHETHER THE LABEL IS A NAME OR A CLIPPING OF THE CONTENT, which decides whether `detail` is worth
+     * previewing under it. A titled conversation has a name of its own, so its prompt is a second fact; every
+     * other episode takes its label FROM the content via `headline`, so a preview of that content is the same
+     * sentence twice, once clipped and once whole. The row cannot tell the two apart by comparing them: a
+     * headline is a PREFIX of its detail, never equal to it, as soon as the content passes a line break or the
+     * 120-character clip. */
+    readonly titled?: boolean;
     // The daemon's own event type, humanised, carried only by a single-event episode, where the label is the
     // event's content and the type is the other half of what happened. A turn's row states its kind by shape.
     readonly typeName?: string;
@@ -170,6 +177,9 @@ const turnEpisode = (turnId: string, events: readonly ActivityEvent[]): Episode 
         at: (events[0] as ActivityEvent).at,
         kind: `turn`,
         label: firstOf(events, (event) => event.title) ?? (prompt === undefined ? `Turn` : headline(prompt)),
+        // Only a conversation's own name makes the prompt below it a second fact; a label clipped out of that
+        // same prompt does not.
+        ...(firstOf(events, (event) => event.title) !== undefined ? { titled: true } : {}),
         ...(prompt !== undefined ? { detail: prompt } : {}),
         ...(firstOf(lifecycle, (event) => event.provider) !== undefined ? { runtime: firstOf(lifecycle, (event) => event.provider) } : {}),
         ...(firstOf(events, (event) => event.origin?.channelId) !== undefined

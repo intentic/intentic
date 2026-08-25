@@ -67,6 +67,34 @@ test("a titleless turn falls back to the prompt's first line, not to a uuid", ()
     expect(toEpisodes(untitled)[0]?.label).toBe(`Go for it.`);
 });
 
+/* The row previews `detail` under the headline only where `titled` says the headline came from somewhere else.
+ * It cannot decide that by comparing the two: a headline is a PREFIX of its detail, so a prompt that runs past
+ * one line or past the 120-character clip is not equal to its own clipping, and the row printed the same
+ * sentence twice, once truncated and once whole. */
+test("only a turn named by its conversation is `titled`, whatever the prompt's length or shape", () => {
+    expect(toEpisodes(TURN)[0]).toMatchObject({ titled: true, label: `Redesign the activity view`, detail: `Go for it.` });
+
+    const prompted = (content: string): ActivityEvent[] => [
+        event({ id: `e1`, at: at(0), direction: `system`, type: `turn.started`, provider: `claude`, turnId: `t1`, content }),
+    ];
+
+    // The two shapes that defeated the old `detail !== label` guard: a clipped prompt and a multi-line one. Both
+    // leave label a strict PREFIX of detail, so comparing them said "these differ, print both".
+    const clipped = toEpisodes(prompted(`x`.repeat(200)))[0];
+    expect(clipped?.titled).toBeUndefined();
+    expect(clipped?.label).not.toBe(clipped?.detail);
+
+    const multiline = toEpisodes(prompted(`first\nsecond`))[0];
+    expect(multiline?.titled).toBeUndefined();
+    expect(multiline?.label).toBe(`first`);
+    expect(multiline?.detail).toBe(`first\nsecond`);
+
+    // The case the old guard did handle, kept honest: one short line is label AND detail, and stays unpreviewed.
+    const short = toEpisodes(prompted(`Go for it.`))[0];
+    expect(short?.titled).toBeUndefined();
+    expect(short).toMatchObject({ label: `Go for it.`, detail: `Go for it.` });
+});
+
 test("a turn is filed under what woke it, never under the runtime that served it", () => {
     const woken = TURN.map((entry) =>
         entry.direction === `system`

@@ -2,10 +2,10 @@
 import {
     ui,
     FilterBar,
-    Icon,
     InfoHint,
     Notice,
     noticeOf,
+    Row,
     SegmentedControl,
     sinceOf,
     StatusBadge,
@@ -80,14 +80,19 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
         <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The daemon-held voice session, while one is live: sandbox-wide and transient, so it sits above the
-             instrument rather than inside the feed it would otherwise scroll away with. -->
-        <div v-if="status?.voice" class="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-card px-3 py-2">
-            <Icon name="microphone" class="text-info" />
-            <span class="text-sm font-medium text-content">#{{ status.voice.channelName }}</span>
-            <StatusBadge variant="info" label="Transcribing" size="xs" dot />
-            <span class="text-xs text-muted">
-                {{ voiceMinutes }} min: {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
-            </span>
+             instrument rather than inside the feed it would otherwise scroll away with.
+             A CARD MASTHEAD IS A <Row>, which is the anatomy this had spelled out by hand: a glyph, a name, a
+             line of explanation and a badge on the right. <Row>'s own notes count fourteen cards that wrote it
+             out themselves and disagreed about the glyph's size and alignment every time; this was the
+             fifteenth, at its own `px-3 py-2` and its own `text-sm font-medium`. `flush` is the prop for exactly
+             this: the bordered box outside owns the padding. -->
+        <div v-if="status?.voice" class="rounded-lg border border-line bg-card px-3 py-2">
+            <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
+                <template #description>
+                    {{ voiceMinutes }} min: {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
+                </template>
+                <template #control><StatusBadge variant="info" label="Transcribing" size="xs" dot /></template>
+            </Row>
         </div>
 
         <!-- THE FILTER SITS ON THE THING IT FILTERS, and all three of them narrow the FEED, so all three are in
@@ -105,8 +110,8 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                     <span class="block text-sm font-medium text-content">Activity</span>
                     <span class="mt-1 block text-xs text-muted">
                         One entry per thing that happened, grouped by <b>who set it off</b>: a connected provider that woke the agent, a schedule, or
-                        you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it
-                        for the raw events the daemon recorded.
+                        you. A turn's whole lifecycle: start, plan, failure, completion, and every provider call it made, is one entry; expand it for
+                        the raw events the daemon recorded.
                     </span>
                 </InfoHint>
             </template>
