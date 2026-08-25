@@ -7,6 +7,7 @@ import {
     CapabilityIdParamSchema,
     CapabilityLoginSchema,
     CapabilityOtpSchema,
+    CapabilityProbeSchema,
     CapabilityRenameSchema,
     CapabilitySchema,
     CapabilitySecretInputSchema,
@@ -48,6 +49,21 @@ export const capabilitiesContract = {
         })
         .input(CapabilitySchema)
         .output(eventIterator(IntenticLineSchema)),
+    /* TRY THE SETTINGS BEFORE SAVING THEM. Nothing is written and nothing is applied: the daemon dials the
+     * service the way the connection would and hands back what it said. It exists because the alternative is
+     * the form's only feedback being the card afterwards reading "not connected", which names none of the six
+     * answers that could have been wrong. A credential the caller is keeping arrives as VAULTED here too, so
+     * an edit can be tested without re-typing a key. */
+    probe: oc
+        .route({
+            method: "POST",
+            path: "/capabilities/probe",
+            summary: "Test a connection's settings without saving them",
+            description:
+                "Dials the service the way this connection would and hands back what it said, before anything is written. The answer is the service's own confirmation or its exact refusal, so a wrong token or an unreachable host is found on the form rather than on a card afterwards.",
+        })
+        .input(CapabilitySchema)
+        .output(CapabilityProbeSchema),
     remove: oc
         .route({
             method: "DELETE",

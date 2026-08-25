@@ -38,17 +38,17 @@
                     "icon": "slack",
                     "description": "Read, post and react; wake on @mention.",
                     "category": "communication",
-                    "hint": "Both tokens come from one Slack app. The app-level token (xapp-) opens the Socket Mode connection this sandbox listens on, no public URL, no inbound firewall hole. The bot token (xoxb-) is what the agent calls the Web API with. Ask the agent to \"set yourself up in my Slack\" and it writes the app manifest for you to paste.",
+                    "hint": "Both tokens come from one Slack app. Ask the agent to \"set yourself up in my Slack\" and it writes the manifest for you.",
                     "guide": {
                         "url": "https://api.slack.com/apps",
                         "linkLabel": "Open the Slack app dashboard",
                         "scopes": "Bot `app_mentions:read`, `channels:history`, `channels:read`, `chat:write`, `groups:history`, `groups:read`, `im:history`, `im:read`, `im:write`, `mpim:history`, `reactions:read`, `reactions:write`, `users:read` · App-level `connections:write`",
                         "steps": [
-                            "`Create New App` → `From an app manifest` (ask the agent for the manifest: it fills in the scopes and events below).",
-                            "`Basic Information` → `App-Level Tokens` → `Generate`, scope `connections:write`. Copy the `xapp-` token.",
+                            "`Create New App` → `From an app manifest` (ask the agent for it).",
+                            "`App-Level Tokens` → `Generate`, scope `connections:write`: the `xapp-` token.",
                             "`Socket Mode` → toggle `Enable Socket Mode` on.",
-                            "`Install App` → `Install to Workspace`, then copy the `xoxb-` Bot User OAuth Token.",
-                            "Paste both tokens here, then invite the bot to a channel with `/invite @yourbot`."
+                            "`Install App` → `Install to Workspace`: the `xoxb-` bot token.",
+                            "Paste both, then `/invite @yourbot` in a channel."
                         ]
                     }
                 },

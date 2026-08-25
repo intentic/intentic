@@ -35,15 +35,15 @@
                     "logo": "telegram",
                     "description": "Read and reply; wake on messages.",
                     "category": "communication",
-                    "hint": "One token from @BotFather is the whole setup, no app review, no public URL. In GROUPS a bot sees only messages that @mention it until you turn privacy mode off (`/setprivacy` → Disable), which is the same trade-off as Discord's Message Content intent: hear everything, or only what is addressed to you.",
+                    "hint": "One token from @BotFather is the whole setup. In groups a bot hears only @mentions until you disable privacy mode.",
                     "guide": {
                         "url": "https://t.me/BotFather",
                         "linkLabel": "Open BotFather in Telegram",
                         "steps": [
-                            "Message `@BotFather` and send `/newbot`, then pick a display name and a username ending in `bot`.",
-                            "Copy the HTTP API token it hands back and paste it here.",
-                            "For a group: add the bot to it, then `/setprivacy` → your bot → `Disable` if it should read every message rather than only @mentions.",
-                            "Say hello to the bot in Telegram: it answers from the first message, no invite step."
+                            "Message `@BotFather`, send `/newbot`, pick a username ending in `bot`.",
+                            "Paste the HTTP API token it hands back.",
+                            "Group, every message? Add the bot, then `/setprivacy` → `Disable`.",
+                            "Say hello in Telegram: it answers from the first message."
                         ]
                     }
                 },

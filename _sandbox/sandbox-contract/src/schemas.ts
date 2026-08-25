@@ -5647,6 +5647,26 @@ export const CapabilityOtpSchema = z.object({
         .describe("How long it lasts. Its expiring is what makes handing one to an agent safe, since the seed behind it is never revealed."),
 });
 
+/* POST /capabilities/probe response: did these settings actually reach the thing, asked BEFORE they are saved.
+ *
+ * The answer is a sentence rather than a status code because the reader is standing in front of a form: what
+ * they need is either the service's own confirmation ("Reached GitHub, authenticated as ada") or the exact
+ * refusal ("GitHub answered 401: the token is not valid"), in the place where the box they would fix still is.
+ * That is also the whole point of doing it here: every one of these failures is otherwise discovered after the
+ * add, on a card that says "not connected" with nothing about which of six answers was wrong.
+ *
+ * `ok: false` is a REPORTED failure, not a transport error: the probe ran and the service said no. A card whose
+ * settings cannot be checked from here at all answers `checked: false`, which is a different thing from a
+ * failure and must never be drawn as one. */
+export const CapabilityProbeSchema = z.object({
+    checked: z.boolean().describe("Whether this connection can be tested from here at all. False is not a failure: it is 'no test exists'."),
+    ok: z.boolean().describe("Whether the service answered as itself."),
+    message: z
+        .string()
+        .describe("What happened, in the words a person standing in front of the form needs: the service's own answer, or its refusal."),
+});
+export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;
+
 // ---- hosts: the user's own connected computers (the `host` capability's live half) ----
 // The manifest says which machines the user INTENDS to have connected; this says which are actually holding a
 // socket right now. Nothing here is remembered across a daemon restart except the enrollment itself: a machine

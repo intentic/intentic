@@ -26,6 +26,31 @@ const WINDOW_LABELS: Record<LocalModelWindow, string> = {
     "131072": "128k · 8 GB",
 };
 
+/* THE WEIGHTS FIGURES BEHIND THE MODEL LABELS, as data, so the form can do the sum the card used to ask its
+ * reader to do ("add the two memory figures"). Keyed by the option values above; a custom GGUF has no figure,
+ * which is honest: whoever pasted the URL chose the memory. */
+const LOCAL_MODEL_WEIGHTS_GB: Readonly<Record<string, number>> = {
+    "unsloth/Phi-4-mini-instruct-GGUF/Phi-4-mini-instruct-Q4_K_M.gguf": 3,
+    "unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf": 6,
+    "unsloth/gemma-4-12b-it-GGUF/gemma-4-12b-it-Q4_K_M.gguf": 14,
+    "unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_M.gguf": 22,
+};
+
+/* The local model card's RAM ask, computed from the form's answers: ~1 GB of cache per 16k of window (the same
+ * rate the rung labels quote) on top of the chosen weights. Any half missing (a custom GGUF, an unparsed
+ * window) leaves its figure undefined and the total with it: a wrong number is worse than none. */
+export interface LocalModelMemory {
+    readonly weightsGb: number | undefined;
+    readonly windowGb: number | undefined;
+    readonly totalGb: number | undefined;
+}
+export const localModelMemory = (config: Readonly<Record<string, string | undefined>>): LocalModelMemory => {
+    const weightsGb = LOCAL_MODEL_WEIGHTS_GB[config["model"] ?? ""];
+    const tokens = Number(config["context"] === "custom" ? config["contextTokens"] : config["context"]);
+    const windowGb = Number.isInteger(tokens) && tokens > 0 ? Math.max(1, Math.round(tokens / 16_384)) : undefined;
+    return { weightsGb, windowGb, totalGb: weightsGb !== undefined && windowGb !== undefined ? weightsGb + windowGb : undefined };
+};
+
 /* One country in the geo-exit card's picker. The capacity share rides in the LABEL rather than being dropped,
  * because a bare country list is misleading here: a third of Tor's countries are one overloaded relay, and
  * picking one of those looks like a broken exit rather than a thin one. Seeing "30% of capacity" next to the
@@ -244,7 +269,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
             { value: "off", label: "Blocked" },
             { value: "on", label: "Allowed" },
         ],
-        hint: "Start, stop, restart and update the Intentic sandboxes running on this machine, narrower than Run commands, and enough to delegate the machine's sandbox fleet to this one.",
+        hint: "Start, stop and update this machine's Intentic sandboxes.",
     },
     {
         key: "sandboxRemove",
@@ -254,7 +279,7 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
             { value: "off", label: "Blocked" },
             { value: "on", label: "Allowed" },
         ],
-        hint: "Delete a sandbox on this machine along with its files and its history. Separate from managing them because nothing undoes it.",
+        hint: "Deletes a sandbox with its files and history: nothing undoes it.",
     },
     {
         key: "roots",
@@ -316,31 +341,34 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 boolean: true,
                 default: "off",
                 rebuild: true,
-                hint: "Passes the host's NVIDIA GPUs into the engine, for CUDA images and GPU compose stacks. Needs an NVIDIA GPU and nvidia-container-toolkit on the host, checked at rebuild, and the sandbox still starts without GPUs if it can't.",
+                hint: "Needs an NVIDIA GPU and nvidia-container-toolkit on the host.",
             },
             {
                 key: "registryMirror",
                 label: "Registry mirror",
                 optional: true,
+                advanced: true,
                 placeholder: "https://registry.example.internal",
-                hint: "A pull-through cache for Docker Hub, worth setting on a slow, metered or air-gapped link, since this engine starts with an empty image store.",
+                hint: "A pull-through cache for Docker Hub.",
             },
             {
                 key: "insecureRegistries",
                 label: "Insecure registries",
                 optional: true,
+                advanced: true,
                 placeholder: "registry.lan:5000",
-                hint: "Registries reachable over plain http or with a self-signed certificate. Space- or comma-separated.",
+                hint: "Plain-http or self-signed registries, comma-separated.",
             },
             {
                 key: "addressPool",
                 label: "Container address pool",
                 optional: true,
+                advanced: true,
                 placeholder: "10.201.0.0/16",
-                hint: "The subnet this engine carves container networks from. Change it when Docker's default (172.17.0.0/16) collides with your VPN or LAN, the symptom is internal hosts going unreachable while everything else works.",
+                hint: "Change it when 172.17.0.0/16 collides with your VPN or LAN.",
             },
         ],
-        hint: "One-time rebuild required, the sandbox restarts privileged with its own isolated Docker Engine (your machine's Docker is never shared).",
+        hint: "One-time rebuild: the sandbox gets its own isolated Docker Engine.",
     },
     {
         id: "ssh",
@@ -368,10 +396,10 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         hint: 'The name is the alias the agent uses (ssh <name> "…").',
         guide: {
             steps: [
-                "Use a dedicated key or account scoped to what the agent should reach.",
-                "Generate one: `ssh-keygen -t ed25519 -f agent_key`, then add `agent_key.pub` to the server's `authorized_keys`.",
+                "Generate a dedicated key: `ssh-keygen -t ed25519 -f agent_key`.",
+                "Add `agent_key.pub` to the server's `authorized_keys`.",
                 "Paste the unencrypted private key here.",
-                "Or switch `Authentication` to `Password` and paste the password instead.",
+                "Or switch to `Password` and paste that instead.",
             ],
         },
     },
@@ -413,6 +441,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "realm",
                 label: "Realm / user group",
                 optional: true,
+                advanced: true,
                 placeholder: "only if your gateway uses one",
                 when: "provider == 'fortinet'",
             },
@@ -420,6 +449,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "trustedCert",
                 label: "Trusted certificate",
                 optional: true,
+                advanced: true,
                 placeholder: "sha256:… (only for a self-signed gateway)",
                 when: "provider == 'fortinet'",
             },
@@ -436,10 +466,13 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             },
             { key: "username", label: "XAuth username", optional: true, when: "provider == 'ipsec'" },
             { key: "password", label: "XAuth password", secret: true, optional: true, when: "provider == 'ipsec'" },
+            // The phase-1/phase-2 knobs, folded: the defaults match a stock FortiGate, and a FortiClient
+            // import sets them all anyway.
             {
                 key: "ikeVersion",
                 label: "IKE version",
                 default: "1",
+                advanced: true,
                 options: [
                     { value: "1", label: "IKEv1" },
                     { value: "2", label: "IKEv2" },
@@ -450,6 +483,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "pfs",
                 label: "Perfect Forward Secrecy",
                 default: "on",
+                advanced: true,
                 options: [
                     { value: "on", label: "On" },
                     { value: "off", label: "Off" },
@@ -460,6 +494,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "dhGroup",
                 label: "DH group",
                 default: "14",
+                advanced: true,
                 options: [
                     { value: "14", label: "14 (2048)" },
                     { value: "5", label: "5 (1536)" },
@@ -475,6 +510,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "aggressive",
                 label: "Aggressive mode",
                 default: "on",
+                advanced: true,
                 options: [
                     { value: "on", label: "On" },
                     { value: "off", label: "Off" },
@@ -490,7 +526,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Routed networks",
                 default: "0.0.0.0/0",
                 placeholder: "10.0.0.0/8,192.168.0.0/16",
-                hint: "Which networks go through the tunnel. 0.0.0.0/0 sends everything, including this sandbox's own internet access, if the gateway doesn't route the internet, list only the networks behind it.",
+                hint: "0.0.0.0/0 sends everything through the gateway, this sandbox's own internet included.",
                 when: "provider == 'ipsec'",
             },
 
@@ -505,15 +541,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 ],
             },
         ],
-        hint: "Connect and disconnect from Sandbox ▸ Status (the agent can too). Auto-connect re-dials after a sandbox restart.",
+        hint: "Connect and disconnect from Sandbox ▸ Status (the agent can too).",
         guide: {
             steps: [
-                "WireGuard: paste the full `.conf` (`[Interface]` + `[Peer]`) from your provider or server.",
-                "FortiGate SSL-VPN: use the gateway host and port your FortiClient connection uses (e.g. `vpn.example.com:10443` → host + `10443`).",
-                "IPsec: the pre-shared key, plus your XAuth username and password if the gateway asks for them.",
-                "IPsec routed networks: keep `0.0.0.0/0` only if the gateway also carries your internet, otherwise list the networks behind it, or the sandbox loses everything the gateway doesn't route.",
-                "Have a FortiClient config file? Use `Import from FortiClient` above to fill this in from it.",
-                "If the gateway asks for a 2FA code, connect from the `Status` card and enter the code there.",
+                "Have a FortiClient file? `Import from FortiClient` fills this in.",
+                "WireGuard: paste the full `.conf` (`[Interface]` + `[Peer]`).",
+                "FortiGate: the gateway host and port FortiClient dials.",
+                "IPsec: pre-shared key, plus XAuth if the gateway asks.",
+                "2FA gateway? Connect from the `Status` card and enter the code there.",
             ],
         },
     },
@@ -532,7 +567,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "provider",
                 label: "Provider",
                 default: "tor",
-                hint: "Tor is free, needs no account and reaches the most countries. VPN Gate is free too but is mostly Japan and Korea. Paste your own for a provider you already have (Proton VPN's free tier, Mullvad).",
+                hint: "Tor needs no account; paste WireGuard for a provider you already have.",
                 options: [
                     { value: "tor", label: "Tor (free, ~28 countries)" },
                     { value: "vpngate", label: "VPN Gate (free, Japan/Korea)" },
@@ -549,7 +584,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Come out in",
                 optional: true,
                 default: "",
-                hint: "Leave on Anywhere unless a task needs a specific country: it is faster and, on Tor, kinder to a volunteer network. You can switch country any time afterwards without re-adding this.",
+                hint: "Switchable any time afterwards, no re-adding.",
                 when: "provider == 'tor'",
                 options: [{ value: "", label: "Anywhere (fastest)" }, ...TOR_EXIT_COUNTRIES.map(countryOption)],
             },
@@ -558,7 +593,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Come out in",
                 optional: true,
                 default: "",
-                hint: "VPN Gate's pool is overwhelmingly Japanese and Korean. For anywhere else, add a Tor exit instead.",
+                hint: "For anywhere outside Japan/Korea, use Tor instead.",
                 when: "provider == 'vpngate'",
                 options: [{ value: "", label: "Anywhere (fastest)" }, ...VPNGATE_EXIT_COUNTRIES.map(countryOption)],
             },
@@ -569,7 +604,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 multiline: true,
                 placeholder:
                     "[Interface]\nPrivateKey = …\nAddress = 10.2.0.2/32\n\n[Peer]\n# DE-FREE#1\nPublicKey = …\nEndpoint = …:51820\n\n[Interface]\n… paste the next country's file straight after …",
-                hint: "Paste one file per country, back to back. The country is read from each file automatically; add a `# country: DE` line to any it cannot place.",
+                hint: "One file per country, back to back. `# country: DE` places one the reader can't.",
                 when: "provider == 'wireguard'",
             },
             {
@@ -577,7 +612,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Start in",
                 optional: true,
                 placeholder: "DE",
-                hint: "Two-letter code, matching one of the files pasted above. Leave empty to use the first one.",
+                hint: "Empty means the first file above.",
                 when: "provider == 'wireguard'",
             },
             /* Off by default, the opposite of the VPN card's auto-connect, and deliberately. A VPN is dialled
@@ -588,23 +623,23 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "autoStart",
                 label: "Start automatically",
                 default: "off",
-                hint: "Off means it comes up when something asks for it. On means it is held up from the moment the sandbox starts.",
+                advanced: true,
+                hint: "Off: it comes up when something asks for it.",
                 options: [
                     { value: "off", label: "Off" },
                     { value: "on", label: "On" },
                 ],
             },
         ],
-        hint: "Nothing goes through an exit unless you point it there: this never changes the sandbox's own connection. Bind a browser account to it on that account's card, or use `geo proxy <name>` with curl.",
+        hint: "Nothing routes through an exit unless you point it there: the sandbox's own connection never changes.",
         guide: {
             steps: [
-                "Tor: nothing to fill in. Pick a country and add it, that is the whole setup.",
-                "VPN Gate: nothing to fill in either. Its server list is fetched for you and a server is picked per country.",
-                "Proton VPN (free): sign in at `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, generate one config per free country, and paste the files here one after another.",
-                "Mullvad: `mullvad.net/account` → `WireGuard configuration`, pick the countries you want, paste the files here.",
-                "Any other provider: any standard `.conf` works. Several files in this one box is the point, they become one pool you switch between.",
-                "After adding, switch country from the `Status` card or with `geo use <name> DE` (the command is `geo`, since `exit` is a shell builtin). Every switch is verified against the real address and fails if it lands in the wrong country.",
-                "These are datacenter addresses: sites that check will see a proxy. Nothing free looks like an ordinary home connection.",
+                "Tor and VPN Gate: nothing to fill in. Pick a country, add.",
+                "Proton VPN free: `account.protonvpn.com` → `Downloads` → `WireGuard configuration`, one config per country.",
+                "Mullvad: `mullvad.net/account` → `WireGuard configuration`.",
+                "Paste several files in the one box: they become one pool.",
+                "Switch later from the `Status` card or `geo use <name> DE`.",
+                "These are datacenter addresses: sites that check will see a proxy.",
             ],
         },
     },
@@ -619,11 +654,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
             { key: "token", label: "Token", secret: true, optional: true },
         ],
         guide: {
-            steps: [
-                "Get your remote MCP server's URL (a Streamable HTTP or SSE endpoint).",
-                "If it needs auth, paste a bearer token (optional).",
-                "The agent connects to it next turn.",
-            ],
+            steps: ["Paste the server's URL (Streamable HTTP or SSE).", "Needs auth? Paste a bearer token.", "The agent connects next turn."],
         },
     },
     {
@@ -642,10 +673,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         guide: {
             scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
-                "Point at a git repo that holds a Claude Code plugin (skills, agents, hooks, MCP).",
+                "Point at a git repo holding a Claude Code plugin.",
                 "Private repo: add a token with read access.",
-                "Optionally set a branch/tag and a subdirectory.",
-                "Or browse a marketplace above to pre-fill the form.",
+                "Or browse a marketplace above to pre-fill this form.",
             ],
         },
     },
@@ -666,10 +696,9 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
         guide: {
             scopes: "private repos: read access (e.g. GitHub `repo`)",
             steps: [
-                "Point at a git repo with an `intentic-extension.json` at its root (or the subdirectory).",
-                "Pin the exact commit sha you reviewed: branches and tags are not accepted.",
-                "Private repo: add a token with read access.",
-                "Reload the app after installing to load its UI; agent contributions load next turn.",
+                "Point at a repo with an `intentic-extension.json`.",
+                "Pin the exact commit sha you reviewed, branches are not accepted.",
+                "Reload the app after installing to load its UI.",
             ],
         },
     },
@@ -704,42 +733,44 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "eip155:8453", label: "Base, real USDC" },
                     { value: "eip155:84532", label: "Base Sepolia, test money" },
                 ],
-                hint: "Start on test money: the whole flow, approval cards, budgets, receipts, works identically with faucet USDC and costs nothing.",
+                hint: "Start on test money: the whole flow works with faucet USDC.",
             },
             {
                 key: "perPaymentMaxUsd",
                 label: "Most per payment (USD)",
                 default: "1.00",
-                hint: "A hard ceiling. Anything dearer is refused outright, the agent cannot even ask.",
+                hint: "A hard ceiling: anything dearer is refused outright.",
             },
             {
                 key: "dailyCapUsd",
                 label: "Most per day (USD)",
                 default: "5.00",
-                hint: "Across every payment, carded or not. Resets at midnight UTC.",
+                hint: "Resets at midnight UTC.",
             },
             {
                 key: "autoApproveUnderUsd",
                 label: "Approve automatically under (USD)",
                 default: "0",
-                hint: "Leave at 0 and every single payment asks you in chat first. Raise it to let small payments through without interrupting you, they still count against the daily cap.",
+                hint: "0 = every payment asks you in chat first.",
             },
             {
                 key: "allow",
                 label: "Auto-approve only these hosts",
                 optional: true,
+                advanced: true,
                 placeholder: "api.example.com, data.example.org",
-                hint: "Optional. With hosts listed, automatic approval applies only to them; everything else still asks. Ignored when automatic approval is off.",
+                hint: "With hosts listed, auto-approval applies only to them.",
             },
             {
                 key: "deny",
                 label: "Never pay these hosts",
                 optional: true,
+                advanced: true,
                 placeholder: "sketchy.example",
-                hint: "Refused before any card goes up, whatever the price.",
+                hint: "Refused whatever the price.",
             },
         ],
-        hint: "Your sandbox gets its own USDC wallet, held by the platform's custody provider, the agent never sees a key and cannot move money without your limits allowing it. Fund it by sending USDC to the address shown on the card after it connects, then the agent can pay any endpoint that charges per call over the x402 protocol. Every payment is receipted with its on-chain transaction.",
+        hint: "The key stays with the platform's custody provider: the agent can never move more than your limits allow. Fund it by sending USDC to the address shown once connected.",
     },
     {
         id: "identity",
@@ -755,19 +786,21 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "Email password",
                 secret: true,
                 optional: true,
-                hint: "Only so the agent can have it re-typed into the provider's own login, most people leave this empty and sign in themselves.",
+                hint: "Most people leave this empty and sign in themselves.",
             },
             {
                 key: "mailbox",
                 label: "Code mailbox",
                 optional: true,
+                advanced: true,
                 placeholder: "the IMAP connection's name",
-                hint: "A connected IMAP entry for this address. The agent then asks for 'the newest code from this site' and gets exactly that, never the inbox.",
+                hint: "A connected IMAP entry: the agent fetches verification codes, never the inbox.",
             },
             {
                 key: "loginUrl",
                 label: "Sign-in page",
                 optional: true,
+                advanced: true,
                 placeholder: "https://accounts.google.com/",
                 hint: "Guessed from the address when empty.",
             },
@@ -776,7 +809,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 label: "May open accounts on its own",
                 boolean: true,
                 default: "off",
-                hint: "Lets the agent create new platform accounts through this identity when a task needs one. Automated signup is against many platforms' terms, leave off unless that is a call you have made.",
+                hint: "Automated signup is against many platforms' terms: your call to make.",
             },
             /* WHERE THIS IDENTITY LIVES. Set here rather than on each account because an identity IS one
              * browser: every account born from it shares the profile, so they share the country too. One
@@ -786,17 +819,17 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 key: "exit",
                 label: "Browse through",
                 optional: true,
+                advanced: true,
                 placeholder: "the geo exit's name",
-                hint: "A connected Geo exit. Every account under this identity then browses from that country, with its clock and language set to match. Leave empty to browse from this sandbox's own connection.",
+                hint: "A connected Geo exit: every account under this identity browses from that country.",
             },
         ],
-        hint: "The agent signs into (and opens) platform accounts through this identity's browser, you do one login, it does the rest, and calls you in for anything only a person can clear.",
+        hint: "You do one email login; the agent signs into everything that grows from it.",
         guide: {
             steps: [
-                "Name it and give it the email address it IS: a dedicated address beats your personal one.",
-                "After adding, open `Log in` and sign into the email provider yourself in the live window.",
-                "Optionally connect `IMAP` for the same address and name it under `Code mailbox`, so the agent can fetch verification codes itself.",
-                "Add platform accounts under this identity (or turn on `May open accounts` and let the agent open them as work needs them).",
+                "A dedicated address beats your personal one.",
+                "After adding, open `Log in` and sign into the provider yourself.",
+                "Add platform accounts under it, or let the agent open them.",
             ],
         },
     },
@@ -823,16 +856,15 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     { value: "anthropic", label: "Anthropic-compatible" },
                 ],
             },
-            { key: "apiKey", label: "API key", secret: true, optional: true },
-            { key: "headers", label: "Extra headers (Name: value per line)", optional: true, multiline: true },
+            { key: "apiKey", label: "API key", secret: true, optional: true, hint: "Empty is fine: most self-hosted servers have no auth." },
+            { key: "headers", label: "Extra headers (Name: value per line)", optional: true, advanced: true, multiline: true },
         ],
-        hint: "A server on this machine is reachable at host.docker.internal, the sandbox always resolves it. Models are read from the endpoint itself, so pulling a new one just needs a reload. Most servers are OpenAI-compatible; pick Anthropic only if it serves /v1/messages. No server yet? The Local model card runs one inside the sandbox for you.",
+        hint: "No server yet? The Local model card runs one inside the sandbox for you.",
         guide: {
             steps: [
-                "Start your model server and note the URL its API is on (Ollama: `http://localhost:11434/v1`).",
-                "Running on THIS machine? Use `host.docker.internal` in place of `localhost`: the sandbox is a container.",
-                "Leave the key empty if the server has no auth; most self-hosted ones don't.",
-                "Its models then appear as their own provider in the chat's model picker.",
+                "Note the URL your server's API is on (Ollama: port `11434`).",
+                "On THIS machine, that is `http://host.docker.internal:11434/v1`.",
+                "Its models appear in the chat's model picker after adding.",
             ],
         },
     },
@@ -876,14 +908,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     },
                     { value: "custom", label: "Custom GGUF (advanced)" },
                 ],
-                hint: "Downloads once into the workspace (gigabytes, kept across rebuilds), then serves from this sandbox. Free RAM it needs = this figure plus the conversation window's below.",
+                hint: "Downloads once into the workspace, then serves from this sandbox.",
             },
             {
                 key: "url",
                 label: "GGUF download URL",
                 placeholder: "https://huggingface.co/…/resolve/main/model.gguf",
                 when: "model == 'custom'",
-                hint: "A direct link to a .gguf file. You are choosing the memory it needs.",
+                hint: "A direct link to a .gguf file.",
             },
             /* THE CHOICE THIS CARD USED TO MAKE FOR PEOPLE, AND THE ONE IT GOT WRONG. Every entry served a flat
              * 32k window, which is under what a turn of the agent loop costs before the user has typed a word:
@@ -905,14 +937,14 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                     ...LOCAL_MODEL_WINDOWS.map((tokens) => ({ value: tokens, label: WINDOW_LABELS[tokens] })),
                     { value: "custom", label: "Custom" },
                 ],
-                hint: "How much conversation the model holds, and what it costs in RAM on top of the weights. 64k is the smallest that fits a full agent turn; 16k and 32k are for a model you only pin as the quick model (titles, commit messages).",
+                hint: "64k is the smallest that fits a full agent turn.",
             },
             {
                 key: "contextTokens",
                 label: "Window in tokens",
                 placeholder: "98304",
                 when: "context == 'custom'",
-                hint: "Your own number, 2,048 to 1,048,576. Reckon about 1 GB of RAM per 16k, and check the model was trained for a window this wide, past that it answers worse rather than refusing.",
+                hint: "2,048 to 1,048,576, about 1 GB of RAM per 16k.",
             },
             {
                 key: "gpu",
@@ -920,16 +952,15 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 boolean: true,
                 default: "off",
                 rebuild: true,
-                hint: "Needs nvidia-container-toolkit on the host. Off, the model runs on CPU, fine for the small ones.",
+                hint: "Needs nvidia-container-toolkit on the host. Off = CPU, fine for the small ones.",
             },
         ],
-        hint: "Nothing leaves this machine: the sandbox downloads the model and serves it itself: no server to install, works offline. Small models won't replace your frontier chat model; they shine as the quick model (free commit messages) and for work that must stay local. Already running Ollama or vLLM? The Model endpoint card points at it instead.",
+        hint: "Nothing leaves this machine, and it works offline. Already running Ollama or vLLM? The Model endpoint card points at it instead.",
         guide: {
             steps: [
-                "Add up the two memory figures, the model's and the window's, and pick a pair this machine has free.",
-                "On the standard image it downloads and serves right away; only the GPU switch asks for a rebuild.",
-                "It then appears as its own provider in the chat's model picker.",
-                "Short of memory? Drop the window to 16k or 32k and pin it as the quick model in Settings: commit messages and titles then cost nothing.",
+                "Pick a model and window this machine has the free RAM for, the sum is computed under the form.",
+                "It downloads and serves right away; only the GPU switch asks for a rebuild.",
+                "Short of memory? A 16k window pinned as the quick model makes commit messages free.",
             ],
         },
     },
@@ -947,8 +978,10 @@ const isCapabilityCategory = (category: string): category is CapabilityCategory 
  * stored values into the page (never showing the agent the password), so a site card that forgot to declare
  * them would be a site the agent cannot sign in to. Both optional: a profile signed in by hand needs neither. */
 const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
-    { key: "username", label: "Username / email", optional: true },
-    { key: "password", label: "Password", secret: true, optional: true },
+    // Folded behind the form's disclosure ("Let the agent sign in for you"): the primary flow is add → sign in
+    // yourself in the live window, and two optional credential boxes standing open read as questions to answer.
+    { key: "username", label: "Username / email", optional: true, advanced: true },
+    { key: "password", label: "Password", secret: true, optional: true, advanced: true },
     /* Which identity this account is born from, core for the same reason the credentials are: whose browser an
      * account lives in is a fact about the sandbox, not about any site, and it is what makes "Continue with
      * Google" one click (the identity's session is right there in the shared profile). Declared without
@@ -958,7 +991,7 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         key: "identity",
         label: "Belongs to identity",
         optional: true,
-        hint: "The identity whose browser this account lives in. It shares its email session, so 'Continue with' its provider is one click.",
+        hint: "Shares that identity's browser, so 'Continue with' its provider is one click.",
     },
     /* WHERE THIS ACCOUNT BROWSES FROM, core for the same reason again: which country a session appears to come
      * from is a fact about the sandbox's manifest, not about any site, so a site card cannot be allowed to
@@ -972,9 +1005,10 @@ const BROWSER_CREDENTIAL_FIELDS: readonly CapabilityField[] = [
         key: "exit",
         label: "Browse through",
         optional: true,
+        advanced: true,
         when: "!identity",
         placeholder: "the geo exit's name",
-        hint: "A connected Geo exit. Every page this account opens then comes out of that country, with the browser's clock and language set to match. Leave empty to browse from this sandbox's own connection.",
+        hint: "A connected Geo exit: this account then browses from that country.",
     },
 ];
 const CORE_FIELDS: Partial<Record<CapabilityKind, readonly CapabilityField[]>> = { host: HOST_SCOPE_FIELDS, browser: BROWSER_CREDENTIAL_FIELDS };

@@ -8,7 +8,7 @@ import {
     type CapabilityEffect,
     capabilityEffects,
 } from "@intentic-app/capability-catalog";
-import { type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
+import { type CapabilityProbe, type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
 import {
     BrandMark,
     Button,
@@ -26,10 +26,10 @@ import {
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
 import { type CapabilityKind, type ForticlientConnection } from "@intentic/sandbox-contract";
-import ToggleSwitch from "primevue/toggleswitch";
 import { type ComputedRef, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
+import CapabilityFieldRow from "../components/CapabilityFieldRow.vue";
 import ForticlientImport from "../components/ForticlientImport.vue";
 import HostConnectDialog from "../components/HostConnectDialog.vue";
 import PluginRegistryBrowse from "../components/PluginRegistryBrowse.vue";
@@ -56,8 +56,11 @@ import { rememberedSecrets, rememberSecrets } from "./capabilities/devSecrets";
 import {
     type StoredSecrets,
     buildConfig,
+    cleanName,
     fieldConfig,
-    fieldError,
+    fieldInvalid,
+    fieldMissing,
+    fieldVerified,
     forticlientAnswers,
     formComplete,
     inlineField,
@@ -67,7 +70,9 @@ import {
     seedValues,
     shownFields,
 } from "./capabilities/form";
-import { useCapabilities } from "../composables/extensions/useCapabilities";
+import { type ConfSummary, containerUrlFix, expandPaste, normalizeFieldValue, summarisesWireguard, wireguardSummary } from "./capabilities/normalize";
+import { HOST_PRESETS, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./capabilities/previews";
+import { probeCapability, useCapabilities } from "../composables/extensions/useCapabilities";
 import { useExtensions } from "../composables/extensions/useExtensions";
 import { useRegistry } from "../composables/extensions/useRegistry";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
@@ -132,6 +137,13 @@ const name = ref(``);
 // suggestion must track the LIVE list: pick() may run against a stale-hydrated or still-fetching list, and a
 // frozen snapshot then collides ("already exists"), or worse, mints a stale-bumped id: once fresh data lands.
 const nameEdited = ref(false);
+/* THE NAME AS IT WILL BE SAVED, repaired rather than refused: "My GitHub" becomes `My-GitHub` and the box says
+ * so underneath while the two differ (namePreview), instead of interrupting with the rule about hyphens. Every
+ * consumer of the name (the collision check, completeness, the submit itself) reads THIS, so what the preview
+ * promises is exactly what the daemon gets. Blur writes it back into the box, at which point the preview has
+ * nothing left to say. */
+const savedName = computed(() => cleanName(name.value));
+const namePreview = computed(() => (savedName.value !== `` && savedName.value !== name.value.trim() ? savedName.value : undefined));
 
 const instancesFor = (entry: CapabilityCatalogEntry): CapabilitySummary[] => instancesOf(entry, capabilities.value);
 const selectedInstances = computed<CapabilitySummary[]>(() => (selected.value === undefined ? [] : instancesFor(selected.value)));
@@ -213,7 +225,7 @@ const cardProcesses = computed<BackgroundProcessRow[]>(() => {
  * costs: an add form is seeded with a card's DEFAULTS, so re-typing a live connection's name and saving wrote
  * the defaults over its settings. Now that the row itself opens for editing, the honest answer to a name that
  * exists is to say so and point at it. */
-const nameCollision = computed(() => editing.value === undefined && selectedInstances.value.some((instance) => instance.id === name.value.trim()));
+const nameCollision = computed(() => editing.value === undefined && selectedInstances.value.some((instance) => instance.id === savedName.value));
 
 /* --- what the rail slices the catalog by, and what the grid then shows ---
  * Every card with the facts all three panes read off it. Computed once here rather than per tile per render: the
@@ -363,17 +375,88 @@ const submitting = ref(false);
 const error = ref<NoticeModel | null>(null);
 // undefined = the confirm dialog is closed; a string = the capability id awaiting a confirmed removal.
 const confirmRemoveId = ref<string>();
-// --- inline validation (touched-on-blur) ---
+// --- inline validation (touched-on-blur, alarmed-on-submit) ---
 // A field key appears here after the user has interacted with it (blur), so errors show only after they leave.
 const touched = reactive(new Set<string>());
+// A submit has been attempted and refused: the moment emptiness stops being "not yet" and starts being "this
+// is what's blocking you", which is when (and only when) a required-but-empty field turns red.
+const attempted = ref(false);
 const shaking = ref(false);
 const markTouched = (key: string): void => {
     touched.add(key);
 };
+const finishName = (): void => {
+    if (namePreview.value !== undefined) {
+        name.value = savedName.value;
+    }
+    markTouched(`name`);
+};
 
-// The refusals, over the form as it stands right now. undefined means the field is fine.
+/* Blur is when a field's value is DONE, so it is when the quiet repairs run: trim the pasted newline off a
+ * token, put the scheme on a bare host, keep only the digits of a port. Written back into the box, so the
+ * correction is something the reader sees rather than something the submit does behind their back. */
+const finishField = (field: CapabilityField): void => {
+    values[field.key] = normalizeFieldValue(field, values[field.key] ?? ``);
+    markTouched(field.key);
+};
+
+// The one-line accounts of what a paste was unpacked into, keyed by the field that took the paste.
+const pasteNotes = reactive<Record<string, string>>({});
+const onFieldInput = (field: CapabilityField): void => {
+    // Editing a field by hand outdates the story about what was pasted into it.
+    delete pasteNotes[field.key];
+};
+/* A paste that RECOGNISABLY holds more than the one box asks for (an ssh command, a connection string, a repo
+ * deep link, a mail address with a well-known provider) answers every box it can, and says what it read where
+ * the paste landed. Anything unrecognised falls through to the ordinary paste it always was. */
+const onFieldPaste = (field: CapabilityField, event: ClipboardEvent): void => {
+    const entry = selected.value;
+    const text = event.clipboardData?.getData(`text`) ?? ``;
+    if (entry === undefined || text.trim() === ``) {
+        return;
+    }
+    const expansion = expandPaste(entry, field, values, text);
+    if (expansion === undefined) {
+        return;
+    }
+    event.preventDefault();
+    Object.assign(values, expansion.values);
+    pasteNotes[field.key] = expansion.summary;
+};
+
+/* The refusals, over the form as it stands right now, split by severity. `fieldAlarm` is the red treatment: a
+ * malformed value that is actually there, or (after a refused submit) a required box still empty. `fieldQuiet`
+ * is the muted "Required" for an empty box merely tabbed past: nothing has gone wrong yet, and the form should
+ * not sound like it has. */
 const nameProblem = computed<string | undefined>(() => nameError(name.value));
-const fieldProblem = (field: CapabilityField): string | undefined => fieldError(field, values[field.key], keptSecrets.value);
+const fieldAlarm = (field: CapabilityField): string | undefined => {
+    if (!touched.has(field.key) && !attempted.value) {
+        return undefined;
+    }
+    const invalid = fieldInvalid(field, values[field.key], keptSecrets.value);
+    if (invalid !== undefined) {
+        return invalid;
+    }
+    return attempted.value && fieldMissing(field, values[field.key], keptSecrets.value) ? `This field is required.` : undefined;
+};
+const fieldQuiet = (field: CapabilityField): boolean =>
+    !attempted.value && touched.has(field.key) && fieldMissing(field, values[field.key], keptSecrets.value);
+// The green check beside a label, for the values a rule can genuinely vouch for (a URL that parses, a full
+// sha, a port in range): the moment the reader would otherwise squint at what they pasted.
+const fieldChecked = (field: CapabilityField): boolean => fieldVerified(field, values[field.key]);
+// The localhost trap's one-click way out: defined exactly while a URL box points at the container itself.
+const fieldUrlFix = (field: CapabilityField): string | undefined => containerUrlFix(field, values[field.key]);
+const applyUrlFix = (field: CapabilityField): void => {
+    const fix = fieldUrlFix(field);
+    if (fix !== undefined) {
+        values[field.key] = fix;
+    }
+};
+// What a WireGuard blob actually holds, read live so the check happens in the box, not after a failed connect.
+const fieldConfSummary = (field: CapabilityField): ConfSummary | undefined => {
+    const entry = selected.value;
+    return entry !== undefined && summarisesWireguard(entry, field) ? wireguardSummary(values[field.key]) : undefined;
+};
 // A credential box the reader may leave alone, because one is already stored behind it. It says so in its own
 // placeholder rather than in prose above the form: the question "do I have to find this again?" is asked of one
 // box at a time, and answered where the eye already is.
@@ -390,6 +473,44 @@ const fieldPlaceholder = (field: CapabilityField): string | undefined =>
 // The fields on screen for a card: const-valued ones are baked into the config, `when`-gated ones come and go
 // as the user toggles the mode they hang off.
 const formFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => shownFields(entry, values);
+/* THE FORM'S TWO TIERS. Main fields are the card's actual questions; advanced ones are the answers whose
+ * default is right for nearly everyone (a registry mirror, an IKE version), folded behind one quiet line so a
+ * card's length is what it asks, not what it could be asked. The disclosure's state is decided when the form
+ * seeds (below): open while any advanced field holds a non-default value, because an edit must never hide the
+ * settings it is standing on. */
+const mainFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => formFields(entry).filter((field) => field.advanced !== true);
+const advancedFields = (entry: CapabilityCatalogEntry): readonly CapabilityField[] => formFields(entry).filter((field) => field.advanced === true);
+const advancedOpen = ref(false);
+// A browser card's folded fields are one specific offer, not "advanced": stored credentials the daemon can
+// type into the site's own login for the agent. Named as what they are.
+const advancedLabel = (entry: CapabilityCatalogEntry): string => (entry.kind === `browser` ? `Let the agent sign in for you (optional)` : `Advanced`);
+const advancedDefault = (field: CapabilityField): string => field.default ?? (field.boolean === true ? `off` : ``);
+
+/* WHAT THE ANSWERS ADD UP TO, said back while they are given (see ./capabilities/previews). The wallet's
+ * numbers compose into a spending policy and the local model's two choices into a RAM bill: each was a
+ * paragraph of prose asking the reader to do the composition themselves. A computed sentence is shorter,
+ * always current, and is the actual thing the submit agrees to. */
+const formSummary = computed<string | undefined>(() => {
+    if (selected.value?.kind === `wallet`) {
+        return walletPolicySummary(values);
+    }
+    if (selected.value?.kind === `localmodel`) {
+        return localModelMemorySummary(values);
+    }
+    return undefined;
+});
+
+/* A connected computer's grant, driven as a posture rather than six switches: the preset row sets them all,
+ * the sentence states what they currently spell (in the same words the connect dialog and the row will use),
+ * and the switches stay underneath for fine-tuning. A hand-tuned mix matches no preset and the row shows it
+ * by holding nothing selected. */
+const hostPresetOptions = HOST_PRESETS.map((preset) => ({ value: preset.key, label: preset.label }));
+const applyHostPreset = (key: string): void => {
+    const preset = HOST_PRESETS.find((candidate) => candidate.key === key);
+    if (preset !== undefined) {
+        Object.assign(values, preset.grants);
+    }
+};
 
 /* The live-browser window for a browser-kind capability (the session is a real logged-in browser, not a pasted
  * token, so it lives out-of-band over the /system/browser-profile WebSocket). Two things open it and one
@@ -707,15 +828,54 @@ const pickForticlient = (connection: ForticlientConnection): void => {
     touched.clear();
 };
 
+/* --- TRY IT BEFORE SAVING IT ---
+ *
+ * The one question a form full of hostnames and tokens cannot answer about itself: does any of this reach the
+ * thing. Answered by the daemon dialling the service the way the connection would (capabilities/probe.ts), and
+ * shown as the service's own words: "Reached GitHub, authenticated as ada", or the exact refusal. Which is
+ * what turns the guide beside the form from required reading into a fallback: the reader can simply find out.
+ *
+ * Offered only where a check exists. A `checked: false` answer retires the button for this card rather than
+ * printing "cannot verify", because not-testable is not a failure and must not be dressed as one: an ssh box,
+ * a paired computer and a signed-in browser are all connections whose test IS the thing itself. */
+const probing = ref(false);
+const probeResult = ref<CapabilityProbe>();
+// Hidden once a card has answered "no test exists": the button would only ever say so again.
+const canProbe = computed(() => selected.value !== undefined && probeResult.value?.checked !== false);
+const runProbe = async (): Promise<void> => {
+    const entry = selected.value;
+    if (entry === undefined || probing.value) {
+        return;
+    }
+    probing.value = true;
+    probeResult.value = undefined;
+    try {
+        probeResult.value = await probeCapability({
+            id: savedName.value || entry.id,
+            kind: entry.kind,
+            config: buildConfig(entry, values, keptSecrets.value),
+        });
+    } catch (caught) {
+        error.value = noticeFrom(caught, `Could not test that connection.`);
+    } finally {
+        probing.value = false;
+    }
+};
+
 const clearForm = (): void => {
     name.value = ``;
     nameEdited.value = false;
     for (const key of Object.keys(values)) {
         delete values[key];
     }
+    for (const key of Object.keys(pasteNotes)) {
+        delete pasteNotes[key];
+    }
+    probeResult.value = undefined;
     keptSecrets.value = new Set<string>();
     error.value = null;
     touched.clear();
+    attempted.value = false;
     shaking.value = false;
 };
 
@@ -746,6 +906,9 @@ watch(
         // exist, so the boxes for them can say "already set" instead of "fill me in".
         Object.assign(values, seedValues(entry, instance?.config, recommendationFor(entry.id)?.prefill ?? {}), rememberedSecrets(entry));
         keptSecrets.value = new Set(instance?.secrets ?? []);
+        // The Advanced fold's opening state: open while anything in it differs from its default (a live
+        // connection's changed mirror, a scan's prefill), because an edit must never hide what it stands on.
+        advancedOpen.value = entry.fields.some((field) => field.advanced === true && (values[field.key] ?? ``) !== advancedDefault(field));
     },
     { immediate: true },
 );
@@ -885,9 +1048,22 @@ const submit = async (): Promise<void> => {
     if (entry === undefined || submitting.value) {
         return;
     }
-    // Mark every field touched so validation errors become visible on a premature submit.
+    // Mark every field touched, and raise the alarm tier: from here on a required-but-empty box is the thing
+    // actually blocking the reader, and is allowed to say so in red.
     touchAll();
     if (!canSubmit.value) {
+        attempted.value = true;
+        // A refusal the reader cannot see is a form that looks broken: if what blocks the submit sits in the
+        // Advanced fold, open it.
+        if (
+            advancedFields(entry).some(
+                (field) =>
+                    fieldMissing(field, values[field.key], keptSecrets.value) ||
+                    fieldInvalid(field, values[field.key], keptSecrets.value) !== undefined,
+            )
+        ) {
+            advancedOpen.value = true;
+        }
         shaking.value = false;
         void nextTick(() => {
             shaking.value = true;
@@ -899,7 +1075,7 @@ const submit = async (): Promise<void> => {
     /* One write for both, because the daemon's is one write: adding and editing are the same upsert over the
      * same id. The only difference is what a blank credential box means, and `keptSecrets` is what carries that
      *: a kept one goes down as the marker the daemon resolves back into the stored value. */
-    const input: AddCapabilityInput = { id: name.value.trim(), kind: entry.kind, config: buildConfig(entry, values, keptSecrets.value) };
+    const input: AddCapabilityInput = { id: savedName.value, kind: entry.kind, config: buildConfig(entry, values, keptSecrets.value) };
     // Read BEFORE the write, like `next` below: a one-per-sandbox card that is being connected for the first
     // time becomes an edit the moment its entry lands, and asking afterwards would call every first add an edit.
     const wasEditing = editing.value !== undefined;
@@ -917,6 +1093,7 @@ const submit = async (): Promise<void> => {
             }
         });
         rememberSecrets(entry, values);
+        attempted.value = false;
         const added = capabilities.value.find((capability) => capability.id === input.id);
         if (added?.status.state === `pending`) {
             handOff(entry, added);
@@ -1267,20 +1444,27 @@ const submitLabel = computed(() => {
                                 <input
                                     v-model="name"
                                     placeholder="my-tool"
-                                    :class="[ui.input(), touched.has('name') && (nameProblem || nameCollision) ? 'ui-field-input-error' : '']"
+                                    :class="[ui.input(), nameCollision || (attempted && nameProblem) ? 'ui-field-input-error' : '']"
                                     @input="nameEdited = true"
-                                    @blur="markTouched('name')"
+                                    @blur="finishName"
                                 />
-                                <span v-if="touched.has('name') && nameProblem" class="ui-field-error">
-                                    <Icon name="exclamation-triangle" class="text-2xs" />
-                                    {{ nameProblem }}
-                                </span>
                                 <!-- A taken name is refused rather than quietly saved over that connection: this
                                      form holds the card's DEFAULTS, and writing those over somebody's live
                                      settings is the accident this points away from. -->
-                                <span v-else-if="nameCollision" class="ui-field-error">
+                                <span v-if="nameCollision" class="ui-field-error">
                                     <Icon name="exclamation-triangle" class="text-2xs" />
-                                    "{{ name.trim() }}" already exists: open it above to change it, or pick another name.
+                                    "{{ savedName }}" already exists: open it above to change it, or pick another name.
+                                </span>
+                                <span v-else-if="attempted && nameProblem" class="ui-field-error">
+                                    <Icon name="exclamation-triangle" class="text-2xs" />
+                                    {{ nameProblem }}
+                                </span>
+                                <!-- The repair, shown rather than performed silently: spaces and punctuation
+                                     become hyphens, and this line is the contract for what the submit will use.
+                                     Blur writes it into the box, at which point there is nothing left to say. -->
+                                <span v-else-if="namePreview" class="mt-1 flex items-center gap-1 text-2xs text-muted">
+                                    <Icon name="check" class="text-2xs text-success" />
+                                    Saved as <span class="font-mono text-content">{{ namePreview }}</span>
                                 </span>
                                 <span v-else-if="selectedInstances.length > 0" class="mt-1 text-2xs text-subtle">
                                     What your agent will call this connection.
@@ -1290,94 +1474,87 @@ const submitLabel = computed(() => {
                              From @3xl it is docked in a column of its own (see the aside below) and this one is
                              hidden: exactly one of the two is ever on screen. -->
                             <CapabilityContext :entry="selected" :values="values" :effects="liveEffects" class="@3xl:hidden" />
-                            <template v-for="field in formFields(selected)" :key="field.key">
-                                <!-- AN ANSWERED QUESTION SITS BESIDE ITS LABEL, NOT UNDER IT. Stacked in the column of
-                                 inputs it reads as one more thing to fill in; beside the label it reads as the thing it
-                                 is: already answered, changeable. Its hint carries what the label can't say (a host
-                                 requirement, when the value takes effect), which is exactly the caveat a lone switch
-                                 invites people to skip.
-                                 The switches always worked this way; the SHORT PICKERS did not, and they are the ones
-                                 that hurt: a connected computer asks six Allowed/Blocked questions, and stacking each
-                                 label over its own pair of buttons made a form of six pre-answered defaults twice as
-                                 tall as the screen. See inlineField() for where the line is drawn and why it is drawn
-                                 on the width of the answers rather than on their number. -->
-                                <label v-if="inlineField(field)" class="flex items-start justify-between gap-4">
-                                    <span class="min-w-0">
-                                        <span class="ui-field-label">{{ field.label }}</span>
-                                        <StatusBadge
-                                            v-if="field.rebuild"
-                                            variant="neutral"
-                                            size="xs"
-                                            label="needs rebuild"
-                                            class="ml-1.5 align-middle"
-                                        />
-                                        <span v-if="field.hint" class="mt-0.5 block text-2xs text-muted">{{ field.hint }}</span>
-                                    </span>
-                                    <ToggleSwitch
-                                        v-if="field.boolean"
-                                        class="ui-switch-sm mt-0.5 shrink-0"
-                                        :model-value="values[field.key] === 'on'"
-                                        :aria-label="field.label"
-                                        @update:model-value="(value: boolean) => (values[field.key] = value ? 'on' : 'off')"
-                                    />
-                                    <SegmentedControl
-                                        v-else
-                                        class="shrink-0"
-                                        :model-value="values[field.key] ?? ''"
-                                        :options="[...(field.options ?? [])]"
-                                        @update:model-value="values[field.key] = $event"
-                                    />
-                                </label>
-                                <label v-else class="ui-field">
-                                    <span class="ui-field-label">
-                                        {{ field.label }}{{ field.optional ? " (optional)" : "" }}
-                                        <StatusBadge
-                                            v-if="field.rebuild"
-                                            variant="neutral"
-                                            size="xs"
-                                            label="needs rebuild"
-                                            class="ml-1.5 align-middle"
-                                        />
-                                    </span>
-                                    <SegmentedControl
-                                        v-if="field.options"
-                                        wrap
-                                        :model-value="values[field.key] ?? ''"
-                                        :options="[...field.options]"
-                                        @update:model-value="values[field.key] = $event"
-                                    />
-                                    <textarea
-                                        v-else-if="field.multiline"
-                                        v-model="values[field.key]"
+                            <!-- A computer's grant as a posture: the preset row sets the six switches at once,
+                                 and the sentence under it states what they currently spell, in the same words
+                                 the connect dialog and the machine's row will use. The switches stay below for
+                                 fine-tuning; a hand-tuned mix selects no preset. -->
+                            <label v-if="selected.kind === 'host'" class="flex items-start justify-between gap-4">
+                                <span class="min-w-0">
+                                    <span class="ui-field-label">Access</span>
+                                    <span class="mt-0.5 block text-2xs text-muted">{{ hostGrantSummary(values) }}</span>
+                                </span>
+                                <SegmentedControl
+                                    class="shrink-0"
+                                    :model-value="matchHostPreset(values) ?? ''"
+                                    :options="hostPresetOptions"
+                                    @update:model-value="applyHostPreset($event)"
+                                />
+                            </label>
+
+                            <!-- The fields, main ones first, with the rarely-changed answers folded behind one
+                                 Advanced line. Each row draws the page's verdicts (see <CapabilityFieldRow>);
+                                 the disclosure opens by itself when an edit holds a non-default advanced value
+                                 or a refused submit is blocked by one, so nothing live or blocking ever hides. -->
+                            <CapabilityFieldRow
+                                v-for="field in mainFields(selected)"
+                                :key="field.key"
+                                :field="field"
+                                :values="values"
+                                :inline="inlineField(field)"
+                                :placeholder="fieldPlaceholder(field)"
+                                :alarm="fieldAlarm(field)"
+                                :quiet="fieldQuiet(field)"
+                                :checked="fieldChecked(field)"
+                                :url-fix="fieldUrlFix(field)"
+                                :note="pasteNotes[field.key]"
+                                :summary="fieldConfSummary(field)"
+                                @edited="onFieldInput(field)"
+                                @pasted="onFieldPaste(field, $event)"
+                                @left="finishField(field)"
+                                @fix="applyUrlFix(field)"
+                            />
+                            <template v-if="advancedFields(selected).length > 0">
+                                <button
+                                    type="button"
+                                    class="inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content"
+                                    @click="advancedOpen = !advancedOpen"
+                                >
+                                    <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
+                                    {{ advancedLabel(selected) }}
+                                    <span class="text-2xs text-subtle">{{ advancedFields(selected).length }}</span>
+                                </button>
+                                <template v-if="advancedOpen">
+                                    <CapabilityFieldRow
+                                        v-for="field in advancedFields(selected)"
+                                        :key="field.key"
+                                        :field="field"
+                                        :values="values"
+                                        :inline="inlineField(field)"
                                         :placeholder="fieldPlaceholder(field)"
-                                        rows="6"
-                                        spellcheck="false"
-                                        :class="[
-                                            ui.input('font-mono resize-y'),
-                                            touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '',
-                                        ]"
-                                        @blur="markTouched(field.key)"
+                                        :alarm="fieldAlarm(field)"
+                                        :quiet="fieldQuiet(field)"
+                                        :checked="fieldChecked(field)"
+                                        :url-fix="fieldUrlFix(field)"
+                                        :note="pasteNotes[field.key]"
+                                        :summary="fieldConfSummary(field)"
+                                        @edited="onFieldInput(field)"
+                                        @pasted="onFieldPaste(field, $event)"
+                                        @left="finishField(field)"
+                                        @fix="applyUrlFix(field)"
                                     />
-                                    <input
-                                        v-else
-                                        v-model="values[field.key]"
-                                        :type="field.secret ? 'password' : 'text'"
-                                        :autocomplete="field.secret ? 'off' : undefined"
-                                        :placeholder="fieldPlaceholder(field)"
-                                        :class="[ui.input(), touched.has(field.key) && fieldProblem(field) ? 'ui-field-input-error' : '']"
-                                        @blur="markTouched(field.key)"
-                                    />
-                                    <span v-if="touched.has(field.key) && fieldProblem(field)" class="ui-field-error">
-                                        <Icon name="exclamation-triangle" class="text-2xs" />
-                                        {{ fieldProblem(field) }}
-                                    </span>
-                                    <span v-else-if="field.hint" class="text-2xs text-muted">{{ field.hint }}</span>
-                                </label>
+                                </template>
                             </template>
                             <!-- Why the grid badged this one: the claim, then the thing that was read to make
                                  it, verbatim. The evidence is what makes this checkable instead of magic, and it
                                  is also what "Not needed" is answering: the suggestion goes quiet for THIS, and
                                  comes back by itself if the workspace changes under it. -->
+                            <!-- The sentence the answers add up to (a spending policy, a RAM bill), computed
+                                 live so it is always what the submit actually agrees to. -->
+                            <p v-if="formSummary" class="flex items-start gap-2 rounded-lg border border-line bg-card px-3 py-2 text-xs text-content">
+                                <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                                {{ formSummary }}
+                            </p>
+
                             <Notice v-if="selectedRecommendation" tone="info">
                                 <div class="flex items-start gap-3">
                                     <div class="min-w-0 flex-1">
@@ -1402,9 +1579,31 @@ const submitLabel = computed(() => {
                                  reader had to scroll back down through what they had just filled in to press it.
                                  Stuck to the foot of the pane it is reachable from anywhere in the form, and the
                                  canvas tint under it keeps the last field from appearing to run into it. -->
+                            <!-- WHAT THE SERVICE ITSELF SAID, above the button that would save it: the answer to
+                                 "will any of this work" belongs before the commitment, not after it, and it is
+                                 the one thing on this screen a guide cannot tell anybody. -->
+                            <p
+                                v-if="probeResult"
+                                class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
+                                :class="
+                                    probeResult.ok
+                                        ? 'border-success/30 bg-success/5 text-content'
+                                        : probeResult.checked
+                                          ? 'border-danger/30 bg-danger/5 text-content'
+                                          : 'border-line bg-card text-muted'
+                                "
+                            >
+                                <Icon
+                                    :name="probeResult.ok ? 'check-circle' : probeResult.checked ? 'exclamation-triangle' : 'info-circle'"
+                                    class="mt-0.5 shrink-0 text-2xs"
+                                    :class="probeResult.ok ? 'text-success' : probeResult.checked ? 'text-danger' : 'text-subtle'"
+                                />
+                                {{ probeResult.message }}
+                            </p>
+
                             <div
                                 :class="[
-                                    'sticky bottom-0 -mx-1 flex items-center gap-3 border-t border-line bg-canvas px-1 py-3',
+                                    'sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 border-t border-line bg-canvas px-1 py-3',
                                     auditable ? 'justify-between' : 'justify-end',
                                     shaking ? 'ui-shake' : '',
                                 ]"
@@ -1420,6 +1619,21 @@ const submitLabel = computed(() => {
                                             : `Have an agent read it first, what the code does, route by route`
                                     }}
                                 </button>
+                                <!-- Quiet, and beside the real button rather than competing with it: testing is
+                                     optional, saving is the task. It retires itself on a card that answers "no
+                                     test exists" (see canProbe). -->
+                                <Button
+                                    v-if="canProbe"
+                                    class="ml-auto"
+                                    label="Test"
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    :loading="probing"
+                                    @click="runProbe"
+                                >
+                                    <template #icon><Icon name="wave-pulse" /></template>
+                                </Button>
                                 <Button type="submit" :label="submitLabel" :loading="submitting">
                                     <template #icon><Icon name="check" /></template>
                                 </Button>

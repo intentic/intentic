@@ -54,10 +54,10 @@
                         "url": "https://myaccount.google.com/apppasswords",
                         "linkLabel": "Create a Gmail app password",
                         "steps": [
-                            "Gmail: turn on `2-Step Verification`, then create an `App Password` (link above) and use it as the password.",
-                            "Outlook/Microsoft: `account.microsoft.com` → `Security` → `Advanced security options` → `App passwords`.",
-                            "Other hosts: your normal IMAP password works.",
-                            "Host/port: Gmail `imap.gmail.com:993`, Outlook `outlook.office365.com:993`."
+                            "Gmail: turn on `2-Step Verification`, then use an `App Password` (link above).",
+                            "Outlook: `account.microsoft.com` → `Security` → `App passwords`.",
+                            "Anywhere else: your normal IMAP password works.",
+                            "Paste your address into `Username`: the host and port fill themselves in."
                         ]
                     }
                 },
@@ -70,7 +70,8 @@
                     {
                         "key": "port",
                         "label": "Port",
-                        "default": "993"
+                        "default": "993",
+                        "advanced": true
                     },
                     {
                         "key": "username",
@@ -85,7 +86,8 @@
                     {
                         "key": "mailbox",
                         "label": "Watched mailbox",
-                        "default": "INBOX"
+                        "default": "INBOX",
+                        "advanced": true
                     }
                 ],
                 "env": {

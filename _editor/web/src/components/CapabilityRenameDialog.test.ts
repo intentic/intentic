@@ -2,8 +2,9 @@
 //
 // The name is the agent's handle for a connection, and this dialog is the only place it can be changed. What is
 // pinned is the part a user can get wrong: the field starts from the name they are looking at, the button stays
-// down until the name is both different and legal, and what leaves is the trimmed name: the daemon refuses a
-// stray space, and it should never get the chance to.
+// down until the name is actually different, and what leaves is the name the daemon will take: typed spaces and
+// punctuation are repaired into it (the add form's own rule), shown under the field first, so nobody is refused
+// for spelling a name the way people spell things.
 import PrimeVue from "primevue/config";
 import { expect, it } from "vitest";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
@@ -53,7 +54,7 @@ const type = async (value: string): Promise<void> => {
     await nextTick();
 };
 
-it(`starts from the current name, refuses an illegal or unchanged one, and emits the name trimmed`, async () => {
+it(`starts from the current name, repairs what is typed, and refuses only an unchanged or empty one`, async () => {
     document.body.innerHTML = ``;
     const dialog = mount();
     dialog.open();
@@ -64,15 +65,18 @@ it(`starts from the current name, refuses an illegal or unchanged one, and emits
     // Nothing to do yet: renaming something to what it is already called is not a rename.
     expect(renameButton().disabled).toBe(true);
 
-    // The add form's rule, enforced in the same words before anything is sent.
-    await type(`-nope`);
+    // A name with nothing usable in it is the one thing left to refuse.
+    await type(`  `);
     expect(renameButton().disabled).toBe(true);
     field().dispatchEvent(new Event(`blur`));
     await nextTick();
-    expect(document.body.textContent).toContain(`must start with a letter or digit`);
+    expect(document.body.textContent).toContain(`Name is required`);
 
-    await type(`  reddit-personal  `);
+    // Spaces and punctuation are REPAIRED rather than refused, and the line under the field says what will
+    // actually be used before the button is pressed.
+    await type(`Reddit Personal`);
     expect(renameButton().disabled).toBe(false);
+    expect(document.body.textContent).toContain(`Reddit-Personal`);
     renameButton().click();
-    expect(dialog.renamed()).toEqual([`reddit-personal`]);
+    expect(dialog.renamed()).toEqual([`Reddit-Personal`]);
 });

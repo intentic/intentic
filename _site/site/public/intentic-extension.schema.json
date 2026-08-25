@@ -484,6 +484,10 @@
                                                 "multiline": {
                                                     "type": "boolean"
                                                 },
+                                                "advanced": {
+                                                    "description": "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
+                                                    "type": "boolean"
+                                                },
                                                 "boolean": {
                                                     "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
                                                     "type": "boolean"
@@ -568,6 +572,48 @@
                                         "description": "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
                                         "type": "string",
                                         "minLength": 1
+                                    },
+                                    "probe": {
+                                        "description": "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
+                                        "type": "object",
+                                        "properties": {
+                                            "url": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "The URL to call, as a template over the fields: `${field}` substitutes, `${field:uri}` percent-encodes. Same spelling as `env`."
+                                            },
+                                            "method": {
+                                                "description": "Defaults to GET.",
+                                                "type": "string",
+                                                "enum": [
+                                                    "GET",
+                                                    "POST",
+                                                    "HEAD"
+                                                ]
+                                            },
+                                            "headers": {
+                                                "description": "The request headers, templated the same way: `{\"Authorization\": \"Bearer ${token}\"}`.",
+                                                "type": "object",
+                                                "propertyNames": {
+                                                    "type": "string"
+                                                },
+                                                "additionalProperties": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "identity": {
+                                                "description": "A dotted path into the JSON answer naming who the caller is (\"login\", \"user.name\"), so success can say which account answered.",
+                                                "type": "string"
+                                            },
+                                            "insecure": {
+                                                "description": "Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API).",
+                                                "type": "boolean"
+                                            }
+                                        },
+                                        "required": [
+                                            "url"
+                                        ],
+                                        "additionalProperties": false
                                     }
                                 },
                                 "required": [
@@ -680,6 +726,10 @@
                                                     "type": "boolean"
                                                 },
                                                 "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "advanced": {
+                                                    "description": "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
                                                     "type": "boolean"
                                                 },
                                                 "boolean": {
@@ -868,6 +918,10 @@
                                                 "multiline": {
                                                     "type": "boolean"
                                                 },
+                                                "advanced": {
+                                                    "description": "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
+                                                    "type": "boolean"
+                                                },
                                                 "boolean": {
                                                     "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
                                                     "type": "boolean"
@@ -1042,6 +1096,10 @@
                                                     "type": "boolean"
                                                 },
                                                 "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "advanced": {
+                                                    "description": "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
                                                     "type": "boolean"
                                                 },
                                                 "boolean": {

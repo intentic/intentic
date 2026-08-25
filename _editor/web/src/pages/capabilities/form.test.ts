@@ -1,7 +1,21 @@
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
 import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
-import { buildConfig, fieldError, forticlientAnswers, formComplete, inlineField, keepsSecret, nameError, seedValues, shownFields } from "./form";
+import {
+    buildConfig,
+    cleanName,
+    fieldError,
+    fieldInvalid,
+    fieldMissing,
+    fieldVerified,
+    forticlientAnswers,
+    formComplete,
+    inlineField,
+    keepsSecret,
+    nameError,
+    seedValues,
+    shownFields,
+} from "./form";
 
 /* What the form refuses, what it starts as, and what survives into the config. The interesting cases are the ones
  * that used to cost a round-trip to the daemon or a silently wrong credential. */
@@ -16,10 +30,46 @@ const card = (fields: CapabilityCatalogEntry["fields"], overrides: Partial<Capab
     ...overrides,
 });
 
-test(`refuses a name the daemon would refuse, and says why`, () => {
+/* A typed name is REPAIRED rather than refused: "My GitHub" is not invalid, it is `My-GitHub` spelt the way a
+ * person spells things. The page shows the repair under the box and submits the repaired form, so the only
+ * name left to refuse is one with nothing salvageable in it. */
+test(`repairs a typed name instead of refusing it`, () => {
+    expect(cleanName(`My GitHub`)).toBe(`My-GitHub`);
+    expect(cleanName(`  ops box (new)  `)).toBe(`ops-box-new`);
+    expect(cleanName(`-nope-`)).toBe(`nope`);
+    expect(cleanName(`ops-box_2`)).toBe(`ops-box_2`);
+    expect(cleanName(`…`)).toBe(``);
+
     expect(nameError(`  `)).toBe(`Name is required.`);
-    expect(nameError(`-nope`)).toContain(`must start with a letter or digit`);
+    expect(nameError(`…`)).toBe(`Name is required.`);
+    // Anything the repair can save is not an error any more.
+    expect(nameError(`My GitHub`)).toBeUndefined();
     expect(nameError(`ops-box_2`)).toBeUndefined();
+});
+
+/* MISSING AND MALFORMED ARE DIFFERENT FAILURES: an empty required box merely tabbed past gets a quiet
+ * "Required", a malformed value that is actually there gets the red treatment. The split is what the page's
+ * two severities are built on. */
+test(`tells an unanswered question from a wrong answer`, () => {
+    expect(fieldMissing({ key: `server`, label: `Server` }, ``)).toBe(true);
+    expect(fieldMissing({ key: `server`, label: `Server` }, `vpn.acme.dev`)).toBe(false);
+    expect(fieldMissing({ key: `note`, label: `Note`, optional: true }, ``)).toBe(false);
+    // Emptiness is never "invalid": it is not yet anything.
+    expect(fieldInvalid({ key: `server`, label: `Server` }, ``)).toBeUndefined();
+    expect(fieldInvalid({ key: `url`, label: `URL` }, `not a url`)).toContain(`Enter a valid URL`);
+});
+
+// The green check, only for the values a rule can genuinely vouch for.
+test(`vouches only for what a rule can check`, () => {
+    expect(fieldVerified({ key: `url`, label: `URL` }, `https://github.com/o/r`)).toBe(true);
+    expect(fieldVerified({ key: `url`, label: `URL` }, `github.com/o/r`)).toBe(false);
+    expect(fieldVerified({ key: `port`, label: `Port` }, `10443`)).toBe(true);
+    expect(fieldVerified({ key: `ref`, label: `Commit sha` }, `a`.repeat(40))).toBe(true);
+    expect(fieldVerified({ key: `ref`, label: `Commit sha` }, `main`)).toBe(false);
+    // Free text earns no check: the form cannot vouch for a hostname it has never dialled.
+    expect(fieldVerified({ key: `host`, label: `Host` }, `db.acme.dev`)).toBe(false);
+    // Nor does a secret, whose correctness no pattern can promise.
+    expect(fieldVerified({ key: `tokenUrl`, label: `Token`, secret: true }, `https://x`)).toBe(false);
 });
 
 // The FortiClient ciphertext check is here rather than after a POST: the daemon rejects an EncX blob, and being

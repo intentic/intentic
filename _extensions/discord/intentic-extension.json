@@ -40,7 +40,7 @@
                     "logo": "discord",
                     "description": "Read and post in your Discord server.",
                     "category": "communication",
-                    "hint": "Voice transcription runs a local whisper model: bigger = more accurate but slower on CPU (Medium ≈ 1.5GB download on first use). Set the voice language to an ISO code like pl or en to pin transcription (auto-detect can misfire on short utterances).",
+                    "hint": "Voice transcription runs a local whisper model: bigger is more accurate, slower on CPU.",
                     "guide": {
                         "url": "https://discord.com/developers/applications",
                         "linkLabel": "Open the Discord developer portal",
@@ -49,7 +49,7 @@
                             "`New Application` → `Bot`.",
                             "`Reset Token`, then copy the bot token.",
                             "Enable the `Message Content` and `Server Members` privileged intents.",
-                            "Paste the token here, then ask the agent to “invite yourself to my server”: it makes a one-click invite link."
+                            "Paste the token, then ask the agent to “invite yourself to my server”."
                         ]
                     }
                 },

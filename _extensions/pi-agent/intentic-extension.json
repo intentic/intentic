@@ -16,15 +16,15 @@
                     "name": "Pi",
                     "description": "Run the Pi coding agent as a chat provider.",
                     "category": "extend",
-                    "hint": "The `pi` id is reserved: this card is served over Pi's own RPC protocol (mid-turn steering, effort control, slash commands), not ACP. Connect a subscription by running `pi` in a Terminal once and typing /login, or paste provider API keys into the environment block.",
+                    "hint": "Served over Pi's own protocol, not ACP: mid-turn steering, effort control, slash commands.",
                     "guide": {
                         "url": "https://pi.dev",
                         "linkLabel": "About Pi",
                         "steps": [
-                            "Add this capability: it bakes the Pi CLI into the sandbox image (a one-time rebuild).",
-                            "Connect a model: run `pi` in a Terminal and type /login for a Claude/ChatGPT/Copilot subscription, or add API keys as `KEY=VALUE` lines in the environment block.",
-                            "Pick a default model inside Pi with /model: Pi owns its model catalog.",
-                            "Pi then appears as a provider in the chat's model picker."
+                            "Adding bakes the Pi CLI into the image: a one-time rebuild.",
+                            "Run `pi` in a Terminal and type /login, or add API keys below.",
+                            "Pick a default inside Pi with /model.",
+                            "Pi then appears in the chat's model picker."
                         ]
                     }
                 },

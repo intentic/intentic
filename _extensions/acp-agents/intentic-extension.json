@@ -16,7 +16,7 @@
                     "logo": "opencode",
                     "description": "Run OpenCode as a chat provider over ACP.",
                     "category": "extend",
-                    "hint": "Sign in by running the login command in a Terminal once, the agent keeps its own credentials in the sandbox."
+                    "hint": "Run the login command in a Terminal once: it keeps its own credentials."
                 },
                 "fields": [
                     { "key": "command", "label": "Command", "default": "opencode acp" },
@@ -56,14 +56,14 @@
                     "name": "Custom ACP agent",
                     "description": "Goose, Qwen Code, or one of your own.",
                     "category": "extend",
-                    "hint": "The command must be on the sandbox PATH and speak ACP over stdio (split on whitespace, no shell quoting). Credentials go in the environment block, or run the login command in a Terminal once.",
+                    "hint": "The command must be on the sandbox PATH and speak ACP over stdio.",
                     "guide": {
                         "url": "https://agentclientprotocol.com",
                         "linkLabel": "Browse ACP agents",
                         "steps": [
-                            "Pick an agent from the ACP registry (`agentclientprotocol.com`) and note its run command.",
-                            "If it needs an API key, add it as a `KEY=VALUE` line in the environment block.",
-                            "For device-code sign-ins, add the agent's login command and run it in a Terminal after adding.",
+                            "Pick an agent from `agentclientprotocol.com`, note its run command.",
+                            "API key? Add a `KEY=VALUE` line to the environment block.",
+                            "Device-code sign-in? Add its login command and run it after adding.",
                             "The agent then appears as a provider in the chat's model picker."
                         ]
                     }

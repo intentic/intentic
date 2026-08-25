@@ -36,14 +36,14 @@
                     "logo": "whatsapp",
                     "description": "Read and reply in WhatsApp chats and groups.",
                     "category": "communication",
-                    "hint": "This is an UNOFFICIAL connection, it links to WhatsApp the way WhatsApp Web does, which is against WhatsApp's terms of service, and numbers do get banned. Use a DEDICATED number (a prepaid SIM or eSIM), never your personal one: the agent acts as that number. No Meta account, no webhook, no public URL, pairing takes a minute.",
+                    "hint": "Unofficial: this links the way WhatsApp Web does, against WhatsApp's terms, and numbers do get banned. Use a dedicated number, never your personal one.",
                     "guide": {
                         "linkLabel": "WhatsApp on the paired phone",
                         "steps": [
-                            "Get WhatsApp running on a dedicated number (any spare phone, prepaid SIM or eSIM).",
-                            "Enter that phone number here, with country code (e.g. +49151…).",
-                            "This card will show a pairing code. On the phone: WhatsApp → `Settings` → `Linked devices` → `Link a device` → `Link with phone number instead`, and type the code.",
-                            "The card turns active. Message the number (or add it to a group) and create an automation with WhatsApp as its source."
+                            "Get WhatsApp running on a dedicated number (spare phone, prepaid SIM).",
+                            "Enter that number here with its country code.",
+                            "This card shows a pairing code: on the phone, `Linked devices` → `Link with phone number instead`.",
+                            "The card turns active: message the number to try it."
                         ]
                     }
                 },

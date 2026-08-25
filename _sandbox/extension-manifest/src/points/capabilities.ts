@@ -13,6 +13,16 @@ export const CapabilityFieldSchema = z.object({
     secret: z.boolean().optional().describe("Mask it, and never echo it back."),
     optional: z.boolean().optional(),
     multiline: z.boolean().optional(),
+    /* The answers most connections never change, folded behind the form's one "Advanced" disclosure. A form's
+     * length is what it costs to read, and a card that asks six questions whose defaults are right for nearly
+     * everyone was spending that cost on nearly everyone. The disclosure opens BY ITSELF while any advanced
+     * field holds a non-default value, so an edit never hides the settings it is standing on. */
+    advanced: z
+        .boolean()
+        .optional()
+        .describe(
+            "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
+        ),
     // An OPT-IN EXTRA rather than a decision, rendered as a switch, carried as the "on"/"off" the config
     // schemas already speak (the vpn's pfs/aggressive precedent). A two-option Segmented can express the same
     // value, and reads wrong for this: it presents a choice the user must make to proceed, sized like the
@@ -103,6 +113,37 @@ export type CapabilityField = z.infer<typeof CapabilityFieldSchema>;
  * extension that ever declared one. */
 export const fieldApplies = (field: CapabilityField, values: Readonly<Record<string, unknown>>): boolean =>
     field.when === undefined || evaluateWhen(parseWhen(field.when), values);
+
+/* HOW THIS CARD'S SETTINGS ARE TESTED, before they are saved. One authenticated request the daemon makes on the
+ * form's behalf (capabilities.probe), declared as data for the same reason the form is: the check is per-service
+ * and the machinery is not.
+ *
+ * It is worth declaring on any card whose failure is otherwise silent, which is most of them: a wrong token, a
+ * host the sandbox cannot route to and a service that is simply not running all present identically as a card
+ * that says "not connected" some time after the form was left. The probe turns each into a sentence on the form
+ * the reader is still standing on. */
+const ProbeSchema = z.object({
+    url: z
+        .string()
+        .min(1)
+        .describe("The URL to call, as a template over the fields: `${field}` substitutes, `${field:uri}` percent-encodes. Same spelling as `env`."),
+    method: z.enum(["GET", "POST", "HEAD"]).optional().describe("Defaults to GET."),
+    headers: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe('The request headers, templated the same way: `{"Authorization": "Bearer ${token}"}`.'),
+    /* WHAT THE SERVICE CALLED THE CALLER, read out of the JSON answer so success can be specific: "authenticated
+     * as ada" is a different fact from "200 OK", and it is the one that tells a reader they connected the
+     * account they meant to. A dotted path; a miss just leaves the message general. */
+    identity: z
+        .string()
+        .optional()
+        .describe('A dotted path into the JSON answer naming who the caller is ("login", "user.name"), so success can say which account answered.'),
+    insecure: z
+        .boolean()
+        .optional()
+        .describe("Accept a self-signed certificate, for a service whose local install ships one (Obsidian's Local REST API)."),
+});
 
 // The "+" card an entry renders: how it looks in the grid and how the user gets the credential it asks for.
 // Shared by every arm below, because none of that varies with the kind.
@@ -202,6 +243,9 @@ export const CapabilityContributionSchema = z
                 .describe(
                     "A sandbox feature pack name (whisper, llamacpp, browser, …) supplying this tool. Preferred over `fragment`: an image that already bakes the pack needs no rebuild, and there is no copy to drift.",
                 ),
+            probe: ProbeSchema.optional().describe(
+                "One authenticated request that tests this card's settings before they are saved, so a wrong token or an unreachable host is answered on the form rather than by a card that says 'not connected' afterwards.",
+            ),
         }),
         /* A site the agent acts on AS THE OWNER, through the shared logged-in Chromium. `loginUrl` is what the
          * sign-in window opens; the profile it persists is the credential. `homeUrl` is where that same profile

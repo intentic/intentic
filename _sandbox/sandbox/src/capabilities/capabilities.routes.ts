@@ -18,6 +18,7 @@ import { secretFieldsOf } from "./secret-fields.js";
 import { contributionFor, contributionRegistry } from "./contributions.js";
 import { totpCode } from "./totp.js";
 import { browseMarketplace } from "./marketplace.js";
+import { probeCapability } from "./probe.js";
 import { capabilityRecommendations } from "./recommend.js";
 import { registry } from "./registry.js";
 
@@ -212,6 +213,17 @@ export const createCapabilitiesRoutes = (services: Services) => {
             } finally {
                 adding.delete(input.id);
             }
+        }),
+        /* TRY THE SETTINGS BEFORE SAVING THEM (see ./probe.ts for what is actually dialled and why it is
+         * declared rather than coded). Nothing is written, nothing is applied and no id is claimed: this route
+         * is a question, and it must stay one, or the Test button becomes a way to change the sandbox.
+         *
+         * Kept credentials resolve here exactly as they do for `add`, and for the same reason: an edit's form
+         * has never been shown the connection's key, so testing one after changing its host would otherwise
+         * mean re-typing the credential first, which is the trap the whole VAULTED path exists to close. */
+        probe: i.probe.handler(async ({ input }) => {
+            const entry = await withKeptSecrets(services, input);
+            return probeCapability(await contributionRegistry(services), entry);
         }),
         /* GIVE A CONNECTION A DIFFERENT NAME, a migration, not a label edit.
          *

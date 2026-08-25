@@ -66,7 +66,24 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 
 <template>
     <div class="ui-card flex flex-col gap-3">
-        <p class="text-sm font-semibold text-content">How to get it</p>
+        <!-- THE LINK LEADS, because it IS the task: every guide's first real step is "open the provider's
+             token page", and the steps below are the fallback for whoever needs the path spelt out. It used
+             to sit last, under the theory that a link should be earned by reading; in practice the reading was
+             the cost, and the reader who already knows what a token is scrolled four steps to find the door.
+             Absent until a self-hosted card's instance URL is filled in, until then there is no host to send
+             anyone to, and the title carries the row alone. -->
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <p class="text-sm font-semibold text-content">How to get it</p>
+            <a
+                v-if="tokenUrl"
+                :href="tokenUrl"
+                target="_blank"
+                rel="noreferrer"
+                class="inline-flex items-center gap-1 text-xs text-link hover:underline"
+            >
+                {{ linkLabel }} <Icon name="external-link" />
+            </a>
+        </div>
 
         <!-- The permissions line comes BEFORE the steps: it is what decides whether the token you are about to
              make is the right one, and reading it after step four is reading it too late.
@@ -88,26 +105,11 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 
              AT THE CHROME SIZE, with the air between steps that the size asks for. This is reference material
              standing beside the form, not the subject of the screen: set at the reading size it stopped
-             sitting alongside the fields and started competing with them. What made the old block hard to get
-             through was never the size: it was five steps packed edge to edge in an 18rem column, and both
-             of those are fixed (a wider column, and a step's worth of separation between the steps). -->
+             sitting alongside the fields and started competing with them. -->
         <ol v-if="steps.length > 0" class="flex list-decimal flex-col gap-2.5 pl-4 text-xs leading-relaxed break-words text-muted marker:text-subtle">
             <li v-for="(step, index) in steps" :key="index">
                 <span v-for="(part, partIndex) in guideParts(step)" :key="partIndex" :class="part.literal ? literal : ''">{{ part.text }}</span>
             </li>
         </ol>
-
-        <!-- The shortcut past step one, kept last: it is where the reader goes once they know what they are
-             making, and a link above the instructions is one taken before they have been read. Absent until a
-             self-hosted card's instance URL is filled in, until then there is no host to send anyone to. -->
-        <a
-            v-if="tokenUrl"
-            :href="tokenUrl"
-            target="_blank"
-            rel="noreferrer"
-            class="mt-1 inline-flex items-center gap-1 text-xs text-link hover:underline"
-        >
-            {{ linkLabel }} <Icon name="external-link" />
-        </a>
     </div>
 </template>

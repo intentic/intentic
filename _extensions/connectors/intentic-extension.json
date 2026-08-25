@@ -18,15 +18,15 @@
                     "logo": "github",
                     "description": "Issues, PRs, code search and git.",
                     "category": "code",
-                    "hint": "Any repo-scoped token is enough: the agent calls the API with curl, and with Git access on, pull and push work over HTTPS. The two extra permissions beside add native ssh://git and CI webhooks on workspace repos, without them both still work, and the card shows you what to add by hand.",
+                    "hint": "Any repo-scoped token is enough; the extras only add native ssh and CI webhooks.",
                     "guide": {
                         "url": "https://github.com/settings/tokens",
                         "scopes": "`repo` (+ `write:public_key` for native ssh, `admin:repo_hook` for CI webhooks)",
                         "steps": [
                             "Open `Settings` → `Developer settings` → `Personal access tokens`.",
-                            "Classic: generate a token with the `repo` scope (add `write:public_key` for native `ssh://git`, `admin:repo_hook` for CI webhooks).",
-                            "Fine-grained: grant repo `Contents` access (add the `Git SSH keys: write` account permission for native `ssh://git`, and `Webhooks: write` for CI).",
-                            "Copy the token and paste it here. Git works over HTTPS regardless; the extra permissions only enable native ssh and automatic CI webhooks."
+                            "Classic: the `repo` scope. Fine-grained: repo `Contents` access.",
+                            "For native `ssh://git` add `write:public_key`; for CI webhooks `admin:repo_hook`.",
+                            "Paste the token here: git works over HTTPS regardless."
                         ]
                     }
                 },
@@ -55,7 +55,14 @@
                 "env": {
                     "GITHUB_TOKEN": "${token}"
                 },
-                "skill": "skills/github/SKILL.md"
+                "skill": "skills/github/SKILL.md",
+                "probe": {
+                    "url": "https://api.github.com/user",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    },
+                    "identity": "login"
+                }
             },
             {
                 "id": "gitlab",
@@ -65,7 +72,7 @@
                     "logo": "gitlab",
                     "description": "Issues, merge requests, pipelines and git.",
                     "category": "code",
-                    "hint": "The api scope covers both extras: an SSH key on your account for ssh://git, and a CI webhook on workspace repos. If key upload is refused git is rerouted over HTTPS; the webhook also needs the token's user to be at least Maintainer. Either way the card shows what to add by hand.",
+                    "hint": "The api scope covers everything; anything refused falls back to HTTPS git.",
                     "guide": {
                         "urlFromField": "url",
                         "path": "/-/user_settings/personal_access_tokens",
@@ -111,7 +118,14 @@
                     "GITLAB_TOKEN": "${token}",
                     "GITLAB_URL": "${url}"
                 },
-                "skill": "skills/gitlab/SKILL.md"
+                "skill": "skills/gitlab/SKILL.md",
+                "probe": {
+                    "url": "${url}/api/v4/user",
+                    "headers": {
+                        "PRIVATE-TOKEN": "${token}"
+                    },
+                    "identity": "username"
+                }
             },
             {
                 "id": "npm",
@@ -121,17 +135,17 @@
                     "logo": "npm",
                     "description": "Publish and manage packages on npm.",
                     "category": "code",
-                    "hint": "The agent uses the npm CLI, already signed in. Publishing may ask for a one-time 2FA code: with a TOTP secret stored, the agent mints its own and never sees the secret. Write tokens expire within 90 days, paste a fresh one under Sandbox ▸ Secrets.",
+                    "hint": "The agent uses the npm CLI signed in as you; a stored TOTP secret answers 2FA for it.",
                     "guide": {
                         "url": "https://www.npmjs.com/",
                         "linkLabel": "Open npmjs.com",
                         "scopes": "granular access token: `Read and write` on the packages/scopes the agent manages",
                         "steps": [
-                            "Sign in on npmjs.com, click your avatar → `Access Tokens` → `Generate New Token` → `Granular Access Token` (classic tokens no longer exist).",
-                            "Grant `Read and write` on just the packages or scopes the agent should manage, pick the expiry deliberately (write tokens live at most `90 days`, `7` by default), and paste the token here.",
-                            "Publishing enforces 2FA: either enable `Bypass 2FA` on the token (npm is narrowing this to staging a publish you then approve on the site), or store your TOTP secret below so the agent can answer OTP prompts.",
-                            "The TOTP secret is the base32 key behind your authenticator's QR code (`Can't scan the QR code?` at enrollment). Only accounts already on TOTP have one: npm no longer offers new TOTP enrollments.",
-                            "On WebAuthn instead of TOTP (npm's default now)? Add the `npmjs.com` browser card too: the sandbox enrolls its own passkey there and answers 2FA prompts and publish approvals itself."
+                            "Avatar → `Access Tokens` → `Generate New Token` → `Granular Access Token`.",
+                            "Grant `Read and write` on just the packages the agent should manage (expiry: at most `90 days`).",
+                            "Publishing enforces 2FA: enable `Bypass 2FA` on the token, or store your TOTP secret below.",
+                            "The TOTP secret is the base32 key behind the QR code (`Can't scan the QR code?`).",
+                            "On WebAuthn/passkeys? Add the `npmjs.com` browser card too."
                         ]
                     }
                 },
@@ -147,7 +161,7 @@
                         "secret": true,
                         "totp": true,
                         "optional": true,
-                        "hint": "Never shown to the agent, it mints expiring codes from it instead. Leave empty if your account uses WebAuthn/passkeys or publishing rides a Bypass-2FA token."
+                        "hint": "Never shown to the agent: it mints expiring codes from it."
                     }
                 ],
                 "env": {
@@ -163,7 +177,7 @@
                     "logo": "npm",
                     "description": "Your npm account in a real browser.",
                     "category": "code",
-                    "hint": "Use Log in to sign in once. A physical security key cannot reach this browser, sign in with a recovery code instead, then open npm's 2FA settings and `Add Security Key`: the sandbox enrolls its own passkey and answers every later 2FA prompt itself. Pairs with the npm connector, its publishes get their web approvals here."
+                    "hint": "A physical key can't reach this browser: sign in with a recovery code, then Add Security Key lets the sandbox enroll its own passkey for every later prompt."
                 },
                 "fields": [],
                 "loginUrl": "https://www.npmjs.com/login",
@@ -178,16 +192,15 @@
                     "icon": "download",
                     "description": "Turn any website into clean text the agent can read.",
                     "category": "extend",
-                    "hint": "Scrape one page, crawl a whole site, map its URLs or search the web, all coming back as markdown, so the agent reads sites that its own browser would choke on. Metered in credits: a crawl spends one per page, which is why the agent is told to always cap a crawl. Self-hosted Firecrawl works too, put its address in the URL field.",
+                    "hint": "Scrape, crawl, map or search, everything back as markdown. Metered in credits: about one per page.",
                     "guide": {
                         "url": "https://www.firecrawl.dev/app/api-keys",
                         "linkLabel": "Open your Firecrawl API keys",
                         "scopes": "one key, full account, credits are shared, so watch the plan's balance",
                         "steps": [
-                            "Sign in at `firecrawl.dev` and open `API Keys` in the dashboard.",
-                            "Copy a key (they start with `fc-`) and paste it here.",
-                            "The free plan comes with a one-off pot of credits and slow rate limits; paid plans refill monthly. One page scraped is roughly one credit.",
-                            "Self-hosting Firecrawl? Point the URL field at your instance instead and use a key it accepts."
+                            "Sign in at `firecrawl.dev` → `API Keys`.",
+                            "Copy a key (starts `fc-`) and paste it here.",
+                            "Self-hosted? Point the URL field at your instance."
                         ]
                     }
                 },
@@ -202,14 +215,21 @@
                         "key": "url",
                         "label": "API URL",
                         "default": "https://api.firecrawl.dev",
-                        "hint": "Only change this for a self-hosted Firecrawl."
+                        "advanced": true,
+                        "hint": "Only for a self-hosted Firecrawl."
                     }
                 ],
                 "env": {
                     "FIRECRAWL_API_KEY": "${apiKey}",
                     "FIRECRAWL_API_URL": "${url}"
                 },
-                "skill": "skills/firecrawl/SKILL.md"
+                "skill": "skills/firecrawl/SKILL.md",
+                "probe": {
+                    "url": "${url}/v1/team/credit-usage",
+                    "headers": {
+                        "authorization": "Bearer ${apiKey}"
+                    }
+                }
             },
             {
                 "id": "website",
@@ -219,27 +239,27 @@
                     "icon": "globe",
                     "description": "Sign into any site; the agent acts as you.",
                     "category": "extend",
-                    "hint": "The card for sites that have no card, an internal admin panel, a supplier portal, a client's CMS. Every other browser card is this one with the addresses filled in and a site cheatsheet attached, so use those where they exist: they teach the agent the site's own URLs and controls, which this one has to discover by reading the page. Add one session per account, named after the account."
+                    "hint": "The card for sites that have no card of their own. One session per account, named after the account."
                 },
                 "fields": [
                     {
                         "key": "homeUrl",
                         "label": "Page to open",
                         "placeholder": "https://admin.acme.com/dashboard",
-                        "hint": "Where this account lives once you are signed in, the page you would bookmark."
+                        "hint": "The page you would bookmark once signed in."
                     },
                     {
                         "key": "loginUrl",
                         "label": "Sign-in page",
                         "placeholder": "https://admin.acme.com/login",
                         "optional": true,
-                        "hint": "Only when signing in happens somewhere else (a separate identity provider). Otherwise the page above is where the login window opens."
+                        "hint": "Only when signing in happens somewhere else."
                     },
                     {
                         "key": "purpose",
                         "label": "What you will use it for",
                         "placeholder": "read and reply to supplier tickets",
-                        "hint": "One line, in your words. This is what tells the agent when to reach for this account instead of another."
+                        "hint": "How the agent knows when to reach for this account instead of another."
                     }
                 ],
                 "skill": "skills/website/SKILL.md"
@@ -252,7 +272,7 @@
                     "logo": "sentry",
                     "description": "Query issues and traces from Sentry.",
                     "category": "observability",
-                    "hint": "Self-hosted: set your instance URL above first. Leave the org blank to let the agent list your orgs.",
+                    "hint": "Leave the org blank and the agent lists your orgs.",
                     "guide": {
                         "urlFromField": "url",
                         "path": "/settings/account/api/auth-tokens/",
@@ -287,7 +307,13 @@
                     "SENTRY_URL": "${url}",
                     "SENTRY_ORG": "${org}"
                 },
-                "skill": "skills/sentry/SKILL.md"
+                "skill": "skills/sentry/SKILL.md",
+                "probe": {
+                    "url": "${url}/api/0/organizations/",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    }
+                }
             },
             {
                 "id": "redmine",
@@ -306,7 +332,7 @@
                         "steps": [
                             "Set the `Instance URL` above first.",
                             "Open `My account` (top-right).",
-                            "Under `API access key`, click `Show` (an admin enables it in `Administration` → `Settings` → `API` if hidden).",
+                            "Under `API access key`, click `Show` (an admin may need to enable the API).",
                             "Copy the key and paste it here."
                         ]
                     }
@@ -327,7 +353,14 @@
                     "REDMINE_URL": "${url}",
                     "REDMINE_API_KEY": "${apiKey}"
                 },
-                "skill": "skills/redmine/SKILL.md"
+                "skill": "skills/redmine/SKILL.md",
+                "probe": {
+                    "url": "${url}/users/current.json",
+                    "headers": {
+                        "X-Redmine-API-Key": "${apiKey}"
+                    },
+                    "identity": "user.login"
+                }
             },
             {
                 "id": "outline",
@@ -366,7 +399,15 @@
                     "OUTLINE_URL": "${url}",
                     "OUTLINE_API_KEY": "${apiKey}"
                 },
-                "skill": "skills/outline/SKILL.md"
+                "skill": "skills/outline/SKILL.md",
+                "probe": {
+                    "url": "${url}/api/auth.info",
+                    "method": "POST",
+                    "headers": {
+                        "authorization": "Bearer ${apiKey}"
+                    },
+                    "identity": "data.user.name"
+                }
             },
             {
                 "id": "notion",
@@ -376,16 +417,16 @@
                     "logo": "notion",
                     "description": "Pages and databases in your Notion workspace.",
                     "category": "business",
-                    "hint": "The agent calls the Notion API with curl. An integration sees nothing on its own: share pages with it (page `•••` → `Connections`) and everything nested underneath comes along. When the agent reports a page as not found, it is usually one nobody shared.",
+                    "hint": "An integration sees nothing on its own: share pages with it and everything nested comes along.",
                     "guide": {
                         "url": "https://www.notion.so/profile/integrations",
                         "linkLabel": "Open your Notion integrations",
                         "scopes": "Read content, add Update + Insert content for an agent that writes",
                         "steps": [
-                            "Open `Settings` → `Connections` → `Develop or manage integrations`, and create a `New integration`: type `Internal`, in the workspace the agent should reach.",
-                            "Under `Capabilities`, grant `Read content`; add `Update content` and `Insert content` if the agent should write. `No user information` is fine.",
+                            "`Settings` → `Connections` → `Develop or manage integrations` → `New integration`, type `Internal`.",
+                            "Grant `Read content`; add `Update`/`Insert` if the agent should write.",
                             "Copy the `Internal Integration Secret` and paste it here.",
-                            "Share content with it: on each top-level page or database, open `•••` → `Connections` and add the integration, sub-pages inherit. Until this step the integration sees nothing at all."
+                            "On each top-level page: `•••` → `Connections` → add the integration, sub-pages inherit."
                         ]
                     }
                 },
@@ -399,7 +440,15 @@
                 "env": {
                     "NOTION_TOKEN": "${token}"
                 },
-                "skill": "skills/notion/SKILL.md"
+                "skill": "skills/notion/SKILL.md",
+                "probe": {
+                    "url": "https://api.notion.com/v1/users/me",
+                    "headers": {
+                        "authorization": "Bearer ${token}",
+                        "Notion-Version": "2022-06-28"
+                    },
+                    "identity": "name"
+                }
             },
             {
                 "id": "sharepoint",
@@ -409,18 +458,17 @@
                     "icon": "folder-open",
                     "description": "Sites, document libraries and lists in SharePoint.",
                     "category": "business",
-                    "hint": "Reached through Microsoft Graph with an Entra ID app registration, tenant, client id and secret, which the agent trades for an hour-long token itself. App permissions need an admin's consent, and they are tenant-wide: `Sites.Selected` plus a grant per site is the way to keep an agent to the sites you meant. Client secrets expire (24 months at most), rotate here when Graph starts answering 401.",
+                    "hint": "Prefer Sites.Selected: app permissions are tenant-wide otherwise. Client secrets expire, rotate here when Graph answers 401.",
                     "guide": {
                         "url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
                         "linkLabel": "Open Entra ID app registrations",
                         "scopes": "application permissions `Sites.Read.All`, or `Sites.ReadWrite.All` to write, `Sites.Selected` to scope per site",
                         "steps": [
-                            "In the Entra admin centre open `App registrations` → `New registration`, name it, single tenant, no redirect URI.",
-                            "Copy the `Application (client) ID` and `Directory (tenant) ID` from the overview page.",
-                            "Open `Certificates & secrets` → `New client secret`, pick an expiry, and copy the secret `Value`: not the Secret ID, and it is shown only once.",
-                            "Open `API permissions` → `Add a permission` → `Microsoft Graph` → `Application permissions`, add `Sites.Read.All` (or `Sites.ReadWrite.All`), then click `Grant admin consent`: without that last click every call answers 403.",
-                            "Least privilege instead: add `Sites.Selected`, consent to it, then have a site owner grant this app read or write on each site it should reach (`Sites.Selected` alone reaches nothing until they do).",
-                            "The hostname below is the first part of your SharePoint URL, e.g. `contoso.sharepoint.com`. Optional: the agent can search your sites without it."
+                            "`App registrations` → `New registration`: single tenant, no redirect URI.",
+                            "Copy the client ID and tenant ID from the overview.",
+                            "`Certificates & secrets` → `New client secret`, copy its `Value` (shown once).",
+                            "`API permissions` → `Microsoft Graph` → `Application permissions`: add `Sites.Read.All` or `Sites.Selected`, then `Grant admin consent`.",
+                            "`Sites.Selected` reaches nothing until a site owner grants this app each site."
                         ]
                     }
                 },
@@ -437,7 +485,7 @@
                         "key": "clientSecret",
                         "label": "Client secret value",
                         "secret": true,
-                        "hint": "The secret's Value, copied at creation. Entra never shows it again, make a new one if it was missed."
+                        "hint": "The Value shown at creation: Entra never shows it again."
                     },
                     {
                         "key": "hostname",
@@ -490,7 +538,13 @@
                     "SIGNOZ_URL": "${url}",
                     "SIGNOZ_API_KEY": "${apiKey}"
                 },
-                "skill": "skills/signoz/SKILL.md"
+                "skill": "skills/signoz/SKILL.md",
+                "probe": {
+                    "url": "${url}/api/v1/orgs",
+                    "headers": {
+                        "SIGNOZ-API-KEY": "${apiKey}"
+                    }
+                }
             },
             {
                 "id": "komodo",
@@ -500,17 +554,17 @@
                     "icon": "box",
                     "description": "Drive your Komodo stacks and deployments.",
                     "category": "deploy",
-                    "hint": "The agent talks to Komodo Core's HTTP API with curl. A Komodo API key is a key + secret pair, the secret is this card's rotatable credential, the key identifies it (like a database user). The key inherits its user's permissions, so a read-only agent wants a non-admin user.",
+                    "hint": "An API key inherits its user's permissions: a read-only agent wants a non-admin user.",
                     "guide": {
                         "urlFromField": "url",
                         "path": "/profile",
                         "linkLabel": "Open your Komodo profile",
                         "scopes": "the key inherits the user's permissions",
                         "steps": [
-                            "Set the `Komodo URL` above first (the address of Komodo Core).",
-                            "Open your profile (top-right) → `Api Keys` → `New Api Key`.",
-                            "Komodo shows the key and the secret once: copy both and paste them here.",
-                            "To keep the agent read-only, make the key on a user that only has `Read` permissions."
+                            "Set the `Komodo URL` above first.",
+                            "Profile (top-right) → `Api Keys` → `New Api Key`.",
+                            "Copy both the key and the secret here: shown once.",
+                            "Read-only agent: make the key on a `Read`-only user."
                         ]
                     }
                 },
@@ -535,7 +589,15 @@
                     "KOMODO_API_KEY": "${apiKey}",
                     "KOMODO_API_SECRET": "${apiSecret}"
                 },
-                "skill": "skills/komodo/SKILL.md"
+                "skill": "skills/komodo/SKILL.md",
+                "probe": {
+                    "url": "${url}/auth",
+                    "method": "POST",
+                    "headers": {
+                        "X-Api-Key": "${apiKey}",
+                        "X-Api-Secret": "${apiSecret}"
+                    }
+                }
             },
             {
                 "id": "cloudflare",
@@ -545,17 +607,17 @@
                     "logo": "cloudflare",
                     "description": "DNS, domains, Workers and Pages on Cloudflare.",
                     "category": "deploy",
-                    "hint": "The agent calls the Cloudflare API with curl. Use a scoped API token, not the legacy Global API Key: pick just the permissions and zones the agent needs, and what you don't grant it can't touch. DNS edits and cache purges hit live traffic, a read-only token is the safe default.",
+                    "hint": "Use a scoped API token, never the Global API Key: a read-only token is the safe default.",
                     "guide": {
                         "url": "https://dash.cloudflare.com/profile/api-tokens",
                         "linkLabel": "Create an API token",
                         "scopes": "your pick per task, e.g. `Zone: Read` + `DNS: Edit`, or the read-only template",
                         "steps": [
-                            "Open the dashboard → `My Profile` → `API Tokens` → `Create Token`.",
-                            "Start from a template (`Edit zone DNS` for DNS work, `Read all resources` for a read-only agent) or build a custom token with exactly the permissions the task needs.",
-                            "Under `Zone Resources` / `Account Resources`, include specific zones or accounts rather than all of them where you can.",
-                            "Copy the token (it is shown once) and paste it here.",
-                            "The `Account ID` is on any zone's `Overview` page, right-hand column. Optional: the agent can list your accounts itself."
+                            "`My Profile` → `API Tokens` → `Create Token`.",
+                            "Start from a template: `Read all resources` for read-only, `Edit zone DNS` for DNS work.",
+                            "Include specific zones rather than all of them where you can.",
+                            "Copy the token here: shown once.",
+                            "`Account ID`: any zone's `Overview` page. Optional, the agent can list accounts itself."
                         ]
                     }
                 },
@@ -575,7 +637,14 @@
                     "CLOUDFLARE_API_TOKEN": "${token}",
                     "CLOUDFLARE_ACCOUNT_ID": "${accountId}"
                 },
-                "skill": "skills/cloudflare/SKILL.md"
+                "skill": "skills/cloudflare/SKILL.md",
+                "probe": {
+                    "url": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+                    "headers": {
+                        "authorization": "Bearer ${token}"
+                    },
+                    "identity": "result.status"
+                }
             },
             {
                 "id": "postgres",
@@ -588,10 +657,9 @@
                     "hint": "The agent queries your database with psql.",
                     "guide": {
                         "steps": [
-                            "No external token: use an existing DB user, ideally a read-only one.",
-                            "Make sure the database is reachable from the sandbox (host/port open, grants/`pg_hba` allow it).",
-                            "PostgreSQL uses port `5432`.",
-                            "Add this card again with a different name to connect another database."
+                            "Use an existing DB user, ideally read-only.",
+                            "The database must be reachable from this sandbox (`pg_hba`, firewall).",
+                            "Or paste a connection string into any box: it fills the whole form."
                         ]
                     }
                 },
@@ -639,10 +707,9 @@
                     "hint": "The agent queries your database with the mysql client.",
                     "guide": {
                         "steps": [
-                            "No external token: use an existing DB user, ideally a read-only one.",
-                            "Make sure the database is reachable from the sandbox (host/port open, grants allow it).",
-                            "MySQL uses port `3306`.",
-                            "Add this card again with a different name to connect another database."
+                            "Use an existing DB user, ideally read-only.",
+                            "The database must be reachable from this sandbox (grants, firewall).",
+                            "Or paste a connection string into any box: it fills the whole form."
                         ]
                     }
                 },

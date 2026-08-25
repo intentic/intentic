@@ -16,7 +16,7 @@
                     "logo": "reddit",
                     "description": "Post, comment and vote on Reddit as you.",
                     "category": "communication",
-                    "hint": "Use Log in to sign in once (the agent then acts as you on Reddit. Automating an account may be against Reddit's terms) use your own."
+                    "hint": "Sign in once with `Log in`: the agent then acts as you. Automating an account may be against Reddit's terms."
                 },
                 "fields": [],
                 "loginUrl": "https://www.reddit.com/login/",
@@ -31,7 +31,7 @@
                     "logo": "x",
                     "description": "Post, reply, like and follow on X as you.",
                     "category": "communication",
-                    "hint": "Use Log in to sign in once (the agent then acts as you on X. Automating an account may be against X's terms) use your own."
+                    "hint": "Sign in once with `Log in`: the agent then acts as you. Automating an account may be against X's terms."
                 },
                 "fields": [],
                 "loginUrl": "https://x.com/i/flow/login",
@@ -46,7 +46,7 @@
                     "logo": "youtube",
                     "description": "Watch, comment, like and subscribe as you.",
                     "category": "communication",
-                    "hint": "Use Log in to sign in once (the agent then acts as you on YouTube. Google is strict about automated logins) completing sign-in yourself in the window is what gets past that."
+                    "hint": "Sign in yourself in the live window: Google refuses automated logins."
                 },
                 "fields": [],
                 "loginUrl": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com%2F",

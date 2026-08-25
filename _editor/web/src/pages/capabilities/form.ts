@@ -30,6 +30,19 @@ import {
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 const URL_RE = /^https?:\/\/.+/i;
 
+/* WHAT A TYPED NAME BECOMES, rather than what it is refused for. "My GitHub" is not an invalid name, it is
+ * `My-GitHub` spelt the way a person spells things, so the form repairs it and SHOWS the repair (the page
+ * prints "saved as …" under the box while the two differ) instead of interrupting with a rule about hyphens.
+ * Case is kept: the daemon accepts it, and rewriting what someone typed further than necessary reads as the
+ * form arguing. The one thing that stays refusable is a name with nothing salvageable in it. */
+export const cleanName = (raw: string): string =>
+    raw
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/gu, `-`)
+        .replace(/[-_]{2,}/g, `-`)
+        .replace(/^[-_]+/, ``)
+        .replace(/[-_]+$/, ``);
+
 /** The form's values, keyed by field. A switch carries "on"/"off", the form speaks strings throughout. */
 export type FormValues = Record<string, string>;
 
@@ -45,37 +58,26 @@ const NOTHING_STORED: StoredSecrets = new Set<string>();
 export const keepsSecret = (field: CapabilityField, value: string | undefined, stored: StoredSecrets): boolean =>
     field.secret === true && (value ?? ``).trim().length === 0 && stored.has(field.key);
 
-// undefined means valid, here and in every rule below.
-export const nameError = (name: string): string | undefined => {
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-        return `Name is required.`;
-    }
-    if (!NAME_RE.test(trimmed)) {
-        return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
-    }
-    return undefined;
-};
+// undefined means valid, here and in every rule below. The character rule is gone: cleanName repairs what it
+// used to refuse, so the only unanswerable name is one with nothing in it.
+export const nameError = (name: string): string | undefined => (cleanName(name).length === 0 ? `Name is required.` : undefined);
 
-/* WHAT A FIELD REFUSES, one rule per line. Each answers about the value as typed and says so in the words the
- * person who typed it needs; the first that objects is what the field shows. Order is deliberate, an empty
- * required field has nothing else worth saying about it, so emptiness leads. */
+/* WHAT A FIELD REFUSES, one rule per line, and ONLY about a value that is actually there. Emptiness is not an
+ * error in this list any more: an untouched required box is a question not yet answered, not a mistake, and the
+ * two deserve different voices (see fieldMissing). Every rule answers about the value as typed and says so in
+ * the words the person who typed it needs; the first that objects is what the field shows. */
 type FieldRule = (field: CapabilityField, value: string) => string | undefined;
 
 const RULES: readonly FieldRule[] = [
-    (field, value) => (field.optional !== true && value.length === 0 ? `This field is required.` : undefined),
-    (field, value) =>
-        value.length > 0 && !field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(value)
-            ? `Enter a valid URL (e.g. https://…).`
-            : undefined,
+    (field, value) => (!field.secret && field.key.toLowerCase().includes(`url`) && !URL_RE.test(value) ? `Enter a valid URL (e.g. https://…).` : undefined),
     // A value lifted straight out of a FortiClient config is ciphertext, not a credential, the daemon rejects
     // it, so say so here rather than after a round-trip.
     (_field, value) =>
-        value.length > 0 && isForticlientCiphertext(value)
+        isForticlientCiphertext(value)
             ? `FortiClient encrypted this with a key tied to the machine that exported it: it can't be used. Enter the real value.`
             : undefined,
     (field, value) => {
-        if (value.length === 0 || field.key !== `port`) {
+        if (field.key !== `port`) {
             return undefined;
         }
         const port = Number(value);
@@ -86,7 +88,7 @@ const RULES: readonly FieldRule[] = [
      * learn you typed a comma. The bounds are imported rather than restated, so the box and the schema behind
      * it cannot disagree about what they accept. */
     (field, value) => {
-        if (value.length === 0 || field.key !== `contextTokens`) {
+        if (field.key !== `contextTokens`) {
             return undefined;
         }
         const tokens = Number(value);
@@ -96,12 +98,25 @@ const RULES: readonly FieldRule[] = [
     },
 ];
 
-export const fieldError = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined => {
+/* MISSING AND MALFORMED ARE DIFFERENT FAILURES, and the split is what lets the page speak to each in the right
+ * voice. An empty required field the reader tabbed past gets a quiet "Required" line: they have done nothing
+ * wrong yet, and a red border plus warning triangle before the first keystroke (the screenshot that started
+ * this) is a form scolding someone for reading it. A malformed value that IS there gets the red treatment on
+ * blur, because normalization has already repaired everything repairable and what remains is genuinely unusable.
+ * Emptiness turns red only once a submit has been attempted, when it stops being "not yet" and starts being
+ * "this is what's blocking you". */
+export const fieldMissing = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): boolean =>
+    !keepsSecret(field, value, stored) && field.optional !== true && (value ?? ``).trim().length === 0;
+
+export const fieldInvalid = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined => {
     // Left alone on an edit, there is nothing to refuse about a value the user is keeping.
     if (keepsSecret(field, value, stored)) {
         return undefined;
     }
     const trimmed = (value ?? ``).trim();
+    if (trimmed.length === 0) {
+        return undefined;
+    }
     for (const rule of RULES) {
         const message = rule(field, trimmed);
         if (message !== undefined) {
@@ -109,6 +124,28 @@ export const fieldError = (field: CapabilityField, value: string | undefined, st
         }
     }
     return undefined;
+};
+
+// The two folded back together, for the callers that only ask "is this field fine".
+export const fieldError = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined =>
+    fieldMissing(field, value, stored) ? `This field is required.` : fieldInvalid(field, value, stored);
+
+/* THE GREEN CHECK, for the values a rule can genuinely vouch for. Only fields with a verifying rule earn one:
+ * a check beside free text would claim the form knows things it doesn't. A 40-hex sha, a URL that parses, a
+ * port in range: each is the moment the reader would otherwise squint at what they pasted, answered where the
+ * eye already is. */
+export const fieldVerified = (field: CapabilityField, value: string | undefined): boolean => {
+    const trimmed = (value ?? ``).trim();
+    if (trimmed.length === 0 || field.secret === true || field.options !== undefined || field.boolean === true) {
+        return false;
+    }
+    if (field.key === `ref`) {
+        return isCommitSha(trimmed);
+    }
+    if (field.key === `port` || field.key === `contextTokens` || field.key.toLowerCase().includes(`url`)) {
+        return fieldInvalid(field, trimmed) === undefined;
+    }
+    return false;
 };
 
 // The fields shown as inputs (const-valued ones are baked into config, not rendered; when-gated ones only while
@@ -138,10 +175,10 @@ export const inlineField = (field: CapabilityField): boolean => {
     return field.options.reduce((total, option) => total + option.label.length, 0) <= INLINE_OPTIONS_BUDGET;
 };
 
-// Every visible field answered (a switch always holds one of its two positions) and a name the daemon will take.
-// A credential already stored counts as answered, see the header: on an edit, blank means keep.
+// Every visible field answered (a switch always holds one of its two positions) and a name the daemon will take
+// once cleaned. A credential already stored counts as answered, see the header: on an edit, blank means keep.
 export const formComplete = (entry: CapabilityCatalogEntry, values: FormValues, name: string, stored: StoredSecrets = NOTHING_STORED): boolean =>
-    NAME_RE.test(name.trim()) &&
+    NAME_RE.test(cleanName(name)) &&
     shownFields(entry, values).every(
         (field) => field.optional === true || keepsSecret(field, values[field.key], stored) || (values[field.key] ?? ``).trim().length > 0,
     );

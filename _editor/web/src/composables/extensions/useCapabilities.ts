@@ -1,6 +1,8 @@
 import { type AddCapabilityInput } from "@intentic-app/capability-catalog";
 import {
     CapabilitiesListSchema,
+    type CapabilityProbe,
+    CapabilityProbeSchema,
     type CapabilityRecommendation,
     type CapabilitySummary,
     type Marketplace,
@@ -41,6 +43,13 @@ export const browseMarketplace = async (url: string, token?: string): Promise<Ma
             body: JSON.stringify({ url, ...(token !== undefined && token !== `` ? { token } : {}) }),
         }),
     );
+
+/* TEST A CONNECTION'S SETTINGS BEFORE SAVING THEM. The daemon dials the service the way the connection would
+ * and hands back what it said (see the daemon's capabilities/probe.ts). Nothing is written, so this is a plain
+ * call rather than a mutation: there is no cache to invalidate, and a Test that refreshed the capability list
+ * would be a Test that looked like it had done something. */
+export const probeCapability = async (input: AddCapabilityInput): Promise<CapabilityProbe> =>
+    CapabilityProbeSchema.parse(await sandboxJson(`/capabilities/probe`, jsonBody(`POST`, input)));
 
 // Replace just a capability's secret (the Sandbox Secrets tab's pencil on a capability row). Mutation only, no
 // useQuery bundled, so a SecretField mount never refires /capabilities (the observer-refetch problem the
