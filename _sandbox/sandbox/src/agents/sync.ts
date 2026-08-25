@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { headSha, rebaseOnto } from "../git/changes.js";
+import { headSha, rebaseOnto, rebaseSince } from "../git/changes.js";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
 import { commitWorktreeRemainder } from "../git/root-repo.js";
 import type { AgentWorktrees } from "./worktrees.js";
@@ -23,16 +23,42 @@ import type { AgentWorktrees } from "./worktrees.js";
  * WHY THIS IS SAFE TO DO WITHOUT ASKING, three properties, and dropping any one of them would make it a
  * decision the user has to be in the room for:
  *
- *   · IT ABORTS. `rebaseOnto` is runOrAbort (git/changes.ts): a rebase that hits a conflict is rolled back and
- *     the worktree is byte-identical again. A branch that cannot be moved cleanly simply is not moved, and the
- *     turn runs exactly as it does today, the existing land-time conflict flow is still there behind it.
- *     Deliberately NOT resolved here: the user asked a question, and hijacking their turn to fix a merge is
- *     worse than the conflict.
+ *   · IT ABORTS. Both attempts below are runOrAbort (git/changes.ts): a rebase that hits a conflict is rolled
+ *     back and the worktree is byte-identical again, which is also what makes it safe to stack the second one
+ *     on the first. A branch that cannot be moved cleanly simply is not moved, and the turn runs exactly as it
+ *     does today, the existing land-time conflict flow is still there behind it. Deliberately NOT resolved
+ *     here: the user asked a question, and hijacking their turn to fix a merge is worse than the conflict.
  *   · IT LOSES NOTHING. A worktree is dirty between turns whenever the last one errored or was interrupted, and
  *     git refuses to rebase a dirty tree. The remainder is committed onto the branch first, the same
  *     provenance commit, with the same author, that land takes at the end of every turn.
  *   · IT STAYS ON THE BRANCH. Nothing here touches the main checkout: main's HEAD is READ, and every write
  *     lands in this conversation's own worktree and its own refs/heads/agent/<id>.
+ *
+ * WHAT IS REPLAYED IS ONLY WHAT MAIN HAS NOT ALREADY GOT, and getting that wrong is what made the rebase
+ * refuse on work that could not possibly conflict. The plain `git rebase` replays every commit the branch has
+ * that main lacks by ANCESTRY, and a landed conversation's commits are exactly that: land copies content into
+ * the main tree as an uncommitted patch, so when the user commits it, their commit carries the branch's
+ * content under a sha of its own and ancestry still calls the branch's originals unmerged. Replaying them onto
+ * a main line that already holds the result is where the conflicts came from, in two shapes:
+ *
+ *   · SLICING. Two turns land, C1 then C2, both editing the same lines; the user commits the main tree once,
+ *     so main holds the NET of the two. Replaying C1 alone then puts main's C1+C2 result against C1's
+ *     intermediate one over the same region, and git has no way to call that anything but a conflict.
+ *   · DRIFT. Main goes on to rewrite the file the landed work sits in. Even one commit then replays against
+ *     text that has moved, though its own content is already in.
+ *
+ * Both are the same mistake, and the registry already knows the rung that avoids it: `landedTip`, the commit
+ * whose content land handed to the main tree. Everything at or before it is in main by definition, which is
+ * the premise anchorOf and the turn's own span are built on (agents/agent-changes.ts, agent/agent.routes.ts).
+ * So a refused rebase is retried as `--onto <main> <landedTip>`: DROP the delivered prefix, replay only what
+ * the branch has taken since. On the common shape, a conversation whose whole branch has landed, that replays
+ * nothing and simply moves the branch to main's tip, which cannot fail.
+ *
+ * SECOND, not first, and that ordering is the safety property. Dropping the prefix is only sound while main
+ * really holds the content, and the case where it does not, a land the user discarded or never committed, is
+ * precisely the case where nothing in main collides with those commits and the plain rebase goes through. A
+ * refusal is the evidence. Where the conflict is in UNLANDED work instead, the retry hits the same wall and
+ * the repo reports `blocked` exactly as before.
  *
  * The one thing it cannot promise is that the result still WORKS: a rebase that applies cleanly line-by-line
  * can still leave the agent calling something main just renamed. The HUMAN is told (the `worktree` frame) and
@@ -97,10 +123,28 @@ const contains = async (dir: string, tip: string, head: string, git: GitRunner):
     }
 };
 
+/* THE RETRY, and the two conditions it will not move a branch without.
+ *
+ * `landedTip` has to still be an ancestor of the branch: a rewrite that orphaned it (a `merge main` the agent
+ * ran itself, an earlier retry) leaves a sha that names no rung of this history, and `--onto` past it would
+ * replay the wrong span. Read off HEAD rather than the caller's `tip`, because the provenance commit above may
+ * have moved it, and that commit is unlanded work the retry must keep.
+ *
+ * Absent, the conversation has never landed, so there is no delivered prefix to drop and the refusal stands:
+ * every commit on the branch is genuinely outstanding work. */
+const replayUnlanded = async (worktree: string, onto: string, landedTip: string | undefined, git: GitRunner): Promise<boolean> => {
+    if (landedTip === undefined || !(await contains(worktree, "HEAD", landedTip, git))) {
+        return false;
+    }
+    return (await rebaseSince(worktree, onto, landedTip, AGENT_GIT_AUTHOR, git)).ok;
+};
+
 const syncOne = async (
     worktrees: AgentWorktrees,
     id: string,
     repo: string,
+    // Where this repo's work last reached the main tree, the registry's own land bookkeeping. See replayUnlanded.
+    landedTip: string | undefined,
     title: string | undefined,
     git: GitRunner,
 ): Promise<RepoSync | undefined> => {
@@ -129,8 +173,12 @@ const syncOne = async (
     // this is the commit land would have taken anyway. Only on the path that is about to rebase, so an ordinary
     // turn on an up-to-date branch never grows a commit it did not ask for.
     await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
-    const rebased = await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git);
-    return rebased.ok ? behind : { ...behind, blocked: true };
+    if ((await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git)).ok) {
+        return behind;
+    }
+    // Refused. Everything the branch has already DELIVERED to the main tree is what it is most likely to have
+    // refused over, so try again without it (see the header, and replayUnlanded).
+    return (await replayUnlanded(worktree, head, landedTip, git)) ? behind : { ...behind, blocked: true };
 };
 
 /* Sync every repo of a conversation's composition. Returns only the repos that were BEHIND, an empty array is
@@ -141,10 +189,12 @@ const syncOne = async (
 export const syncConversation = async (
     worktrees: AgentWorktrees,
     id: string,
-    repos: readonly { readonly repo: string }[],
+    // The composition, each repo carrying the land rung the retry needs (agent/agent.routes.ts reads it off the
+    // registry entry: the worktree record holds only the base).
+    repos: readonly { readonly repo: string; readonly landedTip?: string | undefined }[],
     title: string | undefined,
     git: GitRunner = defaultGit,
 ): Promise<RepoSync[]> => {
-    const results = await Promise.all(repos.map(({ repo }) => syncOne(worktrees, id, repo, title, git)));
+    const results = await Promise.all(repos.map(({ repo, landedTip }) => syncOne(worktrees, id, repo, landedTip, title, git)));
     return results.filter((result) => result !== undefined);
 };

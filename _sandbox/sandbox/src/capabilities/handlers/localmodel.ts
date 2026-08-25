@@ -319,10 +319,12 @@ const gpuMemoryCapacity = async (): Promise<number> => {
         return 0;
     }
     const result = await exec("nvidia-smi", ["--query-gpu=memory.total", "--format=csv,noheader,nounits"]).catch(() => undefined);
-    if (result === undefined) {
-        return 0;
-    }
-    const devices = result.stdout
+    /* AN UNREADABLE ANSWER IS "NO GPU MEMORY", never a throw. This runs inside the background download job, so
+     * anything raised here is caught two frames up, written to the log as one line, and swallowed: the weights
+     * finish arriving and the server is simply never started, on a card that goes on saying it is downloading.
+     * A probe that cannot answer has no business being the reason a model does not serve, and the budget it
+     * feeds already treats 0 as "size against host memory alone", which is the honest reading of not knowing. */
+    const devices = (result?.stdout ?? "")
         .split("\n")
         .map((line) => Number(line.trim()))
         .filter(Number.isFinite);

@@ -9,6 +9,7 @@ import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../platform/perf.js";
 import { noIsolation } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import type { IsolatedAgent } from "./agents-store.js";
 import { landAgent } from "./land.js";
 import { syncConversation } from "./sync.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./worktrees.js";
@@ -52,8 +53,32 @@ const setup = async (): Promise<{ work: string; worktree: string; worktrees: Age
     return { work, worktree: worktrees.worktreeDir("c1", "root"), worktrees };
 };
 
-const sync = (worktrees: AgentWorktrees): ReturnType<typeof syncConversation> =>
-    syncConversation(worktrees, "c1", [{ repo: "root" }], "fix the thing");
+const sync = (worktrees: AgentWorktrees, landedTip?: string): ReturnType<typeof syncConversation> =>
+    syncConversation(worktrees, "c1", [{ repo: "root", landedTip }], "fix the thing");
+
+// The registry row the real land reads, so the tests below can produce `landedTip` the way a turn does rather
+// than assert against a sha they wrote themselves.
+const entryOf = (base: string, landedTip?: string): IsolatedAgent => ({
+    id: "c1",
+    branch: "agent/c1",
+    title: "fix the thing",
+    provider: "claude",
+    harness: "native",
+    repos: [{ repo: "root", base, ...(landedTip === undefined ? {} : { landedTip }) }],
+    status: "idle",
+    costUsd: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    createdAt: 0,
+    updatedAt: 0,
+});
+
+// One turn's worth of work, committed on the branch the way land's provenance commit does.
+const turn = async (worktree: string, write: () => Promise<void>): Promise<void> => {
+    await write();
+    await sh(worktree, "add", "-A");
+    await commit(worktree, "agent work");
+};
 
 test("reports nothing when the branch already sits on the main line", async () => {
     const { worktrees } = await setup();
@@ -186,6 +211,119 @@ test("rolls a conflicting rebase back and leaves the branch on its old base", as
     expect(await sh(worktree, "status", "--porcelain")).toBe("");
     expect(await sh(worktree, "rev-parse", "HEAD^")).toBe(before);
     expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nAGENT\nfour\nfive\n");
+});
+
+/* THE FAILURE THE RETRY WAS WRITTEN FOR, end to end through the real land: work lands, the user asks for a
+ * correction in the same conversation, that lands too, the user commits, and the rebase at the top of the next
+ * turn refused, over work already sitting in the main tree under the user's own name.
+ *
+ * The mechanism is SLICING, and it needs one commit of the user's to cover more than one of the agent's, which
+ * is the ordinary case: a land leaves its delta uncommitted, so a second land stacks onto the same undisturbed
+ * working tree and one `git commit` takes both. Turn one's commit takes `five` to AGENT-a and turn two's takes
+ * it to AGENT-b, but the user's commit carries only the NET. Replaying turn one alone then puts AGENT-a against
+ * AGENT-b over the same line, and no rebase can call that anything but a conflict, which left the conversation
+ * stranded on a base that only got older.
+ *
+ * (Committing after EVERY land is the shape that survives, and only by luck: each user commit is then
+ * patch-identical to one agent commit, and git's own cherry-pick detection drops it. Nothing about that is a
+ * property anyone can rely on, as the next test shows, main only has to drift by a character to lose it.) */
+test("a landed branch the user has committed moves onto the main line instead of refusing", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT-a\n"));
+    const first = await landAgent(worktrees, entryOf(base));
+    expect(first.landed).toBe(true);
+    // The correction, asked in the same conversation, on the same line. It lands onto a working tree that still
+    // holds the first land, uncommitted.
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT-b\n"));
+    const second = await landAgent(worktrees, entryOf(base, first.repos[0]?.landedTip));
+    expect(second.landed).toBe(true);
+    // One commit over both turns, which is what the Changes panel offers: the review boundary is the user's.
+    await sh(work, "add", "-A");
+    await commit(work, "user reviews and commits");
+    const main = await sh(work, "rev-parse", "HEAD");
+
+    const [root] = await sync(worktrees, second.repos[0]?.landedTip);
+    expect(root?.blocked).toBeUndefined();
+    // Both turns are already in the main tree, so nothing of the branch is replayed: it simply IS the main
+    // line now. That count is also what distinguishes the two paths, a plain rebase would have left the two
+    // landed commits sitting on top as replayed copies of content main already holds.
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(main);
+    expect(await sh(worktree, "rev-list", "--count", `${main}..HEAD`)).toBe("0");
+    expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT-b\n");
+});
+
+/* Only the DELIVERED prefix is dropped. Work the agent has done since its last land is the whole reason the
+ * branch still exists, so it is replayed onto the main line exactly as before, and the retry is worth nothing
+ * if it quietly eats it. Main drifts here (the user tidied the landed line before committing), which is what
+ * makes the plain rebase refuse over a commit whose content has already been delivered. */
+test("the retry keeps everything the agent has done since its last land", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n"));
+    const landed = await landAgent(worktrees, entryOf(base));
+    expect(landed.landed).toBe(true);
+    // The user edits the landed line before committing it: the main line now holds this work, but not verbatim.
+    await writeFile(join(work, "app.ts"), "one\ntwo\nthree\nfour\nAGENT, tidied\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user commits, with a tweak");
+    const main = await sh(work, "rev-parse", "HEAD");
+    // And the agent has kept working since, in a file nobody else has touched. Never landed.
+    await turn(worktree, () => writeFile(join(worktree, "new.ts"), "outstanding\n"));
+
+    const [root] = await sync(worktrees, landed.repos[0]?.landedTip);
+    expect(root?.blocked).toBeUndefined();
+    // Exactly one commit on top of the main line: the outstanding one. The landed one is gone, its content
+    // being the user's commit underneath.
+    expect(await sh(worktree, "rev-list", "--count", `${main}..HEAD`)).toBe("1");
+    expect(await sh(worktree, "rev-parse", "HEAD^")).toBe(main);
+    expect(await readFile(join(worktree, "new.ts"), "utf8")).toBe("outstanding\n");
+    expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT, tidied\n");
+});
+
+/* A conflict in UNLANDED work is a real one, and the retry must not paper over it: dropping the landed prefix
+ * leaves that commit to be replayed against the user's edit either way. Blocked, rolled back, byte-identical,
+ * and the turn runs on its old base, which is what the land-time conflict flow is still there for. */
+test("still refuses when the conflict is in work that has not landed", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    await turn(worktree, () => writeFile(join(worktree, "other.ts"), "agent touched this\n"));
+    const landed = await landAgent(worktrees, entryOf(base));
+    expect(landed.landed).toBe(true);
+    await sh(work, "add", "-A");
+    await commit(work, "user commits the landed work");
+    // Outstanding work on a line the user then rewrites for themselves.
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nAGENT\nfour\nfive\n"));
+    const before = await sh(worktree, "rev-parse", "HEAD");
+    await writeFile(join(work, "app.ts"), "one\ntwo\nUSER\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+
+    const [root] = await sync(worktrees, landed.repos[0]?.landedTip);
+    // `other.ts` is in the overlap too: the agent wrote it and the user committed it, which is what the retry
+    // drops. It is `app.ts`, the unlanded half, that has nowhere to go.
+    expect(root).toMatchObject({ repo: "root", blocked: true, overlap: ["app.ts", "other.ts"] });
+    expect(await sh(worktree, "status", "--porcelain")).toBe("");
+    expect(await sh(worktree, "rev-parse", "HEAD")).toBe(before);
+    expect(await readFile(join(worktree, "app.ts"), "utf8")).toBe("one\ntwo\nAGENT\nfour\nfive\n");
+});
+
+/* The rung has to be an ancestor of the branch to name a span at all. A conversation that merged the main line
+ * into itself, or that an earlier retry already rewrote, holds a `landedTip` pointing at a commit this history
+ * no longer contains, and `--onto` past it would replay something nobody asked for. Refuse instead, exactly as
+ * a conversation that has never landed does. */
+test("ignores a landedTip the branch no longer descends from", async () => {
+    const { work, worktree, worktrees } = await setup();
+    const before = await sh(worktree, "rev-parse", "HEAD");
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nAGENT\nfour\nfive\n"));
+    await writeFile(join(work, "app.ts"), "one\ntwo\nUSER\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user work");
+
+    // A sha off another line entirely: real, resolvable, and not an ancestor of anything here.
+    const [root] = await sync(worktrees, await sh(work, "rev-parse", "HEAD"));
+    expect(root).toMatchObject({ repo: "root", blocked: true, overlap: ["app.ts"] });
+    expect(await sh(worktree, "rev-parse", "HEAD^")).toBe(before);
 });
 
 test("leaves a retired checkout alone", async () => {

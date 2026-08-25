@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
@@ -18,16 +19,24 @@ import type { CapabilityCtx } from "../capability.js";
  * The custom-URL source is used throughout because it is the branch a test can serve itself; the Hugging Face
  * branch differs only in who hands over the stream (hub's blob, sliced to the same offset). */
 
-// `llama-server --version` answers, so the handler takes its real path on a runner that has no llama-server:
-// without this the whole suite would exercise the "stored, rebuild required" branch and assert nothing.
+/* `llama-server --version` answers, so the handler takes its real path on a runner that has no llama-server:
+ * without this the whole suite would exercise the "stored, rebuild required" branch and assert nothing.
+ *
+ * IT CARRIES `promisify.custom`, and leaving that off is not a detail: the handler promisifies `execFile`
+ * once at module load, and the REAL one defines that symbol to resolve `{ stdout, stderr }`. A bare callback
+ * function has no such symbol, so `promisify` falls back to the plain convention and resolves the first
+ * callback value instead, a bare string. Every caller reading `.stdout` off that then reads `undefined`.
+ *
+ * It cost this file seven failures that only appear on a machine with a GPU. `gpuMemoryCapacity` returns early
+ * unless SANDBOX_GPU is `all`, so on a GPU-less runner the mock is never promisified at all and the suite is
+ * green; where the sandbox HAS one, `result.stdout.split` threw, the download job swallowed it into
+ * `logger.warn`, and every test that waits for the server to start timed out with nothing naming the cause. */
 vi.mock("node:child_process", async (importOriginal) => {
     const actual = await importOriginal<typeof import("node:child_process")>();
-    return {
-        ...actual,
-        execFile: (_file: string, _args: readonly string[], done: (error: Error | null, stdout: string, stderr: string) => void) => {
-            done(null, "", "");
-        },
+    const execFile = (_file: string, _args: readonly string[], done: (error: Error | null, stdout: string, stderr: string) => void): void => {
+        done(null, "", "");
     };
+    return { ...actual, execFile: Object.assign(execFile, { [promisify.custom]: async () => ({ stdout: "", stderr: "" }) }) };
 });
 
 const { localModelHandler } = await import("./localmodel.js");

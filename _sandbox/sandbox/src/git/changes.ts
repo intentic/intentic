@@ -703,9 +703,22 @@ export const mergeCommit = async (dir: string, sha: string, author: Author, git:
 export const rebaseOnto = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
     runOrAbort(dir, [...identity(author), "rebase", sha], ["rebase", "--abort"], git);
 
-// Drop a commit: replay everything after it onto its parent (`rebase --onto <sha>^ <sha> HEAD`), removing it.
+/* Rebase only what the branch has taken SINCE `since` onto `sha` (`rebase --onto <sha> <since>`): everything at
+ * or before `since` is DROPPED from the branch rather than replayed. `since` must be an ancestor of HEAD, and it
+ * degenerates to a plain move when it IS HEAD, the branch is reset onto `sha` and nothing is replayed at all.
+ *
+ * No branch argument, deliberately. Naming one makes git check it out first, and `HEAD` names a commit rather
+ * than a branch, so passing it detaches the head and the rewrite lands on nothing. Omitted, the rebase moves
+ * the branch that is checked out, which is the only branch any caller here means. */
+export const rebaseSince = async (dir: string, sha: string, since: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
+    runOrAbort(dir, [...identity(author), "rebase", "--onto", sha, since], ["rebase", "--abort"], git);
+
+/* Drop a commit: replay everything after it onto its parent (`rebase --onto <sha>^ <sha>`), removing it. The
+ * same shape as rebaseSince, and with the same reason for naming no branch: `HEAD` there is a commit, not a
+ * branch, so git checked it out and left the drop on a DETACHED head with the branch ref still on the old
+ * history. The panel then showed the commit gone, and it came back the moment anything looked at the branch. */
 export const dropCommit = async (dir: string, sha: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> =>
-    runOrAbort(dir, [...identity(author), "rebase", "--onto", `${sha}^`, sha, "HEAD"], ["rebase", "--abort"], git);
+    runOrAbort(dir, [...identity(author), "rebase", "--onto", `${sha}^`, sha], ["rebase", "--abort"], git);
 
 /* The graph/log view: commits ACROSS ALL REFS (--all, so branch topology is visible), newest first, one page at
  * a time. Fields are delimited with US (\x1f) and records with RS (\x1e) so subjects and multi-line bodies

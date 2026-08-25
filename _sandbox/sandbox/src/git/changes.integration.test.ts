@@ -405,11 +405,17 @@ test("dropCommit removes a commit, replaying later ones onto its parent", async 
     await sh(dir, "add", "-A");
     await sh(dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add c"); // C3
 
+    const branch = await sh(dir, "branch", "--show-current");
     const result = await dropCommit(dir, drop, author);
     expect(result).toEqual({ ok: true });
     expect(existsSync(join(dir, "b.txt"))).toBe(false); // the dropped commit's file is gone
     expect(existsSync(join(dir, "c.txt"))).toBe(true); // the later commit survived
     expect(await sh(dir, "rev-list", "--count", "HEAD")).toBe("2");
+    // ON THE BRANCH, which is the half a working tree cannot show. Passing `HEAD` as the rebase's branch
+    // argument checks out a commit, so the drop landed on a detached head and the branch ref kept the old
+    // history: the panel showed the commit gone and it returned the moment anything read the branch.
+    expect(await sh(dir, "branch", "--show-current")).toBe(branch);
+    expect(await sh(dir, "rev-list", "--count", branch)).toBe("2");
 });
 
 test("changedFiles reports a staged rename with its original path", async () => {

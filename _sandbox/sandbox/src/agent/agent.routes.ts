@@ -301,8 +301,20 @@ async function* runConversationTurn(
             if (input.worktreeBase !== undefined) {
                 return [];
             }
+            /* Read fresh on every call, not captured once: this closure runs again at each card settle, and a
+             * land in between is exactly what moves `landedTip`. The composition comes from the worktree record
+             * (which repos this conversation spans) and the rung from the registry (how far each one's work has
+             * reached the main tree), because the sync drops a delivered prefix rather than replaying it into a
+             * conflict, and the worktree record does not carry that sha. */
+            const current = services.agents.entry(conversationId);
+            const landed = new Map((current?.repos ?? []).map((composed) => [composed.repo, composed.landedTip]));
             const synced = await services.perf.track("agent.sync", { id: conversationId }, () =>
-                syncConversation(services.agentWorktrees, conversationId, worktree.repos, services.agents.entry(conversationId)?.title),
+                syncConversation(
+                    services.agentWorktrees,
+                    conversationId,
+                    worktree.repos.map(({ repo }) => ({ repo, landedTip: landed.get(repo) })),
+                    current?.title,
+                ),
             );
             const moved = synced.filter((repo) => repo.blocked !== true);
             if (moved.length === 0) {
