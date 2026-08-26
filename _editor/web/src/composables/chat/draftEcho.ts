@@ -1,5 +1,5 @@
-import { computed, type ComputedRef, shallowRef } from "vue";
-import { showsPanel } from "../floating";
+import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { floatingWindowPanel, showsPanel } from "../floating";
 import { useSandbox } from "../sandbox/useSandbox";
 
 /* HALF-WRITTEN MESSAGES, TOLD TO THE WINDOWS THAT ARE NOT HOLDING THEM.
@@ -16,13 +16,17 @@ import { useSandbox } from "../sandbox/useSandbox";
  *   · a card that survived had nothing to say about itself: no unsent mark, and "New agent" for a name, while
  *     the message that would have named it sat in the other window.
  *
- * So the window that DRAWS the chat publishes, on a channel of its own, which conversations hold unsent words
- * and the first few of them. Every other window joins its board against that. Two rules keep it honest:
- *   · only the drawing window speaks (`showsPanel`), and only it is believed, a window drawing the panel
- *     reads its own conversations and ignores every echo, so there is no arrangement in which a stale note
- *     outranks the composer itself;
- *   · a window with nothing to say never speaks, which is what keeps a booting window from blanking the note a
- *     live one published a moment earlier.
+ * So when the chat floats, the window that HOLDS it publishes, on a channel of its own, which conversations
+ * hold unsent words and the first few of them. Every other window joins its board against that. Two rules keep
+ * it honest:
+ *   · only the window POSITIVELY holding the floating chat speaks. A regular window briefly believes it draws
+ *     every panel while booting, before the holder's roll-call arrives, so `showsPanel` is not proof of
+ *     ownership and letting it publish makes a half-restored strip overwrite the real one;
+ *   · the holder's FIRST snapshot is published even when empty. A reload is a new JS realm, so suppressing its
+ *     empty snapshot leaves the last realm's non-empty note alive on every dashboard: the stale "Unsent
+ *     message" badge whose chat opens onto an empty composer.
+ * A window drawing the docked chat reads its own conversations and ignores every echo, so docked chats need no
+ * publisher at all and no stale note can outrank the composer itself.
  *
  * WHAT RIDES IT IS THE PREVIEW, NOT THE MESSAGE. The board only ever draws the first few words (a card needs a
  * name), and a half-written message is the most private thing this app holds: there is no reason for the whole
@@ -81,25 +85,33 @@ const NOTHING: ReadonlyMap<string, string> = new Map();
  *  the chat itself, since then its own conversations are the answer and an echo could only be a stale copy. */
 export const elsewhereDrafts: ComputedRef<ReadonlyMap<string, string>> = computed(() => (shows.value ? NOTHING : heard.value));
 
-// The last thing this window published, so a roll-call can be answered without waiting for a keystroke.
+// The latest snapshot this window could publish, so taking ownership and a roll-call can both answer without
+// waiting for a keystroke. It is filled before the floating route claims the panel during boot.
 let published: readonly UnsentDraft[] = [];
 
-/** Say what this window's composers are holding. Called by the tab store on every change, and a no-op for a
- *  window that has never had anything to say: a fresh window announcing "nothing unsent" would otherwise
- *  retract a note the window that actually holds the chat published a moment before. */
+/** Say what this window's composers are holding. Called by the tab store on every change. Every window keeps
+ *  its latest snapshot, but only the floating chat's proven holder puts one on the wire. */
 export const publishDrafts = (drafts: readonly UnsentDraft[]): void => {
-    if (drafts.length === 0 && published.length === 0) {
-        return;
-    }
     published = drafts;
-    post({ kind: `drafts`, sandbox: useSandbox().activeSandboxId.value, drafts });
+    if (floatingWindowPanel.value === `chat`) {
+        post({ kind: `drafts`, sandbox: useSandbox().activeSandboxId.value, drafts });
+    }
 };
+
+// The floating route claims the panel after this module and the tab store have booted. That positive ownership
+// transition publishes the restored snapshot immediately, INCLUDING empty: it retracts any note left by the
+// previous realm when this window is a reload of the floating chat.
+watch(floatingWindowPanel, (panel) => {
+    if (panel === `chat`) {
+        post({ kind: `drafts`, sandbox: useSandbox().activeSandboxId.value, drafts: published });
+    }
+});
 
 /** Another window's note, arriving here: the one way in, so a test hands one over by the path the channel
  *  uses (the seam summon.ts keeps for the same reason). */
 export const receiveDraftNote = (note: DraftNote): void => {
     if (note.kind === `roll`) {
-        if (shows.value && published.length > 0) {
+        if (floatingWindowPanel.value === `chat`) {
             post({ kind: `drafts`, sandbox: useSandbox().activeSandboxId.value, drafts: published });
         }
         return;

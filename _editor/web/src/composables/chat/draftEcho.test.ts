@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { effectScope, nextTick } from "vue";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The sandbox id is the note's own scope (a summons keeps the same one), so it is pinned rather than left as a
 // fresh ref per call: every case below is about whether a note is BELIEVED, and half of that is which sandbox
@@ -9,8 +11,30 @@ vi.mock("../sandbox/useSandbox", async () => {
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
 
-import { draftPreview, elsewhereDrafts, receiveDraftNote } from "./draftEcho";
-import { receiveFloatingNote } from "../floating";
+interface PostedNote {
+    readonly kind: string;
+    readonly sandbox?: string;
+    readonly drafts?: readonly { readonly id: string; readonly preview: string }[];
+}
+
+const posted: PostedNote[] = [];
+
+class FakeChannel {
+    constructor(private readonly name: string) {}
+    postMessage(note: PostedNote): void {
+        if (this.name === `intentic.chat-drafts`) {
+            posted.push(note);
+        }
+    }
+    addEventListener(): void {
+        // Notes arrive through receiveDraftNote, the same door the channel listener uses.
+    }
+}
+
+vi.stubGlobal(`BroadcastChannel`, FakeChannel);
+
+const { draftPreview, elsewhereDrafts, publishDrafts, receiveDraftNote } = await import("./draftEcho");
+const { claimFloating, receiveFloatingNote } = await import("../floating");
 
 /* THE CHAT IS IN A WINDOW OF ITS OWN, as the rest of the app hears it: one heartbeat from that window
  * (floating.ts's own seam), which is the whole of what makes this window stop drawing the panel and start
@@ -18,9 +42,14 @@ import { receiveFloatingNote } from "../floating";
 const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
 const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
 
+beforeEach(() => {
+    posted.length = 0;
+});
+
 afterEach(() => {
     dock();
     receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
+    publishDrafts([]);
 });
 
 /* The name a card wears while nothing else has named it. Short enough for a lane, long enough to tell two
@@ -84,5 +113,32 @@ describe(`elsewhereDrafts`, () => {
         receiveDraftNote({ kind: `drafts`, sandbox: `sb2`, drafts: [{ id: `c1`, preview: `someone else's work` }] });
 
         expect(elsewhereDrafts.value.size).toBe(0);
+    });
+});
+
+/* WHO MAY SPEAK FOR A COMPOSER. `showsPanel` is optimistic during boot: until a floating holder's first beat
+ * arrives, every ordinary window briefly reads as though it draws the chat. The holder identity is the proof;
+ * it also distinguishes a reloaded holder, whose empty restored snapshot must retire its predecessor's note. */
+describe(`draft publisher ownership`, () => {
+    it(`does not let a docked or booting window overwrite the floating chat's snapshot`, () => {
+        publishDrafts([{ id: `c1`, preview: `a stale local copy` }]);
+        receiveDraftNote({ kind: `roll` });
+
+        expect(posted).toEqual([]);
+    });
+
+    it(`publishes an empty first snapshot when a reloaded floating chat takes ownership`, async () => {
+        popOut();
+        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [{ id: `c1`, preview: `already sent` }] });
+        // The replacement realm restored the authoritative chat with an empty composer before its route
+        // claimed the panel. This was suppressed, leaving the note above alive on the dashboard.
+        publishDrafts([]);
+
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, vi.fn()));
+        await nextTick();
+
+        expect(posted.at(-1)).toEqual({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
+        scope.stop();
     });
 });
