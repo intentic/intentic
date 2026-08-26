@@ -67,7 +67,7 @@ export const faqGroups: FaqGroup[] = [
                 id: "run-a-fleet",
                 question: "Can I run a separate agent for each job?",
                 answer: [
-                    "Yes, that's the intended shape: a migrations agent, a release captain, a support triager, each with the access its job needs. Automations wake them on a schedule or an event.",
+                    "Yes, that's the intended shape: a migrations agent, a storefront maintainer, a support agent, each with the access its job needs. Automations wake them on a schedule or an event.",
                 ],
                 more: { label: "Specialize a sandbox until it does a job alone", href: docsHref("autonomous-employees") },
             },
