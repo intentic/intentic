@@ -36,6 +36,7 @@ import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
 import { startExtensionUpdateWatch } from "./extensions/extension-updates.js";
 import { runGitMaintenance } from "./git/maintenance.js";
+import { pinTmuxServer, reportTmuxServerNamespace } from "./terminal/tmux-server.js";
 import { prepushCheck } from "./prepush/prepush.js";
 import { ensureRepoGitDirs } from "./git/repo-git-dirs.js";
 import { commitRootBaseline, ensureLocalRootRepo, ensureRootRepo } from "./git/root-repo.js";
@@ -910,6 +911,16 @@ const main = async (): Promise<void> => {
                 ),
             60 * 60 * 1000,
         ).unref();
+    }
+
+    /* The tmux server, forked HERE so every pane in this container inherits the daemon's mounts and not some
+     * conversation's private `/work` (terminal/tmux-server.ts says what that cost). Before any turn can run,
+     * because the whole point is to be the first client. Then checked on a slow loop: a server that predates
+     * this daemon cannot be pinned retroactively, and a wrong one is invisible from inside the terminals it
+     * serves. */
+    if (role.roots) {
+        void pinTmuxServer(logger).then(() => reportTmuxServerNamespace(logger));
+        setInterval(() => void reportTmuxServerNamespace(logger), 15 * 60 * 1000).unref();
     }
 
     // Git housekeeping (git/maintenance.ts): pack the refs and loose objects a fleet of conversations mints,

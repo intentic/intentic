@@ -1,5 +1,6 @@
-import { access, lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { access, lstat, mkdir, readdir, readFile, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join } from "node:path";
+import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { commitWorktreeRemainder } from "../git/root-repo.js";
@@ -245,6 +246,54 @@ export const createAgentWorktrees = (
     // skipped in createOne, an unborn HEAD has nothing to branch from.
     const liveRepos = async (): Promise<string[]> => ["root", ...(await discoverRepos(workspace.root))];
 
+    /* WHY AN AGENT WORKTREE NEVER CHECKS OUT THE STATE DIR, and what it cost to find out.
+     *
+     * `.intentic` is workspace state that every namespace SHARES: isolation.ts binds the main tree's copy over
+     * the worktree's own, so a draft the agent writes and a transcript the daemon appends are one file and not
+     * two. Part of it is also VERSIONED — the owner's settings, personas, workflows, the environment overlay,
+     * an extension they wrote (history.ts trackedStateExcludes, off the contract's `versioned` allowlist),
+     * because a change to how this sandbox behaves belongs in review and in `git log`.
+     *
+     * Those two facts collide, and the collision eats work. Every worktree's git believes it owns the files at
+     * that path, and behind the path there is exactly ONE directory: a checkout, a rebase or a reset in ANY
+     * conversation writes that branch's committed copy straight through the bind mount and over what the
+     * workspace is actually running, and the next `add -A` commits the stale copy back. That is not
+     * hypothetical. One conversation shipped a workspace extension at 21:58; a second, still based on the
+     * commit before it, was rebased an hour later, its checkout put the old file back, and its land committed
+     * the revert — 949 lines removed, under a subject about something else entirely, authored by nobody who
+     * meant it.
+     *
+     * So the state dir is kept out of the checkout altogether. SPARSE-CHECKOUT rather than a plain
+     * skip-worktree bit because git's own checkout machinery understands it: the index still carries the
+     * versioned entries and a rebase moves them forward exactly as it does any other path, nothing is ever
+     * written to disk for them, and `git status` in the worktree cannot see the shared tree at all. The mount
+     * point the bind needs is recreated by the isolation script's own `mkdir -p`, so removing the directory
+     * here costs the mount nothing.
+     *
+     * Root repo only: the state dir is the ROOT repo's content, and a nested repo's worktree has none.
+     * Converged rather than set once, because every worktree that predates this ran without it; the config
+     * read is the guard that keeps it a single cheap spawn on every turn after the first.
+     */
+    const excludeSharedState = async (dir: string): Promise<void> => {
+        const already = await git(dir, ["config", "--get", "core.sparseCheckout"])
+            .then(({ stdout }) => stdout.trim() === "true")
+            .catch(() => false);
+        if (already) {
+            return;
+        }
+        const printed = (await git(dir, ["rev-parse", "--git-path", "info/sparse-checkout"])).stdout.trim();
+        const target = isAbsolute(printed) ? printed : join(dir, printed);
+        await mkdir(dirname(target), { recursive: true });
+        // Everything at the root, then the one exclusion. `--no-cone` spelling: cone mode takes directories to
+        // KEEP and cannot express "all of it except this".
+        await writeFile(target, `/*\n!/${STATE_DIR}/\n`);
+        await git(dir, ["config", "core.sparseCheckout", "true"]);
+        // Applies the pattern to the checkout that is already on disk: the state dir's files leave the worktree
+        // and their index entries take git's skip-worktree bit. Last, so a failure above leaves sparseCheckout
+        // off and the worktree in the state it was already in rather than half-applied.
+        await git(dir, ["read-tree", "-mu", "HEAD"]);
+    };
+
     const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
         const main = mainDir(repo);
         const base = pinned ?? (await headSha(main));
@@ -260,12 +309,22 @@ export const createAgentWorktrees = (
         } else {
             await git(main, ["worktree", "add", "-b", branch, target, base]);
         }
+        if (repo === "root") {
+            await excludeSharedState(target);
+        }
         return { repo, base };
     };
 
     const repairOne = async (id: string, repo: string): Promise<void> => {
         const target = worktreeDir(id, repo);
         if (await exists(join(target, ".git"))) {
+            // Ahead of the early return: a healthy worktree is exactly the one that still needs converging, and
+            // this is the only line every turn of every existing conversation passes through.
+            if (repo === "root") {
+                await excludeSharedState(target).catch((error: unknown) =>
+                    logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"),
+                );
+            }
             return;
         }
         /* Past the early return is the RESTORE path, so the branch may be parked, an archived agent the user
@@ -283,11 +342,17 @@ export const createAgentWorktrees = (
             await git(mainDir(repo), ["worktree", "repair", target]).catch((error: unknown) =>
                 logger.warn({ err: error, repo }, "agents: worktree repair failed"),
             );
-            return;
+        } else {
+            await git(mainDir(repo), ["worktree", "add", target, `agent/${id}`]).catch((error: unknown) =>
+                logger.warn({ err: error, repo }, "agents: worktree re-attach failed"),
+            );
         }
-        await git(mainDir(repo), ["worktree", "add", target, `agent/${id}`]).catch((error: unknown) =>
-            logger.warn({ err: error, repo }, "agents: worktree re-attach failed"),
-        );
+        // A restored checkout is a fresh one as far as the state dir goes: `worktree add` writes the whole tree.
+        if (repo === "root") {
+            await excludeSharedState(target).catch((error: unknown) =>
+                logger.warn({ err: error, repo }, "agents: state-dir exclusion failed"),
+            );
+        }
     };
 
     // Which of these link paths git will keep out of a commit, asked of git rather than assumed, because the

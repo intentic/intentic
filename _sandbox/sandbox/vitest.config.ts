@@ -23,7 +23,12 @@ export default defineConfig({
     test: {
         projects: [
             { resolve: { alias: sourceAlias }, test: UNIT_SUITE },
-            { resolve: { alias: sourceAlias }, test: INTEGRATION_SUITE },
+            /* The integration suites here are the ones that drive real tmux, and on this sandbox the default
+             * socket is the daemon's own server — the one the owner's terminal tabs live in. The fence puts a
+             * private socket under the whole project (src/testing/tmux-fence.ts says what it costs without
+             * one). Stated on the project rather than in each file because the suites that reach tmux do it
+             * through production code and do not know they have. */
+            { resolve: { alias: sourceAlias }, test: { ...INTEGRATION_SUITE, setupFiles: [here(`./src/testing/tmux-fence.ts`)] } },
         ],
     },
 });
