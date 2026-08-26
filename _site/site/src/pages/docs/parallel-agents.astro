@@ -19,6 +19,16 @@ const layout = `/work                     the shared tree: what you see in the W
 const mount = `/work                     THIS conversation's worktree, mounted over the workspace root
 /mnt/intentic-main        the shared tree, still reachable on purpose`;
 
+const childCli = [
+    "agents spawn --provider cursor --model composer-2.5 --description \"Port the parser\" \\",
+    "  'Port packages/parser, update its tests, and report the files you changed'",
+    "",
+    "agents wait <child-id>                  # until it needs input or finishes",
+    "agents answer <child-id> 'Use TOML 1.0' # factual questions only",
+    "agents send <child-id> 'Also cover CRLF input'",
+    "agents list",
+].join("\n");
+
 const lanes = [
     {
         name: `Attention`,
@@ -63,6 +73,73 @@ const lanes = [
     <h3>It is rebased before every turn</h3>
     <p>
         A conversation can sit for hours between turns while the main line moves under it, so before a turn starts the daemon rebases the branch onto it. If the rebase would conflict it is rolled back and the turn runs from where it was. This is why a resumed conversation reads today's code instead of writing a delta against a base that no longer exists.
+    </p>
+
+    <h2>When an agent delegates</h2>
+    <p>
+        Parallel agents do not have to be opened by a person. A turn may split its own work into children, and intentic follows two different
+        mechanisms on one <strong>Subagents</strong> roster:
+    </p>
+    <table>
+        <thead>
+            <tr><th>Child</th><th>Execution</th><th>Isolation</th><th>Provider</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Runtime subagent</strong></td>
+                <td>Created inside the current harness, such as Claude Code's Agent tool.</td>
+                <td>Part of the parent turn; shares its working tree.</td>
+                <td>The parent's provider and harness.</td>
+            </tr>
+            <tr>
+                <td><strong>Full child agent</strong></td>
+                <td>Created by intentic's cross-runtime meta-harness.</td>
+                <td>Its own conversation, session, branch and isolated worktree.</td>
+                <td>Any connected provider and harness the parent names.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Runtime subagents</h3>
+    <p>
+        A runtime-native child stays inside the provider's own agent loop. The daemon listens to that harness's task and lifecycle events,
+        reads the child's transcript when the runtime exposes one, and nests its thinking and tool calls under the parent card. This is the
+        lightest way to research or divide a task when every child should work in the same checkout.
+    </p>
+
+    <h3>Full child agents: the meta-harness</h3>
+    <p>
+        The meta-harness sits above vendor runtimes. A Claude turn can start Cursor, a Codex turn can start Claude, and a shell-capable ACP
+        agent can start either, because the child enters through the daemon's ordinary conversation engine rather than through the parent's
+        SDK. It is watchable from another window, stoppable like any agent, independently reviewable, and allowed to outlive the turn that
+        started it.
+    </p>
+    <p>
+        Claude Code receives <strong>spawn</strong> and <strong>wait</strong> as agent tools, Cursor receives equivalent custom tools, and
+        every runtime with a shell receives the same service through the <code>agents</code> command:
+    </p>
+    <DocsCodeBlock code={childCli} lang="bash" title="One service, available from every harness" />
+    <p>
+        A child sees none of the parent's chat, so its task must carry the paths, requirements and constraints it needs. Spawn returns as soon
+        as the child is running. Wait sleeps until a child needs input or finishes instead of making the parent poll; Send steers a live child
+        or starts a follow-up turn on a settled one, continuing that child's session.
+    </p>
+
+    <h3>Supervision stays above the tree</h3>
+    <p>
+        <strong>Sandbox → Agent → Subagents</strong> sets three ceilings: children running at once, child turns per parent, and spawn depth.
+        Native runtimes receive those limits through their harness. For full child agents the daemon enforces them at the spawn door rather
+        than writing them into a prompt, so a child that can spawn another child cannot route around them. Persona and action rules decide
+        which conversations receive the spawn doors at all.
+    </p>
+    <p>
+        A parent may answer a child's factual question. It may not approve the child's permission request or plan: those cards remain yours,
+        because letting a model approve its own held action through another model would erase the approval boundary. The same guard that
+        protects other agent actions can hold delegation after a turn has consumed untrusted outside content unless you explicitly allow it.
+    </p>
+    <p>
+        Full children can also run on <a href="/docs/remote-runners/">remote runners</a>. When no machine is named, the fleet scheduler spreads
+        them across ready capacity and falls back to this sandbox when every runner is busy.
     </p>
 
     <h2>The board</h2>
@@ -159,6 +236,8 @@ const lanes = [
     <DocsRelated
         links={[
             { href: "/docs/automations/", title: "Automations & workflows", why: "agents that start themselves, and multi-step runs." },
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "placing isolated conversations and child agents on another machine." },
+            { href: "/docs/models/", title: "Models & accounts", why: "the provider and harness a full child may choose independently." },
             { href: "/api/agent/", title: "One agent", why: "start an isolated turn, watch it, and land it from a script." },
             { href: "/guides/run-multiple-coding-agents-in-parallel/", title: "Guide: running agents in parallel", why: "the same problem without assuming intentic, worktrees and containers weighed against each other." },
         ]}

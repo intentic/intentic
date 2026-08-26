@@ -90,6 +90,12 @@ import DocsLayout from "../../components/DocsLayout.astro";
         The short of it: different <em>work</em> wants a new sandbox; a different <em>face</em> for the same work wants a new
         persona.
     </p>
+    <p>
+        Two newer mechanisms add capacity without creating another role. A{" "}
+        <a href="/docs/parallel-agents/#full-child-agents-the-meta-harness">full child agent</a> is a delegated workstream inside this
+        sandbox, with its own conversation and branch but the same sandbox boundary. A <a href="/docs/remote-runners/">runner</a> is only
+        another place to execute that work: it adds compute, not identity, tools or authority.
+    </p>
 
     <aside class="docs-embed my-6 border border-line bg-card p-5">
         <div class="eyebrow text-link">Honest about the seams</div>
@@ -98,7 +104,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
                 <strong>Chaining</strong> is composition of real primitives (one automation firing another's webhook), not a drag-and-drop
                 graph builder. It is scriptable and composable, but it is not a visual canvas.
             </li>
-            <li>Every agent's <strong>credentials stay in its sandbox</strong>. Nothing you connect is relayed through the platform.</li>
+            <li>Every sandbox's <strong>credentials stay inside it</strong>. Nothing you connect is relayed through the platform.</li>
         </ul>
     </aside>
 

@@ -1,0 +1,173 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE REPRODUCIBLE HALF OF A SANDBOX. This page owns the user-facing contract of sandbox.toml: what belongs,
+ * what is intentionally absent, and why applying a file never imports somebody else's consent. The internal
+ * portability classes and schema implementation belong in the repository design note, not in the operating
+ * instructions a sandbox owner needs. */
+
+const example = [
+    "# Intentic sandbox definition: safe to review and publish.",
+    "schemaVersion = 1",
+    'name = "release-captain"',
+    "",
+    "# Names only. The target asks its owner for the values.",
+    'secrets = ["SENTRY_AUTH_TOKEN"]',
+    "",
+    "[environment]",
+    'baseImage = "ghcr.io/intentic/sandbox:stable"',
+    "dockerfile = '''",
+    "RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg",
+    "'''",
+    "",
+    "# Only choices that differ from the defaults.",
+    "[settings]",
+    "workspaceMap = true",
+    "",
+    "[[repositories]]",
+    'id = "product"',
+    'remote = "https://github.com/example/product.git"',
+    'ref = "main"',
+    "",
+    "# The connection lands visibly unauthenticated.",
+    "[[capabilities]]",
+    'id = "linear"',
+    'kind = "mcp"',
+    'config = { url = "https://mcp.linear.app/sse" }',
+].join("\n");
+
+const contents = [
+    { item: "Repositories", definition: "Workspace id, clone remote and optional branch.", arrival: "Cloned through the sandbox's ordinary repo path." },
+    { item: "Connections", definition: "Capability id, kind and non-secret configuration.", arrival: "Listed as unauthenticated until this owner connects it." },
+    { item: "Secrets", definition: "Names only.", arrival: "Shown as values this owner still needs to provide." },
+    { item: "Environment", definition: "Base-image note and the approved custom Dockerfile source.", arrival: "Parked as a proposal at the target owner's approval gate." },
+    { item: "Agent settings", definition: "Only choices that differ from schema defaults.", arrival: "Merged through the ordinary settings store." },
+];
+---
+
+<DocsLayout
+    pageId="sandbox-definitions"
+    heading="Sandbox definitions"
+    lead="A sandbox.toml is the reproducible shape of an environment: code by reference, connections without credentials, an owner-reviewed overlay recipe, and the agent settings that matter. It is designed to be committed, diffed and handed to somebody else."
+>
+    <h2>Definition, not snapshot</h2>
+    <p>
+        Some parts of a sandbox have a source that can be named again: a repo has a remote and branch, a connection has a kind and
+        non-secret configuration, and an environment overlay is source code. Other parts exist only here: transcripts, unpublished
+        branches, checkpoints, account sessions and ledgers. A definition carries the first set as references. A{" "}
+        <strong>bundle</strong> carries the definition plus the irreplaceable state.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Use</th><th>Sandbox definition</th><th>Sandbox bundle</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Purpose</strong></td>
+                <td>Reproduce or review an environment.</td>
+                <td>Move or restore this sandbox's state.</td>
+            </tr>
+            <tr>
+                <td><strong>Format</strong></td>
+                <td>Small deterministic TOML.</td>
+                <td>Manifest plus an archive of carried files.</td>
+            </tr>
+            <tr>
+                <td><strong>Safe to publish</strong></td>
+                <td>Yes: no credential values or identity.</td>
+                <td>No: treat it as a private backup.</td>
+            </tr>
+            <tr>
+                <td><strong>Good for</strong></td>
+                <td>Code review, drift checks, templates and stamping out a fleet.</td>
+                <td>Continuity, migration and disaster recovery.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>What the TOML describes</h2>
+    <DocsCodeBlock code={example} lang="toml" title="sandbox.toml" />
+    <table>
+        <thead>
+            <tr><th>Section</th><th>What travels</th><th>What happens on arrival</th></tr>
+        </thead>
+        <tbody>
+            {
+                contents.map((entry) => (
+                    <tr>
+                        <td><strong>{entry.item}</strong></td>
+                        <td>{entry.definition}</td>
+                        <td>{entry.arrival}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The file does not include credentials, browser or provider sessions, owner identity, transcripts, automations, personas, locally
+        authored skills, drafts, unpublished git data or checkpoints. An export also lists anything it could not express — for example a
+        repository with no remote — instead of quietly leaving it out.
+    </p>
+
+    <h2>Why TOML</h2>
+    <p>
+        The artifact is a shallow manifest people edit and review. TOML gives the Dockerfile a readable multiline block without YAML's value
+        coercion or JSON's escaped newline noise, and it does not turn the file into a program. Equal live state produces byte-identical
+        output: section order and value spelling are deterministic, so a git diff is a real environment diff rather than formatter churn.
+    </p>
+    <p>
+        The definition is <strong>derived, never kept as a second copy</strong>. Downloading one reads the live repo remotes, capability
+        manifests, overlay and settings each time. There is no background job that can forget to update sandbox.toml while the real sandbox
+        moves on.
+    </p>
+
+    <h2>Download, apply or compare</h2>
+    <p>Open <strong>Sandbox → Environment → Sandbox definition</strong>. The three actions have deliberately different effects:</p>
+    <ul>
+        <li><strong>Download sandbox.toml</strong> derives the current file and names anything omitted from it.</li>
+        <li>
+            <strong>Apply a definition</strong> parses the file into a checklist. Applicable items start selected; existing repo paths and
+            connection ids are marked “already here” and are never overwritten.
+        </li>
+        <li><strong>Compare against one</strong> writes nothing. It returns one line per difference, or says the sandbox is in agreement.</li>
+    </ul>
+    <p>
+        Apply is preview-first. The daemon holds the exact parsed file behind a short-lived plan token, then re-derives the selected items
+        from those held bytes when you confirm. The browser cannot alter the reviewed plan on the way back.
+    </p>
+
+    <h2>Consent does not travel</h2>
+    <p>
+        A shared file may name an overlay that installs packages, but it does not carry the source owner's approval. Applying it writes an
+        environment proposal; the target owner reviews and rebuilds it through the same gate as an agent-proposed change. Connections arrive
+        without authentication and secret names arrive without values. The apply report repeats every manual step that remains.
+    </p>
+    <p>
+        Existing things are protected by the same rule: a definition lands <strong>beside, never over</strong>. It is an additive arrival
+        mechanism, not a force-convergence command. Use Compare to measure drift and make an explicit local change when the target already has
+        a conflicting repo or connection.
+    </p>
+
+    <h2>One definition, many sandboxes</h2>
+    <p>
+        The sandbox run contract can seed an empty workspace from the TOML on first boot. Repositories are cloned, connection cards are
+        created unauthenticated, settings are applied, and the overlay waits for its new owner. Replaying the same container environment on a
+        later rebuild is inert because the workspace is no longer empty. That makes one reviewed definition a fleet recipe without turning
+        boot into an unreviewed configuration executor.
+    </p>
+    <p>
+        <a href="/docs/remote-runners/">Runners</a> reuse the same definition contract more narrowly. They receive the parent's approved image
+        overlay and a settings-only definition; repos still travel through the conversation's git branches, and capabilities and secrets do
+        not travel at all.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/docker/", title: "Docker setup", why: "the replaceable image and durable volumes a definition describes." },
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "how the definition keeps execution environments in step." },
+            { href: "/docs/architecture/", title: "Architecture", why: "why reproducible shape and irreplaceable state are separate." },
+        ]}
+    />
+</DocsLayout>

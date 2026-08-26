@@ -135,14 +135,14 @@ export const comparePages: ComparePage[] = [
         name: "Conductor",
         url: "https://conductor.build/",
         navLabel: "vs Conductor",
-        menuBlurb: "Parallel agents on a Mac versus a configurable machine per agent",
+        menuBlurb: "Parallel agents on a Mac versus a configurable sandbox for the fleet",
         family: "orchestrators",
-        heading: "Both run parallel agents. Only one hands each a machine it configures.",
+        heading: "Both run parallel agents. Only one puts the fleet in an environment you configure.",
         sub: "Both run several agents at once, each on its own branch. They differ in what sits under the agent, and what it costs.",
         theirPitch: '"Run parallel Claude Code, Codex, and Cursor agents in isolated workspaces on your Mac."',
         verdict: [
             "A polished native Mac app for running many agents in parallel, now with Conductor Cloud to offload them. If your agents only need what is already on that Mac, it does the job well.",
-            "intentic gives each agent a container with an image you approve and credentials kept inside. All of it is free and MIT.",
+            "intentic puts the fleet in a container with an image you approve and credentials kept inside, then isolates each agent's files in a worktree. All of it is free and MIT.",
         ],
         overlap: {
             title: "Where you agree",
@@ -151,7 +151,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "A container, not your Mac as it is",
-                body: "Conductor runs agents in your existing environment, so an agent's reach is whatever you happen to have installed. Each intentic agent gets an image you approve, plus capabilities handing it GitHub, Postgres or any MCP server with the credential kept inside.",
+                body: "Conductor runs agents in your existing environment, so their reach is whatever you happen to have installed. An intentic sandbox runs the whole fleet in an image you approve, with capabilities handing it GitHub, Postgres or any MCP server and keeping the credential inside.",
             },
             {
                 title: "Free and MIT, not a seat you rent",
@@ -223,12 +223,12 @@ export const comparePages: ComparePage[] = [
         menuBlurb: "A similar feature list without the machine underneath",
         family: "orchestrators",
         heading: "The nearest neighbour on this page. The difference sits a layer below the feature list.",
-        sub: "Superset runs 100+ parallel agents, each in its own git worktree, with diffs, terminals, cron automations and an MCP server. What it does not hand an agent is a machine of its own.",
+        sub: "Superset runs 100+ parallel agents, each in its own git worktree, with diffs, terminals, cron automations and an MCP server. What it does not add is a managed environment around the fleet.",
         theirPitch:
             '"Run 100+ parallel coding agents on your machine." Superset is a source-available desktop app under the Elastic License 2.0. It runs any CLI agent in its own isolated Git worktree.',
         verdict: [
             "Feature for feature the closest tool here, and the overlap is real: worktree isolation, scheduled runs, a diff between agent and tree, direct model keys.",
-            "Superset's agents run in your local environment. Each intentic agent gets a container from an image you approve, credentials kept inside. intentic is MIT and free; Superset is source-available under ELv2 with a paid Pro tier.",
+            "Superset's agents run in your local environment. An intentic fleet runs in a sandbox built from an image you approve, with one worktree per agent and credentials kept inside. intentic is MIT and free; Superset is source-available under ELv2 with a paid Pro tier.",
         ],
         overlap: {
             title: "Where you agree",
@@ -270,7 +270,7 @@ export const comparePages: ComparePage[] = [
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "source-available (Elastic License 2.0)" },
             { label: "Price", intentic: "free, everything included", them: "free tier; Pro from $15–20/user, remote on Pro", theirs: true },
-            { label: "Isolation", intentic: "a container and a git worktree per agent", them: "an isolated branch per parallel session" },
+            { label: "Isolation", intentic: "one containerized sandbox for the fleet; one git worktree per agent", them: "an isolated branch per parallel session" },
             {
                 label: "Review workflow",
                 intentic: "the diff in the Changes panel, approved before it lands",
@@ -286,7 +286,7 @@ export const comparePages: ComparePage[] = [
         meta: {
             title: "intentic vs Superset · parallel agents, and the machine under them",
             description:
-                "Superset runs 100+ parallel CLI agents in git worktrees on your Mac (ELv2, paid Pro). intentic gives each agent a container you configure, free and MIT.",
+                "Superset runs 100+ parallel CLI agents in git worktrees on your Mac (ELv2, paid Pro). intentic adds a configurable sandbox around its worktree-isolated fleet, free and MIT.",
             datePublished: PUBLISHED,
         },
     },
@@ -295,9 +295,9 @@ export const comparePages: ComparePage[] = [
         name: "T3 Code",
         url: "https://t3.codes/",
         navLabel: "vs T3 Code",
-        menuBlurb: "Control the agents on your machine, or give them one",
+        menuBlurb: "Control agents on your machine, or put the fleet in an approved sandbox",
         family: "orchestrators",
-        heading: "T3 Code controls the agents on your machine. intentic gives each agent a machine.",
+        heading: "T3 Code controls the agents on your machine. intentic gives the fleet a sandbox.",
         sub: "Both share your subscription, an MIT licence and strong phone support. The difference is the layer under the agent.",
         theirPitch:
             '"The open-source control plane for coding agents." T3 Code runs Claude Code, Codex, OpenCode, Cursor and Grok from one surface across desktop, web and native iOS and Android. Bring your own subscription or fork the whole product.',
@@ -312,7 +312,7 @@ export const comparePages: ComparePage[] = [
         differences: [
             {
                 title: "What the agent inherits",
-                body: "T3 Code launches the CLIs on the computer running its server, so an agent's reach is your reach: your PATH, your logins, your clients. In intentic the machine is an image you approve, so two agents on one host can carry entirely different toolchains.",
+                body: "T3 Code launches the CLIs on the computer running its server, so an agent's reach is your reach: your PATH, your logins, your clients. In intentic the workspace runs in an image you approve; use separate sandboxes when two roles need different toolchains or authority.",
             },
             {
                 title: "Systems, and running unwatched",
@@ -320,7 +320,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "What it is", intentic: "the machine an agent works on", them: "a control surface for the agents on your machine" },
+            { label: "What it is", intentic: "a containerized workspace and control surface for an agent fleet", them: "a control surface for the agents on your machine" },
             { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your machine, against your local checkout" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
             {
@@ -354,7 +354,7 @@ export const comparePages: ComparePage[] = [
         meta: {
             title: "intentic vs T3 Code · a control plane, or the machine under it",
             description:
-                "T3 Code drives harnesses on your computer from desktop, web and mobile, MIT and free. intentic gives each agent a container you approve, woken by events.",
+                "T3 Code drives harnesses on your computer from desktop, web and mobile, MIT and free. intentic runs a worktree-isolated fleet in a sandbox you approve, woken by events.",
             datePublished: PUBLISHED,
         },
     },
@@ -363,15 +363,15 @@ export const comparePages: ComparePage[] = [
         name: "Synara",
         url: "https://www.trysynara.com/",
         navLabel: "vs Synara",
-        menuBlurb: "Nine agent runtimes in one window, or a machine each",
+        menuBlurb: "Nine runtimes in one window, or a managed sandbox around the fleet",
         family: "orchestrators",
-        heading: "Synara runs nine agent runtimes in one window. intentic gives one agent a whole machine.",
+        heading: "Synara runs nine agent runtimes in one window. intentic manages the environment around the fleet.",
         sub: "Both are free, local-first and open source, both isolate work in git worktrees, and neither goes near your tokens. They spend their effort at opposite ends of the same stack.",
         theirPitch:
             '"Run every coding agent in one workspace." Synara is a free, open-source, local-first desktop workspace and control plane for provider runtimes already configured on your machine.',
         verdict: [
             "Synara supports nine runtimes: Claude Code, Codex, OpenCode, Cursor, Antigravity, Grok Build, Kilo Code, Pi and Factory Droid, with split chats, terminals, previews, worktrees and a one-action PR.",
-            "intentic invests in depth underneath: whichever harness you pick gets a container you approve, capabilities that hand it your repo, database and error tracker, and an event that starts it without you.",
+            "intentic invests in depth underneath: the fleet runs in a container you approve, with an isolated worktree per agent, capabilities that connect your repo, database and error tracker, and events that start work without you.",
         ],
         overlap: {
             title: "Where you agree",
@@ -384,7 +384,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "The environment is a file you approve",
-                body: "Synara wraps the runtimes on your machine, so what an agent can do is what you have installed. Here the machine is an image you read first, and it is per agent rather than per person.",
+                body: "Synara wraps the runtimes on your machine, so what an agent can do is what you have installed. Here the workspace is an image you read first, shared by the sandbox's fleet rather than inherited from a person's machine.",
             },
         ],
         table: [
@@ -417,7 +417,7 @@ export const comparePages: ComparePage[] = [
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
             {
                 label: "Isolation",
-                intentic: "a container and a git worktree per agent",
+                intentic: "one containerized sandbox for the fleet; one git worktree per agent",
                 them: "the local checkout, or linked git worktrees per task",
             },
             {
@@ -435,9 +435,9 @@ export const comparePages: ComparePage[] = [
             "You want the widest runtime choice in one window, your machine already has what the agents need, and you want no account, container runtime or platform in the path.",
         sources: [{ label: "Docs", url: "https://www.trysynara.com/docs" }],
         meta: {
-            title: "intentic vs Synara · nine runtimes, or a machine each",
+            title: "intentic vs Synara · nine runtimes, or a managed agent sandbox",
             description:
-                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs each agent in a container you configure and wire to your systems.",
+                "Synara runs nine agent runtimes in one local-first, open-source window. intentic runs a worktree-isolated fleet in a container you configure and wire to your systems.",
             datePublished: PUBLISHED,
         },
     },
@@ -569,7 +569,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Parallel / cloud agents",
-                intentic: "a fleet of sandboxes, each on your hardware",
+                intentic: "a fleet of worktree-isolated agents across your sandbox and connected runners",
                 them: "fleets of cloud agents on Cursor's infrastructure",
             },
             {
@@ -596,7 +596,7 @@ export const comparePages: ComparePage[] = [
             { label: "Price", intentic: "free, on your own model subscription", them: "free tier; Pro from $20/user, cloud agents on paid plans" },
             {
                 label: "Isolation",
-                intentic: "a container and a git worktree per agent, on your machine",
+                intentic: "one sandbox container for the fleet; one git worktree per agent, on your machines",
                 them: "a Cursor-managed VM per cloud agent; the local agent edits your tree",
             },
             {
@@ -870,7 +870,7 @@ export const comparePages: ComparePage[] = [
                 theirs: true,
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
-            { label: "Isolation", intentic: "a container and a git worktree per agent", them: "isolated sessions per agent, workspace or sender" },
+            { label: "Isolation", intentic: "one sandbox container for the fleet; one git worktree per agent", them: "isolated sessions per agent, workspace or sender" },
         ],
         together: {
             title: "Hand the repository work over",
@@ -885,7 +885,7 @@ export const comparePages: ComparePage[] = [
         meta: {
             title: "intentic vs OpenClaw · a personal assistant, and a workplace for agents",
             description:
-                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives each coding agent a container, a worktree and a reviewable diff.",
+                "OpenClaw is a self-hosted assistant that lives in your chat apps. intentic gives the fleet a sandbox, and each coding agent an isolated worktree and reviewable diff.",
             datePublished: PUBLISHED,
         },
     },
@@ -894,9 +894,9 @@ export const comparePages: ComparePage[] = [
         name: "Hermes",
         url: "https://hermes-agent.nousresearch.com/",
         navLabel: "vs Hermes",
-        menuBlurb: "An agent that learns you, or a machine per agent",
+        menuBlurb: "An agent that learns you, or a managed workplace for a fleet",
         family: "assistants",
-        heading: "Hermes gets better at you. intentic gives every agent a machine.",
+        heading: "Hermes gets better at you. intentic gives an agent fleet a managed workplace.",
         sub: "Both are MIT, self-hosted and answerable from a chat app. Hermes spends its effort on what an agent carries between sessions; intentic on what it runs inside.",
         theirPitch:
             '"The Agent That Grows With You." Nous Research calls Hermes "the only agent with a built-in learning loop." It creates skills from experience, improves them in use and builds a model of you across sessions.',
@@ -915,7 +915,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 title: "Isolation is the floor, not a backend",
-                body: "Hermes lets the terminal choose local, Docker, SSH or a hosted sandbox. Here there is no local option: every agent works inside its container, on its own worktree, and landing replays the delta as ordinary git you can amend or revert.",
+                body: "Hermes lets the terminal choose local, Docker, SSH or a hosted sandbox. Here there is no host-process option: agents run inside the sandbox container, each isolated in its own worktree, and landing replays the delta as ordinary git you can amend or revert.",
             },
         ],
         table: [
@@ -935,7 +935,7 @@ export const comparePages: ComparePage[] = [
                 intentic: "always a Docker sandbox on hardware you own",
                 them: "local, Docker, SSH or a serverless sandbox, as configured",
             },
-            { label: "Isolation", intentic: "one container and one git worktree per agent", them: "isolated subagents inside a conversation" },
+            { label: "Isolation", intentic: "one sandbox container for the fleet; one git worktree per agent", them: "isolated subagents inside a conversation" },
             {
                 label: "How you reach it",
                 intentic: "any browser over a private tunnel, phone included; Discord and Slack when invited",
@@ -968,7 +968,7 @@ export const comparePages: ComparePage[] = [
         ],
         together: {
             title: "One machine, two jobs",
-            body: "An intentic automation answers a webhook, so Hermes can hand repository work to an agent that gets a container, worktree and diff, then report back in the chat where you asked.",
+            body: "An intentic automation answers a webhook, so Hermes can hand repository work into a sandbox where an agent gets an isolated worktree and reviewable diff, then report back in the chat where you asked.",
         },
         pickThem:
             "You want one agent that writes its own skills, remembers past solutions and works from whichever chat app you use, on work reaching far beyond repositories.",
@@ -977,9 +977,9 @@ export const comparePages: ComparePage[] = [
             { label: "Source", url: "https://github.com/NousResearch/hermes-agent" },
         ],
         meta: {
-            title: "intentic vs Hermes · a self-improving assistant, and a sandbox per agent",
+            title: "intentic vs Hermes · a self-improving assistant, and a managed agent sandbox",
             description:
-                "Hermes is Nous Research's self-improving assistant, MIT and self-hosted. intentic gives each coding agent a container, a worktree and a diff you approve.",
+                "Hermes is Nous Research's self-improving assistant, MIT and self-hosted. intentic gives the fleet a sandbox, and each coding agent an isolated worktree and diff you approve.",
             datePublished: PUBLISHED,
         },
     },
@@ -1027,7 +1027,7 @@ export const comparePages: ComparePage[] = [
             { label: "Setup", intentic: "Docker, a Google account, one pasted command", them: "connect a repo; nothing to host", theirs: true },
             {
                 label: "Elastic capacity",
-                intentic: "bounded by the machine you provide",
+                intentic: "bounded by the sandbox and runner machines you provide",
                 them: "as many parallel agents as you will pay for",
                 theirs: true,
             },
@@ -1039,7 +1039,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Isolation",
-                intentic: "a container and a git worktree per agent, on your machine",
+                intentic: "one sandbox container for the fleet; one git worktree per agent, on your machines",
                 them: "a vendor-run VM per task, with your repo cloned into it",
             },
             {

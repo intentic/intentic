@@ -3,9 +3,9 @@ import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
 import DocsRelated from "../../components/DocsRelated.astro";
 
-/* Three different connections that all live on Sandbox → Computers and are constantly confused: syncing your
- * files INTO the sandbox, letting the agent operate your machine, and driving the sandbox's agents from your
- * editor. The direction of each is the thing to be clear about. */
+/* Four different connections that meet on Sandbox → Computers and are constantly confused: syncing files INTO
+ * the sandbox, letting the agent operate the machine, running a sandbox conversation on its compute, and
+ * driving the sandbox's agents from an editor. The direction and trust boundary of each is the distinction. */
 
 const bridge = `{
     "agent_servers": {
@@ -38,10 +38,10 @@ const scopes = [
 <DocsLayout
     pageId="your-machine"
     heading="Your own machine"
-    lead="Three connections between a sandbox and a computer you own: your files going in, the agent reaching out, and your editor driving the agents. They point in different directions, which is the thing to get straight."
+    lead="Four connections between a sandbox and a computer you own: files going in, the agent reaching out, a runner executing there, and your editor driving the agents. They point in different directions and grant different powers."
 >
-    <h2>The three connections</h2>
-    <p>All three live on <strong>Sandbox → Computers</strong>.</p>
+    <h2>The four connections</h2>
+    <p>All four live on <strong>Sandbox → Computers</strong>.</p>
     <table>
         <thead>
             <tr><th>Connection</th><th>Direction</th></tr>
@@ -49,6 +49,7 @@ const scopes = [
         <tbody>
             <tr><td><strong>Desktop sync</strong></td><td>Your folder appears in the sandbox's workspace, and the sandbox's ports appear on your localhost.</td></tr>
             <tr><td><strong>A connected computer</strong></td><td>The agent operates <em>your</em> machine: runs commands, handles files, sees the screen.</td></tr>
+            <tr><td><strong>A runner</strong></td><td>The parent sends an isolated turn to a sandbox container on this computer; review and landing stay at the parent.</td></tr>
             <tr><td><strong>The editor bridge</strong></td><td>Your editor drives the sandbox's agents, with the transcript in your editor's own chat panel.</td></tr>
         </tbody>
     </table>
@@ -98,6 +99,19 @@ const scopes = [
         <strong>on your machine</strong>, not in the sandbox: they are pushed down on every connect and the agent on your computer refuses out-of-scope calls itself. A compromised sandbox, or an agent talked into something by a page it read, cannot exceed what you ticked.
     </p>
 
+    <h2>Using the computer as a runner</h2>
+    <p>
+        A runner is different from letting an agent operate the host. It is a sandbox container that uses the machine's compute to execute an
+        isolated conversation; the agent works inside that container, not across the host's files or desktop. Creating and updating one rides
+        the connected computer's <strong>Manage sandboxes</strong> grant, without granting shell, screen or file access.
+    </p>
+    <p>
+        Add one under <strong>Runners for this sandbox</strong> on the computer's card, then choose it from a new agent's{" "}
+        <strong>Where this runs</strong> picker. The parent sandbox remains the owner of the conversation, transcript, branch mirror, diff and
+        land door. See <a href="/docs/remote-runners/">Remote runners</a> for workspace sync, environment parity, credentials and failure
+        behavior.
+    </p>
+
     <h2>The editor bridge</h2>
     <p>
         Drive this sandbox's agents from Zed, JetBrains, or any editor speaking the Agent Client Protocol. Mint a token on the Editor bridge
@@ -120,6 +134,7 @@ const scopes = [
 
     <DocsRelated
         links={[
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "executing conversations on this computer without moving control." },
             { href: "/docs/access/", title: "Access & sharing", why: "who else may connect a machine, and what a member is offered." },
             { href: "/api/auth/", title: "Authorising a call", why: "control tokens, their scopes, and minting one without the UI." },
             { href: "/guides/where-your-code-goes-with-cloud-coding-agents/", title: "Guide: where your code goes", why: "whose machine holds the checkout and whose account holds the keys, across the field." },

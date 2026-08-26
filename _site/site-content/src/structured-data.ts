@@ -201,7 +201,7 @@ export function buildSoftwareAppSchema() {
         // landing unread, then the reasons those agents are any good.
         featureList: [
             "Run a fleet of coding agents in parallel, one isolated git worktree each",
-            "One Docker sandbox per agent, on hardware you own",
+            "One Docker sandbox for many agents, on hardware you choose",
             "Diff review before anything lands in your working tree",
             "Bring your own agent: Claude Code, Codex, Grok, Kimi Code, or Google",
             "Environment overlays: the job's dev-tools really installed",

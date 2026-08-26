@@ -35,18 +35,18 @@ export const docsBook: Book = {
                             meta: {
                                 title: "intentic docs · Overview",
                                 description:
-                                    "How intentic gives each coding agent its own sandbox, a specialized workspace on hardware you own, and where to start in the docs.",
+                                    "How intentic gives agents a specialized sandbox workspace on hardware you choose, and where to start in the docs.",
                                 datePublished: "2026-07-23",
                             },
                         },
                         {
                             id: "architecture",
                             title: "Architecture",
-                            blurb: "The thin platform, your sandbox, the tunnel between",
+                            blurb: "Where identity, code, control, state and compute live",
                             meta: {
                                 title: "Architecture · intentic docs",
                                 description:
-                                    "How intentic fits together: the thin platform, the per-agent sandbox on your hardware, the ownership model, and the tunnel fabric.",
+                                    "How intentic fits together: the thin platform, the sandbox daemon, direct browser control, durable state, agent execution, child agents and remote runners.",
                                 datePublished: "2026-07-23",
                             },
                         },
@@ -61,7 +61,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Glossary · intentic docs",
                                 description:
-                                    "What intentic means by daemon, sandbox, workspace, conversation, worktree, landing, fleet, harness, capability, slug, overlay, control token, chore and guard.",
+                                    "What intentic means by daemon, sandbox, definition, bundle, runner, conversation, child agent, worktree, landing, harness, capability and control token.",
                                 datePublished: "2026-08-11",
                             },
                         },
@@ -71,7 +71,7 @@ export const docsBook: Book = {
         },
         {
             label: "Run a sandbox",
-            tagline: "Install, keep, share",
+            tagline: "Install, reproduce, keep",
             icon: "box",
             entry: "quickstart",
             groups: [
@@ -99,6 +99,22 @@ export const docsBook: Book = {
                                 datePublished: "2026-07-23",
                             },
                         },
+                        {
+                            id: "sandbox-definitions",
+                            title: "Sandbox definitions",
+                            blurb: "Export, review and reproduce an environment as TOML",
+                            meta: {
+                                title: "Sandbox definitions · intentic docs",
+                                description:
+                                    "Describe a sandbox as sandbox.toml: repositories, connection shapes, secret names, environment overlay and agent settings, without credentials or history.",
+                                datePublished: "2026-08-25",
+                            },
+                        },
+                    ],
+                },
+                {
+                    label: "Keep it",
+                    items: [
                         {
                             /* Retitled from "Updates & what never breaks". The old title was the page's ARGUMENT,
                              * which is the right thing for a <title> and the wrong thing for a sidebar row: at the
@@ -184,11 +200,11 @@ export const docsBook: Book = {
                         {
                             id: "your-machine",
                             title: "Your own machine",
-                            blurb: "Desktop sync, connected computers, the editor bridge",
+                            blurb: "Sync, host tools, runners and the editor bridge",
                             meta: {
                                 title: "Your own machine · intentic docs",
                                 description:
-                                    "Sync a folder into the sandbox, let the agent operate your computer, or drive its agents from Zed or JetBrains over ACP.",
+                                    "Sync a folder, let an agent operate your computer, use its compute as a remote runner, or drive sandbox agents from Zed or JetBrains over ACP.",
                                 datePublished: "2026-08-07",
                             },
                         },
@@ -207,12 +223,23 @@ export const docsBook: Book = {
                         {
                             id: "parallel-agents",
                             title: "Parallel agents",
-                            blurb: "Many agents at once, reviewed before anything lands",
+                            blurb: "Isolated conversations, subagents and cross-provider children",
                             meta: {
                                 title: "Parallel agents · intentic docs",
                                 description:
-                                    "Run several agents at once, each in its own checkout of your repos, and review what they did before any of it reaches the tree you work in.",
+                                    "Run isolated agents in parallel, let a turn supervise runtime subagents or full cross-provider child agents, and review every branch before it lands.",
                                 datePublished: "2026-08-07",
+                            },
+                        },
+                        {
+                            id: "remote-runners",
+                            title: "Remote runners",
+                            blurb: "Run a conversation on another computer, keep control here",
+                            meta: {
+                                title: "Remote runners · intentic docs",
+                                description:
+                                    "Place agent conversations on runner containers on your other computers while the parent sandbox keeps the transcript, branch, review and land workflow.",
+                                datePublished: "2026-08-25",
                             },
                         },
                         {
@@ -280,7 +307,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Reference architecture · intentic docs",
                                 description:
-                                    "An entire company assembled from intentic sandboxes: one agent per role and team, connected to the services they share.",
+                                    "An entire company assembled from intentic sandboxes: one sandbox per role and team, connected to the services they share.",
                                 datePublished: "2026-07-24",
                             },
                         },

@@ -65,7 +65,7 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
         <div class="grid gap-3 sm:grid-cols-3" set:html={delivery.map(sandboxCard).join("")}></div>
 
         <div class="flex items-center justify-center gap-2 text-center text-2xs text-subtle">
-            <span class="h-px w-8 bg-line-strong"></span>each sandbox connects out over its own tunnel · scoped via capabilities &amp; members, never an ambient bus<span aria-hidden="true">↓</span>
+            <span class="h-px w-8 bg-line-strong"></span>each sandbox connects explicitly · scoped via capabilities &amp; members, never an ambient bus<span aria-hidden="true">↓</span>
         </div>
 
         <div class="border border-primary-600/30 bg-primary-600/[0.05] p-4">
@@ -90,13 +90,16 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
     <h2>How it maps to shipping features</h2>
     <ul>
         <li>
-            <strong>Role &amp; team sandboxes.</strong> One sandbox per function or team: Operations, Governance, Customer &amp; Market, each product team, each customer. Automations wake them, and one run can fire the webhook that wakes the next, so work moves through specialized hands.
+            <strong>Role &amp; team sandboxes.</strong> One sandbox per function or team: Operations, Governance, Customer &amp; Market, each
+            product team, each customer. A reviewed <a href="/docs/sandbox-definitions/">sandbox definition</a> can stamp out their shared
+            repo, connection and environment shape without copying credentials; each new owner completes the trust decisions locally.
+            Automations wake them, and one run can fire the webhook that wakes the next, so work moves through specialized hands.
         </li>
         <li>
             <strong>Human in the loop.</strong> Autonomy is co-piloted, so you drive and watch every sandbox from one browser. A dedicated Agent Governance sandbox carries the rules the others operate under and the restricted secrets they are granted. Supervision is a sandbox pointed at the rest, not a privileged control plane.
         </li>
         <li>
-            <strong>Shared services.</strong> A small set of services the fleet leans on: GitHub for code, Discord for collaboration, Outline for docs, Infisical for secrets. They are plain services the agents connect to, not a control plane the fleet provisions. Each sandbox reaches them over its <strong>own</strong> Cloudflare tunnel, credentials staying per-box.
+            <strong>Shared services.</strong> A small set of services the fleet leans on: GitHub for code, Discord for collaboration, Outline for docs, Infisical for secrets. They are plain services the agents connect to through explicit capabilities, not a control plane the fleet provisions. Credentials stay per-box.
         </li>
         <li>
             <strong>Tools &amp; outputs.</strong> Email, documents (Outline), and dashboards are capabilities the agents operate; every
@@ -108,8 +111,8 @@ const outputs = ["Email management", "Documents · Outline", "Data visualization
         <div class="eyebrow text-link">Honest about the seams</div>
         <ul class="mt-2 space-y-1.5 text-sm leading-relaxed text-muted">
             <li>
-                <strong>No ambient cross-sandbox access.</strong> A sandbox reaches shared services and each other only through capabilities
-                and members, each over its own tunnel, credentials staying per-box. The "shared services" band is a handful of connected
+                <strong>No ambient cross-sandbox access.</strong> A sandbox reaches shared services and other sandboxes only through explicit
+                capabilities and members, credentials staying per-box. The "shared services" band is a handful of connected
                 services, not a shared filesystem or an ambient bus.
             </li>
             <li>

@@ -156,7 +156,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Start with git worktrees. They solve the collision that actually bites, they cost nothing, and you will find out within a day whether you need more.",
             "Move to a container per agent when the agents start needing an environment rather than just files: installing packages, running a dev server, holding a database password, or touching a system you do not want every task to reach.",
-            "That second step is what intentic packages: a Docker sandbox on a machine you own, with its own worktree, tools and credentials. It is free and MIT licensed, so evaluate it by running it.",
+            "intentic chooses two layers deliberately: one Docker sandbox per workspace or trust boundary, then one isolated worktree per agent inside it. Use separate sandboxes when roles need different tools or credentials; use worktrees when agents may safely share the environment.",
         ],
         sections: [
             {
@@ -395,7 +395,7 @@ export const guidePages: GuidePage[] = [
         verdict: [
             "Two rules do most of the work. The credential never enters the model's context, and each task gets only the access it needs.",
             "In practice that means tools holding secrets rather than agents holding secrets, plus per-task isolation so the scope of any single mistake is small.",
-            "intentic is built around that. A capability installs a real tool and its credential inside your sandbox, the agent operates the tool, and the value never leaves that sandbox. Run it on your own machine and the platform stores your identity and your sandbox's address, nothing else; run the starter box we host and the sandbox itself sits on infrastructure we rent.",
+            "intentic scopes capabilities to a sandbox, not to each conversation. A capability installs a real tool and its credential there, and the value never leaves that boundary. Put roles with different authority in separate sandboxes; worktrees isolate concurrent code changes, not credentials.",
         ],
         sections: [
             {
@@ -605,7 +605,7 @@ export const guidePages: GuidePage[] = [
             },
             {
                 name: "A container on hardware you own",
-                what: "The same as above, with each agent isolated in a sandbox on your desktop, server or VPS.",
+                what: "The same as above, with a containerized workspace on your desktop, server or VPS. Several agents can share it while editing isolated worktrees.",
                 goodFor: "Running unattended work and several agents at once while keeping everything on your own hardware.",
                 breaksWhen: "You do not want to operate a machine. There is real, if small, ongoing maintenance.",
             },
@@ -625,7 +625,7 @@ export const guidePages: GuidePage[] = [
         ],
         verdict: [
             "Ask the two questions separately. Whose machine holds the checkout, and whose account holds the credentials. Most of what people mean by privacy here is answered by those two rather than by any policy document.",
-            "If the answer has to be your own machine for both, a locally run agent is the baseline, and a container per agent on hardware you own is the version of that which also survives you closing the laptop.",
+            "If the answer has to be your own machine for both, a locally run agent is the baseline. A containerized workspace on a desktop, server or VPS adds a durable boundary and can keep working after the laptop closes.",
             "That is what intentic does. The sandbox runs on your machine, the repository and credentials stay inside it, and the platform stores only your identity and the sandbox's address. It is MIT licensed, so the claim is checkable rather than promised. If you would rather not host anything, one free starter box runs on our infrastructure instead: the honest trade, spelled out in the privacy policy, is that its disk is then ours rather than yours.",
         ],
         sections: [

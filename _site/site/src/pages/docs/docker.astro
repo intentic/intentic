@@ -199,9 +199,16 @@ tr '\\n' '\\0' < sandbox.env | docker run -i --rm --entrypoint intentic \\
         with no NVIDIA runtime) starts the sandbox without it rather than failing the launch, and records that it couldn't.
     </p>
 
+    <h3>Describing this sandbox's shape</h3>
+    <p>
+        The approved overlay is one section of a <a href="/docs/sandbox-definitions/"><code>sandbox.toml</code> definition</a>, alongside repo
+        remotes, connection shapes, secret names and non-default agent settings. Download it from <strong>Sandbox → Environment</strong> when
+        you want a reviewable recipe for another sandbox; use a private bundle when you need the transcripts and unpublished state too.
+    </p>
+
     <h2>The run contract</h2>
     <p>
-        Every path composes the same <code>docker run</code> from one definition that <strong>ships inside the image</strong>. The scripts
+        Every path composes the same <code>docker run</code> from one run contract that <strong>ships inside the image</strong>. The scripts
         don't hard-code it and neither should your tooling: ask the image, and a stale caller still starts a new image correctly.
     </p>
     <DocsCodeBlock code={runContract} lang="bash" title="Ask the image" />

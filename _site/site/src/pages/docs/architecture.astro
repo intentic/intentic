@@ -1,50 +1,231 @@
 ---
 import ArchitectureFigure from "../../components/ArchitectureFigure.astro";
 import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* THE SYSTEM MAP, not a package inventory. This page names the boundaries a user relies on: who authenticates
+ * whom, where code and credentials live, what survives a restart, how a conversation fans out, and what moves
+ * when execution is placed on another machine. Package-level implementation detail belongs in the repository's
+ * generated architecture book; product mechanisms belong here when they change custody, control or failure. */
 
 const lifecycle = [
-    { title: "Sign in + open Setup", body: "You authenticate with Google, and the sandbox is created for you. The platform reserves a private tunnel and hands you a connect one-liner." },
-    { title: "Connect", body: "You run the one-liner on your machine. It starts the sandbox, which dials out to make itself reachable and announces its URL to the platform on boot." },
-    { title: "Bind on first use", body: "Your browser drives the daemon directly with your Google ID token. The daemon verifies it and binds you as owner on the first authenticated request." },
-    { title: "Chat + plan", body: "You work over the tunnel: chat, files, editor, terminals. The agent runs in plan mode, proposing changes while you watch and steer." },
-    { title: "Review + approve", body: "Every change comes back as a diff you commit or discard, and the agent can operate any connected system or tool from chat. You supervise; it does the work." },
+    {
+        title: "Choose where the sandbox lives",
+        body: "Use a computer you own, a VM in your own cloud account, or a hosted starter. Every route boots the same sandbox image from the same run contract.",
+    },
+    {
+        title: "The sandbox connects out",
+        body: "It opens its own outbound tunnel and announces the resulting address. No inbound port, router rule or platform-to-sandbox connection is needed.",
+    },
+    {
+        title: "Bind on first use",
+        body: "Your browser presents a fresh Google proof directly to the daemon. The daemon verifies it, binds the first owner, and mints its own renewable session.",
+    },
+    {
+        title: "Start a detached turn",
+        body: "The daemon resolves the provider, account, harness, permissions, workspace and placement, then acknowledges the run. Reloading the page does not stop it.",
+    },
+    {
+        title: "Review and land",
+        body: "An isolated conversation returns as a cumulative diff. Landing applies it to the main workspace as uncommitted changes; your commit remains the review boundary.",
+    },
+];
+
+const daemonSurfaces = [
+    { area: "Agents", owns: "Provider accounts, harness selection, detached turns, questions, permissions, transcripts and usage." },
+    { area: "Workspace", owns: "Repositories, files, search, terminals, dev servers, previews, worktrees, diffs and landing." },
+    { area: "Connections", owns: "Capabilities, secrets, connected computers, extensions, VPNs and browser profiles." },
+    { area: "Unattended work", owns: "Schedules, webhooks, listeners, workflows, loops, watches and restart recovery." },
+];
+
+const state = [
+    {
+        place: "/work",
+        holds: "Repos and workspace configuration",
+        rule: "Agent-visible and mounted from a named volume, so updates and rebuilds keep it.",
+    },
+    {
+        place: "/history",
+        holds: "Git history, transcripts, checkpoints, identity and durable daemon records",
+        rule: "Outside the workspace mount, so a command in the workspace cannot erase the recovery record.",
+    },
+    {
+        place: "Container image",
+        holds: "The daemon, runtimes and approved environment overlay",
+        rule: "Replaceable. An update recreates it from the run contract while the two volumes stay put.",
+    },
 ];
 ---
 
 <DocsLayout
     pageId="architecture"
     heading="Architecture"
-    lead="intentic is two tiers: a thin platform for identity, and a per-agent sandbox on your hardware. Only the sandbox ever holds your code. It's where the agent, your workspace, and everything it can do actually live."
+    lead="intentic separates account discovery from agent control. A thin platform tells your browser where the sandbox is; the browser then drives the sandbox daemon directly. The daemon on that machine owns the code, credentials, conversations and work."
 >
-    <h2>The two tiers</h2>
-    {/* The same figure the overview opens with, deliberately: a reader who followed the link from there should
-        recognise the picture they arrived on, and the two pages describing one architecture with two different
-        drawings of it was the reason to draw it properly once. */}
+    <h2>The two product tiers</h2>
     <div class="docs-embed my-8">
         <ArchitectureFigure />
     </div>
 
     <h3>The platform</h3>
     <p>
-        A thin hub: a Vue SPA and a small API. It persists your account, your subscription, and your sandbox's public URL, which the{" "}
-        <a href="/docs/glossary/">daemon</a> announces on boot. It never probes the sandbox, owns no infrastructure, and sits <strong>off the command path</strong>: a platform
-        breach can read a URL and reaches nothing else.
+        The platform is an account and discovery plane: the web shell, sign-in, subscription state, invitations, and the public address a
+        sandbox announces when it boots. It does not proxy ordinary agent turns, inspect a workspace, or hold a credential that can drive a
+        self-hosted sandbox.
+    </p>
+    <p>
+        There are explicit custody exceptions, not hidden ones. A <strong>hosted</strong> sandbox still takes commands directly from your
+        browser, but intentic controls the machine lifecycle because it rents that machine. The optional free trial sends its trial turns
+        through platform-owned model accounts, and the iOS notification relay forwards pointer-only notifications to Apple. Neither is the
+        ordinary command path.
     </p>
 
     <h3>The sandbox</h3>
     <p>
-        One container per agent, on your PC or your server, run <strong>unprivileged by default</strong>. It runs the coding agent, holds your repos and credentials, and exposes its daemon over its own tunnel. That is the whole product surface: chat, terminals, files, panels, capabilities and automations all come from here, and your keys never reach the platform. Inside it the agent runs whatever a job needs (a database client, a headless browser, a deployment engine), but those are tools it invokes, not tiers of the product.
+        A sandbox is a long-lived workspace environment, normally one Docker container plus durable volumes. It can hold many conversations
+        and run many agents at once; it is not one disposable container per chat. The program inside it is the <strong>daemon</strong>: one
+        API and event source for every browser, terminal, agent runtime and automation attached to that workspace.
+    </p>
+    <table>
+        <thead>
+            <tr><th>The daemon owns</th><th>What that includes</th></tr>
+        </thead>
+        <tbody>
+            {
+                daemonSurfaces.map((surface) => (
+                    <tr>
+                        <td><strong>{surface.area}</strong></td>
+                        <td>{surface.owns}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The deployment engine bundled in the image is deliberately <strong>not a third product tier</strong>. It is one tool an agent may
+        run to reconcile infrastructure, just as it may run a test runner or database client. Infrastructure it creates does not become part
+        of the account platform or the sandbox control plane.
     </p>
 
-    <h2>Ownership &amp; trust</h2>
+    <h2>The direct command path</h2>
     <p>
-        The trust root is your browser's Google sign-in. Your browser drives the daemon directly with a Google ID token; the daemon verifies
-        it against Google's keys and binds you as owner on first use. <strong>The platform never holds that token</strong>, so it cannot drive your sandbox even if breached. Repos, credentials and history live where the sandbox runs, and capability secrets echo back to the UI only as "set" or "not set", never as values.
+        Every sandbox connection starts outbound. Its tunnel process dials the reachability hub, and the browser uses the resulting address;
+        nothing needs to dial into your laptop or server. The platform may revoke the grant or forget the address, but it cannot use the
+        grant to act as you.
+    </p>
+    <p>
+        Google is the first proof, not the credential carried forever. The daemon verifies the ID token against Google's keys, binds the
+        owner on first use, then exchanges it for a sandbox-signed session whose signing secret never leaves the box. Membership and role are
+        checked again on each request, so removing a member also ends the authority of an already-open session. Programs use separately
+        scoped, revocable control tokens instead of pretending to be a browser.
     </p>
 
-    <h2>Reachability</h2>
+    <h2>The execution model</h2>
     <p>
-        Every connection is <strong>outbound-only</strong>. A small tunnel agent inside the sandbox dials out from your machine, so the sandbox is reachable from any browser with no inbound ports and no firewall changes. Its address comes from intentic's own tunnel hub, a per-sandbox grant the box enables with itself, which the platform can revoke but never use to serve anything in your name. Already publishing a sandbox under your own domain? Attach it by address instead, and nothing is provisioned at all.
+        A <strong>conversation</strong> is the durable unit you see on the fleet board. A <strong>turn</strong> is one run inside it. Before a
+        turn starts, the daemon resolves four independent choices: provider, connected account, model, and <a href="/docs/models/">harness</a>
+        — the agentic loop that plans and calls tools. Runtime capabilities are declared per provider-and-harness pair, so the UI never offers
+        a control that the selected runtime would silently ignore.
+    </p>
+
+    <figure class="docs-embed my-8 border border-line bg-canvas/40 p-5 sm:p-7">
+        <figcaption class="eyebrow eyebrow-bare mb-4 text-center">One conversation can fan out without losing one supervision model</figcaption>
+        <div class="mx-auto max-w-xl border border-primary-600/35 bg-primary-600/[0.06] p-4 text-center">
+            <div class="text-sm font-medium text-content">Parent conversation</div>
+            <div class="mt-1 text-2xs text-subtle">registry · transcript · questions · review · land</div>
+        </div>
+        <div class="mx-auto h-5 w-px bg-line-strong"></div>
+        <div class="grid gap-3 sm:grid-cols-2">
+            <div class="border border-line bg-card p-4">
+                <div class="text-sm font-medium text-content">Runtime subagent</div>
+                <p class="mt-1 text-xs leading-relaxed text-muted">Created inside the current harness. It shares the parent turn's provider and working tree.</p>
+            </div>
+            <div class="border border-line bg-card p-4">
+                <div class="text-sm font-medium text-content">Full child agent</div>
+                <p class="mt-1 text-xs leading-relaxed text-muted">Created by intentic's meta-harness. It gets its own conversation, provider, worktree and placement.</p>
+            </div>
+        </div>
+        <div class="mt-3 grid gap-3 text-center sm:grid-cols-2">
+            <div class="border border-line bg-overlay/40 p-3 text-xs text-muted">Execute in this sandbox</div>
+            <div class="border border-line bg-overlay/40 p-3 text-xs text-muted">Execute on a connected runner</div>
+        </div>
+    </figure>
+
+    <p>
+        The two child shapes share one roster but not one isolation model. A harness-native subagent is part of its parent's turn. A full
+        child agent is an ordinary isolated conversation that may use a different provider or outlive the parent turn. The same concurrency,
+        lifetime and depth settings govern both: native limits are passed into the harness, while the daemon enforces full-child limits at the
+        spawn door. A parent may answer a full child's factual question, but only a person may approve that child's permission or plan card.{" "}
+        <a href="/docs/parallel-agents/#when-an-agent-delegates">Parallel agents</a> covers the supervision mechanics.
+    </p>
+    <p>
+        Turns are detached from the HTTP request that starts them. Frames receive sequence numbers, persist into the transcript, and can be
+        replayed before a client rejoins the live stream. A journal records in-flight work across daemon restarts, which is why closing a tab
+        is harmless and why an interrupted update can be reported or resumed instead of disappearing.
+    </p>
+
+    <h2>Isolation, state and recovery</h2>
+    <p>
+        A normal chat may work in the shared tree. An isolated conversation instead gets one git worktree per repo, with that composition
+        mounted at <code>/work</code> for the turn. Parallel agents therefore see the paths every project instruction already names while
+        editing different branches. Landing is the single door back: it applies the conversation's delta to the main tree without moving
+        main's commit history.
+    </p>
+    <table>
+        <thead>
+            <tr><th>Layer</th><th>Holds</th><th>Lifecycle rule</th></tr>
+        </thead>
+        <tbody>
+            {
+                state.map((entry) => (
+                    <tr>
+                        <td><code>{entry.place}</code></td>
+                        <td>{entry.holds}</td>
+                        <td>{entry.rule}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    <h2>Shape is different from state</h2>
+    <p>
+        A sandbox has a reproducible <em>shape</em> and irreplaceable <em>state</em>. The shape is derived on demand as a deterministic{" "}
+        <a href="/docs/sandbox-definitions/"><code>sandbox.toml</code> definition</a>: repository remotes, connection shapes, secret names,
+        the approved overlay source, and non-default agent settings. Credentials, identity, transcripts and unpublished work never enter the
+        file. That makes the definition reviewable, comparable for drift, and safe to use as a fleet template.
+    </p>
+    <p>
+        A bundle is the other door: definition plus the state that no source can reproduce. Applying a definition is preview-first and lands
+        beside existing entries; restoring your own bundle is a continuity operation. The distinction preserves consent: an overlay from a
+        shared definition becomes a proposal for the target owner, while an overlay returning in that owner's own bundle may be restored as
+        already approved.
+    </p>
+
+    <h2>Compute can move without moving control</h2>
+    <p>
+        A <a href="/docs/remote-runners/">runner</a> is the same sandbox image in an execution-only mode on another computer. It has no browser
+        owner, public hostname or independent workspace. It dials the parent sandbox over one outbound socket, receives an isolated turn,
+        checks out that conversation's branches, and streams the ordinary agent events back.
+    </p>
+    <p>
+        The parent remains the system of record: conversation status, transcript, interactive cards, branch mirror, diff and landing all stay
+        there. The runner contributes CPU, memory, disk and a warm toolchain. It starts with the parent's image and approved overlay; a
+        settings-only sandbox definition keeps its agent settings comparable and synchronisable. Child agents can be placed across ready
+        runners automatically, while an explicitly placed conversation stays on the machine chosen when it was created.
+    </p>
+
+    <h2>Capabilities and extensions cross different boundaries</h2>
+    <p>
+        A <a href="/docs/capabilities/">capability</a> is a declared connection the daemon knows how to enforce: a provider account, MCP server,
+        database, SSH host, VPN, browser identity or connected computer. Its credential is stored inside the sandbox and its effects are shown
+        before approval. A connected computer enforces its own folder and action switches locally, so the sandbox cannot widen the grant it was
+        given.
+    </p>
+    <p>
+        An <a href="/docs/extensions/">extension</a> adds product surfaces: views, file renderers, commands, settings, background processes or
+        capability cards. Its manifest is the contract, installation is pinned to an exact commit, and trusted code or an environment change
+        requires owner approval. Skills and agent plugins are context loaded by an agent runtime; extensions are code loaded by intentic.
     </p>
 
     <h2>The lifecycle</h2>
@@ -63,4 +244,13 @@ const lifecycle = [
             ))
         }
     </ol>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "worktrees, child agents, review and landing." },
+            { href: "/docs/sandbox-definitions/", title: "Sandbox definitions", why: "the reproducible shape of an environment." },
+            { href: "/docs/remote-runners/", title: "Remote runners", why: "moving execution to another machine without moving control." },
+            { href: "/api/", title: "Sandbox API", why: "the callable contract exposed by the daemon." },
+        ]}
+    />
 </DocsLayout>

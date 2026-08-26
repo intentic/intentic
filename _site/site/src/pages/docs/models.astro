@@ -20,6 +20,11 @@ const providers = [
         connect: `A Google sign-in: no subscription`,
         note: `Labelled for the account rather than the model family: this one channel vends Gemini's models alongside Claude and GPT-OSS. The useful answer for anyone who has connected nothing yet.`,
     },
+    {
+        name: "Cursor",
+        connect: "A Cursor Pro subscription",
+        note: "Runs Cursor's own agent runtime and model catalog through the SDK installed into your sandbox after you connect it.",
+    },
 ];
 
 const others = [
@@ -98,8 +103,9 @@ const others = [
         <li><strong>Claude Code</strong> runs any provider's model through the Claude Code loop instead.</li>
     </ul>
     <p>
-        For most providers there is nothing to choose: Claude is always its own Claude Code loop, and Kimi and Google have no native runtime
-        at all: all three run that loop whatever you pick. Only <strong>Codex and Grok</strong> have a native runtime to switch away from.
+        For most providers there is nothing to choose: Claude and Kimi always use the Claude Code loop, Google always uses its native
+        OpenCode-based loop, and Cursor always uses Cursor's runtime. Only <strong>Codex and Grok</strong> have both Native and Claude Code
+        available.
     </p>
     <p>
         The choice matters because the loops support different features, and the app tells you before you find out mid-turn. A runtime lacking mid-turn steering, clarifying questions, per-tool approvals, MCP tools or reasoning-effort control lists those limits, and the composer hides the controls it would ignore.
@@ -149,6 +155,8 @@ const others = [
     <DocsRelated
         links={[
             { href: "/docs/automations/", title: "Automations & workflows", why: "where pinning an account and a model actually pays off." },
+            { href: "/docs/parallel-agents/#full-child-agents-the-meta-harness", title: "Full child agents", why: "children that choose a provider and harness independently." },
+            { href: "/docs/remote-runners/#credentials-and-capabilities", title: "Remote runners", why: "which model credentials can serve a turn on another machine." },
             { href: "/docs/access/", title: "Access & sharing", why: "who else may spend this sandbox's allowance." },
         ]}
     />

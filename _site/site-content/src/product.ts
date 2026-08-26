@@ -126,7 +126,7 @@ export const productPages: ProductPage[] = [
         facts: [
             { value: "3 lanes", label: "Attention, Active, Finished. The board sorts itself" },
             { value: "1 branch each", label: "every agent gets an isolated checkout" },
-            { value: "5 agents", label: "Claude Code, Codex, Grok, Kimi Code, Google" },
+            { value: "6 agents", label: "Claude Code, Codex, Grok, Kimi Code, Google, Cursor" },
         ],
         blocks: [
             {
@@ -145,6 +145,14 @@ export const productPages: ProductPage[] = [
                     alt: "The same fleet board on a phone: agent cards stacked in one column with model, branch, cost and diff stats.",
                     frame: "phone",
                 },
+            },
+            {
+                title: "Fan out across models and machines",
+                body: "A turn can start full child agents on any connected provider, each as an isolated conversation you can watch and review. Connect runner containers on your other computers and the fleet spreads those children across ready capacity while their transcript and land door stay here.",
+                bullets: [
+                    "Cross-provider meta-harness: Claude can delegate to Cursor, Codex to Claude, or any other connected pair",
+                    "Remote runners replicate the approved environment and return git branches, not a second control plane",
+                ],
             },
             {
                 title: "Isolated by construction",
@@ -390,6 +398,14 @@ export const productPages: ProductPage[] = [
                     frame: "browser",
                     label: "acme-shop · /sandbox/environment",
                 },
+            },
+            {
+                title: "Make the environment reproducible",
+                body: "Download its live shape as sandbox.toml: repository remotes, connection shapes, secret names, the approved overlay and non-default agent settings. Commit it, compare another sandbox for drift, or seed a fleet without exporting a credential or transcript.",
+                bullets: [
+                    "Definitions are deterministic TOML derived from the live sandbox, never a stale second copy",
+                    "Applying one is preview-first: overlays wait for the new owner's approval and connections wait for authentication",
+                ],
             },
             {
                 title: "See usage where it happens",

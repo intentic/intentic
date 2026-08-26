@@ -1,0 +1,159 @@
+---
+import DocsCodeBlock from "../../components/DocsCodeBlock.astro";
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* REMOTE EXECUTION WITHOUT A SECOND CONTROL PLANE. This page is placed with agent-driving rather than machine
+ * setup because placement belongs to a conversation: the computer is merely where its runner container lives.
+ * The connected-computer page owns enrolling and granting a machine; this one owns what moves for a turn. */
+
+const placement = [
+    "agents spawn --provider claude --on build-rig 'Run the Linux test matrix'",
+    "agents spawn --provider codex --on here 'Review the result and prepare the patch'",
+].join("\n");
+
+const split = [
+    { concern: "Conversation identity and status", parent: "Owns it", runner: "Receives the id for the dispatched turn" },
+    { concern: "Transcript and interactive cards", parent: "Persists and displays them", runner: "Streams events; receives answers and steering" },
+    { concern: "Working tree", parent: "Keeps the branch mirror used by diff and land", runner: "Checks out and edits the active copy" },
+    { concern: "Agent process and tools", parent: "Plans and dispatches", runner: "Runs the harness, commands, tests and runtime subagents" },
+    { concern: "Review and landing", parent: "Owns the only land door", runner: "Pushes the resulting branch back" },
+];
+---
+
+<DocsLayout
+    pageId="remote-runners"
+    heading="Remote runners"
+    lead="A runner lets a conversation use another computer's CPU, memory, disk and toolchain while your original sandbox keeps the conversation, transcript, review and land workflow. Execution moves; control does not."
+>
+    <h2>What a runner is</h2>
+    <p>
+        A runner is the ordinary sandbox image booted in an execution-only mode. It belongs to a{" "}
+        <strong>parent sandbox</strong>, not to a person: there is no browser owner, member list, public hostname or second fleet to visit.
+        The runner dials its parent over one outbound connection, so a laptop behind NAT and a VM on a private network have the same posture.
+    </p>
+    <p>
+        It keeps the expensive parts that make a remote turn behave like a local one: the same daemon turn machinery, harnesses, terminals,
+        dependency installation, approved environment overlay and optional nested Docker engine. It leaves account identity, review state and
+        workspace authority with the parent.
+    </p>
+
+    <h2>Parent owns the work; runner performs it</h2>
+    <table>
+        <thead>
+            <tr><th>Concern</th><th>Parent sandbox</th><th>Runner</th></tr>
+        </thead>
+        <tbody>
+            {
+                split.map((entry) => (
+                    <tr>
+                        <td><strong>{entry.concern}</strong></td>
+                        <td>{entry.parent}</td>
+                        <td>{entry.runner}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        The browser never contacts the runner. A question, plan or permission card raised there streams to the parent, and your answer is
+        forwarded to the machine that raised it. Stop and mid-turn steering travel the same way. From the fleet board, a remote conversation
+        differs only by its placement label and the fact that an offline machine is a named failure rather than a hanging spinner.
+    </p>
+
+    <h2>One turn across the link</h2>
+    <ol>
+        <li>
+            <strong>Prepare.</strong> The parent creates the isolated conversation and asks the runner to fetch that conversation's branch for
+            every repo. A remote conversation is always isolated.
+        </li>
+        <li>
+            <strong>Run.</strong> The runner starts the selected provider and harness, materialises any attachments, and streams the same typed
+            events a local turn would produce.
+        </li>
+        <li>
+            <strong>Return.</strong> However the turn ends, the runner snapshots and pushes its branch back. The parent advances its mirror
+            worktree, so the existing diff, standing, archive and land code sees the result without a remote-specific path.
+        </li>
+        <li>
+            <strong>Review.</strong> You inspect and land from the parent exactly as you would for a locally executed isolated agent.
+        </li>
+    </ol>
+    <p>
+        Dependencies and build outputs are rebuilt and kept warm on the runner rather than copied between architectures. Git moves source;
+        caches stay where they were produced. That avoids treating an ARM laptop's node_modules or native build output as valid on an x86 VM.
+    </p>
+
+    <h2>Add a runner to a computer</h2>
+    <p>
+        First connect the computer from <strong>Sandbox → Computers</strong> and allow it to <strong>Manage sandboxes</strong>. That switch is
+        the machine-local permission to create and update containers; adding a runner does not widen shell, screen or file access.
+    </p>
+    <p>
+        On that computer's card, use <strong>Runners for this sandbox → Add runner</strong>, give it a name, and watch the same host-side
+        container flow used for ordinary sandbox operations. The parent mints a single-use pairing, injects its own address, and receives the
+        runner's dial-back. Removing it revokes the enrollment after the machine confirms the container is gone.
+    </p>
+    <p>
+        A runner started by hand can still connect and run turns. It appears in the placement picker, but not under a computer card when no
+        connected host identity says which machine owns its lifecycle.
+    </p>
+
+    <h2>Place a conversation</h2>
+    <p>
+        A new agent's <strong>Where this runs</strong> picker lists this sandbox and every online runner, with CPU, memory and load. Placement
+        is chosen when the conversation is created and then latched: its branch and warm working tree belong on one machine, so a later picker
+        that silently did nothing would be worse than no picker.
+    </p>
+    <p>
+        Full child agents created by the <a href="/docs/parallel-agents/#full-child-agents-the-meta-harness">meta-harness</a> are placed
+        automatically. The scheduler prefers the machine with the most free agent slots, breaks ties by current load, and falls back to the
+        parent instead of waiting for an offline or busy laptop. Capacity is bounded by both cores and memory; outdated runners remain usable
+        because drift is reported rather than turned into a surprise refusal.
+    </p>
+    <p>An agent may override the scheduler when the task genuinely needs one machine:</p>
+    <DocsCodeBlock code={placement} lang="bash" title="Inside a sandbox turn" />
+
+    <h2>The environment is replicated by definition</h2>
+    <p>
+        Creating a runner builds it from the parent's image and byte-identical approved overlay before it starts. The parent also sends a
+        settings-only <a href="/docs/sandbox-definitions/">sandbox definition</a>. Repository entries are intentionally ignored — the exact
+        conversation branches arrive through git — and capability and secret entries are stripped.
+    </p>
+    <p>
+        Each runner reports its image, release channel, overlay hash and settings. Its card shows{" "}
+        <strong>current</strong>, <strong>outdated</strong> or <strong>unknown</strong>, plus the individual drift lines. Settings can be
+        synchronised over the live link. An overlay difference needs the container rebuilt, because adding a compiler is an image change, not
+        a settings call.
+    </p>
+
+    <h2>Credentials and capabilities</h2>
+    <p>
+        A runner does not inherit the parent's browser sessions, connected computers, capabilities or secret values. Model access is the
+        narrow exception required to execute the selected turn: Claude Code-family harnesses resolve against the parent's connected account,
+        receiving a per-turn access token or using the parent's authenticated model translator as a service. Long-lived refresh credentials
+        stay at the origin.
+    </p>
+    <p>
+        Native runtimes whose login lives in their own CLI home — including native Codex, Gemini, Cursor and ACP agents — use the runner's
+        local login. Automatic child placement keeps those runtimes on the parent unless their credential is known to travel; an explicit
+        placement remains available when you know that runner is signed in.
+    </p>
+
+    <h2>Failure is bounded by the branch</h2>
+    <ul>
+        <li><strong>Runner offline before a turn:</strong> the conversation says which runner is unavailable and does not silently execute elsewhere.</li>
+        <li><strong>Link lost during a turn:</strong> the turn is interrupted; completed pushes remain at the parent and the runner keeps its local checkout for the next sync.</li>
+        <li><strong>Runner removed:</strong> the parent still has the conversation, transcript and last delivered branch, so work can continue in a new conversation here or on another runner.</li>
+        <li><strong>Parent restarts:</strong> the runner reconnects with its durable enrollment; the single-use pairing is not replayed.</li>
+    </ul>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/parallel-agents/", title: "Parallel agents", why: "isolated branches, meta-harness children and landing." },
+            { href: "/docs/your-machine/", title: "Your own machine", why: "enrolling the computer and enforcing its grants locally." },
+            { href: "/docs/sandbox-definitions/", title: "Sandbox definitions", why: "the TOML contract used to reproduce settings and environment shape." },
+            { href: "/docs/models/", title: "Models & accounts", why: "the provider, account and harness whose credential the turn spends." },
+        ]}
+    />
+</DocsLayout>

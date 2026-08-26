@@ -42,7 +42,7 @@ const families: Family[] = [
         terms: [
             {
                 word: "Sandbox",
-                what: "One Docker container on your own machine, holding one agent, its workspace and everything it can reach. It contains chat, files, terminals and capabilities, and is the only tier that ever sees your code.",
+                what: "A long-lived workspace environment on a machine you choose, normally one Docker container plus durable volumes. It holds many conversations, their repos, terminals and capabilities, and is the only product tier that sees your code.",
                 href: "/docs/architecture/",
                 page: "Architecture",
             },
@@ -54,7 +54,7 @@ const families: Family[] = [
             },
             {
                 word: "The platform",
-                what: "The thin hub at intentic.dev: your account and your sandbox's address, and nothing else. It sits off the command path, so it cannot drive your sandbox and a breach of it reaches no code.",
+                what: "The thin hub at intentic.dev: account, subscription and sandbox discovery. It sits off the ordinary command path; hosted-machine lifecycle and optional trial turns are explicit custody exceptions.",
                 href: "/docs/architecture/",
                 page: "Architecture",
             },
@@ -81,6 +81,30 @@ const families: Family[] = [
                 what: "A short-lived code the setup screen mints and puts inside the install command for you. Your machine redeems it once for the real connection token, which is why no long-lived secret lands in your shell history.",
                 href: "/docs/quickstart/#setup-codes",
                 page: "Quickstart",
+            },
+        ],
+    },
+    {
+        label: "Shape, state and placement",
+        about: "The words for reproducing a sandbox and moving its compute without moving its ownership.",
+        terms: [
+            {
+                word: "Sandbox definition",
+                what: "A deterministic sandbox.toml describing the reproducible shape of an environment: repo references, connection shapes, secret names, overlay source and non-default agent settings. It contains no credential values, identity or history.",
+                href: "/docs/sandbox-definitions/",
+                page: "Sandbox definitions",
+            },
+            {
+                word: "Bundle",
+                what: "A private portability archive containing the sandbox definition plus state that cannot be reproduced from a source: transcripts, git data, checkpoints and records. A definition is a template; a bundle is continuity.",
+                href: "/docs/sandbox-definitions/#definition-not-snapshot",
+                page: "Sandbox definitions",
+            },
+            {
+                word: "Runner",
+                what: "The sandbox image in execution-only mode on another computer. It runs isolated turns and returns their branches and event streams; the parent sandbox keeps the conversation, transcript, review and land door.",
+                href: "/docs/remote-runners/",
+                page: "Remote runners",
             },
         ],
     },
@@ -123,6 +147,18 @@ const families: Family[] = [
                 what: "The agentic loop that serves a turn: the thing that decides how the model plans, calls tools and asks you questions. It is a separate choice from the model: the same model behaves differently under each, so the picker asks for both.",
                 href: "/docs/models/",
                 page: "Models & accounts",
+            },
+            {
+                word: "Runtime subagent",
+                what: "A child created inside the current provider's harness. It remains part of the parent turn, shares its working tree, and uses the same provider and harness.",
+                href: "/docs/parallel-agents/#runtime-subagents",
+                page: "Parallel agents",
+            },
+            {
+                word: "Full child agent / meta-harness child",
+                what: "An ordinary isolated conversation a turn starts through intentic's provider-neutral supervision service. It may use another provider, outlive its parent turn and run on a remote runner.",
+                href: "/docs/parallel-agents/#full-child-agents-the-meta-harness",
+                page: "Parallel agents",
             },
         ],
     },
