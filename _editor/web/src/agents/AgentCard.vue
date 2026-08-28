@@ -30,6 +30,8 @@ import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import MatchLine from "../components/MatchLine.vue";
 import SessionChip from "./SessionChip.vue";
+import { accountBadge } from "./accountChip";
+import { providerAccounts } from "../composables/chat/providerAccounts";
 import { createInlineRename } from "../composables/inlineRename";
 import { markSegments } from "../composables/agents/markSegments";
 import { canArchive, useAgents, type FleetAgent } from "../composables/agents/useAgents";
@@ -254,6 +256,12 @@ const model = computed(() => {
     }
     return category.value === undefined ? undefined : providerLabel(props.agent.provider);
 });
+/* ...AND WHICH LOGIN PAYS FOR IT (accountChip), beside the branch on the same revealed line and for the same
+ * reason: a sandbox holding a personal plan and a work one spends a real choice per session, made in the
+ * composer and, until now, visible nowhere afterwards. Read from the window's account list rather than carried
+ * on the card, because the summary records an id and an id here is a UUID; a name the sandbox cannot resolve
+ * (a routed provider's pooled subscription, an account disconnected since) draws nothing at all. */
+const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
 /* A nameless card, named for what it IS: a tab waiting to be typed into, a past conversation whose session
  * never earned a title, or an agent whose own naming has yet to land.
  *
@@ -529,7 +537,7 @@ const grab = (event: PointerEvent): void => {
                  wins between two plain utilities is Tailwind's emit order, not the order they are written. A
                  variant (`group-hover:`) always sorts after its unvaried counterpart, so that pair is safe. -->
             <div
-                v-if="model !== undefined || agent.branch !== undefined"
+                v-if="model !== undefined || agent.branch !== undefined || account !== undefined"
                 class="min-w-0 items-center gap-2 text-2xs text-subtle"
                 :class="model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
             >
@@ -561,16 +569,33 @@ const grab = (event: PointerEvent): void => {
                      purpose. Copying it is on the right-click menu (AgentsView), where the board keeps the
                      decisions that are made about a card rather than to it; the full string is on its own
                      hover, since what shows here is abbreviated (SessionChip). -->
-                <!-- The reveal rides a WRAPPER rather than the chip itself, because `hidden` and the chip's own
+                <!-- ...AND WHO PAYS FOR IT, on the same reveal and for the same argument. Which of several
+                     connected logins a session spends is chosen once in the composer and was then readable
+                     nowhere: not on the card, not in the lane, not on the agent's own page. A board is the one
+                     surface that reads forty sessions at once, so it is where "these three are on the work
+                     plan, and that is why it is throttled" stops being a lookup. Like the name beside it, it is
+                     a LABEL and not a control (see `account`, and SessionChip's own note on why): nothing here
+                     is worth a small target in the path of the press that focuses the agent.
+                     The name is clipped from its end and the whole of it, with the identity the provider
+                     reported, is on its own hover (accountChip).
+                     Nothing is drawn when the sandbox cannot name the account: a pooled subscription nobody
+                     picks, or a login disconnected since the turn ran.
+                     The reveal rides a WRAPPER rather than the chips themselves, because `hidden` and their own
                      `inline-flex` are both display utilities and which of them wins is Tailwind's emit order,
-                     not the order they are written in. A wrapper has no display of its own to argue with. -->
+                     not the order they are written in. A wrapper has no display of its own to argue with, and
+                     one wrapper over both keeps them appearing together as the single line they read as. -->
                 <span
-                    v-if="agent.branch !== undefined"
+                    v-if="agent.branch !== undefined || account !== undefined"
                     class="min-w-0 items-center gap-1.5"
                     :class="mobile ? 'inline-flex' : 'hidden group-hover:inline-flex'"
                 >
                     <span v-if="model !== undefined">·</span>
-                    <SessionChip :branch="agent.branch" />
+                    <SessionChip v-if="agent.branch !== undefined" :branch="agent.branch" />
+                    <span v-if="agent.branch !== undefined && account !== undefined">·</span>
+                    <span v-if="account !== undefined" v-tooltip.top="account.hint" class="inline-flex min-w-0 shrink items-center gap-1">
+                        <Icon name="user" class="shrink-0 text-2xs" />
+                        <span class="truncate">{{ account.label }}</span>
+                    </span>
                 </span>
             </div>
 

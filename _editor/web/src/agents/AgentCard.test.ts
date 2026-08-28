@@ -20,6 +20,9 @@ import type { FleetAgent } from "../composables/agents/useAgents";
 
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../router");
+// The window's connected accounts, module state the card reads to turn the id a session recorded into a name.
+const { providerAccounts } = await import("../composables/chat/providerAccounts");
+const NO_ACCOUNTS = providerAccounts.value;
 
 const NO_ATTENTION: AgentSummary[`attention`] = {
     plan: false,
@@ -102,6 +105,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    providerAccounts.value = NO_ACCOUNTS;
 });
 
 /* A CONVERSATION THE FLEET NEVER REGISTERED, because the daemon refused its send. No branch, no diff, no entry
@@ -386,4 +390,17 @@ it(`keeps it on an archived card, the one press that stops one waking back onto 
 it(`names the machine an agent runs on, and says nothing when it runs here`, () => {
     expect(mount({ ...ready(), runner: `rig` }).textContent ?? ``).toContain(`rig`);
     expect(mount(ready()).textContent ?? ``).not.toContain(`rig`);
+});
+
+/* WHICH LOGIN THE TURNS ARE CHARGED TO, beside the session name on the card's revealed line. A sandbox holding
+ * a personal plan and a work one spends a real choice per session, made once in the composer and readable
+ * nowhere afterwards, and the board is the surface that reads forty sessions at once.
+ *
+ * The id the summary carries is a UUID, so the name comes from the window's own account list: an id it cannot
+ * resolve (a login disconnected since the turn ran, a provider whose pooled subscription nobody picks from)
+ * draws nothing, because a UUID on a card names less than silence does. */
+it(`names the login a session's turns run on, and stays silent about one it cannot name`, () => {
+    providerAccounts.value = { ...NO_ACCOUNTS, claude: [{ id: `acct-1`, label: `acme-work@acme.com`, connectedAt: 1 }] };
+    expect(mount({ ...ready(), account: `acct-1` }).textContent ?? ``).toContain(`acme-work`);
+    expect(mount({ ...ready(), account: `disconnected-since` }).textContent ?? ``).not.toContain(`acme-work`);
 });
