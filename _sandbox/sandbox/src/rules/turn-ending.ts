@@ -1,8 +1,16 @@
 import { isAbsolute } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { Rule } from "@intentic/sandbox-contract";
-import { commandExitCode, createVerificationLedger, type ScriptsProbe, verifyEditsMessage } from "../agent/agent-verification.js";
-import type { IsolationPlan } from "../agents/isolation.js";
+import type { GitRunner } from "@intentic/scaffold";
+import type { Rule, RuleBuiltin } from "@intentic/sandbox-contract";
+import {
+    createRemovalLedger,
+    type FileReader,
+    readWorkspaceFile,
+    type RemovalLedger,
+    verifyRemovalsMessage,
+} from "../agent/agent-removals.js";
+import { commandExitCode, createVerificationLedger, type ScriptsProbe, type VerificationLedger, verifyEditsMessage } from "../agent/agent-verification.js";
+import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds } from "./rules.js";
 
@@ -40,8 +48,18 @@ const bashCommand = (input: unknown): string | undefined => {
     return typeof command === "string" && command.trim() !== "" ? command : undefined;
 };
 
+/* Every tool that MUTATES a file, as one matcher.
+ *
+ * The hashline pair belongs here because turning `hashlineEdits` on DISABLES the native Edit and Write
+ * (hashline/hashline-tools.ts): a matcher naming only those two goes quiet in exactly the configuration a user
+ * chooses for heavy editing, so both ledgers below would have recorded nothing and said so confidently. */
+const EDIT_TOOLS = "Edit|Write|NotebookEdit|mcp__hashline__edit|mcp__hashline__write";
+
+// The native tools name it `file_path`, the hashline ones `path`. One reader over both, because which spelling
+// arrives is a setting the owner flipped and not a fact about the edit.
 const editedPath = (input: unknown): string | undefined => {
-    const path = (input as { file_path?: unknown }).file_path;
+    const named = input as { file_path?: unknown; path?: unknown };
+    const path = typeof named.file_path === "string" ? named.file_path : named.path;
     return typeof path === "string" && path !== "" ? path : undefined;
 };
 
@@ -71,12 +89,41 @@ export interface TurnEndingDeps {
     // Told when a rule actually said something, so the settings list can show what has been earning its place.
     readonly onFired?: ((rule: Rule) => void) | undefined;
     readonly scripts?: ScriptsProbe | undefined;
+    // How `verify-removals` reads a file and asks git about a line. Injected together because a test that
+    // supplies one and not the other is a test half against a real workspace.
+    readonly read?: FileReader | undefined;
+    readonly git?: GitRunner | undefined;
+    readonly now?: number | undefined;
 }
 
+// The two records this moment keeps. `removal` exists only when a rule standing here reads it: it snapshots
+// file contents before every edit, which is the one piece of bookkeeping expensive enough to be worth skipping.
+interface Ledgers {
+    readonly verification: VerificationLedger;
+    readonly removal: RemovalLedger | undefined;
+}
+
+/* WHAT EACH BUILT-IN ASKS OF THE TURN, as a total table over the name rather than a chain of ifs: a built-in
+ * added to the contract is a compile error here until it is answered, which is the only thing that keeps a rule
+ * from saving cleanly in the settings screen and then quietly doing nothing. */
+const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => Promise<string | undefined>> = {
+    "verify-edits": (deps, ledgers) => verifyEditsMessage(ledgers.verification, deps.isolation, deps.scripts),
+    "verify-removals": async (deps, ledgers) =>
+        ledgers.removal === undefined
+            ? undefined
+            : verifyRemovalsMessage(ledgers.removal, {
+                  cwd: deps.cwd,
+                  isolation: deps.isolation,
+                  read: deps.read,
+                  git: deps.git,
+                  now: deps.now,
+              }),
+};
+
 // What one rule contributes to the follow-up, or nothing.
-const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledger: ReturnType<typeof createVerificationLedger>): Promise<string | undefined> => {
+const contributionOf = async (rule: Rule, deps: TurnEndingDeps, ledgers: Ledgers): Promise<string | undefined> => {
     if (rule.action.kind === "builtin") {
-        return verifyEditsMessage(ledger, deps.isolation, deps.scripts);
+        return BUILTINS[rule.action.name](deps, ledgers);
     }
     if (rule.action.kind === "instruct") {
         return rule.action.text;
@@ -116,18 +163,49 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
     if (rules.length === 0) {
         return {};
     }
-    const ledger = createVerificationLedger();
+    /* The deletion record is kept ONLY when a rule standing here reads it, and it is the one ledger worth
+     * asking that question about: it reads every file the turn is about to edit, before each first edit. That
+     * is cheap next to the edit itself and it is not free, so a workspace that has not asked for the check does
+     * not pay for the snapshot. The proof ledger stays unconditional because the CONDITIONS need it. */
+    const wantsRemovals = rules.some((rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals");
+    const ledgers: Ledgers = { verification: createVerificationLedger(), removal: wantsRemovals ? createRemovalLedger() : undefined };
+    const { removal } = ledgers;
+    const read = deps.read ?? readWorkspaceFile;
     let followUps = 0;
     return {
+        ...(removal === undefined
+            ? {}
+            : {
+                  /* BEFORE the edit, because after it the bytes are gone and no hook input carries them: `Edit`
+                   * has `old_string`, `Write` and the hashline tools have nothing at all. Reading the file here
+                   * is the only way to know what a turn removed, and the ledger keeps just the first read per
+                   * path, so a file edited five times is one snapshot. */
+                  PreToolUse: [
+                      {
+                          matcher: EDIT_TOOLS,
+                          hooks: [
+                              async (input) => {
+                                  if (input.hook_event_name === "PreToolUse") {
+                                      const path = editedPath(input.tool_input);
+                                      if (path !== undefined) {
+                                          removal.notePrior(path, await read(inWorktree(path, deps.isolation)));
+                                      }
+                                  }
+                                  return {};
+                              },
+                          ],
+                      },
+                  ],
+              }),
         PostToolUse: [
             {
-                matcher: "Edit|Write|NotebookEdit",
+                matcher: EDIT_TOOLS,
                 hooks: [
                     async (input) => {
                         if (input.hook_event_name === "PostToolUse") {
                             const path = editedPath(input.tool_input);
                             if (path !== undefined) {
-                                ledger.noteEdit(path);
+                                ledgers.verification.noteEdit(path);
                             }
                         }
                         return {};
@@ -145,7 +223,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         if (command !== undefined) {
                             const exit = commandExitCode(input.tool_response);
                             const text = typeof input.tool_response === "string" ? input.tool_response : "";
-                            ledger.noteCommand(command, exit === undefined || exit === 0, text);
+                            ledgers.verification.noteCommand(command, exit === undefined || exit === 0, text);
                         }
                         return {};
                     },
@@ -162,7 +240,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         }
                         const command = bashCommand(input.tool_input);
                         if (command !== undefined) {
-                            ledger.noteCommand(command, false, input.error);
+                            ledgers.verification.noteCommand(command, false, input.error);
                         }
                         return {};
                     },
@@ -179,7 +257,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         // What the turn touched, which is the only fact a condition can narrow on here. A turn
                         // that edited nothing still reaches rules with no path condition, "always say this
                         // before you finish" is a legitimate thing to want.
-                        const facts = { paths: ledger.edited().map((path) => workspaceRelative(path, deps.cwd)) };
+                        const facts = { paths: ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd)) };
                         const parts: string[] = [];
                         for (const rule of rules) {
                             // The moment check is redundant with `standing` at the one call site and kept
@@ -188,7 +266,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                             if (rule.moment !== "turn.ending" || !conditionHolds(rule.when, facts)) {
                                 continue;
                             }
-                            const contribution = await contributionOf(rule, deps, ledger);
+                            const contribution = await contributionOf(rule, deps, ledgers);
                             if (contribution !== undefined && contribution !== "") {
                                 parts.push(contribution);
                                 deps.onFired?.(rule);

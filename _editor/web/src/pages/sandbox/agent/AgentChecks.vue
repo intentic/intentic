@@ -5,12 +5,18 @@ import { useDraft } from "../../../composables/useDraft";
 import { NAMED_RULES } from "../../../composables/sandbox/rules";
 import { useRules } from "../../../composables/sandbox/useRules";
 
-/* WHAT PROVES THE WORK. Two checks with nothing in common but that question: one the daemon asks of a turn that
- * edited code and proved nothing, and one the workspace runs at the last moment before code leaves the machine.
+/* WHAT PROVES THE WORK. Three checks with nothing in common but that question: two the daemon asks of a turn
+ * that is trying to finish, and one the workspace runs at the last moment before code leaves the machine.
  *
- * BOTH ARE RULES (composables/sandbox/useRules.ts), written by these two rows rather than by the general add
- * flow below them. The rows stay because they are the two people ask for by name, and a switch reads better
- * than a form, but there is nothing behind them the table cannot express, which is why outgrowing either one
+ * THE TWO DAEMON CHECKS READ OPPOSITE HALVES OF THE SAME TURN, which is why they are two switches and not one.
+ * "Verify before finishing" weighs what was WRITTEN against what was run; a deletion satisfies it trivially and
+ * always will. "Check what it deleted" weighs what was REMOVED against what the repository's history says about
+ * those lines, and it is the only thing here that can speak about a change which type-checks, keeps the suite
+ * green, and reads in review as the diff getting shorter.
+ *
+ * ALL THREE ARE RULES (composables/sandbox/useRules.ts), written by these rows rather than by the general add
+ * flow below them. The rows stay because they are the ones people ask for by name, and a switch reads better
+ * than a form, but there is nothing behind them the table cannot express, which is why outgrowing any of them
  * (a second command before a push, a check that only applies to one repo) needs no new setting.
  *
  * WHICH MODEL the failed check's suggested fix opens on is NOT here: it is `agentRunModels`, up in the Models
@@ -19,6 +25,7 @@ import { useRules } from "../../../composables/sandbox/useRules";
 const { settings, byId, upsert, remove, setEnabled } = useRules();
 
 const verify = () => byId(NAMED_RULES.verify);
+const removals = () => byId(NAMED_RULES.removals);
 const prepush = () => byId(NAMED_RULES.prepush);
 
 // The proof ledger is a built-in action: what it does, read what the turn edited against what the turn ran:
@@ -34,6 +41,24 @@ const setVerify = (on: boolean): void => {
         label: `Verify before finishing`,
         moment: `turn.ending`,
         action: { kind: `builtin`, name: `verify-edits` },
+        enabled: on,
+    });
+};
+
+// The deletion check is a built-in for the same reason: what it does, weigh the lines a turn deleted against
+// what `git log` says about them, is not a command an owner could type, and the record it reads exists only
+// while the turn is running.
+const setRemovals = (on: boolean): void => {
+    const existing = removals();
+    if (existing !== undefined) {
+        setEnabled(existing.id, on);
+        return;
+    }
+    upsert({
+        id: NAMED_RULES.removals,
+        label: `Check what it deleted`,
+        moment: `turn.ending`,
+        action: { kind: `builtin`, name: `verify-removals` },
         enabled: on,
     });
 };
@@ -94,6 +119,24 @@ const savePrepush = (): void => {
         >
             <template #control>
                 <ToggleSwitch :model-value="verify()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setVerify" />
+            </template>
+        </Row>
+
+        <!-- Check what it deleted: before a turn ends, the lines it removed are weighed against what the
+             repository's history says about them, and it asks once when something it deleted has been deleted
+             before, was introduced by a fix, or has stood untouched for months. Off by default like its
+             neighbour, and quiet by construction: a turn that removed ordinary code spawns nothing. -->
+        <Row
+            icon="shield"
+            title="Check what it deleted"
+            description="Ask about removed code the project's history defends."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="removals()?.enabled ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="setRemovals"
+                />
             </template>
         </Row>
 

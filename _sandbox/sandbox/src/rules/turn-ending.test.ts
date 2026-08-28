@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { GitRunner } from "@intentic/scaffold";
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import type { ScriptsProbe } from "../agent/agent-verification.js";
@@ -81,6 +82,76 @@ describe("no rules", () => {
     test("and a rule for another moment says nothing at a stop", async () => {
         const elsewhere = rule({ id: "x", moment: "push.starting", action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 } });
         expect(await stop(armed([elsewhere], { runCommand: async () => ({ status: "failed", exitCode: 1, output: "no" }) }))).toBeUndefined();
+    });
+});
+
+describe("the verify-removals built-in", () => {
+    const REMOVALS: Rule = {
+        id: "verify-removals",
+        label: "Check what it deleted",
+        moment: "turn.ending",
+        action: { kind: "builtin", name: "verify-removals" },
+        enabled: true,
+    };
+
+    const SLEEP = `await sleep(2000); // let the replica catch up`;
+
+    /* The snapshot hook, driven as the SDK drives it. It is a PRE hook, so what it reads is the file as the
+     * turn found it: these tests hand it a reader over a tree the test then changes, which is exactly the
+     * sequence a real edit produces. */
+    const beforeEdit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string) => {
+        const matcher = hooks.PreToolUse![0]!;
+        const input = { hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
+        return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
+    };
+
+    const tree = (files: Record<string, string>) => ({
+        read: async (path: string) => files[path],
+        set: (path: string, content: string | undefined) => (content === undefined ? delete files[path] : (files[path] = content)),
+    });
+
+    const git = (rows: readonly (readonly [string, number, string])[]): GitRunner => async () => ({
+        stdout: rows.map(([hash, at, subject]) => [hash, String(at), subject].join("\u001f")).join("\n"),
+        stderr: "",
+    });
+
+    // 400 days before the fixed clock the deps carry, so "untouched for a long time" is stated, not waited for.
+    const NOW = Date.UTC(2026, 7, 28);
+    const OLD = Math.floor((NOW - 400 * 86_400_000) / 1000);
+
+    test("no rule reading it ⇒ no snapshot hook, so no file is read on any edit", () => {
+        expect(turnEndingHooks([VERIFY]).PreToolUse).toBeUndefined();
+        expect(turnEndingHooks([REMOVALS]).PreToolUse).toBeDefined();
+    });
+
+    test("a defended line that went is put back in front of the turn", async () => {
+        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\nconst kept = 1;\n` });
+        const hooks = armed([REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n`);
+        const nudge = await stop(hooks);
+        expect(nudge).toContain(SLEEP);
+        expect(nudge).toContain(`a91d33 "fix: export dies on cold replica"`);
+    });
+
+    test("adding code says nothing, whatever its history", async () => {
+        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `const kept = 1;\n` });
+        const hooks = armed([REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n${SLEEP}\n`);
+        expect(await stop(hooks)).toBeUndefined();
+    });
+
+    // Both built-ins stand at this moment and read different halves of the same turn; one budget, one follow-up.
+    test("it rides the same follow-up as the proof ledger", async () => {
+        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\n` });
+        const hooks = armed([VERIFY, REMOVALS], { cwd: WORKSPACE_ROOT, read: files.read, git: git([["a91d33", OLD, "fix: export dies on cold replica"]]), now: NOW });
+        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        files.set(`${WORKSPACE_ROOT}/src/a.ts`, ``);
+        const nudge = await stop(hooks);
+        expect(nudge).toContain("no check has passed since the last edit");
+        expect(nudge).toContain(SLEEP);
     });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE ONE CLAIM THIS WHOLE GROUP RESTS ON: the three rows with their own place on the Agent tab are ORDINARY
+// THE ONE CLAIM THIS WHOLE GROUP RESTS ON: the four rows with their own place on the Agent tab are ORDINARY
 // RULES, not switches sitting beside a table that happens to agree with them. If that is true then a toggle and
 // the list below it can never disagree, and a user who outgrows a row can read back exactly what it wrote.
 //
@@ -86,6 +86,19 @@ test(`"Verify before finishing" writes the proof-ledger rule at the turn-ending 
     expect(rule?.enabled).toBe(true);
 });
 
+test(`"Check what it deleted" writes the removal-ledger rule beside it, not instead of it`, async () => {
+    const host = mount(AgentChecks);
+
+    // The second switch in the group. Both built-ins stand at the same moment and read opposite halves of the
+    // same turn, so the one thing worth pinning is that turning one on leaves the other alone.
+    toggleAt(host, 1).click();
+    await Promise.resolve();
+
+    expect(ruleById(`verify-removals`)?.moment).toBe(`turn.ending`);
+    expect(ruleById(`verify-removals`)?.action).toEqual({ kind: `builtin`, name: `verify-removals` });
+    expect(ruleById(`verify-edits`)).toBeUndefined();
+});
+
 test(`switching it back off disables the rule rather than losing where the user put it`, async () => {
     // Position is priority at a deciding moment, so a row that deleted and re-appended its rule could silently
     // move it below one the user had deliberately placed above.
@@ -148,11 +161,12 @@ test(`"Land finished work automatically" writes an allow VERDICT, and off writes
     expect(ruleById(`auto-land`)).toBeUndefined();
 });
 
-test(`the general list shows every rule EXCEPT the three with a row of their own`, () => {
+test(`the general list shows every rule EXCEPT the four with a row of their own`, () => {
     settings.value = {
         ...settings.value,
         rules: [
             { id: `verify-edits`, label: `Verify`, moment: `turn.ending`, action: { kind: `builtin`, name: `verify-edits` }, enabled: true },
+            { id: `verify-removals`, label: `Deleted`, moment: `turn.ending`, action: { kind: `builtin`, name: `verify-removals` }, enabled: true },
             {
                 id: `pre-push`,
                 label: `Pre-push`,
