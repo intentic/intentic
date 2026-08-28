@@ -6,6 +6,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
 import type { AgentRequest } from "./agent.js";
+import { composeWirePrompt } from "./turn-preamble.js";
 import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-plan.js";
 
 /* WHAT A TURN IS ALLOWED TO RUN ON, and what it is handed once it may. Every case here used to be reachable
@@ -86,6 +87,14 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
     });
 
 const turn = (overrides?: Partial<AgentTurn>): AgentTurn => ({ prompt: "do the thing", ...overrides }) as AgentTurn;
+
+// What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
+// function dispatch uses (agent.routes.ts). Assertions about "what the turn is told" go through this, so they
+// keep meaning the wire and not whichever half of the pair they happened to grab.
+const wire = (plan: unknown): string => {
+    const request = (plan as { request: AgentRequest }).request;
+    return composeWirePrompt(request.notes ?? [], request.prompt);
+};
 
 beforeEach(() => {
     credentials.mockReset();
@@ -272,9 +281,9 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
         turn({ agent: "codex", conversationId: "codex-iq" }),
         context,
     );
-    expect((codex as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
-    expect((codex as { request: AgentRequest }).request.prompt).toContain(".agents/skills/iq/SKILL.md");
-    expect((codex as { request: AgentRequest }).request.prompt).not.toContain("iq def createIgnoreScope");
+    expect(wire(codex)).toContain("## iq workspace search");
+    expect(wire(codex)).toContain(".agents/skills/iq/SKILL.md");
+    expect(wire(codex)).not.toContain("iq def createIgnoreScope");
 
     const grok = await planTurn(
         servicesWith({
@@ -289,9 +298,9 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
         turn({ agent: "grok", conversationId: "grok-iq" }),
         context,
     );
-    expect((grok as { request: AgentRequest }).request.prompt).toContain("## iq workspace search");
-    expect((grok as { request: AgentRequest }).request.prompt).toContain(".agents/skills/iq/SKILL.md");
-    expect((grok as { request: AgentRequest }).request.prompt).not.toContain("iq def createIgnoreScope");
+    expect(wire(grok)).toContain("## iq workspace search");
+    expect(wire(grok)).toContain(".agents/skills/iq/SKILL.md");
+    expect(wire(grok)).not.toContain("iq def createIgnoreScope");
 });
 
 test("iq search holdout assigns one balanced arm deterministically per conversation", () => {
@@ -474,16 +483,12 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     });
 
     const grok = await planTurn(grokServices, turn({ agent: "grok" }), isolated);
-    const prompt = (grok as { request: AgentRequest }).request.prompt;
+    const prompt = wire(grok);
     expect(prompt).toContain("/history/worktrees/abc/work");
     expect(prompt).toContain("do the thing");
 
-    const followup = await planTurn(
-        grokServices,
-        turn({ agent: "grok" }),
-        { ...isolated, base: { ...isolated.base, sessionId: "session-1" } },
-    );
-    const followupPrompt = (followup as { request: AgentRequest }).request.prompt;
+    const followup = await planTurn(grokServices, turn({ agent: "grok" }), { ...isolated, base: { ...isolated.base, sessionId: "session-1" } });
+    const followupPrompt = wire(followup);
     expect(followupPrompt).toContain("Use relative paths. `/nowhere/turn-plan` is the shared checkout, not this branch.");
     expect(followupPrompt).not.toContain("/history/worktrees/abc/work");
 
@@ -491,14 +496,14 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
         await planTurn(harnessServices(), turn(), isolated),
         await planTurn(codexServices(), turn({ agent: "codex" }), isolated),
     ]) {
-        expect((namespaced as { request: AgentRequest }).request.prompt).not.toContain("Where this turn's files live");
+        expect(wire(namespaced)).not.toContain("Where this turn's files live");
     }
 });
 
 test("a main-tree turn has no worktree to name, so it says nothing", async () => {
     const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
 
-    expect((plan as { request: AgentRequest }).request.prompt).toBe("do the thing");
+    expect(wire(plan)).toBe("do the thing");
 });
 
 /* The pre-turn rebase is SILENT to the model: it moved the tree, and telling the agent so only ever bought a
@@ -512,7 +517,7 @@ test("a rebased branch says nothing to any runtime", async () => {
     };
 
     for (const plan of [await planTurn(harnessServices(), turn(), isolated), await planTurn(codexServices(), turn({ agent: "codex" }), isolated)]) {
-        expect((plan as { request: AgentRequest }).request.prompt).not.toContain("rebased");
+        expect(wire(plan)).not.toContain("rebased");
     }
 });
 

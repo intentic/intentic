@@ -8,6 +8,7 @@ import type { Services } from "../composition.js";
 import { testConfig } from "../testing.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../workspace/workspace-setup.js";
 import type { AgentRequest } from "./agent.js";
+import { composeWirePrompt } from "./turn-preamble.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 
 /* EVERY RUNTIME IS TOLD THE TREE IS BEHIND: BY WHATEVER SEAM IT HAS. Asserted here rather than in the unit
@@ -91,10 +92,13 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         ...overrides,
     });
 
+// What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
+// function dispatch uses (agent.routes.ts, composeWirePrompt).
 const promptOf = async (services: Services, turn: AgentTurn, context: TurnContext): Promise<string> => {
     const plan = await planTurn(services, turn, context);
     expect(plan).toMatchObject({ ok: true });
-    return (plan as { request: AgentRequest }).request.prompt;
+    const request = (plan as { request: AgentRequest }).request;
+    return composeWirePrompt(request.notes ?? [], request.prompt);
 };
 
 /* The harness arm, which is the one that got the mechanism, and so the one that must no longer get the prose.

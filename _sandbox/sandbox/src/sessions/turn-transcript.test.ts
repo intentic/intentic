@@ -2,7 +2,6 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
-import { LITERAL_SLASH_NOTE, withTurnPreamble } from "../agent/turn-preamble.js";
 import { restoredTurn, subagentTurn } from "./turn-transcript.js";
 
 // When the turn started: what its user row is stamped with (RestoredMessage.sentAt).
@@ -67,11 +66,27 @@ describe("restoredTurn", () => {
         ]);
     });
 
-    /* The note is the OUTERMOST wrapper: the daemon adds its preamble in front of a prompt that already carries
-     * it, so a strip that runs in the wrong order finds no anchor and hands back the lot. Which it did: a
-     * resumed turn recorded the dependency notice and the rebase paragraph as the user's words too. */
-    it("still finds the turn's preamble underneath a re-run's note", () => {
-        const prompt = withResumeNote(withTurnPreamble([LITERAL_SLASH_NOTE], "/work is where it lives"), RESUME_NOTES.restart);
+    /* WHAT THE TURN WAS TOLD comes off its own frame log, not off any prompt. The notes never rode
+     * `turn.prompt` (they were composed onto the request inside the run), so the old parse of that prompt found
+     * nothing and every daemon-recorded turn silently lost them: the live tab drew the collapsed note rows and
+     * the reopened tab drew none. The `preamble` frame is in the recorded events, and this fold keeps it. */
+    it("records the notes the preamble frame carried, on the turn's user row", () => {
+        const events: AgentEvent[] = [
+            { kind: "preamble", notes: [{ title: "Map of this project", text: "## Map of this project\n\nthe workspace, 2 areas" }] },
+            { kind: "delta", text: "on it" },
+        ];
+        expect(restoredTurn({ prompt: "fix the build" }, events, "/work", SENT_AT)[0]).toEqual({
+            role: "user",
+            text: "fix the build",
+            sentAt: SENT_AT,
+            notes: [{ title: "Map of this project", text: "## Map of this project\n\nthe workspace, 2 areas" }],
+        });
+    });
+
+    // A re-run keeps both: the interruption notice replaces the repeated words, and a turn that was also told
+    // something typed keeps that disclosure nowhere — the notice row carries no notes field to hang them on.
+    it("records a re-run's interruption ahead of whatever the turn was told", () => {
+        const prompt = withResumeNote("/work is where it lives", RESUME_NOTES.restart);
         expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([{ role: "notice", text: expect.stringContaining("sandbox came back") }]);
     });
 

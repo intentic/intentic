@@ -18,10 +18,10 @@ test("strip is the builder's inverse, for one note and for both", () => {
 // including that leading slash, which is what the user wrote and what search and titles index.
 test("the literal-slash note moves the user's `/` off the front, and strip puts it back", () => {
     const prompt = "/workspace view does not remember the file tree";
-    const sent = withTurnPreamble([LITERAL_SLASH_NOTE], prompt);
+    const sent = withTurnPreamble([LITERAL_SLASH_NOTE.text], prompt);
     expect(sent.startsWith("/")).toBe(false);
     expect(stripTurnPreamble(sent)).toBe(prompt);
-    expect(stripTurnPreamble(withTurnPreamble([note, notice, LITERAL_SLASH_NOTE], prompt))).toBe(prompt);
+    expect(stripTurnPreamble(withTurnPreamble([note, notice, LITERAL_SLASH_NOTE.text], prompt))).toBe(prompt);
 });
 
 /* THE DEPENDENCY NOTICE HAS TWO OPENINGS, and for a long time only one of them was anchored, so this case is

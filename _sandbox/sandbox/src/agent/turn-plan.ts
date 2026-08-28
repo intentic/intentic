@@ -7,6 +7,7 @@ import {
     type Rule,
     type SandboxSettings,
     type SystemPromptMode,
+    type TurnNote,
     SandboxSettingsSchema,
     capabilitiesOf,
     envSuffix,
@@ -45,7 +46,7 @@ import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import { queueRunEnabled } from "../terminal/terminal-run.js";
 import type { AgentRequest } from "./agent.js";
 import { armSupervisor, type ChildSupervisor } from "../children/children.js";
-import { spawnNote } from "../children/spawn-note.js";
+import { SPAWN_NOTE_TITLE, spawnNote } from "../children/spawn-note.js";
 import { adapterFor } from "./adapter-registry.js";
 import { isUnknownSlashCommand } from "./agent-commands.js";
 import type { SteeringQueue } from "./agent-steering.js";
@@ -55,12 +56,12 @@ import { subagentWaitServer } from "./subagent-wait.js";
 import { watchServer } from "./watch-server.js";
 import { resolveHarnessCredentials } from "./harness-credentials.js";
 import { turnPromptPlacement } from "./system-prompt.js";
-import { LITERAL_SLASH_NOTE, withTurnPreamble, worktreeNote, worktreeReminder } from "./turn-preamble.js";
-import { workspaceMapNote } from "./workspace-map.js";
+import { composeWirePrompt, LITERAL_SLASH_NOTE, worktreeNote, worktreeReminder } from "./turn-preamble.js";
+import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "./workspace-map.js";
 import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
-import { setupNoticeFor } from "../workspace/workspace-setup.js";
-import { iqSearchInstruction } from "./iq-search-instruction.js";
+import { setupNoticeFor, setupNoticeTitle } from "../workspace/workspace-setup.js";
+import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "./iq-search-instruction.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED, the one question every turn has to answer before it can
  * stream anything, and the one the turn route used to answer inline as a four-arm if/else chain wrapped around
@@ -340,7 +341,8 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         provider,
         runtime: capabilities.runtime,
         ...(input.model !== undefined ? { model: input.model } : { model: undefined }),
-        prompt: planned.base.prompt,
+        // The prompt as it will be SENT, notes and all: the same serialization dispatch performs.
+        prompt: composeWirePrompt(planned.base.notes ?? [], planned.base.prompt),
     });
     if (shortfall !== undefined) {
         services.logger.warn(
@@ -380,9 +382,9 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
  *
  * The SYNC note is here rather than in an arm because it is true of every runtime: the pre-turn rebase moved
  * the files under whichever model is about to read them (agents/sync.ts). This is the one point all four arms
- * pass through, so it is the only place a note can be added without being silently absent from three of them,
- * the harness arm wraps its own preamble layer around whatever comes out of here, which stripTurnPreamble
- * peels back off.
+ * pass through, so it is the only place a note can be added without being silently absent from three of them;
+ * the harness arm appends its own note to the same typed list, and dispatch serializes the whole list once
+ * (turn-preamble.ts, composeWirePrompt).
  *
  * THE DEPENDENCY NOTICE IS HERE FOR EXACTLY THAT REASON, having spent its life in the harness arm where three
  * runtimes could not see it. It is the one fact a turn cannot deduce and will otherwise be misled by, that an
@@ -475,7 +477,7 @@ const honoured = (
      * raises. `mapCwd` outside the root is dropped by the escape guard, and a dropped start folder maps the root
      * exactly as it opens the session there. */
     const mapNote = workspaceMapEligible && mapCwd !== undefined ? workspaceMapNote({ root: mapRoot, cwd: mapCwd }) : undefined;
-    const notes = [
+    const notes: TurnNote[] = [
         // First of the preamble, when there is one at all: a note that says who the turn is acting as belongs
         // ahead of anything about the files or the tools it is about to use.
         ...(placement.userNotes ?? []),
@@ -486,7 +488,7 @@ const honoured = (
                       : worktreeReminder(services.workspace.root),
               ]
             : []),
-        ...(mapNote === undefined ? [] : [mapNote]),
+        ...(mapNote === undefined ? [] : [{ title: WORKSPACE_MAP_NOTE_TITLE, text: mapNote }]),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.
          *
@@ -499,9 +501,9 @@ const honoured = (
          * The other runtimes get neither tools nor hooks, there is no seam in them to put either through, so
          * for those the paragraph is still the only thing standing between a model and a wall of true-looking
          * unresolved-import errors. It stays where it is, unchanged, for exactly as long as that is true. */
-        ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [setupNotice] : []),
-        ...(context.iqSearchNote !== undefined ? [context.iqSearchNote] : []),
-        ...(context.spawnNote !== undefined ? [context.spawnNote] : []),
+        ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
+        ...(context.iqSearchNote !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }] : []),
+        ...(context.spawnNote !== undefined ? [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }] : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered
@@ -528,7 +530,12 @@ const honoured = (
     const scope = personaScopeOf(persona, context.effectiveCwd);
     return {
         ...rest,
-        prompt: withTurnPreamble(notes, context.base.prompt),
+        /* The prompt stays the user's own words; the notes ride TYPED beside them and are serialized into the
+         * wire string exactly once, at dispatch (agent.routes.ts, composeWirePrompt). Stapling here is what
+         * used to make everything downstream re-parse the string apart: the literal-slash guard read the
+         * composed prompt and never saw the user's leading `/`, and the transcript record parsed a prompt the
+         * notes were never in and silently dropped them (turn-preamble.ts tells the whole story). */
+        notes,
         /* The composed instructions, carried on the request every runtime reads rather than on the one that
          * used to. Which of the two fields is set is the runtime's own answer (AgentCapabilities.instructions):
          * a replacement where one may be sent, an addition where only that is possible, neither where there is
@@ -789,13 +796,14 @@ export const planHarnessTurn = async (
     // The turn's user message: attachment note folded in as before.
     const promptWithAttachments =
         context.attachmentPaths.length > 0 ? withAttachmentNote(context.base.prompt, [...context.attachmentPaths]) : context.base.prompt;
-    // A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
-    // "Unknown command" and discard, the note keeps the user's words in front of the model (agent-commands.ts
-    // decides, turn-preamble.ts explains). Last of the notes, so it sits against the message it describes.
+    /* A prompt whose leading `/` names no command this session has, which the CLI would otherwise answer with
+     * "Unknown command" and discard, the note keeps the user's words in front of the model (agent-commands.ts
+     * decides, turn-preamble.ts explains). Last of the notes, so it sits against the message it describes,
+     * which the typed list can actually deliver: the old staple checked the COMPOSED prompt, so any other note
+     * in front meant the leading `/` was never at the start and the guard silently never fired. */
     const literalSlash = isUnknownSlashCommand(input.agent ?? "claude", promptWithAttachments);
-    // withTurnPreamble so session restore can strip these notes back out of the stored message, they are
-    // protocol, not something the user said (turn-preamble.ts).
-    const prompt = withTurnPreamble(literalSlash ? [LITERAL_SLASH_NOTE] : [], promptWithAttachments);
+    const prompt = promptWithAttachments;
+    const notes = literalSlash ? [...(context.base.notes ?? []), LITERAL_SLASH_NOTE] : context.base.notes;
     /* Fast speed is a NATIVE-turn ask, so it is held back here and handed only to the branch that keeps the
      * Anthropic credential. A routed turn (codex/grok/kimi/gemini/endpoint under this same loop) is pointed at
      * the sandbox's translator, and the harness refuses fast mode on anything that isn't first-party, so
@@ -810,6 +818,7 @@ export const planHarnessTurn = async (
         request: {
             ...routable,
             prompt,
+            ...(notes === undefined ? {} : { notes }),
             // A routed turn (codex/grok under the Claude Code harness) pins the translator endpoint + bearer +
             // mapped model and withholds the Anthropic OAuth token (baseUrl in agent.ts drops
             // CLAUDE_CODE_OAUTH_TOKEN), and, for the same reason, never carries the fast-mode ask. A native

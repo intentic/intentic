@@ -255,6 +255,8 @@ export const personaDisallowedTools = (persona: TurnPersona, capabilities: reado
  * the chat draws a row from it so the reader can see what the turn was told. It costs one line in the system
  * append where that is where it lands, which is one line of the same fact. */
 export const PERSONA_NOTE_HEADER = "## Who this turn is acting as";
+// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+export const PERSONA_NOTE_TITLE = "Who this turn is acting as";
 
 /* WHICH SYSTEM PROMPT THIS TURN RUNS ON, once the card has had its say, the sandbox's answer, or the card's
  * instead of it.

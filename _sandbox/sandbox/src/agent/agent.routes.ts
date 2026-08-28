@@ -19,7 +19,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import type { DependencyLandOrigin } from "../workspace/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/verify-deps.js";
-import { syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
+import { REPO_SYNC_NOTE_TITLE, syncAdvisory, syncWorkspaceRepos } from "../workspace/sync-repos.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
@@ -36,7 +36,7 @@ import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor } from "../children/children.js";
 import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
-import { preambleNotes, withTurnPreamble } from "./turn-preamble.js";
+import { composeWirePrompt } from "./turn-preamble.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
 import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
@@ -978,26 +978,34 @@ async function* runTurn(
     const advisory = syncPromise === undefined ? undefined : syncAdvisory(await syncPromise);
     mark("repoSync");
     if (advisory !== undefined) {
-        // Through withTurnPreamble like every other note, and not by hand: that is what puts it inside the
-        // strip on restore and the disclosure below, both of which key off the openings that function knows.
-        // Pasted on directly, as it was, it reached the model and nothing else, invisible in the chat, and
-        // redrawn as the user's own words by every reopened tab.
-        request = { ...request, prompt: withTurnPreamble([advisory], request.prompt) };
+        // Onto the TYPED list like every other note, and not stapled by hand: the list is what feeds the
+        // disclosure below, the transcript record, and the wire alike. Pasted on directly, as it once was, it
+        // reached the model and nothing else, invisible in the chat, and redrawn as the user's own words by
+        // every reopened tab. First of the notes, where the staple used to land it: what just moved on disk
+        // is the first thing a turn should know.
+        request = { ...request, notes: [{ title: REPO_SYNC_NOTE_TITLE, text: advisory }, ...(request.notes ?? [])] };
     }
     /* WHAT THE USER'S MESSAGE GREW ON THE WAY TO THE MODEL, said out loud.
      *
-     * Everything above this line may have prepended a note to the prompt: a rebase that moved the branch, a
-     * dependency tree that is behind, workspace context retrieved for this very message, the repos just pulled.
-     * They change what the agent does, and the chat used to show at most a one-line paraphrase of one of them,
-     * so an agent acting on instructions the user could not read looked like an agent acting on its own.
+     * Everything above this line may have added a note: a rebase that moved the branch, a dependency tree that
+     * is behind, the repos just pulled. They change what the agent does, and the chat used to show at most a
+     * one-line paraphrase of one of them, so an agent acting on instructions the user could not read looked
+     * like an agent acting on its own.
      *
-     * Emitted from the FINAL prompt rather than from the notes as they were assembled, because that is the
-     * string the model actually receives; anything a later pass adds is in it by construction, and a disclosure
-     * that has to be remembered separately is one someone eventually forgets to update. */
-    const notes = preambleNotes(request.prompt);
+     * Emitted from the SAME list the wire prompt is serialized from, two lines down, so the disclosure and
+     * what the model receives cannot drift: a note is in both or in neither. The frame is also how the notes
+     * reach the durable record, the transcript fold picks it out of the turn's own frame log
+     * (sessions/turn-transcript.ts), which is what fixed the reopened tab losing every note the live tab had
+     * shown. */
+    const notes = request.notes ?? [];
     if (notes.length > 0) {
-        yield { kind: "preamble", notes };
+        yield { kind: "preamble", notes: [...notes] };
     }
+    /* THE ONE SERIALIZATION of the typed notes into the wire prompt, immediately before the request reaches
+     * its adapter and nowhere else (turn-preamble.ts, composeWirePrompt). Downstream of this line the composed
+     * string is what every adapter and the provider's own session store see, byte-for-byte what the old
+     * per-layer staples produced; upstream of it, nothing ever has to take the string apart again. */
+    request = { ...request, prompt: composeWirePrompt(notes, request.prompt) };
     /* THE TURN'S BEFORE-STATE, recorded under this message so that going back to it, a rewind, or a fork that
      * wants the files as they were here, has something to name. Both placements record one; what differs is
      * what a "state" IS where the turn runs, which is the distinction agent/turn-anchors.ts exists to carry.

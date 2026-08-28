@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const IQ_SEARCH_INSTRUCTION_HEADER = "## iq workspace search";
+// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+export const IQ_SEARCH_INSTRUCTION_TITLE = "Using iq for workspace search";
 
 /* Claude Code reads the full skill through the plugin loader. Native Codex and OpenCode have no plugin seam,
  * so their opening request carries the nudge only as a disclosed turn preamble — not the full SKILL.md body,

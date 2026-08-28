@@ -9,7 +9,7 @@ import { testConfig } from "../testing.js";
 import { workspaceSetup } from "../workspace/workspace-setup.js";
 import type { AgentRequest } from "./agent.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
-import { preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
+import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
 /* WHO ACTUALLY RECEIVES THE PROJECT MAP: the gates, asserted through a real plan rather than by reading them.
@@ -90,10 +90,13 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         ...overrides,
     });
 
+// What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
+// function dispatch uses (agent.routes.ts, composeWirePrompt).
 const promptOf = async (services: Services, turn: AgentTurn, context: TurnContext): Promise<string> => {
     const plan = await planTurn(services, turn, context);
     expect(plan).toMatchObject({ ok: true });
-    return (plan as { request: AgentRequest }).request.prompt;
+    const request = (plan as { request: AgentRequest }).request;
+    return composeWirePrompt(request.notes ?? [], request.prompt);
 };
 
 test("the map rides the opening message when the setting is on, and the user's words still end it", async () => {
@@ -166,12 +169,11 @@ test("an isolated turn is mapped against its own tree, not the shared checkout",
     expect(prompt).not.toContain("The shared billing area");
 });
 
-/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID: the half a new preamble is most likely to forget.
- *
- * The provider stores the combined prompt verbatim, so a note missing from turn-preamble.ts's registry is
- * invisible three ways at once: the message flattens wrong, a reopened tab redraws the map as the user's own
- * words, and the chat never offers it to read. Registering it is one line and forgetting it fails silently,
- * which is exactly the pair worth a test. */
+/* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID, and the PROVIDER's store keeps the composed prompt
+ * verbatim, so the boundary parser must still recognize it there (history menu, adoption, search). This is the
+ * round trip: the same serialization dispatch performs, read back by the parser, which is what fails if a note
+ * ships typed with a header the parser's registry does not know, and what keeps the two vocabularies from
+ * drifting apart (turn-preamble.ts, INJECTED). */
 test("the map strips back off the stored message, and the chat is given a row for it", async () => {
     const root = await projectAt("wsmap-strip-", "shared");
 

@@ -34,6 +34,8 @@ import { IGNORED_DIRS, isPublicPath, isReferencePath } from "@intentic/workspace
  * cache, and riding the message is what lets the chat show the reader exactly what was injected. */
 
 export const WORKSPACE_MAP_NOTE_HEADER = "## Map of this project";
+// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+export const WORKSPACE_MAP_NOTE_TITLE = "Map of this project";
 
 /* The note's share of the turn, as characters (~4 per token). Deliberately of the same order as the retrieved
  * context capsule's 1.2k tokens and far under what it replaces: the warm-up it removes measured ~5.3k tokens of

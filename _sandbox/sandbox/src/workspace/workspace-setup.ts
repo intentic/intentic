@@ -216,6 +216,13 @@ export const SETUP_NOTICE_HEADER =
  * own is what keeps the notice reading as prose while still giving the stripper something to anchor on. */
 export const STALE_NOTICE_HEADER = "Some dependencies declared under /work are not installed";
 
+/* The chat-row titles of the two halves, beside the headers they belong to (turn-preamble.ts explains the
+ * pairing). One notice string can open with either half, so the title is picked off the built text's own
+ * opening, the same discrimination the provider-store parser makes. */
+export const SETUP_NOTICE_TITLE = "Dependencies aren't installed yet";
+export const STALE_NOTICE_TITLE = "Dependencies are behind";
+export const setupNoticeTitle = (notice: string): string => (notice.startsWith(SETUP_NOTICE_HEADER) ? SETUP_NOTICE_TITLE : STALE_NOTICE_TITLE);
+
 // A project names itself by its directory; the root owns the manifest under a name rather than an empty string.
 const where = (status: ProjectSetupStatus): string => (status.dir === "" ? "the workspace root" : status.dir);
 

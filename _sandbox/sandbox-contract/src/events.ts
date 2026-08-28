@@ -361,8 +361,9 @@ export const RestoredMessageSchema = z.object({
     thinking: z.string().optional().describe("What the agent was reasoning about."),
     tools: z.array(RestoredToolCallSchema).optional().describe("The tool calls this part of the turn made."),
     /* What the daemon added to this turn's message (user rows only), the same notes the live `preamble` frame
-     * carries, recovered from the stored prompt when the transcript is read back. The reader that strips them out
-     * of the user's words is the one that hands them over here instead of dropping them on the floor.
+     * carries. A daemon-recorded turn takes them straight off that frame in its own log, typed end to end
+     * (sessions/turn-transcript.ts); only a conversation adopted from a provider's session store recovers them
+     * by parsing the composed prompt kept there, the one store the daemon never wrote typed.
      *
      * On the message rather than as a row of its own, and that matters twice: they ARE part of what was
      * sent, and a record row per turn preamble would break the one-row-per-bubble correspondence a branch counts
@@ -555,12 +556,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
      * way to find out what those instructions said. This frame is the fix: the note text verbatim, one entry per
      * note, rendered collapsed so it costs a click rather than a scroll.
      *
-     * `title` is the note's own opening header, which is what the stripper already anchors on, so the two
-     * cannot drift, and a note nobody thought to title cannot reach the wire unlabelled.
+     * Emitted from the TYPED notes the wire prompt is serialized from at the same point (turn-preamble.ts,
+     * composeWirePrompt), so the disclosure and what the model receives cannot drift: a note is in both or in
+     * neither, and a note nobody thought to title cannot reach the wire unlabelled.
      *
      * ONE MOMENT, always: the notes went in front of the user's own message before the turn started, so they hang
-     * off that message and are stored on it, which is how a reopened tab still has them. Nothing is injected into
-     * a RUNNING turn, the rebase taken while a card sat waiting was the only thing that ever was, and it no
+     * off that message and are stored on it, the transcript fold reads this very frame out of the turn's own
+     * frame log (sessions/turn-transcript.ts), which is how a reopened tab still has them. Nothing is injected
+     * into a RUNNING turn, the rebase taken while a card sat waiting was the only thing that ever was, and it no
      * longer says anything to the model at all (agent/turn-preamble.ts). */
     z.object({ kind: z.literal("preamble"), notes: z.array(TurnNoteSchema) }),
     // The SDK's init handshake; carries the model it actually resolved for the turn.

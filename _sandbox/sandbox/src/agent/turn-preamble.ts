@@ -11,16 +11,16 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 // how-to for shell-only runtimes, the dependency-readiness notice (which
 // must ride the user message because it changes the moment an install finishes, while the system prefix stays
 // byte-stable for the prompt cache), and the literal-slash note below. They are protocol, not something the
-// user said, but the SDK transcript stores the combined prompt verbatim, so a reopened tab would redraw them
-// as the user's own words: the "Dependencies are NOT installed" text stapled onto their message after every
-// refresh or sandbox rebuild. Builder and stripper live together so restore recognizes exactly what a turn
-// injected, including in transcripts written before this module existed, which used the same shape.
+// user said, and the TYPED form (TurnNote, title + text) is the canonical one: each note is built as a
+// TurnNote at its own definition site, rides the request as data (AgentRequest.notes), feeds the `preamble`
+// frame and the transcript record as data, and is serialized into the wire prompt exactly once, by
+// composeWirePrompt at the point the request leaves for its adapter.
 //
-// The third reader is the CHAT, and it is the one this module was missing for most of its life. Stripping a
-// note out of the user's words is only half the job: the other half is showing it somewhere, because a note
-// that changes what the agent does and appears nowhere is an instruction the user is watching be followed
-// without being allowed to read it. preambleNotes below is that half, the same anchored split the stripper
-// makes, kept instead of discarded, and INJECTED carries a title per note so the chat has a row to draw.
+// The PARSER half below (preambleNotes, stripTurnPreamble, unwrapStoredPrompt) exists for the one store the
+// daemon does not write: a provider's own session file keeps the composed wire prompt verbatim, so the
+// history menu, adoption, and search that read THAT store must take the notes back off the user's words or a
+// reopened tab redraws "Dependencies are NOT installed" as something the user typed. That is a boundary
+// parser over a foreign format, not a second representation: nothing daemon-side round-trips through it.
 
 const SEPARATOR = "\n\n---\n\n";
 
@@ -31,10 +31,13 @@ const SEPARATOR = "\n\n---\n\n";
  * would otherwise have to guess whether `/workspace` names a command, a route, or a path. */
 const LITERAL_SLASH_NOTE_HEADER = "## Reading the message below";
 
-export const LITERAL_SLASH_NOTE =
-    `${LITERAL_SLASH_NOTE_HEADER}\n\n` +
-    "It opens with `/` but names no slash command available here: the leading token is the user's own words " +
-    "(a route, a path, a filename). Read the whole message as ordinary prose.";
+export const LITERAL_SLASH_NOTE: TurnNote = {
+    title: "How to read this message",
+    text:
+        `${LITERAL_SLASH_NOTE_HEADER}\n\n` +
+        "It opens with `/` but names no slash command available here: the leading token is the user's own words " +
+        "(a route, a path, a filename). Read the whole message as ordinary prose.",
+};
 
 /* WHERE A CWD-ISOLATED RUNTIME'S TREE IS, told in words because there is no seam to enforce it.
  *
@@ -53,16 +56,22 @@ export const LITERAL_SLASH_NOTE =
  * after compaction. Repeating the full paragraph made one safety fact consume context in proportion to the
  * conversation's length. */
 const WORKTREE_NOTE_HEADER = "## Where this turn's files live";
+const WORKTREE_NOTE_TITLE = "Where this turn's files live";
 
-export const worktreeNote = (worktree: string, root: string): string =>
-    `${WORKTREE_NOTE_HEADER}\n\n` +
-    `This conversation works on its own git branch, checked out at \`${worktree}\`, and this runtime reaches ` +
-    `it by working directory alone, so \`${root}\` is still the SHARED checkout every other agent is editing. ` +
-    `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
-    `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`;
+export const worktreeNote = (worktree: string, root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text:
+        `${WORKTREE_NOTE_HEADER}\n\n` +
+        `This conversation works on its own git branch, checked out at \`${worktree}\`, and this runtime reaches ` +
+        `it by working directory alone, so \`${root}\` is still the SHARED checkout every other agent is editing. ` +
+        `Use relative paths, or absolute paths under \`${worktree}\`. An absolute \`${root}/…\` path (from a memory, ` +
+        `an AGENTS.md, or an earlier turn) writes outside your branch, where the work is neither reviewed nor landed.`,
+});
 
-export const worktreeReminder = (root: string): string =>
-    `${WORKTREE_NOTE_HEADER}\n\nUse relative paths. \`${root}\` is the shared checkout, not this branch.`;
+export const worktreeReminder = (root: string): TurnNote => ({
+    title: WORKTREE_NOTE_TITLE,
+    text: `${WORKTREE_NOTE_HEADER}\n\nUse relative paths. \`${root}\` is the shared checkout, not this branch.`,
+});
 
 /* THE REBASE IS NOT NEWS THE MODEL NEEDS, which is why there is no note here and this comment stands where one
  * used to.
@@ -82,13 +91,14 @@ export const worktreeReminder = (root: string): string =>
  * conflict errand (agents/land.ts, web conflictResolution.ts), which is a mechanism rather than a sentence a
  * model has to be trusted to act on. */
 
-/* Every note this module knows how to put in front of a user message, the builder's flatten check, the
- * stripper's anchor and the chat's disclosure all read this one list, which is what keeps the three from
- * drifting. A note missing from it is invisible three ways at once: it flattens wrong, it survives restore as
- * the user's own words, and the chat never mentions it.
+/* THE PARSER'S VOCABULARY: every note opening that can appear in a PROVIDER-STORE prompt, with the title the
+ * chat draws when one is read back from there. The typed path does not consult this list, a TurnNote carries
+ * its own title from its definition site, so a new note is visible everywhere by construction; add its header
+ * here only so the provider-store readers (history menu, adoption, search) can recognize it too.
  *
  * The TITLE is the row the reader clicks. It says what the note is about in their terms, not the daemon's, the
- * text behind it is addressed to a model and reads like it. */
+ * text behind it is addressed to a model and reads like it. Titles here must match the ones at the definition
+ * sites, so a note reads the same whether it arrived typed or was parsed back off a provider's store. */
 const INJECTED: readonly { readonly header: string; readonly title: string }[] = [
     { header: SPAWN_NOTE_HEADER, title: "Spawning helper agents" },
     // The persona note reaches the user message only where the runtime has no system prompt to hold it (Pi,
@@ -114,11 +124,10 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
 
 /* Notes in front of the user's message, separated from it exactly ONCE however many passes add to them.
  *
- * The preamble is built in two layers: honoured() adds what is true of every runtime, and the harness arm then
- * adds its own around that (turn-plan.ts). Nesting a second separator would break the invariant the stripper is
- * written against, it anchors on the FIRST one, so the inner layer would come back out of a restore as the
- * user's own words, which is the exact failure this module exists to prevent. Merging into the preamble already
- * there instead leaves one separator in every message, whoever wrote it. */
+ * The string core of the serializer below, kept for the parser's own tests (they build fixtures from raw
+ * texts). Merging rather than nesting is what leaves one separator in every message, whoever wrote it: the
+ * parser anchors on the FIRST separator, so a nested second one would come back out of a provider-store read
+ * as the user's own words. */
 export const withTurnPreamble = (notes: readonly string[], prompt: string): string => {
     if (notes.length === 0) {
         return prompt;
@@ -126,6 +135,18 @@ export const withTurnPreamble = (notes: readonly string[], prompt: string): stri
     const joined = notes.join("\n\n");
     return INJECTED.some(({ header }) => prompt.startsWith(header)) ? `${joined}\n\n${prompt}` : `${joined}${SEPARATOR}${prompt}`;
 };
+
+/* THE ONE SERIALIZER from the typed notes to the wire prompt, at the single point a request leaves for its
+ * adapter (agent.routes.ts, right before dispatch). Everything upstream of that point carries TurnNote[]:
+ * turn-plan assembles them, the `preamble` frame is emitted from them, and the transcript record folds them
+ * off the frame log, so none of those ever parses this string back apart. The composed form exists in exactly
+ * two places, the provider wire and the provider's own session store, and the parser half below reads it back
+ * out of THAT store and no other. */
+export const composeWirePrompt = (notes: readonly TurnNote[], prompt: string): string =>
+    withTurnPreamble(
+        notes.map((note) => note.text),
+        prompt,
+    );
 
 /* WHERE THE NOTES END AND THE USER'S WORDS BEGIN, one answer, read by the two functions below.
  *

@@ -26,6 +26,7 @@ import {
     type Rule,
     sendableEffort,
     type SystemPromptMode,
+    type TurnNote,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { relative, sep } from "node:path";
@@ -58,7 +59,6 @@ import { type TurnRuleCommand, turnEndingHooks } from "../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "./agent-terminals.js";
 import type { HeavyCommands } from "../platform/heavy-commands.js";
 import { terminalHelpServer } from "../terminal/terminal-help.js";
-import { withTurnPreamble } from "./turn-preamble.js";
 import { EventQueue } from "./event-queue.js";
 import { trialUnavailableFrame } from "./error-frames.js";
 import { harnessEnv, type TurnAllowance } from "./harness-credentials.js";
@@ -71,7 +71,14 @@ import { noteChildWork } from "./child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "./subagents.js";
 
 export interface AgentRequest {
+    /* What the model reads AFTER the notes below: the user's own words (plus, on the Claude arm, the
+     * attachment trailer). Never the composed wire string, that is minted from this pair exactly once, at
+     * dispatch (agent.routes.ts, composeWirePrompt), so nothing upstream ever has to parse it back apart. */
     readonly prompt: string;
+    /* What the daemon tells the model ahead of the user's message, TYPED, in reading order (turn-preamble.ts).
+     * Canonical: the `preamble` frame and the transcript record are fed from this list, and the wire prompt is
+     * its serialization. Absent ⇒ nothing was injected, the common case for a hand-built request. */
+    readonly notes?: readonly TurnNote[];
     // Which conversation this turn belongs to. Only the subagent registry reads it, a child is filed under the
     // parent whose turn spawned it, which is what lets the Subagents area group by agent and the fleet card count
     // its own. Absent ⇒ a turn with no conversation behind it (the bench), whose children are not registered.

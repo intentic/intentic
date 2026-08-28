@@ -13,6 +13,8 @@
  * told. */
 
 export const SPAWN_NOTE_HEADER = "## Spawning helper agents";
+// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+export const SPAWN_NOTE_TITLE = "Spawning helper agents";
 
 export const spawnNote = (): string =>
     `${SPAWN_NOTE_HEADER}\n\n` +

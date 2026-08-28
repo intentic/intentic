@@ -1,7 +1,14 @@
-import { type AgentEvent, type AgentTurn, capabilitiesOf, type RestoredMessage, type RestoredToolCall } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentTurn,
+    capabilitiesOf,
+    type RestoredMessage,
+    type RestoredToolCall,
+    resumeDisclosure,
+    withoutResumeNote,
+} from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
-import { unwrapStoredPrompt } from "../agent/turn-preamble.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -32,23 +39,26 @@ export const restoredTurn = (
     sentAt: number,
 ): RestoredMessage[] => {
     const out: RestoredMessage[] = [];
-    // The same unwrapping readWorkspaceSession does, for the same reason: the daemon's own injections (a turn
-    // preamble, the note saying what interrupted a turn it re-ran, the trailing attachment note) are not what
-    // the user typed and must not redraw as their words. `turn.attachments` is the authoritative list when the
-    // client sent one, the note is only the Claude path's way of carrying it, and the other adapters word it
-    // differently.
-    const unwrapped = unwrapStoredPrompt(turn.prompt);
-    const stripped = stripAttachmentNote(unwrapped.text);
+    /* `turn.prompt` is the user's words with at most two daemon layers on them, the note saying what
+     * interrupted a turn it re-ran (outermost, events.ts) and the trailing attachment note, and both come back
+     * off here: they are not what the user typed and must not redraw as their words. The turn PREAMBLE is not
+     * among them any more: notes ride the request typed and reach this record through the `preamble` frame
+     * below, never through the prompt, so there is nothing of theirs to parse out. `turn.attachments` is the
+     * authoritative list when the client sent one, the note is only the Claude path's way of carrying it, and
+     * the other adapters word it differently. */
+    const resume = resumeDisclosure(turn.prompt);
+    const stripped = stripAttachmentNote(resume === undefined ? turn.prompt : withoutResumeNote(turn.prompt));
     const attachments = (turn.attachments ?? stripped.attachments).map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
-    /* Taken OUT of the user's words and kept, rather than taken out and dropped. What a turn was told is part of
-     * what happened to it, so a tab that reopens tomorrow shows the same collapsed row the tab that watched it
-     * stream did, not a message whose agent appears to have acted on nothing.
+    /* WHAT THE TURN WAS TOLD, off its own frame log: the `preamble` frame carries the same typed notes the
+     * live tab drew, so the reopened tab shows the identical collapsed row, not a message whose agent appears
+     * to have acted on nothing. Read from the frames rather than parsed out of any prompt, this fold used to
+     * parse `turn.prompt`, which the notes were never in, so every daemon-recorded turn silently lost them.
      *
      * Carried ON the user's row, never as a row of its own: the record's positions are what a rewind addresses
      * and a branch copies a prefix of, so a turn that happened to be told something must not record one row more
      * than a turn that wasn't. */
-    const resume = unwrapped.resume;
-    const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
+    const injected = events.filter((event) => event.kind === "preamble").flatMap((event) => event.notes);
+    const notes = [...injected, ...(resume?.kind === "note" ? [resume.note] : [])];
     /* A handoff turn's prompt opens with the transcript the daemon folded into it (runtime-history.ts). Unwrap
      * that and keep only what the user actually typed: the rows inside the envelope are this conversation's OWN
      * earlier messages, which this record already holds. Re-emitting them appended a second, and, being

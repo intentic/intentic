@@ -129,7 +129,7 @@ test("a runtime with no system prompt still hears which persona it is wearing", 
     });
     expect(placement.systemPrompt).toBeUndefined();
     expect(placement.systemAppend).toBeUndefined();
-    expect(placement.userNotes).toEqual([PERSONA]);
+    expect(placement.userNotes).toEqual([{ title: "Who this turn is acting as", text: PERSONA }]);
     // Nothing at all to say is nothing at all sent: an empty list would put a bare separator in front of the
     // user's own words.
     expect(turnPromptPlacement({ capabilities: ACP, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, terseOutput: true })).toEqual({});

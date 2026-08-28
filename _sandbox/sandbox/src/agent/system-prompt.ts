@@ -1,5 +1,6 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentCapabilities, SystemPromptMode } from "@intentic/sandbox-contract";
+import type { AgentCapabilities, SystemPromptMode, TurnNote } from "@intentic/sandbox-contract";
+import { PERSONA_NOTE_TITLE } from "../personas/personas.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 
 /* WHAT THE MODEL IS TOLD BEFORE THE CONVERSATION STARTS, and where each piece of it goes.
@@ -264,9 +265,10 @@ export interface TurnPromptPlacement {
     readonly systemPrompt?: string;
     // What the daemon adds to that base. Undefined ⇒ nothing to add (or nothing may be added).
     readonly systemAppend?: string;
-    /* The notes that could not ride a system prompt, for the caller to prepend to the user message, in the
-     * order they should be read: a runtime with no system seam sends the persona note through this door. */
-    readonly userNotes?: readonly string[];
+    /* The notes that could not ride a system prompt, typed, for the caller to carry on the request's own
+     * notes (AgentRequest.notes), in the order they should be read: a runtime with no system seam sends the
+     * persona note through this door. */
+    readonly userNotes?: readonly TurnNote[];
 }
 
 /* Where each composed piece of this turn's instructions goes. One function because the destinations are one
@@ -281,7 +283,7 @@ export const turnPromptPlacement = ({ capabilities, mode, systemPrompt, stableSy
      * that does not know which accounts it may speak through is the mistake the whole layer exists to stop, and
      * here the user message is the only channel there is. */
     if (instructions === "none") {
-        return personaNote === undefined ? {} : { userNotes: [personaNote] };
+        return personaNote === undefined ? {} : { userNotes: [{ title: PERSONA_NOTE_TITLE, text: personaNote }] };
     }
 
     /* "custom", the owner's text, and nothing else of ours. On a runtime that can only ADD, it is added: its

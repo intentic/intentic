@@ -57,6 +57,8 @@ const commits = (n: number): string => `${n} ${n === 1 ? "commit" : "commits"}`;
  * only ever cuts an opening it knows, a reopened tab redrew the whole thing as a paragraph the user had
  * supposedly typed above their own words. */
 export const REPO_SYNC_NOTE_HEADER = "## Repos synced with their remotes";
+// The chat-row title, beside the header it belongs to (turn-preamble.ts explains the pairing).
+export const REPO_SYNC_NOTE_TITLE = "Repos synced with their remotes";
 
 // A note prepended to the turn's prompt so the agent knows what moved and which repos it could
 // NOT advance (its context there may be stale). Clean/current/no-remote/skipped repos add nothing.
