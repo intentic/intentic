@@ -20,7 +20,7 @@ import { CapabilitySchema, SandboxSettingsSchema } from "./schemas.js";
 // One repository, by reference: the id it lands under in the workspace, where a target clones it from, and
 // (optionally) the branch to check out. A repo with NO remote cannot appear here, the exporter reports it as
 // omitted instead of inventing a source for bytes only the source sandbox holds.
-export const DefinitionRepositorySchema = z.object({
+export const DefinitionRepositorySchema = z.strictObject({
     // Workspace-relative repo id ("intentic", "clients/foo"), the same id the wire {repo} routes use.
     id: z.string().min(1),
     // The clone URL, verbatim from the source repo's own remote.
@@ -41,7 +41,7 @@ export type DefinitionRepository = z.infer<typeof DefinitionRepositorySchema>;
  * cannot be pushed anywhere — secrets, identity, /history, the built image.
  *
  * A workspace with no remote cannot appear here; the exporter says so in `omitted` rather than inventing one. */
-export const DefinitionWorkspaceSchema = z.object({
+export const DefinitionWorkspaceSchema = z.strictObject({
     // The clone URL, verbatim from the workspace repo's own remote.
     remote: z.string().min(1),
     // The branch to check out; absent means the remote's default.
@@ -49,7 +49,7 @@ export const DefinitionWorkspaceSchema = z.object({
 });
 export type DefinitionWorkspace = z.infer<typeof DefinitionWorkspaceSchema>;
 
-export const DefinitionEnvironmentSchema = z.object({
+export const DefinitionEnvironmentSchema = z.strictObject({
     // The image the overlay extends, informational: the target composes against ITS OWN base (see
     // composeEnvironment's baseImageOf), this records what the source was on.
     baseImage: z.string().optional(),
@@ -77,13 +77,13 @@ const bareField = (field: z.ZodType): z.ZodType => {
 
 const definitionSettings = (): z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>> => {
     const shape = Object.fromEntries(Object.entries(SandboxSettingsSchema.shape).map(([key, field]) => [key, bareField(field).optional()]));
-    return z.object(shape).prefault({}) as unknown as z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>;
+    return z.strictObject(shape).prefault({}) as unknown as z.ZodType<Partial<z.infer<typeof SandboxSettingsSchema>>>;
 };
 
-export const SandboxDefinitionSchema = z.object({
+export const SandboxDefinitionSchema = z.strictObject({
     // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at,
     // the bundle manifest's own rule.
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     // What the source sandbox was called, for the reader; never used to authorize anything.
     name: z.string().optional(),
     environment: DefinitionEnvironmentSchema.prefault({}),

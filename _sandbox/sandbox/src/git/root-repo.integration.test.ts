@@ -8,7 +8,7 @@ import { afterEach, expect, test } from "vitest";
 import { rootExcludes } from "../history/history.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { changedFiles } from "./changes.js";
-import { commitRootBaseline, commitWorktreeRemainder, ensureLocalRootRepo, ensureRootRepo } from "./root-repo.js";
+import { commitRootBaseline, commitWorktreeRemainder, ensureLocalRootRepo, ensureRootRepo, ROOT_BASELINE_CONFIG } from "./root-repo.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -53,6 +53,7 @@ test("provision inits /work with a separate git dir, a baseline commit, and the 
     // The baseline commit captured the loose file but neither the repo dir nor .intentic/.
     expect(await sh(work, "ls-files")).toBe("notes.md");
     expect(await bothSides(work)).toEqual([]);
+    expect(await sh(work, "config", "--get", ROOT_BASELINE_CONFIG)).toBe(await sh(work, "rev-parse", "HEAD"));
 });
 
 /* THE HOLES IN THE .intentic WALL, checked against real git rather than reasoned about.

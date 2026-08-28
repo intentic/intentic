@@ -24,6 +24,12 @@ const exists = async (path: string): Promise<boolean> => {
     }
 };
 
+// Protected git-dir metadata, rather than a commit-message heuristic: only the daemon writes these keys and
+// the container profile keeps the git dir outside /work. `fresh` is the narrow unborn window in which the boot
+// seed runs; `baseline` names the exact commit the daemon created after boot convergence.
+export const ROOT_FRESH_CONFIG = "intentic.fresh";
+export const ROOT_BASELINE_CONFIG = "intentic.baseline";
+
 // The index mode git gives a nested repository, the entry a repo dir becomes when it is staged instead of
 // excluded. `ls-files --stage -z` prints "<mode> <sha> <stage>\t<path>", NUL-terminated and never quoted, so a
 // path holding a space (or a newline) survives this parse intact.
@@ -172,7 +178,12 @@ export const commitWorktreeRemainder = async (repo: string, dir: string, message
 
 // Returns true only when this boot freshly `gitInit`ed the repo, the caller then takes the baseline commit
 // (commitRootBaseline) AFTER converging its /work-owned files, so those files land inside the baseline.
-export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: string, git: GitRunner = defaultGit): Promise<boolean> => {
+export const ensureRootRepo = async (
+    workspace: WorkspacePaths,
+    historyRoot: string,
+    git: GitRunner = defaultGit,
+    definitionSeedEligible = true,
+): Promise<boolean> => {
     const gitDir = repoGitDir(historyRoot, "root");
     const fresh = !(await exists(gitDir));
     if (fresh) {
@@ -188,6 +199,9 @@ export const ensureRootRepo = async (workspace: WorkspacePaths, historyRoot: str
     if (fresh) {
         // Repeat status scans over /work stay stat-cheap. Nothing is tracked yet, so nothing to untrack.
         await git(workspace.root, ["config", "core.untrackedCache", "true"]);
+        if (definitionSeedEligible) {
+            await git(workspace.root, ["config", ROOT_FRESH_CONFIG, "true"]);
+        }
         return true;
     }
     await untrackNestedRepos(workspace.root, gitDir, git);
@@ -226,7 +240,11 @@ const ensureLocalStateExcluded = async (root: string, git: GitRunner): Promise<v
  * machine), the nested-repo excludes written before the caller's baseline commit can stage a discovered
  * repo's tree, and the untracked cache that keeps repeat status scans stat-cheap, ours to set because the
  * repo is ours to create. Returns true exactly when it made the repo, same contract as ensureRootRepo. */
-export const ensureLocalRootRepo = async (workspace: WorkspacePaths, git: GitRunner = defaultGit): Promise<boolean> => {
+export const ensureLocalRootRepo = async (
+    workspace: WorkspacePaths,
+    git: GitRunner = defaultGit,
+    definitionSeedEligible = true,
+): Promise<boolean> => {
     if (await exists(join(workspace.root, ".git"))) {
         await ensureLocalStateExcluded(workspace.root, git);
         return false;
@@ -235,6 +253,9 @@ export const ensureLocalRootRepo = async (workspace: WorkspacePaths, git: GitRun
     // git init created .git/info; the excludes keep discovered nested repos out of the baseline's `add -A`.
     await writeFile(join(workspace.root, ".git", "info", "exclude"), `${rootExcludes(await discoverRepos(workspace.root)).join("\n")}\n`);
     await git(workspace.root, ["config", "core.untrackedCache", "true"]);
+    if (definitionSeedEligible) {
+        await git(workspace.root, ["config", ROOT_FRESH_CONFIG, "true"]);
+    }
     return true;
 };
 
@@ -255,4 +276,10 @@ export const commitRootBaseline = async (workspace: WorkspacePaths, git: GitRunn
         "-m",
         "Initialize workspace",
     ]);
+    const fresh = (await git(workspace.root, ["config", "--get", ROOT_FRESH_CONFIG]).catch(() => undefined))?.stdout.trim() === "true";
+    if (fresh) {
+        const head = (await git(workspace.root, ["rev-parse", "HEAD"])).stdout.trim();
+        await git(workspace.root, ["config", ROOT_BASELINE_CONFIG, head]);
+    }
+    await git(workspace.root, ["config", "--unset-all", ROOT_FRESH_CONFIG]).catch(() => undefined);
 };

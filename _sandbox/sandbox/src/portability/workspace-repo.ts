@@ -1,15 +1,28 @@
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { DefinitionAction, DefinitionWorkspace, WorkspacePublish, WorkspacePublishResult, WorkspaceRemote } from "@intentic/sandbox-contract";
+import {
+    AutomationSchema,
+    type DefinitionAction,
+    type DefinitionWorkspace,
+    type WorkspacePublish,
+    type WorkspacePublishResult,
+    type WorkspaceRemote,
+} from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { isPublicPath } from "@intentic/workspace-ignore";
+import { z } from "zod";
 import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
-import { customPath, draftsDir } from "../environment/environment.js";
 import { defaultBranchOf } from "../git/publish-file.js";
 import { pushBranch, remoteState } from "../git/remote.js";
-import { writeExtensionEnablement } from "../extensions/extension-enablement.js";
+import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/root-repo.js";
+import { AGENT_GIT_AUTHOR } from "../git/git.js";
+import { rootPathIsExcluded } from "../history/history.js";
+import { discoverRepos } from "../workspace/repo-discovery.js";
+import { DEFINITION_SOURCES } from "./definition.js";
 
 /* THE WORKSPACE AS A REFERENCE: publishing /work, and taking somebody's published /work into a fresh sandbox.
  *
@@ -23,9 +36,10 @@ import { writeExtensionEnablement } from "../extensions/extension-enablement.js"
  * THE ARRIVAL IS THE HARD HALF, and the reason is the format's own promise: a definition is safe to publish,
  * which means it is also a file a stranger may hand you. The typed sections keep that promise by construction,
  * a capability lands unauthenticated, an overlay lands as a proposal. A CHECKOUT keeps nothing by
- * construction: whatever is in the tree is what lands. Three of the things in that tree act on their own, so
- * three of them are neutralized on arrival (neutralizeWorkspaceArrival), and everything else in it is inert
- * until a person opens it. That list is short, and it is the whole security argument for this section.
+ * construction: whatever is in the tree is what lands. The fetched tree is therefore inspected and rewritten
+ * in a detached temporary worktree BEFORE it can touch /work: private/ignored paths and executable git entry
+ * types are refused, typed definition sources keep the target's bytes, and everything that acts on its own is
+ * switched off. Only that inert tree is checked out. There is no live unsafe window for a watcher to catch.
  */
 
 export class WorkspaceRemoteError extends Error {}
@@ -79,7 +93,8 @@ const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: stri
 };
 
 // Whether /work is already published, the one fact the apply's applicability turns on.
-export const workspaceRemoteUrl = async (root: string, git: GitRunner = defaultGit): Promise<string | undefined> => (await remoteUrlOf(root, git)).remote;
+export const workspaceRemoteUrl = async (root: string, git: GitRunner = defaultGit): Promise<string | undefined> =>
+    (await remoteUrlOf(root, git)).remote;
 
 // Where /work stands and where it could go, the card's first render: published or not, and which hosts could
 // publish it. Read-only.
@@ -89,36 +104,253 @@ export const workspaceRemote = async (services: Services, git: GitRunner = defau
 });
 
 /* WHETHER A DEFINITION MAY MATERIALIZE A WORKSPACE HERE, the `beside, never over` rule as it has to be spelled
- * for a checkout that owns the whole tree.
- *
- * A repo item asks "does this directory exist"; /work always exists, so the equivalent question is whether
- * this workspace has a history of its OWN. A fresh sandbox has exactly one commit, the daemon's own
- * `Initialize workspace` baseline (git/root-repo.ts), or none at all at boot-seed time, when the seed runs
- * before the baseline step. Anything beyond that is somebody's work, and taking a foreign tree over it is
- * precisely the force-convergence this surface refuses to do.
- */
+ * for a checkout that owns the whole tree. Commit count and message are not provenance: somebody else's
+ * one-commit repository can look exactly like the daemon's baseline. The daemon records the exact baseline
+ * sha in protected git config, and a fresh marker covers only the unborn boot-seed window before that commit.
+ * A changed HEAD or any visible worktree change makes the workspace somebody's work and therefore ineligible. */
 export const workspaceIsPristine = async (root: string, git: GitRunner = defaultGit): Promise<boolean> => {
     const head = await git(root, ["rev-parse", "-q", "--verify", "HEAD"])
         .then(({ stdout }) => stdout.trim())
         .catch(() => "");
     if (head === "") {
-        return true; // unborn: the boot seed's own moment, before commitRootBaseline runs
+        return (await git(root, ["config", "--get", ROOT_FRESH_CONFIG]).catch(() => undefined))?.stdout.trim() === "true";
     }
-    const counted = (await git(root, ["rev-list", "--count", "HEAD"]).catch(() => undefined))?.stdout.trim();
-    return counted === "1";
+    const baseline = (await git(root, ["config", "--get", ROOT_BASELINE_CONFIG]).catch(() => undefined))?.stdout.trim();
+    if (baseline !== head) {
+        return false;
+    }
+    const status = await git(root, ["status", "--porcelain=v1", "--untracked-files=all"]).catch(() => undefined);
+    return status !== undefined && status.stdout === "";
 };
 
-/* Take a published workspace into this one: wire the remote, fetch, and check the branch out.
- *
- * `checkout -B` is doing real work here, not just moving a ref: git REFUSES it when an untracked file in the
- * tree would be overwritten, and names the files. That refusal IS the "never over" guarantee, enforced by the
- * tool rather than by a rule this module remembers to apply, and it surfaces as the item's failure row.
- *
- * A failure un-wires the remote it added. Half-applied is the one state that would be genuinely confusing
- * here: `deriveDefinition` reads the remote, so a workspace that failed to materialize would start emitting a
- * `[workspace]` section for a tree it never took.
- */
-export const adoptWorkspaceRemote = async (root: string, workspace: DefinitionWorkspace, git: GitRunner = defaultGit): Promise<string> => {
+interface WorkspaceTreeEntry {
+    readonly mode: string;
+    readonly type: string;
+    readonly path: string;
+}
+
+const treeEntries = async (root: string, commit: string, git: GitRunner): Promise<WorkspaceTreeEntry[]> =>
+    (await git(root, ["ls-tree", "-r", "-z", "--full-tree", commit])).stdout
+        .split("\0")
+        .filter((entry) => entry !== "")
+        .map((entry) => {
+            const tab = entry.indexOf("\t");
+            const [mode, type] = entry.slice(0, tab).split(" ");
+            if (tab === -1 || mode === undefined || type === undefined) {
+                throw new WorkspaceRemoteError("the workspace remote returned a tree entry git could not describe safely");
+            }
+            return { mode, type, path: entry.slice(tab + 1) };
+        });
+
+// Every path the root repository itself excludes is refused, rather than trusted merely because a foreign
+// repository force-added it. Symlinks and gitlinks are refused too: the former can redirect a later write out
+// of the inspected tree, and the latter is a nested repository with a second, uninspected source. `public/` is
+// an additional arrival-only refusal because creating it is the switch that serves its contents to the world.
+const preflightTree = async (root: string, commit: string, git: GitRunner): Promise<void> => {
+    const repoIds = await discoverRepos(root);
+    for (const entry of await treeEntries(root, commit, git)) {
+        if (entry.type !== "blob" || (entry.mode !== "100644" && entry.mode !== "100755")) {
+            throw new WorkspaceRemoteError(`the workspace remote contains ${entry.path} as an unsupported ${entry.type} (${entry.mode})`);
+        }
+        if (rootPathIsExcluded(entry.path, repoIds)) {
+            throw new WorkspaceRemoteError(
+                `the workspace remote tracks ${entry.path}, which is private, ignored, or belongs to another repository in /work`,
+            );
+        }
+        if (isPublicPath(entry.path)) {
+            throw new WorkspaceRemoteError(
+                `the workspace remote tracks ${entry.path}; a top-level public/ directory publishes files immediately and must be created deliberately`,
+            );
+        }
+    }
+};
+
+const optionalFile = async (path: string): Promise<Buffer | undefined> => {
+    try {
+        return await readFile(path);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+            return undefined;
+        }
+        throw error;
+    }
+};
+
+const replaceFile = async (root: string, path: string, content: Buffer | string | undefined): Promise<void> => {
+    const target = join(root, path);
+    if (content === undefined) {
+        await rm(target, { recursive: true, force: true });
+        return;
+    }
+    await mkdir(dirname(target), { recursive: true });
+    await writeFile(target, content);
+};
+
+const APPROVED_OVERLAY = ".intentic/config/environment.custom.Dockerfile";
+const WORKSPACE_OVERLAY_DRAFT = ".intentic/config/environment.d/workspace.Dockerfile";
+const AUTOMATIONS = ".intentic/config/automations.json";
+const EXTENSION_ENABLEMENT = ".intentic/config/extension-enablement.json";
+const EnablementSchema = z.record(z.string(), z.boolean());
+
+const parsedJsonFile = async <T>(path: string, schema: z.ZodType<T>, label: string): Promise<T | undefined> => {
+    const bytes = await optionalFile(path);
+    if (bytes === undefined) {
+        return undefined;
+    }
+    try {
+        return schema.parse(JSON.parse(bytes.toString("utf8")));
+    } catch (error) {
+        throw new WorkspaceRemoteError(`${label} cannot arrive safely: ${error instanceof Error ? error.message : String(error)}`);
+    }
+};
+
+const stillAutomations = async (root: string): Promise<DefinitionAction | undefined> => {
+    const path = join(root, AUTOMATIONS);
+    const automations = await parsedJsonFile(path, z.array(AutomationSchema), AUTOMATIONS);
+    if (automations === undefined) {
+        return undefined;
+    }
+    const enabled = automations.filter((automation) => automation.enabled);
+    if (enabled.length === 0) {
+        return undefined;
+    }
+    await replaceFile(
+        root,
+        AUTOMATIONS,
+        `${JSON.stringify(
+            automations.map((automation) => ({ ...automation, enabled: false })),
+            null,
+            2,
+        )}\n`,
+    );
+    return {
+        subject: "Turn on the automations you want",
+        detail: `${enabled.length} automation${enabled.length === 1 ? "" : "s"} arrived with the workspace and ${enabled.length === 1 ? "is" : "are"} switched OFF, because the scheduler fires enabled ones unattended: ${enabled.map((automation) => automation.id).join(", ")}. Enable the ones you want on the Automations view.`,
+    };
+};
+
+const stillExtensions = async (
+    root: string,
+    targetEnablement: Readonly<Record<string, boolean>>,
+    targetHadEnablement: boolean,
+): Promise<DefinitionAction | undefined> => {
+    const extensionsRoot = workspaceExtensionsRoot(root);
+    const entries = await readdir(extensionsRoot, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+            return [];
+        }
+        throw error;
+    });
+    const ids: string[] = [];
+    for (const entry of entries.filter((item) => item.isDirectory() && !item.name.startsWith(".")).toSorted((a, b) => a.name.localeCompare(b.name))) {
+        const parsed = await parseExtensionManifest(join(extensionsRoot, entry.name));
+        if ("error" in parsed) {
+            throw new WorkspaceRemoteError(`workspace extension ${entry.name} cannot be disabled safely: ${parsed.error}`);
+        }
+        ids.push(extensionIdOf(parsed.manifest));
+    }
+    await replaceFile(
+        root,
+        EXTENSION_ENABLEMENT,
+        ids.length === 0 && !targetHadEnablement
+            ? undefined
+            : `${JSON.stringify({ ...targetEnablement, ...Object.fromEntries(ids.map((id) => [id, false])) }, null, 2)}\n`,
+    );
+    if (ids.length === 0) {
+        return undefined;
+    }
+    return {
+        subject: "Enable the workspace extensions you trust",
+        detail: `${ids.length} workspace extension${ids.length === 1 ? "" : "s"} arrived with the workspace and ${ids.length === 1 ? "is" : "are"} switched OFF, because an extension's code runs in this sandbox once it is on: ${ids.join(", ")}. Turn on the ones you trust on the Extensions view.`,
+    };
+};
+
+const gateOverlay = async (root: string, incoming: Buffer | undefined, handledBySection: boolean): Promise<DefinitionAction | undefined> => {
+    const custom = incoming?.toString("utf8").trim() ?? "";
+    if (custom === "" || handledBySection) {
+        return undefined;
+    }
+    const proposed = `${custom}\n`;
+    const existing = await optionalFile(join(root, WORKSPACE_OVERLAY_DRAFT));
+    if (existing !== undefined && !existing.equals(Buffer.from(proposed))) {
+        throw new WorkspaceRemoteError(
+            `${APPROVED_OVERLAY} cannot be gated safely because the workspace already contains a different ${WORKSPACE_OVERLAY_DRAFT}`,
+        );
+    }
+    await replaceFile(root, WORKSPACE_OVERLAY_DRAFT, proposed);
+    return {
+        subject: "Approve and rebuild the environment",
+        detail: "The workspace carried an overlay. It landed as a proposal on the Environment card, never as a build: review it, approve it, then run the rebuild command the card shows.",
+    };
+};
+
+const safeWorkspaceCommit = async (
+    services: Services,
+    commit: string,
+    options: { readonly overlayHandledBySection: boolean },
+    git: GitRunner,
+): Promise<{ readonly commit: string; readonly actions: DefinitionAction[] }> => {
+    const root = services.workspace.root;
+    const targetSources = new Map<string, Buffer | undefined>();
+    for (const path of DEFINITION_SOURCES) {
+        targetSources.set(path, await optionalFile(join(root, path)));
+    }
+    const targetEnablementBytes = await optionalFile(join(root, EXTENSION_ENABLEMENT));
+    const targetEnablement = (await parsedJsonFile(join(root, EXTENSION_ENABLEMENT), EnablementSchema, `the target's ${EXTENSION_ENABLEMENT}`)) ?? {};
+
+    const stage = await mkdtemp(join(tmpdir(), "intentic-workspace-arrival-"));
+    await rm(stage, { recursive: true, force: true });
+    let registered = false;
+    try {
+        await git(root, ["worktree", "add", "--detach", stage, commit]);
+        registered = true;
+        const incomingOverlay = await optionalFile(join(stage, APPROVED_OVERLAY));
+        for (const [path, content] of targetSources) {
+            await replaceFile(stage, path, content);
+        }
+        // The remote's switch file never gets authority over extensions already installed in the target. Start
+        // from the target's choices and add an explicit false for every piece of workspace extension code.
+        await replaceFile(stage, EXTENSION_ENABLEMENT, undefined);
+        const actions = [
+            await gateOverlay(stage, incomingOverlay, options.overlayHandledBySection),
+            await stillAutomations(stage),
+            await stillExtensions(stage, targetEnablement, targetEnablementBytes !== undefined),
+        ].filter((action): action is DefinitionAction => action !== undefined);
+        await git(stage, ["add", "-A"]);
+        await git(stage, [
+            "-c",
+            `user.name=${AGENT_GIT_AUTHOR.name}`,
+            "-c",
+            `user.email=${AGENT_GIT_AUTHOR.email}`,
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "Prepare safe workspace arrival",
+        ]);
+        return { commit: (await git(stage, ["rev-parse", "HEAD"])).stdout.trim(), actions };
+    } finally {
+        if (registered) {
+            await git(root, ["worktree", "remove", "--force", stage]).catch(() => undefined);
+        }
+        await rm(stage, { recursive: true, force: true }).catch(() => undefined);
+        await git(root, ["worktree", "prune"]).catch(() => undefined);
+    }
+};
+
+/* Take a published workspace into this one without ever checking the foreign tree out live. Fetching only
+ * writes the protected git dir. The tree is preflighted and made inert in a temporary worktree; the target sees
+ * a single checkout of that safe commit, with ignored-file overwrites explicitly forbidden. The branch is then
+ * moved back to the remote commit with a mixed reset, so the safety rewrites remain visible local changes and
+ * can never be pushed upstream as though the source owner authored them. */
+export const adoptWorkspaceRemote = async (
+    services: Services,
+    workspace: DefinitionWorkspace,
+    options: { readonly overlayHandledBySection: boolean },
+    git: GitRunner = defaultGit,
+): Promise<{ readonly branch: string; readonly actions: DefinitionAction[] }> => {
+    const root = services.workspace.root;
+    let checkedOut = false;
     await git(root, ["remote", "add", "origin", workspace.remote]).catch((error: unknown) => {
         throw new WorkspaceRemoteError(gitRefusal(error, "could not add the workspace remote"));
     });
@@ -129,95 +361,30 @@ export const adoptWorkspaceRemote = async (root: string, workspace: DefinitionWo
         if (branch === undefined || branch === "") {
             throw new WorkspaceRemoteError(`${workspace.remote} advertises no default branch; name one with \`ref\` in the definition`);
         }
-        await git(root, ["checkout", "-B", branch, `origin/${branch}`]);
+        await git(root, ["check-ref-format", "--branch", branch]).catch(() => {
+            throw new WorkspaceRemoteError(`${JSON.stringify(branch)} is not a safe branch name`);
+        });
+        const remoteCommit = (await git(root, ["rev-parse", "--verify", `origin/${branch}^{commit}`])).stdout.trim();
+        await preflightTree(root, remoteCommit, git);
+        const prepared = await safeWorkspaceCommit(services, remoteCommit, options, git);
+        await git(root, ["checkout", "--no-overwrite-ignore", "-B", branch, prepared.commit]);
+        checkedOut = true;
+        // Move HEAD + index to the real remote commit without touching the already-safe worktree. The disabled
+        // switches and target-owned source files now read as deliberate local differences from upstream.
+        await git(root, ["reset", "--mixed", remoteCommit]);
+        await git(root, ["config", "--unset-all", ROOT_FRESH_CONFIG]).catch(() => undefined);
+        await git(root, ["config", "--unset-all", ROOT_BASELINE_CONFIG]).catch(() => undefined);
         // Upstream is a convenience, not part of landing the tree: a remote whose ref layout surprises us
         // still leaves a correct checkout behind.
         await git(root, ["branch", `--set-upstream-to=origin/${branch}`, branch]).catch(() => undefined);
-        return branch;
+        return { branch, actions: prepared.actions };
     } catch (error) {
-        await git(root, ["remote", "remove", "origin"]).catch(() => undefined);
+        if (!checkedOut) {
+            await git(root, ["remote", "remove", "origin"]).catch(() => undefined);
+        }
         throw error instanceof WorkspaceRemoteError ? error : new WorkspaceRemoteError(gitRefusal(error, "could not check out the workspace"));
     }
 };
-
-/* ---- what a checked-out workspace must not be allowed to do on its own ----
- *
- * Everything else a workspace repo carries waits for a person: a workflow or loop design until someone runs
- * it, a draft until someone approves it, a persona until someone picks it, a skill until an agent reads it.
- * These three act by themselves, so these three arrive switched off. Each is turned off through the daemon's
- * own write path, so the owner turns it back on in the ordinary UI rather than by editing a file.
- */
-
-// The overlay: `composeEnvironment` folds the custom section into the APPROVED file, so a checked-out
-// `environment.custom.Dockerfile` would arrive already approved, which is exactly the consent the apply's
-// draft-only rule refuses to import. Handed to the same approval gate instead, unless the definition's own
-// `[environment]` section is about to park the identical content there.
-const gateOverlay = async (services: Services, overlayHandledBySection: boolean): Promise<DefinitionAction | undefined> => {
-    const custom = ((await services.files.read(customPath(services))) ?? "").trim();
-    if (custom === "") {
-        return undefined;
-    }
-    await services.files.remove(customPath(services));
-    if (overlayHandledBySection) {
-        return undefined; // the environment item parks it, and says so in its own needsAction line
-    }
-    await services.files.write(join(draftsDir(services), "workspace.Dockerfile"), `${custom}\n`);
-    return {
-        subject: "Approve and rebuild the environment",
-        detail: "The workspace carried an overlay. It landed as a proposal on the Environment card, never as a build: review it, approve it, then run the rebuild command the card shows.",
-    };
-};
-
-// Automations: the scheduler fires every ENABLED automation, and nobody consented to a stranger's schedule
-// (or to wakes naming channels and personas this sandbox does not have).
-const stillAutomations = async (services: Services): Promise<DefinitionAction | undefined> => {
-    const enabled = (await services.automations.list().catch(() => [])).filter((automation) => automation.enabled);
-    if (enabled.length === 0) {
-        return undefined;
-    }
-    for (const automation of enabled) {
-        await services.automations.setEnabled(automation.id, false).catch(() => undefined);
-    }
-    return {
-        subject: "Turn on the automations you want",
-        detail: `${enabled.length} automation${enabled.length === 1 ? "" : "s"} arrived with the workspace and ${enabled.length === 1 ? "is" : "are"} switched OFF, because the scheduler fires enabled ones unattended: ${enabled.map((automation) => automation.id).join(", ")}. Enable the ones you want on the Automations view.`,
-    };
-};
-
-// Workspace extensions: their code runs in the extension backend the moment they are enabled, and an ABSENT
-// enablement entry means enabled (extension-enablement.ts), so arriving quietly is arriving switched on.
-const stillExtensions = async (services: Services): Promise<DefinitionAction | undefined> => {
-    const root = workspaceExtensionsRoot(services.workspace.root);
-    const names = await readdir(root, { withFileTypes: true })
-        .then((entries) => entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name))
-        .catch(() => []);
-    const ids: string[] = [];
-    for (const name of names.toSorted()) {
-        const parsed = await parseExtensionManifest(join(root, name));
-        if ("manifest" in parsed) {
-            ids.push(extensionIdOf(parsed.manifest));
-        }
-    }
-    if (ids.length === 0) {
-        return undefined;
-    }
-    for (const id of ids) {
-        await writeExtensionEnablement(services.workspace.root, id, false).catch(() => undefined);
-    }
-    return {
-        subject: "Enable the workspace extensions you trust",
-        detail: `${ids.length} workspace extension${ids.length === 1 ? "" : "s"} arrived with the workspace and ${ids.length === 1 ? "is" : "are"} switched OFF, because an extension's code runs in this sandbox once it is on: ${ids.join(", ")}. Turn on the ones you trust on the Extensions view.`,
-    };
-};
-
-// The three, in one pass, returning the lines the report owes the owner for whatever it actually turned off.
-export const neutralizeWorkspaceArrival = async (
-    services: Services,
-    options: { readonly overlayHandledBySection: boolean },
-): Promise<DefinitionAction[]> =>
-    [await gateOverlay(services, options.overlayHandledBySection), await stillAutomations(services), await stillExtensions(services)].filter(
-        (action): action is DefinitionAction => action !== undefined,
-    );
 
 /* ---- publishing ----
  *
@@ -239,7 +406,9 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
             body: JSON.stringify({ name, path: name, visibility: "private" }),
         });
         if (!response.ok) {
-            throw new WorkspaceRemoteError(`${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim());
+            throw new WorkspaceRemoteError(
+                `${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim(),
+            );
         }
         const body = (await response.json().catch(() => ({}))) as { http_url_to_repo?: string };
         if (typeof body.http_url_to_repo !== "string" || body.http_url_to_repo === "") {
@@ -258,7 +427,9 @@ const created = async (host: GitHost, name: string, owner: string | undefined): 
         body: JSON.stringify({ name, private: true, auto_init: false }),
     });
     if (!response.ok) {
-        throw new WorkspaceRemoteError(`${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim());
+        throw new WorkspaceRemoteError(
+            `${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim(),
+        );
     }
     const body = (await response.json().catch(() => ({}))) as { clone_url?: string };
     if (typeof body.clone_url !== "string" || body.clone_url === "") {
@@ -289,7 +460,9 @@ export const publishWorkspace = async (services: Services, input: WorkspacePubli
     if (remote === "") {
         const host = (await gitHosts(services))[0];
         if (host === undefined) {
-            throw new WorkspaceRemoteError("no github or gitlab account is connected, so there is nowhere to create the repository; connect one, or paste a URL you made yourself");
+            throw new WorkspaceRemoteError(
+                "no github or gitlab account is connected, so there is nowhere to create the repository; connect one, or paste a URL you made yourself",
+            );
         }
         remote = await created(host, repoNameFrom(input.name ?? services.config.sandbox.name), input.owner);
     }

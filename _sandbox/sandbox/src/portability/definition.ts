@@ -64,22 +64,43 @@ export const DEFINITION_SOURCES: readonly string[] = [
  * `[workspace]` section carries none of this, and the export says so in `omitted` rather than leaving the owner
  * to find out. Where arrival needs a caveat, the note is that caveat. */
 export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly note: string }[] = [
-    { path: ".intentic/config/personas.json", note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is." },
+    {
+        path: ".intentic/config/personas.json",
+        note: "Personas arrive naming accounts the target has not connected; each reads as broken until its capability is.",
+    },
     { path: ".intentic/config/personas/", note: "Persona prompt files, beside the cards that name them." },
     { path: ".intentic/config/drafts/", note: "Post drafts arrive awaiting approval, which is the only state they act in." },
-    { path: ".intentic/config/automations.json", note: "Arrive DISABLED: the scheduler fires enabled automations, and nobody consented to a stranger's schedule." },
+    {
+        path: ".intentic/config/automations.json",
+        note: "Arrive DISABLED: the scheduler fires enabled automations, and nobody consented to a stranger's schedule.",
+    },
     { path: ".intentic/config/workflows.json", note: "Workflow designs are inert until someone runs one." },
     { path: ".intentic/config/loop-designs.json", note: "Loop designs are inert until someone runs one." },
     { path: ".intentic/config/extension-settings.json", note: "Per-extension settings, beside the extensions they configure." },
-    { path: ".intentic/config/extension-enablement.json", note: "Rewritten on arrival so every workspace extension lands OFF: absent means enabled, and extension code runs." },
+    {
+        path: ".intentic/config/extension-enablement.json",
+        note: "Rewritten on arrival so every workspace extension lands OFF: absent means enabled, and extension code runs.",
+    },
     { path: ".intentic/config/extension-update-policy.json", note: "Update policy, beside the extensions it governs." },
-    { path: ".intentic/config/workspace-extensions/", note: "Extension code, authored here. It arrives switched off; the owner enables what they trust." },
+    {
+        path: ".intentic/config/workspace-extensions/",
+        note: "Extension code, authored here. It arrives switched off; the owner enables what they trust.",
+    },
     { path: ".intentic/config/templates.json", note: "Scaffold template choices; they point at repos the definition's own sections name." },
     { path: ".intentic/config/skills/", note: "Locally-authored skills. Which skills are ON is a setting; the files are these." },
-    { path: ".intentic/config/capability-dismissals.json", note: "Suggestions this workspace turned down. Carried as-is; the target can undismiss any of them." },
-    { path: ".intentic/config/environment.Dockerfile", note: "A pending proposal arrives as a proposal: a question at the target owner's approval gate, never a build." },
+    {
+        path: ".intentic/config/capability-dismissals.json",
+        note: "Suggestions this workspace turned down. Carried as-is; the target can undismiss any of them.",
+    },
+    {
+        path: ".intentic/config/environment.Dockerfile",
+        note: "A pending proposal arrives as a proposal: a question at the target owner's approval gate, never a build.",
+    },
     { path: ".intentic/config/environment.d/", note: "Agent overlay drafts, composed into that same proposal." },
-    { path: ".intentic/config/heavy-commands.json", note: "Learned from this workspace's runs; harmless where it is wrong, and relearned against the target's repos." },
+    {
+        path: ".intentic/config/heavy-commands.json",
+        note: "Learned from this workspace's runs; harmless where it is wrong, and relearned against the target's repos.",
+    },
 ];
 
 /* ---- derivation ---- */
@@ -202,7 +223,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     const name = services.config.sandbox.name;
     return {
         definition: SandboxDefinitionSchema.parse({
-            schemaVersion: 1,
+            schemaVersion: 2,
             ...(name === "" ? {} : { name }),
             environment: {
                 baseImage: baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image),
@@ -227,7 +248,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
  * three surfaces cannot disagree about what "a runner's definition" contains. */
 export const settingsDefinition = async (services: Services): Promise<SandboxDefinition> =>
     SandboxDefinitionSchema.parse({
-        schemaVersion: 1,
+        schemaVersion: 2,
         environment: {},
         repositories: [],
         capabilities: [],
@@ -293,12 +314,16 @@ const tomlValue = (value: unknown): string => {
 // The Dockerfile block, as a multi-line LITERAL so its backslashes and quotes read exactly as written. The
 // escaped fallback covers the one content a literal cannot hold (a ''' inside), rather than refusing it.
 const tomlBlock = (value: string): string => {
-    const withNewline = value.endsWith("\n") ? value : `${value}\n`;
-    // eslint-disable-next-line no-control-regex
-    if (withNewline.includes("'''") || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(withNewline) || withNewline.includes("\r")) {
+    // TOML's opening newline is trimmed from a multi-line literal, but its closing newline is content. A
+    // value without one therefore cannot use the readable block spelling without silently gaining a byte.
+    if (!value.endsWith("\n")) {
         return JSON.stringify(value);
     }
-    return `'''\n${withNewline}'''`;
+    // eslint-disable-next-line no-control-regex
+    if (value.includes("'''") || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value) || value.includes("\r")) {
+        return JSON.stringify(value);
+    }
+    return `'''\n${value}'''`;
 };
 
 export const emitDefinitionToml = (definition: SandboxDefinition, omitted: readonly DefinitionAction[] = []): string => {
@@ -379,6 +404,28 @@ export const emitDefinitionToml = (definition: SandboxDefinition, omitted: reado
 
 /* ---- parsing: strict TOML, then the contract schema, each failure named ---- */
 
+const recordLike = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// Shared capability schemas also serve JSON APIs where accepting a newer producer's extra field can be a
+// useful compatibility posture. A reviewed definition wants the opposite: no TOML key may disappear during
+// parsing and leave the owner believing it applied. Compare only keys the input actually supplied, so schema
+// defaults added to the parsed side are harmless while every stripped key, at any depth, is named.
+const strippedDefinitionKeys = (raw: unknown, parsed: unknown, path = ""): string[] => {
+    if (Array.isArray(raw) && Array.isArray(parsed)) {
+        return raw.flatMap((entry, index) => strippedDefinitionKeys(entry, parsed[index], `${path}[${index}]`));
+    }
+    if (!recordLike(raw) || !recordLike(parsed)) {
+        return [];
+    }
+    return Object.entries(raw).flatMap(([key, value]) => {
+        const nested = path === "" ? key : `${path}.${key}`;
+        if (!Object.hasOwn(parsed, key)) {
+            return [nested];
+        }
+        return strippedDefinitionKeys(value, parsed[key], nested);
+    });
+};
+
 export const parseDefinitionToml = (text: string): SandboxDefinition => {
     let raw: unknown;
     try {
@@ -393,6 +440,12 @@ export const parseDefinitionToml = (text: string): SandboxDefinition => {
             .map((issue) => `${issue.path.join(".") === "" ? "document" : issue.path.join(".")}: ${issue.message}`)
             .join("; ");
         throw new DefinitionFormatError(`this is TOML but not a sandbox definition: ${problems}`);
+    }
+    const stripped = strippedDefinitionKeys(raw, parsed.data);
+    if (stripped.length > 0) {
+        throw new DefinitionFormatError(
+            `this is TOML but not a sandbox definition: unknown field${stripped.length === 1 ? "" : "s"} ${stripped.join(", ")}`,
+        );
     }
     return parsed.data;
 };
@@ -442,7 +495,10 @@ export const definitionDiff = (current: SandboxDefinition, target: SandboxDefini
         thereWorkspace !== undefined &&
         (hereWorkspace.remote !== thereWorkspace.remote || trimmed(hereWorkspace.ref) !== trimmed(thereWorkspace.ref))
     ) {
-        differences.push({ subject: "Workspace", detail: `The definition says ${reference(thereWorkspace)}; this workspace is at ${reference(hereWorkspace)}.` });
+        differences.push({
+            subject: "Workspace",
+            detail: `The definition says ${reference(thereWorkspace)}; this workspace is at ${reference(hereWorkspace)}.`,
+        });
     }
     const currentRepos = new Map(current.repositories.map((repo) => [repo.id, repo]));
     const targetRepos = new Map(target.repositories.map((repo) => [repo.id, repo]));
@@ -484,7 +540,10 @@ export const definitionDiff = (current: SandboxDefinition, target: SandboxDefini
         const here = currentSettings[key] ?? defaults[key];
         const there = targetSettings[key] ?? defaults[key];
         if (canon(here) !== canon(there)) {
-            differences.push({ subject: `Setting ${key}`, detail: `The definition says ${shortValue(there)}; this sandbox has ${shortValue(here)}.` });
+            differences.push({
+                subject: `Setting ${key}`,
+                detail: `The definition says ${shortValue(there)}; this sandbox has ${shortValue(here)}.`,
+            });
         }
     }
     const currentSecrets = new Set(current.secrets);

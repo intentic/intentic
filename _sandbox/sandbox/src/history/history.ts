@@ -11,6 +11,7 @@ import {
     type SnapshotTrigger,
     VERSIONED_STATE_PATHS,
 } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/constants";
 import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { MAX_FILE_DIFF_BYTES, partialDiff } from "../git/diff-partial.js";
@@ -76,28 +77,34 @@ export const repoGitDir = (historyRoot: string, name: string): string => join(hi
  * neither is a secret to exclude. And the unanchored match was always too wide, a `capabilities.json` inside
  * somebody's own repo is their code, and it was being dropped from their history for sharing a name with a
  * daemon manifest two directories up. */
-const COMMON_EXCLUDES = [
-    ".env*",
-    "!.env.example",
-    ".secrets.json",
-    "claude.json",
-    "node_modules/",
-    ".tmp/",
-    "dist/",
-    ".cache/",
-    ".turbo/",
-    ".next/",
-    ".angular/",
-    ".pnpm-store/",
-    ".yarn/",
-    ".venv/",
-    "venv/",
-    "__pycache__/",
-    ".pytest_cache/",
-    ".mypy_cache/",
-    ".ruff_cache/",
-    ".gradle/",
-];
+const COMMON_PRIVATE_FILES = new Set([".secrets.json", "claude.json"]);
+const COMMON_EXCLUDES = [".env*", "!.env.example", ...COMMON_PRIVATE_FILES, ...[...IGNORED_DIRS].map((dir) => `${dir}/`)];
+
+// The executable form of rootExcludes, for callers that have a path rather than a gitignore engine. A
+// workspace remote is the important one: it must reject a tracked path that this daemon would have kept out
+// of its OWN workspace repository before it ever checks that tree out. Keeping the predicate beside the
+// patterns prevents the arrival boundary growing a second, inevitably stale list of private/junk paths.
+const isVersionedStatePath = (path: string): boolean =>
+    VERSIONED_STATE_PATHS.some((allowed) => (allowed.endsWith("/") ? path.startsWith(allowed) : path === allowed));
+
+export const rootPathIsExcluded = (path: string, repoIds: readonly string[]): boolean => {
+    const segments = path.split("/");
+    if (segments.length === 0 || segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+        return true;
+    }
+    if (repoIds.some((id) => path === id || path.startsWith(`${id}/`))) {
+        return true;
+    }
+    if (segments[0] === REFERENCE_DIR) {
+        return true;
+    }
+    if (segments[0] === STATE_DIR && !isVersionedStatePath(path)) {
+        return true;
+    }
+    return segments.some(
+        (segment) => IGNORED_DIRS.has(segment) || (segment.startsWith(".env") && segment !== ".env.example") || COMMON_PRIVATE_FILES.has(segment),
+    );
+};
 // The root scope additionally skips every discovered repo dir (each repo is its own scope, also avoids git's
 // embedded-repo gitlink handling), /.intentic/ (daemon-internal manifests + credentials), and the reference
 // shelf (/refs/, dropped clones are re-fetchable consultation material, not workspace state worth snapshotting;

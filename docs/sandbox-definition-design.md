@@ -55,20 +55,19 @@ than why it cannot travel.
 
 Two rules make the section safe, and they are the whole security argument for it:
 
-- **Beside, never over, spelled for a checkout.** A repo item asks "does this directory exist"; `/work` always
-  exists, so the item asks whether this workspace has a history of its OWN — an unborn HEAD (the boot seed's
-  moment) or exactly the daemon's `Initialize workspace` baseline. The materialize step is `git checkout -B`,
-  which REFUSES when an untracked file would be overwritten and names the files; that refusal is the guarantee,
-  enforced by git rather than remembered by us, and a failure un-wires the remote it added so nothing is left
-  half-applied.
-- **Three things arrive switched off.** The typed sections keep the consent promise by construction; a checkout
-  keeps nothing by construction, because whatever is in the tree is what lands. Three things in that tree act
-  by themselves, so `neutralizeWorkspaceArrival` turns each off through the daemon's own write path: an
-  `environment.custom.Dockerfile` goes to the approval gate as a draft (`composeEnvironment` would otherwise
-  fold it into the APPROVED overlay), every automation is disabled (the scheduler fires enabled ones
-  unattended), and every workspace extension is written `false` into `extension-enablement.json` (absent means
-  ENABLED, so arriving quietly would be arriving on). Everything else in the tree — designs, drafts, personas,
-  skills — waits for a person, and the report names each thing it switched off.
+- **Beside, never over, with provenance.** A repo item asks "does this directory exist"; `/work` always exists,
+  so the item asks whether this is the exact clean baseline the daemon created. The baseline sha lives in
+  protected git config; a separate fresh marker covers only the unborn boot-seed window. Commit count and
+  message prove nothing, so an arbitrary one-commit repository is never treated as empty. Any visible worktree
+  change, changed HEAD or existing remote makes the item inapplicable.
+- **Inspect and neutralize before checkout.** Fetching writes only the protected git dir. Intentic lists the
+  fetched tree and refuses anything its own root repository would exclude (private `.intentic` state, secrets,
+  junk, nested repos and `refs/`), plus `public/`, symlinks and gitlinks. It then checks the tree out in a
+  temporary worktree, preserves the target copies of capabilities, settings and the approved overlay source,
+  disables every automation and workspace extension, and gates the overlay as a draft. Parse and write failures
+  abort. Only that inert commit is checked out into `/work`, with ignored-file overwrites forbidden; a mixed
+  reset leaves the safety rewrites as local differences from the real remote commit. There is no interval in
+  which a scheduler or extension watcher can observe the foreign active configuration.
 
 The other half is `POST /definition/workspace/publish`: a remote cannot be named until it exists, so the card
 creates a private repo on a connected github/gitlab account and pushes `/work` to it. Its own owner-gated route
@@ -83,7 +82,9 @@ JSON-family has no multi-line strings, so a Dockerfile becomes escaped noise; KD
 a niche format for one file; CUE/Pkl/Dhall are programmable, and a file strangers hand around must not execute
 logic. The emitter is hand-rolled (~80 lines) because its two requirements are exactly what no library
 promises together: byte-identical output for equal input, and comments. Parsing is smol-toml (strict TOML 1.0)
-followed by the contract schema, so a hand-edited file fails naming the field rather than half-applying.
+followed by a strict versioned contract schema, so a hand-edited file fails naming an unknown or invalid field
+rather than silently stripping it and half-applying. Multi-line Dockerfile literals are used only when their
+closing newline is real content; a value without one uses an escaped basic string so emit → parse is byte-exact.
 
 ## 4. The rules it inherits
 

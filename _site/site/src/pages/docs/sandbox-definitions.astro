@@ -10,7 +10,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
 
 const example = [
     "# Intentic sandbox definition: safe to review and publish.",
-    "schemaVersion = 1",
+    "schemaVersion = 2",
     'name = "storefront"',
     "",
     "# Names only. The target asks its owner for the values.",
@@ -47,7 +47,7 @@ const contents = [
     {
         item: "The workspace",
         definition: "The clone remote and branch of /work itself.",
-        arrival: "Checked out into an empty workspace, before the repositories.",
+        arrival: "Preflighted, made inert, then checked out into a daemon-marked empty workspace before the repositories.",
     },
     { item: "Repositories", definition: "Workspace id, clone remote and optional branch.", arrival: "Cloned through the sandbox's ordinary repo path." },
     { item: "Connections", definition: "Capability id, kind and non-secret configuration.", arrival: "Listed as unauthenticated until this owner connects it." },
@@ -126,6 +126,10 @@ const contents = [
         overlay and settings each time, and equal state produces byte-identical output. There is no stored sandbox.toml that can drift from
         the sandbox it describes, which is also what makes a drift comparison a computation rather than bookkeeping.
     </p>
+    <p>
+        The format version is exact: this build accepts <code>schemaVersion = 2</code>. Unknown keys are errors rather than being discarded,
+        so a misspelled field cannot look as though it applied successfully.
+    </p>
 
     <h2>The workspace itself</h2>
     <p>
@@ -140,22 +144,28 @@ const contents = [
         work on. Until then the export says so in its omissions, because the difference is too large to leave for someone to discover.
     </p>
     <p>
-        A workspace only lands in a sandbox that is still empty. One with a history of its own, or one already pointing at a workspace remote,
-        marks the item “already here”. The checkout refuses rather than overwrites: if a file already on disk would be replaced, the item
-        fails and names the file, and the remote it added is removed again, so nothing is left half-applied.
+        A workspace only lands on the exact clean baseline this daemon created, or during its marked first-boot window. A one-commit repository
+        is not assumed to be empty. A changed baseline, visible file change, or existing workspace remote marks the item “already here”.
+        Before checkout, the fetched tree is inspected away from <code>/work</code>. Private or ignored state, nested repositories, symlinks,
+        gitlinks, the reference shelf and the public outbox are refused; an ignored credential already on disk is never exposed to checkout.
     </p>
 
     <h3>What arrives switched off</h3>
     <p>
         The sections above can guarantee their own safety — a connection has nowhere to put a credential, an overlay is written as a proposal.
-        A checkout cannot, because whatever is in the tree is what lands. Three things in a workspace act without being asked, so three things
-        arrive off, each named on the report:
+        A raw checkout cannot, because whatever is in the tree is what lands. Intentic therefore builds an inert tree in a temporary checkout
+        first, and only that tree can touch the live workspace. Three things arrive off, each named on the report:
     </p>
     <ul>
         <li><strong>The environment overlay</strong> goes to the approval gate as a proposal instead of arriving already approved.</li>
         <li><strong>Automations</strong> arrive disabled, because the scheduler fires enabled ones unattended.</li>
         <li><strong>Workspace extensions</strong> arrive switched off, because an extension's code runs in the sandbox once it is on.</li>
     </ul>
+    <p>
+        Files represented by their own checklist sections — capabilities, settings and the approved overlay source — keep the target's bytes
+        during workspace checkout. They change only if their own item is selected. A malformed active manifest or a failed safety write fails
+        the workspace item; the report never claims something was switched off when it was not.
+    </p>
     <p>Everything else — designs, drafts, personas, skills, notes — waits for a person to open it, so it lands as it is.</p>
 
     <h2>Download, apply or compare</h2>

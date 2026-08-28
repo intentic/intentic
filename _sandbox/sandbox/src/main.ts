@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { observeGitCommands } from "@intentic/scaffold";
+import { defaultGit, observeGitCommands } from "@intentic/scaffold";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
@@ -558,12 +558,13 @@ const main = async (): Promise<void> => {
     const freshRoot = await boot.step("rootRepo", async () =>
         !role.roots
             ? false
-            : (traits.relocateGitDirs ? ensureRootRepo(services.workspace, config.historyRoot) : ensureLocalRootRepo(services.workspace)).catch(
-                  (error: unknown) => {
-                      logger.warn({ err: error }, "root workspace repo not ensured, the Changes review will degrade");
-                      return false;
-                  },
-              ),
+            : (traits.relocateGitDirs
+                  ? ensureRootRepo(services.workspace, config.historyRoot, defaultGit, services.workspaceArrivedEmpty)
+                  : ensureLocalRootRepo(services.workspace, defaultGit, services.workspaceArrivedEmpty)
+              ).catch((error: unknown) => {
+                  logger.warn({ err: error }, "root workspace repo not ensured, the Changes review will degrade");
+                  return false;
+              }),
     );
 
     /* THE STARTER SITE, on a fresh workspace only: the baked one-page site copied in and its dev server

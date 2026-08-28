@@ -20,7 +20,7 @@ import { composeEnvironment, draftsDir } from "../environment/environment.js";
 import { repoGitDir } from "../history/history.js";
 import { isValidRepoId } from "../workspace/repo-discovery.js";
 import { definitionDiff, DefinitionFormatError, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
-import { adoptWorkspaceRemote, neutralizeWorkspaceArrival, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
+import { adoptWorkspaceRemote, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
 
 /* APPLYING A DEFINITION, preview-first, through the same native write paths the product's own surfaces use.
  *
@@ -177,8 +177,8 @@ export const applyDefinitionItems = async (
                 if (workspace === undefined) {
                     throw new Error("the held definition no longer names a workspace");
                 }
-                await adoptWorkspaceRemote(services.workspace.root, workspace);
-                gated.push(...(await neutralizeWorkspaceArrival(services, { overlayHandledBySection })));
+                const arrival = await adoptWorkspaceRemote(services, workspace, { overlayHandledBySection });
+                gated.push(...arrival.actions);
                 // The tree may have delivered a capability manifest, which reaches the composed overlay and
                 // the endpoint translator exactly as an upserted capability does; converge once after the loop.
                 touchedCapabilities = true;

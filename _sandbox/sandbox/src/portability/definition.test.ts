@@ -8,7 +8,7 @@ import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinit
  * with a message naming the field, never by half-parsing. */
 
 const definition: SandboxDefinition = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "wilson",
     environment: {
         baseImage: "ghcr.io/intentic/sandbox:stable",
@@ -51,13 +51,36 @@ test("a dockerfile the literal block cannot hold falls back to an escaped string
     expect(parseDefinitionToml(emitDefinitionToml(awkward))).toEqual(awkward);
 });
 
+test("a dockerfile without a final newline keeps that exact byte shape", () => {
+    const noFinalNewline: SandboxDefinition = {
+        ...definition,
+        environment: { dockerfile: "RUN true" },
+    };
+    const emitted = emitDefinitionToml(noFinalNewline);
+    expect(emitted).toContain('dockerfile = "RUN true"');
+    expect(parseDefinitionToml(emitted)).toEqual(noFinalNewline);
+});
+
 test("not-TOML and TOML-but-not-a-definition each fail with a named reason", () => {
     expect(() => parseDefinitionToml("= this is not toml")).toThrow(DefinitionFormatError);
-    expect(() => parseDefinitionToml("schemaVersion = 2\n")).toThrow(/schemaVersion/);
+    expect(() => parseDefinitionToml("schemaVersion = 1\n")).toThrow(/schemaVersion/);
+    expect(() => parseDefinitionToml("schemaVersion = 3\n")).toThrow(/schemaVersion/);
     // An unknown capability kind is refused rather than guessed at, the manifest rule everywhere else.
-    expect(() => parseDefinitionToml('schemaVersion = 1\n[[capabilities]]\nid = "x"\nkind = "warp-drive"\nconfig = { }\n')).toThrow(
+    expect(() => parseDefinitionToml('schemaVersion = 2\n[[capabilities]]\nid = "x"\nkind = "warp-drive"\nconfig = { }\n')).toThrow(
         DefinitionFormatError,
     );
+});
+
+test("unknown document and workspace fields are refused instead of silently stripped", () => {
+    expect(() => parseDefinitionToml("schemaVersion = 2\nsurprise = true\n")).toThrow(/surprise/);
+    expect(() => parseDefinitionToml('schemaVersion = 2\n[workspace]\nremote = "https://example.com/workspace.git"\nbranch = "release"\n')).toThrow(
+        /branch/,
+    );
+    expect(() =>
+        parseDefinitionToml(
+            'schemaVersion = 2\n[[capabilities]]\nid = "linear"\nkind = "mcp"\nconfig = { url = "https://mcp.example.com", typo = true }\n',
+        ),
+    ).toThrow(/capabilities\[0\]\.config\.typo/);
 });
 
 test("diff answers empty for agreement and one line per real difference", () => {
@@ -88,7 +111,10 @@ test("the workspace section drifts in three directions, and a definition without
     // Not naming a workspace against a published one is a real difference, not agreement by omission: it is
     // the difference between a document that carries the sandbox's own content and one that does not.
     expect(definitionDiff(definition, unpublished as SandboxDefinition)).toEqual([
-        { subject: "Workspace", detail: "This workspace is published at https://github.com/example/workspace.git @ main; the definition names none." },
+        {
+            subject: "Workspace",
+            detail: "This workspace is published at https://github.com/example/workspace.git @ main; the definition names none.",
+        },
     ]);
     expect(definitionDiff(unpublished as SandboxDefinition, definition)).toEqual([
         { subject: "Workspace", detail: "The definition names https://github.com/example/workspace.git @ main; this workspace has no remote." },
@@ -122,7 +148,7 @@ test("settingsDefinition is settings-only: non-defaults in, every other section 
 
 test("settingsDrift names each differing key once, with defaults meaning agreement", () => {
     const scoped = (settings: SandboxDefinition["settings"]): SandboxDefinition => ({
-        schemaVersion: 1,
+        schemaVersion: 2,
         environment: {},
         repositories: [],
         capabilities: [],
