@@ -1,19 +1,32 @@
 import type { AgentProvider, OauthAccount, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { ref } from "vue";
+import { computed, ref, type WritableComputedRef } from "vue";
+import { type AccountPicks, accountPicks } from "./accountPreference";
 import { perProvider } from "./providerCatalog";
 
 /* WHO CAN RUN A TURN ON EACH PROVIDER, as this window last heard it: the connected daemon accounts, the
  * translator's own subscriptions, the refusals observed on the way, and the one rule that turns all of that into
  * "the account this conversation's next turn uses".
  *
- * In-memory and NOT persisted like turnDefaults: account ids are daemon-minted per sandbox, so they would be
- * meaningless across a sandbox switch. useChat fills these when a daemon becomes reachable (loadAccountStatus /
- * refreshConnections / refreshTranslatorAccounts) and resetChat clears them. They live here rather than in
- * useChat so a Conversation, and every surface that draws an account, can read them without importing useChat
- * (a cycle). The user's last PICK per provider is a different thing again and persists in accountPreference.ts. */
+ * The LISTS are in-memory and not persisted: account ids are daemon-minted per sandbox, so a list cached across
+ * a sandbox switch would be about the wrong machine. useChat fills them when a daemon becomes reachable
+ * (loadAccountStatus / refreshConnections / refreshTranslatorAccounts) and resetChat clears them. They live here
+ * rather than in useChat so a Conversation, and every surface that draws an account, can read them without
+ * importing useChat (a cycle). The user's last PICK per provider is a different thing again, a preference that
+ * outlives the lists and travels between windows; it lives in accountPreference.ts and is surfaced below. */
 
 export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>(perProvider<readonly OauthAccount[]>(() => []));
-export const selectedAccountId = ref<Record<AgentProvider, string | undefined>>(perProvider<string | undefined>(() => undefined));
+
+/* The user's last account pick per provider, read and written as one record. NOT a ref of its own: it IS the
+ * scoped sandbox's stored preference (accountPreference.ts), so a pick made in this window is persisted and
+ * announced to the other windows by the assignment itself, and a pick made in another window is already here
+ * by the time anything reads it. A ref mirroring that store would be the second copy this whole file's
+ * neighbours exist to prevent. */
+export const selectedAccountId: WritableComputedRef<AccountPicks> = computed({
+    get: () => accountPicks().value,
+    set: (picks) => {
+        accountPicks().value = picks;
+    },
+});
 
 // Which SUBSCRIPTIONS the bundled translator holds (codex/grok/kimi/gemini), the other half of "can this
 // provider run", since these authenticate through the translator rather than through a daemon-stored account.

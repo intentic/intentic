@@ -67,7 +67,7 @@ session.set(
         ],
     }),
 );
-local.set(`intentic.chatAccounts.sb1`, JSON.stringify({ claude: `second` }));
+local.set(`ui-chat-accounts-sb1`, JSON.stringify({ claude: `second` }));
 
 const { sandboxJson, sandboxRequest } = await import("../sandbox/sandboxClient");
 vi.mocked(sandboxRequest).mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));

@@ -44,7 +44,7 @@ import {
 import { rememberedModelFor, startingMode, turnDefaults } from "./turnDefaults";
 import { accessKnown, providerReady, providerReadyOn } from "./access";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "./transcript";
-import { readAccountPreference, writeAccountPreference } from "./accountPreference";
+import { scopeAccountPreference } from "./accountPreference";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "./transcriptCache";
 import { usageStatusByAccount } from "./usageStatus";
@@ -307,11 +307,11 @@ const restoreTab = (tab: StoredTab): Conversation => {
 // single fresh tab when neither exists, and focus the stored active tab.
 const restoreTabs = (): void => {
     scopedSandboxId = activeSandboxId.value;
-    // Read BEFORE the tabs are built, because building one resolves an account: a fresh conversation seeds from
-    // this pick (Conversation's constructor), and a restored one falls back to it. Scoped with the tabs, the
-    // ids name credentials in THIS sandbox's store, so the incoming sandbox's picks replace the outgoing one's
-    // rather than being cleared to nothing.
-    selectedAccountId.value = readAccountPreference(scopedSandboxId);
+    // Scoped BEFORE the tabs are built, because building one resolves an account: a fresh conversation seeds
+    // from this pick (Conversation's constructor), and a restored one falls back to it. Scoped with the tabs,
+    // the ids name credentials in THIS sandbox's store, so the incoming sandbox's picks replace the outgoing
+    // one's rather than being cleared to nothing.
+    scopeAccountPreference(scopedSandboxId);
     const stored = readTabSnapshot(scopedSandboxId);
     // The list is about to be REPLACED wholesale, focus included: the snapshot's active tab wins over whatever
     // is on screen. Rare (a sandbox switch, a boot) and invisible when it isn't, hence the line.
@@ -397,16 +397,6 @@ watch(
     },
     { immediate: true },
 );
-
-// Persist the account pick per provider, the seed a NEW conversation (and a fresh window) starts from. A watch
-// rather than a write inside selectAccount, because the pick also moves on its own: a connect makes the new
-// account current, a disconnect hands the selection to whatever is left, and a landing account list corrects a
-// pick that is no longer valid. All of those are the user's "last preference" just as much as a click is.
-watch(selectedAccountId, (picks) => {
-    if (scopedSandboxId !== undefined) {
-        writeAccountPreference(scopedSandboxId, picks);
-    }
-});
 
 /* A READ whose failure is not news: apply what the daemon sent, and on any failure leave the ref holding
  * whatever it had. Four surfaces here work this way, slash commands, per-account usage, the routed-provider
@@ -1208,9 +1198,13 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
             conversation.model.value = body.default;
         }
     }
-    if (!valid.has(turnDefaults.models.value[target] ?? ``)) {
-        turnDefaults.models.value = { ...turnDefaults.models.value, [target]: body.default };
-    }
+    /* THE REMEMBERED PICK IS NOT REWRITTEN FROM A CATALOG, the rule refreshAccounts states for the account, and
+     * it belongs here for the same reason: an open chat pinned to an id this list does not carry cannot send,
+     * so it moves (above), while the PREFERENCE behind it is a standing choice that no single read is a verdict
+     * on. Rewriting it was how a thin answer, a provider whose catalog is still coming up, spent the choice for
+     * good. rememberedModelFor resolves it against this very list instead, so a genuinely retired id is stepped
+     * over on the way to the default and one that is merely missing this second is honoured again when the
+     * catalog carries it. */
 };
 
 // One catalog load per provider at a time, the picker's on-open refresh, the reachable seam, and a manual

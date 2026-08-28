@@ -1,4 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract";
+// The preference subpath, not the barrel: see turnDefaults.ts's note on the same import.
+import { definePreference } from "@intentic/ui/preference";
+import { ref, type Ref } from "vue";
 import { perProvider } from "./providerCatalog";
 
 /* Which account of each provider the user last picked for a turn, per sandbox, what a new conversation's
@@ -8,48 +11,82 @@ import { perProvider } from "./providerCatalog";
  *
  * SANDBOX-SCOPED, because an account id is not a global name: it is the key of a credential file in one
  * sandbox's own store (<workspace>/.intentic/<provider>/<id>.json), so carrying it to another sandbox would pin
- * a chat to an account that does not exist there. The tab snapshot is keyed this way for the same reason.
+ * a chat to an account that does not exist there. The tab snapshot is keyed this way for the same reason, and
+ * the id stays IN the storage key so a replaced workspace's sweep still finds it (sandbox/systemEventRouting).
  *
- * localStorage, and one store rather than tabSnapshot's two: this is a PREFERENCE, not a window's own state, so
- * the last pick made anywhere is the one the next window opens on, the same last-writer-wins the other turn
- * prefs (turnDefaults) have. What a window is CURRENTLY showing never comes from here; `selectedAccountId` holds
- * that in memory, and this is read only when a window binds to a sandbox.
+ * A `definePreference` per sandbox, declared the first time that sandbox is scoped to, rather than a read into a
+ * private ref. This is a PREFERENCE in that primitive's exact sense, one answer per account and not per window,
+ * and the app runs a full copy per browser window (chat/summon.ts). Read once at load, it was a different COPY
+ * per window: an account picked in the popped-out chat was invisible to the fleet board's window, so "New agent"
+ * pressed on the board built the conversation on whatever account THAT window had loaded with and broadcast it
+ * to everyone. The primitive tells the other windows (a BroadcastChannel plus the browser's own `storage`
+ * event), so the last pick made anywhere is the one every window's next chat opens on, at once.
+ *
+ * What a window is CURRENTLY showing never comes from here; a conversation holds its own account, and this is
+ * read only when one is seeded.
  *
  * A pick is remembered whether or not the account still exists, because only the daemon's account list can say,
  * so validating it belongs to the reader (rememberedAccountFor) and to the moment that list lands
  * (refreshAccounts), not here. */
 
-const key = (sandboxId: string): string => `intentic.chatAccounts.${sandboxId}`;
+export type AccountPicks = Record<AgentProvider, string | undefined>;
 
-// The last pick per provider, or a blank slate, for an unbound sandbox, an unreadable blob, or storage that
-// isn't there at all (private mode, where merely touching it throws).
-export const readAccountPreference = (sandboxId: string | undefined): Record<AgentProvider, string | undefined> => {
-    const blank = perProvider<string | undefined>(() => undefined);
+const blank = (): AccountPicks => perProvider<string | undefined>(() => undefined);
+
+// The last pick per provider, parsed. Any provider is a candidate key, the vocabulary is open (native ids plus
+// installed ACP agents), and a value is usable only as a non-empty id. Anything else is dropped to the blank
+// slate's `undefined`, which every reader already handles as "no pick yet".
+const readPicks = (raw: string | null): AccountPicks => {
+    if (raw === null) {
+        return blank();
+    }
+    let stored: unknown;
+    try {
+        stored = JSON.parse(raw);
+    } catch {
+        return blank();
+    }
+    const entries = typeof stored === `object` && stored !== null ? (stored as Record<string, unknown>) : {};
+    const picks = Object.entries(entries).filter((entry): entry is [string, string] => typeof entry[1] === `string` && entry[1] !== ``);
+    return { ...blank(), ...Object.fromEntries(picks) };
+};
+
+/* The picks of a sandbox this window has not scoped to yet, and the picks of NO sandbox. One ref rather than a
+ * fresh blank each read, so an unbound window's selection still holds in memory for its own life, which is what
+ * it did when the write was merely skipped. Reset when the scope moves, since one unbound sandbox's picks are
+ * not an answer about the next. */
+const unbound = ref<AccountPicks>(blank());
+
+// One preference per sandbox, kept so a second scoping to the same sandbox re-uses the declaration rather than
+// registering a second holder for its key (the primitive dispatches an incoming change by key, one holder each).
+const held = new Map<string, Ref<AccountPicks>>();
+
+const preferenceFor = (sandboxId: string): Ref<AccountPicks> => {
+    const existing = held.get(sandboxId);
+    if (existing !== undefined) {
+        return existing;
+    }
+    const preference = definePreference<AccountPicks>({
+        // Providers with no pick drop out (JSON.stringify omits undefined), which is exactly how readPicks
+        // takes them back.
+        key: `ui-chat-accounts-${sandboxId}`,
+        read: readPicks,
+        write: (picks) => JSON.stringify(picks),
+    });
+    held.set(sandboxId, preference);
+    return preference;
+};
+
+// The picks ref the app reads and writes right now: the scoped sandbox's own preference, or the unbound slate.
+// Rebound by scopeAccountPreference, which useChat calls with the tabs (the ids name credentials in THIS
+// sandbox's store, so the incoming sandbox's picks replace the outgoing one's rather than being cleared).
+const scoped = ref<string | undefined>();
+
+export const scopeAccountPreference = (sandboxId: string | undefined): void => {
     if (sandboxId === undefined) {
-        return blank;
+        unbound.value = blank();
     }
-    try {
-        const raw = localStorage.getItem(key(sandboxId));
-        if (raw === null) {
-            return blank;
-        }
-        const stored = JSON.parse(raw) as Record<string, unknown>;
-        // Any provider is a candidate key, the vocabulary is open (native ids plus installed ACP agents), and a
-        // value is usable only as a non-empty id. Anything else is dropped to the blank slate's `undefined`,
-        // which every reader already handles as "no pick yet".
-        const picks = Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === `string` && entry[1] !== ``);
-        return { ...blank, ...Object.fromEntries(picks) };
-    } catch {
-        return blank;
-    }
+    scoped.value = sandboxId;
 };
 
-// Persist the picks. Providers with none drop out (JSON.stringify omits undefined), which is exactly how the
-// reader takes them back.
-export const writeAccountPreference = (sandboxId: string, picks: Record<AgentProvider, string | undefined>): void => {
-    try {
-        localStorage.setItem(key(sandboxId), JSON.stringify(picks));
-    } catch {
-        // Unavailable or over quota; the in-memory selection still holds for the life of the window.
-    }
-};
+export const accountPicks = (): Ref<AccountPicks> => (scoped.value === undefined ? unbound : preferenceFor(scoped.value));
