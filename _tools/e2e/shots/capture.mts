@@ -77,9 +77,9 @@ const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
  * under the last message, which is the thing the trim below spends its whole existence preventing elsewhere. */
 const POPOUT_WINDOW = { width: 800, height: 660 } as const;
 
-/* THE BIG FRAME'S WINDOW — the app window the landing page's three rotating surfaces are all shot in.
+/* THE BIG FRAME'S WINDOW — the app window the landing page's two rotating surfaces are both shot in.
  *
- * ONE size for all three, because they take turns inside a single frame and a frame that changed shape every
+ * ONE size for both, because they take turns inside a single frame and a frame that changed shape every
  * four seconds would be the only thing anybody noticed about it.
  *
  * The shared desktop width, deliberately, after trying to narrow it. The frame is ~840px and the workspace
@@ -90,9 +90,9 @@ const POPOUT_WINDOW = { width: 800, height: 660 } as const;
  * is for.
  *
  * The height is likewise taller than the frame shows. It crops from the top, the way the hero's old single
- * shot already did, and that is what lets three surfaces of very different lengths share it: the board is a
- * few cards and stops, the pipelines list runs past the fold, and the crop — not the capture — decides where
- * the picture ends. */
+ * shot already did, and that is what lets two surfaces of different lengths share it: the board is a few cards
+ * and stops, the review runs its title, its Land button and the head of a diff and carries on past the fold,
+ * and the crop — not the capture — decides where the picture ends. */
 const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
 
 interface Shot {
@@ -218,30 +218,15 @@ const SHOTS: Shot[] = [
         viewport: HERO_WINDOW,
         fullHeight: true,
     },
+    /* THE SECOND HERO SCREEN: a finished change waiting to land. Same window and crop as the board above, so the
+     * two take turns inside one frame without it changing shape. The soft-deletes agent's review is the calmest
+     * way to make the page's "you approve" claim in a picture — a plain title, a "Ready to land" badge over an
+     * unpressed Land button, and a short, clean diff. It replaces the raw split-diff and the CI board this frame
+     * used to cycle, which read to a stranger meeting the product cold as a wall of code and a wall of dots. */
     {
-        name: "hero-changes",
-        path: "/workspace",
-        waitFor: 'button:has-text("Changes")',
-        /* Opens Changes and then the largest of the five diffs. Both presses are the shot's subject: the tab
-         * groups the working tree BY REPOSITORY (`web` and `api`, each with its own branch and count), and
-         * the file opens that grouping into an actual review rather than the "drop your work here" pane the
-         * Files tab lands on. */
-        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
-        settleMs: 1800,
-        clip: "area",
-        viewport: HERO_WINDOW,
-        fullHeight: true,
-    },
-    /* The CI board, flattened across the two hosts acme-shop's repos live on. Mostly green with one broken run,
-     * which is what the fixture now records (_site/demo/src/fixture/ci.ts).
-     *
-     * Its heading is skipped by the FRAME rather than by scrolling here: at this window height the whole list
-     * fits, so there is nothing to scroll, and the 140px this view spends on a title and a sentence is exactly
-     * the band the hero has to spend on runs (`lift` in landing.ts). */
-    {
-        name: "hero-pipelines",
-        path: "/ext/pipelines",
-        waitFor: "text=pass rate",
+        name: "hero-review",
+        path: "/agents/cnv_soft_deletes",
+        waitFor: "text=Ready to land",
         settleMs: 1600,
         clip: "area",
         viewport: HERO_WINDOW,
@@ -295,11 +280,11 @@ const SHOTS: Shot[] = [
         name: "workspace-changes",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
-        /* Opens the Changes tab rather than shooting the Files tab it lands on — that one opens on a "drop your
-         * work here" pane, which is truthful and a screenshot of nothing — and then opens the largest of the
-         * five diffs: the block this sits under is about reading a change file by file, and the +23/−4 one
-         * fills the pane with an actual review where the +2/−1 beside it would leave most of the frame blank. */
-        click: ['button:has-text("Changes")', "text=CheckoutPanel.tsx"],
+        /* Opens the Changes tab rather than the Files tab it lands on (a "drop your work here" pane, which is a
+         * screenshot of nothing), then opens a small, clean diff: the block this sits under is about reading a
+         * change file by file, and a short before/after reads as a review a person can actually follow, where
+         * the largest file in the tree fills the pane with a wall of red and green. */
+        click: ['button:has-text("Changes")', "text=schema.ts"],
         settleMs: 1800,
         clip: "area",
     },

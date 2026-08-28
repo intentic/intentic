@@ -33,13 +33,15 @@ export interface HeroScreen extends ShotImage {
  * and the chat lifted out of it into another (the app's own pop-out). One still frame of a fleet board could
  * only ever make one of the page's claims; a workspace beside a live conversation makes the whole of it.
  *
- * EACH FRAME CYCLES, in the order written here, and the two lists are DIFFERENT LENGTHS on purpose: three
- * surfaces behind, two conversations in front, so the pair never settles into one repeating picture. Order is
- * editorial and the first of each is the one a stranger sees first, so `app` opens on the board, which is the
- * page's subject, and `chat` opens on the agents cut, which is the conversation the board's cards lead to.
+ * THE CENTRE FRAME CYCLES `app`, in the order written here; the wings hold stills (see Landing.astro). `app`
+ * is two CALM surfaces on purpose: the board of plain-English tasks, then one of those tasks finished and
+ * waiting to land — the whole "you delegate, you approve" claim, without opening the first impression on a raw
+ * code diff or a CI board, which read as a wall of code and a wall of dots to a stranger meeting the product
+ * cold. The first of each list is the one a stranger sees first, so `app` opens on the board, which is the
+ * page's subject, and `chat` opens on the agents cut, the conversation the board's cards lead to.
  *
  * The frames CROP their screens rather than fitting them (see Landing.astro): every capture is one window
- * height and the surfaces inside are wildly different lengths, so what a reader sees is the top of each. */
+ * height and the surfaces inside are different lengths, so what a reader sees is the top of each. */
 export interface HeroScreens {
     /** The workspace window, behind and larger. */
     app: HeroScreen[];
@@ -182,18 +184,13 @@ export const landingContent: LandingContent = {
             app: [
                 {
                     name: "hero-agents",
-                    alt: "The intentic fleet board: an Attention lane holding a Front Desk question and an agent asking one of its own, an Active lane with an agent running a Stripe checkout under two subagents, and a Finished lane where a completed change offers Land now. Each card shows its model, branch, cost and diff stats.",
+                    alt: "The intentic fleet board: an Attention lane holding a Front Desk question and an agent asking one of its own, an Active lane with an agent working on a Stripe checkout, and a Finished lane where a completed change offers Land now. Each card carries a plain-English title, the model behind it, and what it has cost.",
                     frameLabel: "acme-shop · /agents",
                 },
                 {
-                    name: "hero-changes",
-                    alt: "The workspace's Changes tab: the working tree grouped by repository, three files under web, two under api, each with its branch and its own insertions and deletions, beside a side-by-side diff of CheckoutPanel.tsx.",
-                    frameLabel: "acme-shop · /workspace",
-                },
-                {
-                    name: "hero-pipelines",
-                    alt: "The Pipelines view: CI runs from a GitHub repo and a GitLab repo on one board, five passed, one running and one failed, at an 83% pass rate, each row drawing the circles of its own jobs.",
-                    frameLabel: "acme-shop · /pipelines",
+                    name: "hero-review",
+                    alt: 'A finished change waiting for a yes: the agent\'s task written as a plain title, a "Ready to land" badge over an unpressed Land now button, and a short side-by-side diff of the file it changed.',
+                    frameLabel: "acme-shop · /agents",
                 },
             ],
             chat: [
