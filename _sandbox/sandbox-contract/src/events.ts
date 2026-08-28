@@ -11,6 +11,7 @@ import {
     ShareDetailSchema,
     SubagentKindSchema,
     SubagentStatusSchema,
+    SubagentVerificationSchema,
     UsageWindowSchema,
 } from "./schemas.js";
 
@@ -666,6 +667,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         lastTool: z.string().optional(),
         summary: z.string().optional(),
         error: z.string().optional(),
+        // Whether anything checked the work the report describes (SubagentVerificationSchema). Rides the frame
+        // that ENDS the child, beside the report itself, so the card carries both at once.
+        verification: SubagentVerificationSchema.optional(),
     }),
     z.object({ kind: z.literal("todos"), items: z.array(TodoItemSchema) }),
     // The provider's own slash commands (ACP available_commands_update), replaced whole each time, the

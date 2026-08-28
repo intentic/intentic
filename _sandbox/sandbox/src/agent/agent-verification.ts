@@ -54,6 +54,21 @@ const SUGGESTED_SCRIPTS = ["test", "typecheck", "check", "lint", "build"] as con
 
 export type VerificationKind = "test" | "typecheck" | "lint" | "build";
 
+/* DID THE COMMAND PASS, read off the tmux wrapper's own footer (`--- [exit 7, 2s] …`), which is the
+ * authoritative answer whenever output filtering is on: the text the model sees is not the process's status,
+ * and a suite that printed its failures and exited 1 reads as ordinary output without this.
+ *
+ * Takes `unknown` because its two callers hold different things and neither should have to know that: a
+ * PostToolUse hook holds the SDK's `tool_response` (a string, or an object for a structured result), the
+ * frame feeder holds a tool card's text content. Undefined ⇒ no footer to read, and the caller's own signal
+ * (the hook event, the frame's status) is what says whether it ran. The LAST footer wins: a compound call
+ * leaves one per command, and the run's own last word is the one that ended it. */
+export const commandExitCode = (response: unknown): number | undefined => {
+    const text = typeof response === "string" ? response : typeof response === "object" && response !== null ? JSON.stringify(response) : "";
+    const last = [...text.matchAll(/---\s\[exit\s(\d+),/g)].at(-1)?.[1];
+    return last === undefined ? undefined : Number(last);
+};
+
 // One classified command the turn ran. `at` is the shared counter, not a clock.
 interface Evidence {
     readonly kind: VerificationKind;
@@ -71,6 +86,25 @@ export interface VerificationVerdict {
     readonly failed: Evidence | undefined;
 }
 
+/* WHERE THE WORK STANDS, as one word plus what it stands on, the reader for everything that REPORTS the
+ * ledger rather than acting on it (a child's verdict on the roster and on its report: child-verification.ts).
+ *
+ * `verdict` cannot answer this and must not be taught to: it is the nudge's reader, and it goes silent for
+ * two completely different reasons, nothing was edited, or what was edited is proven. Silence is the right
+ * answer to "should I send this turn back"; it is the wrong answer to "did this agent prove anything", where
+ * "it changed no code" and "its tests passed" are the two facts a reader most needs told apart. So the third
+ * reader states all four, over the same record and the same prose/order rules. */
+export type VerificationState = "verified" | "unproven" | "failing" | "no-code";
+
+export interface VerificationStanding {
+    readonly state: VerificationState;
+    // The code paths edited, deduped, newest last. Empty for `no-code`.
+    readonly paths: readonly string[];
+    // The command that SPOKE: the one that cleared it (`verified`) or the one that broke (`failing`). Absent
+    // for `unproven` (nothing ran) and `no-code` (nothing to run).
+    readonly check: string | undefined;
+}
+
 export interface VerificationLedger {
     readonly noteEdit: (path: string) => void;
     readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
@@ -81,6 +115,8 @@ export interface VerificationLedger {
      * "before a turn ending that touched the database" has to fire on a turn that did its job properly. So the
      * ledger is two readers over one record, what still wants proof, and what was touched at all. */
     readonly edited: () => readonly string[];
+    // Where the work stands, for the surfaces that report rather than nudge. See VerificationStanding.
+    readonly standing: () => VerificationStanding;
 }
 
 const isProsePath = (path: string): boolean => {
@@ -166,6 +202,21 @@ export const createVerificationLedger = (): VerificationLedger => {
     const edits: { path: string; at: number; prose: boolean }[] = [];
     const evidence: Evidence[] = [];
     let counter = 0;
+    /* The one read both verdicts are computed from. Only code counts, a turn that touched nothing else is
+     * done when it says it is, and the ORDER question ("did a check run after the last edit") is about the
+     * last edit a check could speak to, not the last edit of any kind. `paths` is newest-last and deduped:
+     * the same file edited five times is one path to name. */
+    const read = (): { readonly paths: readonly string[]; readonly after: readonly Evidence[] } => {
+        const code = edits.filter((edit) => !edit.prose);
+        const lastEdit = code.at(-1);
+        if (lastEdit === undefined) {
+            return { paths: [], after: [] };
+        }
+        return {
+            paths: [...new Set(code.map((edit) => edit.path))],
+            after: evidence.filter((item) => item.at > lastEdit.at),
+        };
+    };
     return {
         noteEdit: (path) => {
             counter += 1;
@@ -181,22 +232,29 @@ export const createVerificationLedger = (): VerificationLedger => {
         },
         edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
-            // Only code counts here, a turn that touched nothing else is done when it says it is, and the
-            // ORDER question ("did a check run after the last edit") is about the last edit a check could
-            // speak to, not the last edit of any kind.
-            const code = edits.filter((edit) => !edit.prose);
-            const lastEdit = code.at(-1);
-            if (lastEdit === undefined) {
+            const { paths, after } = read();
+            if (paths.length === 0 || after.some((item) => item.passed)) {
                 return undefined;
             }
-            const after = evidence.filter((item) => item.at > lastEdit.at);
-            if (after.some((item) => item.passed)) {
-                return undefined;
-            }
-            // Newest-last, deduped: the same file edited five times is one path to name.
-            const paths = [...new Set(code.map((edit) => edit.path))];
             const failed = after.findLast((item) => !item.passed);
             return { paths, ...(failed !== undefined ? { failed } : { failed: undefined }) };
+        },
+        standing: () => {
+            const { paths, after } = read();
+            if (paths.length === 0) {
+                return { state: "no-code", paths, check: undefined };
+            }
+            // A pass anywhere after the last edit clears it, the same rule `verdict` goes quiet on, and the
+            // LAST such pass is the one to name: `pnpm typecheck && pnpm test` leaves two, and the stronger
+            // claim is the later one the agent chose to finish on.
+            const passed = after.findLast((item) => item.passed);
+            if (passed !== undefined) {
+                return { state: "verified", paths, check: passed.command };
+            }
+            const failed = after.findLast((item) => !item.passed);
+            return failed === undefined
+                ? { state: "unproven", paths, check: undefined }
+                : { state: "failing", paths, check: failed.command };
         },
     };
 };

@@ -181,6 +181,38 @@ const STATUS: Record<SubagentSession["status"], { name: IconName; spin?: boolean
     killed: { name: `stop`, class: `text-xs text-subtle`, "aria-label": `Killed` },
 };
 
+/* DID ANYTHING CHECK THE WORK THIS REPORT DESCRIBES (SubagentVerificationSchema, computed daemon-side from
+ * the child's own tool calls). It sits with the report rather than with the status glyph on purpose: `completed`
+ * says the agent stopped, this says whether what it stopped on was ever tested, and the second is the one a
+ * reader is about to act on.
+ *
+ * All four states are shown here, including the two the daemon deliberately does not spend the PARENT's context
+ * on (child-verification.ts). A person reading a report is asking the question; a model that has just been
+ * handed one is not, which is why the two surfaces differ. */
+const VERIFICATION: Record<NonNullable<SubagentSession["verification"]>["state"], { name: IconName; class: string; text: string }> = {
+    verified: { name: `check-circle`, class: `text-success`, text: `Verified` },
+    unproven: { name: `exclamation-triangle`, class: `text-warning`, text: `Unproven` },
+    failing: { name: `exclamation-circle`, class: `text-danger`, text: `Check failed` },
+    "no-code": { name: `file`, class: `text-muted`, text: `Changed no code` },
+};
+
+// The sentence beside that word: what it stands on, in the reader's terms. Nothing for `no-code`, whose chip
+// already says the whole of it.
+const verificationDetail = (verification: NonNullable<SubagentSession["verification"]>): string | undefined => {
+    const files = verification.paths ?? [];
+    const changed = `${files.length} ${files.length === 1 ? `file` : `files`}`;
+    if (verification.state === "verified") {
+        return verification.check === undefined ? `a check passed after its last edit` : `${verification.check} passed after its last edit`;
+    }
+    if (verification.state === "unproven") {
+        return `changed ${changed}, and no check passed after the last edit`;
+    }
+    if (verification.state === "failing") {
+        return verification.check === undefined ? `a check after its edits did not pass` : `${verification.check} did not pass`;
+    }
+    return undefined;
+};
+
 /* THE LIVE LINE, the board's own: what it is doing this second and how long it has been at it, in link, the
  * one accent that makes a working row findable in a column of stopped ones. A PENDING child gets one too, and
  * it is the most useful reading on this surface: a queued agent is one the concurrency cap has not let start,
@@ -570,6 +602,19 @@ watch(
                                  repeat it. -->
                             <section v-if="report !== undefined" class="flex min-w-0 flex-col gap-2">
                                 <span class="text-2xs font-semibold uppercase tracking-wide text-muted">Report</span>
+                                <!-- WHETHER ANYTHING CHECKED IT, above the words it qualifies rather than
+                                     under them: the reader decides how to read the report, so the standing
+                                     has to arrive before the report does, not as a footnote to it. -->
+                                <p v-if="current?.verification" class="flex min-w-0 items-baseline gap-1.5 text-2xs">
+                                    <Icon
+                                        :name="VERIFICATION[current.verification.state].name"
+                                        :class="[VERIFICATION[current.verification.state].class, `shrink-0`]"
+                                    />
+                                    <span :class="[VERIFICATION[current.verification.state].class, `font-semibold`]">
+                                        {{ VERIFICATION[current.verification.state].text }}
+                                    </span>
+                                    <span class="min-w-0 truncate text-muted">{{ verificationDetail(current.verification) }}</span>
+                                </p>
                                 <!-- THE CEILING IS A SHARE OF THE WINDOW, not a count of pixels. A fixed one
                                      (this was 14rem, then 20rem) is wrong at both ends: on a tall window it
                                      cut a report off with half the pane standing empty below it, which reads

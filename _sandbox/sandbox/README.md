@@ -26,6 +26,18 @@ reports the profile.
   direct call at each move. That is what gives a child a `blocked` status and its own last words as its
   report, and what the turn's `wait` tool parks on (src/agent/subagent-wait.ts): sleep until one of this
   turn's own children needs input or finishes, instead of polling.
+- Say whether anything CHECKED what a child reports (src/agent/child-verification.ts). Work merging into the
+  main tree passes a gate (src/agents/land.ts refuses a patch that will not apply); a claim merging into the
+  parent's context passed none, and a child's "done, it handles the empty case now" became the parent's
+  premise unexamined. So each child keeps a ledger of the files it edited against the checks that ran after
+  them, and the verdict — `verified` / `unproven` / `failing` / `no-code`, naming the check that spoke — is
+  stamped on its record the moment it ends, rides the frame that carries its report, and is appended to the
+  Task tool's own result on its way into the parent. Fed from the NORMALIZED frames every adapter already
+  emits rather than from the Claude arm's hooks, which is what makes it hold for a child running on Codex,
+  Cursor or Gemini; the same ledger the turn-ending nudge is built on (src/agent/agent-verification.ts), read
+  by a second reader that states all four standings instead of going silent on two. Only the two states that
+  carry a warning are spoken into the parent's context — an Explore child that edited nothing is the
+  commonest child there is — while all four ride the wire for the roster, the card and the `wait` answer.
 - Spawn full agents from inside a turn, on ANY connected provider, from ANY runtime. The engine is one
   (src/children/children.ts): a child is an ordinary isolated unattended conversation served by whichever
   provider adapter the spec names, so a Claude turn starts Cursor's Composer with the same call a Cursor turn

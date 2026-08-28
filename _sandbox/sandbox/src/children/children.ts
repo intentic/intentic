@@ -6,6 +6,7 @@ import { steerTurn } from "../agent/agent-steering.js";
 import { childSpawn } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../guard/turn-taint.js";
+import { noteChildWork } from "../agent/child-verification.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "../agent/subagents.js";
 import { startTurnRun } from "../agent/turn-runs.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
@@ -199,6 +200,12 @@ const runChildTurn = (
         let failure: string | undefined;
         try {
             for await (const { event } of run.follow(0)) {
+                /* WHAT THIS CHILD PROVED, off its own normalized frames, which is what makes the verdict hold
+                 * on a child running Codex, Cursor or Gemini rather than only where the Claude hooks reach
+                 * (child-verification.ts). Its OWN delegations count too, deliberately: a child that handed
+                 * the edit to a grandchild is still the agent whose report the parent will read, and the work
+                 * landed in its worktree either way. Before the branches below, several of which `continue`. */
+                noteChildWork(event, childId);
                 if (event.kind === "session") {
                     if (kid !== undefined) {
                         kid.sessionId = event.sessionId;

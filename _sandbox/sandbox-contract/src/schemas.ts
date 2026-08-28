@@ -8480,6 +8480,29 @@ export type SubagentKind = z.infer<typeof SubagentKindSchema>;
 export const SubagentStatusSchema = z.enum(["pending", "running", "blocked", "completed", "failed", "killed", "paused"]);
 export type SubagentStatus = z.infer<typeof SubagentStatusSchema>;
 
+/* WHETHER ANYTHING CHECKED WHAT THE HELPER DID, carried beside its report rather than left for the reader to
+ * assume. Computed from the helper's own tool calls, the files it edited against the checks that ran after
+ * them (the daemon's child-verification.ts), so it holds on every provider rather than only where the Claude
+ * hooks reach.
+ *
+ * The four states are deliberately not two. `verified` and `failing` each name the command that spoke, so a
+ * targeted test is never read as the suite; `unproven` is the one that matters most, work changed and nothing
+ * ran; and `no-code` says the helper edited nothing, which is the honest answer for a research helper and
+ * must not be rendered as approval. Absent ⇒ the daemon saw no tool calls from it at all. */
+export const SubagentVerificationSchema = z.object({
+    state: z
+        .enum(["verified", "unproven", "failing", "no-code"])
+        .describe(
+            "Whether anything proved its work: a check passed after its last edit, it changed code and nothing checked it, a check ran and failed, or it changed no code at all.",
+        ),
+    paths: z.array(z.string()).optional().describe("The code files it changed, most recent last. The first few; the record holds the rest."),
+    check: z
+        .string()
+        .optional()
+        .describe("The command that spoke: the one that cleared it, or the one that failed. Named rather than summarised, so a targeted test is not read as the whole suite."),
+});
+export type SubagentVerification = z.infer<typeof SubagentVerificationSchema>;
+
 export const SubagentSessionSchema = z.object({
     id: z
         .string()
@@ -8538,6 +8561,9 @@ export const SubagentSessionSchema = z.object({
         .optional()
         .describe("Its report: what it concluded, without opening its record. The question a finished helper gets read for."),
     error: z.string().optional().describe("Why it failed, when it did."),
+    // Whether anything checked the work behind that report (SubagentVerificationSchema). Filled once it ends:
+    // a standing read while it is still working would be a verdict on a job half done.
+    verification: SubagentVerificationSchema.optional().describe("Whether anything proved the work its report describes."),
 });
 export type SubagentSession = z.infer<typeof SubagentSessionSchema>;
 export const SubagentsListSchema = z.object({

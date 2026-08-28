@@ -67,6 +67,7 @@ import { opt } from "./opt.js";
 import { readClaudeUsage } from "../usage/claude-usage.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk } from "./sdk-stream.js";
 import { sdkSystemPrompt } from "./system-prompt.js";
+import { noteChildWork } from "./child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "./subagents.js";
 
 export interface AgentRequest {
@@ -1119,6 +1120,17 @@ export async function* runAgent(
                         writing.delete(event.id);
                         documents.latest = event.status === "completed" ? written : documents.latest;
                     }
+                }
+                /* And the same seam again for WHAT THIS TURN'S CHILDREN PROVED. A subagent's own tool calls
+                 * ride this stream carrying the spawning call's id, which is the child's record id, so the
+                 * edits and checks of every child are attributable here without a hook, a meta file, or a
+                 * join (child-verification.ts). An update names only its call, so it is routed by the
+                 * ownership the opening frame established; a frame of the PARENT'S own work has no child to
+                 * name and is dropped, which is why an undelegating turn pays one comparison. */
+                if (event.kind === "tool_call") {
+                    noteChildWork(event, event.parentToolUseId);
+                } else if (event.kind === "tool_call_update") {
+                    noteChildWork(event, undefined);
                 }
                 push(event);
             }

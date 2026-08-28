@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { Rule } from "@intentic/sandbox-contract";
-import { createVerificationLedger, type ScriptsProbe, verifyEditsMessage } from "../agent/agent-verification.js";
+import { commandExitCode, createVerificationLedger, type ScriptsProbe, verifyEditsMessage } from "../agent/agent-verification.js";
 import type { IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds } from "./rules.js";
@@ -34,17 +34,6 @@ const MAX_FOLLOW_UPS = 2;
 // How much of a failed rule command's own words ride back to the model. Enough to act on, not enough to
 // re-paste a suite.
 const COMMAND_OUTPUT_BYTES = 4_000;
-
-// Does this Bash result say the command failed? The tmux wrapper's footer carries the real exit code
-// (`--- [exit 7, 2s] ...`), which is the authoritative answer whenever output filtering is on. Without a
-// footer there is nothing to read here and the caller's event tells us instead: PostToolUse ⇒ ran,
-// PostToolUseFailure ⇒ did not.
-const footerExitCode = (response: unknown): number | undefined => {
-    const text = typeof response === "string" ? response : typeof response === "object" && response !== null ? JSON.stringify(response) : "";
-    const matches = [...text.matchAll(/---\s\[exit\s(\d+),/g)];
-    const last = matches.at(-1)?.[1];
-    return last === undefined ? undefined : Number(last);
-};
 
 const bashCommand = (input: unknown): string | undefined => {
     const command = (input as { command?: unknown }).command;
@@ -154,7 +143,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         }
                         const command = bashCommand(input.tool_input);
                         if (command !== undefined) {
-                            const exit = footerExitCode(input.tool_response);
+                            const exit = commandExitCode(input.tool_response);
                             const text = typeof input.tool_response === "string" ? input.tool_response : "";
                             ledger.noteCommand(command, exit === undefined || exit === 0, text);
                         }

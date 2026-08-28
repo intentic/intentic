@@ -1,8 +1,9 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentHarness, AgentProvider, SubagentKind, SubagentSession, SubagentStatus } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentHarness, AgentProvider, SubagentKind, SubagentSession, SubagentStatus, SubagentVerification } from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { turnRunOf } from "./turn-runs.js";
 
 /* THE AGENTS AN AGENT STARTS, AS THINGS THE DAEMON CAN NAME.
@@ -66,6 +67,10 @@ interface SubagentRecord {
     lastTool: string | undefined;
     summary: string | undefined;
     error: string | undefined;
+    /* Whether anything checked the work behind that summary (child-verification.ts), stamped once, at the
+     * moment the child ends. Not while it runs: a standing read mid-flight says "unproven" about every child
+     * that has not reached its tests yet, which is a verdict on a job half done. */
+    verification: SubagentVerification | undefined;
     /* --- how its transcript is READ. Daemon-side only; see the header. ---
      * The TURN itself rather than a copy of what it knew when the child was born: its session id is filled from
      * the stream's first frame and the directory below from the first child's start hook, both of which can land
@@ -89,6 +94,9 @@ const sweep = (now: number): void => {
     for (const [id, record] of records) {
         if (record.endedAt !== undefined && now - record.endedAt > RETAIN_FINISHED_MS) {
             records.delete(id);
+            // The verification ledger's life is the record's: its verdict was stamped onto the record when the
+            // child ended, so what is left here is the working record nobody can ask about any more.
+            forgetChild(id);
         }
     }
 };
@@ -144,6 +152,7 @@ const wire = (record: SubagentRecord): SubagentSession => ({
     ...(record.lastTool !== undefined ? { lastTool: record.lastTool } : {}),
     ...(record.summary !== undefined ? { summary: record.summary } : {}),
     ...(record.error !== undefined ? { error: record.error } : {}),
+    ...(record.verification !== undefined ? { verification: record.verification } : {}),
 });
 
 /** Every subagent this sandbox knows about, live first, then most recently active, which is the order a roster
@@ -252,6 +261,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         lastTool: undefined,
         summary: undefined,
         error: undefined,
+        verification: undefined,
         turn,
         agentId: undefined,
         summarySource: undefined,
@@ -292,8 +302,14 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
     }
     Object.assign(record, Object.fromEntries(changed));
     record.activityAt = Date.now();
+    /* THE ONE MOMENT A CHILD ENDS, whichever of the five roads it came down: a task_notification, the
+     * SubagentStop hook, the spawn service's own settle, the turn-end sweep, a failure. Each of those is a
+     * different caller and only this line sees all of them, which is why the verdict is read HERE and not at
+     * any of them. Read once and kept: the ledger goes on existing until the record is swept, but a standing
+     * that changed afterwards would be work done by something that is no longer this child. */
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
+        record.verification = childVerification(record.id);
     }
     // Every real move: a status, a token count, the tool it just used. This is the chattiest publisher in the
     // daemon by a distance, which is exactly why the bus rate-limits per domain rather than asking each caller
@@ -309,6 +325,9 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
         ...(fields.lastTool !== undefined ? { lastTool: record.lastTool } : {}),
         ...(fields.summary !== undefined ? { summary: record.summary } : {}),
         ...(fields.error !== undefined ? { error: record.error } : {}),
+        // Off the RECORD rather than off `fields`, because nothing patches it: it is stamped by the ending
+        // above, on the same frame that carries the report it qualifies.
+        ...(record.verification !== undefined ? { verification: record.verification } : {}),
     };
 };
 
@@ -561,7 +580,37 @@ export const subagentAgentId = async (id: string): Promise<string | undefined> =
     return undefined;
 };
 
+/** Whether anything checked one child's work. The stamped verdict where the child has ended, and the live
+ *  standing where it has not: a FOREGROUND child's tool result can reach its parent before the task stream
+ *  says the child is over, and a stamp that lost that race would be a stamp the parent never sees. */
+export const subagentVerification = (id: string): SubagentVerification | undefined => records.get(id)?.verification ?? childVerification(id);
+
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+    /* THE VERDICT, ONTO THE REPORT, at the one moment the parent is reading it: the Task tool's own result,
+     * on its way into the parent's context. `tool_use_id` IS the child's record id, so there is nothing to
+     * correlate.
+     *
+     * additionalContext rather than updatedToolOutput: the child's report is the child's, and rewriting it
+     * would make the daemon a co-author of something the parent will quote. This appends a fact ABOUT it,
+     * which is the whole distinction this mechanism exists to draw. Nothing is appended when there is nothing
+     * to warn about (child-verification.ts says why), so a clean fan-out costs no context at all. */
+    PostToolUse: [
+        {
+            matcher: "Task",
+            hooks: [
+                async (input): Promise<{ continue: true; hookSpecificOutput?: { hookEventName: "PostToolUse"; additionalContext: string } }> => {
+                    if (input.hook_event_name !== "PostToolUse") {
+                        return { continue: true };
+                    }
+                    const verification = subagentVerification(input.tool_use_id);
+                    const note = verification === undefined ? undefined : childVerificationNote(verification);
+                    return note === undefined
+                        ? { continue: true }
+                        : { continue: true, hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: note } };
+                },
+            ],
+        },
+    ],
     SubagentStart: [
         {
             hooks: [
@@ -811,4 +860,5 @@ export const resetSubagents = (): void => {
     tasks.clear();
     backgrounded.clear();
     waiters.clear();
+    resetChildVerification();
 };

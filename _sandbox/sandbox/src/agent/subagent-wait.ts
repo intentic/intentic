@@ -148,7 +148,10 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
             tool(
                 "wait",
                 "Wait until an agent you started needs you. Blocks until the target is blocked on input (a question or " +
-                    "permission), or finishes, whichever comes first: then returns its status and last report. Target an " +
+                    "permission), or finishes, whichever comes first: then returns its status, its last report, and " +
+                    "`verification` — whether anything actually checked the work that report describes (`verified` / " +
+                    "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
+                    "says: an agent's own account of its work is a claim, not a result. Target an " +
                     "Agent-tool child by its spawning tool call id, a spawned agent by the id the " +
                     'spawn tool returned, or "any" for whichever of this ' +
                     "conversation's children moves first. Use this instead of sleeping or polling in a " +

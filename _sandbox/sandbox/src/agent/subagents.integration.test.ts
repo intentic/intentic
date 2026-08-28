@@ -5,6 +5,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { noteChildWork } from "./child-verification.js";
 import {
     closeSubagents,
     listSubagentSessions,
@@ -430,6 +431,49 @@ describe("how a subagent ends", () => {
         // The SDK's exit notification lands afterwards with its own digest of the run: the child's words stand.
         noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-1", status: "completed", summary: "ran 12 tools" });
         expect(listSubagentSessions()).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
+    });
+
+    it("stamps the verification the moment it ends, whichever road it came down", () => {
+        openSpawnedChild(turn(), { id: "sub-verify-1", description: "port the parser" });
+        noteChildWork({ kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/parser.ts" }] }, "sub-verify-1");
+        // Still working: a standing read mid-flight would call every child unproven before it reaches its tests.
+        expect(listSubagentSessions()[0]?.verification).toBeUndefined();
+        settleSpawnedChild("sub-verify-1", { failed: false, report: "Ported it." });
+        expect(listSubagentSessions()[0]?.verification).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
+    });
+
+    it("carries the verdict on the same frame as the report, for an SDK child too", () => {
+        noteSubagentTask(turn(), started({ tool_use_id: "call-v" }));
+        noteChildWork({ kind: "tool_call", id: "c1", name: "Write", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] }, "call-v");
+        noteChildWork({ kind: "tool_call", id: "c2", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" }, "call-v");
+        noteChildWork({ kind: "tool_call_update", id: "c2", status: "completed", content: [{ type: "text", text: "--- [exit 0, 2s]" }] }, undefined);
+        const frame = update(noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-v", status: "completed", summary: "done" }));
+        expect(frame.verification).toEqual({ state: "verified", paths: ["src/a.ts"], check: "pnpm test" });
+    });
+
+    /* The stamp onto the report itself, which is the whole point: the parent reads the Task result, and the
+     * fact about whether anything checked it arrives in the same breath. */
+    it("appends the warning to a Task result the parent is about to read", async () => {
+        noteSubagentTask(turn(), started({ tool_use_id: "call-w" }));
+        noteChildWork({ kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] }, "call-w");
+        const output = await subagentHooks(turn()).PostToolUse?.[0]?.hooks[0]?.(
+            { hook_event_name: "PostToolUse", tool_name: "Task", tool_use_id: "call-w", tool_input: {}, tool_response: "Done." } as unknown as HookInput,
+            "t1",
+            { signal: new AbortController().signal },
+        );
+        expect((output as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput?.additionalContext).toContain("UNPROVEN");
+    });
+
+    // And a child with nothing to warn about spends none of the parent's context saying so.
+    it("says nothing about a child that edited no code", async () => {
+        noteSubagentTask(turn(), started({ tool_use_id: "call-q" }));
+        noteChildWork({ kind: "tool_call", id: "c1", name: "Grep", category: "search", status: "completed", target: "needle" }, "call-q");
+        const output = await subagentHooks(turn()).PostToolUse?.[0]?.hooks[0]?.(
+            { hook_event_name: "PostToolUse", tool_name: "Task", tool_use_id: "call-q", tool_input: {}, tool_response: "Found it." } as unknown as HookInput,
+            "t1",
+            { signal: new AbortController().signal },
+        );
+        expect(output).toEqual({ continue: true });
     });
 
     it("does not re-end a finished child, but does let a late failure through", () => {
