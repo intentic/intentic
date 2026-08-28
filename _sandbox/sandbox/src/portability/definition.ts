@@ -223,7 +223,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
     const name = services.config.sandbox.name;
     return {
         definition: SandboxDefinitionSchema.parse({
-            schemaVersion: 2,
+            schemaVersion: 1,
             ...(name === "" ? {} : { name }),
             environment: {
                 baseImage: baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image),
@@ -248,7 +248,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
  * three surfaces cannot disagree about what "a runner's definition" contains. */
 export const settingsDefinition = async (services: Services): Promise<SandboxDefinition> =>
     SandboxDefinitionSchema.parse({
-        schemaVersion: 2,
+        schemaVersion: 1,
         environment: {},
         repositories: [],
         capabilities: [],

@@ -173,7 +173,7 @@ test("plan → apply lands every piece through the native paths, and a re-plan m
     const definitions = createDefinitions(targetServices);
 
     const toml = [
-        "schemaVersion = 2",
+        "schemaVersion = 1",
         'secrets = ["OPENAI_API_KEY"]',
         "",
         "[environment]",
@@ -239,7 +239,7 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
     const target = await makeRoots();
     const targetServices = servicesFor(target, { git: { clone: gitClone } });
     const definitions = createDefinitions(targetServices);
-    const toml = ["schemaVersion = 2", "[[repositories]]", 'id = "app"', `remote = ${JSON.stringify(upstreamDir)}`, ""].join("\n");
+    const toml = ["schemaVersion = 1", "[[repositories]]", 'id = "app"', `remote = ${JSON.stringify(upstreamDir)}`, ""].join("\n");
 
     const plan = await definitions.plan(toml);
     await definitions.apply({ token: plan.token, items: [] });
@@ -259,7 +259,7 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
 
 const workspaceToml = (remote: string, ref?: string): string =>
     [
-        "schemaVersion = 2",
+        "schemaVersion = 1",
         "",
         "[workspace]",
         `remote = ${JSON.stringify(remote)}`,

@@ -83,7 +83,7 @@ const definitionSettings = (): z.ZodType<Partial<z.infer<typeof SandboxSettingsS
 export const SandboxDefinitionSchema = z.strictObject({
     // Bumped when the layout changes in a way an older daemon would misread. Refused rather than guessed at,
     // the bundle manifest's own rule.
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(1),
     // What the source sandbox was called, for the reader; never used to authorize anything.
     name: z.string().optional(),
     environment: DefinitionEnvironmentSchema.prefault({}),

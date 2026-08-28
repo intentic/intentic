@@ -209,7 +209,7 @@ mod tests {
         assert_eq!(base64(b"fo"), "Zm8=");
         assert_eq!(base64(b"foo"), "Zm9v");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
-        assert_eq!(base64(b"schemaVersion = 2\n"), "c2NoZW1hVmVyc2lvbiA9IDIK");
+        assert_eq!(base64(b"schemaVersion = 1\n"), "c2NoZW1hVmVyc2lvbiA9IDEK");
     }
 
     #[cfg(unix)]

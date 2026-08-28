@@ -10,7 +10,7 @@ import DocsRelated from "../../components/DocsRelated.astro";
 
 const example = [
     "# Intentic sandbox definition: safe to review and publish.",
-    "schemaVersion = 2",
+    "schemaVersion = 1",
     'name = "storefront"',
     "",
     "# Names only. The target asks its owner for the values.",
@@ -127,7 +127,7 @@ const contents = [
         the sandbox it describes, which is also what makes a drift comparison a computation rather than bookkeeping.
     </p>
     <p>
-        The format version is exact: this build accepts <code>schemaVersion = 2</code>. Unknown keys are errors rather than being discarded,
+        The format version is exact: this build accepts <code>schemaVersion = 1</code>. Unknown keys are errors rather than being discarded,
         so a misspelled field cannot look as though it applied successfully.
     </p>
 
