@@ -235,12 +235,17 @@ reports the profile.
 - Move a sandbox, two ways that share one truth (src/portability). A **bundle** is the whole environment as a
   gzipped tar of the two volumes, driven entirely by the state manifests' portability classes (carry / secret /
   identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
-  **definition** is the declarable half of the same thing as a `sandbox.toml`: repositories by remote,
-  connections by shape, secret NAMES, agent settings, the overlay as source — derived from the live manifests
-  on every export (never stored), applied preview-first through the same native write paths the UI uses, and
-  diffable against the running sandbox for drift. The bundle manifest embeds the definition (one schema, two
-  doors), and applying a definition keeps the consent model: the overlay lands as a proposal at the approval
-  gate, capabilities arrive unauthenticated, credentials never ride along. A runner can stamp
+  **definition** is the declarable half of the same thing as a `sandbox.toml`: the workspace itself by remote,
+  repositories by remote, connections by shape, secret NAMES, agent settings, the overlay as source — derived
+  from the live manifests on every export (never stored), applied preview-first through the same native write
+  paths the UI uses, and diffable against the running sandbox for drift. `[workspace]` is what makes the
+  sandbox's own way of working travel: `/work` is itself a repo (the `root` scope), tracking exactly the
+  owner's authored content, so publishing it turns notes, skills, personas, automations, designs and drafts
+  from bundle-only bytes into one reference. The bundle manifest embeds the definition (one schema, two doors),
+  and applying a definition keeps the consent model: the overlay lands as a proposal at the approval gate,
+  capabilities arrive unauthenticated, credentials never ride along, and the three things a checked-out
+  workspace could do by itself (an approved overlay, enabled automations, workspace extensions) arrive switched
+  off with the report naming each one. A runner can stamp
   `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition` option) and an empty workspace boots pre-shaped — the
   fleet door. This sandbox's own runners are the first fleet through it: `runner-up` ships a settings-only
   definition plus the approved overlay with its pinning hash (approval by provenance — this owner already

@@ -26,6 +26,11 @@ const example = [
     "[settings]",
     "workspaceMap = true",
     "",
+    "# The workspace itself: notes, skills, personas, automations, designs, drafts.",
+    "[workspace]",
+    'remote = "https://github.com/example/storefront-workspace.git"',
+    'ref = "main"',
+    "",
     "[[repositories]]",
     'id = "product"',
     'remote = "https://github.com/example/product.git"',
@@ -39,6 +44,11 @@ const example = [
 ].join("\n");
 
 const contents = [
+    {
+        item: "The workspace",
+        definition: "The clone remote and branch of /work itself.",
+        arrival: "Checked out into an empty workspace, before the repositories.",
+    },
     { item: "Repositories", definition: "Workspace id, clone remote and optional branch.", arrival: "Cloned through the sandbox's ordinary repo path." },
     { item: "Connections", definition: "Capability id, kind and non-secret configuration.", arrival: "Listed as unauthenticated until this owner connects it." },
     { item: "Secrets", definition: "Names only.", arrival: "Shown as values this owner still needs to provide." },
@@ -50,13 +60,13 @@ const contents = [
 <DocsLayout
     pageId="sandbox-definitions"
     heading="Sandbox definitions"
-    lead="A sandbox.toml is the reproducible shape of an environment: code by reference, connections without credentials, an owner-reviewed overlay recipe, and the agent settings that matter. It is designed to be committed, diffed and handed to somebody else."
+    lead="A sandbox.toml is the reproducible shape of an environment: the workspace and its code by reference, connections without credentials, an owner-reviewed overlay recipe, and the agent settings that matter. It is designed to be committed, diffed and handed to somebody else."
 >
     <h2>Definition, not snapshot</h2>
     <p>
-        Some parts of a sandbox have a source that can be named again: a repo has a remote and branch, a connection has a kind and
-        non-secret configuration, and an environment overlay is source code. Other parts exist only here: transcripts, unpublished
-        branches, checkpoints, account sessions and ledgers. A definition carries the first set as references. A{" "}
+        Some parts of a sandbox have a source that can be named again: a repo has a remote and branch, the workspace itself is a repo with a
+        remote, a connection has a kind and non-secret configuration, and an environment overlay is source code. Other parts exist only here:
+        transcripts, unpushed branches, checkpoints, account sessions and ledgers. A definition carries the first set as references. A{" "}
         <strong>bundle</strong> carries the definition plus the irreplaceable state.
     </p>
     <table>
@@ -106,22 +116,47 @@ const contents = [
         </tbody>
     </table>
     <p>
-        The file does not include credentials, browser or provider sessions, owner identity, transcripts, automations, personas, locally
-        authored skills, drafts, unpublished git data or checkpoints. An export also lists anything it could not express — for example a
-        repository with no remote — instead of quietly leaving it out.
+        The file does not include credentials, browser or provider sessions, owner identity, transcripts, unpushed git data, checkpoints or
+        the built image. An export also lists anything it could not express — a repository with no remote, or a workspace nobody has
+        published — instead of quietly leaving it out.
     </p>
 
-    <h2>Why TOML</h2>
     <p>
-        The artifact is a shallow manifest people edit and review. TOML gives the Dockerfile a readable multiline block without YAML's value
-        coercion or JSON's escaped newline noise, and it does not turn the file into a program. Equal live state produces byte-identical
-        output: section order and value spelling are deterministic, so a git diff is a real environment diff rather than formatter churn.
+        The file is <strong>derived, never kept as a second copy</strong>. Downloading one reads the live repo remotes, capability manifests,
+        overlay and settings each time, and equal state produces byte-identical output. There is no stored sandbox.toml that can drift from
+        the sandbox it describes, which is also what makes a drift comparison a computation rather than bookkeeping.
+    </p>
+
+    <h2>The workspace itself</h2>
+    <p>
+        <code>/work</code> is a git repository. It tracks everything in the workspace that is not a project repository, reference material or
+        internal daemon state — which in practice is the sandbox's way of working: notes, authored skills, personas, automations, workflow
+        and loop designs, drafts and workspace extensions. Credentials, browser profiles and provider sessions sit outside that repository by
+        construction, which is what makes publishing it safe to offer.
     </p>
     <p>
-        The definition is <strong>derived, never kept as a second copy</strong>. Downloading one reads the live repo remotes, capability
-        manifests, overlay and settings each time. There is no background job that can forget to update sandbox.toml while the real sandbox
-        moves on.
+        Publish it from the same card and a private repository is created on your connected GitHub or GitLab account. From then on the
+        definition carries a <code>[workspace]</code> section, and a target that applies the file gets the way you work, not only the code you
+        work on. Until then the export says so in its omissions, because the difference is too large to leave for someone to discover.
     </p>
+    <p>
+        A workspace only lands in a sandbox that is still empty. One with a history of its own, or one already pointing at a workspace remote,
+        marks the item “already here”. The checkout refuses rather than overwrites: if a file already on disk would be replaced, the item
+        fails and names the file, and the remote it added is removed again, so nothing is left half-applied.
+    </p>
+
+    <h3>What arrives switched off</h3>
+    <p>
+        The sections above can guarantee their own safety — a connection has nowhere to put a credential, an overlay is written as a proposal.
+        A checkout cannot, because whatever is in the tree is what lands. Three things in a workspace act without being asked, so three things
+        arrive off, each named on the report:
+    </p>
+    <ul>
+        <li><strong>The environment overlay</strong> goes to the approval gate as a proposal instead of arriving already approved.</li>
+        <li><strong>Automations</strong> arrive disabled, because the scheduler fires enabled ones unattended.</li>
+        <li><strong>Workspace extensions</strong> arrive switched off, because an extension's code runs in the sandbox once it is on.</li>
+    </ul>
+    <p>Everything else — designs, drafts, personas, skills, notes — waits for a person to open it, so it lands as it is.</p>
 
     <h2>Download, apply or compare</h2>
     <p>Open <strong>Sandbox → Environment → Sandbox definition</strong>. The three actions have deliberately different effects:</p>
@@ -152,10 +187,11 @@ const contents = [
 
     <h2>One definition, many sandboxes</h2>
     <p>
-        The sandbox run contract can seed an empty workspace from the TOML on first boot. Repositories are cloned, connection cards are
-        created unauthenticated, settings are applied, and the overlay waits for its new owner. Replaying the same container environment on a
-        later rebuild is inert because the workspace is no longer empty. That makes one reviewed definition a fleet recipe without turning
-        boot into an unreviewed configuration executor.
+        The sandbox run contract can seed an empty workspace from the TOML on first boot. The workspace is checked out, repositories are
+        cloned, connection cards are created unauthenticated, settings are applied, and the overlay waits for its new owner. Replaying the
+        same container environment on a later rebuild is inert because the workspace is no longer empty. That makes one reviewed definition a
+        fleet recipe — every sandbox in the fleet with the same skills, personas and designs, not merely the same code — without turning boot
+        into an unreviewed configuration executor.
     </p>
     <p>
         <a href="/docs/remote-runners/">Runners</a> reuse the same definition contract more narrowly. They receive the parent's approved image

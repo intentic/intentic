@@ -24,6 +24,8 @@ import {
     DefinitionItemSchema,
     DefinitionPlanSchema,
     DefinitionReportSchema,
+    WorkspacePublishResultSchema,
+    WorkspaceRemoteSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -138,6 +140,8 @@ export {
     DefinitionItemSchema,
     DefinitionPlanSchema,
     DefinitionReportSchema,
+    WorkspacePublishResultSchema,
+    WorkspaceRemoteSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -202,6 +206,8 @@ export type DefinitionItem = z.infer<typeof DefinitionItemSchema>;
 export type DefinitionPlan = z.infer<typeof DefinitionPlanSchema>;
 export type DefinitionReport = z.infer<typeof DefinitionReportSchema>;
 export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
+export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
+export type WorkspacePublishResult = z.infer<typeof WorkspacePublishResultSchema>;
 export type MigrationHost = z.infer<typeof MigrationHostSchema>;
 export type MigrationItem = z.infer<typeof MigrationItemSchema>;
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;

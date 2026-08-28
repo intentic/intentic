@@ -30,6 +30,25 @@ export const DefinitionRepositorySchema = z.object({
 });
 export type DefinitionRepository = z.infer<typeof DefinitionRepositorySchema>;
 
+/* THE WORKSPACE ITSELF, by reference. `/work` is a git repo of its own (the daemon's `root` scope, git dir on
+ * /history), tracking every workspace file that is not a nested repo, the reference shelf, or daemon-internal
+ * state — which by the versioned-state allowlist means the owner's AUTHORED content: notes, skills, personas,
+ * automations, workflow and loop designs, drafts, workspace extensions. None of that has a source anywhere else,
+ * so before this section a definition could only shrug at it and a bundle was the sole way to move it.
+ *
+ * With a remote it becomes referenceable like any other repo, which is the whole point: `[workspace]` plus
+ * `[[repositories]]` is a sandbox's code AND its way of working, and what remains bundle-only is exactly what
+ * cannot be pushed anywhere — secrets, identity, /history, the built image.
+ *
+ * A workspace with no remote cannot appear here; the exporter says so in `omitted` rather than inventing one. */
+export const DefinitionWorkspaceSchema = z.object({
+    // The clone URL, verbatim from the workspace repo's own remote.
+    remote: z.string().min(1),
+    // The branch to check out; absent means the remote's default.
+    ref: z.string().optional(),
+});
+export type DefinitionWorkspace = z.infer<typeof DefinitionWorkspaceSchema>;
+
 export const DefinitionEnvironmentSchema = z.object({
     // The image the overlay extends, informational: the target composes against ITS OWN base (see
     // composeEnvironment's baseImageOf), this records what the source was on.
@@ -68,6 +87,9 @@ export const SandboxDefinitionSchema = z.object({
     // What the source sandbox was called, for the reader; never used to authorize anything.
     name: z.string().optional(),
     environment: DefinitionEnvironmentSchema.prefault({}),
+    // The workspace repo itself, when it has a remote to be named by. Absent is the ordinary state of a
+    // workspace nobody has published, not an error.
+    workspace: DefinitionWorkspaceSchema.optional(),
     repositories: z.array(DefinitionRepositorySchema).prefault([]),
     /* Each connection IN FULL (id, kind, config), not merely named: the manifest they come from carries the
      * SHAPE of a connection and never its credential (workspace-state.ts argues the split on the
@@ -100,7 +122,7 @@ export type DefinitionExport = z.infer<typeof DefinitionExportSchema>;
 // same items the owner reviewed.
 export const DefinitionItemSchema = z.object({
     id: z.string(),
-    kind: z.enum(["repo", "capability", "environment", "settings"]),
+    kind: z.enum(["workspace", "repo", "capability", "environment", "settings"]),
     label: z.string(),
     detail: z.string().optional(),
     /* False when the target already holds this piece (the repo's directory exists, a capability with that id
@@ -144,6 +166,46 @@ export const DefinitionDiffSchema = z.object({
     differences: z.array(DefinitionActionSchema),
 });
 export type DefinitionDiff = z.infer<typeof DefinitionDiffSchema>;
+
+/* ---- publishing the workspace repo, the one step a definition cannot take for itself ----
+ *
+ * `[workspace]` names a remote; nothing can name one that does not exist. So the owner-facing half of the
+ * feature is this: create a PRIVATE repo on a connected git host and push /work to it, or adopt a URL the
+ * owner made themselves. Deliberately its own route rather than a side effect of the export, publishing a
+ * workspace is an outward act with its own confirmation, and deriving a document must stay read-only.
+ */
+export const WorkspacePublishSchema = z.object({
+    /* An existing repo's clone URL. Given, nothing is created: the remote is wired up and pushed to, which is
+     * the path for an owner who made the repo themselves or is moving hosts. */
+    remote: z.string().min(1).optional(),
+    // The repo to create when `remote` is absent. Owner-side default is the sandbox's own name.
+    name: z.string().min(1).optional(),
+    /* The account or organization to create it under; absent means the authenticated user. Ignored when
+     * `remote` is given. */
+    owner: z.string().min(1).optional(),
+});
+export type WorkspacePublish = z.infer<typeof WorkspacePublishSchema>;
+
+// Where the workspace now lives, and what a definition will name. `created` distinguishes "made you a repo"
+// from "wired up the one you gave me", which is the difference the card reports back.
+export const WorkspacePublishResultSchema = z.object({
+    remote: z.string(),
+    branch: z.string(),
+    created: z.boolean(),
+});
+export type WorkspacePublishResult = z.infer<typeof WorkspacePublishResultSchema>;
+
+// What the card renders before anything is published: whether /work has a remote, and which connected git
+// hosts could make one. Read-only, so the button can say "Publish to github.com" rather than opening a form
+// into a void.
+export const WorkspaceRemoteSchema = z.object({
+    remote: z.string().optional(),
+    branch: z.string().optional(),
+    // Hostnames of connected github/gitlab accounts, in the order they would be tried. Empty means the owner
+    // must connect one (or paste a URL).
+    hosts: z.array(z.string()),
+});
+export type WorkspaceRemote = z.infer<typeof WorkspaceRemoteSchema>;
 
 /* ---- the bundle manifest, restated on the definition ----
  *

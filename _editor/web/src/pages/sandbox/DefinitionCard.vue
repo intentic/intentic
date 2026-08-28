@@ -4,15 +4,18 @@ import {
     DefinitionExportSchema,
     DefinitionPlanSchema,
     DefinitionReportSchema,
+    WorkspacePublishResultSchema,
+    WorkspaceRemoteSchema,
     type DefinitionDiff,
     type DefinitionExport,
     type DefinitionPlan,
     type DefinitionReport,
+    type WorkspaceRemote,
 } from "@intentic-app/api-contract";
 import { Button, Card, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useRole } from "../../composables/sandbox/useRole";
 
@@ -40,6 +43,40 @@ const { busy: deriving, notice: deriveError, run: runDerive } = useAsyncAction()
 const { busy: planning, notice: planError, run: runPlan } = useAsyncAction();
 const { busy: applying, notice: applyError, run: runApply } = useAsyncAction();
 const { busy: comparing, notice: diffError, run: runDiff } = useAsyncAction();
+
+/* THE WORKSPACE REPO, read on first render rather than behind a button: whether /work is published decides
+ * whether a downloaded definition carries this sandbox's own content at all, so it is the first thing the card
+ * has to say, not something the owner discovers in an omissions list after downloading. */
+const workspace = ref<WorkspaceRemote | undefined>(undefined);
+const confirmingPublish = ref(false);
+const { notice: workspaceError, run: runWorkspace } = useAsyncAction();
+const { busy: publishing, notice: publishError, run: runPublish } = useAsyncAction();
+
+const loadWorkspace = (): Promise<void> =>
+    runWorkspace(async () => {
+        workspace.value = WorkspaceRemoteSchema.parse(await sandboxJson(`/definition/workspace`));
+    }, `Could not read the workspace repo.`);
+
+onMounted(() => {
+    if (canOperate.value) {
+        void loadWorkspace();
+    }
+});
+
+// Publishing is OUTWARD, so it is confirmed rather than one click: it creates a repository on somebody's
+// account and pushes the workspace into it.
+const publish = (): Promise<void> =>
+    runPublish(async () => {
+        const result = WorkspacePublishResultSchema.parse(
+            await sandboxJson(`/definition/workspace/publish`, {
+                method: `POST`,
+                headers: { "content-type": `application/json` },
+                body: JSON.stringify({}),
+            }),
+        );
+        workspace.value = { remote: result.remote, branch: result.branch, hosts: workspace.value?.hosts ?? [] };
+        confirmingPublish.value = false;
+    }, `Could not publish the workspace.`);
 
 // The document is small text, so unlike a bundle it downloads through an object URL rather than a ticket.
 const download = (): Promise<void> =>
@@ -124,6 +161,45 @@ const cancel = (): Promise<void> =>
                 shape, secret names, the overlay source. Safe to publish — credentials never travel, and its overlay lands on a target as a
                 proposal, never as a build.
             </p>
+
+            <!-- The workspace repo: whether the document carries this sandbox's own content, and the one
+                 action a definition cannot take for itself. -->
+            <div v-if="plan === undefined" class="flex flex-col gap-2 rounded-lg border border-line p-3">
+                <p class="text-xs font-medium text-content">The workspace itself</p>
+                <template v-if="workspace?.remote !== undefined">
+                    <p class="text-2xs text-subtle">
+                        Published at <span class="font-mono">{{ workspace.remote }}</span
+                        ><template v-if="workspace.branch !== undefined"> on {{ workspace.branch }}</template
+                        >. The definition carries it as a <span class="font-mono">[workspace]</span> section, so a target clones this
+                        sandbox's own content — notes, skills, personas, automations, designs and drafts — beside the repositories.
+                    </p>
+                </template>
+                <template v-else>
+                    <p class="text-2xs text-subtle">
+                        Not published, so a definition carries only its sections and none of this sandbox's own content. Publishing pushes
+                        <span class="font-mono">/work</span> to a new private repository. Nested repositories, the reference shelf,
+                        credentials, browser sessions and <span class="font-mono">.env</span> files are outside the workspace repo and never
+                        travel with it.
+                    </p>
+                    <div v-if="!confirmingPublish" class="flex flex-wrap items-center gap-2">
+                        <Button
+                            label="Publish workspace"
+                            size="small"
+                            severity="secondary"
+                            :disabled="(workspace?.hosts.length ?? 0) === 0"
+                            @click="confirmingPublish = true"
+                        />
+                        <p v-if="(workspace?.hosts.length ?? 0) === 0" class="text-2xs text-subtle">
+                            Connect a GitHub or GitLab account first; that is what creates the repository.
+                        </p>
+                    </div>
+                    <div v-else class="flex flex-wrap items-center gap-2">
+                        <p class="text-2xs text-content">Create a private repository on {{ workspace?.hosts[0] }} and push /work to it?</p>
+                        <Button label="Publish" size="small" :loading="publishing" @click="publish" />
+                        <Button label="Cancel" size="small" severity="secondary" text @click="confirmingPublish = false" />
+                    </div>
+                </template>
+            </div>
 
             <div v-if="plan === undefined" class="flex flex-wrap items-center gap-2">
                 <Button label="Download sandbox.toml" size="small" :loading="deriving" @click="download">
@@ -237,6 +313,6 @@ const cancel = (): Promise<void> =>
             </div>
         </template>
 
-        <NoticeStack :of="[deriveError, planError, applyError, diffError]" />
+        <NoticeStack :of="[deriveError, planError, applyError, diffError, workspaceError, publishError]" />
     </Card>
 </template>

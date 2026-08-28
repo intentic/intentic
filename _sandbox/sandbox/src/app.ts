@@ -11,6 +11,7 @@ import {
     REQUEST_ID_HEADER,
     roleAtLeast,
     runnerTranslatorPath,
+    WorkspacePublishSchema,
 } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -62,6 +63,7 @@ import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
 import { createDefinitions } from "./portability/apply-definition.js";
 import { DefinitionFormatError, emitDefinitionToml, settingsDefinition } from "./portability/definition.js";
+import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./portability/workspace-repo.js";
 import { BundleFormatError, restoreBundle } from "./portability/restore.js";
 import { MigrationFormatError } from "./migrations/archive.js";
 import { createMigrations } from "./migrations/migrations.js";
@@ -1176,6 +1178,39 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             return denied;
         }
         return c.json({ ok: definitions.abandon() });
+    });
+
+    /* THE WORKSPACE REPO, the half of the definition a document cannot supply for itself: `[workspace]` names a
+     * remote, and nothing can name one that does not exist. A read for the card's first render, and an
+     * owner-gated write that creates a PRIVATE repo on a connected git host and pushes /work to it. Its own
+     * route rather than a side effect of the export, because publishing is outward and deriving is read-only
+     * (portability/workspace-repo.ts argues both halves). */
+    app.get("/definition/workspace", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        return c.json(await workspaceRemote(services));
+    });
+    app.post("/definition/workspace/publish", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = WorkspacePublishSchema.safeParse((await c.req.json().catch(() => undefined)) ?? {});
+        if (!parsed.success) {
+            return c.json({ error: "expected { remote?, name?, owner? }" }, 400);
+        }
+        try {
+            return c.json(await publishWorkspace(services, parsed.data));
+        } catch (error) {
+            // Already published, no connected host, a refused create, a rejected push: all things the owner
+            // can act on, none of them breakage.
+            if (error instanceof WorkspaceRemoteError) {
+                return c.json({ error: error.message }, 409);
+            }
+            throw error;
+        }
     });
 
     /* MIGRATIONS: importing a FOREIGN assistant's setup (a packed `~/.hermes`), preview-first. Raw Hono beside

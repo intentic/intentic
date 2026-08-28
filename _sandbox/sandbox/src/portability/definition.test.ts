@@ -16,6 +16,7 @@ const definition: SandboxDefinition = {
         // this is the content class (a Dockerfile) the format exists to hold.
         dockerfile: 'RUN apt-get update \\\n  && apt-get install -y ffmpeg\nENV GREETING="hello world"\n',
     },
+    workspace: { remote: "https://github.com/example/workspace.git", ref: "main" },
     repositories: [
         { id: "intentic", remote: "https://github.com/example/intentic.git", ref: "main" },
         { id: "clients/site", remote: "git@github.com:example/site.git" },
@@ -82,6 +83,20 @@ test("diff answers empty for agreement and one line per real difference", () => 
     expect(subjects).toContain("Setting terseHoldout"); // absent in target ⇒ default, differs from 0.25
 });
 
+test("the workspace section drifts in three directions, and a definition without one is not silence", () => {
+    const { workspace: _dropped, ...unpublished } = definition;
+    // Not naming a workspace against a published one is a real difference, not agreement by omission: it is
+    // the difference between a document that carries the sandbox's own content and one that does not.
+    expect(definitionDiff(definition, unpublished as SandboxDefinition)).toEqual([
+        { subject: "Workspace", detail: "This workspace is published at https://github.com/example/workspace.git @ main; the definition names none." },
+    ]);
+    expect(definitionDiff(unpublished as SandboxDefinition, definition)).toEqual([
+        { subject: "Workspace", detail: "The definition names https://github.com/example/workspace.git @ main; this workspace has no remote." },
+    ]);
+    const moved: SandboxDefinition = { ...definition, workspace: { remote: "https://github.com/example/workspace.git", ref: "template" } };
+    expect(definitionDiff(definition, moved).map((difference) => difference.subject)).toEqual(["Workspace"]);
+});
+
 test("a setting spelled at its default is no drift against one that omits it", () => {
     const explicit: SandboxDefinition = { ...definition, settings: { ...definition.settings, terseOutput: false } };
     expect(definitionDiff(definition, explicit)).toEqual([]);
@@ -95,6 +110,8 @@ test("settingsDefinition is settings-only: non-defaults in, every other section 
     // The default-valued flag is dropped (stating it would freeze today's default into every future apply);
     // nothing else grows a section, which is what makes this safe to ship to a runner.
     expect(scoped.settings).toEqual({ terseOutput: true });
+    // No workspace either: a runner's tree arrives through the parent's git door, never by cloning a remote.
+    expect(scoped.workspace).toBeUndefined();
     expect(scoped.repositories).toEqual([]);
     expect(scoped.capabilities).toEqual([]);
     expect(scoped.secrets).toEqual([]);

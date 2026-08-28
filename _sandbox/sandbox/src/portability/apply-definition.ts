@@ -20,6 +20,7 @@ import { composeEnvironment, draftsDir } from "../environment/environment.js";
 import { repoGitDir } from "../history/history.js";
 import { isValidRepoId } from "../workspace/repo-discovery.js";
 import { definitionDiff, DefinitionFormatError, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
+import { adoptWorkspaceRemote, neutralizeWorkspaceArrival, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";
 
 /* APPLYING A DEFINITION, preview-first, through the same native write paths the product's own surfaces use.
  *
@@ -45,6 +46,25 @@ const dockerfileOf = (definition: SandboxDefinition): string => (definition.envi
 // The checklist, derived fresh on every call so plan and apply cannot disagree about what is applicable.
 const itemsOf = async (services: Services, definition: SandboxDefinition): Promise<DefinitionItem[]> => {
     const items: DefinitionItem[] = [];
+    /* The workspace FIRST, in the checklist and therefore in the apply loop: it materializes a whole tree, and
+     * a repo cloned before it would be a directory that tree could not be checked out over. */
+    const workspace = definition.workspace;
+    if (workspace !== undefined) {
+        const published = await workspaceRemoteUrl(services.workspace.root);
+        const pristine = await workspaceIsPristine(services.workspace.root);
+        items.push({
+            id: "workspace",
+            kind: "workspace",
+            label: "The workspace itself",
+            detail: `${workspace.remote}${workspace.ref === undefined ? "" : ` @ ${workspace.ref}`}; its notes, skills, personas, designs and drafts land in /work`,
+            applicable: published === undefined && pristine,
+            ...(published !== undefined
+                ? { reason: `this workspace is already published at ${published}; a definition lands beside what is there, never over it` }
+                : pristine
+                  ? {}
+                  : { reason: "this workspace already has a history of its own; a definition lands beside what is there, never over it" }),
+        });
+    }
     for (const repo of definition.repositories) {
         const invalid = !isValidRepoId(repo.id);
         const exists = !invalid && existsSync(join(services.workspace.root, repo.id));
@@ -98,6 +118,15 @@ const itemsOf = async (services: Services, definition: SandboxDefinition): Promi
 // honesty rule: a list that looks complete is worse than one that is visibly missing.
 const actionsFor = (definition: SandboxDefinition): DefinitionAction[] => {
     const actions: DefinitionAction[] = [];
+    /* Said at PREVIEW time, before the tree is fetched and therefore before anyone can know WHICH things it
+     * carries: a workspace repo is authored content, and the parts of it that act unattended land off. The
+     * report replaces this with the specific list of what was actually switched off. */
+    if (definition.workspace !== undefined) {
+        actions.push({
+            subject: "What the workspace brings arrives switched off",
+            detail: "A workspace repo carries a sandbox's own way of working. Anything in it that acts by itself — automations, workspace extensions, an environment overlay — lands disabled or as a proposal, and the report names each one so you can turn on what you trust.",
+        });
+    }
     if (dockerfileOf(definition) !== "") {
         actions.push({
             subject: "Approve and rebuild the environment",
@@ -130,13 +159,30 @@ export const applyDefinitionItems = async (
     const items = await itemsOf(services, definition);
     const applied: DefinitionReport["applied"] = [];
     const failed: DefinitionReport["failed"] = [];
+    // What the workspace arrival switched off, learned only by doing it, so it rides back on the report
+    // beside the actions the document could predict.
+    const gated: DefinitionAction[] = [];
+    /* Whether the `[environment]` item is going to park this definition's overlay as a proposal anyway. When it
+     * is, a workspace checkout carrying the identical custom section must not park a SECOND copy: the two are
+     * derived from the same file on the source, and the composed proposal would install everything twice. */
+    const overlayHandledBySection = items.some((item) => item.kind === "environment" && item.applicable && pick(item));
     let touchedCapabilities = false;
     for (const item of items) {
         if (!item.applicable || !pick(item)) {
             continue;
         }
         try {
-            if (item.kind === "repo") {
+            if (item.kind === "workspace") {
+                const workspace = definition.workspace;
+                if (workspace === undefined) {
+                    throw new Error("the held definition no longer names a workspace");
+                }
+                await adoptWorkspaceRemote(services.workspace.root, workspace);
+                gated.push(...(await neutralizeWorkspaceArrival(services, { overlayHandledBySection })));
+                // The tree may have delivered a capability manifest, which reaches the composed overlay and
+                // the endpoint translator exactly as an upserted capability does; converge once after the loop.
+                touchedCapabilities = true;
+            } else if (item.kind === "repo") {
                 const repo = definition.repositories.find((entry) => `repo:${entry.id}` === item.id);
                 if (repo === undefined) {
                     throw new Error("the held definition no longer names this repository");
@@ -183,7 +229,7 @@ export const applyDefinitionItems = async (
         await syncEndpointCompat(services);
     }
     services.history.notifyUserWrite();
-    return { applied, failed, needsAction: actionsFor(definition) };
+    return { applied, failed, needsAction: [...actionsFor(definition), ...gated] };
 };
 
 /* The RUNNER'S way of taking a definition's settings: REPLACE, not the merge-beside applyDefinitionItems does.

@@ -191,9 +191,11 @@ const state = [
     <h2>Shape is different from state</h2>
     <p>
         A sandbox has a reproducible <em>shape</em> and irreplaceable <em>state</em>. The shape is derived on demand as a deterministic{" "}
-        <a href="/docs/sandbox-definitions/"><code>sandbox.toml</code> definition</a>: repository remotes, connection shapes, secret names,
-        the approved overlay source, and non-default agent settings. Credentials, identity, transcripts and unpublished work never enter the
-        file. That makes the definition reviewable, comparable for drift, and safe to use as a fleet template.
+        <a href="/docs/sandbox-definitions/"><code>sandbox.toml</code> definition</a>: the workspace remote, repository remotes, connection
+        shapes, secret names, the approved overlay source, and non-default agent settings. The workspace is a repository too, so the way a
+        sandbox works — its skills, personas, automations and designs — is part of its shape rather than something only a backup can move.
+        Credentials, identity, transcripts and unpushed work never enter the file. That makes the definition reviewable, comparable for
+        drift, and safe to use as a fleet template.
     </p>
     <p>
         A bundle is the other door: definition plus the state that no source can reproduce. Applying a definition is preview-first and lands

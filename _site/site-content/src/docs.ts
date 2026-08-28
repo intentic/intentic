@@ -106,7 +106,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Sandbox definitions · intentic docs",
                                 description:
-                                    "Describe a sandbox as sandbox.toml: repositories, connection shapes, secret names, environment overlay and agent settings, without credentials or history.",
+                                    "Describe a sandbox as sandbox.toml: the workspace itself, repositories, connection shapes, secret names, environment overlay and agent settings, without credentials or history.",
                                 datePublished: "2026-08-25",
                             },
                         },

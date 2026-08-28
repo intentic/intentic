@@ -5,12 +5,14 @@ import { dirname, join } from "node:path";
 import { type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { defaultGit, gitClone } from "@intentic/scaffold";
 import { expect, test } from "vitest";
+import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { fakeFiles, memoryCapabilitiesStore, services } from "../route-testing.js";
 import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { applyDefinitionItems, createDefinitions } from "./apply-definition.js";
 import { deriveDefinition, parseDefinitionToml } from "./definition.js";
+import { workspaceRemoteUrl } from "./workspace-repo.js";
 
 /* THE DEFINITION ROUND TRIP ON REAL DISK AND REAL GIT: derive a sandbox.toml from a workspace with live
  * repos, land it in an empty one, and check that what the target holds is what the document said — plus the
@@ -56,7 +58,50 @@ const filesOnDisk = (): Services["files"] =>
             await mkdir(dirname(absPath), { recursive: true });
             await writeFile(absPath, content);
         },
+        remove: async (absPath) => {
+            await rm(absPath, { recursive: true, force: true });
+        },
     });
+
+const AUTHOR = ["-c", "user.email=test@example.com", "-c", "user.name=test"];
+
+// A workspace that is a REPO, the shape every real /work has: the daemon's own baseline commit and nothing
+// else, unless the test asks for a history somebody has worked in.
+const makeWorkspaceRepo = async (work: string, commits = 1): Promise<void> => {
+    await defaultGit(work, ["init", "-b", "main"]);
+    for (let index = 0; index < commits; index++) {
+        await defaultGit(work, [...AUTHOR, "commit", "-q", "--allow-empty", "-m", index === 0 ? "Initialize workspace" : `later ${index}`]);
+    }
+};
+
+/* A PUBLISHED workspace: a bare repo standing in for the host, holding one sandbox's own content — a note, a
+ * skill, an enabled automation, a workspace extension and an approved overlay. The last three are the ones
+ * that act by themselves, which is what the arrival has to switch off. */
+const publishedWorkspace = async (): Promise<string> => {
+    const dirs = await makeRoots();
+    const bare = join(dirs.history, "workspace.git");
+    await defaultGit(dirs.history, ["init", "--bare", "-q", "-b", "main", bare]);
+    const work = dirs.work;
+    await defaultGit(work, ["init", "-b", "main"]);
+    await writeFile(join(work, "notes.md"), "workspace notes\n");
+    await mkdir(join(work, ".intentic/config/skills/mine"), { recursive: true });
+    await writeFile(join(work, ".intentic/config/skills/mine/SKILL.md"), "# mine\n");
+    await writeFile(
+        join(work, ".intentic/config/automations.json"),
+        JSON.stringify([{ id: "nightly", trigger: { kind: "schedule", cron: "0 9 * * *" }, prompt: "sweep the inbox", enabled: true }], null, 2),
+    );
+    await mkdir(join(work, ".intentic/config/workspace-extensions/hello"), { recursive: true });
+    await writeFile(
+        join(work, ".intentic/config/workspace-extensions/hello/intentic-extension.json"),
+        JSON.stringify({ publisher: "acme", name: "hello", version: "1.0.0", engines: { intentic: "^0.2.0" } }),
+    );
+    await writeFile(join(work, ".intentic/config/environment.custom.Dockerfile"), "RUN apt-get install -y ffmpeg\n");
+    await defaultGit(work, ["add", "-A"]);
+    await defaultGit(work, [...AUTHOR, "commit", "-q", "-m", "workspace"]);
+    await defaultGit(work, ["remote", "add", "origin", bare]);
+    await defaultGit(work, ["push", "-q", "-u", "origin", "main"]);
+    return bare;
+};
 
 const servicesFor = (dirs: { work: string; history: string }, overrides: Record<string, unknown> = {}): Services =>
     services({
@@ -194,5 +239,112 @@ test("a stale or consumed token is refused, and the boot-seed path applies every
     const report = await applyDefinitionItems(seededServices, parseDefinitionToml(toml), () => true);
     expect(report.failed).toEqual([]);
     expect(existsSync(join(seeded.work, "app/README.md"))).toBe(true);
+    await cleanup();
+});
+
+/* ---- the workspace repo: the section that carries a sandbox's own way of working ---- */
+
+const workspaceToml = (remote: string, ref?: string): string =>
+    ["schemaVersion = 1", "", "[workspace]", `remote = ${JSON.stringify(remote)}`, ...(ref === undefined ? [] : [`ref = ${JSON.stringify(ref)}`]), ""].join(
+        "\n",
+    );
+
+test("the workspace travels by reference: its content arrives, and everything in it that acts by itself arrives off", async () => {
+    const remote = await publishedWorkspace();
+
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    const targetServices = servicesFor(target, {
+        automations: fileAutomationsStore(
+            join(target.work, ".intentic/config/automations.json"),
+            join(target.work, ".intentic/records/automation-runs.json"),
+        ),
+        sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+        secretRegistry: async () => [],
+    });
+    const definitions = createDefinitions(targetServices);
+
+    const plan = await definitions.plan(workspaceToml(remote, "main"));
+    expect(plan.items.map((item) => [item.id, item.applicable])).toEqual([["workspace", true]]);
+    // Said before anything is fetched, because at preview time nobody can know WHICH things the tree carries.
+    expect(plan.needsAction.map((action) => action.subject)).toEqual(["What the workspace brings arrives switched off"]);
+
+    const report = await definitions.apply({ token: plan.token, items: ["workspace"] });
+    expect(report.failed).toEqual([]);
+
+    // The sandbox's own content, the half no definition could carry before this section existed.
+    expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("workspace notes\n");
+    expect(existsSync(join(target.work, ".intentic/config/skills/mine/SKILL.md"))).toBe(true);
+
+    // The automation the tree carried is OFF: the scheduler fires enabled ones unattended.
+    expect((await targetServices.automations.list()).map((automation) => [automation.id, automation.enabled])).toEqual([["nightly", false]]);
+    // The workspace extension is OFF: an absent entry means enabled, so arriving quietly is arriving on.
+    expect(JSON.parse(await readFile(join(target.work, ".intentic/config/extension-enablement.json"), "utf8"))).toEqual({ "acme.hello": false });
+    // The overlay went to the approval gate rather than arriving pre-approved.
+    expect(existsSync(join(target.work, ".intentic/config/environment.custom.Dockerfile"))).toBe(false);
+    expect(await readFile(join(target.work, ".intentic/config/environment.d/workspace.Dockerfile"), "utf8")).toBe("RUN apt-get install -y ffmpeg\n");
+    expect(report.needsAction.map((action) => action.subject)).toEqual([
+        "What the workspace brings arrives switched off",
+        "Approve and rebuild the environment",
+        "Turn on the automations you want",
+        "Enable the workspace extensions you trust",
+    ]);
+
+    // And a definition derived HERE now names the same remote, which is what makes drift a real comparison.
+    const { definition, omitted } = await deriveDefinition(targetServices);
+    expect(definition.workspace).toEqual({ remote, ref: "main" });
+    expect(omitted).toEqual([]);
+    await cleanup();
+});
+
+test("an unpublished workspace is named as the export's first omission, with what publishing would buy", async () => {
+    const source = await makeRoots();
+    await makeWorkspaceRepo(source.work);
+    const { definition, omitted } = await deriveDefinition(
+        servicesFor(source, { sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) }, secretRegistry: async () => [] }),
+    );
+    expect(definition.workspace).toBeUndefined();
+    expect(omitted[0]?.subject).toBe("The workspace itself");
+    expect(omitted[0]?.detail).toContain("Publish the workspace");
+    await cleanup();
+});
+
+test("a workspace with a history of its own, or one already published, is never taken over", async () => {
+    const remote = await publishedWorkspace();
+
+    // Two commits: somebody has worked here, so this is no longer a fresh sandbox.
+    const worked = await makeRoots();
+    await makeWorkspaceRepo(worked.work, 2);
+    const workedPlan = await createDefinitions(servicesFor(worked)).plan(workspaceToml(remote));
+    expect(workedPlan.items[0]?.applicable).toBe(false);
+    expect(workedPlan.items[0]?.reason).toContain("history of its own");
+
+    // Already published: this workspace is somebody's clone already, and a definition lands beside, never over.
+    const published = await makeRoots();
+    await makeWorkspaceRepo(published.work);
+    await defaultGit(published.work, ["remote", "add", "origin", remote]);
+    const publishedPlan = await createDefinitions(servicesFor(published)).plan(workspaceToml(remote));
+    expect(publishedPlan.items[0]?.applicable).toBe(false);
+    expect(publishedPlan.items[0]?.reason).toContain("already published");
+    await cleanup();
+});
+
+test("an untracked file the workspace would overwrite refuses the item and leaves nothing half-applied", async () => {
+    const remote = await publishedWorkspace();
+    const target = await makeRoots();
+    await makeWorkspaceRepo(target.work);
+    // Untracked here AND present in the incoming tree: git's own refusal is the "never over" guarantee.
+    await writeFile(join(target.work, "notes.md"), "mine\n");
+
+    const definitions = createDefinitions(servicesFor(target));
+    const plan = await definitions.plan(workspaceToml(remote, "main"));
+    const report = await definitions.apply({ token: plan.token, items: ["workspace"] });
+
+    expect(report.applied).toEqual([]);
+    expect(report.failed[0]?.error).toContain("notes.md");
+    expect(await readFile(join(target.work, "notes.md"), "utf8")).toBe("mine\n");
+    // The remote came back off, so a derive here still reports the workspace as unpublished rather than
+    // emitting a [workspace] section for a tree that never landed.
+    expect(await workspaceRemoteUrl(target.work)).toBeUndefined();
     await cleanup();
 });
