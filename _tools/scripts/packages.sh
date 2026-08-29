@@ -15,6 +15,8 @@ PUB=(_tools/base _tools/constants _sandbox/sandbox-run _deploy/graph _deploy/res
      _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _editor/extension-ui _computers/local-agent _sandbox/sync _computers/desktop _computers/browser _computers/host _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
      _sandbox/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
 
-# Every dir that carries the release version = the published set plus the private sandbox image, which is not
-# published to npm but bakes its version into the built image. Stamped before build so artifacts see it.
-VERSIONED=("${PUB[@]}" _sandbox/sandbox)
+# Every dir that carries the release version = the published set plus the two private packages that put the
+# version into an artifact rather than onto a registry: the sandbox image bakes it, and the browser extension
+# derives its manifest version from it (stamp-manifest.mjs) — which the Chrome Web Store then holds it to, since
+# an upload must be strictly newer than the published one. Stamped before build so artifacts see it.
+VERSIONED=("${PUB[@]}" _sandbox/sandbox _computers/webext)

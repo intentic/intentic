@@ -208,6 +208,17 @@ export const docsBook: Book = {
                                 datePublished: "2026-08-07",
                             },
                         },
+                        {
+                            id: "your-browser",
+                            title: "Your own browser",
+                            blurb: "The extension, the sites you allow, and watching it work",
+                            meta: {
+                                title: "Your own browser · intentic docs",
+                                description:
+                                    "Install the browser extension and let your sandbox work in the browser you are already signed into — on the sites you allow, one at a time, while you watch every click.",
+                                datePublished: "2026-08-29",
+                            },
+                        },
                     ],
                 },
             ],

@@ -36,7 +36,7 @@ TAG="v${VERSION}"
 # the trigger it had just been rescued from — so it was a publish workflow nothing could start, and the
 # Marketplace action was never published at all. Being in THIS LIST is what makes a publish workflow reachable;
 # prepass invariant 10 refuses any workflow that tries to reach itself with a tag push instead.
-WORKFLOWS=(npm-publish.yml action-publish.yml)
+WORKFLOWS=(npm-publish.yml action-publish.yml webstore-publish.yml)
 
 if [ -z "${GITHUB_TOKEN:-}" ]; then
   if [ -n "${CI:-}" ]; then
@@ -56,7 +56,7 @@ fi
 if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 \
   && ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
   echo "${TAG} does not exist, locally or on origin — semantic-release did not tag this version, so there is" >&2
-  echo "nothing for npm-publish.yml or action-publish.yml to check out. Not dispatching." >&2
+  echo "nothing for the publish workflows to check out. Not dispatching." >&2
   exit 1
 fi
 

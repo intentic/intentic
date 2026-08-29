@@ -80,11 +80,27 @@ answers.
 ```sh
 pnpm --filter @intentic/webext build      # → dist/, loadable as an unpacked extension
 pnpm --filter @intentic/webext test
+pnpm --filter @intentic/webext package    # → dist.zip, what the store takes
+pnpm --filter @intentic/webext icons      # re-render static/icons/ from assets/icon.svg
 ```
 
 Then in Chrome: **Extensions → Developer mode → Load unpacked → `_computers/webext/dist`**. Pair it with the
 code from a `webext` capability's card (**Connect**), or open the card in the same browser and the extension
 picks the code up on its own.
+
+A locally built extension reports version **0.0.0**, and that is correct rather than broken: the version lives
+on the git tag, not in the tree (`_tools/scripts/packages.sh`), and `scripts/stamp-manifest.mjs` derives the
+manifest's number from the stamped package version in CI. Do not hand-publish a zip — the store refuses any
+upload that is not strictly newer, so a hand-built one burns a version the pipeline then cannot use.
+
+## Publishing
+
+Every release publishes itself: `.github/workflows/webstore-publish.yml` builds this package at the tag,
+packs it, uploads it and submits it for review. It skips loudly while the four `CHROME_WEBSTORE_*` values are
+unset, which is the state until the listing has been created by hand once.
+
+- [PUBLISHING.md](PUBLISHING.md): the one-time setup — developer account, first upload, OAuth credentials.
+- [STORE-LISTING.md](STORE-LISTING.md): every field of the listing form, written out.
 
 ## Key files
 
@@ -94,3 +110,4 @@ picks the code up on its own.
 - [src/page/driver.ts](src/page/driver.ts): what runs inside the page — the walk, the actions, the banner, the confirmation.
 - [src/popup/popup.ts](src/popup/popup.ts): the 340 pixels that make this installable, and the only place a permission is ever asked for.
 - [static/manifest.json](static/manifest.json): four permissions, one optional host pattern, one content script.
+- [scripts/pack.mjs](scripts/pack.mjs): dist/ as one zip, written by hand because the CI image has no `zip`.

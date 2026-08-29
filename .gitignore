@@ -5,6 +5,9 @@
 **/.turbo
 **/dist
 **/dist-*
+# The browser extension's packed artifact (_computers/webext/scripts/pack.mjs). `**/dist` does not cover it:
+# that pattern matches a path component called `dist`, and this is a file called `dist.zip`.
+**/dist.zip
 **/deploy
 **/generated
 **/out-tsc

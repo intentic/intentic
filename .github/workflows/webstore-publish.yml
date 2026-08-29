@@ -1,0 +1,90 @@
+# Publish the browser extension to the Chrome Web Store, at the tag semantic-release pushes — npm-publish.yml's
+# shape for an artifact that ships to a store instead of a registry.
+#
+# DISPATCHED, NOT TAG-TRIGGERED, like its two siblings and for the same reason: semantic-release pushes the tag
+# with the built-in GITHUB_TOKEN, and GitHub starts no workflow from an event that token created. `on: push:
+# tags` here would be a trigger that cannot fire — the mistake npm-publish.yml and action-publish.yml each made
+# once, and the one prepass invariant 10 now refuses. dispatch-publish.sh names this file; that is what makes it
+# reachable.
+#
+# THE TAG IS THE VERSION AND THE TREE IS NOT. Every first-party package.json stays at 0.0.0 in git, so the
+# checkout of a tag is an UNSTAMPED tree: set-versions.sh stamps it here before anything is built, and the
+# extension's build derives its manifest version from the stamped package version (scripts/stamp-manifest.mjs).
+# The store refuses an upload whose version is not strictly greater than the published one, so an unstamped
+# build would upload 0.0.0 once and then be unable to upload anything ever again.
+#
+# INERT UNTIL THE LISTING EXISTS. The four CHROME_WEBSTORE_* values are the store's OAuth client, a refresh
+# token for the publisher account, and the item id the first manual upload creates. Without them the publish
+# step SKIPS loudly (a warning annotation on the run) rather than failing: an unlisted extension must not take
+# a release red. _computers/webext/PUBLISHING.md is the one-time setup, and STORE-LISTING.md is what goes in
+# the listing form.
+#
+# ON THE FLEET, unlike npm-publish.yml. That one is GitHub-hosted because npm's provenance attestation refuses
+# any other runner; nothing here is attested, so this runs where the rest of the pipeline runs, with the shared
+# caches.
+name: webstore publish
+
+# Run it by hand from a tag the same way the release job does: Actions ▸ webstore publish ▸ Run workflow, with
+# the tag selected as the ref. `target` is the audience — `trustedTesters` while the listing is new.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Who the version goes to once review clears"
+        type: choice
+        default: default
+        options:
+          - default
+          - trustedTesters
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: webstore-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 30
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      PNPM_STORE: /ci-cache/pnpm-store
+      TURBO_CACHE_DIR: /ci-cache/turbo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+
+      - uses: ./.github/actions/pnpm-setup
+
+      # Before the build, so the manifest the packer seals carries the released version.
+      - name: Stamp the release version
+        run: bash _tools/scripts/set-versions.sh "${GITHUB_REF_NAME#v}"
+
+      # `--filter` pulls the dependency closure through turbo's ^build edge: the extension inlines the
+      # contract's and the browser vocabulary's dist.
+      - name: Build the extension
+        run: pnpm turbo run build --filter=./_computers/webext
+
+      # dist/ as one zip, written by node rather than by `zip`, which ci-base does not have (scripts/pack.mjs).
+      - name: Pack it
+        run: pnpm --filter @intentic/webext run package
+
+      - name: Upload and submit
+        env:
+          CHROME_WEBSTORE_CLIENT_ID: ${{ secrets.CHROME_WEBSTORE_CLIENT_ID }}
+          CHROME_WEBSTORE_CLIENT_SECRET: ${{ secrets.CHROME_WEBSTORE_CLIENT_SECRET }}
+          CHROME_WEBSTORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEBSTORE_REFRESH_TOKEN }}
+          CHROME_WEBSTORE_ITEM_ID: ${{ vars.CHROME_WEBSTORE_ITEM_ID }}
+        run: node _tools/scripts/publish-webstore.mjs "${GITHUB_REF_NAME#v}" "${{ inputs.target || 'default' }}"

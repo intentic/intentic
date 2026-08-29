@@ -1,0 +1,124 @@
+---
+import DocsLayout from "../../components/DocsLayout.astro";
+import DocsRelated from "../../components/DocsRelated.astro";
+
+/* The page a store listing links to, and the page somebody reads before letting an agent into the browser
+ * their bank is open in. So it leads with the boundary rather than the feature list: which sites, who grants
+ * them, what is visible while it works, and how to stop it. */
+
+const switches = [
+    { name: `Read the page`, state: `on`, detail: `Its elements and its text, on a site you allowed. Off leaves the connection inert, and the card says so.` },
+    {
+        name: `Click and type`,
+        state: `on`,
+        detail: `On by default, unlike a computer's pointer control, because driving the page IS this connector — a browser that may only look is a worse way to fetch a URL. The grant that bounds it is per site.`,
+    },
+    {
+        name: `Take screenshots`,
+        state: `off`,
+        detail: `The visible tab as an image. Off by default because a page reading is a list the extension built, and a screenshot is whatever that window happens to be showing.`,
+    },
+    {
+        name: `Hand sessions to the sandbox`,
+        state: `off`,
+        detail: `The one switch that copies a credential rather than borrowing the browser holding it. Needs your click on the page every single time as well.`,
+    },
+    {
+        name: `Ask before acting`,
+        state: `sensitive`,
+        detail: `When you are asked in the page first: on anything that smells of money, deletion or a password (the default), on everything, or never.`,
+    },
+];
+---
+
+<DocsLayout
+    pageId="your-browser"
+    heading="Your own browser"
+    lead="An extension that lets your sandbox work in the browser you are already signed into — on the sites you allow, one at a time, while you watch every click."
+>
+    <h2>Why this exists next to the sandbox's own browser</h2>
+    <p>
+        Your sandbox already has a Chromium with logged-in profiles, and for most work it is the better tool: it runs while nobody is at the
+        keyboard. What it can never be is <em>you</em> — your passkey, your employer's SSO, your bank's device check, the sites that refuse a
+        datacentre address. Those are not a matter of having the right cookie; they are a matter of being the browser the account was enrolled on.
+    </p>
+    <p>
+        So this borrows that browser rather than impersonating it. Nothing is copied out unless you explicitly hand it over, and you are sitting
+        in front of the thing while it happens.
+    </p>
+
+    <h2>Connecting one</h2>
+    <p>
+        Add <strong>Your Chrome</strong> (or <strong>Your Edge</strong>) under <strong>Sandbox → Capabilities</strong>, then press
+        <strong>Connect</strong> on its card. You get a one-time code that expires in about ten minutes.
+    </p>
+    <p>
+        Install the extension in the browser you want to connect and paste the code into its popup. If that browser is the one you are reading
+        this in, you paste nothing: the card hands the code to the extension directly and the popup lights up with <strong>Connect</strong>.
+    </p>
+    <p>
+        The extension then holds one outbound connection to your sandbox while the browser is open. No port is opened on your network, and there
+        is nothing to configure on your router.
+    </p>
+
+    <h2>Which sites, and who decides</h2>
+    <p>
+        <strong>Not the sandbox.</strong> Sites are Chrome's own optional host permissions, and Chrome only grants one when a person clicks in the
+        extension's own window — so the agent cannot grant itself a site, however it is asked to. When it needs one it leaves a request: the
+        toolbar icon shows <strong>!</strong>, and the popup names the site with the reason the agent gave. You answer <strong>read only</strong>
+        or <strong>read and act</strong>, and you can take either back in the extension or in Chrome's settings.
+    </p>
+    <p>
+        A tab on a site you have not allowed is not merely off limits: your browser withholds its address from the extension altogether, so a
+        connected browser does not disclose what else you have open. The agent's tab listing says exactly that, rather than showing blanks.
+    </p>
+
+    <h2>What the card decides</h2>
+    <p>These are on the capability's card in your sandbox, and the extension is what enforces them:</p>
+    <ul>
+        {
+            switches.map((entry) => (
+                <li>
+                    <strong>{entry.name}</strong> <em>({entry.state} by default)</em> — {entry.detail}
+                </li>
+            ))
+        }
+    </ul>
+
+    <h2>Watching it work</h2>
+    <p>
+        Every action draws a line in the corner of the tab it happened in: <em>the agent clicked "Send"</em>. On a page that deals in passwords,
+        payment or deletion, it asks before it acts — in the page, next to the thing it is about — and a question nobody answers is a no.
+    </p>
+    <p>
+        <strong>Pause</strong> in the popup refuses every tool call until you resume, and the toolbar icon says so while it is paused. The popup
+        also keeps the last two hundred actions, so "what did it just do" has an answer that is not a guess. Nothing typed into a page is recorded
+        there — only that something of that length was.
+    </p>
+
+    <h2>Handing a site over</h2>
+    <p>
+        A browser has to be open to be borrowed, which is the one thing a long job cannot rely on. So there is
+        <strong>connect_site</strong>: it copies one site's sign-in into your sandbox's own browser, against an account that already exists
+        there, and from then on the agent can work on that site with your laptop shut.
+    </p>
+    <p>
+        It needs the switch on the card, your confirmation on the page every time, and it never shows the agent what moved — the answer it gets
+        back is a count and a site name. Worth knowing before you use it: some sites end a session that starts appearing from a second place.
+    </p>
+
+    <h2>Ending it</h2>
+    <p>
+        <strong>Revoke</strong> on the card drops the extension's key and cuts its connection immediately; the extension stays installed and can
+        be paired again. <strong>Remove</strong> takes the capability with it. From the browser's side, pausing, revoking a site, or uninstalling
+        the extension all work without touching the sandbox, which is the right way round: it is your browser.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/your-machine/", title: "Your own machine", why: "the same idea for a whole computer: a shell, files and the screen." },
+            { href: "/docs/capabilities/", title: "Capabilities", why: "everything else a sandbox can be connected to, and what each one may touch." },
+            { href: "/privacy/", title: "Privacy", why: "what the extension stores, what leaves your browser, and what we never receive." },
+        ]}
+    />
+</DocsLayout>

@@ -95,6 +95,19 @@ export const privacyDoc: LegalDoc = {
             ],
         },
         {
+            heading: "The browser extension",
+            paragraphs: [
+                "The intentic browser extension lets a sandbox you have paired work in your own browser. It talks to that sandbox and to nothing else: there is no intentic server in the path, we receive nothing from it, and it contains no analytics, no telemetry and no third-party code.",
+                "It stores four things in your browser, and they never leave it except as described below: the address of the sandbox you paired and the token that reaches it, which of your sites you allowed it on and whether each is read-only, whether you have paused it, and a local log of the last 200 actions it took so you can see what it did.",
+            ],
+            list: [
+                "What it reads: the content of pages on the sites you explicitly allow, one site at a time, granted in the extension and revocable in your browser's own settings. It cannot see any other tab: your browser withholds even the address of one it was not allowed on. Page content it reads is sent to your sandbox, where your agent works on it, and onward to whichever AI model you have configured under your agreement with that provider.",
+                "What it never reads: the contents of password fields, which it is written not to report back.",
+                "Sign-ins you hand over: the extension can copy one site's session cookies to your own sandbox, so a job can continue after you close the browser. It happens only when you confirm it on the page, only while that switch is on, and the cookies go straight to your sandbox over an encrypted connection. We never receive them, and your agent is never shown them.",
+                "How to stop it: pause it in the extension, revoke a site there or in your browser, revoke the whole pairing from the sandbox's card, or uninstall the extension. Uninstalling removes everything above from your browser.",
+            ],
+        },
+        {
             heading: "Sandboxes we host for you",
             paragraphs: [
                 "If you take the free hosted sandbox, we create a virtual machine and a disk for it at Fly.io and we pay for them. Everything you then put in that workspace: repositories, files, environment variables, credentials you choose to store there, and everything the agent writes, sits on that disk, which is infrastructure we arranged rather than infrastructure you own. This is the one part of the service where your working content is in our sphere, and it is why the Data Processing Agreement exists.",

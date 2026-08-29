@@ -1,92 +1,139 @@
 # Publishing the browser extension
 
-What it takes to get this from `dist/` into somebody's browser, in the order the work actually has to happen.
-Store review is the long pole and everything else can be done while it runs.
+**Every release publishes itself.** `webstore-publish.yml` builds this package at the tag semantic-release
+pushed, packs `dist/` into a zip, uploads it to the Chrome Web Store and submits it for review — the same
+shape as `npm-publish.yml` and `action-publish.yml`, dispatched from `dispatch-publish.sh` alongside them.
 
-## 0. What is already true
+Until the listing exists there is nothing to upload to, so the publish step **skips loudly** (a warning
+annotation on the run) instead of taking a release red. What follows is how to stop it skipping. It is done
+once.
 
-- The build produces a loadable, unpacked MV3 extension: `pnpm --filter @intentic/webext build` → `dist/`.
-- Four permissions (`storage`, `scripting`, `alarms`, `cookies`), one optional host pattern, one content script
-  scoped to `*://*.intentic.dev/*`. No `tabs`, no `debugger`, no remote code.
-- The store id is not baked into anything. Pairing works through a window message and a pasted code, so an
-  unlisted build and a store build pair identically. Nothing below is blocked on an approved listing.
+---
 
-## 1. Before submitting (half a day)
+## What is already wired
 
-| Thing | Why it blocks | Notes |
-| --- | --- | --- |
-| **Icons** (16/32/48/128 PNG) | The manifest has none; the store requires them and Chrome shows a puzzle piece meanwhile | Not committed as placeholders on purpose — a fake binary in a repo is worse than a missing one |
-| **A publisher account** | $5 one-time, and the account that owns the listing forever | Use the org account, not a person's |
-| **Privacy policy URL** | Required for any extension handling "web browsing activity" or "authentication information" — this handles both | One page on intentic.dev, linked from the listing |
-| **A `key` in the manifest for the unlisted build** | Otherwise the dev id changes on every reload and a paired browser looks like a different one | Only needed for the pre-listing beta |
-| **Version discipline** | The store rejects a re-upload of the same version | `version` in `static/manifest.json` is the source; wire it to the package's release like `@intentic/host`'s |
-
-## 2. The single-purpose statement, written before the form asks for it
-
-Chrome's review turns on ONE question: does everything the extension asks for serve one narrow purpose a user
-would recognise? Ours, in the words the listing should use:
-
-> Lets your Intentic sandbox work in this browser, on sites you explicitly allow, while you watch.
-
-Each permission then justifies itself against that sentence — this is the table to paste into the review form:
-
-| Permission | Justification |
+| Piece | Where |
 | --- | --- |
-| `scripting` | Reading the page and clicking in it IS the feature; injection happens only into origins the user granted |
-| `storage` | The sandbox pairing, the per-site read/act modes, the pause switch, the local activity log |
-| `alarms` | Reconnecting the socket after the MV3 worker is evicted; nothing periodic otherwise |
-| `cookies` | One user-initiated action ("hand this site's session to my sandbox"), confirmed in the page every time, off by default |
-| `optional_host_permissions: *://*/*` | Requested per site at runtime, never at install: the user picks the sites |
-| content script on `*://*.intentic.dev/*` | Receives a pairing code the user's own sandbox page offers, so they don't copy-paste it |
+| Build → `dist/` (three bundles, static files, stamped manifest) | `package.json` `build` |
+| `dist/` → `dist.zip`, reproducible, no `zip` binary needed | `scripts/pack.mjs` |
+| Manifest version derived from the release version | `scripts/stamp-manifest.mjs`, `_tools/scripts/packages.sh` |
+| Icons, rendered from one SVG | `scripts/render-icons.mjs` → `static/icons/` |
+| Upload + submit | `_tools/scripts/publish-webstore.mjs` |
+| Runs on every release | `.github/workflows/webstore-publish.yml`, listed in `_tools/scripts/dispatch-publish.sh` |
+| Listing copy, field by field | [STORE-LISTING.md](STORE-LISTING.md) |
+| Privacy policy the listing must link | `_site/site-content/src/legal.ts`, section *The browser extension* |
+| The page the listing links to | `_site/site/src/pages/docs/your-browser.astro` |
 
-**`cookies` is the one that draws scrutiny**, and it is worth pre-empting in the notes: it reads only the
-current site's jar, only after an in-page confirmation, only when the sandbox's `cookies` switch is on, and the
-data goes to the user's own sandbox — a host they paired themselves — never to us. If review pushes back,
-shipping v1 with the `cookies` permission removed entirely is a two-line change (`static/manifest.json`, and
-the `connect_site` tool refuses with "this build cannot hand sessions over"); land it as v1.1 once the listing
-has a track record.
+**The version is not in the tree.** Every first-party `package.json` here stays at `0.0.0` and CI stamps the
+release version onto it; `static/manifest.json` carries `0.0.0` for the same reason and the build derives the
+real number from the stamped package. A locally-built extension therefore says `0.0.0`, which is correct — it
+is not a release. The store refuses an upload whose version is not strictly greater than the published one, so
+never publish a hand-built zip: it would burn a version number the pipeline then cannot use.
 
-## 3. Submission
+---
 
-1. `pnpm --filter @intentic/webext build`, zip `dist/`, upload.
-2. Category **Developer Tools**. Distribution **Public**, or **Unlisted** for the first weeks — unlisted is
-   reviewed too, but a rejection costs nothing publicly.
-3. Fill the permission justifications from the table above; attach the privacy policy; declare data handling as
-   *authentication information* + *website content*, **not sold, not used for anything but the stated feature*.
-4. Expect **3–10 business days**, longer for the first submission from a new publisher, and longer again
-   whenever `cookies` is in the manifest.
+## The one-time setup
 
-## 4. Edge, and then the rest
+### 1. A developer account (~10 minutes, $5)
 
-- **Edge Add-ons** takes the same package with no code changes (`static/manifest.json` as-is). Its review is
-  usually faster. The `edge` capability card already points at an Edge listing URL.
-- **Firefox** needs real work, not a re-upload: `browser.*` promises, a different background model
-  (`background.scripts` / event pages), and no `chrome.scripting.executeScript({func})` serialization semantics
-  to rely on. Worth doing only if asked for — the card system is ready for it (one manifest entry plus a skill).
-- **Safari** needs an Xcode wrapper and an Apple developer account. Same answer: only on demand.
+<https://chrome.google.com/webstore/devconsole> — sign in as the account that should own the listing forever
+(the organisation's, not a person's), accept the agreement, pay the one-time $5 registration fee.
 
-## 5. What to fix before the listing is public
+### 2. The first upload, by hand
 
-- **Trim the background bundle.** 755 kB minified, ~200 kB of which is the daemon's entire schema surface
-  reached through the contract's barrel import. Giving the webext schemas their own contract entry point (as
-  `@intentic/sandbox-contract/webext-links` already does for the zero-dependency half) is the fix. A reviewer
-  reading a bundle full of unrelated API shapes is a reviewer asking why.
-- **Ship a source map** or point the review notes at the public repo and the exact commit. Minified code with
-  no provenance is the most common cause of a slow first review.
-- **A `docs/your-browser` page on the site**, the twin of `your-machine`, since the listing has to link
-  somewhere that explains the model: sites you allow, a banner on every action, pause in one click.
-- **The platform-brokered pairing** (sign in with Google in the popup → pick a sandbox → connect). The current
-  flow assumes the person has their sandbox open, which is true when they connect from the card and false when
-  they arrive from the store listing. That is the funnel the listing will actually deliver, so it is the next
-  real feature rather than a nicety.
+The API can only upload to an item that already exists, and only the dashboard can create one. So the first
+version goes up by hand:
 
-## 6. After it ships
+```sh
+pnpm --filter @intentic/webext build
+pnpm --filter @intentic/webext package     # → _computers/webext/dist.zip
+```
 
-- **Update cadence.** A store release is days, not minutes. Anything that can live in the daemon should: the
-  extension's tool surface is deliberately opaque to the daemon so the two release independently, but that cuts
-  both ways — a bug in a tool description is a store round trip.
-- **Watch for the MV3 worker eviction bugs.** They present as "the browser shows offline until I click the
-  extension". The alarm covers a minute; if reports say otherwise, the next lever is an offscreen document.
-- **Do not add permissions casually.** Every added permission re-triggers full review AND disables the
-  extension for existing users until they accept it. `tabs` and `debugger` are the two that would be tempting
-  and are the two to keep out.
+In the dashboard: **Add new item**, upload `dist.zip`, then fill the listing from
+[STORE-LISTING.md](STORE-LISTING.md) — name, summary, description, category, the permission justifications,
+the data-usage answers, the privacy policy URL, the icon and at least one 1280×800 screenshot. Save as draft
+and submit.
+
+The URL now contains the item id: `.../devconsole/…/<32-lowercase-letters>/…`. That is
+`CHROME_WEBSTORE_ITEM_ID`.
+
+> Submit the first version to **trusted testers** if you would rather not have `cookies` reviewed in public.
+> The dashboard offers it beside the publish button, and the workflow's `target` input matches.
+
+### 3. API credentials (~15 minutes)
+
+The Web Store API is an ordinary Google OAuth client. In <https://console.cloud.google.com>:
+
+1. Create (or pick) a project, and enable **Chrome Web Store API**.
+2. **APIs & Services → OAuth consent screen**: External, publishing status *Testing* is fine, and add the
+   publisher account itself as a test user.
+3. **Credentials → Create credentials → OAuth client ID → Desktop app**. Keep the client id and secret:
+   `CHROME_WEBSTORE_CLIENT_ID`, `CHROME_WEBSTORE_CLIENT_SECRET`.
+4. Get a refresh token for the publisher account. Open this in a browser signed in as that account, with your
+   client id substituted:
+
+   ```
+   https://accounts.google.com/o/oauth2/auth?response_type=code&scope=https://www.googleapis.com/auth/chromewebstore&access_type=offline&prompt=consent&redirect_uri=urn:ietf:wg:oauth:2.0:oob&client_id=<CLIENT_ID>
+   ```
+
+   Approve, copy the code it shows, and exchange it once:
+
+   ```sh
+   curl -s https://oauth2.googleapis.com/token \
+     -d client_id=<CLIENT_ID> -d client_secret=<CLIENT_SECRET> \
+     -d code=<CODE> -d grant_type=authorization_code \
+     -d redirect_uri=urn:ietf:wg:oauth:2.0:oob
+   ```
+
+   The `refresh_token` in the answer is `CHROME_WEBSTORE_REFRESH_TOKEN`. It does not expire while the client
+   stays in *Testing* only if it is used at least every six months — a release every few weeks keeps it alive.
+   Publishing the consent screen removes that caveat.
+
+### 4. Tell the repository
+
+**Settings → Secrets and variables → Actions**:
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `CHROME_WEBSTORE_CLIENT_ID` | secret | from step 3 |
+| `CHROME_WEBSTORE_CLIENT_SECRET` | secret | from step 3 |
+| `CHROME_WEBSTORE_REFRESH_TOKEN` | secret | from step 3 |
+| `CHROME_WEBSTORE_ITEM_ID` | **variable** | from step 2 — an extension id is public, and a secret would only make the logs unreadable |
+
+### 5. Prove it
+
+Actions ▸ **webstore publish** ▸ Run workflow, with the last release tag as the ref. It builds, packs and
+uploads; the log ends in `submitted to default: ITEM_PENDING_REVIEW` (waiting on a reviewer) or
+`OK` (live). A version already uploaded reports that and exits green.
+
+From then on, nothing: every release dispatches it.
+
+---
+
+## What review will ask about
+
+`cookies` is the permission that draws scrutiny, and the answer is in the listing already: it reads only the
+current site's jar, only after a confirmation drawn on that page, only while a switch that is off by default is
+on, and the data goes to a server the user paired themselves. If a reviewer refuses it anyway, shipping without
+it is a two-line change — drop `"cookies"` from `static/manifest.json` and let `connect_site` refuse — and it
+can come back as a later version once the listing has a track record.
+
+Two things that make a first review slower, both avoidable: a minified bundle with no provenance (point the
+review notes at this public repository and the commit), and a listing whose description promises anything the
+permissions do not obviously serve.
+
+## Still worth doing
+
+- **Screenshots.** At least one, 1280×800, from a real session: the popup with a paired sandbox and two
+  allowed sites, and a page mid-action with the banner up. The only listing asset that cannot come out of this
+  repository.
+- **Trim the background bundle.** 755 kB minified, ~200 kB of it the daemon's whole schema surface pulled in
+  through the contract's barrel import. `@intentic/sandbox-contract/webext-links` already exists for the
+  zero-dependency half (it took the content script from 1.1 MB to 374 bytes); the webext schemas want the same
+  treatment.
+- **Platform-brokered pairing.** Today's flow assumes the person has their sandbox open — true when they
+  connect from the card, false when they arrive from the store listing, which is the funnel the listing will
+  actually deliver.
+- **Edge.** Same package, no code change, its own listing at <https://partner.microsoft.com/dashboard/microsoftedge>;
+  the `edge` capability card already points at one. Automating it is one more script beside
+  `publish-webstore.mjs`; the Edge API takes the same zip with a different auth dance.

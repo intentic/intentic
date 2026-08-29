@@ -1,0 +1,17 @@
+<!-- THE SOURCE OF THE FOUR PNGs BESIDE IT. Chrome takes bitmaps only (an extension's action icon is rasterised
+     by the browser at fixed sizes), so the store artifact is `icon-16/32/48/128.png` — but a bitmap is not a
+     thing to edit, so the drawing lives here and the PNGs are rendered from it:
+
+       node _computers/webext/scripts/render-icons.mjs
+
+     The mark has to survive 16 pixels, which is the whole of its design: a browser window with one pointer in
+     it, in two colours, no gradients and no text.
+
+     It lives OUTSIDE static/ on purpose: that directory is copied into dist/ whole, and a store artifact should
+     carry the four bitmaps a browser reads rather than the source they were drawn from. -->
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+    <rect width="128" height="128" rx="28" fill="#12121a" />
+    <rect x="20" y="24" width="88" height="80" rx="14" fill="none" stroke="#7c5cff" stroke-width="11" />
+    <path d="M20 50 H108" stroke="#7c5cff" stroke-width="11" />
+    <path d="M45 60 L97 84 L75 89 L65 108 Z" fill="#ffffff" />
+</svg>

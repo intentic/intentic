@@ -65,9 +65,13 @@
                 color: inherit;
                 cursor: pointer;
             }
+            /* The accent, stated rather than derived. `background: currentColor` with `filter: invert(1)` was
+               the clever version and it rendered a white button on a white panel in light mode — which is to
+               say it rendered the two controls that matter (Allow this site, Connect) as blank space. */
             button.primary {
-                background: currentColor;
-                filter: invert(1) hue-rotate(180deg);
+                background: #7c5cff;
+                border-color: #7c5cff;
+                color: #fff;
             }
             input {
                 font: inherit;

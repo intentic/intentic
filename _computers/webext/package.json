@@ -11,10 +11,13 @@
         "directory": "_computers/webext"
     },
     "scripts": {
-        "build": "esbuild src/background/main.ts --bundle --format=esm --target=chrome116 --minify --outfile=dist/background.js --log-level=warning && esbuild src/content/pair-bridge.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/pair-bridge.js --log-level=warning && esbuild src/popup/popup.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/popup.js --log-level=warning && cp -R static/. dist/",
+        "build": "rm -rf dist dist.zip && esbuild src/background/main.ts --bundle --format=esm --target=chrome116 --minify --outfile=dist/background.js --log-level=warning && esbuild src/content/pair-bridge.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/pair-bridge.js --log-level=warning && esbuild src/popup/popup.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/popup.js --log-level=warning && cp -R static/. dist/ && node scripts/stamp-manifest.mjs",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "package": "node scripts/pack.mjs",
+        "icons": "node scripts/render-icons.mjs",
+        "preview": "node scripts/preview.mjs"
     },
     "dependencies": {
         "@intentic/browser": "workspace:*",
