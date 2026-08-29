@@ -82,7 +82,7 @@
  * hand-written `tsconfig.libs.json` is the proof: it names 13 of the 23 packages that need building, and the
  * one it happens to omit (`@intentic/constants`) was on its own worth 3 phantom errors in the daemon.
  */
-import { chmodSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 /* BY FILE, NOT BY PACKAGE NAME. The walker is the same one `@intentic/constants/node` exports, but a BARE
  * specifier is resolved through `node_modules`, and the two callers that matter most here run before there is
@@ -1264,3 +1264,105 @@ const build = spawnSync(tsgo, ["-b", ...needsDeclarations.map(({ name }) => name
 if (build.status !== 0) {
     process.exit(build.status ?? 1);
 }
+
+/* AND THE COPIES PNPM MADE OF THAT DIST HAVE TO BE TOLD, because a workspace package here is INJECTED rather
+ * than symlinked (`injectWorkspacePackages: true`): `node_modules/.pnpm/<pkg>@file+<path>/node_modules/<pkg>`
+ * is a tree of HARD LINKS to the package's own files, taken once, at install time. A file this pass REWRITES
+ * therefore reaches the copy for free, same inode, written through. A file it CREATES does not reach it at
+ * all: nothing ever made that link, and the install has no reason to run again.
+ *
+ * That asymmetry is silent, and it reports itself as somebody else's bug. `export * from "./schemas/ports.js"`
+ * in a rewritten `dist/index.d.ts` resolves, inside the copy, to a file that is not there; `skipLibCheck`
+ * (which every Vue package sets) swallows the missing module inside the .d.ts and re-reports it against the
+ * CONSUMER's import as TS2305, "has no exported member 'PortSummary'" — naming source that is correct in git,
+ * in a package that did not change. Splitting `schemas.ts` into `schemas/` cost four red pipelines and three
+ * runners exactly that way, and no re-run could have cleared it: only an install re-injects, and the install
+ * sees a lockfile that is up to date and does nothing.
+ *
+ * pnpm does this itself, but only after a package's own `build` SCRIPT (`syncInjectedDepsAfterScripts`),
+ * which is the thing this pass deliberately bypasses by driving `tsgo` directly, for the EXDEV reason spelled
+ * out above. So it is done here instead, with the fallback pnpm's version lacks: link where the store shares
+ * a filesystem with the package, copy where an agent worktree means it does not. */
+const storeDir = join(root, "node_modules/.pnpm");
+const mangle = (segment) => segment.replaceAll("/", "+");
+
+/* One inode IS one file and cannot be stale. Failing that, size and mtime, because a copy is stamped with the
+ * source's mtime below: without that second test an overlay-mounted `node_modules` (the EXDEV case) could
+ * never match, and every `pnpm typecheck` would rewrite tens of megabytes to learn that nothing had changed. */
+const current = (wrote, dst) => {
+    if (!existsSync(dst)) {
+        return false;
+    }
+    const held = statSync(dst);
+    // ROUNDED TO THE MILLISECOND, on both sides. The emitted file carries the filesystem's nanoseconds
+    // (`...421024.6375`) and `utimesSync` can only stamp a copy to the millisecond, rounding as it does it
+    // (`...421025`). Compare the raw floats and every copy is stale the instant it is made; truncate instead of
+    // rounding and the two land a millisecond apart, which is the same bug wearing a hat: 385 files rewritten
+    // on every single `pnpm typecheck`, for a tree that was already correct.
+    return held.ino === wrote.ino || (held.size === wrote.size && Math.round(held.mtimeMs) === Math.round(wrote.mtimeMs));
+};
+
+let written = 0;
+const place = (src, dst, wrote) => {
+    written += 1;
+    rmSync(dst, { force: true });
+    try {
+        linkSync(src, dst);
+    } catch {
+        /* EXDEV, and the reason this cannot simply be left to pnpm: an agent worktree mounts its own
+         * `node_modules` from an overlay, so the store and the package sit on two filesystems and no link can
+         * span them. Stamping the mtime is what lets `current` recognize this copy next time. */
+        copyFileSync(src, dst);
+        utimesSync(dst, wrote.atime, wrote.mtime);
+    }
+};
+
+const mirror = (from, to) => {
+    mkdirSync(to, { recursive: true });
+    const emitted = new Set();
+    for (const child of readdirSync(from, { withFileTypes: true })) {
+        emitted.add(child.name);
+        const src = join(from, child.name);
+        const dst = join(to, child.name);
+        if (child.isDirectory()) {
+            mirror(src, dst);
+            continue;
+        }
+        const wrote = statSync(src);
+        if (!current(wrote, dst)) {
+            place(src, dst, wrote);
+        }
+    }
+    /* The other direction of the same staleness: a declaration the package no longer emits is still a file the
+     * copy will happily resolve an import to, and `schemas.d.ts` outliving the `schemas/` that replaced it is
+     * precisely the shape that gets one deleted symbol read as an old one. */
+    for (const orphan of readdirSync(to)) {
+        if (!emitted.has(orphan)) {
+            rmSync(join(to, orphan), { force: true, recursive: true });
+        }
+    }
+};
+
+let refreshed = 0;
+for (const { name, dir, pkg } of existsSync(storeDir) ? needsDeclarations : []) {
+    const dist = join(dir, "dist");
+    if (!existsSync(dist)) {
+        continue;
+    }
+    // `@intentic/sandbox-contract` at `_sandbox/sandbox-contract` is stored as
+    // `@intentic+sandbox-contract@file+_sandbox+sandbox-contract`, plus `_<peers>` when the resolution has any.
+    const prefix = `${mangle(pkg.name)}@file+${mangle(name)}`;
+    for (const stored of readdirSync(storeDir)) {
+        if (stored !== prefix && !stored.startsWith(`${prefix}_`)) {
+            continue;
+        }
+        const copy = join(storeDir, stored, "node_modules", pkg.name);
+        if (existsSync(join(copy, "package.json"))) {
+            mirror(dist, join(copy, "dist"));
+            refreshed += 1;
+        }
+    }
+}
+// `written` is the interesting half: it is 0 on a workspace that is already coherent, and non-zero exactly
+// when this pass has just spared somebody a type error naming a package they did not touch.
+console.log(`injected copies: ${refreshed} reconciled with the dist this pass emitted, ${written} files rewritten`);
