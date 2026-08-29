@@ -84,7 +84,7 @@ export const pageMeta: Record<string, PageMeta> = {
     /* The economy's own page, top-level because it serves members and creators alike. Its FIGURES come from
      * pool.ts at render time; only the framing is authored here. */
     "/earn/": {
-        title: "Earn · intentic",
+        title: "Membership credits, creator pool & public ledger · intentic",
         description: "Credits to creators on install or run. Public ledger.",
         datePublished: "2026-08-11",
     },
