@@ -12,12 +12,13 @@ import {
     type DefinitionReport,
     type WorkspaceRemote,
 } from "@intentic-app/api-contract";
-import { Button, Card, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
+import { Button, Card, CopyButton, NoticeStack, Row, RowGroup, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import Checkbox from "primevue/checkbox";
 import { computed, onMounted, ref } from "vue";
 import { sandboxJson } from "../../composables/sandbox/sandboxClient";
 import { useRole } from "../../composables/sandbox/useRole";
+import { workspaceRepoOf } from "./workspaceRepo";
 
 /* THE DEFINITION: this sandbox's declarable shape as a `sandbox.toml` anyone may read, beside the bundle card
  * that moves the whole of it. Three verbs, all owner-only on the daemon:
@@ -51,6 +52,10 @@ const workspace = ref<WorkspaceRemote | undefined>(undefined);
 const confirmingPublish = ref(false);
 const { notice: workspaceError, run: runWorkspace } = useAsyncAction();
 const { busy: publishing, notice: publishError, run: runPublish } = useAsyncAction();
+
+// The remote as a row reads it: which repository this is, and the page it opens. See workspaceRepo.ts.
+const published = computed(() => (workspace.value?.remote === undefined ? undefined : workspaceRepoOf(workspace.value.remote)));
+const host = computed(() => workspace.value?.hosts[0]);
 
 const loadWorkspace = (): Promise<void> =>
     runWorkspace(async () => {
@@ -157,49 +162,91 @@ const cancel = (): Promise<void> =>
 
         <template v-if="canOperate">
             <p class="text-2xs text-subtle">
-                The declarable shape of this sandbox as a <span class="font-mono">sandbox.toml</span>: repositories by remote, connections by
-                shape, secret names, the overlay source. Safe to publish — credentials never travel, and its overlay lands on a target as a
-                proposal, never as a build.
+                This sandbox as a shareable <span class="font-mono">sandbox.toml</span>: repositories, connections, secret names, overlay source.
+                Secret values stay here, and the overlay needs the target owner's approval before it builds.
             </p>
 
-            <!-- The workspace repo: whether the document carries this sandbox's own content, and the one
-                 action a definition cannot take for itself. -->
-            <div v-if="plan === undefined" class="flex flex-col gap-2 rounded-lg border border-line p-3">
-                <p class="text-xs font-medium text-content">The workspace itself</p>
-                <template v-if="workspace?.remote !== undefined">
-                    <p class="text-2xs text-subtle">
-                        Published at <span class="font-mono">{{ workspace.remote }}</span
-                        ><template v-if="workspace.branch !== undefined"> on {{ workspace.branch }}</template
-                        >. The definition carries it as a <span class="font-mono">[workspace]</span> section, so a target clones this
-                        sandbox's own content — notes, skills, personas, automations, designs and drafts — beside the repositories.
-                    </p>
-                </template>
-                <template v-else>
-                    <p class="text-2xs text-subtle">
-                        Not published, so a definition carries only its sections and none of this sandbox's own content. Publishing pushes
-                        <span class="font-mono">/work</span> to a new private repository. Nested repositories, the reference shelf,
-                        credentials, browser sessions and <span class="font-mono">.env</span> files are outside the workspace repo and never
-                        travel with it.
-                    </p>
-                    <div v-if="!confirmingPublish" class="flex flex-wrap items-center gap-2">
+            <!-- THE WORKSPACE REPO, as the one record it is: which repository, on which branch, and the two
+                 things anyone does with a repository once it exists. It was a paragraph in a boxed inset,
+                 which got both halves wrong. The box drew a second card inside the first for a border that
+                 said nothing the card's own hairline doesn't (<BundleCard> had the same inset removed for the
+                 same reason), and the paragraph buried the remote mid-sentence: the one fact a reader wants
+                 from this block arrived as a sixty-character URL ending in `.git`, unfollowable and
+                 unselectable without dragging across the words around it.
+
+                 A `flat` <RowGroup> is the app's answer to a group already sitting on a surface, and the row's
+                 own anatomy is exactly this record's: a host mark, the project, the branch as a trailing fact,
+                 the verbs on the right. Both states are the SAME row, so publishing changes what the row says
+                 rather than swapping one block of prose for another.
+
+                 Held back until the read lands, because the two states are not equally cheap to be wrong
+                 about: "Not published" carries a button that creates a repository, and drawing it for the beat
+                 before the daemon answers offers that to owners who published months ago. -->
+            <RowGroup v-if="plan === undefined && workspace !== undefined" flat label="Workspace">
+                <Row v-if="published !== undefined" density="compact" :icon="published.icon">
+                    <template #title
+                        ><span class="block truncate font-mono text-2xs">{{ published.project }}</span></template
+                    >
+                    <template #description>
+                        Every definition carries it as <span class="font-mono">[workspace]</span>: notes, skills, personas, automations, designs and
+                        drafts.
+                    </template>
+                    <!-- The branch is a fact about the row, so it sits with the facts and stays unclickable. -->
+                    <template v-if="workspace?.branch !== undefined" #meta>
+                        <span class="inline-flex items-center gap-1"><Icon name="fork" />{{ workspace.branch }}</span>
+                    </template>
+                    <template #control>
+                        <a
+                            v-if="published.browseUrl !== undefined"
+                            :href="published.browseUrl"
+                            target="_blank"
+                            rel="noopener"
+                            :class="ui.iconButton()"
+                            aria-label="Open the workspace repository"
+                            v-tooltip.top="`Open the repository`"
+                        >
+                            <Icon name="external-link" class="text-sm" />
+                        </a>
+                        <CopyButton :text="workspace?.remote ?? ``" aria-label="Copy the clone URL" v-tooltip.top="`Copy the clone URL`" />
+                    </template>
+                </Row>
+
+                <!-- Unpublished. What blocks the button IS the row's description, so the reader never presses a
+                     greyed-out control to find out why it is grey. -->
+                <Row v-else density="compact" icon="cloud-upload" title="Not published">
+                    <template #description>
+                        <template v-if="host === undefined">Connect a GitHub or GitLab account first. That is what creates the repository.</template>
+                        <template v-else
+                            >Publish <span class="font-mono">/work</span> to carry this sandbox's own notes, skills, personas, automations, designs
+                            and drafts.</template
+                        >
+                    </template>
+                    <template #control>
                         <Button
-                            label="Publish workspace"
+                            v-if="!confirmingPublish"
+                            label="Publish"
                             size="small"
                             severity="secondary"
-                            :disabled="(workspace?.hosts.length ?? 0) === 0"
+                            :disabled="host === undefined"
                             @click="confirmingPublish = true"
                         />
-                        <p v-if="(workspace?.hosts.length ?? 0) === 0" class="text-2xs text-subtle">
-                            Connect a GitHub or GitLab account first; that is what creates the repository.
+                        <template v-else>
+                            <Button label="Publish" size="small" :loading="publishing" @click="publish" />
+                            <Button label="Cancel" size="small" severity="secondary" text @click="confirmingPublish = false" />
+                        </template>
+                    </template>
+                    <!-- WHAT STAYS BEHIND, at the moment it decides something. As standing prose it was four
+                         lines of caveat every reader scrolled past, and here it answers the question the
+                         confirm step asks. `v-if` on the slot, not inside it: a slot that is passed is a slot
+                         the row renders, margin and all. -->
+                    <template v-if="confirmingPublish" #below>
+                        <p class="text-2xs text-subtle">
+                            Creates a private repository on {{ host }} and pushes <span class="font-mono">/work</span> to it. Nested repositories, the
+                            reference shelf, credentials, browser sessions and <span class="font-mono">.env</span> files stay behind.
                         </p>
-                    </div>
-                    <div v-else class="flex flex-wrap items-center gap-2">
-                        <p class="text-2xs text-content">Create a private repository on {{ workspace?.hosts[0] }} and push /work to it?</p>
-                        <Button label="Publish" size="small" :loading="publishing" @click="publish" />
-                        <Button label="Cancel" size="small" severity="secondary" text @click="confirmingPublish = false" />
-                    </div>
-                </template>
-            </div>
+                    </template>
+                </Row>
+            </RowGroup>
 
             <div v-if="plan === undefined" class="flex flex-wrap items-center gap-2">
                 <Button label="Download sandbox.toml" size="small" :loading="deriving" @click="download">
