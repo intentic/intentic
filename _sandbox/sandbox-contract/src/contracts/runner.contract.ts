@@ -2,7 +2,9 @@ import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { AgentEventSchema } from "../events.js";
 import { RunnerFactsSchema, RunnerSyncLineSchema, RunnerSyncSchema, RunnerTurnSchema } from "../runner-protocol.js";
-import { AgentReplySchema, EditorContextSchema, OkSchema } from "../schemas.js";
+import { EditorContextSchema } from "../schemas/agent.js";
+import { AgentReplySchema } from "../schemas/plan-limits.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* What a RUNNER can be asked, over the socket it opened to its parent sandbox. Phase-1 skeleton: the shape is
  * decided (docs/remote-runners-plan.md §5, workspace root), the implementations land with runner mode.
@@ -40,7 +42,14 @@ export const runnerContract = {
      * editor context UNCOMPOSED: the note over those paths has to be built against the runner's own
      * workspace root, since that is the machine whose files the agent will open. */
     steer: oc
-        .input(z.object({ conversationId: z.string().min(1), text: z.string(), attachments: z.array(z.string()).optional(), editorContext: EditorContextSchema.optional() }))
+        .input(
+            z.object({
+                conversationId: z.string().min(1),
+                text: z.string(),
+                attachments: z.array(z.string()).optional(),
+                editorContext: EditorContextSchema.optional(),
+            }),
+        )
         .output(z.object({ applied: z.boolean(), invalid: z.string().optional() })),
     /* The parent pushing its declared shape onto this runner: a settings-only definition (sandbox.toml text,
      * runner-protocol.ts's hello says why settings are all a runner declares). REPLACE semantics, not the

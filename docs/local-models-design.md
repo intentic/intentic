@@ -216,7 +216,7 @@ Slices 1–3 are the whole CPU product and never ask for a rebuild on the standa
 All five slices landed together. The map, for whoever touches this next:
 
 - **Contract**: the `localmodel` kind, `LocalModelConfigSchema` (`model` HF path / `"custom"` + `url`,
-  `gpu` on/off) and its union arm (`_sandbox/sandbox-contract/src/schemas.ts`). Providers stay `endpoint/<id>`
+  `gpu` on/off) and its union arm (`_sandbox/sandbox-contract/src/schemas/capabilities.ts`). Providers stay `endpoint/<id>`
   on purpose: no new namespace, no new turn path.
 - **The join**: `_sandbox/sandbox/src/endpoints/local-model.ts`: the id-derived loopback port (FNV-1a into
   40100–40499), `endpointConfigOf` (THE reader of "which capabilities are endpoints"), and the model-source

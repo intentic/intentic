@@ -16,7 +16,7 @@ import {
     PROVIDERS,
     sendableEffort,
 } from "./agent-catalog.js";
-import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas.js";
+import type { AgentHarness, AgentProvider, PermissionMode } from "./schemas/agent.js";
 
 /* THE MATRIX GUARD.
  *

@@ -1,6 +1,6 @@
 import { ACCESS_COST, accessFor, modelsFor, PROVIDERS } from "./agent-catalog.js";
 import { compareCheapestFirst, familyOf, tierRankOf } from "./model-order.js";
-import type { AgentProvider } from "./schemas.js";
+import type { AgentProvider } from "./schemas/agent.js";
 
 /* THE QUICK MODEL, the cheap, fast model a small automatic job spends instead of the frontier model the chat
  * runs on. Today that is the commit message written when an agent's work lands; anything else of that shape (a

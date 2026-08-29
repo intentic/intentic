@@ -12,10 +12,9 @@ import {
     CapabilitySchema,
     CapabilitySecretInputSchema,
     CapabilityStatusSchema,
-    MarketplaceRequestSchema,
-    MarketplaceSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/capabilities.js";
+import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* The sandbox's unified capability manifest. `list` returns each active capability with its live status, the
  * non-secret echo of its config, and the NAMES of the credentials it holds. `add` upserts a capability and

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActivityStatusSchema } from "./schemas.js";
+import { ActivityStatusSchema } from "./schemas/activity.js";
 
 /* The wire between the daemon and an extension's realtime-listener GATEWAY process (ext-discord, ext-slack,
  * ext-telegram, ext-whatsapp, ext-imap): the four provider-scoped routes app.ts mounts under

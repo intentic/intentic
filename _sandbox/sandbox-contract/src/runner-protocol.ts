@@ -52,7 +52,8 @@ export const runnerEnrollUrl = (parentUrl: string): string => `${parentUrl.repla
  * parent serves from its real git dirs (<historyRoot>/gits/<encoded id>), authenticated by the runner's own
  * token as a bearer. One builder because three parties spell it: the parent's route, the runner's sync, and
  * anyone debugging with a hand-typed clone. */
-export const runnerGitUrl = (parentUrl: string, repo: string): string => `${parentUrl.replace(/\/$/, "")}/system/runners/git/${encodeURIComponent(repo)}`;
+export const runnerGitUrl = (parentUrl: string, repo: string): string =>
+    `${parentUrl.replace(/\/$/, "")}/system/runners/git/${encodeURIComponent(repo)}`;
 
 /* Where a runner's push LANDS in the parent's git dirs. Never refs/heads/agent/<id> directly: that branch is
  * checked out in the parent's mirror worktree, and git itself refuses updating a checked-out ref, which is a
@@ -234,8 +235,5 @@ export type RunnerTurn = z.infer<typeof RunnerTurnSchema>;
  * client sends them. `runner` implies isolation, a remote conversation is always branch-anchored, because its
  * branch is the unit that moves between machines. Absent means local, which is why this is optional
  * everywhere: the default costs nothing to anyone who never uses it. */
-export const AgentPlacementSchema = z.union([
-    z.object({ kind: z.literal("local") }),
-    z.object({ kind: z.literal("runner"), id: z.string().min(1) }),
-]);
+export const AgentPlacementSchema = z.union([z.object({ kind: z.literal("local") }), z.object({ kind: z.literal("runner"), id: z.string().min(1) })]);
 export type AgentPlacement = z.infer<typeof AgentPlacementSchema>;

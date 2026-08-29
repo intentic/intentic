@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, SkillBodySchema, SkillDraftSchema, SkillIdSchema, SkillRemoveSchema, SkillsListSchema } from "../schemas.js";
+import { SkillBodySchema, SkillDraftSchema, SkillIdSchema, SkillRemoveSchema, SkillsListSchema } from "../schemas/settings.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* WHAT THE AGENT KNOWS RIGHT NOW, and which half of it the owner controls.
  *

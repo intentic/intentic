@@ -6,8 +6,8 @@ import {
     CiRunParamSchema,
     CiRunsResponseSchema,
     CiSeenResponseSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/ci.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Pipelines on the workspace repos' github/gitlab remotes. `runs` serves the Pipelines rail view (cache +
 // on-demand backfill; per-repo webhook warnings ride along); `rerun`/`cancel` proxy to the vendor; `fix`

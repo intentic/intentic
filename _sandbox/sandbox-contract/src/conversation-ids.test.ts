@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { newConversationId } from "./conversation-ids.js";
-import { ConversationIdSchema } from "./schemas.js";
+import { ConversationIdSchema } from "./schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
     const remaining = [...values];

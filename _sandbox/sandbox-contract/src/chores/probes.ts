@@ -1,4 +1,4 @@
-import type { Advisory, Bundle, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas.js";
+import type { Advisory, Bundle, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas/maintenance.js";
 import type { IdiomRule } from "./stack.js";
 import {
     BYPASS_PATTERN,

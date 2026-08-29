@@ -1,19 +1,12 @@
 import { z } from "zod";
-import {
-    AgentProviderSchema,
-    AgentReplySchema,
-    AgentSummarySchema,
-    FastModeStateSchema,
-    LandConflictSchema,
-    MemberRoleSchema,
-    PermissionModeSchema,
-    RateLimitInfoSchema,
-    ShareDetailSchema,
-    SubagentKindSchema,
-    SubagentStatusSchema,
-    SubagentVerificationSchema,
-    UsageWindowSchema,
-} from "./schemas.js";
+import { AgentProviderSchema, PermissionModeSchema } from "./schemas/agent.js";
+import { AgentSummarySchema, LandConflictSchema } from "./schemas/agents.js";
+import { RateLimitInfoSchema } from "./schemas/claude-gate.js";
+import { FastModeStateSchema } from "./schemas/fast-mode.js";
+import { AgentReplySchema, UsageWindowSchema } from "./schemas/plan-limits.js";
+import { ShareDetailSchema } from "./schemas/share.js";
+import { MemberRoleSchema } from "./schemas/shared.js";
+import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "./schemas/terminal.js";
 
 // The wire shapes streamed from the daemon's event-iterator procedures. This is their canonical home: the
 // daemon yields them and the browser client consumes them from the same schema, so the two can't drift (they

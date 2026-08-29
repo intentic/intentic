@@ -1,4 +1,4 @@
-import type { ChoreLedgerEntry, ChoresReport, ProbeId, ProbeResult } from "../schemas.js";
+import type { ChoreLedgerEntry, ChoresReport, ProbeId, ProbeResult } from "../schemas/maintenance.js";
 import { type Chore, type ChoreContext, type ChoreFinding, CHORES, chorePrompt } from "./chores.js";
 import { probeSpec } from "./probes.js";
 

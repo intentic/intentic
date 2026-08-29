@@ -1,5 +1,11 @@
 import { oc } from "@orpc/contract";
-import { ClientDiagnosticsAcceptedSchema, ClientDiagnosticsReportSchema, LogReadQuerySchema, LogReadSchema, LogsListSchema } from "../schemas.js";
+import {
+    ClientDiagnosticsAcceptedSchema,
+    ClientDiagnosticsReportSchema,
+    LogReadQuerySchema,
+    LogReadSchema,
+    LogsListSchema,
+} from "../schemas/logs.js";
 
 // Daemon-owned debug logs (historyRoot/logs): terminal pipe-pane captures, intentic CLI run logs, daemon.log.
 // Reads are read-only by design, the files are written by the daemon/tmux only, so the record stays

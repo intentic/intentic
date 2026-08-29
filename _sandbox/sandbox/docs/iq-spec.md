@@ -104,12 +104,12 @@ more: 6 refs in 2 files — iq refs createIgnoreScope --kind call --after h3x1
 `--kind fn|class|type|const|route|test`.
 
 ```
-$ iq sym 'Workspace*Schema' --kind type
-iq: sym — 4 symbols · showing 4/4
-  WorkspaceSearchQuerySchema   const   _sandbox/sandbox-contract/src/schemas.ts:215
-  WorkspaceSearchMatchSchema   const   _sandbox/sandbox-contract/src/schemas.ts:219
-  WorkspaceSearchFileSchema    const   _sandbox/sandbox-contract/src/schemas.ts:223
-  WorkspaceSearchSchema        const   _sandbox/sandbox-contract/src/schemas.ts:226
+$ iq sym 'WorkspaceSearch*Schema' --kind type
+iq: sym — 7 symbols · showing 4/7
+  WorkspaceSearchQuerySchema   const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:7
+  WorkspaceSearchTagSchema     const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:38
+  WorkspaceSearchSpanSchema    const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:47
+  WorkspaceSearchHitSchema     const   _sandbox/sandbox-contract/src/schemas/workspace-search.ts:52
 ```
 
 ### `iq ast '<pattern>'`: structural AST pattern

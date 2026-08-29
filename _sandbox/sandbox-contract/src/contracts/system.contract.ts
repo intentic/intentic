@@ -1,24 +1,21 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { SessionTranscriptSchema, SystemEventSchema } from "../events.js";
+import { MachineFlowLineSchema, MachineSandboxFlowInputSchema } from "../schemas/computers.js";
+import { PresenceReportSchema } from "../schemas/logs.js";
+import { OkSchema } from "../schemas/shared.js";
+import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema } from "../schemas/system.js";
 import {
     BrowserNameParamSchema,
     BrowsersListSchema,
-    DaemonSessionSchema,
-    InfoSchema,
-    ManifestProblemsSchema,
-    MachineFlowLineSchema,
-    MachineSandboxFlowInputSchema,
-    OkSchema,
-    PresenceReportSchema,
     SubagentIdParamSchema,
     SubagentsListSchema,
     TerminalNameParamSchema,
     TerminalScrollbackQuerySchema,
     TerminalScrollbackSchema,
     TerminalsListSchema,
-    UsageSummarySchema,
-} from "../schemas.js";
+} from "../schemas/terminal.js";
+import { UsageSummarySchema } from "../schemas/usage.js";
 
 // Sandbox status + identity, the long-lived liveness stream, and the connect-token-relayed host tunnel.
 // `events` interleaves heartbeat frames (browser holds it open to detect the sandbox dying instantly) with

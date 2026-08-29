@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { IntenticLineSchema } from "../events.js";
-import { ExitCountriesSchema, ExitIdParamSchema, ExitListSchema, ExitObservationSchema, ExitUseInputSchema, OkSchema } from "../schemas.js";
+import { ExitCountriesSchema, ExitIdParamSchema, ExitListSchema, ExitObservationSchema, ExitUseInputSchema } from "../schemas/exit.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // The live GEO EXIT surface. An exit is ADDED as an `exit` capability (which provider, a resting country,
 // whether it comes up on boot); it is STARTED, MOVED and ROTATED here. Same split as the vpn contract and for

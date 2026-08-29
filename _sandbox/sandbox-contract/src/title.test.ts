@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { AgentTurnSchema } from "./schemas.js";
+import { AgentTurnSchema } from "./schemas/agent.js";
 import { deriveTitle } from "./title.js";
 
 /* The name a conversation opens under. Every case here is a shape the naive rule (collapse whitespace, cut at

@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, PrepushRunSchema } from "../schemas.js";
+import { PrepushRunSchema } from "../schemas/ci.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // The pre-push check, the command the workspace runs when the user pushes, before anything leaves the machine
 // (see PrepushRunSchema for where this sits and why). Three verbs about ONE run: the check answers about the

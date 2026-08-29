@@ -124,7 +124,60 @@ export * from "./prompt-complexity.js";
 export * from "./quick-model.js";
 export * from "./output-fields.js";
 export * from "./publish-drafts.js";
-export * from "./schemas.js";
+/* The wire shapes, one module per subject area, mirroring `contracts/` above: every request and response the
+ * daemon speaks is declared in exactly one of them. Inputs that carry a `{param}` in their route path (repo /
+ * id / name) merge the path param into the same flat object, oRPC fills the path placeholder from the matching
+ * key and routes the rest to the body (POST/PUT) or query (GET).
+ *
+ * `schemas/internal.ts` is deliberately absent: it holds the id and ref primitives these modules are written
+ * in, which are vocabulary rather than shapes either side of the wire sends. */
+export * from "./schemas/activity.js";
+export * from "./schemas/agent.js";
+export * from "./schemas/agents.js";
+export * from "./schemas/automations.js";
+export * from "./schemas/capabilities.js";
+export * from "./schemas/ci.js";
+export * from "./schemas/claude-gate.js";
+export * from "./schemas/codebase-health.js";
+export * from "./schemas/computers.js";
+export * from "./schemas/drafts.js";
+export * from "./schemas/environment.js";
+export * from "./schemas/exit.js";
+export * from "./schemas/extension-updates.js";
+export * from "./schemas/fast-mode.js";
+export * from "./schemas/git.js";
+export * from "./schemas/git-history.js";
+export * from "./schemas/history.js";
+export * from "./schemas/hosts.js";
+export * from "./schemas/intentic.js";
+export * from "./schemas/inventory.js";
+export * from "./schemas/logs.js";
+export * from "./schemas/loops.js";
+export * from "./schemas/maintenance.js";
+export * from "./schemas/marketplace.js";
+export * from "./schemas/panels.js";
+export * from "./schemas/personas.js";
+export * from "./schemas/plan-limits.js";
+export * from "./schemas/ports.js";
+export * from "./schemas/provider-oauth.js";
+export * from "./schemas/provider-subscriptions.js";
+export * from "./schemas/public.js";
+export * from "./schemas/push.js";
+export * from "./schemas/secrets.js";
+export * from "./schemas/sessions.js";
+export * from "./schemas/settings.js";
+export * from "./schemas/share.js";
+export * from "./schemas/shared.js";
+export * from "./schemas/system.js";
+export * from "./schemas/terminal.js";
+export * from "./schemas/usage.js";
+export * from "./schemas/vpn.js";
+export * from "./schemas/webext.js";
+export * from "./schemas/workflows.js";
+export * from "./schemas/workspace-repos.js";
+export * from "./schemas/workspace-search.js";
+export * from "./schemas/workspace-setup.js";
+export * from "./schemas/workspace-tree.js";
 export * from "./definition.js";
 export * from "./search-globs.js";
 export * from "./starter.js";

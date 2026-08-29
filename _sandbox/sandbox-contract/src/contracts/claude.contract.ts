@@ -7,8 +7,8 @@ import {
     OauthAccountListSchema,
     OauthAccountSchema,
     OauthExchangeSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/provider-oauth.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Claude subscription OAuth, the sandbox owns the credential. `start` hands the browser the authorize URL +
 // PKCE material; `exchange` stores the resulting tokens as a new account and returns it; `accounts` lists the

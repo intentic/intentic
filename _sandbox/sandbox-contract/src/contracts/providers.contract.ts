@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { ModelsSchema, NativeProviderParamSchema } from "../schemas.js";
+import { NativeProviderParamSchema } from "../schemas/agent.js";
+import { ModelsSchema } from "../schemas/provider-oauth.js";
 
 // EVERY NATIVE PROVIDER'S PICKER CATALOG, ON ONE ROUTE.
 //

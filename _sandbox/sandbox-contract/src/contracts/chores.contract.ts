@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { ChoreLedgerWriteSchema, ChoreProbeRequestSchema, ChoresReportSchema, OkSchema } from "../schemas.js";
+import { ChoreLedgerWriteSchema, ChoreProbeRequestSchema, ChoresReportSchema } from "../schemas/maintenance.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* Maintenance evidence: what every repo under /work currently measures, and what has already been done about it.
  * Three routes, because there are exactly three things the surface does, read the evidence, ask for a

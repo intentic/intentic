@@ -1,13 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { IntenticLineSchema } from "../events.js";
-import {
-    ForticlientImportInputSchema,
-    ForticlientImportSchema,
-    OkSchema,
-    VpnConnectInputSchema,
-    VpnIdParamSchema,
-    VpnListSchema,
-} from "../schemas.js";
+import { OkSchema } from "../schemas/shared.js";
+import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputSchema, VpnIdParamSchema, VpnListSchema } from "../schemas/vpn.js";
 
 // The live VPN surface. A VPN is ADDED as a `vpn` capability (credentials, autoConnect, capabilities.contract);
 // it is DIALLED here. The split is deliberate: connecting is a runtime operation that both the operator (the

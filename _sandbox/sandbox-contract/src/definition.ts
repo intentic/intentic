@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { DefinitionActionSchema } from "./definition-action.js";
-import { CapabilitySchema, SandboxSettingsSchema } from "./schemas.js";
+import { CapabilitySchema } from "./schemas/capabilities.js";
+import { SandboxSettingsSchema } from "./schemas/settings.js";
 
 /* THE SANDBOX DEFINITION: the declarable SHAPE of a sandbox, split off from its state.
  *
- * A bundle (portability section of schemas.ts) moves everything a sandbox holds; this is the half of it that
+ * A bundle (BundleSchema, schemas/maintenance.ts) moves everything a sandbox holds; this is the half of it that
  * is a REFERENCE to a source of truth rather than bytes only this sandbox has: which repos (as remotes a
  * target can clone), which connections (as shapes a target re-authenticates), which overlay steps (as source
  * a target's owner approves), which secrets (as NAMES a target asks for), which agent settings. Everything

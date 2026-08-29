@@ -173,7 +173,7 @@ Shedding notes buys 3–4k tokens. Against a 16k window with a 45k floor, the an
 
 Steps 1 and 2 of §7 shipped together; the rest of the order stands as written.
 
-**The window is now data.** `Model` (contract `schemas.ts`) carries an optional `contextWindow`, and the
+**The window is now data.** `Model` (contract `schemas/provider-oauth.ts`) carries an optional `contextWindow`, and the
 endpoint catalog fills it: `endpoint-catalog.ts` reads llama.cpp's `/props`
 (`default_generation_settings.n_ctx`, the SERVED per-slot window, not the GGUF's training length) concurrently
 with the models list, and prefers a row's own `max_model_len` where vLLM published one. It flows through the

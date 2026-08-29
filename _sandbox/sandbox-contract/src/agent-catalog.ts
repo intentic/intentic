@@ -1,15 +1,8 @@
-import {
-    type AgentHarness,
-    type AgentProvider,
-    type Model,
-    type ModelBadge,
-    NATIVE_PROVIDERS,
-    type NativeProvider,
-    type PermissionMode,
-} from "./schemas.js";
+import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "./schemas/agent.js";
+import { type Model, type ModelBadge } from "./schemas/provider-oauth.js";
 
 /* The provider / harness / model catalog every picker shares (the chat menu, the automations dialog), pure
- * data keyed by the wire vocabulary in schemas.ts, so the surfaces can't drift. Live state stays with the
+ * data keyed by the wire vocabulary in schemas/agent.ts, so the surfaces can't drift. Live state stays with the
  * consumer (native Grok's model list is the daemon's own catalog for it, layered on top of modelsFor by the
  * web; ACP providers are merged in from the installed `agent` capabilities). */
 
@@ -191,7 +184,7 @@ export const reportsPlanLimits = (provider: AgentProvider): boolean => PLAN_LIMI
 // Surfaced for codex/grok alone. Claude is always its own Claude Code loop; kimi has no native runtime to switch
 // to (it only exists under this harness); and GEMINI IS THE MIRROR OF KIMI, it only exists under its native
 // one, because Google refuses Claude Code's traffic outright (capabilitiesOf says why). See AgentHarness in
-// schemas.ts.
+// schemas/agent.ts.
 //
 // Gemini's `native` is OpenCode rather than a Google CLI: the image ships no Gemini binary, and OpenCode is
 // already here driving Grok. It spends the same translator accounts a routed turn would have, what Google

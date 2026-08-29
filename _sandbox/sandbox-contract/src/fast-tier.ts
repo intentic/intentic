@@ -1,6 +1,6 @@
 import { compareCheapestFirst, isCheaperRung } from "./model-order.js";
 import { parsePinned } from "./quick-model.js";
-import type { AgentProvider } from "./schemas.js";
+import type { AgentProvider } from "./schemas/agent.js";
 
 /* WHICH MODEL A DOWNGRADED TURN ACTUALLY RUNS ON, the second half of automatic tier selection.
  * prompt-complexity.ts decides a turn COULD be cheaper; this decides whether there is anything cheaper to put

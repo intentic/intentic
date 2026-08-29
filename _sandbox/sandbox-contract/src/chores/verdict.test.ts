@@ -1,4 +1,14 @@
-import type { Bundle, ChoreLedgerEntry, ChorePackage, ChoresReport, ChoreShape, ChoreSignals, Duplication, ProbeResult, UiScan } from "../schemas.js";
+import type {
+    Bundle,
+    ChoreLedgerEntry,
+    ChorePackage,
+    ChoreShape,
+    ChoreSignals,
+    ChoresReport,
+    Duplication,
+    ProbeResult,
+    UiScan,
+} from "../schemas/maintenance.js";
 import { describe, expect, test } from "vitest";
 import { choreById, CHORES } from "./chores.js";
 import { assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";

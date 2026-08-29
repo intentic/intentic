@@ -1,18 +1,9 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { AgentCommandsQuerySchema, AgentCommandsSchema, AttachFrameSchema } from "../events.js";
-import {
-    AgentReplySchema,
-    AgentTurnSchema,
-    AttachTurnSchema,
-    OkSchema,
-    ProviderRefusalsSchema,
-    ResumeTurnSchema,
-    RewindResultSchema,
-    RewindTurnSchema,
-    StartedTurnSchema,
-    SteerSchema,
-    StopTurnSchema,
-} from "../schemas.js";
+import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
+import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
+import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/plan-limits.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // A turn EXECUTES as a detached daemon-side run: `run` starts it and acks with the run id; any number of
 // clients render it via `attach` (replay from a seq cursor, then live), the initiating window holds no

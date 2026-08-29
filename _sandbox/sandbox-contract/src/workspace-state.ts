@@ -187,7 +187,7 @@ const STATE_FILES = [
     },
 
     /* The named personas this sandbox shows the outside world, which connected accounts each one speaks for,
-     * what a session wearing it may do, where it works (schemas.ts PersonaSchema). It invalidates `capabilities` as well as
+     * what a session wearing it may do, where it works (PersonaSchema, schemas/personas.ts). It invalidates `capabilities` as well as
      * its own key because a card and the accounts it names are read together everywhere they are shown: connect
      * a second Reddit and the persona list has a new candidate; remove one and a card points at nothing.
      *

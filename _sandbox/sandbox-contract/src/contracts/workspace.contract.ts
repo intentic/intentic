@@ -1,17 +1,23 @@
 import { oc } from "@orpc/contract";
+import { WorkspaceHealthQuerySchema, WorkspaceHealthSchema } from "../schemas/codebase-health.js";
+import { WorkspaceModulesSchema } from "../schemas/git.js";
+import { OkSchema } from "../schemas/shared.js";
 import {
     AddAppsSchema,
     AppParamSchema,
     AppsListSchema,
     CloneRepoSchema,
     CloneResultSchema,
-    WorkspaceSearchResultSchema,
-    WorkspaceSearchQuerySchema,
-    OkSchema,
     RepoAppsParamSchema,
     ReposListSchema,
     RunTestsSchema,
     TemplatesListSchema,
+    WorkspaceGraphSchema,
+    WorkspaceSyncSchema,
+} from "../schemas/workspace-repos.js";
+import { WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace-search.js";
+import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace-setup.js";
+import {
     WorkspaceChildrenQuerySchema,
     WorkspaceChildrenSchema,
     WorkspaceClassificationSchema,
@@ -19,22 +25,14 @@ import {
     WorkspaceFileQuerySchema,
     WorkspaceFileReadQuerySchema,
     WorkspaceFileSchema,
-    WorkspaceGraphSchema,
-    WorkspaceHealthQuerySchema,
-    WorkspaceHealthSchema,
-    WorkspaceInstallResultSchema,
-    WorkspaceInstallSchema,
     WorkspaceMediaTicketQuerySchema,
     WorkspaceMediaTicketSchema,
-    WorkspaceModulesSchema,
     WorkspaceMoveSchema,
     WorkspaceResolveQuerySchema,
     WorkspaceResolveSchema,
     WorkspaceScopeSchema,
-    WorkspaceSetupSchema,
-    WorkspaceSyncSchema,
     WorkspaceTreeSchema,
-} from "../schemas.js";
+} from "../schemas/workspace-tree.js";
 
 // The full /work view + extra-repo cloning. The binary preview (/workspace/raw) is intentionally NOT here, it
 // stays a plain Hono route serving raw bytes with a Content-Type header (oRPC's request/response shape doesn't

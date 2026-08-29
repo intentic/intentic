@@ -15,7 +15,7 @@ strongest and the calibration burden smallest.
 Three pieces are already in place, and they shape the answer more than the research does.
 
 **An ordered ladder is the established unit of model configuration.** `quickModel` and `agentRunModels`
-(`_sandbox/sandbox-contract/src/schemas.ts:1838`, `:1874`) are both *lists* of `${provider}:${model}` keys
+(`_sandbox/sandbox-contract/src/schemas/settings.ts`) are both *lists* of `${provider}:${model}` keys
 resolved by `resolveQuickModels` / `resolveAgentRunModels`. The comment in `quick-model.ts` states the rule
 plainly:
 
@@ -266,7 +266,7 @@ that it only routes down. Swapping it for something merely known to be cheap is 
 | The judge: features, gates, score | `sandbox-contract/src/prompt-complexity.ts` |
 | Which cheaper model, and whether one exists | `sandbox-contract/src/fast-tier.ts` |
 | "Is this a cheaper rung" on the tier ladder | `model-order.ts` (`isCheaperRung`) |
-| Settings: mode + the fast ladder | `schemas.ts` (`autoTier`, `autoFastModels`) |
+| Settings: mode + the fast ladder | `schemas/settings.ts` (`autoTier`, `autoFastModels`) |
 | Spending the judgement, catalogs, modes, the veto | `sandbox/src/agent/turn-tier.ts` |
 | Applying it + the shadow record + the `tier` frame | `sandbox/src/agent/agent.routes.ts` |
 | The previous turn's verdict + the standing veto | `agents-store.ts` / `agents-registry.ts` (`tier`, `tierHold`, `recordTier`) |

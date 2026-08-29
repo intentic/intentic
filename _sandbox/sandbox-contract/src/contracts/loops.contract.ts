@@ -8,8 +8,8 @@ import {
     LoopRecordSchema,
     LoopSchema,
     LoopsListSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/loops.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* The loop routes, "run this conversation again until the goal is met".
  *

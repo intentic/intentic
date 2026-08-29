@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
+import { OkSchema } from "../schemas/shared.js";
 import {
-    OkSchema,
     WorkflowIdParamSchema,
     WorkflowRunIdParamSchema,
     WorkflowRunSchema,
@@ -9,7 +9,7 @@ import {
     WorkflowSaveSchema,
     WorkflowSchema,
     WorkflowsListSchema,
-} from "../schemas.js";
+} from "../schemas/workflows.js";
 
 /* The workflow routes, "run these sessions, in this order, each handing its result to the next".
  *

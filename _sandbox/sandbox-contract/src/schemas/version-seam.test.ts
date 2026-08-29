@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
-import { CapabilitiesListSchema, IpsecVpnConfigSchema, SandboxSettingsSchema } from "./schemas.js";
+import { CapabilitiesListSchema } from "./capabilities.js";
+import { SandboxSettingsSchema } from "./settings.js";
+import { IpsecVpnConfigSchema } from "./vpn.js";
 
 /* The settings shape spans a version seam that really moves: the browser ships with the platform, the daemon
  * ships inside the user's sandbox image, so a web build routinely parses a payload from an OLDER daemon. These
@@ -29,7 +31,7 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
  * time only when the user changes something, so until then the daemon parses `{}`: one field without a
  * `.default()` turns that into a throw at boot, and the version tolerance above is built on the same property.
  *
- * Asserted by shape rather than by value: what each default IS belongs next to the field in schemas.ts, where
+ * Asserted by shape rather than by value: what each default IS belongs next to the field in settings.ts, where
  * the reason it holds is written down. A second copy here proved nothing the schema didn't already say and
  * failed on every field the product added. */
 test("no field is required: a workspace that has never written settings parses", () => {

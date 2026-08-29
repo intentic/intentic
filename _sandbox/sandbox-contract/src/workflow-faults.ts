@@ -7,7 +7,7 @@
  */
 
 import { duplicateOutputFieldNames } from "./output-fields.js";
-import type { Workflow, WorkflowStep } from "./schemas.js";
+import type { Workflow, WorkflowStep } from "./schemas/workflows.js";
 
 // One id, one node: the scheduler keys needs, runs and the drawn graph by it, so a repeat makes the same node
 // mean two things.

@@ -7,8 +7,8 @@ import {
     AutomationIdParamSchema,
     AutomationSchema,
     AutomationsListSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/automations.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // The sandbox's automations manifest (scheduled agent wake-ups). `list` returns each automation with its recent
 // runs + next fire time. `upsert` adds or edits by id (nothing to provision, the scheduler picks it up on its

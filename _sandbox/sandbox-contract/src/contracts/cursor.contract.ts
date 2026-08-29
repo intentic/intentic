@@ -7,8 +7,8 @@ import {
     CursorLoginStartSchema,
     OauthAccountListSchema,
     OauthAccountSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/provider-oauth.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* Cursor subscription sign-in, the sandbox owns the credential and the platform never sees it, the same bargain
  * claude.contract.ts strikes. What differs is who finishes the handshake.

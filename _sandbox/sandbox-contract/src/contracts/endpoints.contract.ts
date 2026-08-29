@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { CapabilityIdParamSchema, ModelsSchema } from "../schemas.js";
+import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
+import { ModelsSchema } from "../schemas/provider-oauth.js";
 
 // An `endpoint` capability's picker catalog, the models the configured server itself publishes, read from its
 // own /v1/models. Every other provider's catalog is one fixed route because there is one of each; endpoints are

@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, SecretInventorySchema, SecretKeyParamSchema, SecretKeysSchema, SecretRevealSchema, SecretSetSchema } from "../schemas.js";
+import { SecretInventorySchema, SecretKeyParamSchema, SecretKeysSchema, SecretRevealSchema, SecretSetSchema } from "../schemas/secrets.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // User-supplied env-var secrets, written to the sandbox's gitignored desired-state/.env (which
 // `apply` reloads each run, no restart). `set` upserts one KEY=value, `remove` deletes it; `list` returns the

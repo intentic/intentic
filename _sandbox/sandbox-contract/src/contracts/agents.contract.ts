@@ -3,7 +3,6 @@ import { AgentTranscriptSchema } from "../events.js";
 import {
     AgentArchiveSchema,
     AgentAutoLandSchema,
-    AgentChangesSchema,
     AgentFileDiffQuerySchema,
     AgentIdSchema,
     AgentIdsSchema,
@@ -11,17 +10,18 @@ import {
     AgentPlaceSchema,
     AgentRenameSchema,
     AgentResumeAfterOutageSchema,
+    AgentsArchivedSchema,
     AgentSearchQuerySchema,
     AgentSearchResultSchema,
-    AgentsArchivedSchema,
-    AgentsListSchema,
     AgentsMovedSchema,
     AgentsRemovedSchema,
     AgentSummarySchema,
-    FileDiffSchema,
     LandResultSchema,
-    OkSchema,
-} from "../schemas.js";
+} from "../schemas/agents.js";
+import { AgentsListSchema } from "../schemas/automations.js";
+import { AgentChangesSchema } from "../schemas/git.js";
+import { FileDiffSchema } from "../schemas/history.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // The fleet: every registered conversation-agent (see AgentSummarySchema). Registry-level actions (read,
 // rename, seen, archive) apply uniformly. For branch-backed conversations, `diff` is the worktree's CUMULATIVE

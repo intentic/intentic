@@ -1,6 +1,9 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { KeyedProviderSchema, OkSchema, TranslatorAccountsSchema, TranslatorCompleteSchema, TranslatorStartSchema } from "../schemas.js";
+import { TranslatorAccountsSchema } from "../schemas/plan-limits.js";
+import { TranslatorCompleteSchema, TranslatorStartSchema } from "../schemas/provider-oauth.js";
+import { KeyedProviderSchema } from "../schemas/provider-subscriptions.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Routed-provider subscriptions (Sandbox ▸ Agent). The bundled translator (CLIProxyAPI) runs a non-Claude model
 // UNDER the Claude Code harness on the user's SUBSCRIPTION, so each provider connects via an OAuth login rather

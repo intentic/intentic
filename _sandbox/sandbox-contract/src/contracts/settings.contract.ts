@@ -1,13 +1,7 @@
 import { oc } from "@orpc/contract";
-import {
-    BuiltinPromptSchema,
-    BuiltinPromptTextSchema,
-    DayWindowQuerySchema,
-    OkSchema,
-    RuleFiringsSchema,
-    SandboxSettingsSchema,
-    SavingsReportSchema,
-} from "../schemas.js";
+import { BuiltinPromptSchema, BuiltinPromptTextSchema, RuleFiringsSchema, SandboxSettingsSchema, SavingsReportSchema } from "../schemas/settings.js";
+import { OkSchema } from "../schemas/shared.js";
+import { DayWindowQuerySchema } from "../schemas/usage.js";
 
 // Per-sandbox agent settings (.intentic/config/settings.json). `get` returns the current flags with defaults applied
 // when the file is absent; `set` overwrites them. `savings` reports what each token-reduction mechanism was

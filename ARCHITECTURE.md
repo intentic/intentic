@@ -650,7 +650,7 @@ buses every extension is allowed to contribute to.
 ### Capabilities
 
 Everything a user adds to a sandbox is a **capability**: one `{ id, kind, config }` entry in a single
-discriminated union (`CapabilitySchema` in [schemas.ts](_sandbox/sandbox-contract/src/schemas.ts)) over the
+discriminated union (`CapabilitySchema` in [schemas/capabilities.ts](_sandbox/sandbox-contract/src/schemas/capabilities.ts)) over the
 kinds: `devops`, `monorepo`, `mcp`, `service`, `integration`, `cli`, `plugin`, `extension`, `ssh`, `vpn`,
 `exit`, `docker`, `browser`, `host`, `agent`, `endpoint`. There is deliberately **no top-level taxonomy** of "skills vs connectors vs
 environments vs secrets": those are overlapping *ingredients*, not disjoint categories (a connector is a

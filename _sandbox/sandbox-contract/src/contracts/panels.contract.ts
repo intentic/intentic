@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, PanelRepoParamSchema, PanelsListSchema } from "../schemas.js";
+import { PanelRepoParamSchema, PanelsListSchema } from "../schemas/panels.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Per-repository dev servers + the content facts the web app's extensions detect on. `list` enumerates every
 // repo with its runtime status + facts; `start`/`stop` drive the repo's dev server. Their tmux sessions list

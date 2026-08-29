@@ -279,7 +279,8 @@ expires unused); a 200-without-receipt is recorded as an anomaly against that en
 | Layer | Change |
 |---|---|
 | `_sandbox/sandbox-contract/src/events.ts` | `PaymentOfferSchema`, `PaymentReceiptSchema`; `payment_offer` / `payment_receipt` arms in `AgentEventSchema` (beside `service_offer` at ~:610) |
-| `_sandbox/sandbox-contract/src/schemas.ts` | reply arm `payment_offer{approve}` (beside `service_offer` at :1321); `wallet` added to `CapabilityKindSchema` (:3176) |
+| `_sandbox/sandbox-contract/src/schemas/plan-limits.ts` | reply arm `payment_offer{approve}`, beside `service_offer` |
+| `_sandbox/sandbox-contract/src/schemas/capabilities.ts` | `wallet` added to `CapabilityKindSchema` |
 | `_sandbox/sandbox/bin/wallet` | the CLI (services-CLI pattern: `node:http`, agent token, `INTENTIC_TURN_OWNER`) + `skills/wallet/SKILL.md` |
 | `_sandbox/sandbox/src/auth/grants.ts` | `agentReach` += `GET /wallet/status`, `POST /wallet/fetch`, `GET /wallet/history` |
 | `_sandbox/sandbox/src/wallet/` | `x402-client.ts` (three challenge parsers → normalized quote; payload builders v2/v1/MPP), `payment-offer.ts` (the gate: `createRequest` + `turnRunOf` + `agents.observe`, non-journalled, `OFFER_DEADLINE_MS` 10 min), `wallet-ledger.ts`, `wallet.routes.ts` |

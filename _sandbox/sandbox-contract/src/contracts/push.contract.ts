@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema, PushConfigSchema, PushTestSchema } from "../schemas.js";
+import { PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema, PushConfigSchema, PushTestSchema } from "../schemas/push.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Push notifications for this sandbox. The daemon owns the VAPID keypair and the channel list (see
 // push/push-store.ts for why the key lives on the history volume), and sends on the three moments where the

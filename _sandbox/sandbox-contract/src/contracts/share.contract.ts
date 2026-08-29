@@ -1,7 +1,8 @@
 import { oc } from "@orpc/contract";
-import { OkSchema, ShareCreateSchema, ShareListSchema, ShareRemoveSchema, ShareUpdateSchema, SharedConversationSchema } from "../schemas.js";
+import { ShareCreateSchema, SharedConversationSchema, ShareListSchema, ShareRemoveSchema, ShareUpdateSchema } from "../schemas/share.js";
+import { OkSchema } from "../schemas/shared.js";
 
-/* Conversations published as read-only pages (see the share section in schemas.ts).
+/* Conversations published as read-only pages (see schemas/share.ts).
  *
  * Its own group rather than two more routes on `public`, because the two speak different path spaces and mean
  * different things by "publish". The outbox's routes take a path in the workspace and copy the bytes at it; a

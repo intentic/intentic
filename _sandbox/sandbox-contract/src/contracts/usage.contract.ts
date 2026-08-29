@@ -1,5 +1,5 @@
 import { oc } from "@orpc/contract";
-import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas.js";
+import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/usage.js";
 
 // The durable spend ledger (see UsageTurnSchema). Read-only over the wire, rows are appended daemon-side at
 // turn end, so the ledger stays a trustworthy record of what was actually spent, the same principle as the

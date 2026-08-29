@@ -1,23 +1,23 @@
 import { oc } from "@orpc/contract";
+import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import {
-    CapabilityIdParamSchema,
     ExtensionEnabledInputSchema,
     ExtensionProcessParamSchema,
     ExtensionProcessStatusSchema,
     ExtensionSettingsInputSchema,
     ExtensionSettingsSchema,
-    ExtensionReadinessSchema,
+    ExtensionsListSchema,
     ExtensionUpdateActionSchema,
     ExtensionUpdateAppliedSchema,
     ExtensionUpdatePolicyInputSchema,
     ExtensionUpdatePreviewSchema,
     ExtensionUpdatesCheckedSchema,
     ExtensionUsageInputSchema,
-    ExtensionsListSchema,
-    OkSchema,
     WorkspaceExtensionCreatedSchema,
     WorkspaceExtensionCreateSchema,
-} from "../schemas.js";
+} from "../schemas/extension-updates.js";
+import { ExtensionReadinessSchema } from "../schemas/maintenance.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Installed extensions resolved to their approved manifests, what the web extension host boots from. The
 // bundle itself is a plain Hono route (GET /extensions/{id}/bundle): raw ESM bytes are not an oRPC payload.

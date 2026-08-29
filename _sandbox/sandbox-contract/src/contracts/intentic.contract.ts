@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { IntenticLineSchema } from "../events.js";
-import { IntenticRunSchema, OkSchema } from "../schemas.js";
+import { IntenticRunSchema } from "../schemas/intentic.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Run the in-sandbox intentic CLI (resolve/plan/apply/deployments/…) and stream its ndjson lines as they
 // arrive, so the UI sees live progress. A non-zero exit surfaces as a thrown error once the stream ends.

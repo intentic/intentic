@@ -1,15 +1,15 @@
 import { oc } from "@orpc/contract";
 import {
-    OkSchema,
     PersonaIdParamSchema,
     PersonaKitSchema,
     PersonaPromptSchema,
     PersonaSchema,
-    PersonasListSchema,
     PersonaSkillBodySchema,
     PersonaSkillNameSchema,
     PersonaSkillSchema,
-} from "../schemas.js";
+    PersonasListSchema,
+} from "../schemas/personas.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* The sandbox's named personas (PersonaSchema): which connected accounts each one speaks for, what a session
  * wearing it may do, where it works, and what it is told. The card half is a plain three-verb CRUD with no apply

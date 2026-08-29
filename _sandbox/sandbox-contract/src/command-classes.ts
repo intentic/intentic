@@ -1,4 +1,4 @@
-import { type CommandClass, CommandClassSchema } from "./schemas.js";
+import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
 
 /* WHICH CLASSES A SHELL COMMAND FALLS IN, the classifier behind every command gate, read before the command runs.
  *

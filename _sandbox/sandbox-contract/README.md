@@ -9,7 +9,7 @@ mismatch is a type error rather than a runtime surprise.
 ## Responsibilities
 
 - Declare the contracts, one file per subject area (`src/contracts/`).
-- Declare the schemas every contract shares (`src/schemas.ts`).
+- Declare the wire shapes those contracts are built from, one module per subject area (`src/schemas/`).
 - Declare the event union the daemon pushes over SSE (`src/events.ts`).
 - Hold the small pieces of logic that BOTH sides must agree on rather than each deciding: the chore book,
   hostname and tunnel-id rules, session naming, terminal protocol, workspace state, runtime state.
@@ -19,7 +19,12 @@ mismatch is a type error rather than a runtime surprise.
 ## Key files
 
 - [src/contracts](src/contracts): one contract per area. Start with `agent.contract.ts` and `git.contract.ts`.
-- [src/schemas.ts](src/schemas.ts): the shared shapes; the biggest file here, and the one most changes touch.
+- [src/schemas](src/schemas): the wire shapes, one module per subject area, named to match the contract that
+  spends them (`schemas/git.ts` under `contracts/git.contract.ts`). A contract imports the two or three modules
+  it actually needs, so what a subject area is built from is visible in its import block rather than implied by
+  proximity in a shared file. `schemas/internal.ts` is the exception and is not re-exported from the index: it
+  holds the id and ref primitives several modules are written in, which are vocabulary rather than shapes either
+  side of the wire sends.
 - [src/events.ts](src/events.ts): what the daemon pushes, and when.
 - [src/workspace-state.ts](src/workspace-state.ts) and [src/runtime-state.ts](src/runtime-state.ts): which
   changed file, and which moved runtime thing, makes which browser view stale. The workspace table also assigns

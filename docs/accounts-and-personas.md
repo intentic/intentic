@@ -199,7 +199,7 @@ accounts spelled out.
 
 | Piece | Files |
 | --- | --- |
-| The two shapes | [schemas.ts](../_sandbox/sandbox-contract/src/schemas.ts): `CapabilitySchema` (`browser` kind) and `PersonaSchema` |
+| The two shapes | [schemas/capabilities.ts](../_sandbox/sandbox-contract/src/schemas/capabilities.ts): `CapabilitySchema` (`browser` kind) and [schemas/personas.ts](../_sandbox/sandbox-contract/src/schemas/personas.ts): `PersonaSchema` |
 | The rule about which accounts a turn gets | [personas.ts](../_sandbox/sandbox/src/personas/personas.ts) |
 | The JS execution backend a card can grant | [js-runtime.ts](../_sandbox/sandbox/src/execution/js-runtime.ts) (the fence and the runner) · [js-tool.ts](../_sandbox/sandbox/src/execution/js-tool.ts) (the `Code` tool the Claude Code loop mounts) |
 | The disk state behind a login | [session-store.ts](../_sandbox/sandbox/src/browser/session-store.ts) |

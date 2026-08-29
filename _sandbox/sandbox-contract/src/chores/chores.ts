@@ -1,4 +1,4 @@
-import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas.js";
+import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } from "../schemas/maintenance.js";
 import { bucketOf, digestOf } from "./digest.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";

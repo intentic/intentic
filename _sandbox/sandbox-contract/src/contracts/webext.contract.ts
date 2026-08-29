@@ -1,6 +1,8 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { OkSchema, WebExtFactsSchema, WebExtScopesSchema } from "../schemas.js";
+import { WebExtScopesSchema } from "../schemas/capabilities.js";
+import { OkSchema } from "../schemas/shared.js";
+import { WebExtFactsSchema } from "../schemas/webext.js";
 
 /* What a connected BROWSER can be asked, over the socket its extension opened to this sandbox.
  *

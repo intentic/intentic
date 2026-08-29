@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { AccountIdSchema, DeviceStartSchema, OauthAccountListSchema, OkSchema } from "../schemas.js";
+import { AccountIdSchema, DeviceStartSchema, OauthAccountListSchema } from "../schemas/provider-oauth.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // xAI Grok (via OpenCode) uses subscription OAuth, the sandbox owns the credential (OpenCode persists the
 // tokens and refreshes them). `start` authorizes xAI's headless device-code method and returns the verification

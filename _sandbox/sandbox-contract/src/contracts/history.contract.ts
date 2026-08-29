@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { FileDiffSchema, OkSchema, SnapshotDiffSchema, SnapshotFileDiffQuerySchema, SnapshotIdSchema, SnapshotsListSchema } from "../schemas.js";
+import { FileDiffSchema, SnapshotDiffSchema, SnapshotFileDiffQuerySchema, SnapshotIdSchema, SnapshotsListSchema } from "../schemas/history.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // Workspace history: daemon-owned snapshots of /work with diff + restore. `diff` compares a checkpoint against
 // the previous visible checkpoint (everything that happened since it, hidden interval captures included); an

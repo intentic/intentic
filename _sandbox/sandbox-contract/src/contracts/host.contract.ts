@@ -1,6 +1,9 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
-import { HostFactsSchema, HostScopesSchema, MachineFlowLineSchema, MachineSandboxFlowSchema, OkSchema } from "../schemas.js";
+import { MachineFlowLineSchema, MachineSandboxFlowSchema } from "../schemas/computers.js";
+import { HostScopesSchema } from "../schemas/capabilities.js";
+import { HostFactsSchema } from "../schemas/hosts.js";
+import { OkSchema } from "../schemas/shared.js";
 
 /* What a connected computer can be ASKED, over the socket it opened to this sandbox.
  *

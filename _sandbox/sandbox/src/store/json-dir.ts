@@ -19,9 +19,9 @@ import { writeJsonFile } from "./json-file.js";
  * one is written by the agent, so `list` answers with the entries it parsed AND the filenames it refused,
  * and a typo surfaces in the UI instead of becoming a draft that silently never posts. */
 
-// The contract's `entryId` charset (sandbox-contract's schemas.ts), which that module keeps private. Held once
-// here rather than re-typed per store: both copies of it carried a comment claiming to match this, which is
-// exactly the kind of agreement that drifts unobserved.
+// The contract's `entryId` charset (sandbox-contract's schemas/internal.ts, which the package index does not
+// re-export). Held once here rather than re-typed per store: both copies of it carried a comment claiming to
+// match this, which is exactly the kind of agreement that drifts unobserved.
 const ENTRY_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,59}$/;
 
 export interface JsonDir<T> {

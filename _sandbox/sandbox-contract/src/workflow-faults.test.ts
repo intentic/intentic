@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { type Workflow, WorkflowSchema, type WorkflowStep } from "./schemas.js";
+import { type Workflow, WorkflowSchema, type WorkflowStep } from "./schemas/workflows.js";
 import { workflowFaults, workflowRunFaults } from "./workflow-faults.js";
 
 /* The GATE rules. The graph rules beside them are exercised by the scheduler's own integration tests, which

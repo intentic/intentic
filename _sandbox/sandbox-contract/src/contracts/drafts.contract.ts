@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
-import { DraftIdParamSchema, DraftsListSchema, DraftSummarySchema, OkSchema } from "../schemas.js";
+import { DraftIdParamSchema, DraftsListSchema, DraftSummarySchema } from "../schemas/drafts.js";
+import { OkSchema } from "../schemas/shared.js";
 
 // The sandbox's post-drafts queue (agent-proposed posts awaiting approval). The agent creates draft files
 // directly, these routes are the OWNER's side: `list` is the approval inbox, `upsert` covers approve / edit /
