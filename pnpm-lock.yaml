@@ -3238,6 +3238,9 @@ importers:
       '@intentic-dev/site-content':
         specifier: workspace:*
         version: link:../site-content
+      '@intentic/constants':
+        specifier: workspace:*
+        version: link:../../_tools/constants
       '@intentic/registry':
         specifier: workspace:*
         version: link:../../_sandbox/registry
@@ -3266,9 +3269,6 @@ importers:
       '@intentic-dev/demo':
         specifier: workspace:*
         version: file:_site/demo(esbuild@0.28.2)(typescript@5.9.3)(vite@8.2.0(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))(vue@3.5.40(typescript@5.9.3))
-      '@intentic/constants':
-        specifier: workspace:*
-        version: link:../../_tools/constants
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
