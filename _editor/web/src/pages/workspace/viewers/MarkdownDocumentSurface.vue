@@ -9,14 +9,21 @@
      That is the difference from the surface this replaces, which mounted a Monaco editor in place of the clicked
      paragraph: a different font in a different box at a different size, arriving with a flicker, on every click.
 
-     Caret, selection, IME, spellcheck and native undo are the browser's, which is the whole reason for building
-     on `contenteditable` rather than on a widget. What the browser must NOT be trusted with is markup and
+     Caret, selection, IME and spellcheck are the browser's, which is the whole reason for building on
+     `contenteditable` rather than on a widget. What the browser must NOT be trusted with is markup and
      whitespace, and it is not: every edit is read back as text and its blocks are built again from that text, so
      anything it inserts of its own is gone on the next pass, and the newlines it would quietly delete are held
-     outside the DOM where it cannot reach them. See `built` and `makeEditable`. -->
+     outside the DOM where it cannot reach them. See `built` and `makeEditable`.
+
+     UNDO IS OURS TOO, and for the same reason: rebuilding a block is a programmatic DOM write, which drops the
+     browser's own stack on the first keystroke. So is every shortcut that means markup rather than formatting,
+     because there is no bold here to switch on, only asterisks to put around something. See markdownHistory.ts
+     and markdownEdits.ts. -->
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { splitMarkdownBlocks } from "@intentic/ui/markdown";
+import { indentLines, insertLink, onListLine, outdentLines, type TextEdit, toggleWrap } from "./markdownEdits";
+import { createMarkdownHistory, type EditKind } from "./markdownHistory";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "./markdownSourceDom";
 import "./markdownEditing.css";
 
@@ -71,21 +78,48 @@ const activeIndex = (): number => {
     return blockElements().findIndex((element) => element === node || element.contains(node));
 };
 
-/** Where the caret is, as an offset into the document's source. */
-const caretOffset = (): number | undefined => {
-    const index = activeIndex();
+/* A position in the DOM as an offset into the source. Resolved from the NODE rather than from the selection's
+ * own start, so it answers for either end of a selection: the two ends can sit in different blocks, and a
+ * shortcut that formats a selection needs both. */
+const sourceOffsetOf = (node: Node, offset: number): number | undefined => {
+    const root = host.value;
+    if (root === undefined || !root.contains(node)) {
+        return undefined;
+    }
+    const index = blockElements().findIndex((element) => element === node || element.contains(node));
     const element = blockElements()[index];
-    const selection = window.getSelection();
-    const range = selection === null || selection.rangeCount === 0 ? undefined : selection.getRangeAt(0);
-    if (index === -1 || element === undefined || range === undefined) {
+    if (element === undefined) {
         return undefined;
     }
     // Within the block from the DOM, and the blocks before it from `built`: the gaps are not in the DOM to be
     // counted, so they are added back here.
-    return (blockStarts()[index] ?? 0) + offsetOfCaret(element as HTMLElement, range.startContainer, range.startOffset);
+    return (blockStarts()[index] ?? 0) + offsetOfCaret(element as HTMLElement, node, offset);
 };
 
-const putCaret = (offset: number): void => {
+const liveRange = (): Range | undefined => {
+    const selection = window.getSelection();
+    return selection === null || selection.rangeCount === 0 ? undefined : selection.getRangeAt(0);
+};
+
+/** Where the caret is, as an offset into the document's source. */
+const caretOffset = (): number | undefined => {
+    const range = liveRange();
+    return range === undefined ? undefined : sourceOffsetOf(range.startContainer, range.startOffset);
+};
+
+/** The selection as source offsets, or undefined when it is not in this document. */
+const selectionRange = (): { start: number; end: number } | undefined => {
+    const range = liveRange();
+    if (range === undefined) {
+        return undefined;
+    }
+    const start = sourceOffsetOf(range.startContainer, range.startOffset);
+    const end = sourceOffsetOf(range.endContainer, range.endOffset);
+    return start === undefined || end === undefined ? undefined : { start: Math.min(start, end), end: Math.max(start, end) };
+};
+
+// The place in the DOM a source offset names, for putting a caret or a selection edge back after a rebuild.
+const domPointAt = (offset: number): { node: Node; offset: number } | undefined => {
     const starts = blockStarts();
     const elements = blockElements();
     // The last block whose start is at or before the offset: where a caret sitting in a gap belongs is the end
@@ -98,20 +132,27 @@ const putCaret = (offset: number): void => {
     }
     const element = elements[index];
     if (element === undefined) {
-        return;
+        return undefined;
     }
     const local = Math.min(offset - (starts[index] ?? 0), blockBody(element).length);
-    const at = caretAtOffset(element as HTMLElement, Math.max(0, local));
-    if (at === undefined) {
+    return caretAtOffset(element as HTMLElement, Math.max(0, local));
+};
+
+const putSelection = (start: number, end: number): void => {
+    const from = domPointAt(start);
+    const to = domPointAt(end);
+    if (from === undefined || to === undefined) {
         return;
     }
     const range = document.createRange();
-    range.setStart(at.node, Math.min(at.offset, at.node.textContent?.length ?? 0));
-    range.collapse(true);
+    range.setStart(from.node, Math.min(from.offset, from.node.textContent?.length ?? 0));
+    range.setEnd(to.node, Math.min(to.offset, to.node.textContent?.length ?? 0));
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
 };
+
+const putCaret = (offset: number): void => putSelection(offset, offset);
 
 /* Which block the caret is in gets the class that reveals its markers. The same answer however the caret got
  * there: a click, an arrow key, a find, or the text under it being rewritten. */
@@ -213,12 +254,42 @@ const sync = (): void => {
     markActive();
 };
 
-const onInput = (): void => {
+/* THE UNDO STACK IS THIS SURFACE'S, because the browser's cannot survive what this surface does: parsing an edit
+ * and rebuilding the block it changed is a programmatic DOM write, which drops the native stack on the first
+ * keystroke. See markdownHistory.ts. */
+const history = createMarkdownHistory();
+
+// Note where the document has got to. Called after every edit, once the DOM has settled, so the caret recorded
+// with it is the one the user will be returned to.
+const remember = (kind: EditKind): void => history.record({ text: text(), caret: caretOffset() ?? 0 }, kind, Date.now());
+
+/** Put `next` on screen, tell the world, and restore the selection the edit asks for. */
+const apply = (edit: TextEdit, kind: EditKind = `structural`): void => {
+    render(edit.text);
+    emit(`change`, edit.text);
+    putSelection(edit.start, edit.end);
+    markActive();
+    remember(kind);
+};
+
+// An edit's kind, from what the browser says it did. Insertions and deletions coalesce into runs of their own
+// (see markdownHistory); anything else is a step by itself.
+const kindOf = (inputType: string): EditKind =>
+    inputType.startsWith(`insert`) ? `typing` : inputType.startsWith(`delete`) ? `deleting` : `structural`;
+
+// What happens after the browser has edited the DOM: read the text back, reparse the blocks it changed, and note
+// the step. One path, whether the edit came from a keystroke or from an IME committing a word.
+const commitInput = (kind: EditKind): void => {
+    emit(`change`, text());
+    sync();
+    remember(kind);
+};
+
+const onInput = (event: Event): void => {
     if (composing) {
         return;
     }
-    emit(`change`, text());
-    sync();
+    commitInput(kindOf(event instanceof InputEvent ? event.inputType : ``));
 };
 
 /* An IME is mid-word: the DOM holds a composition the user has not committed, so reparsing it would rewrite the
@@ -229,23 +300,23 @@ const onCompositionStart = (): void => {
 
 const onCompositionEnd = (): void => {
     composing = false;
-    onInput();
+    // A committed composition is a word arriving: typing, so it coalesces with the run around it.
+    commitInput(`typing`);
 };
 
 /* Text spliced into the document at the caret, for the keys the browser would otherwise get wrong. Done to the
  * SOURCE and re-rendered rather than to the DOM through a range: the source is the thing that has to be right,
  * and going through it means the blocks are re-split by the same code path every other edit uses. */
 const insertAtCaret = (insert: string): void => {
-    const offset = caretOffset();
-    if (offset === undefined) {
+    // Over the SELECTION, not merely at the caret: pasting with words selected replaces them, which is what
+    // every editor does and what the browser would have done if this were not intercepted.
+    const at = selectionRange();
+    if (at === undefined) {
         return;
     }
     const current = text();
-    const next = current.slice(0, offset) + insert + current.slice(offset);
-    render(next);
-    emit(`change`, next);
-    putCaret(offset + insert.length);
-    markActive();
+    const next = current.slice(0, at.start) + insert + current.slice(at.end);
+    apply({ text: next, start: at.start + insert.length, end: at.start + insert.length });
 };
 
 /* ENTER, AND WHY IT NEEDS A BLOCK THAT IS NOT IN THE FILE.
@@ -291,12 +362,103 @@ const startBlock = (): void => {
     selection?.addRange(range);
     emit(`change`, text());
     markActive();
+    remember(`structural`);
+};
+
+// Restore a state from the history stack. The whole document is laid out again: an undo can cross blocks, and
+// putting it back wholesale is the one way the DOM and the source cannot end up disagreeing about it.
+const travel = (state: { text: string; caret: number } | undefined): boolean => {
+    if (state === undefined) {
+        return false;
+    }
+    render(state.text);
+    emit(`change`, state.text);
+    putCaret(state.caret);
+    markActive();
+    return true;
+};
+
+/* A formatting shortcut, applied to whatever is selected. Returns false when there is no selection to act on, so
+ * the caller can leave the key to the browser rather than swallowing it. */
+const format = (edit: (text: string, start: number, end: number) => TextEdit): boolean => {
+    const at = selectionRange();
+    if (at === undefined) {
+        return false;
+    }
+    apply(edit(text(), at.start, at.end));
+    return true;
 };
 
 const onKeydown = (event: KeyboardEvent): void => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === `s`) {
+    const chord = event.ctrlKey || event.metaKey;
+    const key = event.key.toLowerCase();
+
+    // An IME is mid-word. Every chord below would act on text the user has not committed yet.
+    if (composing) {
+        return;
+    }
+
+    if (chord && key === `s`) {
         event.preventDefault();
         emit(`save`, text());
+        return;
+    }
+
+    /* UNDO AND REDO. Both spellings of redo, because both are in people's hands: Ctrl+Shift+Z everywhere, and
+     * Ctrl+Y as well on Windows, where a generation of editors bound it. */
+    if (chord && key === `z` && !event.shiftKey) {
+        event.preventDefault();
+        travel(history.undo());
+        return;
+    }
+    if (chord && ((key === `z` && event.shiftKey) || key === `y`)) {
+        event.preventDefault();
+        travel(history.redo());
+        return;
+    }
+
+    /* THE FORMATTING KEYS, as the markdown they mean. There is no "bold" to switch on here, there are two
+     * asterisks to put around something, so Ctrl+B writes them and takes them away again. Doing it this way
+     * rather than letting the browser's own `formatBold` run is what keeps the file readable: `<b>` would say
+     * nothing markdown can express, and would vanish on the next rebuild anyway. */
+    if (chord && !event.altKey && (key === `b` || key === `i` || key === `k`)) {
+        const done = key === `k` ? format(insertLink) : format((body, start, end) => toggleWrap(body, start, end, key === `b` ? `**` : `*`));
+        if (done) {
+            event.preventDefault();
+        }
+        return;
+    }
+
+    /* TAB INDENTS A LIST, and only a list. Everywhere else it stays the key that leaves the document, which is
+     * the only way out for someone navigating by keyboard: a text box that swallows Tab is a trap. */
+    if (event.key === `Tab` && !chord && !event.altKey) {
+        const at = selectionRange();
+        if (at !== undefined && onListLine(text(), at.start)) {
+            event.preventDefault();
+            apply((event.shiftKey ? outdentLines : indentLines)(text(), at.start, at.end));
+        }
+        return;
+    }
+
+    /* SHIFT+ENTER IS A LINE BREAK INSIDE THE PARAGRAPH, which markdown spells as two trailing spaces before the
+     * newline. Left to the browser it inserted a `<br>` carrying no source at all, so the break was gone on the
+     * next rebuild: the key appeared to work and then undid itself.
+     *
+     * At the END of a block it starts a new one instead, because there markdown has nothing for it to mean: a
+     * hard break needs a line to break TO, so the two spaces and the newline are trailing whitespace, which the
+     * browser then collapses away exactly as it does everywhere else in this surface. Rather than write
+     * characters that will not survive, the key does the visible thing the user was reaching for. */
+    if (event.key === `Enter` && event.shiftKey && !chord && !event.altKey) {
+        event.preventDefault();
+        const at = selectionRange();
+        const index = activeIndex();
+        const element = blockElements()[index];
+        const endOfBlock = at === undefined || element === undefined || at.end === (blockStarts()[index] ?? 0) + blockBody(element).length;
+        if (endOfBlock) {
+            startBlock();
+        } else {
+            insertAtCaret(`  \n`);
+        }
         return;
     }
     /* ENTER STARTS A NEW BLOCK. In markdown a single newline inside a paragraph is a SPACE, so letting the
@@ -338,11 +500,7 @@ const onKeydown = (event: KeyboardEvent): void => {
     const current = text();
     const gap = built[seam]?.gap ?? `\n\n`;
     const cut = (starts[seam] ?? 0) + blockBody(blockElements()[seam] ?? document.createElement(`p`)).length;
-    const next = current.slice(0, cut) + current.slice(cut + gap.length);
-    render(next);
-    emit(`change`, next);
-    putCaret(cut);
-    markActive();
+    apply({ text: current.slice(0, cut) + current.slice(cut + gap.length), start: cut, end: cut });
 };
 
 // The selection moves for reasons that are not edits (a click, an arrow key), and the active block has to follow
@@ -374,12 +532,23 @@ const onDrop = (event: DragEvent): void => {
     insertAtCaret(event.dataTransfer?.getData(`text/plain`) ?? ``);
 };
 
-/* The browser's own rich-text editing, refused at the door. `formatBold` and friends would wrap a `<b>` around
- * the selection, which says nothing about the file: bold here is two asterisks, and the way to type them is to
- * type them. Refusing the intent is clearer than letting it apply and vanish on the next rebuild. */
+/* Two things the browser must not do here, refused at the door.
+ *
+ * `formatBold` and friends would wrap a `<b>` around the selection, which says nothing this file can hold. The
+ * shortcuts are answered in `onKeydown` as the markdown they mean; this catches the other ways in, a context
+ * menu or a touch-keyboard's formatting bar.
+ *
+ * `historyUndo` and `historyRedo` are the browser reaching for a stack that this surface invalidated the moment
+ * it first rebuilt a block (see markdownHistory.ts). Letting it run would restore DOM the model knows nothing
+ * about. Ctrl+Z is handled in `onKeydown`; this covers the menu and the trackpad gesture. */
 const onBeforeInput = (event: InputEvent): void => {
     if (event.inputType.startsWith(`format`)) {
         event.preventDefault();
+        return;
+    }
+    if (event.inputType === `historyUndo` || event.inputType === `historyRedo`) {
+        event.preventDefault();
+        travel(event.inputType === `historyUndo` ? history.undo() : history.redo());
     }
 };
 
@@ -394,15 +563,18 @@ onMounted(() => {
         putCaret(caretAt);
     }
     markActive();
+    history.reset({ text: source, caret: caretAt ?? 0 });
 });
 
 // A new document (a different file, a reload from disk) replaces what is on screen; the surface's own edits come
-// back through `change` and must never round-trip, so an unchanged text is ignored.
+// back through `change` and must never round-trip, so an unchanged text is ignored. History starts again with it:
+// undoing past a file you did not edit into one you did is not something anyone means by Ctrl+Z.
 watch(
     () => source,
     (next) => {
         if (next !== text()) {
             render(next);
+            history.reset({ text: next, caret: 0 });
         }
     },
 );
