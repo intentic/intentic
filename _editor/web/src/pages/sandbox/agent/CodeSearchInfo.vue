@@ -19,6 +19,12 @@ const MAP_COMPARISON = [
     [`Where it looks first`, `The top, then downwards`, `The project it was opened in`],
     [`When you rename a folder`, `Old notes keep naming the old one`, `Read again next conversation`],
 ];
+
+const SHADOW_COMPARISON = [
+    [`Reading a Word file or PDF`, `Parsed mid-task, every time it's needed`, `The text version already exists`],
+    [`A scanned PDF or a photo`, `An empty or failed read`, `A note saying exactly what's missing and why`],
+    [`When a document changes`, `Stale knowledge until someone re-reads it`, `Re-rendered in the background as it lands`],
+];
 </script>
 
 <template>
@@ -77,5 +83,26 @@ const MAP_COMPARISON = [
                 isn't there any more. Sent once per conversation, and you can read exactly what was sent: it appears above your first message.
             </p>
         </div>
+
+        <!-- ③ Document shadows, one step before either of the above: the files no text search can see into.
+             The two things worth being precise about: it never invents content (a scan or a photo says what
+             was NOT generated, rather than pretending), and the switch governs only the background pass — the
+             reader itself is always there. -->
+        <h3 class="mt-5 text-xs font-semibold uppercase tracking-wide text-subtle">Document shadows</h3>
+        <p class="mt-1.5 text-2xs text-muted">
+            Some files in a workspace aren't text: Word documents, spreadsheets, slide decks, PDFs, images, recordings. With this on, the sandbox
+            keeps a plain-text rendering of each one — made in the background the moment a file lands or changes, so the assistant reads a page of
+            markdown instead of parsing a binary file mid-task.
+        </p>
+        <InfoTable class="mt-2" :headers="[``, `Off: parsed on demand`, `On: shadowed as files land`]" :rows="SHADOW_COMPARISON" />
+        <p class="mt-1.5 text-2xs text-subtle">
+            Nothing is invented. What a rendering can't contain without a model — the text of a scanned page, a description of a photo, a transcript
+            of a recording — is named as not generated, so an empty shadow can never pass for an empty file. The renderings live in the sandbox's own
+            cache, never in your project, and are rebuilt rather than exported.
+        </p>
+        <p class="mt-1.5 text-2xs text-subtle">
+            Off, the assistant can still read these formats — it just pays for the conversion at the moment it needs the file. The switch only decides
+            whether the sandbox spends background effort keeping the shadows current.
+        </p>
     </InfoDialog>
 </template>

@@ -22,6 +22,11 @@ The interesting decisions:
   complete one is the failure mode the output format exists to prevent.
 - **One cache, raw HTML.** Fetches are cached by (URL, render mode) for 15 minutes, before any transform, so
   every mode reuses one fetch and parallel subagents researching the same site stop paying the network twice.
+- **Neutralized in the bytes.** Every page's markdown passes `neutralizeOutsideText`
+  (`@intentic/base/outside-text`) before it is printed or saved: a forged `</untrusted-content>` or
+  `<system-reminder>` in a page must die in the saved file itself, because a later `Read` of that file gets no
+  envelope from the daemon. Same neutralizer as the daemon's seams and fileq's sidecars — one implementation,
+  or the copies drift and the drift is a working forgery.
 - **Crawls are polite by default.** robots.txt is parsed with Google's longest-match semantics and obeyed
   (`--ignore-robots` is an explicit responsibility transfer), crawl-delay is honored (capped), crawls stay on
   the start origin, and a `--query` makes the frontier best-first: links whose anchor text shares words with
@@ -41,8 +46,9 @@ The interesting decisions:
 The sandbox image bakes the CLI onto `PATH` out of the daemon's own dependency tree (the `lsp`/`iq`
 precedent in `_sandbox/sandbox/Dockerfile`), and ships [plugin/](plugin) — a skill teaching agents when to
 prefer `webq` over `WebFetch` (JS pages, whole-docs-site reads, repeated fetches) and when not to (one-off
-simple pages, anything needing sign-in, which belongs to the browser tools). The package is otherwise a
-dependency island: nothing in the daemon imports it.
+simple pages, anything needing sign-in, which belongs to the browser tools). Nothing in the daemon imports
+it, but it is no longer a pure island: `@intentic/fileq` imports the DOM → markdown writer (`./markdown`,
+`./dom` subpath exports) so workspace documents and fetched pages read by the same conventions.
 
 ## Conventions & gotchas
 

@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/__fixtures__/**"],
+    "references": [
+        { "path": "../../_tools/base" },
+        { "path": "../../_tools/constants" },
+        { "path": "../webq" },
+        { "path": "../workspace-ignore" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

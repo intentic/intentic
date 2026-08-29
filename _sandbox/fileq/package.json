@@ -1,0 +1,62 @@
+{
+    "name": "@intentic/fileq",
+    "version": "0.0.0",
+    "description": "fileq, agent-native file reading: any binary workspace file (docx, xlsx, pptx, pdf, images, audio) as clean budgeted markdown, kept fresh as sidecars the moment files land",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/fileq"
+    },
+    "files": [
+        "dist",
+        "src"
+    ],
+    "bin": {
+        "fileq": "./dist/cli.js"
+    },
+    "exports": {
+        "./formats": {
+            "types": "./dist/lib/formats.d.ts",
+            "import": {
+                "@intentic/src": "./src/lib/formats.ts",
+                "default": "./dist/lib/formats.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lib/formats.ts",
+                "default": "./dist/lib/formats.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@intentic/webq": "workspace:*",
+        "@intentic/workspace-ignore": "workspace:*",
+        "@stricli/core": "catalog:",
+        "exceljs": "catalog:",
+        "exifr": "catalog:",
+        "fflate": "catalog:",
+        "file-type": "catalog:",
+        "image-size": "catalog:",
+        "mammoth": "catalog:",
+        "music-metadata": "catalog:",
+        "tslib": "catalog:",
+        "unpdf": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

@@ -5,7 +5,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
 import { createRequest, resolveRequest } from "../agent/agent-requests.js";
-import { wrapOutsideContent } from "../guard/outside-content.js";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { captureScrollback } from "./terminal-session.js";
 

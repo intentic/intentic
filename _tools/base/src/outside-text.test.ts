@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { NEUTRALIZED, neutralizeOutsideText, wrapOutsideContent } from "./outside-content.js";
+import { NEUTRALIZED, neutralizeOutsideText, wrapOutsideContent } from "./outside-text.js";
 
 describe("wrapOutsideContent", () => {
     test("seals both ends with one fresh id, and the body rides byte-identical when clean", () => {

@@ -6,7 +6,7 @@ import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-trans
 import type { Services } from "../composition.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
-import { wrapOutsideContent } from "../guard/outside-content.js";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending } from "../push/notifications.js";
 import { threadKey } from "../sessions/thread-sessions.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";

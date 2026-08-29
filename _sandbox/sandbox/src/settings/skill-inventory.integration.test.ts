@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Capability, Persona, SandboxSettings, SkillSummary } from "@intentic/sandbox-contract";
@@ -28,6 +28,9 @@ const stubServices = (root: string, capabilities: readonly Capability[], setting
                 await mkdir(dirname(path), { recursive: true });
                 await writeFile(path, content);
             },
+            // Reconcile removes every baked skill the enabled list omits, so any test that reconciles a
+            // partial list exercises the remove path for the other baked tools (fileq, since it joined lsp).
+            remove: (path) => rm(path, { recursive: true, force: true }),
         }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => settings }),

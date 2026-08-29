@@ -5,7 +5,7 @@ import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerFrom, tokenEquals } from "../auth/auth.js";
-import { wrapOutsideContent } from "../guard/outside-content.js";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { WebExtClient } from "./webext-hub.js";
 import { importBrowserSession } from "./session-import.js";
 
@@ -31,7 +31,7 @@ const AUTH_DEADLINE_MS = 10_000;
  * connected computer answers with its own filesystem and its own commands: material the owner put there. A
  * connected browser answers with WEBSITES, which is the single largest supply of text written specifically to
  * be read by a model and act on it. So page-derived text is wrapped in the same envelope the Front Desk and
- * the listeners use (guard/outside-content.ts), and it is done HERE rather than in the extension so that an
+ * the listeners use (base's outside-text.ts), and it is done HERE rather than in the extension so that an
  * old, un-updated or tampered extension build cannot deliver unsealed page text into a turn.
  *
  * Note what is not on the list: `tabs`. A tab's title and URL are page-controlled strings, and a title is the

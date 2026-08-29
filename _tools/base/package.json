@@ -39,6 +39,17 @@
                 "default": "./dist/lifecycle.js"
             }
         },
+        "./outside-text": {
+            "types": "./dist/outside-text.d.ts",
+            "import": {
+                "@intentic/src": "./src/outside-text.ts",
+                "default": "./dist/outside-text.js"
+            },
+            "require": {
+                "@intentic/src": "./src/outside-text.ts",
+                "default": "./dist/outside-text.js"
+            }
+        },
         "./async": {
             "types": "./dist/async.d.ts",
             "import": {

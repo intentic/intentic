@@ -1246,6 +1246,36 @@
       "to": "_tools/tsconfig"
     },
     {
+      "dev": false,
+      "from": "_sandbox/fileq",
+      "to": "_sandbox/webq"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/fileq",
+      "to": "_sandbox/workspace-ignore"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/fileq",
+      "to": "_tools/base"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/fileq",
+      "to": "_tools/constants"
+    },
+    {
+      "dev": true,
+      "from": "_sandbox/fileq",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_sandbox/fileq",
+      "to": "_tools/tsconfig"
+    },
+    {
       "dev": true,
       "from": "_sandbox/gate",
       "to": "_sandbox/sandbox-contract"
@@ -1319,6 +1349,11 @@
       "dev": false,
       "from": "_sandbox/sandbox",
       "to": "_sandbox/extension-manifest"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/sandbox",
+      "to": "_sandbox/fileq"
     },
     {
       "dev": false,
@@ -1524,6 +1559,11 @@
       "dev": true,
       "from": "_sandbox/webchat-widget",
       "to": "_tools/tsconfig"
+    },
+    {
+      "dev": false,
+      "from": "_sandbox/webq",
+      "to": "_tools/base"
     },
     {
       "dev": true,
@@ -2011,7 +2051,7 @@
           "what": ": installing as a background agent, per platform."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "computers",
       "dir": "_computers/host",
       "files": 29,
@@ -2019,10 +2059,9 @@
       "loc": 3509,
       "name": "@intentic/host",
       "oneLiner": "The small program on your own computer that lets your sandbox work there.",
-      "readmeRev": "19ee6b6fbd1b53e34bf14239a909b8999ee4d4a9",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787687089000
+      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
+      "stale": false,
+      "updatedAt": 1788007409000
     },
     {
       "anchors": [
@@ -2059,9 +2098,9 @@
       "loc": 1933,
       "name": "@intentic/local-agent",
       "oneLiner": "The plumbing every intentic CLI that lives on a user's own computer needs, and none of what any of them does.",
-      "readmeRev": "db57ecb051bc6afe447c2893c15c3739ba20f40b",
+      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
       "stale": false,
-      "updatedAt": 1788001986000
+      "updatedAt": 1788007409000
     },
     {
       "anchors": [
@@ -2088,19 +2127,31 @@
         {
           "path": "_computers/webext/static/manifest.json",
           "what": ": four permissions, one optional host pattern, one content script."
+        },
+        {
+          "path": "_computers/webext/scripts/pack.mjs",
+          "what": ": dist/ as one zip, written by hand because the CI image has no zip."
+        },
+        {
+          "path": "_computers/webext/scripts/render-icons.mjs",
+          "what": ": the four PNGs, read out of the site's lotus rather than redrawn."
+        },
+        {
+          "path": "_computers/webext/scripts/render-store-assets.mjs",
+          "what": ": the mandatory promotional tile, from that same lotus."
         }
       ],
       "behind": 0,
       "component": "computers",
       "dir": "_computers/webext",
-      "files": 21,
+      "files": 26,
       "hasTests": true,
-      "loc": 2622,
+      "loc": 3113,
       "name": "@intentic/webext",
       "oneLiner": "The browser extension that lets your sandbox work in the browser you are already signed into, on the sites you allow, while you watch it happen.",
-      "readmeRev": "5c115465dce6964a736c16777cca80d92a1bbcce",
+      "readmeRev": "d5e3dba494f5d08539596d9faa6aaa2b050e14e8",
       "stale": false,
-      "updatedAt": 1787999549000
+      "updatedAt": 1788007632000
     },
     {
       "anchors": [
@@ -2120,9 +2171,9 @@
       "hasTests": false,
       "loc": 331,
       "oneLiner": "The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.",
-      "readmeRev": "",
+      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
       "stale": false,
-      "updatedAt": 0
+      "updatedAt": 1788007409000
     },
     {
       "anchors": [
@@ -2419,7 +2470,7 @@
     },
     {
       "anchors": [],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/desktop-app",
       "files": 14,
@@ -2428,7 +2479,8 @@
       "name": "@intentic/desktop-app",
       "oneLiner": "The no-terminal way to run an intentic sandbox on your own computer.",
       "readmeRev": "19ee6b6fbd1b53e34bf14239a909b8999ee4d4a9",
-      "stale": false,
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
       "updatedAt": 1787687089000
     },
     {
@@ -2450,14 +2502,14 @@
           "what": ": the Rust dependencies."
         }
       ],
-      "behind": 12,
+      "behind": 13,
       "dir": "_editor/desktop-app/src-tauri",
       "files": 10,
       "hasTests": false,
       "loc": 4695,
       "oneLiner": "The Rust half of the desktop app: the native window, the tray, and the permissions the webview is allowed.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "12 commits have touched this package since its README was written",
+      "reason": "13 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2531,7 +2583,7 @@
         },
         {
           "path": "_editor/ui/src/markdown",
-          "what": ", the engine behind that surface, on the @intentic/ui/markdown subpath because it is plain TypeScript: render.ts (sanitize, the document's parts, and the streaming split), code.ts (fenced blocks), figures.ts (which fences are figures)."
+          "what": ", the engine behind that surface, on the @intentic/ui/markdown subpath because it is plain TypeScript: render.ts (sanitize, the document's parts, and the streaming split), code.ts (fenced blocks), figures.ts (which fences are figures), blocks.ts (where each block SITS in the source)."
         },
         {
           "path": "_editor/ui/src/lib",
@@ -2546,18 +2598,17 @@
           "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
         }
       ],
-      "behind": 3,
+      "behind": 0,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 141,
+      "files": 142,
       "hasTests": false,
-      "loc": 15666,
+      "loc": 15841,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
-      "readmeRev": "b064b449d6df1952f7f0b6e25d77426b2088d528",
-      "reason": "3 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787691539000
+      "readmeRev": "537e0069b14489e6c02ab732b4b9597e568ed83b",
+      "stale": false,
+      "updatedAt": 1788007560000
     },
     {
       "anchors": [
@@ -2586,16 +2637,16 @@
           "what": ": the full route table."
         }
       ],
-      "behind": 5,
+      "behind": 9,
       "component": "editor",
       "dir": "_editor/web",
-      "files": 1008,
+      "files": 1015,
       "hasTests": true,
-      "loc": 171872,
+      "loc": 173368,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue), the platform's workspace UI.",
       "readmeRev": "5e1eb21003866cd32655803891462076c9ee3d68",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "9 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787956537000
     },
@@ -3874,6 +3925,46 @@
     {
       "anchors": [
         {
+          "path": "_sandbox/fileq/src/lib/derive.ts",
+          "what": "ensureSidecar, the one pipeline both commands and the daemon run: place, recognize, route, converge."
+        },
+        {
+          "path": "_sandbox/fileq/src/lib/sidecar.ts",
+          "what": "the shadow tree: paths, front matter, content-hash freshness, and the single neutralized writer."
+        },
+        {
+          "path": "_sandbox/fileq/src/lib/formats.ts",
+          "what": "what is derivable and how it is recognized (magic bytes first); the daemon imports this as its cheap pre-filter."
+        },
+        {
+          "path": "_sandbox/fileq/src/lib/derivers/deriver.ts",
+          "what": "the per-format contract, including the version stamp that re-derives stale shadows."
+        },
+        {
+          "path": "_sandbox/fileq/src/lib/sweep.ts",
+          "what": "the whole-workspace pass: converge every candidate, prune orphaned shadows."
+        },
+        {
+          "path": "_sandbox/fileq/src/cli.integration.test.ts",
+          "what": "the whole surface driven in-process against a temp workspace."
+        }
+      ],
+      "behind": 1,
+      "component": "sandbox",
+      "dir": "_sandbox/fileq",
+      "files": 26,
+      "hasTests": true,
+      "loc": 1626,
+      "name": "@intentic/fileq",
+      "oneLiner": "Agent-native file reading: any binary workspace file — docx, xlsx, pptx, pdf, images, audio — as clean, token-budgeted markdown, kept fresh as sidecars from the moment a file lands.",
+      "readmeRev": "374b3602ec0f493ddc036ad4b6163acc17c7ae27",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788008092000
+    },
+    {
+      "anchors": [
+        {
           "path": "_sandbox/gate/src/gate.ts",
           "what": ", everything the CLI decides, as pure functions: argument parsing, the dialled URL, the verdict reader, the exit mapping."
         },
@@ -4073,8 +4164,8 @@
           "what": ": the one gate every gated action consults (fail-closed); src/guard/actions.ts is the catalog of decisions, and src/guard/command-gate.ts is the one that can park a running turn on a card. WHAT a command is, as opposed to what may be done about it, lives one package out in"
         },
         {
-          "path": "_sandbox/sandbox/src/guard/outside-content.ts",
-          "what": ": the envelope around anything the owner did not"
+          "path": "_sandbox/sandbox/src/guard/outside-results.ts",
+          "what": ": the mid-turn half of the envelope around"
         },
         {
           "path": "_sandbox/sandbox/src/browser/session-store.ts",
@@ -4114,12 +4205,12 @@
       "dir": "_sandbox/sandbox",
       "files": 1043,
       "hasTests": true,
-      "loc": 185761,
+      "loc": 185773,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon, a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "7169c6bb8faae4be2214176b531053a3c22f9481",
+      "readmeRev": "7a87f50729f3e4184ef1ad84d8981864ba465c1a",
       "stale": false,
-      "updatedAt": 1788000181000
+      "updatedAt": 1788008099000
     },
     {
       "anchors": [
@@ -4128,8 +4219,8 @@
           "what": ": one contract per area. Start with agent.contract.ts and git.contract.ts."
         },
         {
-          "path": "_sandbox/sandbox-contract/src/schemas.ts",
-          "what": ": the shared shapes; the biggest file here, and the one most changes touch."
+          "path": "_sandbox/sandbox-contract/src/schemas",
+          "what": ": the wire shapes, one module per subject area, named to match the contract that"
         },
         {
           "path": "_sandbox/sandbox-contract/src/events.ts",
@@ -4172,18 +4263,18 @@
           "what": "and contract.lock.json: every exported"
         }
       ],
-      "behind": 15,
+      "behind": 1,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
-      "files": 123,
+      "files": 170,
       "hasTests": true,
-      "loc": 18091,
+      "loc": 28303,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
-      "readmeRev": "0eaceefabf0737aa67a64eb18d70a872fad49b3b",
-      "reason": "15 commits have touched this package since its README was written",
+      "readmeRev": "277218fa10de2e584bddc124d010079c3b091a39",
+      "reason": "1 commit has touched this package since its README was written",
       "stale": true,
-      "updatedAt": 1787691398000
+      "updatedAt": 1788007658000
     },
     {
       "anchors": [
@@ -4284,7 +4375,7 @@
           "what": ": the CLI surface a user actually types."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "component": "sandbox",
       "dir": "_sandbox/sync",
       "files": 26,
@@ -4292,10 +4383,9 @@
       "loc": 5437,
       "name": "@intentic/sync",
       "oneLiner": "Keeps a folder on your own computer in step with a sandbox, both ways, so you can use your own editor.",
-      "readmeRev": "93ebf7d804f8aa44fa0a453fa6eb4bc039d42d92",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787595065000
+      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
+      "stale": false,
+      "updatedAt": 1788007409000
     },
     {
       "anchors": [
@@ -4356,16 +4446,18 @@
           "what": "the whole surface driven against a loopback fixture site."
         }
       ],
-      "behind": 0,
+      "behind": 1,
+      "component": "sandbox",
       "dir": "_sandbox/webq",
       "files": 30,
       "hasTests": true,
-      "loc": 2533,
+      "loc": 2545,
       "name": "@intentic/webq",
       "oneLiner": "Agent-native web fetch: any URL as clean, token-budgeted markdown, and bounded same-site crawls, over one shared cache.",
-      "readmeRev": "b9d2c672f34f8fa653862e8b8a4d8cdc0a09306e",
-      "stale": false,
-      "updatedAt": 1787520219000
+      "readmeRev": "374b3602ec0f493ddc036ad4b6163acc17c7ae27",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788008092000
     },
     {
       "anchors": [
@@ -4522,16 +4614,16 @@
           "what": ": the node:sqlite index itself."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "search",
       "dir": "_search/iq-engine",
       "files": 93,
       "hasTests": true,
-      "loc": 9732,
+      "loc": 9731,
       "name": "@intentic/iq-engine",
       "oneLiner": "The search engine behind the iq CLI, and the heavy lib of the iq cluster.",
       "readmeRev": "e1177efbdce3587b11d466b0531ec1d8ff30a661",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306249000
     },
@@ -4743,7 +4835,7 @@
           "what": ": where the build-time integrations are wired in."
         }
       ],
-      "behind": 33,
+      "behind": 37,
       "component": "site",
       "dir": "_site/site",
       "files": 23,
@@ -4779,16 +4871,16 @@
           "what": ": the JSON-LD the site emits."
         }
       ],
-      "behind": 47,
+      "behind": 50,
       "component": "site",
       "dir": "_site/site-content",
       "files": 16,
       "hasTests": false,
-      "loc": 5073,
+      "loc": 5098,
       "name": "@intentic-dev/site-content",
       "oneLiner": "Every word on the public website, as data.",
       "readmeRev": "c2d00e1936cbb180ca54de8c73690c3b7fe9c17b",
-      "reason": "47 commits have touched this package since its README was written",
+      "reason": "50 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1786488806000
     },
@@ -4815,17 +4907,16 @@
           "what": ": the Delayer/Coalescer distinction pinned as behaviour."
         }
       ],
-      "behind": 1,
+      "behind": 0,
       "dir": "_tools/base",
-      "files": 7,
+      "files": 9,
       "hasTests": true,
-      "loc": 1160,
+      "loc": 1510,
       "name": "@intentic/base",
-      "oneLiner": "The runtime primitives every tier shares: the when condition language, disposal, and the async schedulers.",
-      "readmeRev": "bde9ea814cab4a99d31c139be638825dba2eb13d",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1787306252000
+      "oneLiner": "The runtime primitives every tier shares: the when condition language, disposal, the async schedulers, and the outside-text neutralizer.",
+      "readmeRev": "374b3602ec0f493ddc036ad4b6163acc17c7ae27",
+      "stale": false,
+      "updatedAt": 1788008092000
     },
     {
       "anchors": [
@@ -5301,7 +5392,7 @@
       "updatedAt": 1787306252000
     }
   ],
-  "generatedAt": 1788004520838,
+  "generatedAt": 1788008127421,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

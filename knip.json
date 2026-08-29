@@ -50,6 +50,9 @@
         "_sandbox/webq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
         },
+        "_sandbox/fileq": {
+            "entry": ["src/cli.ts", "src/**/*.test.ts"]
+        },
         "_deploy/cli": {
             "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },

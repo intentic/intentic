@@ -1,12 +1,15 @@
 # @intentic/base
 
-The runtime primitives every tier shares: the `when` condition language, disposal, and the async schedulers.
+The runtime primitives every tier shares: the `when` condition language, disposal, the async schedulers, and
+the outside-text neutralizer.
 
-Nothing in here knows what this product is. That is the point: each of the three modules replaced a decision
+Almost nothing in here knows what this product is. That is the point: each module replaced a decision
 that had been made independently, and differently, in the daemon and in the web app, where the copies could
-only ever drift apart. There is no barrel export: a consumer imports the module it needs
-(`@intentic/base/when`), because these three have nothing to do with each other and a package that offers them
-as one thing invites being treated as a junk drawer.
+only ever drift apart. `outside-text` is the one deliberate exception — it IS product vocabulary (the
+untrusted-content envelope), and it sits here precisely because three separate writers (the daemon's seams,
+webq's saved pages, fileq's sidecars) must speak it byte-identically. There is no barrel export: a consumer
+imports the module it needs (`@intentic/base/when`), because these modules have nothing to do with each other
+and a package that offers them as one thing invites being treated as a junk drawer.
 
 ## Responsibilities
 
@@ -17,6 +20,11 @@ as one thing invites being treated as a junk drawer.
 - **`lifecycle`**: teardown as structure rather than as a list somebody maintains. A store is registered into
   where things are created and disposed once; it keeps going past a member that throws and reports the failures
   together, so one bad stop cannot strand the ports and child processes queued behind it.
+- **`outside-text`**: the untrusted-content envelope (`wrapOutsideContent`) and the marker neutralizer
+  (`neutralizeOutsideText`) that makes it trustworthy: envelope forgeries, harness control tags and model
+  reserved tokens are folded (homoglyphs, zero-width characters) and replaced before content is sealed or
+  written to disk. Shared because the daemon's seams, webq's saved pages and fileq's derived sidecars must all
+  neutralize identically — a drifted copy is a working forgery.
 - **`async`**: the four shapes of "don't do that again yet", named so the choice between them is visible:
   `Delayer` restarts its clock on every call, `Coalescer` opens a window on the first call and lets later ones
   join it, `SingleFlight` shares one run per key among concurrent callers, and `retry` is the loop with the

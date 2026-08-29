@@ -501,7 +501,7 @@ const STATE_FILES = [
     {
         path: ".intentic/local/cache/",
         invalidates: [],
-        why: "Rebuildable indexes and caches, the iq index and its vector sidecar, the whisper model; ignored by the watcher and recreated from carried workspace content.",
+        why: "Rebuildable indexes and caches, the iq index and its vector sidecar, the whisper model, fileq's derived/ markdown shadows of binary files; ignored by the watcher and recreated from carried workspace content.",
         portability: "derived",
     },
     /* Connector and extension scratch, one directory per extension under runtime/extensions/<id>

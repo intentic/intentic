@@ -1,7 +1,7 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { classifyCommand } from "@intentic/sandbox-contract";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
-import { wrapOutsideContent } from "./outside-content.js";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 
 /* WRAPPING WHAT THE AGENT PULLS IN MID-TURN, the second seam, beside the one that wraps a stranger's message
  * at turn birth (automations/scheduler.ts). Same envelope, same reason; the difference is only that nobody

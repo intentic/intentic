@@ -239,6 +239,10 @@ export const SkillRemoveSchema = z.object({
 //   workspaceMap     , computes an AREA index of the project a run starts in and prepends it to the
 //                        conversation's opening message, so the turn does not have to buy its own orientation
 //                        with a directory listing. Generated from the filesystem every time, never stored.
+//   sidecars         , the background pass converging a markdown shadow of every binary workspace file
+//                        (docx/pdf/images/audio → .intentic/local/cache/derived/) the moment it lands, via
+//                        the baked fileq CLI, so reasoning-time reads are pre-derived. The CLI itself is
+//                        always available; this gates only the eager watcher-driven derivation.
 //   outputCleaners   , the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled,
 //                        "" = all cleaners on (default), else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
@@ -272,7 +276,7 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
         ),
-    skills: z.array(z.string()).default(["lsp"]).describe("Which skills are switched on."),
+    skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which skills are switched on."),
     hashlineEdits: z
         .boolean()
         .default(false)
@@ -361,6 +365,18 @@ export const SandboxSettingsSchema = z.object({
         .default(false)
         .describe(
             "Open every conversation with a map of the project it starts in: what is in it, what each part is for, and where the agent is standing. Worked out fresh each time rather than written down anywhere, because a written layout is wrong within a fortnight. Off by default, since it spends tokens on the first message of every conversation.",
+        ),
+    /* THE MARKDOWN SHADOWS OF BINARY FILES, the eager half of fileq (_sandbox/fileq). The lazy half — the
+     * `fileq` CLI an agent runs mid-task — is always on PATH and gated only by its skill; this switch is
+     * about the BACKGROUND pass: the daemon watching /work and converging a sidecar under
+     * .intentic/local/cache/derived/ for every docx/xlsx/pptx/pdf/image/audio file the moment it lands or
+     * changes, so reasoning-time reads hit a shadow that already exists. Off by default like every boolean
+     * here: it spends CPU unasked, on every file that lands, which is the owner's call to make. */
+    sidecars: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Keep an up-to-date markdown rendering of every document, image and audio file in the workspace, made in the background as files land, so the agent reads a pre-derived text instead of paying to parse the file mid-task. Costs background CPU on a document-heavy workspace, so it is a switch rather than a default.",
         ),
     outputCleaners: z
         .string()

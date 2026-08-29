@@ -4,6 +4,7 @@
  * the bytes came from, what the pruner removed, what a query filter kept, and every degradation (byte cap
  * hit, JS page with no browser in the image) as a note the capsule prints — a silent fallback reads as
  * "that was the whole page" to an agent, which is a lie with consequences. */
+import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { bm25Rank } from "./bm25.js";
 import { chromiumAvailable, renderPage } from "./browser.js";
 import { cacheRead, cacheWrite, DEFAULT_MAX_AGE_S, type RenderMode } from "./cache.js";
@@ -63,7 +64,7 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
             finalUrl,
             status,
             contentType,
-            markdown: nonHtmlMarkdown(acquired.rawBody, contentType, notes),
+            markdown: neutralizeOutsideText(nonHtmlMarkdown(acquired.rawBody, contentType, notes)),
             meta: { title: url, description: undefined, lang: undefined },
             links: [],
             source,
@@ -73,8 +74,14 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
     }
 
     // Meta and links come off the tree BEFORE pruning mutates it: navigation is chrome to the reader but
-    // structure to the crawler.
-    const meta = metaOf(doc);
+    // structure to the crawler. Title and description are neutralized with the body below — both land in
+    // saved front matter and crawl indexes, which are files a later `Read` serves unwrapped.
+    const rawMeta = metaOf(doc);
+    const meta: PageMeta = {
+        title: neutralizeOutsideText(rawMeta.title),
+        description: rawMeta.description === undefined ? undefined : neutralizeOutsideText(rawMeta.description),
+        lang: rawMeta.lang,
+    };
     const links = extractLinks(doc, finalUrl);
 
     let prunedShare: number | undefined;
@@ -84,7 +91,12 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
     if (body !== undefined && options.query !== undefined && options.query !== "") {
         notes.push(applyQueryFilter(body, options.query));
     }
-    const markdown = body === undefined ? "" : renderMarkdown(body, { baseUrl: finalUrl });
+    /* Neutralized HERE, at the one point every command's markdown passes through, because the page's bytes are
+     * the internet's: printed to stdout they ride inside the daemon's untrusted-content envelope (the Bash
+     * seam wraps network commands), but the SAVED file is read back later by a plain `Read`, which wraps
+     * nothing — so a forged envelope marker or a `<system-reminder>` in the page has to die in the bytes
+     * themselves. Idempotent, so the stdout copy being wrapped again upstream costs nothing. */
+    const markdown = body === undefined ? "" : neutralizeOutsideText(renderMarkdown(body, { baseUrl: finalUrl }));
     return { url, finalUrl, status, contentType, markdown, meta, links, source, prunedShare, notes };
 };
 

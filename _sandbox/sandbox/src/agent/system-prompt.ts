@@ -184,7 +184,7 @@ const SECRETS_GUIDANCE =
     "the names that do. In files you write, keep the reference, never a raw value, and never ask the user to " +
     "paste one into chat.";
 
-/* The outside-content envelope language (guard/outside-content.ts and the seams that wrap with it). One
+/* The outside-content envelope language (base's outside-text.ts and the seams that wrap with it). One
  * stable paragraph for the same reason the secrets language is one: the model SEES the tags on every stranger
  * message, fetched page and foreign tool result, and has to know what they assert, repeating a warning per
  * wrap costs a sermon per page and trains the reader to skim it. The id rule is stated because it is the part

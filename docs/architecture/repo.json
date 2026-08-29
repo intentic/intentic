@@ -15,6 +15,7 @@
             "packages": [
                 "_sandbox/acp-bridge",
                 "_sandbox/extension-api",
+                "_sandbox/fileq",
                 "_sandbox/ic",
                 "_sandbox/registry",
                 "_sandbox/sandbox",
@@ -23,6 +24,7 @@
                 "_sandbox/scaffold",
                 "_sandbox/sync",
                 "_sandbox/webchat-widget",
+                "_sandbox/webq",
                 "_sandbox/workspace-ignore",
                 "_sandbox/workspace-setup"
             ]

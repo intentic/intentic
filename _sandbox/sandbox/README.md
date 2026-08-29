@@ -148,7 +148,7 @@ reports the profile.
   so a destructive command sent to somebody's own laptop needs that computer's `destructive` switch, which is
   off until they turn it on. The sandbox can afford to hold only what nothing undoes because the container is
   disposable; a laptop has no image to be recreated from, and the two defaults differ for exactly that reason.
-- Tell the agent which words are not the owner's, and act on it (src/guard/outside-content.ts). Everything that
+- Tell the agent which words are not the owner's, and act on it (@intentic/base's outside-text). Everything that
   arrives from outside the workspace: a stranger's listener or Front Desk message, a fetched page, a foreign MCP
   server's answer, the output of a shell command that reached the internet: is wrapped in an
   `<untrusted-content>` envelope whose id is minted per wrap, so content can never close its own envelope and
@@ -352,7 +352,11 @@ reports the profile.
   [src/system/runtime-watch.ts](src/system/runtime-watch.ts): everything that is RUNNING rather than written:
   tmux sessions, panel dev servers, listening sockets, the agent's browsers and its subagents. The first three
   start from a file; the fourth cannot, which is why it is half announcements from the subsystems that do the
-  thing and half one shared sampler that runs only while a browser is connected.
+  thing and half one shared sampler that runs only while a browser is connected. The file feed has one more
+  subscriber than the browser: [src/derived/sidecar-service.ts](src/derived/sidecar-service.ts), which spawns
+  the baked `fileq` CLI (`_sandbox/fileq`) to keep a markdown shadow of every binary workspace file (docx,
+  pdf, images, audio) converged under `.intentic/local/cache/derived/` — gated by the `sidecars` setting,
+  serialized to one child at a time, and sweeping the whole tree when the setting flips on.
 - [src/hosts](src/hosts), the user's own computers: the socket each one holds open, the Computers view's data
   (`machine-reports.ts`), and `host-seed.ts`: the card the setup flow creates for the machine that installed
   this sandbox, granted its sandboxes and nothing else. Acting on one of those sandboxes STREAMS, because the
@@ -389,13 +393,13 @@ reports the profile.
   drift about what counts as a recursive delete. It is regex over shell text and says so: friction for
   well-behaved work, never the boundary for a hostile one, which stays structural (the container, the
   worktree, the land gate, an automation's tool allowlist).
-- [src/guard/outside-content.ts](src/guard/outside-content.ts): the envelope around anything the owner did not
-  write, and the neutralizer that keeps content from forging one. Two seams apply it: a stranger's message at
-  turn birth (src/automations/scheduler.ts) and everything the agent pulls in mid-turn
-  ([src/guard/outside-results.ts](src/guard/outside-results.ts), which wraps every MCP server except the
-  daemon's own control servers: an exception list a conformance test pins, so a server added without a
-  decision fails the suite). [src/guard/turn-taint.ts](src/guard/turn-taint.ts) is the one-way bit the wrapping
-  sets and the command gate reads.
+- [src/guard/outside-results.ts](src/guard/outside-results.ts): the mid-turn half of the envelope around
+  anything the owner did not write — it wraps every MCP server except the daemon's own control servers (an
+  exception list a conformance test pins, so a server added without a decision fails the suite); the other
+  seam is a stranger's message at turn birth (src/automations/scheduler.ts). The envelope and its neutralizer
+  themselves live in `@intentic/base/outside-text`, shared with webq's saved pages and fileq's sidecars, which
+  must neutralize identically. [src/guard/turn-taint.ts](src/guard/turn-taint.ts) is the one-way bit the
+  wrapping sets and the command gate reads.
 - [src/browser/session-store.ts](src/browser/session-store.ts): whose browser an account lives in. An
   IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
   accounts born from it share that browser: which is what makes a site's "Continue with Google" one click:

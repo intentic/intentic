@@ -80,6 +80,7 @@ import { startVersionCheck } from "./platform/version-check.js";
 import { recordNewestRun } from "./store/newest-run.js";
 import { startReleaseNotesCheck } from "./platform/release-notes.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
+import { startSidecarService } from "./derived/sidecar-service.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
 import { startRefWatch } from "./git/ref-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
@@ -1185,6 +1186,16 @@ const main = async (): Promise<void> => {
             services.extensionBackend.restart();
         }
     });
+    /* The markdown shadows of binary files converge on the same stream: a docx/pdf/image/audio file that
+     * lands or changes gets its sidecar re-derived by a spawned `fileq`, so a later read is pre-parsed.
+     * Gated per-run by the `sidecars` setting (read fresh each pass, so the switch works without a restart);
+     * spelled like the other sweeps here rather than composed, it holds no state a route reads. */
+    shutdown.push(
+        startSidecarService(
+            { enabled: async () => (await services.sandboxSettings.get()).sidecars, logger },
+            subscribeWorkspaceChanges,
+        ),
+    );
     // Repo-set change push riding the same watcher: a repo cloned/deleted anywhere under /work re-frames the
     // discovered repo list on /events (the watcher itself never sees .git paths).
     startRepoWatch(services.workspace.root, logger);

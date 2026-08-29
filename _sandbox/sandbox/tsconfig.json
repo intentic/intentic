@@ -19,6 +19,7 @@
         { "path": "../../_sandbox/registry" },
         { "path": "../../_sandbox/scaffold" },
         { "path": "../../_deploy/sdk" },
+        { "path": "../../_sandbox/fileq" },
         { "path": "../../_tools/constants" }
     ],
     "extends": "@intentic/tsconfig/tsconfig.base.json"

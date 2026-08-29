@@ -48,9 +48,41 @@ Both verbs refuse rather than guess: when a file's tsconfig or type foundations 
 Notes: TypeScript/JavaScript only. Pass workspace paths.
 `;
 
+export const FILEQ_SKILL = `---
+name: fileq
+description: Read binary workspace files (docx, xlsx, pptx, pdf, images, audio) as clean budgeted markdown with the \`fileq\` CLI. Use whenever a task needs the contents of an office document, the text layer of a PDF, or the metadata of an image or recording — instead of guessing from the filename or shelling out to ad-hoc converters.
+---
+
+# fileq: binary files as markdown
+
+The \`fileq\` CLI (on PATH) turns the workspace files you cannot open as text into markdown, and keeps a
+sidecar copy fresh so reading twice derives once.
+
+## Read a file
+\`fileq <file>\` (or \`fileq read <file> --budget 8000\`)
+- Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the sidecar path
+  carrying the whole thing. Over budget, the cut is announced with that exact path to Read.
+- Formats: docx, xlsx (capped tables), pptx (slides + speaker notes), pdf (text layer), png/jpg/gif/webp
+  (dimensions + EXIF), mp3/wav/flac/mp4/… (duration + tags), html.
+
+## Check the sidecar first
+A file may already have a shadow at \`.intentic/local/cache/derived/<path>.md\` — front matter says which
+source hash it was derived from. \`fileq read\` checks freshness for you, so prefer it over trusting a
+shadow's age by eye.
+
+## What it refuses, and why
+- A scanned PDF answers "no usable text layer … OCR is not part of this tier" rather than an empty page;
+  images say "no visual description". Treat those notes as "not generated", never as "nothing there".
+- Plain text (md, csv, txt, code) is not fileq's business: Read it directly.
+- Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
+
+Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
+`;
+
 // skill name → SKILL.md body. The settings `skills` array selects which of these are written to disk.
 const SKILLS: Record<string, string> = {
     lsp: LSP_SKILL,
+    fileq: FILEQ_SKILL,
 };
 
 // The baked tools this image can teach the agent about, whether or not they are currently on, what the Skills

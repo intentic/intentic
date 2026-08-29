@@ -346,6 +346,13 @@ RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
 # notice when this image doesn't carry it. Same chmod-as-existence-check rationale.
 RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
     && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq
+# The fileq CLI on PATH — the agent's binary-file reader (docx/xlsx/pptx/pdf/images/audio → clean budgeted
+# markdown, with content-hash-fresh sidecars under .intentic/local/cache/derived/). Symlinked out of the
+# daemon's tree exactly like lsp, iq and webq above: @intentic/fileq is a dependency of @intentic/sandbox, and
+# the daemon's sidecar service (src/derived/) spawns this very binary for the background pass the `sidecars`
+# setting gates. The skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
 # packs/codex.Dockerfile): prepare-image-trees.sh prunes the ~350 MiB @openai/codex platform package OUT of the
 # daemon tree, so the pack's copy is the only one and the daemon directly spawns its app-server surface.

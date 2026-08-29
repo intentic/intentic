@@ -10,10 +10,35 @@
         "directory": "_sandbox/webq"
     },
     "files": [
-        "dist"
+        "dist",
+        "src"
     ],
     "bin": {
         "webq": "./dist/cli.js"
+    },
+    "exports": {
+        "./markdown": {
+            "types": "./dist/lib/markdown.d.ts",
+            "import": {
+                "@intentic/src": "./src/lib/markdown.ts",
+                "default": "./dist/lib/markdown.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lib/markdown.ts",
+                "default": "./dist/lib/markdown.js"
+            }
+        },
+        "./dom": {
+            "types": "./dist/lib/dom.d.ts",
+            "import": {
+                "@intentic/src": "./src/lib/dom.ts",
+                "default": "./dist/lib/dom.js"
+            },
+            "require": {
+                "@intentic/src": "./src/lib/dom.ts",
+                "default": "./dist/lib/dom.js"
+            }
+        }
     },
     "scripts": {
         "build": "tsgo",
@@ -23,6 +48,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@stricli/core": "catalog:",
         "parse5": "catalog:",
         "playwright": "catalog:",

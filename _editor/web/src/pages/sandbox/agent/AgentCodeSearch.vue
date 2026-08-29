@@ -9,12 +9,13 @@ import { verdictsOf } from "../savingsChart";
 import CodeSearchInfo from "./CodeSearchInfo.vue";
 import MeasurementPanel, { type PanelReading } from "./MeasurementPanel.vue";
 
-/* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Two settings that compose and are easy to confuse, which is
- * exactly why they share a group: the first teaches the assistant to search with iq instead of grep, the second
- * hands over the shape of the project before there is a question to ask.
+/* HOW THE ASSISTANT FINDS ITS WAY AROUND THE CODE. Three settings that compose and are easy to confuse, which
+ * is exactly why they share a group: the first teaches the assistant to search with iq instead of grep, the
+ * second hands over the shape of the project before there is a question to ask, the third keeps the files no
+ * search can see into (docx, pdf, images, audio) pre-rendered as text so both of the others reach them.
  *
- * Ordered by when each one happens: search on demand, and the map that comes before there is anything to
- * search for. */
+ * Ordered by when each one happens: search on demand, the map that comes before there is anything to search
+ * for, and the background pass that runs before either. */
 
 const { settings, patch } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -93,6 +94,20 @@ const searchReadings = computed<PanelReading[]>(() => {
                  few turns for a split to say anything before the layout it describes has changed. And nothing to
                  say in 11px text either; where the map lands and which project it follows are both facts about
                  the feature rather than about the click, and the (i) gives them a paragraph each. -->
+        </Row>
+
+        <!-- Document shadows: the background pass keeping every binary file (docx, pdf, images, audio)
+             pre-rendered as markdown the moment it lands, so a mid-task read costs a file open instead of a
+             parse. The fileq CLI itself is always available (its skill governs whether the assistant is told);
+             this switch is only about spending background CPU unasked, which is the owner's call. -->
+        <Row icon="file" title="Document shadows" description="Keep documents, images and audio pre-rendered as text, updated as files change.">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.sidecars ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ sidecars: value })"
+                />
+            </template>
         </Row>
     </RowGroup>
 </template>
