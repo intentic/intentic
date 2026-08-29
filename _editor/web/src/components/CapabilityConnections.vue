@@ -74,7 +74,7 @@ const emit = defineEmits<{ open: [cardId: string, connectionId: string] }>();
     <div class="flex flex-col gap-6">
         <!-- Grouped by category and counted, so this reads as the same page the catalog does: the rail points at
              the same ten headings either way. -->
-        <RowGroup v-for="group in groups" :key="group.label" density="compact" :label="group.label" :count="group.rows.length">
+        <RowGroup v-for="group in groups" :key="group.label" :label="group.label" :count="group.rows.length">
             <Row v-for="row in group.rows" :key="`${row.cardId}:${row.id}`" as="button" chevron @click="emit(`open`, row.cardId, row.id)">
                 <!-- 24 was this file's own number for "a row's mark", against 22 on the extensions, secrets,
                      environment and skills lists: near enough to look deliberate and far enough to be the drift

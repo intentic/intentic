@@ -292,11 +292,11 @@ const confirmRemove = async (): Promise<void> => {
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
         <!-- The empty state below is a real one: it explains what NOT having a persona costs, so it must not
              be shown to somebody who simply has not been told yet. The list's own shape stands in meanwhile. -->
-        <!-- `density="compact"` on the OUTLINE as well as on the list, because that is what it is an outline OF.
-             It used to be the group's only omission: the rows below arrive compact, the placeholder promised
-             comfortable ones, and the list visibly shrank as it landed. The group says it once now. -->
+        <!-- The outline is a <RowGroup> like the list it stands in for, so it lands on the same tier by
+             construction. It used to state its own: the rows arrived compact, the placeholder had promised
+             comfortable ones, and the list visibly shrank as it landed. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" density="compact" label="Your personas">
+            <RowGroup v-if="outline" label="Your personas">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading your sandbox's personas…</span>
                     <SkeletonRows :rows="2" description control />
@@ -329,7 +329,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else density="compact" label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
+            <RowGroup v-else label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"

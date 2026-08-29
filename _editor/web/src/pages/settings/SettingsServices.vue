@@ -234,12 +234,11 @@ const rotate = (slug: string) =>
                  gets: the admission rules, which are rendered from the platform's own numbers and are therefore
                  the one block guaranteed to land. Listings and the create form are withheld — most providers
                  have neither, and promising rows that never arrive is worse than promising nothing. -->
-            <!-- `density="compact"` on the outline because that is the tier of the group it promises (the
-                 admission rules): an outline that states a different height from the rows that land makes the
-                 list jump as it arrives, which is what this one did. -->
+            <!-- A <RowGroup> outline for a <RowGroup> of rows, so it promises the height that lands. It used to
+                 state a tier of its own and state it differently, and the list jumped as it arrived. -->
             <div class="flex flex-col gap-6" role="status" aria-busy="true">
                 <span class="sr-only">Reading your service listings…</span>
-                <RowGroup density="compact">
+                <RowGroup>
                     <template #label><span class="skeleton block h-2.5 w-40" aria-hidden="true" /></template>
                     <SkeletonRows :rows="4" :lead="false" description control />
                 </RowGroup>
@@ -297,7 +296,7 @@ const rotate = (slug: string) =>
                  The narrative first, then the thresholds as facts. Every figure below is the platform's. -->
             <!-- The thresholds are a record list: short lines of fact, read in bulk. The prose above them is a
                  note on the same surface, so it takes the group's tier rather than restating `px-4.5 py-3.5`. -->
-            <RowGroup density="compact" label="How admission works">
+            <RowGroup label="How admission works">
                 <RowNote>
                     No review queue. Prove your publisher name, connect payouts, and pass a health check: one signed call that succeeds, two bad ones
                     that fail. Pass and you're live on probation. Same five-minute timeout as a paid run, so slow endpoints take time.

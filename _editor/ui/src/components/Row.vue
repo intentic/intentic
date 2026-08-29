@@ -10,10 +10,11 @@
      its own hit area and tint. Splitting them is what lets this component state "facts are text-2xs text-subtle"
      once, instead of eleven callers spelling it out and drifting a shade apart.
 
-     DENSITY IS A TIER, NOT A CLASS OVERRIDE. Three of them, because the app had independently settled on three
-     and named none: settings rows breathe (`comfortable`), record lists are read in bulk (`compact`), and a
-     navigator rail is scanned (`dense`). A caller reaching for `py-2` by hand is the failure this replaces:
-     and the reason the record lists hand-rolled their rows even where this component was importable.
+     DENSITY IS A TIER, NOT A CLASS OVERRIDE, AND NOT A QUESTION THIS ROW ANSWERS. A caller reaching for `py-2`
+     by hand is the failure the tiers replace — and the reason record lists hand-rolled their rows even where
+     this component was importable. But the tiers were also, for a while, three labels a call site had to choose
+     between, and that produced its own drift: see <RowGroup>, which now answers it once for a whole list. What
+     is left here is the fallback for a row that is NOT in a list, which in practice means a card's masthead.
 
      `flush` DROPS THE PADDING, for the row whose container already owns it: the exact counterpart of
      <RowGroup>'s `flat`, and it is what lets a CARD'S MASTHEAD be this component. That masthead (an icon, an
@@ -61,12 +62,12 @@ const {
     interactive?: boolean;
     chevron?: boolean;
     tone?: RowTone;
-    /* comfortable: settings rows · compact: record lists · dense: navigator rails.
+    /* LEAVE IT UNSET. Inside a <RowGroup> the group publishes the tier and this row reads it, which is what
+     * stops a list drifting a row at a time; the group's own default is `compact`, because a group is a list.
      *
-     * LEAVE IT UNSET INSIDE A <RowGroup>: the group publishes its tier and this row reads it, which is what
-     * stops a list drifting a row at a time. Set it only where this row disagrees with the list it is on — a
-     * `flush :heading="2"` masthead above compact rows is comfortable by RANK, not by list. Outside a group it
-     * falls back to `comfortable`, which is what it always defaulted to. */
+     * Outside a group it falls back to `comfortable`, and that is the masthead's case: a `flush :heading="2"`
+     * <Row> on a card is not in a list, has to outrank the rows under it, and wants a glyph sized for an h2.
+     * Set it explicitly only for a row that genuinely disagrees with the surface it is on. */
     density?: RowDensity;
     /** Paints the app-wide selected tint. Implies `interactive`: a row you can pick is a row you can hover. */
     selected?: boolean;

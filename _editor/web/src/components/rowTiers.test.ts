@@ -9,6 +9,7 @@
 //
 // What is pinned is therefore the four things the drift was made of:
 //
+//   · a group with no `density` IS compact, and its rows take that — the standard, in one assertion;
 //   · a row with no `density` takes its group's, which is what the extensions list never did;
 //   · a <SkeletonRows> promises the height of the rows that land, which is what the personas, payouts and
 //     services outlines got wrong (the payouts one under a comment saying it could not happen);
@@ -29,7 +30,7 @@ afterEach(() => {
     }
 });
 
-/** Renders `children` inside a <RowGroup>, at `density` when one is given. */
+/** Renders `children` inside a <RowGroup>. Pass no density for the standard case: a group is compact. */
 const mount = async (density: `comfortable` | `compact` | `dense` | undefined, children: () => unknown): Promise<HTMLElement> => {
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -48,6 +49,29 @@ const padded = (host: HTMLElement, tier: `comfortable` | `compact` | `dense`): H
     return [...host.querySelectorAll<HTMLElement>(`[class*="${px}"]`)];
 };
 
+/* THE STANDARD, AS ONE ASSERTION. A <RowGroup> is a list and a list is compact, so a group that says nothing
+ * and a row that says nothing land on the compact tier together. This is what stopped the Sandbox hub changing
+ * row language as you tabbed through it: Personas at 14px/500 against Agent at 16px/600, decided by which file
+ * somebody had edited last. Asserted with NO density anywhere, because that is the case that used to be wrong. */
+it(`draws a group that states nothing, and the rows in it, at the compact tier`, async () => {
+    const host = await mount(undefined, () => h(Row, { title: `Quick model`, description: `Fast models for background tasks.` }));
+    const row = host.querySelector<HTMLElement>(`.group`);
+    expect(row?.className, `a group is a list, and a list is compact`).toContain(ROW_TIERS.compact.pad);
+    expect(row?.className).not.toContain(ROW_TIERS.comfortable.pad);
+});
+
+/* OUTSIDE A GROUP IT IS STILL `comfortable`, and that is the card MASTHEAD's tier rather than a leftover: a
+ * `flush :heading="2"` <Row> is not in a list, outranks the rows under it, and wants a glyph sized for an h2. */
+it(`leaves a row outside any group on comfortable, which is the masthead's tier`, async () => {
+    const host = document.createElement(`div`);
+    document.body.append(host);
+    const app = createApp({ render: () => h(Row, { title: `Environment`, icon: `box`, heading: 2 }) });
+    app.mount(host);
+    mounted.push({ app, host });
+    await nextTick();
+    expect(host.querySelector<HTMLElement>(`.group`)?.className).toContain(ROW_TIERS.comfortable.pad);
+});
+
 it(`gives a row with no density of its own the tier its group published`, async () => {
     const host = await mount(`compact`, () => h(Row, { title: `intentic.github` }));
     const row = host.querySelector<HTMLElement>(`.group`);
@@ -60,18 +84,6 @@ it(`gives a row with no density of its own the tier its group published`, async 
  * the rule tidier would take a whole shape with it. */
 it(`lets a row that states its own tier keep it, for the masthead that outranks its list`, async () => {
     const host = await mount(`compact`, () => h(Row, { title: `Move this sandbox`, density: `comfortable` }));
-    expect(host.querySelector<HTMLElement>(`.group`)?.className).toContain(ROW_TIERS.comfortable.pad);
-});
-
-// Outside a group nothing has published a tier, and a bare <Row> on a card is a settings row. This is the
-// behaviour every one of these components had before the group owned anything, and it must not have moved.
-it(`falls back to comfortable with no group above it`, async () => {
-    const host = document.createElement(`div`);
-    document.body.append(host);
-    const app = createApp({ render: () => h(Row, { title: `Theme` }) });
-    app.mount(host);
-    mounted.push({ app, host });
-    await nextTick();
     expect(host.querySelector<HTMLElement>(`.group`)?.className).toContain(ROW_TIERS.comfortable.pad);
 });
 

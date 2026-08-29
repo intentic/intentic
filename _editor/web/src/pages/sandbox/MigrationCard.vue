@@ -157,7 +157,7 @@ const cancel = (): Promise<void> =>
                      heard of their computers and no reason to think reading one was possible at all. A row
                      saying \"asleep, wake it and check again\" is not a dead-end offer; it is the difference
                      between a feature that is missing and one that is waiting. -->
-                <RowGroup v-if="hosts.length > 0" density="compact" flat label="Your computers">
+                <RowGroup v-if="hosts.length > 0" flat label="Your computers">
                     <Row
                         v-for="host in hosts"
                         :key="host.id"
@@ -253,7 +253,7 @@ const cancel = (): Promise<void> =>
                     <StatusBadge variant="info" :label="plan.source === `hermes` ? `Hermes` : `OpenClaw`" />
                     <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you import.</p>
                 </div>
-                <RowGroup density="compact" flat label="What would come in">
+                <RowGroup flat label="What would come in">
                     <Row v-for="item in orderedItems" :key="item.id" as="label" class="cursor-pointer">
                         <template #title
                             ><span class="text-xs">{{ item.label }}</span></template
@@ -289,7 +289,7 @@ const cancel = (): Promise<void> =>
                     </Row>
                 </div>
 
-                <RowGroup v-if="plan.needsAction.length > 0" density="compact" flat label="Won't move by itself">
+                <RowGroup v-if="plan.needsAction.length > 0" flat label="Won't move by itself">
                     <Row v-for="action in plan.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
                 </RowGroup>
 
@@ -323,11 +323,11 @@ const cancel = (): Promise<void> =>
                 <StatusBadge variant="success" label="Imported" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }} landed.</p>
             </div>
-            <RowGroup v-if="report.failed.length > 0" density="compact" flat>
+            <RowGroup v-if="report.failed.length > 0" flat>
                 <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
                 <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />
             </RowGroup>
-            <RowGroup v-if="report.needsAction.length > 0" density="compact" flat label="Finish the move">
+            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the move">
                 <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
         </template>

@@ -238,7 +238,7 @@ watch(
                  a row group, because that is what it is"). Hand-drawn, it was a surface with no tier on it, so
                  the <SkillRow>s inside it had to carry their own — and a list whose rows each declare their size
                  is the drift this whole change is about. The group says `compact` once and they read it. -->
-            <RowGroup density="compact">
+            <RowGroup>
                 <!-- The invitation is a ROW inside the list, not a line above it: the Skills page's shape. Above
                      it, an empty list said the same thing twice: a paragraph explaining there is nothing, and a
                      bordered box holding nothing but the button that would fix it. -->

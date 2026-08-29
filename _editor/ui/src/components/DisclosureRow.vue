@@ -65,11 +65,11 @@ const {
 } = defineProps<{
     /** Open state. `v-model:open` to let the row keep it; bind + listen to let an accordion parent own it. */
     open?: boolean;
-    /* comfortable: settings rows · compact: record lists · dense: navigator rails. Forwarded to <Row>.
+    /* LEAVE IT UNSET: the <RowGroup> around it publishes the tier, and a group is compact. Forwarded to <Row>.
      *
-     * LEAVE IT UNSET INSIDE A <RowGroup> and the group's tier applies. This is the prop the extensions list
-     * was the one caller in the app never to pass, which is why it drew settings-sized rows one tab along from
-     * the compact secrets and personas lists — see the note in row.ts. */
+     * This is the prop the extensions list was the one caller in the app never to pass, which is why it drew
+     * settings-sized rows one tab along from the compact secrets and personas lists — and the reason the tier
+     * is no longer a per-list judgement at all. See <RowGroup>. */
     density?: RowDensity;
     /* WHAT THE PRESS TARGET IS.
      *

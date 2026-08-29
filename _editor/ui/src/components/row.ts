@@ -10,7 +10,17 @@ import { computed, inject, provide, type ComputedRef, type InjectionKey } from "
  * first time an icon changes size. <DisclosureRow> draws the cluster a second time and hides it instead, and
  * that copy is only ever right if it reads its gaps from the same table the visible one does. */
 
-/** comfortable: settings rows · compact: record lists · dense: navigator rails. */
+/* THREE TIERS, AND ONLY ONE OF THEM IS A CHOICE ANYBODY MAKES.
+ *
+ * `compact` is what a row IS: <RowGroup> defaults to it, so every list in the app — hub tabs, settings tabs,
+ * cards — draws the same row without a call site saying anything. `dense` is the navigator rail, a different
+ * surface with its own width. `comfortable` is the card MASTHEAD (a `flush :heading="2"` <Row>, which is not
+ * in a group and keeps <Row>'s own fallback): it has to outrank the rows under it, so its glyph is sized for an
+ * h2 rather than for a line of list.
+ *
+ * They used to be described as "settings rows · record lists · navigator rails", and that taxonomy is what came
+ * apart: it asked every list to classify itself, the app classified 85 of them and produced two answers, and all
+ * 33 that landed on `comfortable` had simply never been asked. See <RowGroup>. */
 export type RowDensity = `comfortable` | `compact` | `dense`;
 
 export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
@@ -104,13 +114,13 @@ export const ROW_BLOCK_PAD = {
  * the same argument <RowGroup> already makes about its selection column — a fact about the LIST, not about any
  * row in it — and it is what turns "remember `density` at 60 call sites" into "say it once per list".
  *
- * AN EXPLICIT PROP STILL WINS, because one row inside a group legitimately disagrees: a card's masthead is a
- * `flush :heading="2"` <Row> sitting above compact rows on the same surface, and it is comfortable by rank
- * rather than by list. That is a stated exception at a call site, which is a different thing from a default
- * nobody chose.
+ * AN EXPLICIT PROP STILL WINS, because a row inside a group can legitimately disagree — but that is now a rare,
+ * argued exception rather than the thing you get by not looking, and the gate refuses a group that merely
+ * restates the default.
  *
- * Outside a group the fallback is `comfortable`, which is what every one of these components defaulted to
- * before: a bare <Row> on a card is a settings row, and that has not changed. */
+ * OUTSIDE A GROUP the fallback is `comfortable`, and that is not a leftover: it is the card MASTHEAD's tier.
+ * A `flush :heading="2"` <Row> is not in a list, has to outrank the rows under it, and wants a glyph sized for
+ * an h2 rather than for a line of list. Rank is a real distinction; "settings-ish versus record-ish" was not. */
 const ROW_DENSITY: InjectionKey<ComputedRef<RowDensity>> = Symbol(`ui.row.density`);
 
 /** Published by <RowGroup> for every row, outline and note on its surface. */

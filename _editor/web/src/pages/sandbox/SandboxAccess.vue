@@ -336,9 +336,9 @@ const revoke = async (target: string): Promise<void> => {
 <template>
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
-        <!-- density="compact": a roster is a record list, and the rows below are <Row>s now rather than three
-             hand-drawn shapes at px-4 py-3 on a surface whose own outline drew the settings tier. -->
-        <RowGroup density="compact" label="Access">
+        <!-- The rows below are <Row>s now rather than three hand-drawn shapes at px-4 py-3 on a surface whose
+             own outline drew a different tier again. They take the group's, like every list in the app. -->
+        <RowGroup label="Access">
             <template v-if="isOwner">
                 <Row icon="user" :title="user?.email">
                     <template #meta>
@@ -470,7 +470,7 @@ const revoke = async (target: string): Promise<void> => {
              cannot exist (see the note in the script). The rows are the answers to the three questions asked in
              the order the eye arrives at them: what IS signed in that I can see, why can't I see the rest, and
              what exactly happens if I press this. -->
-        <RowGroup v-if="isOwner" density="compact" label="Signed-in browsers">
+        <RowGroup v-if="isOwner" label="Signed-in browsers">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
             <Row icon="desktop" title="This browser" :description="thisBrowser">
                 <template #meta><span class="text-success">Signed in</span></template>
@@ -526,7 +526,7 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
-        <RowGroup density="compact" label="Here now">
+        <RowGroup label="Here now">
             <RowNote v-if="presenceOthers.length === 0" variant="empty">No one else is connected right now.</RowNote>
             <template v-else>
                 <Row

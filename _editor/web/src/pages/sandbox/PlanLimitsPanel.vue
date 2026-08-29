@@ -169,7 +169,7 @@ const roster = computed(() => {
 <template>
     <!-- A @container over the whole section: every column below thins out against the PANEL, which is a hub
          section inside the workspace pane and never the width of the window. -->
-    <RowGroup v-if="rows.length > 0" id="accounts" density="compact" class="@container" label="Plan limits">
+    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" label="Plan limits">
         <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
              on" is the question, and it survives having 31 of them. -->
         <RowNote variant="block">
@@ -493,7 +493,7 @@ const roster = computed(() => {
          accounts. It used to say that in words ("Reading your connections…"), which is a sentence where a panel
          goes, so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
          its legend, which is the whole of what lands here. -->
-    <RowGroup v-else-if="!accountsLoaded && outline" density="compact" class="@container" role="status" aria-busy="true">
+    <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
         <span class="sr-only">Reading your connections…</span>
         <RowNote variant="block" aria-hidden="true">

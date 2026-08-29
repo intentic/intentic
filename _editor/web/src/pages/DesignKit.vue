@@ -374,11 +374,13 @@ const pickedTier = ref(`collaborator`);
                 </div>
 
                 <!-- THE THREE TIERS, SIDE BY SIDE, because side by side is the only place this drift was ever
-                     visible either: the extensions tab drew settings-sized rows one tab along from the compact
-                     secrets and personas tabs for as long as nobody had both on one screen.
-                     THE TIER IS SET ONCE, HERE, ON THE GROUP. Neither the rows nor the outline nor the note
-                     below says anything about its size — that is the whole mechanism, and this is what it looks
-                     like. `comfortable` is a settings row, `compact` a record list, `dense` a navigator rail. -->
+                     visible: the Sandbox hub changed row language as you tabbed through it, and nobody had two
+                     tabs on one screen.
+
+                     ONLY THE MIDDLE ONE IS A LIST. `compact` is what a <RowGroup> IS — the default, set nowhere,
+                     which is why the group below has to be told to draw the other two at all. `dense` is the
+                     navigator rail; `comfortable` is a card's masthead, which is not in a list and keeps <Row>'s
+                     own fallback. Neither the rows nor the outline nor the notes say anything about size. -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Tiers, and the lines that are not rows</h3>
                 <div class="grid gap-4 md:grid-cols-3">
                     <RowGroup
@@ -386,7 +388,7 @@ const pickedTier = ref(`collaborator`);
                         :key="tier"
                         :density="tier"
                         :label="tier"
-                        :caption="tier === `comfortable` ? `settings rows` : tier === `compact` ? `record lists` : `navigator rails`"
+                        :caption="tier === `compact` ? `every list — the default` : tier === `dense` ? `navigator rails` : `card mastheads`"
                     >
                         <!-- The mark comes from the slot, never from a number here: that is what `:size="mark"`
                              is, and it is why these three columns cannot drift apart. -->
@@ -407,7 +409,7 @@ const pickedTier = ref(`collaborator`);
                      picks from a picture instead of from whichever file they happened to be in. -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup density="compact" label="hit=header · body=rail" caption="evidence about the row, hung off its title">
+                    <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
                         <DisclosureRow v-model:open="kitRail" title="A turn that failed" description="Claude · from discord">
                             <template #lead><Icon name="sparkles" class="text-xs text-link" /></template>
                             <template #meta><span>4m 2s</span><span>2h ago</span></template>
@@ -424,7 +426,7 @@ const pickedTier = ref(`collaborator`);
                         </DisclosureRow>
                     </RowGroup>
 
-                    <RowGroup density="compact" label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
+                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
                         <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
                             <!-- THE LINK HUGS ITS TEXT (`w-fit`), which is the half of this mode a picture has to

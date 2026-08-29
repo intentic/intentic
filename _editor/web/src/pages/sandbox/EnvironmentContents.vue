@@ -186,7 +186,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <!-- `flat`, because this list is already inside the Environment card: a bordered group per section drew a
              frame around a surface painted in the card's own colour, so the section labels and the gap between
              them do the grouping and the card stays the only frame. -->
-        <RowGroup v-for="group in rowGroups" :key="group.origin" density="compact" flat undivided :label="group.label" :count="countLabel(group)">
+        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
             <!-- The row's chevron used to ride in `#meta`, at the TRAILING edge among the facts, which is where
                  the verbs live and not where a reader looks for a disclosure. <DisclosureRow> puts it in the
                  lead column with the rest of the app's expandable rows, and `disabled` is how a row with
@@ -309,7 +309,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
         <!-- THE STAPLES, AS A STRIP. Thirteen names and thirteen versions, which is the entire question anybody
              brings to this group, in three lines instead of thirteen rows. -->
-        <RowGroup v-if="staples !== undefined" density="compact" flat :label="staples.label" :count="countLabel(staples)">
+        <RowGroup v-if="staples !== undefined" flat :label="staples.label" :count="countLabel(staples)">
             <!-- Strip AND sentence in one child of the group, so the group's row divider does not draw a line
                  between a pill and the sentence that pill just opened. Aligned with the rows above by taking
                  the group's own tier (<RowNote variant="block">) rather than by restating their `px-4`, so all
@@ -368,13 +368,13 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             <!-- Two sections rather than the three that can appear: the outline promises the shape, and a
                  sandbox with nothing added on top has only the base group: over-promising sections is how a
                  placeholder ends up taller than the answer. -->
-            <RowGroup v-for="(section, index) in [4, 3]" :key="index" density="compact" flat undivided>
+            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
                 <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
                 <SkeletonRows :rows="section" />
             </RowGroup>
             <!-- The staples strip: thirteen pills of a name and a version, which is a different shape from a
                  row and reads as one at a glance. -->
-            <RowGroup density="compact" flat>
+            <RowGroup flat>
                 <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
                 <RowNote variant="block">
                     <div class="flex flex-wrap gap-1.5" aria-hidden="true">

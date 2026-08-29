@@ -27,18 +27,45 @@ import { provideRowDensity, type RowDensity } from "./row.js";
  * where each row is its own openable entry with a mark, a name and its own spacing (the sandbox's environment
  * contents), the lines are one more stroke on a surface that already has a frame, and the rhythm of the rows is
  * what separates them. */
-/* `density` IS THE GROUP'S, AND EVERY ROW ON ITS SURFACE READS IT. A record list says `compact` once here
- * instead of on each of its rows, its loading outline and each note between them — which is what those three
- * had to do before, and what one of them always eventually forgot. See the long note in row.ts for the four
- * lists this had already come apart on. `comfortable` is the default because a group of settings rows is what
- * this component was built for, and that is what every existing call site draws. */
-const { density = `comfortable` } = defineProps<{
+/* A GROUP IS A LIST, AND A LIST IS `compact`. THAT IS THE DEFAULT, AND IT IS THE WHOLE STANDARD.
+ *
+ * The tier used to be a judgement made per group — "is this a settings row or a record row?" — and the app
+ * answered it 85 times and got two answers. Measured across every group in the build: 51 were `compact`, 33 were
+ * `comfortable`, and ALL THIRTY-THREE of those had simply never stated a tier. Not one group in the app ever
+ * chose `comfortable` on purpose. It was not a decision, it was a default nobody was asked about, and it landed
+ * wherever nobody had thought about it.
+ *
+ * WHAT THAT COST IS A HUB THAT CHANGES LANGUAGE AS YOU TAB THROUGH IT. In the Sandbox hub, Personas, Extensions,
+ * Environment and Access drew their row titles at 14px/500; Agent, Status and Computers drew theirs at 16px/600,
+ * with a 18px glyph beside a 14px one. In Settings, Keybindings was 14px/500 and Appearance, Notifications and
+ * Data were 16px/600 — one nav rail, two row languages, and which one you got depended on which file somebody
+ * had edited last. Inside a SINGLE tab it contradicted itself: Agent ▸ Skills and Agent ▸ Rules were compact
+ * while Agent ▸ Models and Agent ▸ Instructions were not.
+ *
+ * THE QUESTION WAS NOT DECIDABLE, WHICH IS WHY IT KEPT BEING DECIDED DIFFERENTLY. "Models" is three rows with a
+ * picker on each: a settings list, or a record list of model tiers? "Your listings" is five services with a
+ * badge and four verbs. "Computers" is machines with switches on them. Every one of those reads both ways, so
+ * the taxonomy was never doing the work — a reader tabbing between them is not classifying anything, they are
+ * looking at rows, and rows on one surface have one size.
+ *
+ * SO THE TAXONOMY IS GONE AND THE STRUCTURE ANSWERS INSTEAD: if it is in a <RowGroup>, it is a list, and it is
+ * compact. There is nothing left to get wrong, and nothing to remember at a call site.
+ *
+ * `comfortable` DID NOT DIE — IT MOVED TO WHAT IT WAS ACTUALLY FOR. A card's masthead (`<Row flush :heading="2">`)
+ * is not in a group, so it keeps <Row>'s own `comfortable` fallback: its 18px glyph belongs beside an h2, and it
+ * has to outrank the rows underneath it. That is a RANK, which is a real distinction; "this list feels more like
+ * settings than records" was not.
+ *
+ * Passing it here is still possible and still legitimate for the group that genuinely disagrees — but it is now
+ * an argued exception rather than the thing you get by not looking, and `_tools/scripts/row-tiers.mjs` refuses a
+ * group that merely restates the default. */
+const { density = `compact` } = defineProps<{
     label?: string;
     count?: string | number;
     caption?: string;
     flat?: boolean;
     undivided?: boolean;
-    /** comfortable: settings rows · compact: record lists · dense: navigator rails. */
+    /** Leave it alone: a group is a list and a list is `compact`. See the note above before overriding. */
     density?: RowDensity;
 }>();
 

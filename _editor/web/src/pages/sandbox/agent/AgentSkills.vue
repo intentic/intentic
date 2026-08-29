@@ -147,7 +147,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
 </script>
 
 <template>
-    <RowGroup density="compact" label="Skills" :count="count">
+    <RowGroup label="Skills" :count="count">
         <template #info><SkillsInfo /></template>
         <!-- The group's own instrument, on the group's own header: it narrows these rows and nothing else on
              the page. A field rather than a bar: there is one control, and a whole toolbar over one group would

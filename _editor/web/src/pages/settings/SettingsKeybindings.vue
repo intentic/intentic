@@ -123,7 +123,7 @@ onUnmounted(stopRecording);
 
         <!-- A record list — a hundred-odd commands, read by scanning — so the group takes the compact tier and
              its rows and its "nothing matched" line read it from there. -->
-        <RowGroup density="compact">
+        <RowGroup>
             <Row v-for="row in rows" :key="row.command" :title="row.title" :description="row.command">
                 <template #title>
                     <span class="flex items-center gap-2">

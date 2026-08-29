@@ -1355,7 +1355,6 @@ const submitLabel = computed(() => {
                                  subject of the heading above rather than an entry under it. -->
                             <RowGroup
                                 v-if="selectedInstances.length > 0 && !selected.singleton"
-                                density="compact"
                                 label="Your connections"
                                 :count="selectedInstances.length"
                             >
@@ -1385,7 +1384,6 @@ const submitLabel = computed(() => {
                              here rather than only in the terminal panel's popover. Same rows, same actions. -->
                             <RowGroup
                                 v-if="cardProcesses.length > 0"
-                                density="compact"
                                 label="Background process"
                                 caption="Relays events to your agent: restart it if this connection stops responding."
                             >

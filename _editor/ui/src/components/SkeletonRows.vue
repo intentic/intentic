@@ -31,7 +31,7 @@ const {
 } = defineProps<{
     /** How many placeholder rows. Match the shortest list worth promising, not the longest one seen. */
     rows?: number;
-    /** The tier of the rows that are coming. Leave unset inside a <RowGroup>: see the note above. */
+    /** Leave it unset: the <RowGroup> this is dropped into is the same one the real rows land in. */
     density?: RowDensity;
     /** A leading glyph's square, for lists whose rows carry an icon or an avatar. */
     lead?: boolean;

@@ -145,7 +145,7 @@ const sizeLabel = (bytes: number): string => {
              is the app's toolbar action: no chrome until the pointer is on it, the tone arriving with the
              hover. Neither needs a label because the row is one file and these are the only two things anyone
              does to a file; the tooltip carries the word. -->
-        <RowGroup v-if="exports.length > 0" density="compact" flat label="Exports" :count="exports.length">
+        <RowGroup v-if="exports.length > 0" flat label="Exports" :count="exports.length">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
@@ -199,7 +199,7 @@ const sizeLabel = (bytes: number): string => {
                     {{ report.restored.repos.length }} repos ({{ report.restored.repos.join(`, `) }}).
                 </p>
             </div>
-            <RowGroup v-if="report.needsAction.length > 0" density="compact" flat label="Finish the move">
+            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the move">
                 <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
             <p v-if="report.refused.length > 0" class="text-2xs text-warning">

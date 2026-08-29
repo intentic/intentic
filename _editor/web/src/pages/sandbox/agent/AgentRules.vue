@@ -104,7 +104,7 @@ const firedOf = (rule: Rule): string => {
 </script>
 
 <template>
-    <RowGroup density="compact" label="Rules">
+    <RowGroup label="Rules">
         <template #info><RulesInfo /></template>
 
         <template v-for="rule in listed" :key="rule.id">

@@ -247,19 +247,11 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <!-- Each count is what its section HOLDS, not the total: rows leave for the pinned group above and for
              the filter, and a header that kept claiming 17 over 13 rows is a header nobody trusts again.
 
-             `density="compact"` is the tier this tab always believed it was at: <ExtensionRow>'s own note
-             describes "22px inside a 40px row", and every neighbouring record list — secrets, personas, skills,
-             environment contents — says compact on its rows. This tab was the one caller in the app that never
-             passed the prop, so it drew settings-sized rows and the extensions list stood visibly taller than
-             the tab beside it. Said once here, it now reaches the rows, the outline below and every note. -->
-        <RowGroup
-            v-for="section in sections"
-            :key="section.id"
-            density="compact"
-            :label="section.label"
-            :count="section.entries.length"
-            :caption="section.caption"
-        >
+             No tier stated, and none needed: a <RowGroup> is a list and a list is compact (see RowGroup's own
+             note). This tab is why that is the default — it was the one caller in the app that never passed the
+             prop, so it drew settings-sized rows while <ExtensionRow>'s own note described "22px inside a 40px
+             row", and the extensions list stood visibly taller than the secrets tab beside it. -->
+        <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :count="section.entries.length" :caption="section.caption">
             <ExtensionRow
                 v-for="entry in section.entries"
                 :key="entry.extension.id"
@@ -274,7 +266,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         <!-- `sections` is empty while the read is out, so the groups above render nothing and this is the only
              thing on the tab. The outline gives it the shape of the list instead of a sentence about it. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" density="compact" label="Installed">
+            <RowGroup v-if="outline" label="Installed">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading this sandbox's extensions…</span>
                     <SkeletonRows :rows="3" description control />
@@ -304,7 +296,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
              parse, or an id something else already owns. Named per directory because nothing install-shaped
              ever rejected them: this group is where their author (usually an agent, via GET /extensions)
              learns why the row is missing. -->
-        <RowGroup v-if="invalid.length > 0" density="compact" label="Not loadable">
+        <RowGroup v-if="invalid.length > 0" label="Not loadable">
             <Row v-for="entry in invalid" :key="entry.dir">
                 <template #title>
                     <span class="block truncate">.intentic/config/workspace-extensions/{{ entry.dir }}</span>
@@ -317,7 +309,7 @@ const created = async (extension: { id: string; dir: string; wish: string }): Pr
         </RowGroup>
 
         <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
-        <RowGroup v-if="unlisted.length > 0" density="compact" label="Running but not listed">
+        <RowGroup v-if="unlisted.length > 0" label="Running but not listed">
             <Row v-for="status in unlisted" :key="status.id">
                 <template #title>
                     <span class="block truncate">{{ status.extensionId }}</span>
