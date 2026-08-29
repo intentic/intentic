@@ -1,8 +1,7 @@
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
-import type { AdmissionRule, CommandClass } from "@intentic/sandbox-contract";
+import { type AdmissionRule, classifyCommand, type CommandClass } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { commandRun } from "../guard/actions.js";
-import { classifyCommand } from "../guard/command-classes.js";
 import { guard } from "../guard/guard.js";
 import { armWatcher, cancelWatcher, DEFAULT_INTERVAL_S, DEFAULT_TIMEOUT_S, listWatchers, type WatcherTurnSeed } from "./watchers.js";
 

@@ -136,9 +136,18 @@ reports the profile.
   starts: every outside-driven wake (automations, listeners, the Front Desk, the workflow release gate) is
   allowed, held for approval, or refused. Inside a session already running: classified outbound provider calls
   are checked against the owner's action rules, and shell commands whose class the owner holds: destructive
-  git, recursive deletes, credential reads, publishes, outbound fetches: park on a permission card before they
-  execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold in the autonomous posture
-  where the permission cards are never raised at all.
+  git, recursive deletes, disk and volume wipes, credential reads, publishes, outbound fetches: park on a
+  permission card before they execute. Both in-turn gates are PreToolUse hooks, which is what makes them hold
+  in the autonomous posture where the permission cards are never raised at all. The rulebook starts empty and
+  one floor sits under it: the class nothing brings back (a formatted disk, a deleted Docker volume, a
+  recursive delete aimed at a root rather than at something inside one) is held on every turn, configured or
+  not, so a fresh sandbox is not one mistyped path away from it. An explicit `allow` still outranks the floor,
+  everything recoverable is still never asked about, and the cost is stated where it is paid: the vendor
+  runtimes whose gate is their own approval channel now ask per command rather than never.
+  The same classifier runs a second time on a different machine: `_computers/host` reads it beside its scopes,
+  so a destructive command sent to somebody's own laptop needs that computer's `destructive` switch, which is
+  off until they turn it on. The sandbox can afford to hold only what nothing undoes because the container is
+  disposable; a laptop has no image to be recreated from, and the two defaults differ for exactly that reason.
 - Tell the agent which words are not the owner's, and act on it (src/guard/outside-content.ts). Everything that
   arrives from outside the workspace: a stranger's listener or Front Desk message, a fetched page, a foreign MCP
   server's answer, the output of a shell command that reached the internet: is wrapped in an
@@ -374,7 +383,12 @@ reports the profile.
   runner's summary, and the sync door pushes this sandbox's settings down the live link (replace semantics —
   the parent is a runner's whole authority). `docs/remote-runners-plan.md` at the workspace root says why
   every seam sits where it does.
-- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card.
+- [src/guard/guard.ts](src/guard/guard.ts): the one gate every gated action consults (fail-closed); [src/guard/actions.ts](src/guard/actions.ts) is the catalog of decisions, and [src/guard/command-gate.ts](src/guard/command-gate.ts) is the one that can park a running turn on a card. WHAT a command is, as opposed to what may be done about it, lives one package out in
+  [sandbox-contract/src/command-classes.ts](../sandbox-contract/src/command-classes.ts): the same table the
+  machine agent reads before running anything on somebody's own computer, so the two enforcement points cannot
+  drift about what counts as a recursive delete. It is regex over shell text and says so: friction for
+  well-behaved work, never the boundary for a hostile one, which stays structural (the container, the
+  worktree, the land gate, an automation's tool allowlist).
 - [src/guard/outside-content.ts](src/guard/outside-content.ts): the envelope around anything the owner did not
   write, and the neutralizer that keeps content from forging one. Two seams apply it: a stranger's message at
   turn birth (src/automations/scheduler.ts) and everything the agent pulls in mid-turn

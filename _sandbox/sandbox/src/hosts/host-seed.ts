@@ -34,6 +34,7 @@ export const SETUP_HOST_SCOPES = {
     control: "off",
     sandboxes: "on",
     sandboxRemove: "off",
+    destructive: "off",
 } as const;
 
 /* The machine's name in the UI, from the hostname the setup flow reported. It becomes the capability id, which

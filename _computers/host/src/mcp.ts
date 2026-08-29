@@ -127,7 +127,7 @@ const TOOLS: readonly Tool[] = [
     tool({
         name: "run_command",
         description:
-            "Run a command on this computer and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
+            "Run a command on this computer and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this computer's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
         input: z.object({
             command: required.describe("The command line to run, in this machine's shell."),
             cwd: required.optional().describe("Working directory. Must be inside the allowed folders. Defaults to the first allowed folder."),

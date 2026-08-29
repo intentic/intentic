@@ -154,8 +154,13 @@ export type AdmissionRule = z.infer<typeof AdmissionRuleSchema>;
 export const CommandClassSchema = z.enum([
     // Rewrites or discards committed work: force-push, hard reset, force-delete a branch, clean -f, filter-branch.
     "git.destructive",
-    // Recursive-force deletion (`rm -rf`).
+    // Recursive-force deletion (`rm -rf`), and its spelling in a script (`fs.rm(p, { recursive: true })`).
     "files.destructive",
+    /* State nothing here brings back: a formatted or overwritten disk, a deleted Docker volume, a recursive
+     * delete aimed at a root rather than at something inside one. The only class the daemon holds where the
+     * owner wrote no rule, which is why it is separate from files.destructive rather than a shade of it:
+     * `rm -rf build` is ordinary work in a disposable container and `rm -rf /` is the end of the machine. */
+    "system.destructive",
     // Names credential material: a .env file, an ssh key, ~/.aws/credentials, .npmrc, a stored token file.
     "secrets.access",
     // Publishes outward and irreversibly: npm/pnpm/yarn/cargo publish, gh release create, docker push.
@@ -2830,14 +2835,19 @@ export const SandboxSettingsSchema = z.object({
      * on its own never would. An UNATTENDED turn has nobody to answer, so a hold there refuses instead and says
      * why; that is the honest form of "ask me" when there is no me.
      *
-     * An unlisted class is allowed, and an empty rulebook wires no hook at all, an owner who has never opened
-     * this pays nothing for it. Keys are the CommandClass enum, so a typo is a settings error rather than a rule
-     * that silently never matches. */
+     * An unlisted class is allowed, WITH ONE FLOOR UNDER IT: the classes nothing brings back (FLOOR_CLASSES in
+     * command-classes.ts, `system.destructive` today) are held where the owner wrote nothing, so a workspace
+     * that has never opened this page is not one mistyped path away from a formatted disk. An explicit `allow`
+     * still wins, it is a decision about that exact class and the floor must not override the person who made
+     * it. Everything else stays as it was: unlisted is allowed and ordinary work is never asked about.
+     *
+     * Keys are the CommandClass enum, so a typo is a settings error rather than a rule that silently never
+     * matches. */
     commandRules: z
         .partialRecord(CommandClassSchema, AdmissionRuleSchema)
         .default({})
         .describe(
-            "What an agent may run inside the sandbox, for the five kinds of command that are hard to take back: rewriting git history, deleting recursively, reading credential files, publishing a package, reaching out to the network. Everything else is recoverable in a container that is itself disposable, and gating it would be friction bought with nothing.",
+            "What an agent may run inside the sandbox, for the six kinds of command that are hard to take back: rewriting git history, deleting recursively, wiping a disk or a container volume, reading credential files, publishing a package, reaching out to the network. Everything else is recoverable in a container that is itself disposable, and gating it would be friction bought with nothing. Leaving a kind unset is not the same as allowing it: wiping a disk is held for your approval until you say otherwise, because nothing here brings that back.",
         ),
     /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
@@ -5065,6 +5075,21 @@ export const HostScopesSchema = z.object({
      * matters here: everything `sandboxes` grants is undone by doing it again, and this is undone by nothing.
      * A user who delegated "restart my sandboxes when they wedge" did not thereby agree to lose one. */
     sandboxRemove: hostScope.default("off"),
+    /* Run a command this machine's agent classifies as destructive: a recursive delete, a formatted disk, a
+     * removed Docker volume (command-classes.ts, the same classifier the sandbox's own gate reads).
+     *
+     * ITS OWN SWITCH UNDER `shell`, and the reason is the asymmetry this whole feature turns on. Inside the
+     * sandbox a bad `rm -rf` costs a container that exists to be thrown away, so the gate there can afford to
+     * hold only the handful of commands nothing undoes and wave the rest through. This is somebody's laptop.
+     * There is no image to recreate it from, no checkpoint, no worktree: `rm -rf ~/projects` is the afternoon
+     * everybody remembers. And there is no card to raise either, the machine answers a tool call with a value
+     * and cannot park it while somebody thinks, so the honest form of "ask me" here is "refuse until they
+     * ticked it", which is exactly what a scope is.
+     *
+     * Default off, with `shell` default ON, which is the pairing to read carefully: a connected computer runs
+     * commands out of the box, because that is what people connect one for, and the ones that delete are the
+     * ones they have to say yes to. */
+    destructive: hostScope.default("off"),
     // One directory per line. Empty ⇒ the machine's home directory, which is what the agent reports at connect.
     roots: z.string().optional(),
 });
@@ -8642,7 +8667,9 @@ export const SubagentVerificationSchema = z.object({
     check: z
         .string()
         .optional()
-        .describe("The command that spoke: the one that cleared it, or the one that failed. Named rather than summarised, so a targeted test is not read as the whole suite."),
+        .describe(
+            "The command that spoke: the one that cleared it, or the one that failed. Named rather than summarised, so a targeted test is not read as the whole suite.",
+        ),
 });
 export type SubagentVerification = z.infer<typeof SubagentVerificationSchema>;
 

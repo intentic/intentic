@@ -19,12 +19,17 @@ test("a computer connected by setup may manage sandboxes and do nothing else", (
         control: "off",
         sandboxes: "on",
         sandboxRemove: "off",
+        destructive: "off",
     });
 });
 
-// Removal is the one thing an automatic grant must never carry: it is irreversible, and nobody chose it.
-test("setup never grants removal", () => {
+/* The two irreversible grants an automatic connection must never carry. Removal loses a sandbox; `destructive`
+ * lets a command delete the machine's own files, and setup does not even grant `shell`, so a machine connected
+ * this way could not run one anyway. Both are decisions a person makes on the card, in front of the sentence
+ * that says what they do. */
+test("setup never grants removal or destructive commands", () => {
     expect(SETUP_HOST_SCOPES.sandboxRemove).toBe("off");
+    expect(SETUP_HOST_SCOPES.destructive).toBe("off");
 });
 
 /* Every switch the card knows about is decided here. A scope added to the contract and forgotten here would be

@@ -31,8 +31,18 @@ test(`states the grant in one line, from what is allowed`, () => {
     expect(hostGrantSummary({ shell: `on` })).toBe(`May run commands, and nothing else.`);
     expect(hostGrantSummary({})).toBe(`Read files only.`);
     // Everything granted has no "nothing else" to add.
-    expect(hostGrantSummary({ shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, sandboxRemove: `on` })).toBe(
-        `May run commands, change files, see the screen, use the mouse and keyboard, manage its sandboxes and remove its sandboxes.`,
+    expect(
+        hostGrantSummary({
+            shell: `on`,
+            write: `on`,
+            screen: `on`,
+            control: `on`,
+            sandboxes: `on`,
+            sandboxRemove: `on`,
+            destructive: `on`,
+        }),
+    ).toBe(
+        `May run commands, change files, see the screen, use the mouse and keyboard, manage its sandboxes, remove its sandboxes and delete folders and wipe disks.`,
     );
 });
 

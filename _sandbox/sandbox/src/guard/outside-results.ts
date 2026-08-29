@@ -1,6 +1,6 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { classifyCommand } from "@intentic/sandbox-contract";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
-import { classifyCommand } from "./command-classes.js";
 import { wrapOutsideContent } from "./outside-content.js";
 
 /* WRAPPING WHAT THE AGENT PULLS IN MID-TURN, the second seam, beside the one that wraps a stranger's message
@@ -22,14 +22,14 @@ import { wrapOutsideContent } from "./outside-content.js";
  *   · the browser servers, which are NOT in INTERNAL on purpose. Playwright is ours, the PAGE is the
  *     internet, and the whole point of a browser tool is to bring that page's text back.
  *   · Bash output, but only when the command reached OUT: the `network.outbound` class of the same classifier
- *     the command gate consults (guard/command-classes.ts), so `curl https://example.com` is wrapped, and `ls`
+ *     the command gate consults (sandbox-contract's command-classes.ts), so `curl https://example.com` is wrapped, and `ls`
  *    , or a curl at loopback, which is this container talking to itself, is not.
  *
  * WHAT IS NOT WRAPPED, said plainly rather than left to be discovered:
  *   · Read/Grep/Glob of workspace files, the agent's own material. A hostile file in the workspace arrived
  *     through some other seam, and wrapping every file read would wrap the codebase.
  *   · shell output that fetched without looking like it (`git pull`, `gh issue view`), the classifier is
- *     regex over shell text and carries the same honesty note as guard/command-classes.ts.
+ *     regex over shell text and carries the same honesty note as sandbox-contract's command-classes.ts.
  *   · what a delegated CLI read inside its own context, its harness, its seams, not ours.
  *
  * The wrap is applied to the FIELDS that carry content, never to the whole result object: a tool's result is a

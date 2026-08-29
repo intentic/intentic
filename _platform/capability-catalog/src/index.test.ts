@@ -110,7 +110,7 @@ describe("contributionCard", () => {
             skill: "skills/windows/SKILL.md",
         };
         const keys = contributionCard(pack).fields.map((field) => field.key);
-        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "roots"]);
+        expect(keys).toEqual(["platform", "shell", "write", "screen", "control", "sandboxes", "sandboxRemove", "destructive", "roots"]);
     });
 
     /* THE GENERIC BROWSER CARD renders like any other: the pinned discriminator, the answers that replace what a

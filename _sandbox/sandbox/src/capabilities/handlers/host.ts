@@ -26,6 +26,7 @@ export const hostHandler: CapabilityHandler = {
             control: host.control,
             sandboxes: host.sandboxes,
             sandboxRemove: host.sandboxRemove,
+            destructive: host.destructive,
             ...(host.roots !== undefined ? { roots: host.roots } : {}),
         };
     },

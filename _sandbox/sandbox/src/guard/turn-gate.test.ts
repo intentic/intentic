@@ -55,7 +55,12 @@ test("a turn with no conversation publishes nothing", () => {
 
 /* `turnIsGated` is what a vendor runtime asks BEFORE its turn starts, to decide whether to make the vendor raise
  * approvals at all. It must agree with the gate's own `enforcing`, or a runtime would either ask for approvals
- * nothing will judge or judge nothing because it never asked. */
+ * nothing will judge or judge nothing because it never asked.
+ *
+ * BOTH ARE NOW ALWAYS TRUE, including for the empty rulebook that used to answer false: the standing floor
+ * (guard/actions.ts) holds the classes nothing undoes on every turn, so an unconfigured workspace is exactly
+ * the one that would have gone unjudged. This test is the pair's agreement, not the value, so it still fails
+ * if either side is changed alone. */
 test("turnIsGated agrees with the gate it predicts", () => {
     for (const input of [
         turn(),
@@ -65,9 +70,17 @@ test("turnIsGated agrees with the gate it predicts", () => {
         turn({ commandRules: { "files.destructive": "deny" }, outsideWake: "webchat" }),
     ]) {
         const { gate, release } = createTurnGate(input);
-        expect(turnIsGated(input), JSON.stringify({ rules: input.commandRules, wake: input.outsideWake })).toBe(gate.enforcing);
+        expect(turnIsGated(), JSON.stringify({ rules: input.commandRules, wake: input.outsideWake })).toBe(gate.enforcing);
         release();
     }
+});
+
+// The floor is what makes the unconfigured workspace the interesting case: nobody wrote a rule, nothing was
+// woken from outside, and a command that would format a disk still has something to answer to.
+test("a workspace with no rules at all is still gated", () => {
+    const { gate, release } = createTurnGate(turn());
+    expect(gate.enforcing).toBe(true);
+    release();
 });
 
 /* THE REFUSE-ONLY SHAPE (OpenCode). A hold cannot park there because the vendor aborts a turn that goes quiet

@@ -1,5 +1,12 @@
-import type { AdmissionPolicy, AdmissionRule, CommandClass, Trigger, WakeSource } from "@intentic/sandbox-contract";
-import { COMMAND_CLASS_LABELS } from "./command-classes.js";
+import {
+    type AdmissionPolicy,
+    type AdmissionRule,
+    COMMAND_CLASS_LABELS,
+    type CommandClass,
+    FLOOR_CLASSES,
+    type Trigger,
+    type WakeSource,
+} from "@intentic/sandbox-contract";
 import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
 
 /* The action catalog, every gated decision, defined once at this module edge and consulted by value.
@@ -84,7 +91,7 @@ export const outboundSend = defineGuardedAction<OutboundSendInput>({
 });
 
 export interface CommandRunInput {
-    // ONE of the classes the command fell in (guard/command-classes.ts). A command in two classes is two
+    // ONE of the classes the command fell in (sandbox-contract's command-classes.ts). A command in two classes is two
     // consults, and the gate keeps the most restrictive answer, which is what makes "most restrictive wins"
     // observable at the consult site instead of hidden inside a decide that was handed a list.
     readonly commandClass: CommandClass;
@@ -92,9 +99,21 @@ export interface CommandRunInput {
     readonly rules: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
     /* What first brought outside content into this turn (guard/turn-taint.ts), a listener provider, "web", a
      * foreign MCP server, or undefined for a turn working only on the owner's own material. Present ⇒ the
-     * turn has read text somebody else wrote, which is the condition the credential-read floor below keys on. */
+     * turn has read text somebody else wrote, which is the condition the taint floor below keys on. */
     readonly outsideSource?: string;
 }
+
+/* THE CLASSES A TAINTED TURN DOES NOT GET FOR FREE. Both are things a turn carrying somebody else's words
+ * should have to ask about, and neither is something an ordinary turn should have to ask about:
+ *
+ *   secrets.access    a turn that has read a stranger's page does not get to read credential material unasked.
+ *   files.destructive the same page's other obvious ask. `rm -rf node_modules` is ordinary work and stays
+ *                     unasked all day; the same command in a turn that just read a bug report from a Front
+ *                     Desk visitor is the injection everybody pictures, and one card is a cheap way to not
+ *                     find out which it was afterwards.
+ *
+ * Everything else is untouched, so a tainted turn goes on editing, building, committing and replying. */
+const TAINT_FLOOR_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["secrets.access", "files.destructive"]);
 
 /* May the agent run this shell command? Consulted by the PreToolUse command gate before the command executes.
  *
@@ -113,15 +132,26 @@ export const commandRun = defineGuardedAction<CommandRunInput>({
         if (rule === "hold") {
             return HOLD(`the command rules hold commands that ${COMMAND_CLASS_LABELS[commandClass]} for your approval`);
         }
-        /* THE TAINT FLOOR, the one rule here that the owner did not write, and the only place the outside-
-         * content envelope becomes enforcement rather than narration (guard/turn-taint.ts explains why this
-         * class and no other). A turn that has read somebody else's words does not get to read credential
-         * material unasked; every other class is untouched, so the turn goes on editing, building and replying.
+        /* TWO FLOORS, the rules here that the owner did not write. Both apply ONLY where the owner has said
+         * NOTHING: an explicit `allow` is a decision about this exact class, a workspace whose work IS reading
+         * credentials or wiping volumes, say, and a floor that overrode it would be this module deciding it
+         * knows better than the person who configured it.
          *
-         * Applied only where the owner has said NOTHING. An explicit `allow` is a decision about this exact
-         * class, a workspace whose work IS reading credentials, say, and a floor that overrode it would be
-         * this module deciding it knows better than the person who configured it. */
-        if (rule === undefined && commandClass === "secrets.access" && outsideSource !== undefined) {
+         * THE STANDING FLOOR. `commandRules` is an empty rulebook until somebody opens the settings, and for
+         * everything recoverable that is the right default: the container is disposable and gating ordinary
+         * work is friction bought with nothing. It is the wrong default for the handful of commands that leave
+         * nothing to recover FROM (contract command-classes.ts FLOOR_CLASSES says which and argues the line).
+         * A fresh sandbox should not be one mistyped path away from a formatted disk, and "we assumed you had
+         * configured it" is not an answer anybody wants after the fact.
+         *
+         * The cost is stated where it is paid: `enforcing` in guard/turn-gate.ts is now true on every turn,
+         * so the vendor runtimes whose gate is their own approval channel ask per command rather than never. */
+        if (rule === undefined && FLOOR_CLASSES.has(commandClass)) {
+            return HOLD(`this command would ${COMMAND_CLASS_LABELS[commandClass]}, and nothing here undoes that`);
+        }
+        /* THE TAINT FLOOR, the only place the outside-content envelope becomes enforcement rather than
+         * narration (guard/turn-taint.ts explains the bit; TAINT_FLOOR_CLASSES above argues the two classes). */
+        if (rule === undefined && outsideSource !== undefined && TAINT_FLOOR_CLASSES.has(commandClass)) {
             return HOLD(
                 `this turn has taken in content from outside (${outsideSource}), and this command would ${COMMAND_CLASS_LABELS[commandClass]}`,
             );
@@ -172,4 +202,3 @@ export const childSpawn = defineGuardedAction<ChildSpawnInput>({
         return ALLOW(`no action rule restricts spawning child agents on ${provider}`);
     },
 });
-

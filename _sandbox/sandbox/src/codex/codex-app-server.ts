@@ -674,7 +674,7 @@ const skillInput = (prompt: string, skills: readonly CodexSkill[]): { readonly s
  *
  * `command` is optional in the schema, so a request without one is undefined here and the caller accepts it:
  * the alternative is refusing work over a field Codex chose not to send, and the gate is friction for
- * well-behaved commands rather than a boundary (guard/command-classes.ts). Deliberately TOLERANT of everything
+ * well-behaved commands rather than a boundary (sandbox-contract's command-classes.ts). Deliberately TOLERANT of everything
  * else in the payload: this runs on the turn path and a shape surprise must not throw the stream. */
 const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { readonly command: string; readonly reason?: string } | undefined => {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {

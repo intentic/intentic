@@ -46,6 +46,124 @@ describe("files.destructive", () => {
     test("--force alone is not read as recursive", () => {
         expect(classifyCommand("rm --force node_modules/.cache")).not.toContain("files.destructive");
     });
+
+    /* THE SCRIPT SPELLING OF THE SAME AFTERNOON. The gate feeds this classifier the JS backend's code as well as
+     * the shell line, and `fs.rmSync(p, { recursive: true, force: true })` used to walk straight past a rulebook
+     * whose owner thought they had covered deleting recursively: the regex wanted `rm` followed by whitespace and
+     * a flag, and `rmSync` has neither. */
+    test("a script's recursive delete is the same class as the shell's", () => {
+        for (const code of [
+            'fs.rmSync("/tmp/build", { recursive: true, force: true })',
+            'await fs.promises.rm("dist", { recursive: true })',
+            "await rm(target, { force: true, recursive: true })",
+            'fs.rmdirSync("build", { recursive: true })',
+            'rimraf.sync("node_modules")',
+            'await rimraf("dist")',
+        ]) {
+            expect(classifyCommand(code), code).toContain("files.destructive");
+        }
+    });
+
+    /* Recursive alone is enough on the script side and not on the shell side, which reads as an inconsistency
+     * until you ask what stops each one: `rm -r` stops at a prompt no script can answer, and `fs.rm` prompts
+     * nobody. A single-file unlink still is not this class on either side. */
+    test("a script that deletes one file, or nothing, is not recursive deletion", () => {
+        for (const code of ['fs.unlinkSync("tmp.txt")', 'await fs.promises.rm("tmp.txt")', "const rmq = queue.rm(job)"]) {
+            expect(classifyCommand(code), code).not.toContain("files.destructive");
+        }
+    });
+});
+
+describe("system.destructive", () => {
+    /* The class with a standing floor under it (guard/actions.ts): it holds even where the owner wrote no rule,
+     * so what is in it has to survive the question "does anything here bring this back?" */
+    test("catches a disk being formatted, wiped or overwritten", () => {
+        for (const command of [
+            "mkfs.ext4 /dev/sda1",
+            "mkfs -t xfs /dev/nvme0n1",
+            "wipefs -a /dev/sdb",
+            "blkdiscard /dev/nvme0n1",
+            "sgdisk --zap-all /dev/sda",
+            "dd if=/dev/zero of=/dev/sda bs=1M",
+            "shred -n 3 /dev/sdb",
+            "cat image.iso > /dev/sdb",
+        ]) {
+            expect(classifyCommand(command), command).toContain("system.destructive");
+        }
+    });
+
+    // Reading a device INTO a file is how a backup is taken, and holding that would teach exactly the wrong
+    // lesson. Only `of=` a device counts.
+    test("imaging a disk to a file is not wiping one", () => {
+        expect(classifyCommand("dd if=/dev/sda of=/backup/disk.img bs=4M")).not.toContain("system.destructive");
+    });
+
+    test("catches Docker state that is data rather than image", () => {
+        for (const command of [
+            "docker volume rm intentic-postgres_data",
+            "docker volume prune -f",
+            "docker system prune -af --volumes",
+            "docker compose down -v",
+            "docker-compose down --volumes",
+            "podman volume rm cache",
+        ]) {
+            expect(classifyCommand(command), command).toContain("system.destructive");
+        }
+    });
+
+    // Deliberately outside the floor: each of these is undone by doing the ordinary thing again, and a floor
+    // that fires on them is one people learn to click through.
+    test("Docker work that is recreated by running it again is not this class", () => {
+        for (const command of ["docker compose down", "docker rm -f api", "docker image prune -a", "docker compose up -d --force-recreate"]) {
+            expect(classifyCommand(command), command).not.toContain("system.destructive");
+        }
+    });
+
+    /* THE WHOLE POINT OF THE SPLIT. Same verb, same flags, different class, because the operand is a root rather
+     * than something inside one, and only the second is worth stopping a fresh sandbox for. */
+    test("a recursive delete aimed at a root is more than files.destructive", () => {
+        for (const command of [
+            "rm -rf /",
+            "rm -rf /*",
+            "rm -rf ~",
+            "rm -rf ~/",
+            'rm -rf "$HOME"',
+            "rm -rf ${HOME}/*",
+            "rm -rf /work",
+            "rm -rf /home/",
+            "rm -rf /etc",
+            "rm -rf C:\\",
+            'fs.rmSync("/", { recursive: true, force: true })',
+            'rimraf("/work")',
+        ]) {
+            expect(classifyCommand(command), command).toContain("system.destructive");
+        }
+    });
+
+    test("a recursive delete of something inside a root is ordinary work", () => {
+        for (const command of [
+            "rm -rf build",
+            "rm -rf node_modules",
+            "rm -rf /work/intentic/dist",
+            "rm -rf ~/projects/old",
+            "rm -rf $HOME/.cache/turbo",
+            "rm -rf /tmp/scratch",
+            'fs.rmSync("/work/intentic/dist", { recursive: true })',
+        ]) {
+            expect(classifyCommand(command), command).not.toContain("system.destructive");
+        }
+    });
+
+    // Both classes at once, which is what the gate needs: whichever rule is stricter gets to decide.
+    test("a root delete is in both deletion classes", () => {
+        expect(classifyCommand("rm -rf /")).toEqual(["files.destructive", "system.destructive"]);
+    });
+
+    // A pipeline's later command must not lend its operands to an earlier one, the force-push trap in the
+    // other direction: the `/` here belongs to grep, not to rm.
+    test("an operand belonging to the next command in a pipeline is not this rm's target", () => {
+        expect(classifyCommand("rm -rf build | tee /")).not.toContain("system.destructive");
+    });
 });
 
 describe("secrets.access", () => {

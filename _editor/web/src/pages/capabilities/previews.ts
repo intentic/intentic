@@ -31,7 +31,7 @@ export const walletPolicySummary = (values: Readonly<Record<string, string>>): s
 // ---------------------------------------------------------------------------
 
 // The switch keys a host card carries (HOST_SCOPE_FIELDS), in the order the sentence names them.
-const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `sandboxRemove`] as const;
+const HOST_SWITCHES = [`shell`, `write`, `screen`, `control`, `sandboxes`, `sandboxRemove`, `destructive`] as const;
 type HostSwitch = (typeof HOST_SWITCHES)[number];
 
 const GRANT_WORDS: Readonly<Record<HostSwitch, string>> = {
@@ -41,6 +41,7 @@ const GRANT_WORDS: Readonly<Record<HostSwitch, string>> = {
     control: `use the mouse and keyboard`,
     sandboxes: `manage its sandboxes`,
     sandboxRemove: `remove its sandboxes`,
+    destructive: `delete folders and wipe disks`,
 };
 
 export interface HostPreset {
@@ -49,23 +50,24 @@ export interface HostPreset {
     readonly grants: Readonly<Record<HostSwitch, `on` | `off`>>;
 }
 
-/* Three postures a person actually means, over six switches nobody wants to think about one by one. Removal
- * stays off even at Full control: it is the one grant nothing undoes, so it is only ever turned on by hand. */
+/* Three postures a person actually means, over seven switches nobody wants to think about one by one. The two
+ * grants nothing undoes, removing a sandbox and running a destructive command, stay off even at Full control:
+ * a preset is a convenience, and neither of those is a thing to hand somebody by picking a convenient label. */
 export const HOST_PRESETS: readonly HostPreset[] = [
     {
         key: `observe`,
         label: `Observe`,
-        grants: { shell: `off`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off` },
+        grants: { shell: `off`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off`, destructive: `off` },
     },
     {
         key: `operate`,
         label: `Operate`,
-        grants: { shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off` },
+        grants: { shell: `on`, write: `off`, screen: `on`, control: `off`, sandboxes: `off`, sandboxRemove: `off`, destructive: `off` },
     },
     {
         key: `full`,
         label: `Full control`,
-        grants: { shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, sandboxRemove: `off` },
+        grants: { shell: `on`, write: `on`, screen: `on`, control: `on`, sandboxes: `on`, sandboxRemove: `off`, destructive: `off` },
     },
 ];
 

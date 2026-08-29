@@ -128,7 +128,7 @@ export const openCodeBinaryMissing = (backend: string): string =>
  * turn in the container, configured workspace or not.
  *
  * So OpenCode does a coarse pre-filter and the real classifier does the deciding. These globs are a deliberate
- * OVER-approximation of guard/command-classes.ts: they must not miss anything that classifier would catch, and
+ * OVER-approximation of sandbox-contract's command-classes.ts: they must not miss anything that classifier would catch, and
  * they are free to match things it will wave straight through (an unclassified `git push` to a feature branch
  * costs one in-process round-trip and nothing else). They are NOT a second rulebook, and no verdict is ever
  * read off them: every ask they produce is answered by the one decide fn.

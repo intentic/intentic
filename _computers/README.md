@@ -10,3 +10,10 @@ Two connectors, and the difference is worth stating once: [host/](host) is the w
 the screen — connected by a one-liner run over there. [webext/](webext) is one browser on it, connected by a
 code pasted into an extension, and it can do exactly one thing the other cannot: act as the person on the sites
 their browser is already signed into.
+
+On the machine, enforcement covers what a command SAYS, not only whether commands are allowed at all. `shell`
+opens the door; a command the shared classifier
+([sandbox-contract/src/command-classes.ts](../_sandbox/sandbox-contract/src/command-classes.ts)) reads as
+destructive — a recursive delete, a formatted disk, a removed Docker volume — additionally needs `destructive`,
+which is off until its owner turns it on. The sandbox's own gate holds far less than this, because a container
+is disposable and a laptop is not.

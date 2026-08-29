@@ -24,6 +24,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     control: "on",
     sandboxes: "on",
     sandboxRemove: "on",
+    destructive: "on",
     ...overrides,
 });
 
@@ -141,19 +142,21 @@ test("shape files ride the runner-up argv, and an overlay without its hash is re
         "--definition-file",
         "/tmp/d/sandbox.toml",
     ]);
-    expect(icRunnerArgs("runner-up", "rig", "https://x", "p", { overlayFile: "/tmp/d/overlay.Dockerfile", environmentHash: "a".repeat(64) })).toEqual([
-        "runner",
-        "up",
-        "https://x",
-        "--pair",
-        "p",
-        "--name",
-        "rig",
-        "--overlay-file",
-        "/tmp/d/overlay.Dockerfile",
-        "--environment-hash",
-        "a".repeat(64),
-    ]);
+    expect(icRunnerArgs("runner-up", "rig", "https://x", "p", { overlayFile: "/tmp/d/overlay.Dockerfile", environmentHash: "a".repeat(64) })).toEqual(
+        [
+            "runner",
+            "up",
+            "https://x",
+            "--pair",
+            "p",
+            "--name",
+            "rig",
+            "--overlay-file",
+            "/tmp/d/overlay.Dockerfile",
+            "--environment-hash",
+            "a".repeat(64),
+        ],
+    );
     expect(() => icRunnerArgs("runner-up", "rig", "https://x", "p", { overlayFile: "/tmp/d/overlay.Dockerfile" })).toThrow(/hash/);
     expect(() => icRunnerArgs("runner-up", "rig", "https://x", "p", { environmentHash: "a".repeat(64) })).toThrow(/overlay/);
 });

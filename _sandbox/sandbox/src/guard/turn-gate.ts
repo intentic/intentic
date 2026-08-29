@@ -44,12 +44,23 @@ export interface TurnGate {
     readonly release: () => void;
 }
 
-/* Whether the OWNER'S RULEBOOK could refuse anything on this turn, answerable before the turn starts.
+/* Whether anything here could refuse this turn, answerable before the turn starts.
  *
  * Read by the runtimes whose gate is the vendor's approval channel, because turning that channel on is a
  * decision at turn start rather than per call. Kept beside createTurnGate so the two cannot disagree about what
- * "could refuse anything" means. */
-export const turnIsGated = (turn: TurnGateInput): boolean => Object.keys(turn.commandRules ?? {}).length > 0 || turn.outsideWake !== undefined;
+ * "could refuse anything" means.
+ *
+ * ALWAYS TRUE since the standing floor arrived (guard/actions.ts commandRun): a command that would wipe a disk
+ * or a Docker volume is held on every turn, including one in a workspace whose owner has never opened the
+ * settings, so there is no longer a turn on which nothing could refuse. Answering `false` for an empty rulebook
+ * would be answering the old question, and the runtimes that read this would leave their approval channel off
+ * and never bring the floor a command to judge.
+ *
+ * WHAT THAT COSTS, stated rather than buried: Codex now runs `approvalPolicy: "untrusted"` and OpenCode its
+ * asking config on every turn instead of only configured ones, which is an approval round-trip per command
+ * rather than none. That is the price of a default that binds on every runtime instead of only the one whose
+ * hook is always wired, and the floor is deliberately narrow so the round-trip is nearly always a yes. */
+export const turnIsGated = (): boolean => true;
 
 /* Mint this turn's gate and publish its taint bit.
  *

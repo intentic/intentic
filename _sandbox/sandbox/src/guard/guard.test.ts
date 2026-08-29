@@ -113,8 +113,32 @@ describe("command.run", () => {
         );
     });
 
-    /* The taint floor: the only verdict here the owner did not write. It holds credential reads on a turn that
-     * has taken in somebody else's words, and it yields to any rule they DID write. */
+    /* THE STANDING FLOOR: held where the owner wrote nothing, on every turn, tainted or not. It is what makes a
+     * fresh sandbox, whose rulebook is empty by default, not one mistyped path away from a formatted disk. */
+    describe("the standing floor under the classes nothing undoes", () => {
+        test("holds a disk or volume wipe on an ordinary turn with an empty rulebook", () => {
+            const verdict = guard(commandRun, { commandClass: "system.destructive", rules: {} });
+            expect(verdict.effect).toBe("hold");
+            expect(verdict.reason).toContain("nothing here undoes");
+        });
+
+        // Narrow on purpose. A floor that fires on ordinary work is one people learn to click through, so
+        // everything recoverable stays allowed on an empty rulebook exactly as it always was.
+        test("nothing else is held on an empty rulebook", () => {
+            for (const commandClass of ["git.destructive", "files.destructive", "secrets.access", "package.publish", "network.outbound"] as const) {
+                expect(guard(commandRun, { commandClass, rules: {} }).effect, commandClass).toBe("allow");
+            }
+        });
+
+        // The floor is a default, not an override: an owner who said `allow` about this exact class decided it.
+        test("the owner's explicit rule wins both ways", () => {
+            expect(guard(commandRun, { commandClass: "system.destructive", rules: { "system.destructive": "allow" } }).effect).toBe("allow");
+            expect(guard(commandRun, { commandClass: "system.destructive", rules: { "system.destructive": "deny" } }).effect).toBe("deny");
+        });
+    });
+
+    /* The taint floor: the other verdict here the owner did not write. It holds credential reads AND recursive
+     * deletes on a turn that has taken in somebody else's words, and it yields to any rule they DID write. */
     describe("the outside-content floor", () => {
         test("holds a credential read on a tainted turn, and names the source in the reason", () => {
             const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "discord" });
@@ -122,12 +146,22 @@ describe("command.run", () => {
             expect(verdict.reason).toContain("discord");
         });
 
-        test("an untainted turn is untouched", () => {
-            expect(guard(commandRun, { commandClass: "secrets.access", rules: {} }).effect).toBe("allow");
+        /* `rm -rf node_modules` is ordinary work and stays unasked all day; the same command in a turn that has
+         * just read a stranger's bug report is the injection everybody pictures, and one card is a cheap way to
+         * not find out afterwards which of the two it was. */
+        test("holds a recursive delete on a tainted turn too", () => {
+            const verdict = guard(commandRun, { commandClass: "files.destructive", rules: {}, outsideSource: "webchat" });
+            expect(verdict.effect).toBe("hold");
+            expect(verdict.reason).toContain("webchat");
         });
 
-        test("only the credential class: a tainted turn still deletes and publishes as configured", () => {
-            for (const commandClass of ["git.destructive", "files.destructive", "package.publish", "network.outbound"] as const) {
+        test("an untainted turn is untouched", () => {
+            expect(guard(commandRun, { commandClass: "secrets.access", rules: {} }).effect).toBe("allow");
+            expect(guard(commandRun, { commandClass: "files.destructive", rules: {} }).effect).toBe("allow");
+        });
+
+        test("the rest of the catalog is untouched: a tainted turn still pushes and publishes as configured", () => {
+            for (const commandClass of ["git.destructive", "package.publish", "network.outbound"] as const) {
                 expect(guard(commandRun, { commandClass, rules: {}, outsideSource: "web" }).effect, commandClass).toBe("allow");
             }
         });
@@ -182,4 +216,3 @@ describe("agents.spawn", () => {
         expect(guard(childSpawn, { provider: "claude", rules: { "agents.spawn": "deny" }, outsideSource: "webchat" }).effect).toBe("deny");
     });
 });
-

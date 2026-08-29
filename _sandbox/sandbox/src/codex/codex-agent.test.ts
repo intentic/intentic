@@ -91,7 +91,8 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     expect(turn.options).toEqual({
         workingDirectory: "/work",
         sandboxMode: "danger-full-access",
-        approvalPolicy: "never",
+        // "untrusted" on every turn now: the standing floor means there is always something that could refuse.
+        approvalPolicy: "untrusted",
         model: "gpt-5-codex",
         // Claude's top effort level maps onto Codex's scale ceiling.
         modelReasoningEffort: "xhigh",
@@ -705,19 +706,22 @@ test("an unclassified command is approved, so an ordinary turn is untouched", as
     expect(decisions).toEqual([true]);
 });
 
-// Codex is only ASKED to raise approvals when the rulebook has something it could refuse. An unconfigured
-// workspace keeps `approvalPolicy: "never"`, which is byte-identical to what every turn ran under before.
-test("approvals are requested only when the owner wrote rules", async () => {
+/* Codex raises approvals whenever the gate has something it could refuse, which is now EVERY turn: the
+ * standing floor holds the classes nothing undoes even on a workspace nobody configured. That is the cost this
+ * change accepts and the reason it is written down twice (guard/turn-gate.ts states it too) — an approval
+ * round-trip per command execution, in exchange for a default that binds on every runtime rather than only on
+ * the one whose hook is always wired. The floor is narrow enough that the round-trip is nearly always a yes. */
+test("approvals are requested on every turn, configured or not", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     const agent = createTestAgent(runner);
 
     await collect(agent, request);
-    expect(calls[0]!.options.approvalPolicy).toBe("never");
+    expect(calls[0]!.options.approvalPolicy).toBe("untrusted");
 
     await collect(agent, { ...request, commandRules: { "files.destructive": "hold" } });
     expect(calls[1]!.options.approvalPolicy).toBe("untrusted");
 
-    // A turn a stranger woke is gated too, even with no rules: that is the taint floor's condition.
+    // A turn a stranger woke is gated too, which was already true: that is the taint floor's condition.
     await collect(agent, { ...request, outsideWake: "discord" });
     expect(calls[2]!.options.approvalPolicy).toBe("untrusted");
 });

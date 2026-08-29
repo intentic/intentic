@@ -75,11 +75,12 @@ test("an unclassified command is allowed, so an ordinary turn is untouched", asy
     expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
 });
 
-// The rulebook is the OWNER'S, not a per-tool prompt: with no rules and no taint, the standing auto-allow holds
-// and the gate is never consulted at all. This is what keeps an unconfigured workspace behaving as it always did.
-test("a workspace with no rules is not gated", async () => {
+/* A workspace with no rules IS gated now, because the standing floor (guard/actions.ts) holds the classes
+ * nothing undoes whether or not anybody configured anything. What has not changed is the answer for everything
+ * else: with no rule and no taint, a force-push on an unconfigured workspace is still allowed outright. */
+test("a workspace with no rules is gated by the floor, and still allows everything the floor does not cover", async () => {
     const gate = gateWith({});
-    expect(gate.enforcing).toBe(false);
+    expect(gate.enforcing).toBe(true);
     const call = request("execute", OPTIONS, { rawInput: { command: "git push --force origin main" } });
     expect(await decidePermission(call, "execute", false, gate)).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
 });

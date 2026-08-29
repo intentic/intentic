@@ -134,7 +134,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         sandboxUrl: flags.url,
         id,
         token: hostToken,
-        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off" },
+        scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off", destructive: "off" },
     };
     /* ADDED TO THE LIST, NOT WRITTEN OVER IT. This line used to be `writeHostConfig(link)` against a
      * single-link file, which made connecting a second sandbox a silent disconnection of the first — and the

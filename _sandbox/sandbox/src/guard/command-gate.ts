@@ -1,9 +1,8 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { AdmissionRule, AgentEvent, CommandClass } from "@intentic/sandbox-contract";
+import { type AdmissionRule, type AgentEvent, classifyCommand, COMMAND_CLASS_LABELS, type CommandClass } from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
-import { classifyCommand, COMMAND_CLASS_LABELS } from "./command-classes.js";
 import { guard, type GuardVerdict } from "./guard.js";
 import type { TurnTaint } from "./turn-taint.js";
 
@@ -41,7 +40,7 @@ import type { TurnTaint } from "./turn-taint.js";
  * unattended branch: a card raised where no one can answer hangs the turn until its timeout and reads as the
  * agent freezing, which is worse than a clear no. The policy does not change, only how it is delivered.
  *
- * Read guard/command-classes.ts for what this does and does not catch: the classifier is regex over shell text,
+ * Read sandbox-contract's command-classes.ts for what this does and does not catch: the classifier is regex over shell text,
  * so the gate is friction for well-behaved work and an ask for the owner, never the boundary for a hostile one.
  */
 
@@ -97,17 +96,17 @@ export type GateOutcome = { readonly allow: true } | { readonly allow: false; re
 const ALLOWED: GateOutcome = { allow: true };
 
 export interface CommandGate {
-    /* Whether ANYTHING here can refuse this turn: the owner wrote at least one rule, or the turn was born
-     * carrying somebody else's words and the taint floor may apply.
+    /* Whether ANYTHING here can refuse this turn. True on every turn now: the owner's rules, the taint floor,
+     * and the standing floor under the classes nothing undoes (guard/actions.ts commandRun), the last of which
+     * applies to a workspace that has never opened the settings.
      *
      * Read by the runtimes whose gate is the VENDOR'S approval channel, because turning that channel on is a
      * decision at turn start: Codex asks nothing under `approvalPolicy: "never"` and OpenCode nothing under an
-     * allow-all config, and flipping either costs an approval round-trip per call. False ⇒ leave the vendor
-     * exactly as it was, so an unconfigured workspace pays nothing and behaves as it always did.
+     * allow-all config, and flipping either costs an approval round-trip per call. guard/turn-gate.ts's
+     * turnIsGated is the same answer read before a turn exists, and states what the round-trip buys.
      *
-     * The honest cost of deciding once: a turn that starts clean, with no rules, and THEN fetches a hostile page
-     * cannot make its vendor start asking retroactively. The Claude Code loop has no such gap (its hook is
-     * always wired); for the others, `rulebook: "approval"` is the disclosure that covers it. */
+     * Kept as a field rather than folded away, because it is the seam a runtime that CANNOT ask would read to
+     * say so, and because the "always" grants below are what make the per-call cost bearable within a turn. */
     readonly enforcing: boolean;
     /* The whole decision for one program about to run, AS A GENERATOR: the frames it yields are the permission
      * card and its resolution, and the return value is the verdict. Never throws, a guard that cannot answer
@@ -174,7 +173,7 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     const granted = new Set<CommandClass>();
 
     return {
-        enforcing: Object.keys(options.rules).length > 0 || options.taint.tainted(),
+        enforcing: true,
         consult: async function* (program, subject) {
             const classes = classifyCommand(program).filter((commandClass) => !granted.has(commandClass));
             const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());

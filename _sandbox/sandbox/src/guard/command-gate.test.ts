@@ -220,13 +220,68 @@ describe("command gate: the outside-content floor", () => {
         expect((await gate.run(READ_ENV)).hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
     });
 
-    // The floor is about credentials, not about tainted turns being untrustworthy at everything.
-    test("no other class is touched: a tainted turn still deletes, pushes and publishes as configured", async () => {
+    // The floor covers what a hostile page would ask for, not everything a tainted turn does: it goes on
+    // pushing, publishing and fetching exactly as configured.
+    test("the rest of the catalog is untouched on a tainted turn", async () => {
         const gate = harness({ taint: createTurnTaint("discord") });
-        for (const command of [FORCE_PUSH, "rm -rf build", "npm publish", "curl https://example.com"]) {
+        for (const command of [FORCE_PUSH, "npm publish", "curl https://example.com"]) {
             expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
         }
         expect(gate.events).toEqual([]);
+    });
+
+    // The other half of the same floor: deletion is the page's other obvious ask, so it raises a card too.
+    test("a recursive delete on a tainted turn raises a card", async () => {
+        const gate = harness({ taint: createTurnTaint("discord") });
+        const pending = gate.run("rm -rf build");
+        await settled();
+        const card = cardOf(gate.events);
+        expect(card.title).toContain("delete files recursively");
+        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+        expect((await pending).hookSpecificOutput).toBeUndefined();
+    });
+});
+
+/* THE STANDING FLOOR, at the gate rather than at the decide fn. This is the case the whole change is for: a
+ * workspace nobody has configured, a turn nobody woke from outside, and a command that would take the machine
+ * with it. Before the floor, every one of these passed untouched. */
+describe("command gate: the standing floor", () => {
+    test("a command that wipes state nothing restores raises a card on an unconfigured workspace", async () => {
+        for (const command of ["mkfs.ext4 /dev/sda1", "docker volume rm app_data", "rm -rf ~", "dd if=/dev/zero of=/dev/sda"]) {
+            const gate = harness({});
+            const pending = gate.run(command);
+            await settled();
+            const card = cardOf(gate.events);
+            expect(card.title, command).toContain("wipe a disk");
+            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            expect((await pending).hookSpecificOutput, command).toBeUndefined();
+        }
+    });
+
+    /* Narrow on purpose, and this is the test that keeps it narrow: an agent deleting a build directory,
+     * force-pushing a branch or reading a dotenv on an unconfigured workspace is never asked anything. A floor
+     * that fires on ordinary work is one people learn to click through. */
+    test("ordinary work on an unconfigured workspace is still never asked about", async () => {
+        const gate = harness({});
+        for (const command of [FORCE_PUSH, "rm -rf build", "rm -rf node_modules", "cat .env", "npm publish", "docker compose down"]) {
+            expect((await gate.run(command)).hookSpecificOutput, command).toBeUndefined();
+        }
+        expect(gate.events).toEqual([]);
+    });
+
+    // The floor is a default, not an override: the owner who wrote `allow` about this exact class decided it.
+    test("an explicit allow outranks the floor", async () => {
+        const gate = harness({ rules: { "system.destructive": "allow" } });
+        expect((await gate.run("docker volume rm app_data")).hookSpecificOutput).toBeUndefined();
+        expect(gate.events).toEqual([]);
+    });
+
+    // Unattended, a hold has nobody to raise a card to, so the floor refuses and says so, the same translation
+    // every other hold gets there.
+    test("unattended, the floor refuses instead of parking", async () => {
+        const out = await harness({ unattended: true }).run("mkfs.ext4 /dev/sda1");
+        expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
+        expect(reasonOf(out)).toContain("nobody to approve it");
     });
 });
 

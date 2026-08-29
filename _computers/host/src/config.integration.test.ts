@@ -26,6 +26,7 @@ const scopes = (shell: HostScopes["shell"]): HostScopes => ({
     control: "off",
     sandboxes: "off",
     sandboxRemove: "off",
+    destructive: "off",
 });
 
 const link = (url: string, id: string, shell: HostScopes["shell"] = "off") => ({

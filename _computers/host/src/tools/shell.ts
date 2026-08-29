@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import type { HostScopes } from "@intentic/sandbox-contract";
-import { assertPath, assertScope, rootsOf } from "../policy.js";
+import { classifyCommand, COMMAND_CLASS_LABELS, type CommandClass, type HostScopes } from "@intentic/sandbox-contract";
+import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
 
 /* Running a command on somebody's computer, the tool that does most of the work, and the one whose failure
  * modes are worth designing around rather than discovering.
@@ -18,7 +18,20 @@ import { assertPath, assertScope, rootsOf } from "../policy.js";
  *
  * EVERY COMMAND HAS A DEADLINE. There is no terminal on the other end: a command that waits for input (an
  * unprimed `sudo`, an `npm login`, anything with a "[y/N]") would hang until the socket died. The timeout turns
- * that into a message the agent can act on, and the message says what it means rather than "timed out". */
+ * that into a message the agent can act on, and the message says what it means rather than "timed out".
+ *
+ * WHAT THE COMMAND SAYS IS PART OF THE GRANT, not just whether there is a grant. `shell` used to be the whole
+ * question and `cwd` the only thing read: a command was checked for WHERE it started and never for WHAT it did,
+ * so an agent that had been told it could run commands could run `rm -rf ~/projects` with the user's own
+ * privileges, and the sandbox's command gate never saw it, because that gate hooks Bash and the JS backend and
+ * this arrives as an MCP tool call. The classifier below closes that: same table the sandbox reads
+ * (sandbox-contract/command-classes.ts), consulted HERE, on the machine, beside the scopes, because that is
+ * where this product's whole argument says enforcement lives.
+ *
+ * ONE EXTRA SWITCH, NOT FIVE. Only the two classes that destroy something are gated (`destructive` on the
+ * card). Reading a dotenv, publishing a package and reaching the network are the sandbox's rulebook to hold,
+ * with a card and a person to answer it; re-asking them here, where a refusal is the only available answer,
+ * would turn a connected laptop into a machine that says no a lot. */
 
 /* Long enough for an install or a test run, short enough that a wedged command doesn't hold a tool call for the
  * hub's whole 15-minute ceiling. The agent can ask for more, up to the hard cap.
@@ -65,11 +78,34 @@ export interface CommandResult {
     readonly timedOut: boolean;
 }
 
+/* The classes that need `destructive` on top of `shell`. Both spend something this machine cannot get back:
+ * files that no worktree or checkpoint holds a copy of, and disks or volumes that hold everything else. The
+ * rest of the catalog is deliberately absent, see the header. */
+const GATED_CLASSES: ReadonlySet<CommandClass> = new Set<CommandClass>(["files.destructive", "system.destructive"]);
+
+// The refusal a destructive command earns, naming what the classifier saw so the user can judge the ask rather
+// than being told only that something was blocked.
+const destructiveRefusal = (classes: readonly CommandClass[]): string =>
+    `Refused: this command would ${classes.map((commandClass) => COMMAND_CLASS_LABELS[commandClass]).join(" and ")} on this computer, ` +
+    `and "Run destructive commands" is switched off for it. Turn it on in its capability card to allow this, ` +
+    `or run a command that does not delete.`;
+
+// Which gated classes this command falls in, empty when it is ordinary work.
+export const destructiveClasses = (command: string): CommandClass[] =>
+    classifyCommand(command).filter((commandClass) => GATED_CLASSES.has(commandClass));
+
 export const runCommand = async (
     input: { readonly command: string; readonly cwd?: string; readonly timeoutMs?: number },
     scopes: HostScopes,
 ): Promise<CommandResult> => {
     assertScope(scopes, "shell");
+    /* Read BEFORE the cwd is resolved, so a destructive command aimed outside the roots is refused for what it
+     * does rather than for where it would have started: the second message sends somebody to widen "Folders it
+     * may touch", which is the opposite of the change they want to make. */
+    const destructive = destructiveClasses(input.command);
+    if (destructive.length > 0 && scopes.destructive !== "on") {
+        throw new ScopeError(destructiveRefusal(destructive));
+    }
     // The working directory is inside the roots like any other path, a command is a file operation with extra
     // steps, and starting it in a directory the user walled off is the same breach as reading from there.
     const cwd = input.cwd === undefined ? (rootsOf(scopes)[0] ?? homedir()) : assertPath(input.cwd, scopes, "run a command in");

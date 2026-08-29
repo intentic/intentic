@@ -17,7 +17,16 @@ const connector = (id: string): Capability => ({ id, kind: "cli", config: { prov
 const computer = (id: string): Capability => ({
     id,
     kind: "host",
-    config: { platform: "linux", shell: "on", write: "on", screen: "off", control: "off", sandboxes: "off", sandboxRemove: "off" },
+    config: {
+        platform: "linux",
+        shell: "on",
+        write: "on",
+        screen: "off",
+        control: "off",
+        sandboxes: "off",
+        sandboxRemove: "off",
+        destructive: "off",
+    },
 });
 const mcp = (id: string): Capability => ({ id, kind: "mcp", config: { url: "https://a/mcp" } });
 

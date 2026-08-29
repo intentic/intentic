@@ -282,6 +282,16 @@ const HOST_SCOPE_FIELDS: readonly CapabilityField[] = [
         hint: "Deletes a sandbox with its files and history: nothing undoes it.",
     },
     {
+        key: "destructive",
+        label: "Run destructive commands",
+        default: "off",
+        options: [
+            { value: "off", label: "Blocked" },
+            { value: "on", label: "Allowed" },
+        ],
+        hint: "Deleting folders recursively, formatting a disk, removing a Docker volume. Everything else it may run stays allowed.",
+    },
+    {
         key: "roots",
         label: "Folders it may touch",
         optional: true,

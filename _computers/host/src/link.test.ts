@@ -53,6 +53,7 @@ const scopes = (overrides: Partial<HostScopes> = {}): HostScopes => ({
     control: "on",
     sandboxes: "on",
     sandboxRemove: "on",
+    destructive: "on",
     ...overrides,
 });
 
@@ -92,7 +93,17 @@ test("the daemon can ask a machine what it is", async () => {
 test("a pushed grant takes effect on the machine", async () => {
     const { client, scopesNow } = connectedPair();
     expect(await client.setScopes({ shell: "off", write: "off", screen: "on", control: "off" })).toEqual({ ok: true });
-    expect(scopesNow()).toEqual({ shell: "off", write: "off", screen: "on", control: "off", sandboxes: "off", sandboxRemove: "off" });
+    // The schema fills every switch the push left out, and each one it fills is off: a grant that arrives
+    // partial must not read as a grant of whatever it forgot to mention.
+    expect(scopesNow()).toEqual({
+        shell: "off",
+        write: "off",
+        screen: "on",
+        control: "off",
+        sandboxes: "off",
+        sandboxRemove: "off",
+        destructive: "off",
+    });
 });
 
 test("a grant that does not satisfy the contract is refused before it reaches the machine", async () => {
