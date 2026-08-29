@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
+import { foreground, PANE_FORMAT, paneStates } from "../terminal/pane-state.js";
+import { watchPromptSignals } from "../terminal/prompt-signal.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -14,11 +16,17 @@ const execFileAsync = promisify(execFile);
  * when a dev server binds its port, so no `workspaceChanged` batch could ever say so, and for want of that
  * frame, every view of a running thing carried its own timer. Six of them, in every open tab, forever.
  *
- * The state is in THIS process, so the daemon is the right place to notice. Two halves, because the sources
+ * The state is in THIS process, so the daemon is the right place to notice. Three sources, because they
  * genuinely differ:
  *
  *   ANNOUNCED, the daemon does the thing itself (starts the panel, mints the browser, opens the child), so the
  *   code that changes the state calls `publishRuntimeChange` on its way past. Instant, exact, free.
+ *
+ *   ANNOUNCED FROM THE SHELL, the one thing that happens in the container without the daemon touching it and
+ *   still has an exact moment: a person's command starting and finishing in a terminal tab. Our zsh's
+ *   preexec/precmd hooks touch a file, and terminal/prompt-signal.ts turns that into a `terminals` frame. It
+ *   is here because the alternative is a poll that is always either too slow to feel live or too expensive to
+ *   leave running.
  *
  *   SAMPLED, nothing tells anyone. A pane dies when its command exits; a dev server binds its port seconds
  *   after launch. Both are only knowable by looking, so the sampler looks. ONCE, here, on the connection the
@@ -26,7 +34,7 @@ const execFileAsync = promisify(execFile);
  *   browser is subscribed and publishes only when what it sees has changed, so an idle sandbox with a tab open
  *   costs two file reads and one `tmux list-panes` every couple of seconds, and pushes nothing at all.
  *
- * Both halves land in the same throttle, and the throttle is the thing that keeps this cheaper than what it
+ * All three land in the same throttle, and the throttle is the thing that keeps this cheaper than what it
  * replaces rather than merely faster. */
 
 // How often the sampled half looks. Matches the managed-process sweep, which is the clock a panel's
@@ -142,27 +150,36 @@ export interface RuntimeProbes {
  * nothing. Membership, liveness and exit status stay exact: those are what the strip and the badge are. */
 const ACTIVITY_BUCKET_MS = 10_000;
 
-// Every session's name, whether its panes are dead, how they exited, and its activity clock, bucketed. One
-// exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other.
+/* THE FINGERPRINT IS THE TERMINALS LIST, MINUS THE PARTS THAT ARE NOT TMUX'S, so the sampler pushes exactly
+ * when what the browser would draw has changed. Same format string, same fold (terminal/pane-state.ts), one
+ * line per session: membership, liveness, the last window's exit status, the activity clock bucketed, and
+ * WHETHER A FOREGROUND COMMAND IS RUNNING IN THERE.
+ *
+ * That last field is why this reads through `foreground` rather than counting panes. A command ending in a
+ * `web-*` shell kills nothing and starts nothing: the pane lives, its exit status is tmux's not the command's,
+ * and the activity stamp stops moving at the instant the prompt is drawn. Every field the old fingerprint
+ * watched therefore looked IDENTICAL before and after, and the strip's busy dot stayed lit until the coarse
+ * activity bucket happened to roll under it, up to ten seconds later and, when the prompt landed in the same
+ * bucket as the last push, not until something unrelated moved.
+ *
+ * Busy is folded to a flag, not the command word, on purpose: a build whose foreground process churns
+ * (`pnpm` → `node` → `git`) would otherwise push on every sample, the live-tail cost this whole module is
+ * shaped to avoid. The word itself still reaches the browser, in the list it re-reads when the flag flips. */
+export const paneFingerprint = (stdout: string): string =>
+    [...paneStates(stdout)]
+        .map(([name, { live, exitCode, activityAt, liveCommand }]) =>
+            [name, live ? "live" : "dead", exitCode ?? "", Math.floor(activityAt / ACTIVITY_BUCKET_MS), foreground(liveCommand) === undefined ? "" : "busy"].join(
+                "\t",
+            ),
+        )
+        .toSorted()
+        .join("\n");
+
+// One exec for the whole tmux server. No server yet means no sessions, which is a fingerprint like any other.
 const tmuxFingerprint = async (): Promise<string> => {
     try {
-        const { stdout } = await execFileAsync("tmux", [
-            "list-panes",
-            "-a",
-            "-F",
-            "#{session_name}\t#{pane_dead}\t#{pane_dead_status}\t#{session_activity}",
-        ]);
-        return stdout
-            .split("\n")
-            .flatMap((line) => {
-                const [name, dead, status, activity] = line.split("\t");
-                if (name === undefined || name === "") {
-                    return [];
-                }
-                return [`${name}\t${dead ?? ""}\t${status ?? ""}\t${Math.floor((Number(activity) * 1000) / ACTIVITY_BUCKET_MS)}`];
-            })
-            .toSorted()
-            .join("\n");
+        const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
+        return paneFingerprint(stdout);
     } catch {
         return "";
     }
@@ -252,15 +269,23 @@ export const createRuntimeSampler = (probes: RuntimeProbes = defaultRuntimeProbe
 
 const sampler = createRuntimeSampler();
 
+// The shell's own half of the announced side, from outside this process: our zsh tells us the moment a command
+// starts and the moment its prompt comes back (terminal/prompt-signal.ts), which is the one transition tmux
+// keeps to itself. Held for as long as anything is subscribed, on the same terms as the sampler.
+let unwatchPrompts: (() => void) | undefined;
+
 /** Subscribe a /events connection to the runtime feed. The sampled half runs only while at least one connection
  *  holds a subscription, no browser, no looking. */
 export const subscribeRuntimeChanges = (listener: (domains: RuntimeDomain[]) => void): (() => void) => {
     subscribers.add(listener);
     sampler.start();
+    unwatchPrompts ??= watchPromptSignals(() => publishRuntimeChange("terminals"));
     return () => {
         subscribers.delete(listener);
         if (subscribers.size === 0) {
             sampler.stop();
+            unwatchPrompts?.();
+            unwatchPrompts = undefined;
             pending.clear();
             nextAllowedAt.clear();
             if (timer !== undefined) {

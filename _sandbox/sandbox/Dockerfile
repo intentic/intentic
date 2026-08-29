@@ -105,6 +105,16 @@ RUN mkdir -p /run/sshd /root/.ssh && chmod 700 /root/.ssh \
 # HISTSIZE/SAVEHIST are set because oh-my-zsh only ever RAISES them (to 50000/10000) — a ceiling sized for a
 # file that died with the container. Matched to tmux's history-limit below, since both bound the same thing:
 # how far back the owner can reach in a terminal.
+#
+# THE TWO HOOKS AT THE END ARE WHAT MAKES THE PANEL'S BUSY DOT LIVE. tmux tells nobody when a command starts or
+# stops inside a live pane — `pane_current_command` just reads differently the next time somebody asks — so the
+# daemon could only ever sample it, and the dot outlived the command by up to a poll. The shell knows the exact
+# moment, and it is our shell: preexec (a command is about to run) and precmd (a prompt is about to be drawn)
+# truncate one file in /run, which the daemon watches (terminal/prompt-signal.ts) and turns into a `terminals`
+# frame. Two syscalls and no fork, so it costs nothing per prompt; the braces put the redirection failure on
+# the group's stderr, so a missing /run/intentic/shell (no daemon has listened yet) is silent rather than a
+# line of noise above every prompt. They come after oh-my-zsh's source line because add-zsh-hook composes with
+# whatever omz and zsh-autosuggestions register there, and last-registered is simply last-run.
 RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh \
     && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions /root/.oh-my-zsh/custom/plugins/zsh-autosuggestions \
     && printf '%s\n' \
@@ -119,6 +129,10 @@ RUN git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git /root/.oh-my-zsh 
         'HISTSIZE=100000' \
         'SAVEHIST=100000' \
         'source $ZSH/oh-my-zsh.sh' \
+        'autoload -Uz add-zsh-hook' \
+        '_intentic_prompt_signal() { { : >| /run/intentic/shell/prompt; } 2>/dev/null }' \
+        'add-zsh-hook preexec _intentic_prompt_signal' \
+        'add-zsh-hook precmd _intentic_prompt_signal' \
         > /root/.zshrc
 # tmux backs each terminal tab (system/terminal.ts attaches one session per tab). The web UI draws the tab bar,
 # so the tmux status bar is off; default-command launches the oh-my-zsh zsh above (not /bin/sh); destroy-unattached

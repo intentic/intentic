@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { SHELL } from "../terminal/pane-state.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,10 +29,6 @@ export interface ProcessSpec {
 // is wire data (session names reach the browser and are string-built in web/_extensions), do not rename.
 export const PANEL_SESSION_PREFIX = "panel-";
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
-
-// The image's default-command shell (Dockerfile), pane_current_command reads this at an idle prompt, which is
-// how the sweep sees a oneShot job finish (and how the terminals list sees a background process crash).
-export const SHELL = "zsh";
 
 // The tmux side of the manager, injectable so tests need no tmux binary. `states` reports every panel pane's
 // foreground command (session name → pane_current_command) in one call; an absent session is a dead one.

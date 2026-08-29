@@ -39,7 +39,7 @@ import { installPanelKey, workspaceSetup } from "./workspace-setup.js";
  * THE EXIT CODE comes out of the panel by wrapping the command: tmux reports a pane's foreground command,
  * never an exit status, so the wrapped line tees output to a log (for the event's bounded tail) and drops
  * `$pipestatus[1]` into a status file the daemon reads once the sweep sees the shell back at its prompt. The
- * wrapper is zsh syntax on purpose, the panel shell IS zsh (managed-processes' SHELL), the same constant
+ * wrapper is zsh syntax on purpose, the panel shell IS zsh (terminal/pane-state's SHELL), the same constant
  * the sweep's prompt detection already pins. A missing or unparseable status file (the owner Ctrl+C'd the
  * pane, the shell died) reads as exit -1: unknown is not green. */
 

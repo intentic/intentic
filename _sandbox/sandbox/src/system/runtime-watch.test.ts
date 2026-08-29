@@ -1,6 +1,6 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
 import { afterEach, expect, test, vi } from "vitest";
-import { createRuntimeSampler, publishRuntimeChange, type RuntimeProbes, subscribeRuntimeChanges } from "./runtime-watch.js";
+import { createRuntimeSampler, paneFingerprint, publishRuntimeChange, type RuntimeProbes, subscribeRuntimeChanges } from "./runtime-watch.js";
 
 /* The bus is module-level state (one daemon, one feed), so every test takes a subscription and gives it back:
  * the last unsubscribe resets the pending set, the rate-limit stamps and the sampler together, which is what
@@ -102,6 +102,24 @@ test("the sampler publishes only what changed, and never on its first reading", 
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(frames).toEqual([["terminals"]]);
     unsubscribe();
+});
+
+/* THE FINGERPRINT, and the regression it exists for. A command ending in a shell is a change that NOTHING else
+ * in a tmux reading records: the pane lives either way, its exit status is tmux's rather than the command's,
+ * and the activity stamp stops moving at the moment the prompt is drawn. A fingerprint without the foreground
+ * command in it therefore read the shell as identical before and after, and the panel's busy dot stayed lit
+ * until the coarse activity bucket happened to roll under it. */
+const ACTIVITY = 1_780_000_000;
+const shellPane = (command: string, activity = ACTIVITY): string => `web-a1b2c3d4\t0\t\t${activity}\t${command}`;
+
+test("a command finishing moves the fingerprint, with every other field standing still", () => {
+    expect(paneFingerprint(shellPane("pnpm"))).not.toBe(paneFingerprint(shellPane("zsh")));
+});
+
+test("a running command's churn does not: busy is a flag, not the word", () => {
+    // A build's foreground process walks `pnpm` → `node` → `git` and back. Pushing on each would bill every
+    // connected browser a list read a second for a dot that is already lit.
+    expect(paneFingerprint(shellPane("node"))).toBe(paneFingerprint(shellPane("git")));
 });
 
 test("a new listening port refreshes the panels above it as well as the ports view", async () => {

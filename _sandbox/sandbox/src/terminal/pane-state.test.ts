@@ -1,10 +1,10 @@
 import { expect, test } from "vitest";
-import { paneStates } from "./system.routes.js";
+import { foreground, paneStates } from "./pane-state.js";
 
-// `tmux list-panes -a -F '#{session_name}\t#{pane_dead}\t#{pane_dead_status}\t#{session_activity}\t#{pane_current_command}'`
-//, one line per pane, so a multi-window session (every agent-* one: bin/tmux-run opens a window per Bash
-// command and keeps the finished ones under remain-on-exit) reports many. `session_activity` is session-wide,
-// so every line of a session repeats it; `pane_dead_status` is empty while the pane lives.
+// `tmux list-panes -a -F PANE_FORMAT`, one line per pane, so a multi-window session (every agent-* one:
+// bin/tmux-run opens a window per Bash command and keeps the finished ones under remain-on-exit) reports many.
+// `session_activity` is session-wide, so every line of a session repeats it; `pane_dead_status` is empty while
+// the pane lives.
 const ACTIVITY = 1_780_000_000;
 type Pane = [session: string, dead: 0 | 1, status: string, command: string];
 const listPanes = (...panes: Pane[]): string =>
@@ -59,6 +59,14 @@ test("a session whose every pane is dead has no live command", () => {
 test("an idle shell's live command is the shell", () => {
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "zsh"])).get("web-a1b2c3d4")?.liveCommand).toBe("zsh");
     expect(paneStates(listPanes(["web-a1b2c3d4", 0, "", "pnpm"])).get("web-a1b2c3d4")?.liveCommand).toBe("pnpm");
+});
+
+// The one reading the kill confirm, the strip's dot and the sampler's fingerprint all go through, which is the
+// whole reason it lives here rather than beside any one of them.
+test("a session is busy with whatever is in front of its shell, and with nothing at an idle prompt", () => {
+    expect(foreground("pnpm")).toBe("pnpm");
+    expect(foreground("zsh")).toBeUndefined();
+    expect(foreground(undefined)).toBeUndefined();
 });
 
 // The exit status of the LAST window is the exit status of the last command, which is the one the dead pane's

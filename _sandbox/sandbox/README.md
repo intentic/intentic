@@ -365,8 +365,12 @@ reports the profile.
   [src/git/ref-watch.ts](src/git/ref-watch.ts) (refs), and
   [src/system/runtime-watch.ts](src/system/runtime-watch.ts): everything that is RUNNING rather than written:
   tmux sessions, panel dev servers, listening sockets, the agent's browsers and its subagents. The first three
-  start from a file; the fourth cannot, which is why it is half announcements from the subsystems that do the
-  thing and half one shared sampler that runs only while a browser is connected. The file feed has one more
+  start from a file; the fourth cannot, which is why it is announcements from the subsystems that do the thing,
+  plus one shared sampler that runs only while a browser is connected, plus the one announcement that arrives
+  from outside the daemon: the image's zsh touches a file in `/run` on every preexec and precmd
+  ([src/terminal/prompt-signal.ts](src/terminal/prompt-signal.ts)), because a command starting and finishing
+  inside a live pane is the one transition tmux tells nobody about, and sampling it is what used to leave the
+  terminal panel's busy dot lit for seconds after the command was done. The file feed has one more
   subscriber than the browser: [src/derived/sidecar-service.ts](src/derived/sidecar-service.ts), which spawns
   the baked `fileq` CLI (`_sandbox/fileq`) to keep a markdown shadow of every binary workspace file (docx,
   pdf, images, audio) converged under `.intentic/local/cache/derived/` — gated by the `sidecars` setting,
