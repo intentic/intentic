@@ -623,6 +623,18 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             show_launcher(app);
             let _ = tauri::Emitter::emit(app, "desktop://pending-recreate", ());
         }
+        // The Desktop sync card's enrollment, handed over so the folder can be picked in a system dialog
+        // rather than typed into a one-liner. App-source only by construction (setup_link.rs), so unlike a
+        // setup there is nothing to confirm here: the SPA's own button said what it does, and the picker
+        // and its confirmation are still ahead (App.vue).
+        Some(Link::Sync(args)) => {
+            *app.state::<crate::state::AppState>()
+                .pending_sync
+                .lock()
+                .unwrap() = Some(args);
+            show_launcher(app);
+            let _ = tauri::Emitter::emit(app, "desktop://pending-sync", ());
+        }
         Some(Link::SignIn) => {
             if let Err(error) = crate::auth::start(app) {
                 eprintln!("{error}");

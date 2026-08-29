@@ -45,6 +45,13 @@ from any device. The app adds no third plane. It is three thin native things aro
    container as up and say nothing whatsoever about the sync the same setup had just configured. The only
    rendering of those facts was `intentic-sync status`, in a terminal.
 
+   Enabling sync after setup was the same gap from the other side: the SPA's Desktop sync card minted a
+   pairing and then handed the app's own user a one-liner to paste in a terminal. Inside the app that card
+   offers a button instead (`intentic://sync`, app-window only — the token enrolls a machine into two-way
+   file sync, so an external copy of the link is refused whole): the app asks for the folder in the system's
+   own dialog, confirms what two-way sync means for what is already in it, and runs the same `sync.sh` /
+   `sync.ps1` the one-liner runs, streaming into the manager screen like every other run.
+
    Sharing the *component* was not enough on its own, and the second half of that is newer: this window drew
    its containers as cards with their own buttons and then drew the same sandboxes again underneath as folders
    and ports, under a second heading, with nothing on screen relating the two: the exact double-rendering the

@@ -14,7 +14,7 @@ import {
     vAction,
 } from "@intentic/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from "vue";
 import { initAnalytics, track, trackBeforeExit } from "./analytics";
 import Requirements from "./components/Requirements.vue";
@@ -26,10 +26,12 @@ import {
     // question. See the ref's own comment for why the answer is a state of its own rather than a boolean.
     dockerReady as dockerReadyProbe,
     expectedStop,
+    folderEntries,
     forgetResumableSetup,
     machineReport,
     onPendingRecreate,
     onPendingSetup,
+    onPendingSync,
     onRun,
     onUpdate,
     readMarker,
@@ -46,8 +48,10 @@ import {
     setupAlert,
     setupRun,
     signOutForSetup,
+    syncRun,
     takePendingRecreate,
     takePendingSetup,
+    takePendingSync,
     updateInstall,
     updateState,
     workspaceOpen,
@@ -58,6 +62,7 @@ import {
     type RunEvent,
     type SandboxStatus,
     type SetupArgs,
+    type SyncArgs,
     type UpdateStage,
 } from "./desktop";
 
@@ -691,6 +696,83 @@ const drainRecreate = async (): Promise<void> => {
     await recreate(requested.slug, requested.hash, requested.rollback, `link`);
 };
 
+/* --- DESKTOP SYNC, ENABLED WITHOUT A TERMINAL ---
+ *
+ * The SPA's Desktop sync card mints the pairing and hands it over (`intentic://sync`); what it cannot do from
+ * a webview is the one thing left: name a real folder on this machine. So this face asks for it in the
+ * system's own dialog and runs the same sync.sh / sync.ps1 the card's copy-paste one-liner runs. `SYNC_DIR`
+ * used to ride only the SETUP link — a user who set their sandbox up first and wanted their work folder
+ * connected later had no in-app path at all, on the app whose whole premise is being the no-terminal way.
+ *
+ * The card in the SPA keeps polling /system/sync while its pairing is live, so a run that finishes here is a
+ * card that says "Enabled" the moment the window swaps back. */
+const syncSetup = ref<{ args: SyncArgs; dir?: string; error?: string } | undefined>(undefined);
+const syncLines = computed(() => eventsOf(`sync-setup`).flatMap((event) => (event.kind === `line` ? [event.text] : [])));
+
+const runSync = async (args: SyncArgs, dir: string | undefined): Promise<void> => {
+    syncSetup.value = { args, ...(dir === undefined ? {} : { dir }) };
+    const startedAt = Date.now();
+    track(`desktop_sync_started`, { mirror: args.mirror, takeover: args.takeover });
+    const failure = await start(`sync-setup`, () => syncRun(args, dir));
+    track(`desktop_sync_finished`, { mirror: args.mirror, takeover: args.takeover, ...runOutcome(`sync-setup`, failure === undefined, startedAt) });
+    if (failure === undefined) {
+        syncSetup.value = undefined;
+        // Back to the page that started this: its card is polling for exactly this enrollment and flips to
+        // "Enabled" on its own, which is a better ending than this screen paraphrasing it.
+        await workspaceOpen();
+        return;
+    }
+    syncSetup.value = { args, ...(dir === undefined ? {} : { dir }), error: failure };
+    // The same courtesy a failed install gets: a run that stopped while nobody was looking must not stay a
+    // secret of a window nobody is looking at.
+    await setupAlert();
+};
+
+/* THE ONE CONFIRMATION, after the pick and before anything runs. The picker names a folder; it says nothing
+ * about what is about to happen to it, and what happens is two-way sync with no undo — agents' changes in
+ * the sandbox land in this folder from now on. Counting what already lives there is what turns the warning
+ * from boilerplate into a sentence about the reader's own files. A mirror pairing skips all of it: no folder,
+ * nothing synced, and the card's own button already said what it does. */
+const drainSync = async (): Promise<void> => {
+    const args = await takePendingSync();
+    if (args === null || running.value) {
+        return;
+    }
+    if (args.mirror) {
+        await runSync(args, undefined);
+        return;
+    }
+    const what = args.name ?? `your sandbox`;
+    const picked = await open({ directory: true, multiple: false, title: `Choose the folder to keep in sync with ${what}` });
+    if (typeof picked !== `string` || picked === ``) {
+        // Cancelled: nothing ran, nothing is owed — the window goes back to the card that asked.
+        await workspaceOpen();
+        return;
+    }
+    const entries = await folderEntries(picked).catch(() => 0);
+    const held = entries === 0 ? `` : `\n\nIt already holds ${entries} item${entries === 1 ? `` : `s`}, and the sandbox's own files land in it too.`;
+    const agreed = await confirm(
+        `${picked}\n\nEverything in this folder syncs BOTH ways with ${what}: changes agents make in the sandbox appear here, with no undo.${held}`,
+        { title: `Keep this folder in sync with ${what}?`, kind: `warning`, okLabel: `Start syncing` },
+    );
+    if (!agreed) {
+        await workspaceOpen();
+        return;
+    }
+    await runSync(args, picked);
+};
+
+/* "Try again" re-runs with the folder already chosen. It is honest about one limit: the pairing token is
+ * single-use, so a run that failed AFTER enrolling cannot enroll again — the error the script prints then
+ * says so, and the card's Regenerate (one click away via the header's way out) mints a fresh one. */
+const retrySync = async (): Promise<void> => {
+    const held = syncSetup.value;
+    if (held === undefined || running.value) {
+        return;
+    }
+    await runSync(held.args, held.dir);
+};
+
 /* ONE CLICK ON ONE ROW, whichever of the shared verbs it was.
  *
  * The kit decides which buttons exist and what the destructive ones ask; this decides what each one DOES here,
@@ -841,6 +923,7 @@ onMounted(async () => {
         }),
         onPendingSetup(() => void loadPending()),
         onPendingRecreate(() => void drainRecreate()),
+        onPendingSync(() => void drainSync()),
         onUpdate((stage) => (update.value = stage)),
     ]);
     // …and the read the listener above cannot stand in for: this window is built on demand, so a download that
@@ -854,7 +937,7 @@ onMounted(async () => {
      * `loadPending` owns `faceKnown` rather than this line owning it, and that is the point: this `await`
      * covers the container list AND the whole handed-over install, neither of which the frame's title has any
      * reason to wait for. See `faceKnown`. */
-    await Promise.all([refresh(), loadPending(), drainRecreate()]);
+    await Promise.all([refresh(), loadPending(), drainRecreate(), drainSync()]);
     // Only when nothing was handed over: a fresh link is about a setup the user is starting right now, and it
     // outranks one this app restarted the machine for at some point in the past.
     if (pending.value === undefined) {
@@ -1030,9 +1113,55 @@ onUnmounted(() => {
                 <Icon name="box" class="mt-0.5 shrink-0" />
                 <span>Docker isn't reachable, so there is nothing to show yet. Start Docker, or set a sandbox up from your workspace.</span>
             </p>
-            <p v-else-if="!hasRows" class="text-2xs text-muted">
+            <!-- …and not while a sync enrollment is on screen: "set one up from your workspace" over a card
+                 that is busy connecting one reads as the screen contradicting itself. -->
+            <p v-else-if="!hasRows && !syncSetup" class="text-2xs text-muted">
                 No sandboxes here yet. Set one up from your workspace: this screen is where you manage it afterwards.
             </p>
+
+            <!-- A DESKTOP-SYNC ENROLLMENT IN FLIGHT — the folder was picked in the system dialog and the
+                 same script the card's one-liner runs is running here, narrating into the pane. Gone on
+                 success (the window hands itself back to the card, which flips to "Enabled" on its own
+                 poll); on failure it stays, with the script's own words and a way to run it again. -->
+            <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
+                <div class="flex items-start gap-2.5">
+                    <Icon name="sync" class="mt-0.5 text-primary-400" />
+                    <div class="min-w-0 flex-1">
+                        <h2 class="text-sm font-semibold leading-tight">
+                            {{
+                                syncSetup.args.mirror
+                                    ? `Mirroring ports from ${syncSetup.args.name ?? `your sandbox`} to this computer`
+                                    : `Connecting a folder to ${syncSetup.args.name ?? `your sandbox`}`
+                            }}
+                        </h2>
+                        <p v-if="syncSetup.dir" class="break-all font-mono text-2xs text-subtle">{{ syncSetup.dir }}</p>
+                    </div>
+                    <button
+                        v-if="syncSetup.error"
+                        type="button"
+                        class="-my-1 shrink-0 rounded-md px-2 py-1 text-2xs text-subtle hover:bg-surface hover:text-content"
+                        v-action="() => (syncSetup = undefined)"
+                    >
+                        Dismiss
+                    </button>
+                </div>
+                <Notice v-if="syncSetup.error" tone="danger" class="text-2xs">{{ syncSetup.error }}</Notice>
+                <MachineRunLog
+                    :lines="syncLines"
+                    :running="activeRun === `sync-setup`"
+                    empty="Starting on this computer…"
+                    note="Installing the sync agent and starting the first sync."
+                />
+                <!-- The pairing inside is single-use: a run that failed after enrolling needs a fresh one,
+                     which the sandbox's Desktop sync card mints in one click - so that way out is offered
+                     beside the retry rather than left for the reader to deduce. -->
+                <div v-if="syncSetup.error" class="flex flex-wrap items-center gap-3">
+                    <Button label="Try again" size="small" :disabled="running" @click="retrySync">
+                        <template #icon><Icon name="refresh" /></template>
+                    </Button>
+                    <span class="text-2xs text-subtle">If it says the pairing was already used or expired, regenerate it in your workspace.</span>
+                </div>
+            </section>
 
             <!-- WHAT THIS COMPUTER IS RUNNING: one row per sandbox, carrying its folder, its ports, its
                      image and its verbs, exactly as the SPA's Computers tab draws the same machine.

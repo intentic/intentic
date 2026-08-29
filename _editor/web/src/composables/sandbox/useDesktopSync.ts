@@ -1,6 +1,7 @@
 import { roleAtLeast, type SyncStatus, syncFolder } from "@intentic/sandbox-contract";
 import { timeAgo } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
+import { desktopSyncLink } from "../../environments/desktop";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
@@ -117,6 +118,24 @@ export function useDesktopSync() {
               ),
     );
 
+    /* The same enrollment as the two commands above, spelled as the handoff the desktop app intercepts
+     * (environments/desktop.ts). No folder rides it: the app asks for one in a system dialog, which is the
+     * point — the card's reader inside the app chose a no-terminal product, and `folder` here is a text
+     * field guessing at a path on a machine this page cannot see. The card decides whether to SHOW it (only
+     * inside the app); building it belongs here with its siblings so the three can never disagree on what
+     * an enrollment carries. */
+    const desktopLink = computed(() =>
+        url.value === `` || pairToken.value === undefined
+            ? undefined
+            : desktopSyncLink({
+                  url: url.value,
+                  pair: pairToken.value,
+                  ...(active.value?.name === undefined ? {} : { name: active.value.name }),
+                  takeover: takeover.value && pairMode.value !== `mirror`,
+                  mirror: pairMode.value === `mirror`,
+              }),
+    );
+
     // Mint (or re-mint) a pairing token so the card can reveal the one-liner. Authorized by the browser's Google
     // session, sandboxRequest attaches it. The token is single-use and expires (~10 min) server-side. The
     // daemon answers with the mode it actually granted (a member's "sync" request comes back "mirror").
@@ -207,6 +226,7 @@ export function useDesktopSync() {
         takeover,
         linuxCommand,
         windowsCommand,
+        desktopLink,
         enable,
         start,
         stop,

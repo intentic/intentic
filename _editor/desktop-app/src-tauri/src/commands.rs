@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
-use crate::setup_link::{RecreateArgs, SetupArgs};
+use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
 use crate::state::{AppState, CloseAction, Settings};
 
 type CommandResult<T> = Result<T, String>;
@@ -137,6 +137,13 @@ pub fn take_pending_setup(state: State<'_, AppState>) -> Option<SetupArgs> {
 #[tauri::command]
 pub fn take_pending_recreate(state: State<'_, AppState>) -> Option<RecreateArgs> {
     state.pending_recreate.lock().unwrap().take()
+}
+
+/// Taken, not read, for the sharpest reason of the three: the pairing token inside is single-use, and a
+/// request delivered twice would spend it on a run nobody is watching.
+#[tauri::command]
+pub fn take_pending_sync(state: State<'_, AppState>) -> Option<SyncArgs> {
+    state.pending_sync.lock().unwrap().take()
 }
 
 /// Everything a setup invocation needs beyond the link itself: the origins to fall back on, whether Docker
@@ -647,6 +654,63 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
     Ok(())
 }
 
+/* THE DESKTOP SYNC ENROLLMENT, as an argument vector: sync.sh / sync.ps1 with the pairing the SPA minted.
+ * Everything it does — downloading the agent, enrolling the SSH key, starting Mutagen and the port-mirror
+ * watcher — is the script's, unchanged from the one-liner the Desktop sync card hands out; the app's part is
+ * only that the folder arrived from a system dialog instead of being typed into a command.
+ *
+ * ENV THROUGHOUT, no positional args: both sync scripts read SANDBOX_URL / PAIR_TOKEN / SYNC_DIR / TAKEOVER
+ * from the environment, exactly as the pasted `env … | sh` and `$env:… ; irm | iex` forms deliver them, so
+ * there is no per-host argument convention here to get wrong.
+ *
+ * `dir` is the folder the user picked, and it is IGNORED on a mirror enrollment in this builder rather than
+ * trusted to the webview: a mirror pairing has no folder, and a SYNC_DIR riding one would be a value the
+ * agent ignores today and a latent surprise the day it stops ignoring it. */
+pub fn sync_script(args: &SyncArgs, dir: Option<&str>, host: Host, version: &str) -> ScriptRun {
+    let mut env = app_env(version);
+    env.push(("SANDBOX_URL".into(), args.url.clone()));
+    env.push(("PAIR_TOKEN".into(), args.pair.clone()));
+    if let Some(dir) = dir.filter(|dir| !dir.is_empty() && !args.mirror) {
+        env.push(("SYNC_DIR".into(), dir.to_string()));
+    }
+    if args.takeover && !args.mirror {
+        env.push(("TAKEOVER".into(), "1".into()));
+    }
+    ScriptRun {
+        file: host.script("sync.sh", "sync.ps1"),
+        args: Vec::new(),
+        env,
+        // Runs as the user by design — the agent installs into ~/.intentic/sync and registers per-user
+        // login entries, and nothing about it needs root anywhere.
+        elevate: false,
+        host,
+    }
+}
+
+/// Run the enrollment this window just collected a folder for. One at a time under the id the screen
+/// watches; the events stream the same way every other run's do.
+#[tauri::command]
+pub async fn sync_run(app: AppHandle, args: SyncArgs, dir: Option<String>) -> CommandResult<()> {
+    let run = sync_script(&args, dir.as_deref(), Host::current(), VERSION);
+    tauri::async_runtime::spawn_blocking(move || scripts::run(&app, "sync-setup", run))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// How much already lives in a folder the user just picked — the one fact that turns the sync confirmation
+/// from boilerplate into a sentence about THEIR files. Zero for a folder that does not exist yet (the picker
+/// can create one), an error only for one that exists and cannot be read.
+#[tauri::command]
+pub async fn folder_entries(path: String) -> CommandResult<u32> {
+    tauri::async_runtime::spawn_blocking(move || match std::fs::read_dir(&path) {
+        Ok(entries) => Ok(entries.count().min(u32::MAX as usize) as u32),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(error) => Err(format!("could not read {path}: {error}")),
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 /// What desktop sync is doing on THIS computer — the folders it keeps in step, the ports it put on localhost,
 /// and whether the watcher behind them is alive.
 ///
@@ -797,6 +861,16 @@ mod tests {
         }
     }
 
+    fn sync_args() -> SyncArgs {
+        SyncArgs {
+            url: "https://sandbox-abc.example.dev".into(),
+            pair: "pair-token".into(),
+            name: Some("work".into()),
+            takeover: false,
+            mirror: false,
+        }
+    }
+
     fn env_of<'a>(run: &'a ScriptRun, key: &str) -> Option<&'a str> {
         run.env
             .iter()
@@ -884,6 +958,13 @@ mod tests {
             recreate_script("work", None, false, Host::Windows, RELEASE),
             remove_script("work", Host::Windows, RELEASE),
             remove_script("work", Host::Unix, RELEASE),
+            sync_script(
+                &sync_args(),
+                Some("/home/ada/projects"),
+                Host::Unix,
+                RELEASE,
+            ),
+            sync_script(&sync_args(), None, Host::Windows, RELEASE),
         ] {
             assert_eq!(
                 env_of(&run, "INTENTIC_NO_PROMPT"),
@@ -1085,6 +1166,70 @@ mod tests {
     fn no_flow_but_setup_ever_elevates() {
         assert!(!recreate_script("work", None, false, Host::Unix, RELEASE).elevate);
         assert!(!remove_script("work", Host::Unix, RELEASE).elevate);
+        assert!(!sync_script(&sync_args(), Some("/home/ada"), Host::Unix, RELEASE).elevate);
+    }
+
+    /* The sync enrollment binds EVERYTHING through env and nothing positionally — the same delivery the
+     * pasted one-liners use, and the reason there is no per-host argument convention to cross-check here.
+     * The Windows half is still asserted by name: like every other .ps1 it is cross-built on a Linux runner
+     * and first executes on a user's machine. */
+    #[test]
+    fn sync_enrollment_rides_entirely_on_env_on_both_hosts() {
+        let unix = sync_script(
+            &sync_args(),
+            Some("/home/ada/projects/app"),
+            Host::Unix,
+            RELEASE,
+        );
+        assert_eq!(unix.file, "sync.sh");
+        assert!(unix.args.is_empty());
+        assert_eq!(
+            env_of(&unix, "SANDBOX_URL"),
+            Some("https://sandbox-abc.example.dev")
+        );
+        assert_eq!(env_of(&unix, "PAIR_TOKEN"), Some("pair-token"));
+        assert_eq!(env_of(&unix, "SYNC_DIR"), Some("/home/ada/projects/app"));
+        assert_eq!(env_of(&unix, "TAKEOVER"), None);
+
+        let windows = sync_script(
+            &sync_args(),
+            Some("C:\\Users\\Ada\\projects\\app"),
+            Host::Windows,
+            RELEASE,
+        );
+        assert_eq!(windows.file, "sync.ps1");
+        assert!(windows.args.is_empty());
+        assert_eq!(
+            env_of(&windows, "SYNC_DIR"),
+            Some("C:\\Users\\Ada\\projects\\app")
+        );
+    }
+
+    #[test]
+    fn a_takeover_rides_only_when_asked_for() {
+        let mut args = sync_args();
+        args.takeover = true;
+        let run = sync_script(&args, Some("/home/ada"), Host::Unix, RELEASE);
+        assert_eq!(env_of(&run, "TAKEOVER"), Some("1"));
+    }
+
+    /// A mirror pairing has no folder: the builder drops one arriving beside it (and a takeover, which only
+    /// sync contends over) rather than trusting the webview to never send them together.
+    #[test]
+    fn a_mirror_enrollment_never_carries_a_folder_or_a_takeover() {
+        let mut args = sync_args();
+        args.mirror = true;
+        args.takeover = true;
+        let run = sync_script(&args, Some("/home/ada/projects"), Host::Unix, RELEASE);
+        assert_eq!(env_of(&run, "SYNC_DIR"), None);
+        assert_eq!(env_of(&run, "TAKEOVER"), None);
+    }
+
+    /// An empty string is not a folder — it would override the agent's own default with nothing.
+    #[test]
+    fn an_empty_folder_is_no_folder() {
+        let run = sync_script(&sync_args(), Some(""), Host::Unix, RELEASE);
+        assert_eq!(env_of(&run, "SYNC_DIR"), None);
     }
 
     /* The sync agent's own install location, per host. Cross-built like everything else here, so the Windows

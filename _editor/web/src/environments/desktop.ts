@@ -87,6 +87,39 @@ export const desktopSetupLink = (args: DesktopSetupArgs): string => {
  * credentials come back over `intentic://auth` and the app reopens this SPA at /desktop-auth/complete. */
 export const DESKTOP_SIGN_IN_LINK = `intentic://signin`;
 
+export interface DesktopSyncArgs {
+    /// The sandbox's own URL and the single-use pairing token — the same two values the card's one-liner
+    /// carries as SANDBOX_URL and PAIR_TOKEN.
+    url: string;
+    pair: string;
+    /// The sandbox's display name, so the app's screen can say what the folder is being connected to.
+    name?: string;
+    takeover?: boolean;
+    /// A ports-only pairing: the app skips the folder dialog, because there is no folder.
+    mirror?: boolean;
+}
+
+/* The desktop-sync handoff: the Desktop sync card's enrollment as a button instead of a pasted one-liner,
+ * for the one computer where the app IS a process on the machine. Deliberately NO folder on the link — the
+ * app collects that in a system dialog, which is the entire reason the handoff exists.
+ *
+ * The Rust side honours this from the app's own window ONLY (setup_link.rs): both values are the sender's,
+ * and honoured from the OS handler any page could put its reader one folder pick away from two-way syncing
+ * that folder into a sandbox the sender signs in to. A browser without the app keeps the one-liner. */
+export const desktopSyncLink = (args: DesktopSyncArgs): string => {
+    const params = new URLSearchParams({ url: args.url, pair: args.pair });
+    if (args.name !== undefined && args.name !== ``) {
+        params.set(`name`, args.name);
+    }
+    if (args.takeover === true) {
+        params.set(`takeover`, `1`);
+    }
+    if (args.mirror === true) {
+        params.set(`mirror`, `1`);
+    }
+    return `intentic://sync?${params.toString()}`;
+};
+
 /* Swap a sandbox onto a different image: no hash updates to the fresh `:stable` base, a hash builds the
  * owner-approved overlay pinned to that digest, and `rollback` returns it to the image before the last update.
  * The same three argument shapes the pasted command carries.

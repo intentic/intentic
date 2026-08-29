@@ -2,6 +2,7 @@
 import { Button, Card, ConfirmDialog, CopyButton, ui, Code, Row } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useDesktopSync } from "../../composables/sandbox/useDesktopSync";
+import { desktopVersion, openDesktopLink } from "../../environments/desktop";
 import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
 
 /* Desktop sync enablement (on the /sandbox hub). Three states over useDesktopSync: pick a folder and Enable →
@@ -32,11 +33,18 @@ const {
     takeover,
     linuxCommand,
     windowsCommand,
+    desktopLink,
     enable,
     start,
     stop,
     disable,
 } = useDesktopSync();
+
+/* INSIDE THE DESKTOP APP, THE ONE-LINER BECOMES A BUTTON — the same shape HostRecreate gives the update
+ * command. The app is a process on this very machine, so it can ask for the folder in a system dialog and
+ * run the identical sync script itself (`intentic://sync`). The commands stay underneath either way: the
+ * computer being enrolled need not be this one — a mirror in particular is often for a different machine. */
+const appLink = computed(() => (desktopVersion() === undefined ? undefined : desktopLink.value));
 
 // The owner's opt-in to the ports-only flow (skip file sync on a fresh enable, or add a mirror machine while
 // another holds sync). Members don't need the toggle: portsOnly is forced for them.
@@ -228,8 +236,34 @@ onUnmounted(stop);
                     </div>
                 </template>
                 <template v-else>
+                    <!-- Inside the desktop app, the no-terminal way leads: the app asks for the folder in a
+                         system dialog (no path to type, no ~ to expand) and runs the same script the command
+                         below runs. The command keeps its place underneath because the computer being
+                         enrolled need not be this one. -->
+                    <div v-if="appLink !== undefined" class="flex flex-col gap-1.5">
+                        <div>
+                            <Button
+                                :label="pairMode === 'mirror' ? 'Mirror ports to this computer' : 'Choose a folder on this computer'"
+                                size="small"
+                                @click="openDesktopLink(appLink)"
+                            >
+                                <template #icon><Icon name="desktop" /></template>
+                            </Button>
+                        </div>
+                        <p class="text-2xs text-subtle">
+                            <template v-if="pairMode === 'mirror'">
+                                Enrolls this computer and puts the sandbox's dev servers on its localhost. No files are synced.
+                            </template>
+                            <template v-else>
+                                Pick the folder in a system dialog: it and the sandbox's files then stay in step, both ways.
+                            </template>
+                        </p>
+                    </div>
                     <p class="text-2xs text-subtle">
-                        <template v-if="pairMode === 'mirror'">
+                        <template v-if="appLink !== undefined">
+                            Or run this on {{ pairMode === "mirror" ? "the computer that should get the ports" : "another computer" }}:
+                        </template>
+                        <template v-else-if="pairMode === 'mirror'">
                             Run this on the computer that should get the ports. It installs the sync agent and mirrors the sandbox's dev servers onto
                             its localhost. No files are synced, and no sign-in is needed.
                         </template>

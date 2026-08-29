@@ -67,6 +67,30 @@ pub struct RecreateArgs {
     pub rollback: bool,
 }
 
+/// `intentic://sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` — enroll THIS computer in desktop sync:
+/// the SPA's Desktop sync card handing over the enrollment it just minted, so the app can ask for the folder
+/// in a system dialog and run the same sync script the copy-paste one-liner runs. No folder rides the link —
+/// choosing one natively is the whole point of the handoff.
+///
+/// [`Source::App`] ONLY, refused outright from outside. The pairing token enrolls a machine into TWO-WAY file
+/// sync with whatever sandbox `url` names, and both values are chosen by the sender: honoured from the OS
+/// handler, any page could put a victim one folder pick away from mirroring that folder into a sandbox the
+/// sender signs in to. An external browser keeps the pasted one-liner, which at least shows what it carries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncArgs {
+    pub url: String,
+    pub pair: String,
+    /// The sandbox's display name, for the screen that runs it — the URL names a host, not the thing the
+    /// user called their sandbox.
+    pub name: Option<String>,
+    /// Move sync here from another machine already enrolled (revokes its key) — the card's own opt-in.
+    pub takeover: bool,
+    /// A ports-only enrollment: the daemon granted a mirror pairing, so there is no folder to pick and no
+    /// SYNC_DIR to pass. The app runs the same script; the agent learns the mode from the token it redeems.
+    pub mirror: bool,
+}
+
 /// `intentic://auth?handoff=…&state=…` — the credential coming back from a sign-in that happened in the
 /// user's real browser (see auth.rs for why it never happens in the webview).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +103,7 @@ pub struct AuthArgs {
 pub enum Link {
     Setup(Box<SetupArgs>),
     Recreate(RecreateArgs),
+    Sync(SyncArgs),
     /// `intentic://signin` — the SPA's login screen asking to be signed in the way this app can be: in the
     /// user's real browser. It carries nothing, because everything it starts is minted afterwards.
     SignIn,
@@ -125,6 +150,16 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
         }
         "signin" => Some(Link::SignIn),
         "update" => (source == Source::App).then_some(Link::Update),
+        // App-window only, like `update`, and for a sharper reason: see [`SyncArgs`]. There is nothing to
+        // strip and keep — the url and the token ARE the request — so an external copy is refused whole.
+        "sync" if source == Source::App => Some(Link::Sync(SyncArgs {
+            url: get("url")?,
+            pair: get("pair")?,
+            name: get("name"),
+            takeover: get("takeover").is_some(),
+            mirror: get("mirror").is_some(),
+        })),
+        "sync" => None,
         "recreate" => {
             let rollback = get("rollback").is_some();
             Some(Link::Recreate(RecreateArgs {
@@ -243,6 +278,57 @@ mod tests {
             Some(Link::Update)
         );
         assert_eq!(parse_link("intentic://update", Source::External), None);
+    }
+
+    #[test]
+    fn parses_a_sync_enrollment_from_the_apps_own_window() {
+        let Some(Link::Sync(args)) = parse_link(
+            "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev&pair=tok123&name=My%20Sandbox&takeover=1",
+            Source::App,
+        ) else {
+            panic!("expected a sync link");
+        };
+        assert_eq!(args.url, "https://sandbox-abc.example.dev");
+        assert_eq!(args.pair, "tok123");
+        assert_eq!(args.name.as_deref(), Some("My Sandbox"));
+        assert!(args.takeover);
+        assert!(!args.mirror);
+
+        let Some(Link::Sync(mirror)) = parse_link(
+            "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev&pair=tok123&mirror=1",
+            Source::App,
+        ) else {
+            panic!("expected a mirror sync link");
+        };
+        assert!(mirror.mirror);
+        assert_eq!(mirror.name, None);
+    }
+
+    /* THE FOLDER-EXFILTRATION LINK THIS REFUSAL EXISTS TO STOP. `url` and `pair` are both the sender's: a
+     * page navigating here from a browser, behind nothing but "Open Intentic?", would put its reader one
+     * folder pick away from two-way syncing that folder into a sandbox the sender signs in to. Unlike a
+     * setup link there is nothing here worth keeping after a strip, so the whole link is refused. */
+    #[test]
+    fn a_sync_link_from_outside_the_app_is_refused_entirely() {
+        assert_eq!(
+            parse_link(
+                "intentic://sync?url=https%3A%2F%2Fevil.example&pair=tok123",
+                Source::External
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_sync_link_missing_its_sandbox_or_token_is_not_one() {
+        assert_eq!(parse_link("intentic://sync?pair=tok123", Source::App), None);
+        assert_eq!(
+            parse_link(
+                "intentic://sync?url=https%3A%2F%2Fsandbox-abc.example.dev",
+                Source::App
+            ),
+            None
+        );
     }
 
     #[test]

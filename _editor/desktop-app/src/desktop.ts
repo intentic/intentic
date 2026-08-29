@@ -21,6 +21,18 @@ export interface RecreateArgs {
     rollback: boolean;
 }
 
+/* A desktop-sync enrollment the SPA handed over (`intentic://sync`): the same SANDBOX_URL and single-use
+ * pairing token the copy-paste one-liner carries, minus the folder — collecting THAT in a system dialog is
+ * the whole point of the handoff. `mirror` is a ports-only pairing: nothing to pick, nothing synced. */
+export interface SyncArgs {
+    url: string;
+    pair: string;
+    /// The sandbox's display name, so the screen can say what the folder is being connected to.
+    name?: string;
+    takeover: boolean;
+    mirror: boolean;
+}
+
 export interface SandboxStatus {
     slug: string;
     container: string;
@@ -130,6 +142,15 @@ export const dockerReady = (): Promise<boolean> => invoke(`docker_ready`);
  * running install's screen away with it. */
 export const takePendingSetup = (): Promise<SetupArgs | null> => invoke(`take_pending_setup`);
 export const takePendingRecreate = (): Promise<RecreateArgs | null> => invoke(`take_pending_recreate`);
+/* Taken, not read, with the sharpest stake of the three: the pairing token inside is single-use, and a
+ * request delivered twice would spend it on a run nobody is watching. */
+export const takePendingSync = (): Promise<SyncArgs | null> => invoke(`take_pending_sync`);
+/** Run the enrollment — sync.sh / sync.ps1, the same script the card's one-liner runs — with the folder the
+ *  user picked (absent for a mirror pairing, which has none). Events stream under the `sync-setup` run id. */
+export const syncRun = (args: SyncArgs, dir?: string): Promise<void> => invoke(`sync_run`, { args, dir: dir ?? null });
+/** How much already lives in a folder the user just picked — what makes the sync confirmation a sentence
+ *  about their files rather than boilerplate. */
+export const folderEntries = (path: string): Promise<number> => invoke(`folder_entries`, { path });
 /* `install` is the user's answer to the requirements list, and it is what makes the flow's one question one
  * question. A setup's FIRST attempt always passes false: `ic docker prepare` then examines the machine,
  * reports what would have to change and stops without changing it. The window draws that as a list with a
@@ -170,6 +191,7 @@ export const onRun = (handler: (event: RunEvent) => void): Promise<UnlistenFn> =
     listen<RunEvent>(`desktop://run`, (event) => handler(event.payload));
 export const onPendingSetup = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-setup`, () => handler());
 export const onPendingRecreate = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-recreate`, () => handler());
+export const onPendingSync = (handler: () => void): Promise<UnlistenFn> => listen(`desktop://pending-sync`, () => handler());
 
 /* THE APP'S OWN VERSION, READ ONCE AND THEN FOLLOWED — and both halves are load-bearing.
  *

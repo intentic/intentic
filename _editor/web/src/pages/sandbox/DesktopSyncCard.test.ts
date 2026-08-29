@@ -31,6 +31,7 @@ vi.mock(`../../composables/sandbox/useDesktopSync`, () => ({
         takeover: ref(false),
         linuxCommand: ref(``),
         windowsCommand: ref(``),
+        desktopLink: ref(undefined),
         enable: async () => {},
         start: () => {},
         stop: () => {},

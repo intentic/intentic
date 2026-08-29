@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::setup_link::{RecreateArgs, SetupArgs};
+use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
 
 /* THE TWO ORIGINS, AND THEY ARE NOT THE SAME HOST.
  *
@@ -60,6 +60,9 @@ pub struct AppState {
      * notification, so both orderings land. */
     pub pending: Mutex<Option<SetupArgs>>,
     pub pending_recreate: Mutex<Option<RecreateArgs>>,
+    /// A desktop-sync enrollment the SPA handed over (`intentic://sync`), waiting for the launcher face to
+    /// ask for the folder and run it. Same taken-not-read contract as the two above.
+    pub pending_sync: Mutex<Option<SyncArgs>>,
     /// slug → display name, ours to remember: docker knows only container names, and the name the user typed
     /// into the SPA never reaches the machine any other way.
     names: Mutex<BTreeMap<String, String>>,
@@ -78,6 +81,7 @@ impl AppState {
             settings: Mutex::new(settings),
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
+            pending_sync: Mutex::new(None),
             names: Mutex::new(names),
             install_id: Mutex::new(None),
         })
@@ -228,6 +232,7 @@ mod tests {
             settings: Mutex::new(Settings::default()),
             pending: Mutex::new(None),
             pending_recreate: Mutex::new(None),
+            pending_sync: Mutex::new(None),
             names: Mutex::new(BTreeMap::new()),
             install_id: Mutex::new(None),
         }
