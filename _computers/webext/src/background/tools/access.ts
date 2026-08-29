@@ -20,7 +20,7 @@ export const refreshBadge = async (): Promise<void> => {
     const [pending, offered, paused] = await Promise.all([store.pending(), store.inbox(), store.paused()]);
     const waiting = pending !== undefined || offered !== undefined;
     await chrome.action.setBadgeText({ text: paused ? `❚❚` : waiting ? `!` : `` });
-    await chrome.action.setBadgeBackgroundColor({ color: paused ? `#8a8a94` : `#7c5cff` });
+    await chrome.action.setBadgeBackgroundColor({ color: paused ? `#9c8b73` : `#e07b27` });
     await chrome.action.setTitle({
         title: paused
             ? `Intentic — paused`

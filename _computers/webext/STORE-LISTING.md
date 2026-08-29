@@ -120,7 +120,7 @@ https://intentic.dev/docs/your-browser
 
 | Asset | Size | Status |
 | --- | --- | --- |
-| Store icon | 128×128 PNG | `static/icons/icon-128.png`, rendered from `assets/icon.svg` (`pnpm --filter @intentic/webext icons`) |
+| Store icon | 128×128 PNG | `static/icons/icon-128.png` — the product's own lotus, rendered from the shared lotus in `_site/site/src/components/ornaments.ts` (`pnpm --filter @intentic/webext icons`) |
 | Screenshot 1 | 1280×800 | `assets/store/popup-1280x800.png` — the popup, paired, three sites allowed, one request waiting |
 | Screenshot 2 | 1280×800 | Optional but worth it: a real page mid-action with the banner up. Only a live session can produce that one |
 | Small promo tile | 440×280 | Optional; only needed if the item is ever featured |

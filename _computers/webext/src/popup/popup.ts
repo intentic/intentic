@@ -80,7 +80,15 @@ const pair = async (code: string, url: string): Promise<HTMLElement | undefined>
 
 const renderStatus = (state: PopupState): void => {
     const node = section("status");
-    node.append(el("h1", { text: "Intentic" }));
+    const brand = el("div", { className: "brand" });
+    const mark = document.createElement("img");
+    // The icon the extension already installs with (static/icons), not a second copy of the logo.
+    mark.src = "icons/icon-32.png";
+    mark.alt = "";
+    mark.width = 18;
+    mark.height = 18;
+    brand.append(mark, el("h1", { text: "Intentic" }));
+    node.append(brand);
     if (state.sandbox === undefined) {
         node.append(el("div", { className: "muted", text: "Not connected to a sandbox yet." }));
         return;

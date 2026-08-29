@@ -18,9 +18,15 @@
                 padding: 14px;
                 font: 13px/1.45 system-ui, sans-serif;
             }
+            .brand {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                margin: 0 0 10px;
+            }
             h1 {
                 font-size: 13px;
-                margin: 0 0 10px;
+                margin: 0;
                 letter-spacing: 0.04em;
                 text-transform: uppercase;
                 color: var(--quiet);
@@ -65,13 +71,15 @@
                 color: inherit;
                 cursor: pointer;
             }
-            /* The accent, stated rather than derived. `background: currentColor` with `filter: invert(1)` was
-               the clever version and it rendered a white button on a white panel in light mode — which is to
-               say it rendered the two controls that matter (Allow this site, Connect) as blank space. */
+            /* The ember, from the product's own palette (_site/site/src/styles/global.css --color-primary-500),
+               stated rather than derived. `background: currentColor` with `filter: invert(1)` was the clever
+               version and it rendered a white button on a white panel in light mode — which is to say it
+               rendered the two controls that matter (Allow this site, Connect) as blank space. The label is
+               the warm near-black rather than white: on ember that is 6.4:1 instead of 2.9:1. */
             button.primary {
-                background: #7c5cff;
-                border-color: #7c5cff;
-                color: #fff;
+                background: #e07b27;
+                border-color: #e07b27;
+                color: #15100b;
             }
             input {
                 font: inherit;

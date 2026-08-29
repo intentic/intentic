@@ -17,7 +17,7 @@ once.
 | Build → `dist/` (three bundles, static files, stamped manifest) | `package.json` `build` |
 | `dist/` → `dist.zip`, reproducible, no `zip` binary needed | `scripts/pack.mjs` |
 | Manifest version derived from the release version | `scripts/stamp-manifest.mjs`, `_tools/scripts/packages.sh` |
-| Icons, rendered from one SVG | `scripts/render-icons.mjs` → `static/icons/` |
+| Icons, rendered from the shared lotus in `_site/site/src/components/ornaments.ts` | `scripts/render-icons.mjs` → `static/icons/` |
 | Upload + submit | `_tools/scripts/publish-webstore.mjs` |
 | Runs on every release | `.github/workflows/webstore-publish.yml`, listed in `_tools/scripts/dispatch-publish.sh` |
 | Listing copy, field by field | [STORE-LISTING.md](STORE-LISTING.md) |
@@ -124,9 +124,10 @@ permissions do not obviously serve.
 
 ## Still worth doing
 
-- **Screenshots.** At least one, 1280×800, from a real session: the popup with a paired sandbox and two
-  allowed sites, and a page mid-action with the banner up. The only listing asset that cannot come out of this
-  repository.
+- **A second screenshot.** The first one is committed (`assets/store/popup-1280x800.png`) and regenerates from
+  the repository — `pnpm --filter @intentic/webext preview` renders the real popup at exactly 1280×800. What it
+  cannot show is the other half of the product: a real page mid-action with the banner up. That one needs a
+  live session, and it is the shot that sells this.
 - **Trim the background bundle.** 755 kB minified, ~200 kB of it the daemon's whole schema surface pulled in
   through the contract's barrel import. `@intentic/sandbox-contract/webext-links` already exists for the
   zero-dependency half (it took the content script from 1.1 MB to 374 bytes); the webext schemas want the same

@@ -395,11 +395,11 @@ export const flashBanner = (message: string): void => {
             "max-width: 320px",
             "padding: 9px 12px",
             "border-radius: 10px",
-            "background: #12121a",
-            "color: #f4f4f8",
+            "background: #15100b",
+            "color: #efe3cd",
             "font: 13px/1.4 system-ui, sans-serif",
             "box-shadow: 0 6px 24px rgba(0,0,0,.28)",
-            "border-left: 3px solid #7c5cff",
+            "border-left: 3px solid #e07b27",
             "pointer-events: none",
         ].join(";"),
     );
@@ -431,8 +431,8 @@ export const askConfirm = async (question: string, timeoutMs: number): Promise<b
                 "width: 320px",
                 "padding: 14px",
                 "border-radius: 12px",
-                "background: #12121a",
-                "color: #f4f4f8",
+                "background: #15100b",
+                "color: #efe3cd",
                 "font: 13px/1.45 system-ui, sans-serif",
                 "box-shadow: 0 8px 32px rgba(0,0,0,.36)",
             ].join(";"),
@@ -452,7 +452,9 @@ export const askConfirm = async (question: string, timeoutMs: number): Promise<b
                     "padding: 5px 12px",
                     "border-radius: 7px",
                     "font: 13px system-ui, sans-serif",
-                    primary ? "background: #7c5cff; color: #fff" : "background: transparent; color: #aaa; border: 1px solid #333",
+                    primary
+                        ? "background: #e07b27; color: #15100b"
+                        : "background: transparent; color: #b7a68d; border: 1px solid rgba(201,160,92,.3)",
                 ].join(";"),
             );
             return element;

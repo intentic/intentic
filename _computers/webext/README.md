@@ -75,13 +75,19 @@ answers.
   every sandbox page — and it is why `@intentic/sandbox-contract/webext-links` exists. Trimming the background
   the same way needs the webext schemas to get their own contract entry point.
 
+- **The mark and the accent are the product's, not this package's.** The icons are rendered from the same
+  `LOTUS` in `_site/site/src/components/ornaments.ts` that the favicon and the desktop app draw from — one
+  drawing, never a hand-copy — and the ember (`#e07b27`) in the popup button, the in-page banner and the
+  toolbar badge is `--color-primary-500` from the site's palette. This shipped once with an invented purple
+  browser-and-cursor icon, which is exactly the second logo that rule exists to prevent.
+
 ## Commands
 
 ```sh
 pnpm --filter @intentic/webext build      # → dist/, loadable as an unpacked extension
 pnpm --filter @intentic/webext test
 pnpm --filter @intentic/webext package    # → dist.zip, what the store takes
-pnpm --filter @intentic/webext icons      # re-render static/icons/ from assets/icon.svg
+pnpm --filter @intentic/webext icons      # re-render static/icons/ from the shared lotus
 ```
 
 Then in Chrome: **Extensions → Developer mode → Load unpacked → `_computers/webext/dist`**. Pair it with the
@@ -111,3 +117,4 @@ unset, which is the state until the listing has been created by hand once.
 - [src/popup/popup.ts](src/popup/popup.ts): the 340 pixels that make this installable, and the only place a permission is ever asked for.
 - [static/manifest.json](static/manifest.json): four permissions, one optional host pattern, one content script.
 - [scripts/pack.mjs](scripts/pack.mjs): dist/ as one zip, written by hand because the CI image has no `zip`.
+- [scripts/render-icons.mjs](scripts/render-icons.mjs): the four PNGs, read out of the site's lotus rather than redrawn.

@@ -78,18 +78,20 @@ const shot = `<!doctype html>
             html, body { margin: 0; width: 1280px; height: 800px; overflow: hidden; }
             body {
                 display: flex; align-items: center; gap: 72px; padding: 0 90px; box-sizing: border-box;
-                background: radial-gradient(120% 120% at 15% 10%, #1b1b28 0%, #0d0d14 60%);
-                color: #f4f4f8; font: 16px/1.5 system-ui, sans-serif;
+                background: radial-gradient(120% 120% at 15% 10%, #15100b 0%, #0c0907 60%);
+                color: #efe3cd; font: 16px/1.5 system-ui, sans-serif;
             }
             h1 { font-size: 40px; line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.02em; }
-            p { margin: 0 0 14px; color: #b6b6c6; max-width: 30ch; font-size: 18px; }
-            b { color: #f4f4f8; font-weight: 600; }
-            .accent { color: #a08cff; }
+            p { margin: 0 0 14px; color: #b7a68d; max-width: 30ch; font-size: 18px; }
+            b { color: #efe3cd; font-weight: 600; }
+            .accent { color: #f59b3f; }
+            .mark { width: 64px; height: 64px; margin: 0 0 26px; display: block; }
             iframe { width: 368px; height: 640px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 30px 80px rgba(0,0,0,.55); }
         </style>
     </head>
     <body>
         <div>
+            <img class="mark" src="icons/icon-128.png" alt="" />
             <h1>Your agent,<br /><span class="accent">in your browser.</span></h1>
             <p>It works on the sites <b>you allow</b> — one at a time, granted here, revoked in Chrome.</p>
             <p>You watch it happen: every action is drawn on the page, and anything that spends money or deletes something asks you first.</p>
