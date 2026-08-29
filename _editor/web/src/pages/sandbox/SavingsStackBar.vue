@@ -59,12 +59,12 @@ const tooltipFor = (label: string, tokens: number): string => `${label} · ~${fo
         <figcaption class="sr-only">Raw shell output by what removed it, and what was left for the assistant.</figcaption>
         <ul class="mt-1 flex flex-col gap-1.5">
             <li v-for="segment in removed" :key="segment.key" class="flex min-w-0 items-baseline gap-2">
-                <span class="size-2 shrink-0 translate-y-px rounded-[2px]" :style="{ background: segment.color }" />
+                <span class="size-2 shrink-0 translate-y-px rounded-2xs" :style="{ background: segment.color }" />
                 <span class="min-w-0 flex-1 text-xs text-content">{{ segment.label }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-muted">~{{ formatCompact(segment.tokens) }}</span>
             </li>
             <li v-if="reached !== undefined" class="mt-1.5 flex min-w-0 items-baseline gap-2">
-                <span class="size-2 shrink-0 translate-y-px rounded-[2px]" :style="{ background: reached.color }" />
+                <span class="size-2 shrink-0 translate-y-px rounded-2xs" :style="{ background: reached.color }" />
                 <span class="min-w-0 flex-1 text-xs text-muted">{{ reached.label }}</span>
                 <span class="shrink-0 text-2xs tabular-nums text-muted">~{{ formatCompact(reached.tokens) }}</span>
             </li>

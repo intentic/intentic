@@ -40,7 +40,7 @@ const PLOT_HEIGHT = `10rem`;
         <!-- Two or more series always carry a legend: identity must never rest on colour-matching alone. -->
         <figcaption v-if="stacked" class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span v-for="provider in providers" :key="provider" class="flex items-center gap-1.5 text-2xs text-muted">
-                <span class="size-2 shrink-0 rounded-[2px]" :style="{ background: providerColor(provider) }" />
+                <span class="size-2 shrink-0 rounded-2xs" :style="{ background: providerColor(provider) }" />
                 {{ providerGroupLabel(provider) }}
             </span>
         </figcaption>

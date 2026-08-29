@@ -97,6 +97,8 @@
     --spacing: 0.25rem;
 
     /* Radius scale. */
+    /* Chart and table legend swatches — smaller than xs so a colour chip reads square without a full corner. */
+    --radius-2xs: 0.125rem;
     --radius-xs: 0.25rem;
     --radius-sm: 0.375rem;
     --radius-md: 0.5rem;

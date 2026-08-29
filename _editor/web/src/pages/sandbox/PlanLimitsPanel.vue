@@ -202,7 +202,7 @@ const roster = computed(() => {
                  is carried by colour alone. -->
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
                     <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
-                        <span class="size-2 shrink-0 rounded-[2px] bg-current" :class="planLimitBandTone(segment.band)" />
+                        <span class="size-2 shrink-0 rounded-2xs bg-current" :class="planLimitBandTone(segment.band)" />
                         <span class="tabular-nums text-content">{{ segment.count }}</span>
                         {{ segment.label }}
                     </span>
@@ -368,11 +368,11 @@ const roster = computed(() => {
                                         v-for="row in barsOf(group)"
                                         :key="row.id"
                                         v-tooltip.top="barTooltip(row)"
-                                        class="flex h-full w-1.5 items-end rounded-[2px] bg-content/10"
+                                        class="flex h-full w-1.5 items-end rounded-2xs bg-content/10"
                                     >
                                         <span
                                             v-if="row.percent !== undefined"
-                                            class="w-full rounded-[2px] bg-current"
+                                            class="w-full rounded-2xs bg-current"
                                             :class="usageTone(row.percent)"
                                             :style="{ height: `${Math.max(row.percent, 4)}%` }"
                                         />

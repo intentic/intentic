@@ -496,7 +496,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                     <td class="py-1.5 pr-3">
                                         <span class="flex items-center gap-1.5">
                                             <span
-                                                class="size-2 shrink-0 rounded-[2px]"
+                                                class="size-2 shrink-0 rounded-2xs"
                                                 :style="{ background: providerColor(providerGroup(row.provider)) }"
                                             />
                                             {{ providerDisplayLabel(row.provider) }}
