@@ -130,10 +130,40 @@ test("turns can be narrowed to failures and to one conversation", async () => {
         turn({ outcome: "cancelled", conversationId: "c3" }),
     ]);
 
-    const failed = await call(deps, "turns", { failedOnly: true });
+    const failed = await call(deps, "turns", { only: "failed" });
     expect(failed).toContain("2 turns");
     expect(failed).not.toContain("c1");
     expect(await call(deps, "turns", { conversationId: "c2" })).toContain("1 turns");
+});
+
+/* THE OTHER WAY A TURN GOES WRONG, and the one no status word could ever show: every row here is `ok`, so a
+ * reader filtering on failure sees a clean day. Two of these three finished on code nothing stands behind. */
+test("turns separates the ones that finished from the ones that only stopped", async () => {
+    const deps = await setup({}, [
+        turn({ outcome: "ok", conversationId: "proved", verification: "verified", check: "pnpm test src/parser.test.ts", filesEdited: 2 }),
+        turn({ outcome: "ok", conversationId: "quiet", verification: "unproven", filesEdited: 3, checklistTotal: 4, checklistOpen: 2 }),
+        turn({ outcome: "ok", conversationId: "broken", verification: "failing", check: "pnpm test", filesEdited: 1 }),
+    ]);
+
+    const all = await call(deps, "turns", {});
+    expect(all).toContain("3 turns, 0 failed, 2 finished with unproven code changes");
+    // "verified" is only worth the word because the check that earned it is printed beside it.
+    expect(all).toContain(`"check":"pnpm test src/parser.test.ts"`);
+    // A plan the turn wrote itself and left open is the readable form of "it stopped talking".
+    expect(all).toContain(`"checklistOpen":2`);
+
+    const unproven = await call(deps, "turns", { only: "unproven" });
+    expect(unproven).toContain("quiet");
+    expect(unproven).toContain("broken");
+    expect(unproven).not.toContain("proved");
+});
+
+/* A turn the provider never answered records no verdict, and the filter must not read that silence as a
+ * finding: an unknown counted as a hit is how a filter comes to be distrusted. */
+test("a turn with no recorded verdict is never counted as unproven", async () => {
+    const deps = await setup({}, [turn({ outcome: "error", errorCode: "claude-not-entitled" }), turn({ outcome: "ok", verification: "no-code" })]);
+    expect(await call(deps, "turns", {})).toContain("0 finished with unproven code changes");
+    expect(await call(deps, "turns", { only: "unproven" })).toContain("No turns match");
 });
 
 test("a turn with no recorded outcome is reported as unrecorded, never as a success", async () => {

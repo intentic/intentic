@@ -5,8 +5,10 @@ import {
     type AgentTurn,
     agentContract,
     capabilitiesOf,
+    type ContextUsage,
     type EditorContext,
     type SnapshotTurn,
+    type TodoItem,
     type WorkspaceEvent,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -33,12 +35,14 @@ import { landingVerdict, standing } from "../rules/rules.js";
 import { type RepoSync, syncConversation } from "../agents/sync.js";
 import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../sessions/turn-transcript.js";
-import { type ChildSupervisor, childSupervisor } from "../children/children.js";
+import { type ChildSupervisor, childSupervisor, isSpawnedChild } from "../children/children.js";
 import type { AgentRequest } from "./agent.js";
 import { adapterFor } from "./adapter-registry.js";
 import { composeWirePrompt } from "./turn-preamble.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
+import { createFrameLedger } from "./agent-verification.js";
+import { nudgeUnverifiedWork } from "./verify-nudge.js";
 import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
 import { registerTurn, SteeringQueue, steerTurn, stopTurn } from "./agent-steering.js";
@@ -686,6 +690,10 @@ const SLOW_PREFLIGHT_MS = 5_000;
  * ledger worth having over the activity log. */
 const ERROR_MESSAGE_CHARS = 400;
 
+// How much of the check that spoke the ledger keeps (UsageTurn.check). A command is a line, not a script: long
+// enough for `pnpm -C _sandbox/sandbox test src/agent/x.test.ts`, which is the shape these actually take.
+const VERIFICATION_CHECK_CHARS = 200;
+
 /* The four codes that already own a durable trace of their own, and the reason a failed turn is not
  * automatically an `error` line.
  *
@@ -1111,6 +1119,26 @@ async function* runTurn(
     let searchCalls = 0;
     let openingSearches = 0;
     let reachedTheWork = false;
+    /* DID THIS TURN PROVE ANYTHING, kept as the turn runs so the ledger can say at the end. The same ledger the
+     * Stop nudge is built on (agent-verification.ts) and the same feeder a child's verdict comes off
+     * (child-verification.ts), fed here from the PARENT turn's frames.
+     *
+     * FED FRAMES RATHER THAN HOOKS, which is what makes it universal: the hook version is Claude Agent SDK
+     * PostToolUse and exists on one of six runtimes, while every runtime normalizes its stream into the
+     * `tool_call` vocabulary before it reaches this loop.
+     *
+     * SUBAGENTS' CALLS COUNT, on exactly the rule the prose and the searches below already follow: a turn that
+     * sent a child to make its edits still edited, and a verdict that ignored delegated work would report the
+     * most careful turns as having done nothing. The child's own report carries its own verdict separately. */
+    const verification = createFrameLedger();
+    /* THE AGENT'S OWN CHECKLIST as it last stood, the `todos` frames every runtime that keeps one emits. Last
+     * wins: the frame is a whole snapshot, not a delta. Undefined ⇒ this turn kept no checklist, which is not
+     * an empty one and must not be recorded as though it were. */
+    let checklist: readonly TodoItem[] | undefined;
+    // How many times the window was compacted under this turn, and how full it was when the turn ended. The
+    // two facts nothing kept, and the ones that say whether a turn ended against the wall.
+    let compactions = 0;
+    let context: ContextUsage | undefined;
     /* THE LAST ERROR FRAME THIS TURN EMITTED, for the ledger's `outcome` and the one `error` line the log was
      * missing. LAST, not first: a turn that fails, resumes past an outage and then fails again ended on the
      * second failure, and the second is what a reader asking "why did this turn die" needs.
@@ -1229,6 +1257,19 @@ async function* runTurn(
                 if (isFileWorkCall(event)) {
                     reachedTheWork = true;
                 }
+            }
+            /* WHAT THIS TURN CHANGED AND WHAT PROVED IT, and the two facts that say whether it ended against
+             * the wall. Frames the loop already carries, folded here because nothing downstream of it still
+             * knows the ORDER they arrived in, which is the whole of the verification question: `pnpm test`
+             * then three edits is a turn with no evidence for those edits. */
+            if (event.kind === "tool_call" || event.kind === "tool_call_update") {
+                verification.note(event);
+            } else if (event.kind === "todos") {
+                checklist = event.items;
+            } else if (event.kind === "compact") {
+                compactions += 1;
+            } else if (event.kind === "context_usage") {
+                context = event;
             }
             if (event.kind === "session") {
                 sessionId = event.sessionId;
@@ -1473,6 +1514,33 @@ async function* runTurn(
          * Fire-and-forget, same contract as every other turn-end write. */
         const outcome = signal?.aborted === true ? "cancelled" : failure !== undefined ? "error" : "ok";
         const billed = usage !== undefined;
+        /* HOW THE TURN ENDED, past the three words `outcome` has for it. A turn that proved its work and a turn
+         * that went quiet halfway through its own checklist are both "ok", and until now the ledger wrote the
+         * same row for each (UsageTurn.verification says why that is the question worth answering).
+         *
+         * GATED ON THE PROVIDER HAVING SPOKEN, not on the turn having been billed. `no-code` on a turn the
+         * provider refused before the model read a word is arithmetic rather than behaviour, exactly the trap
+         * the experiment metrics avoid one line down; `no-code` on a turn that ran is a real answer about a
+         * real turn. A CANCELLED turn keeps its verdict too, and deliberately: work abandoned mid-flight with
+         * nothing proving it is precisely what a reader coming back to a stopped turn needs told. */
+        const proven = verification.standing();
+        const ending = providerAnswered
+            ? {
+                  verification: proven.state,
+                  ...(proven.check !== undefined ? { check: proven.check.slice(0, VERIFICATION_CHECK_CHARS) } : {}),
+                  filesEdited: verification.edited().length,
+                  compactions,
+                  ...(checklist !== undefined
+                      ? {
+                            checklistTotal: checklist.length,
+                            // Pending and in-progress alike: both are work the agent said it would do and did
+                            // not, and a turn ending on either is a turn that stopped rather than finished.
+                            checklistOpen: checklist.filter((item) => item.status !== "completed").length,
+                        }
+                      : {}),
+                  ...(context !== undefined ? { contextTokens: context.tokens, contextWindow: context.contextWindow } : {}),
+              }
+            : {};
         services.usage
             .record({
                 provider,
@@ -1493,6 +1561,8 @@ async function* runTurn(
                 cacheCreationTokens: usage?.cacheCreationTokens ?? 0,
                 costUsd: usage?.costUsd ?? 0,
                 durationMs: usage?.durationMs ?? 0,
+                // How it ended, past what it cost: what the turn changed, what proved it, what it left open.
+                ...ending,
                 ...(billed
                     ? {
                           // Counted off this turn's own frames rather than taken from the provider, which reports
@@ -1534,6 +1604,35 @@ async function* runTurn(
                     : {}),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "usage: ledger append failed"));
+        /* AND THE PROOF FOLLOW-UP, for the runtimes that cannot get one from a Stop hook.
+         *
+         * The `verify-edits` rule reaches a Claude turn through the SDK's hooks, mid-turn, which is cheaper
+         * than anything this can do and keeps the context the work happened in — so where those run, this
+         * stands aside and the gate on `rulebook` is what keeps a turn from being told twice. Everywhere else
+         * the rule was armed and inert, and the follow-up arrives as its own turn instead (verify-nudge.ts).
+         *
+         * FOUR GATES, because this spends a turn on the user's behalf. It ended WELL: a failed turn has a
+         * failure to report rather than an unproven edit, and a CANCELLED one must never be answered by the
+         * daemon starting another, which is the same turn coming back after the user stopped it. It is not a
+         * spawned child: that conversation's reader is its parent, and the parent has already been told what
+         * the child proved. It has a conversation to run on at all. And the rule itself, with its conditions,
+         * is checked inside. */
+        if (
+            outcome === "ok" &&
+            input.conversationId !== undefined &&
+            capabilitiesOf(provider, input.harness ?? "native").rulebook !== "hooks" &&
+            !isSpawnedChild(input.conversationId)
+        ) {
+            void nudgeUnverifiedWork({
+                conversationId: input.conversationId,
+                seed: input,
+                rules: request.turnEndingRules ?? [],
+                ledger: verification,
+                ...(isolation !== undefined ? { isolation: isolation.plan } : {}),
+                cwd: effectiveCwd,
+                ...(request.onRuleFired !== undefined ? { onFired: request.onRuleFired } : {}),
+            }).catch((error: unknown) => services.logger.warn({ err: error }, "verify nudge: could not be decided"));
+        }
         sniffer.flush();
         // Fire-and-forget workspace snapshot at turn end (aborted turns included), history must never delay
         // or fail a turn. The raw prompt (not the enriched request) labels the checkpoint in the user's words.

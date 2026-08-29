@@ -805,8 +805,20 @@ class TurnFold {
         if (speed !== undefined) {
             yield speed;
         }
+        /* THE TURN ENDED WITHOUT SUCCEEDING, and which way it did is now on the frame.
+         *
+         * This used to yield one uncoded error carrying the subtype inside its sentence, which made it the
+         * schema's own worst case: an unclassified failure is one nothing downstream knows how to handle, and
+         * the ledger recorded exactly that (UsageTurn.errorCode). The distinction it was throwing away is a
+         * real one, and it is the one a post-mortem asks for first, a loop that ran out of iterations is not a
+         * loop that broke. The sentence still carries the subtype verbatim, since it is the only thing that
+         * separates the several endings sharing the second code. */
         if (message.subtype !== "success") {
-            yield { kind: "error", message: `agent did not complete (${message.subtype})` };
+            yield {
+                kind: "error",
+                code: message.subtype === "error_max_turns" ? "turn-cap" : "harness-incomplete",
+                message: `agent did not complete (${message.subtype})`,
+            };
         }
         // The account's headroom, re-read now that the turn has settled, the freshest this account's
         // limits get without spending anything to find out. After the result frames on purpose: the read

@@ -9371,6 +9371,62 @@ export const UsageTurnSchema = z.object({
      *
      * Absent ⇒ as for `searchCalls`. */
     openingSearches: z.number().optional(),
+    /* DID THIS TURN FINISH, OR DID IT STOP TALKING. The fields that tell the two apart, and the reason
+     * `outcome` alone could never.
+     *
+     * A turn ends at least five different ways: its stop condition was met, the model ran out of things to say,
+     * the loop hit a cap, the budget ran out, or the model asserted it was done and nothing checked the claim.
+     * `outcome` collapses four of those into "ok", so a ledger that already recorded every failure perfectly
+     * still wrote the same word over a turn that proved its work and a turn that went quiet halfway through its
+     * own checklist. The daemon was computing the difference and discarding it at turn end.
+     *
+     * NO SINGLE STOP-REASON WORD IS STORED, deliberately: these are the facts, and which of the five modes they
+     * add up to is a rule that will get better. A word written down now would freeze today's rule into rows
+     * that outlive it and cannot be re-read under the next one, the same reason `tierRouted` is recorded beside
+     * `tierScore` instead of being derived from it once and forgotten.
+     *
+     * `verification` is the four-state VerificationState the child roster already speaks (agent-verification.ts):
+     * "verified" = a check passed AFTER the last code edit, "failing" = the last one after it did not,
+     * "unproven" = nothing ran, "no-code" = nothing a check could speak to was edited. Folded from this turn's
+     * own tool-call frames, subagents' included, so a Codex turn is judged exactly as a Claude one is. Absent ⇒
+     * the row predates this, NOT a turn nothing was known about.
+     *
+     * `check` is the command that SPOKE, the one that cleared the work or the one that broke, capped. It is
+     * what keeps "verified" auditable: a passing `vitest run one.test.ts` is evidence about one file and must
+     * never read as the repo being green, and only the command itself shows which was which.
+     *
+     * `filesEdited` counts every file written, prose included, where `verification` speaks only about code. The
+     * pair is the point: `{ verification: "no-code", filesEdited: 3 }` is a documentation turn, and
+     * `{ verification: "unproven", filesEdited: 0 }` cannot happen. */
+    verification: z.enum(["verified", "unproven", "failing", "no-code"]).optional(),
+    check: z.string().optional(),
+    filesEdited: z.number().optional(),
+    /* THE AGENT'S OWN CHECKLIST WHEN THE TURN ENDED, reconstructed from the Task tool family and reported by
+     * every runtime that keeps one (`todos` frames). `checklistOpen` is pending plus in-progress.
+     *
+     * This is the honest reading of "the model stopped emitting": a turn that ended `ok` with items still open
+     * abandoned a plan it wrote itself, which is a different event from a turn that finished one, and the two
+     * were indistinguishable in every record this daemon kept. Absent ⇒ the turn kept no checklist at all,
+     * which is most short turns and is not the same as an empty one. */
+    checklistTotal: z.number().optional(),
+    checklistOpen: z.number().optional(),
+    /* HOW MANY TIMES THE CONTEXT WAS COMPACTED under this turn, and how full the window was when it ended.
+     *
+     * Compaction is the least observable thing a harness does to a turn: a poorly timed one discards the
+     * partial result the turn still needed, and the only trace was a frame streamed to whoever was watching.
+     * Recorded here, "did compaction hurt" becomes a question this ledger can answer, by joining these against
+     * `verification` and `outcome` over months of real turns, which is a number nobody currently has.
+     *
+     * `contextTokens`/`contextWindow` are the last `context_usage` frame, absent for a runtime that reports
+     * none. Both, rather than a percentage: the window is a per-model constant that moves between model
+     * versions, and a fraction computed today cannot be recomputed tomorrow from what it threw away.
+     *
+     * Together they carry ~90 bytes onto a ~250-byte row. A heavy day is ~100 turns, so a year of hard use goes
+     * from ~9 MB to ~12 MB, which is the price of a log that can answer why a turn ended rather than only what
+     * it cost. */
+    compactions: z.number().optional(),
+    contextTokens: z.number().optional(),
+    contextWindow: z.number().optional(),
     /* WHAT THE COMPLEXITY JUDGE SAID ABOUT THIS TURN, and whether anything was done about it. The three fields
      * automatic tier selection is calibrated from, and the reason it can ship in shadow at all.
      *

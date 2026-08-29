@@ -1,4 +1,5 @@
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { UsageTurn } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { type LevelName, type LogLineResult, readLogLines, readMetricSeries } from "./diagnostics.js";
@@ -44,6 +45,15 @@ export interface DiagnosticsToolDeps {
     readonly usage: Pick<UsageStore, "turns">;
     readonly now?: () => number;
 }
+
+/* A TURN THAT FINISHED ON WORK NOTHING CHECKED. Both states count, because both are a claim the record cannot
+ * stand behind: "unproven" is nothing ran, "failing" is the last thing that ran did not pass, and a turn that
+ * ended anyway on either has left something for a person to look at.
+ *
+ * "no-code" and absent are deliberately not here. The first is a turn a check could not have spoken to; the
+ * second is a row from before this was recorded, or a turn the provider never answered, and counting an
+ * unknown as a finding is how a filter comes to be distrusted. */
+const unproven = (row: UsageTurn): boolean => row.verification === "unproven" || row.verification === "failing";
 
 const sinceOf = (now: number, minutes: number | undefined): number | undefined =>
     minutes === undefined ? undefined : now - Math.min(minutes, MAX_MINUTES) * 60_000;
@@ -146,17 +156,28 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
             ),
             tool(
                 "turns",
-                "How recent agent turns ended: which model actually ran, what it cost, and for a failed one its error code and " +
-                    "the provider's own sentence. This is the durable record, so it answers questions about turns nobody was " +
-                    "watching, and it is the place to look when a session died, a turn produced the wrong provider's error, or " +
-                    "several conversations broke at once.",
+                "How recent agent turns ended: which model actually ran, what it cost, for a failed one its error code and the " +
+                    "provider's own sentence, and for one that ran, whether anything CHECKED the work it did. This is the durable " +
+                    "record, so it answers questions about turns nobody was watching, and it is the place to look when a session " +
+                    "died, a turn produced the wrong provider's error, or several conversations broke at once. " +
+                    '`verification` is the part a status word cannot give you: "verified" means a check passed after the last code ' +
+                    'edit and `check` names it, "unproven" means nothing ran, "failing" means the last one did not pass, "no-code" ' +
+                    "means nothing a check could speak to was edited. A turn ending with `checklistOpen` above zero abandoned a plan " +
+                    "it wrote itself, which is what a turn that stopped rather than finished looks like from here.",
                 {
                     sinceMinutes: z.number().int().min(1).max(MAX_MINUTES).optional(),
                     conversationId: z.string().max(200).optional().describe("Narrow to one conversation."),
-                    failedOnly: z.boolean().optional().describe("Only turns that failed or were cancelled. Default false."),
+                    only: z
+                        .enum(["failed", "unproven"])
+                        .optional()
+                        .describe(
+                            'Narrow to one kind of ending: "failed" is turns that failed or were cancelled, "unproven" is turns that ' +
+                                "changed code and finished with nothing having checked it (including ones whose last check broke). " +
+                                "Leave it out for every turn.",
+                        ),
                     limit: z.number().int().min(1).max(MAX_LINES).optional(),
                 },
-                async ({ sinceMinutes, conversationId, failedOnly, limit }) => {
+                async ({ sinceMinutes, conversationId, only, limit }) => {
                     const at = now();
                     const since = sinceOf(at, sinceMinutes);
                     // The ledger windows by UTC day, so a minute-level window needs the day floor first and then
@@ -167,7 +188,8 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         (row) =>
                             (since === undefined || row.at >= since) &&
                             (conversationId === undefined || row.conversationId === conversationId) &&
-                            (failedOnly !== true || row.outcome === "error" || row.outcome === "cancelled"),
+                            (only !== "failed" || row.outcome === "error" || row.outcome === "cancelled") &&
+                            (only !== "unproven" || unproven(row)),
                     );
                     if (matching.length === 0) {
                         return ok(
@@ -178,7 +200,11 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     const failed = matching.filter((row) => row.outcome === "error").length;
                     return ok(
                         [
-                            `${matching.length} turns, ${failed} failed. Newest ${shown.length} below.`,
+                            // Both counts, because they are different questions about the same rows and the
+                            // second one has no other way to be asked: a turn that failed announced itself, and
+                            // a turn that finished on work nothing checked looks exactly like a turn that
+                            // finished.
+                            `${matching.length} turns, ${failed} failed, ${matching.filter(unproven).length} finished with unproven code changes. Newest ${shown.length} below.`,
                             // `outcome` absent means the row predates outcome being recorded, which is not the
                             // same as a turn that succeeded; say so rather than printing a guess.
                             "",
@@ -188,6 +214,23 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                                     outcome: row.outcome ?? "unrecorded",
                                     ...(row.errorCode !== undefined ? { errorCode: row.errorCode } : {}),
                                     ...(row.errorMessage !== undefined ? { error: row.errorMessage } : {}),
+                                    /* How the turn ENDED, past whether it failed. Absent on a row that predates
+                                     * this being recorded and on a turn the provider never answered, which is
+                                     * the honest reading: nothing was watched, so nothing is claimed. */
+                                    ...(row.verification !== undefined ? { verification: row.verification } : {}),
+                                    ...(row.check !== undefined ? { check: row.check } : {}),
+                                    ...(row.filesEdited !== undefined && row.filesEdited > 0 ? { filesEdited: row.filesEdited } : {}),
+                                    // Only when something is still open: a finished checklist is the ordinary
+                                    // case and would be a column of zeroes on every row.
+                                    ...(row.checklistOpen !== undefined && row.checklistOpen > 0
+                                        ? { checklistOpen: row.checklistOpen, checklistTotal: row.checklistTotal }
+                                        : {}),
+                                    ...(row.compactions !== undefined && row.compactions > 0 ? { compactions: row.compactions } : {}),
+                                    // As a fraction of the window, which is the readable form of the pair and
+                                    // the one that says "this turn ended against the wall".
+                                    ...(row.contextTokens !== undefined && row.contextWindow !== undefined && row.contextWindow > 0
+                                        ? { contextPct: Math.round((row.contextTokens / row.contextWindow) * 100) }
+                                        : {}),
                                     provider: row.provider,
                                     ...(row.model !== undefined ? { model: row.model } : {}),
                                     // Only when it differs: printing it on every row would bury the rows where

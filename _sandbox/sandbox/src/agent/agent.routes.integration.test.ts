@@ -406,6 +406,106 @@ test("a turn that succeeds is recorded as such, with the experiment metrics it e
     expect("errorMessage" in (ledger[0] ?? {})).toBe(false);
 });
 
+/* AND WHETHER ANYTHING CHECKED THE WORK, which `outcome` alone could never say.
+ *
+ * A turn that proved its edits and a turn that went quiet halfway through its own checklist are both "ok", and
+ * the ledger used to write the same row for each. The facts that separate them were all being computed and
+ * thrown away at turn end: what was edited, what ran after it, what the agent still had open, how full the
+ * window was. Folded off the FRAME stream, so a Codex or Cursor turn is judged exactly as a Claude one is. */
+const editFrame = (id: string, path: string) => ({ kind: "tool_call" as const, id, name: "Edit", category: "edit" as const, status: "completed" as const, locations: [{ path }] });
+const checkFrame = (id: string, command: string) => ({ kind: "tool_call" as const, id, name: "Bash", category: "execute" as const, status: "in_progress" as const, target: command });
+const checkResult = (id: string, text: string) => ({ kind: "tool_call_update" as const, id, status: "completed" as const, content: [{ type: "text" as const, text }] });
+
+test("a turn that proved its edits is recorded as verified, naming the check that spoke", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield editFrame("1", "/work/src/parser.ts");
+                    yield checkFrame("2", "pnpm test src/parser.test.ts");
+                    yield checkResult("2", "2 passed\n--- [exit 0, 3s]");
+                    yield { kind: "usage", costUsd: 0.2 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-verified" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    /* The command is the whole reason "verified" is worth writing down: a passing `pnpm test src/parser.test.ts`
+     * is evidence about one file, and a row that said only "verified" would let it read as the repo being green. */
+    expect(ledger[0]).toMatchObject({ outcome: "ok", verification: "verified", check: "pnpm test src/parser.test.ts", filesEdited: 1 });
+});
+
+test("a turn that stopped talking is recorded as such: unproven edits, its own checklist still open", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield {
+                        kind: "todos",
+                        items: [
+                            { content: "read the parser", status: "completed" },
+                            { content: "fix the parser", status: "in_progress" },
+                            { content: "test it", status: "pending" },
+                        ],
+                    };
+                    yield editFrame("1", "/work/src/parser.ts");
+                    yield { kind: "compact", trigger: "auto", preTokens: 180_000, postTokens: 40_000 };
+                    yield { kind: "context_usage", tokens: 148_000, contextWindow: 200_000 };
+                    yield { kind: "usage", costUsd: 0.2 };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-quiet" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({
+        outcome: "ok",
+        verification: "unproven",
+        filesEdited: 1,
+        // Two of its own three steps left standing: a turn that abandoned a plan it wrote itself.
+        checklistTotal: 3,
+        checklistOpen: 2,
+        compactions: 1,
+        contextTokens: 148_000,
+        contextWindow: 200_000,
+    });
+    // Nothing spoke, so there is no check to name; an absent one is the difference between "you never checked"
+    // and "you checked and it broke".
+    expect("check" in (ledger[0] ?? {})).toBe(false);
+});
+
+/* A REFUSED TURN GETS NO VERDICT, for the same reason it gets no prose count: "it changed no code" is
+ * arithmetic when the model never read a word, and a burst of auth refusals would otherwise read as a run of
+ * turns that all decided to do nothing. */
+test("a turn the provider never answered records no verdict at all", async () => {
+    const ledger: Record<string, unknown>[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agent: async function* () {
+                    yield { kind: "error", code: "claude-not-entitled", message: "not enabled" };
+                    yield { kind: "done" };
+                },
+                usage: { record: async (turn) => void ledger.push(turn) },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "go", conversationId: "conv-refused" });
+
+    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect("verification" in (ledger[0] ?? {})).toBe(false);
+    expect("compactions" in (ledger[0] ?? {})).toBe(false);
+});
+
 /* THE MODEL ASKED FOR, BESIDE THE ONE THAT RAN. A pick is resolved past the tier judge, a provider default and
  * a catalog validity check that silently substitutes, and none of those substitutions was recorded, so "I chose
  * one model and got another's error" could only be answered by reading four resolution paths. */

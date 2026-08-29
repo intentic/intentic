@@ -12,6 +12,7 @@ import { sweepAgedAgents } from "./agents/archive.js";
 import { startVanishedRepoSweep } from "./agents/vanished-repos.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
+import { startVerifyNudges } from "./agent/verify-nudge.js";
 import { startWatchers } from "./agent/watchers.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
@@ -1052,6 +1053,13 @@ const main = async (): Promise<void> => {
     // be imported from under turn-plan, where the arming tool lives. Stop drops every armed watch, a daemon on
     // its way down cannot check anything, and the record honestly gone beats a timer into a dead process.
     shutdown.push(startWatchers(services, streamAgent));
+
+    /* The proof follow-up for every runtime without SDK Stop hooks (agent/verify-nudge.ts): a turn that changed
+     * code and ran no check after its last edit gets one bounded follow-up, delivered as its own turn because a
+     * Codex or ACP loop has nowhere to put one mid-flight. Wired here for the same reason the watches are, the
+     * follow-up IS a turn and the turn generator cannot be imported from under the route that owns it. Only ever
+     * fires where the owner has stood the `verify-edits` rule. */
+    shutdown.push(startVerifyNudges(services, streamAgent));
 
     /* The post publisher, armed rather than polled: it reads the drafts queue, works out the soonest approved
      * post's due time, and sleeps until exactly that. Arming here is what carries a hold across a restart, a

@@ -646,11 +646,22 @@ test("a permission answer never moves the branch", async () => {
     expect(calls).toBe(0);
 });
 
-test("a non-success result becomes an error followed by done", async () => {
+/* A loop that ran out of iterations is not a loop that broke, and the frame says which. Uncoded, both landed on
+ * the ledger as an unclassified failure — the one shape nothing downstream knows how to handle. */
+test("a turn that hits the iteration cap becomes a coded error followed by done", async () => {
     const events = await collect(request, fakeQuery({ type: "result", subtype: "error_max_turns", session_id: "s" }));
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", message: "agent did not complete (error_max_turns)" },
+        { kind: "error", code: "turn-cap", message: "agent did not complete (error_max_turns)" },
+        { kind: "done" },
+    ]);
+});
+
+test("any other non-success result is the harness failing, and says so", async () => {
+    const events = await collect(request, fakeQuery({ type: "result", subtype: "error_during_execution", session_id: "s" }));
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "harness-incomplete", message: "agent did not complete (error_during_execution)" },
         { kind: "done" },
     ]);
 });

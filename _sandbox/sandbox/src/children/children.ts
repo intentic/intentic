@@ -131,6 +131,17 @@ export const armSupervisor = (conversationId: string, supervisor: ChildSuperviso
 /** The armed supervisor for a conversation, or undefined for one no qualifying turn ever planned. */
 export const supervisorFor = (conversationId: string): ChildSupervisor | undefined => armed.get(conversationId);
 
+/* IS THIS CONVERSATION SOMEBODY'S CHILD? Read off the depth ledger above, which is written for every spawn and
+ * is the authoritative record of parentage; the `sub-` prefix on the id is a convenience for people reading
+ * cards, not a fact to branch on.
+ *
+ * Asked by anything that would otherwise START A TURN on a conversation of its own accord (agent/verify-nudge.ts).
+ * A child's turn ends and its record settles the moment its report reaches the parent; a turn started after
+ * that runs for nobody, reports to nothing, and spends the owner's allowance doing it. Whatever a child left
+ * unproven is already said where it can be acted on: it rides back with the report itself
+ * (child-verification.ts) and it lands on the spend ledger. */
+export const isSpawnedChild = (conversationId: string): boolean => depths.has(conversationId);
+
 // Tests drive the service through its real entry points, so they need a way back to empty between cases.
 export const resetChildrenForTest = (): void => {
     kids.clear();

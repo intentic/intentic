@@ -962,6 +962,22 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                  * context-window-too-small does: they never reached a provider, and losing them to a
                  * capacity fact the user did not cause would be ours to answer for. */
                 "sandbox-memory-low",
+                /* THE LOOP RAN OUT OF ITERATIONS, not out of work: the runtime hit its own turn ceiling and
+                 * stopped. Nothing failed, nothing is disconnected and nothing is spent, which is exactly why
+                 * it needs a code of its own rather than a sentence: it is the one ending that LOOKS like a
+                 * finished turn from the outside, and a ledger that filed it as an ordinary error told a
+                 * reader nothing they could act on.
+                 *
+                 * The recovery is the user's, not the daemon's: whatever the turn was doing is half done, and
+                 * re-running it blind would either redo the finished half or resume work nobody looked at. */
+                "turn-cap",
+                /* THE HARNESS ENDED THE TURN WITHOUT SUCCEEDING and did not say why in terms anything here
+                 * models: an internal execution error, or a result subtype a later vendor build invented. The
+                 * sentence carries the subtype verbatim, because that word is the only thing separating two of
+                 * these, and a code that meant "one of several unrelated things" would be worse than none. It
+                 * is a real classification all the same: it says the failure came from the LOOP rather than
+                 * from the provider, the credential or the request, which rules out every recovery next door. */
+                "harness-incomplete",
             ])
             .optional(),
         // rate_limit only: when the exhausted window reopens (epoch seconds, from the stream's own

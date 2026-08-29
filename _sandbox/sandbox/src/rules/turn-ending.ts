@@ -63,10 +63,15 @@ const editedPath = (input: unknown): string | undefined => {
     return typeof path === "string" && path !== "" ? path : undefined;
 };
 
-// The agent names files absolutely; a rule is written the way the owner reads their own tree. A path OUTSIDE
-// the turn's cwd is left alone rather than expressed as a pile of `../`, it is genuinely not a workspace path,
-// and no workspace-shaped glob should match it.
-const workspaceRelative = (path: string, cwd: string | undefined): string => {
+/* The agent names files absolutely; a rule is written the way the owner reads their own tree. A path OUTSIDE
+ * the turn's cwd is left alone rather than expressed as a pile of `../`, it is genuinely not a workspace path,
+ * and no workspace-shaped glob should match it.
+ *
+ * Exported for the runtimes that get their follow-up as a fresh turn rather than through this hook set
+ * (agent/verify-nudge.ts). Both readers have to relativise identically or the same glob means two things
+ * depending on which provider ran the turn, which is the one inconsistency that would make path conditions
+ * untrustworthy everywhere. */
+export const workspaceRelative = (path: string, cwd: string | undefined): string => {
     if (cwd === undefined || !isAbsolute(path)) {
         return path;
     }

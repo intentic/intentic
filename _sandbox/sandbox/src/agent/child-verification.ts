@@ -1,5 +1,5 @@
-import type { AgentEvent, SubagentVerification, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
-import { commandExitCode, createVerificationLedger, type VerificationLedger } from "./agent-verification.js";
+import type { AgentEvent, SubagentVerification, ToolCallStatus } from "@intentic/sandbox-contract";
+import { createFrameLedger, type FrameLedger, trackedCall } from "./agent-verification.js";
 
 /* DID THE CHILD PROVE ANYTHING? — the verdict that rides back with a child's report.
  *
@@ -19,12 +19,13 @@ import { commandExitCode, createVerificationLedger, type VerificationLedger } fr
  *   · its output is a NUDGE BACK TO THE MODEL that produced the work. Advice to the author is not evidence
  *     for the reader, and there was nothing the reader could read.
  *
- * SO THE LEDGER IS FED FROM FRAMES HERE, not from hooks. Every runtime's adapter normalizes its native stream
- * into the same `tool_call` / `tool_call_update` vocabulary (agent/tool-calls.ts: `category`, `target`,
+ * SO THE LEDGER IS FED FROM FRAMES, not from hooks. Every runtime's adapter normalizes its native stream into
+ * the same `tool_call` / `tool_call_update` vocabulary (agent/tool-calls.ts: `category`, `target`,
  * `locations`, `status`, `content`), which is the one seam every provider in this daemon already passes
- * through. An edit is a call whose category is `edit` and whose locations name files; a check is a call whose
- * category is `execute` and whose command the classifier recognises. That is the whole feeder, and it is why
- * a Cursor child gets the same verdict a Claude one does.
+ * through, and that is why a Cursor child gets the same verdict a Claude one does. The feeder itself lives
+ * next to the ledger it fills (agent-verification.ts, createFrameLedger), because the parent turn now wants
+ * exactly the same thing for itself; what stays HERE is the only part that is genuinely about children, which
+ * is working out whose call a frame belongs to.
  *
  * ONE LEDGER PER CHILD, KEYED BY THE CHILD'S OWN id — the spawning tool call's id for an SDK child, the
  * conversation id for a spawned one, which is the id its record, its card and the wait tool already use
@@ -35,18 +36,12 @@ import { commandExitCode, createVerificationLedger, type VerificationLedger } fr
  * would read as approval. And a passing check is never upgraded into "the repo is green": the standing names
  * the command that spoke, so a reader can see it was one test file. */
 
-/* Per-child ledgers, and every tool call still waiting to land. The second map is what makes a
- * `tool_call_update` attributable: it carries the call's id and its outcome, but not the child's.
- *
- * BOTH KINDS WAIT THERE, and an edit waits for the same reason a check does: a call that was REFUSED (the
- * permission gate) or that failed on a stale `old_string` changed nothing, and counting it would report a
- * child as having unproven work when it has no work at all. This is the hook feeder's rule arrived at from
- * the other side, PostToolUse only fires for a tool call that actually ran. */
-const ledgers = new Map<string, VerificationLedger>();
-type PendingCall =
-    | { readonly child: string; readonly kind: "edit"; readonly paths: readonly string[] }
-    | { readonly child: string; readonly kind: "check"; readonly command: string };
-const callOwner = new Map<string, PendingCall>();
+/* Per-child ledgers, and who owns each tool call still waiting to land. The second map is what makes a
+ * `tool_call_update` attributable: it carries the call's id and its outcome, but not the child's. What the
+ * call WAS lives inside the child's own ledger (createFrameLedger); only the ownership is this module's, and
+ * only this module needs it, because a turn has one ledger and nothing to route. */
+const ledgers = new Map<string, FrameLedger>();
+const callOwner = new Map<string, string>();
 
 // How many paths ride on the wire and into the parent's context. A child that touched forty files has said
 // what it needs to say in the first few; the record itself is the transcript.
@@ -54,24 +49,23 @@ const PATHS_ON_THE_WIRE = 8;
 // A command is a line, not a script. Long enough for `pnpm -C _sandbox/sandbox test src/agent/x.test.ts`.
 const CHECK_CHARS = 200;
 
-const ledgerOf = (child: string): VerificationLedger => {
+/* The child's ledger, OPENED at its first tracked call rather than when that call succeeds, which is what
+ * keeps `undefined` meaning one thing only: the daemon saw nothing from this child. An agent whose every edit
+ * was refused has still been watched, and its standing is `no-code` — it changed no code — where "nothing
+ * seen" would leave the roster silent about an agent that plainly worked. */
+const ledgerOf = (child: string): FrameLedger => {
     const existing = ledgers.get(child);
     if (existing !== undefined) {
         return existing;
     }
-    const fresh = createVerificationLedger();
+    const fresh = createFrameLedger();
     ledgers.set(child, fresh);
     return fresh;
 };
 
-/* A call this child made, held until its outcome lands. The child's ledger is OPENED here rather than when
- * the call succeeds, which is what keeps `undefined` meaning one thing only: the daemon saw nothing from this
- * child. An agent whose every edit was refused has still been watched, and its standing is `no-code` — it
- * changed no code — where "nothing seen" would leave the roster silent about an agent that plainly worked. */
-const remember = (id: string, call: PendingCall): void => {
-    ledgerOf(call.child);
-    callOwner.set(id, call);
-};
+// A call that is already terminal in the frame that opened it (an adapter reporting a fast tool in one go) is
+// settled by the ledger on the same line, so nothing is left to route and no ownership is filed for it.
+const settled = (status: ToolCallStatus | undefined): boolean => status === "completed" || status === "failed";
 
 /* ONE FRAME OF A CHILD'S WORK. `child` is undefined for the frames that cannot name their own owner (a
  * `tool_call_update` carries only the call id), which is exactly why the ownership map exists: the update is
@@ -79,67 +73,32 @@ const remember = (id: string, call: PendingCall): void => {
  *
  * Called for a child's frames only: agent.ts feeds the SDK children of a Claude turn (frames carrying a
  * `parentToolUseId`), children/children.ts feeds a spawned child's own turn on whatever provider runs it. A
- * frame belonging to no child never reaches here, so an ordinary turn pays a map lookup and nothing else. */
+ * frame belonging to no child never reaches here, so an ordinary turn pays a map lookup and nothing else.
+ *
+ * The classification is PEEKED at before the ledger is opened, and that order is the point: a child that used
+ * nothing but Read must stay unseen rather than become `no-code`, which is a verdict about a different kind of
+ * agent entirely. */
 export const noteChildWork = (event: AgentEvent, child: string | undefined): void => {
     if (event.kind === "tool_call") {
-        if (child === undefined) {
+        if (child === undefined || trackedCall(event) === undefined) {
             return;
         }
-        /* A call is remembered here and NOTED at its result: "did it pass" is only known then, and the
-         * ledger's order counter has to place a check after the edits it speaks to, which is the ordering the
-         * hook feeder gets for free by firing at PostToolUse. A call that is already terminal in this frame
-         * (an adapter reporting a fast tool in one go) settles immediately, on the same line.
-         *
-         * WHICH FILES AN EDIT TOUCHED: `locations` where the adapter derived them from the tool's input, and
-         * the structured diff otherwise — an ACP agent sends the change and not the argument it came from, so
-         * reading only one of the two would see a Zed-driven child edit nothing. */
-        if (event.category === "edit") {
-            const paths = (event.locations ?? []).map((location) => location.path);
-            const diffed = (event.content ?? []).flatMap((entry) => (entry.type === "diff" ? [entry.path] : []));
-            const touched = paths.length > 0 ? paths : diffed;
-            if (touched.length > 0) {
-                remember(event.id, { child, kind: "edit", paths: touched });
-                settle(event.id, event.status, event.content);
-            }
-            return;
-        }
-        if (event.category === "execute" && event.target !== undefined) {
-            remember(event.id, { child, kind: "check", command: event.target });
-            settle(event.id, event.status, event.content);
+        ledgerOf(child).note(event);
+        if (!settled(event.status)) {
+            callOwner.set(event.id, child);
         }
         return;
     }
     if (event.kind === "tool_call_update") {
-        settle(event.id, event.status, event.content);
-    }
-};
-
-// A call's result, once it has one. Interim updates (live output snapshots) leave it pending: the audit tee's
-// rule next door (activity/outbound.ts), and for the same reason, only a terminal status is an answer.
-const settle = (id: string, status: ToolCallStatus | undefined, content: readonly ToolCallContent[] | undefined): void => {
-    if (status !== "completed" && status !== "failed") {
-        return;
-    }
-    const owner = callOwner.get(id);
-    if (owner === undefined) {
-        return;
-    }
-    callOwner.delete(id);
-    if (owner.kind === "edit") {
-        // A refused or failed edit changed nothing, so it is not work waiting for proof.
-        if (status === "completed") {
-            for (const path of owner.paths) {
-                ledgerOf(owner.child).noteEdit(path);
-            }
+        const owner = callOwner.get(event.id);
+        if (owner === undefined) {
+            return;
         }
-        return;
+        ledgers.get(owner)?.note(event);
+        if (settled(event.status)) {
+            callOwner.delete(event.id);
+        }
     }
-    const text = content?.find((entry) => entry.type === "text")?.text ?? "";
-    /* Two independent ways for a check to fail, and the exit code outranks the status: a suite that printed
-     * its failures and exited 1 is routinely reported as a `completed` tool call, because the TOOL worked.
-     * Without a footer to read there is nothing better than the status, which is the honest fallback. */
-    const exit = commandExitCode(text);
-    ledgerOf(owner.child).noteCommand(owner.command, exit === undefined ? status === "completed" : exit === 0, text);
 };
 
 /** Where a child's work stands right now, as the wire says it. Undefined ⇒ nothing of this child was ever
@@ -163,7 +122,7 @@ export const childVerification = (child: string): SubagentVerification | undefin
 export const forgetChild = (child: string): void => {
     ledgers.delete(child);
     for (const [id, owner] of callOwner) {
-        if (owner.child === child) {
+        if (owner === child) {
             callOwner.delete(id);
         }
     }

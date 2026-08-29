@@ -515,6 +515,37 @@ conversation's worktree instead of a path that still reaches the shared checkout
   kind that arrives in bursts. `rollup` keeps the money honest by summing only turns the provider counted, and
   the experiment readers drop failed and cancelled turns, whose zero prose and zero searches are arithmetic
   rather than behaviour.
+- **And a turn that finished is told apart from one that only stopped talking.** A turn ends at least five
+  different ways — its stop condition was met, the model ran out of things to say, the loop hit a cap, the
+  budget ran out, or the model asserted it was done and nothing checked the claim — and `outcome` collapses
+  four of them into `ok`. The daemon was computing the difference and discarding it at turn end, so the ledger
+  now carries it: `verification` (`verified` / `unproven` / `failing` / `no-code`) with the `check` that spoke
+  and `filesEdited`; `checklistTotal`/`checklistOpen`, because a turn ending on its own unfinished plan is what
+  "it stopped talking" looks like from outside; `compactions` and `contextTokens`/`contextWindow`, which is the
+  only record of whether a turn ended against the wall — and the only way anyone will ever answer whether badly
+  timed compaction hurts, by joining those against outcome over months of real turns. All of it is folded off
+  the normalized frame stream in `streamAgent`, subagents' calls included, so a Codex turn is judged exactly as
+  a Claude one is. No single stop-reason word is stored: which of the five modes the facts add up to is a rule
+  that will get better, and a word written down now would freeze today's rule into rows that outlive it. The
+  harness's own non-success result is classified too, `turn-cap` for a loop out of iterations and
+  `harness-incomplete` for the rest, where both used to land as an uncoded failure — the one shape nothing
+  downstream knows how to handle.
+- **And the follow-up that asks for proof now fires on every runtime** (`src/agent/verify-nudge.ts`). The
+  owner's `verify-edits` rule — a turn that changed code and ran no check after its last edit gets one bounded
+  follow-up naming the checks this workspace actually has — reached the model through the Claude Agent SDK's
+  Stop hook, which is to say it worked on one of six runtimes. On a Codex, Grok, Gemini, Cursor, Pi or ACP turn
+  the rule sat in the list looking armed and did nothing, and the owner had no way to see that. What was
+  missing was never the follow-up but the ledger: nothing outside the Claude arm knew which files a turn had
+  edited or which of its commands were checks, and the frame-fed ledger above is exactly that. The Claude arm
+  keeps its hooks, because an in-turn Stop follow-up costs no new session and no re-read of the context;
+  everywhere else the follow-up arrives as its own turn down the ordinary daemon-started road, resuming the
+  conversation's provider session. A fresh turn rather than a steer even where a steer exists (Pi): the
+  decision is made while the turn is unwinding and its steering queue is on its way to closed, and a mechanism
+  about unverified work must not be able to lose its own message. It spends a turn on the owner's behalf, so
+  the guards are the point — the rule has to be standing with its conditions holding against the files this
+  turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
+  is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
+  already told what it proved), and a nudge never answers a nudge.
 - **One 4xx is the provider's fault, and it is classified as such.** A turn that runs for ten minutes and then
   dies on `400 prompt_cache_retention is not supported on this model` was refused over a parameter nothing here
   sends: the CLI's outgoing body was captured without it, the field appears nowhere in this repo, and the same
@@ -566,8 +597,8 @@ conversation's worktree instead of a path that still reaches the shared checkout
   agent added a `console.log` to find out what was happening. A raw tail of a 5MB JSON log is worse than the
   print statement it replaces — oldest-first, unfiltered, mostly routine — so the unit is a filtered read:
   `mcp__diagnostics__errors` (level floor, time window, substring, newest first), `slow` (the perf file, by
-  operation), `turns` (outcomes from the ledger, optionally failures only) and `resources` (a dotted path into
-  the metric series, with a summary). On the live sandbox that is 4,084 warnings and 6 errors in one file
+  operation), `turns` (how turns ended, from the ledger, narrowable to the ones that failed or to the ones that
+  finished on code nothing checked) and `resources` (a dotted path into the metric series, with a summary). On the live sandbox that is 4,084 warnings and 6 errors in one file
   reduced to "the 35 warnings from the last ten minutes". An answer whose read started mid-file says so, because
   an empty result over a window nothing could see reads exactly like proof that nothing happened. The tools are
   read-only and confined to `historyRoot/logs` plus the ledger — a turn reads the record of what it did and can

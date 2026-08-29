@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
+import type { AgentEvent, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 
 /* DID THIS TURN PROVE ANYTHING?, the one question a turn that edited code should not end without answering,
@@ -255,6 +256,95 @@ export const createVerificationLedger = (): VerificationLedger => {
             return failed === undefined
                 ? { state: "unproven", paths, check: undefined }
                 : { state: "failing", paths, check: failed.command };
+        },
+    };
+};
+
+/* THE SAME LEDGER, FED FRAMES INSTEAD OF HOOKS, which is what makes the verdict provider-neutral.
+ *
+ * The hook feeder above (rules/turn-ending.ts) is the Claude Agent SDK's PostToolUse, so it exists on exactly
+ * one of this daemon's six runtimes. Every runtime, though, normalizes its native stream into the same
+ * `tool_call` / `tool_call_update` vocabulary (agent/tool-calls.ts: `category`, `target`, `locations`,
+ * `status`, `content`), and that seam is the one place a Codex turn, a Cursor turn and a Claude turn are the
+ * same shape. So the ledger is fed there and the verdict stops being a Claude privilege.
+ *
+ * ONE PENDING MAP PER LEDGER. A call is REMEMBERED when it opens and NOTED when it settles, because "did it
+ * pass" is only known then and the ledger's counter has to place a check after the edits it speaks to, which
+ * the hook feeder gets for free by firing at PostToolUse. A call that is already terminal in its opening frame
+ * (an adapter reporting a fast tool in one go) settles on the same line.
+ *
+ * A REFUSED OR FAILED EDIT CHANGED NOTHING, so it is not work waiting for proof. That is the hook feeder's
+ * rule arrived at from the other side: PostToolUse only fires for a tool call that actually ran. */
+export interface FrameLedger extends VerificationLedger {
+    // Feed one frame. Frames this ledger has no use for cost a comparison and nothing else.
+    readonly note: (event: AgentEvent) => void;
+}
+
+// What one tool call is to this ledger: work waiting for proof, a check that might supply it, or neither.
+type TrackedCall = { readonly kind: "edit"; readonly paths: readonly string[] } | { readonly kind: "check"; readonly command: string };
+
+/* Whether a call is one of the two, exported because a caller keying ledgers by OWNER (child-verification.ts)
+ * has to know that before it opens one: a child that used nothing but Read must stay "never seen" rather than
+ * becoming "changed no code", and those are different answers about different agents.
+ *
+ * WHICH FILES AN EDIT TOUCHED: `locations` where the adapter derived them from the tool's input, and the
+ * structured diff otherwise, because an ACP agent sends the change and not the argument it came from, so
+ * reading only one of the two would see a Zed-driven turn edit nothing. */
+export const trackedCall = (event: Extract<AgentEvent, { kind: "tool_call" }>): TrackedCall | undefined => {
+    if (event.category === "edit") {
+        const located = (event.locations ?? []).map((location) => location.path);
+        const diffed = (event.content ?? []).flatMap((entry) => (entry.type === "diff" ? [entry.path] : []));
+        const touched = located.length > 0 ? located : diffed;
+        return touched.length > 0 ? { kind: "edit", paths: touched } : undefined;
+    }
+    return event.category === "execute" && event.target !== undefined ? { kind: "check", command: event.target } : undefined;
+};
+
+export const createFrameLedger = (): FrameLedger => {
+    const ledger = createVerificationLedger();
+    const pending = new Map<string, TrackedCall>();
+    // A call's result, once it has one. Interim updates (live output snapshots) leave it pending: only a
+    // terminal status is an answer, the same rule the audit tee next door keeps (activity/outbound.ts).
+    const settle = (id: string, status: ToolCallStatus | undefined, content: readonly ToolCallContent[] | undefined): void => {
+        if (status !== "completed" && status !== "failed") {
+            return;
+        }
+        const call = pending.get(id);
+        if (call === undefined) {
+            return;
+        }
+        pending.delete(id);
+        if (call.kind === "edit") {
+            if (status === "completed") {
+                for (const path of call.paths) {
+                    ledger.noteEdit(path);
+                }
+            }
+            return;
+        }
+        const text = content?.find((entry) => entry.type === "text")?.text ?? "";
+        /* Two independent ways for a check to fail, and the exit code outranks the status: a suite that printed
+         * its failures and exited 1 is routinely reported as a `completed` tool call, because the TOOL worked.
+         * Without a footer to read there is nothing better than the status, which is the honest fallback. */
+        const exit = commandExitCode(text);
+        ledger.noteCommand(call.command, exit === undefined ? status === "completed" : exit === 0, text);
+    };
+    return {
+        ...ledger,
+        note: (event) => {
+            if (event.kind === "tool_call_update") {
+                settle(event.id, event.status, event.content);
+                return;
+            }
+            if (event.kind !== "tool_call") {
+                return;
+            }
+            const call = trackedCall(event);
+            if (call === undefined) {
+                return;
+            }
+            pending.set(event.id, call);
+            settle(event.id, event.status, event.content);
         },
     };
 };
