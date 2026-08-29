@@ -9,6 +9,7 @@ import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { useSandbox } from "../composables/sandbox/useSandbox";
 import { setupRedirect } from "./setupGate";
+import { signInAt } from "./signIn";
 import { isStaleChunkError, recoverStaleChunk } from "./staleChunk";
 
 declare module "vue-router" {
@@ -31,7 +32,9 @@ const resolveUser = async (to: RouteLocationNormalized): Promise<Resolved> => {
             return { redirect: { path: `/platform-unavailable`, query: { returnTo: to.fullPath } } };
         }
     }
-    return current ? { user: current } : { redirect: `/login` };
+    // Signed out: the login screen, CARRYING THE PAGE THAT ASKED FOR IT (signIn.ts owns that decision and the
+    // reason it is not a bare `/login`).
+    return current ? { user: current } : { redirect: signInAt(to.fullPath) };
 };
 
 // Signed in, with a user in hand, and hydrate the query cache from IndexedDB (per-user buster) before any
@@ -45,18 +48,10 @@ const requireAuth = async (to: RouteLocationNormalized): Promise<boolean | Route
     return true;
 };
 
-// Signed in and NOTHING else, for a page that mounts no query of its own. /desktop-auth is the one that
-// cares: it reads nothing from the cache, and hydrating a whole workspace's worth of it would be a disk read
-// standing between the user and the Google prompt that page exists to show.
-const requireSession = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
-    const resolved = await resolveUser(to);
-    return `user` in resolved ? true : resolved.redirect;
-};
-
-/* GOOGLE FIRST, SESSION SECOND. Minting the ID token needs nothing from the platform, so letting it wait for
- * the session round trip, and then for this page's own chunk to arrive, and then for it to mount, is dead
+/* GOOGLE FIRST, AND GOOGLE ONLY. Minting the ID token needs nothing from the platform, so letting it wait for
+ * a session round trip, and then for this page's own chunk to arrive, and then for it to mount, is dead
  * time charged to the one screen whose entire content is a person waiting for Google to appear. Synchronous:
- * it returns in the same tick, and the awaited guard after it runs against a prompt already in flight.
+ * it returns in the same tick, so the page mounts against a prompt already in flight.
  *
  * Only with the app's handoff parameters in hand. Someone who lands here by hand has nothing to hand off, and
  * a Google prompt on a page that is about to say so would be a prompt nobody asked for. */
@@ -114,13 +109,23 @@ const routes: RouteRecordRaw[] = [
     },
     {
         /* The desktop app's sign-in, in the user's REAL browser. The app can't run Google's flow in its own
-         * webview (see environments/desktop.ts), so it opens this page in the default browser: requireAuth
-         * makes it an ordinary sign-in, and the page then hands the credentials back over `intentic://auth`.
-         * A person who lands here without an app just sees an explanation. */
+         * webview (see environments/desktop.ts), so it opens this page in the default browser, and the page
+         * hands the credentials back over `intentic://auth`. A person who lands here without an app just sees
+         * an explanation.
+         *
+         * NO SESSION GUARD, for the same reason the three sandbox-free surfaces below carry none — and here
+         * that is the difference between a product that works and one that does not. The app opens the OS
+         * DEFAULT browser, which is routinely a window nobody has signed in: a different profile from the one
+         * that downloaded the installer, or an incognito window that is gone by now. A guard answers that with
+         * a bounce to /login, which drops the state and challenge this URL carries and ends in the workspace —
+         * so the browser is signed in, and the app that asked for it is still on its own sign-in screen.
+         *
+         * The page resolves its own session instead, and when there is none it signs in with the very Google
+         * credential it has to mint anyway (pages/DesktopAuth.vue). */
         path: `/desktop-auth`,
         name: `desktop-auth`,
         meta: { title: `Sign in to Intentic` },
-        beforeEnter: [startGoogleMint, requireSession],
+        beforeEnter: [startGoogleMint],
         component: () => import(`../pages/DesktopAuth.vue`),
     },
     {

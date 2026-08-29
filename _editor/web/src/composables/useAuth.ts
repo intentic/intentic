@@ -34,7 +34,19 @@ const refresh = async (): Promise<User | null> => {
             throw new Error(error.message ?? `Couldn't check your session.`);
         }
         if (data?.user === undefined) {
-            await invalidatePlatformAuth();
+            /* SIGNED OUT ON ARRIVAL IS NOT THE SAME EVENT AS SIGNED OUT JUST NOW, and only the second one has
+             * anything to tear down. The cascade exists to take a SIGNED-IN runtime apart — the daemon
+             * streams, the cached queries, the Google credential — so firing it for a browser that was never
+             * signed in destroys state that was never part of a session.
+             *
+             * The Google credential is the one that matters, and it is why this guard is here rather than a
+             * tidy-up: /desktop-auth mints that credential BEFORE it asks about the session (the mint is the
+             * slow half, so the router starts it first), and the credential is the entire payload that page
+             * hands to the app. Invalidating on a cold signed-out load cancelled the mint mid-flight and
+             * turned Google's auto re-authentication off for the rest of the page's life. */
+            if (user.value !== null) {
+                await invalidatePlatformAuth();
+            }
             return null;
         }
         user.value = { id: data.user.id, email: data.user.email, name: data.user.name, image: data.user.image ?? null };

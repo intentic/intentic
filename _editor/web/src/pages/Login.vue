@@ -21,15 +21,23 @@
 <script setup lang="ts">
 import { vAction } from "@intentic/ui";
 import { computed, onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import AppBrand from "../components/AppBrand.vue";
 import { useAuth } from "../composables/useAuth";
 import { useGoogleIdentity } from "../composables/useGoogleIdentity";
 import { desktopInstaller, desktopVersion, signInThroughBrowser } from "../environments/desktop";
+import { returnPath } from "../router/signIn";
 
 const { signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton } = useGoogleIdentity();
 const router = useRouter();
+const route = useRoute();
+
+/* THE PAGE THAT SENT THEM HERE, which this screen used to forget. Both ways out of it hardcoded `/`, so a
+ * guard that turned somebody away from a deep link signed them in and then dropped them in the workspace,
+ * with the address they had asked for gone. Sanitised on the way in: it is spent both as a router navigation
+ * and as an OAuth callback on this origin (router/signIn.ts holds that, and why it is narrow). */
+const destination = computed(() => returnPath(route.query[`returnTo`]));
 
 /* THE SITE'S TWO FACES, FETCHED BY THIS ROUTE AND NO OTHER. Playfair sets the one heading drawn at display
  * size and Mukta sets the reading copy, which is what makes the type on this screen the type on the page
@@ -102,7 +110,7 @@ const redirectSignIn = async (): Promise<void> => {
         signInThroughBrowser();
         return;
     }
-    await signInWithGoogle();
+    await signInWithGoogle(destination.value);
 };
 
 /* The mint, started on mount so a click has something to resolve, and so a returning user is signed in with
@@ -122,7 +130,7 @@ const signInWithCredential = async (): Promise<void> => {
             return; // Dismissed, or Google unavailable. The fallback below is already on screen.
         }
         await signInWithGoogleCredential(idToken);
-        await router.push(`/`);
+        await router.push(destination.value);
     } catch {
         /* The platform would not take a token Google did in fact sign: a build without the endpoint, or a
          * client-id mismatch between this app and that platform. The redirect does not depend on either, so

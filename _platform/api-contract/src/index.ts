@@ -185,10 +185,11 @@ export const inviteContract = {
 /* Carrying ONE sign-in from the user's real browser into the desktop app's webview (_editor/desktop-app).
  *
  * Google refuses OAuth from an embedded webview and GIS is FedCM-based, which the Linux webview does not
- * implement, so the app opens /desktop-auth in the DEFAULT browser instead. That page (session required, so
- * this is the ordinary sign-in flow) parks two credentials for exactly one pickup and hands the app a link
- * carrying only the row's id. The app also sends a one-way challenge when it starts; redeem requires the
- * verifier retained inside that process, so stealing/racing the deep link cannot collect the credentials.
+ * implement, so the app opens /desktop-auth in the DEFAULT browser instead. That page signs the browser in if
+ * it is not already (the OS default browser is routinely a profile nobody has signed in), then parks two
+ * credentials for exactly one pickup and hands the app a link carrying only the row's id. The app also sends a
+ * one-way challenge when it starts; redeem requires the verifier retained inside that process, so
+ * stealing/racing the deep link cannot collect the credentials.
  *
  * `redeem` is the mirror, and deliberately SESSIONLESS, the webview has no session yet; that is the point.
  * It answers with the Better Auth one-time token (which the webview spends at /api/auth/one-time-token/verify

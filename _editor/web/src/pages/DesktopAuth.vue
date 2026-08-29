@@ -14,8 +14,18 @@ import AppBrand from "../components/AppBrand.vue";
  *
  * The app opened it with `opener` because Google refuses OAuth from an embedded webview and Google Identity
  * Services is FedCM-based, which the Linux webview does not implement (see environments/desktop.ts). Here,
- * both are ordinary: the route's guard has already run the Better Auth sign-in, and GIS mints an ID token the
- * way it does on every other screen.
+ * both are ordinary: GIS mints an ID token the way it does on every other screen.
+ *
+ * AND THE SESSION IS THIS PAGE'S OWN PROBLEM, never a route guard's. The app opens the OS DEFAULT browser,
+ * which is routinely a window nobody has signed in — a different profile from the one that downloaded the
+ * installer, or an incognito window that has since been closed. A guard answered that with a bounce to
+ * /login, which drops the state and challenge below and ends by pushing into the workspace: the browser sits
+ * in a signed-in app and the desktop app that asked is still on its own sign-in screen, with nothing to tell
+ * it otherwise. Having an account already made that WORSE, not better — it is what turns the bounce into a
+ * workspace instead of a setup page, so the flow looks like it succeeded.
+ *
+ * So a browser with no session signs in HERE, with the very credential this page has to mint anyway: the same
+ * one-Google-sign-in the login screen does, spent on the platform and then handed to the app.
  *
  * EVERYTHING ON THIS PAGE IS A WAIT, so the two things that end one start as early as they can: the router
  * kicks the Google mint off before the session round trip (router/index.ts), and the button below is on
@@ -29,7 +39,7 @@ import AppBrand from "../components/AppBrand.vue";
  * sign-in IT started, and not a link that arrived from somewhere else. */
 
 const route = useRoute();
-const { user, signInWithGoogle } = useAuth();
+const { user, refresh, signInWithGoogle, signInWithGoogleCredential } = useAuth();
 const { getIdToken, renderButton, adoptIdToken } = useGoogleIdentity();
 const { scheme } = useTheme();
 
@@ -49,10 +59,13 @@ const googleButton = ref<HTMLElement>();
  * workspace's own sign-in gate now offers this same hand-off when the hour does run out. */
 const HANDOFF_USABLE_FOR_MS = 45 * 60 * 1000;
 
-/* THE CREDENTIAL THE PLATFORM ALREADY HOLDS: tried first, so the ordinary desktop sign-in shows no Google
- * surface at all. Arriving here means the user pressed sign in inside the app AND is signed in to this
- * platform in this browser; a Google button on top of that is a third act of consent for something they have
- * already twice agreed to, and it is the step people were getting stuck on.
+/* THE CREDENTIAL THE PLATFORM ALREADY HOLDS: tried first whenever there IS a session, so the desktop sign-in
+ * of somebody already signed in to this browser shows no Google surface at all. They pressed sign in inside
+ * the app and are signed in here; a Google button on top of that is a third act of consent for something they
+ * have already twice agreed to, and it is the step people were getting stuck on.
+ *
+ * Only with a session, and that is not an optimisation: a sessionless call is answered 401, and a 401 tears
+ * the signed-in runtime down — on this page, the Google mint the router has in flight (see `platformSession`).
  *
  * It is also the only escape that works when Google's in-page button CANNOT run: a blocked frame, an
  * extension, an origin Google is refusing. Those are invisible from this page: the button renders, takes the
@@ -78,6 +91,24 @@ const platformHeldToken = async (): Promise<string | undefined> => {
         // A platform without this route (an older or self-hosted build) is not an error here: it is simply
         // one that holds nothing, and the Google button below is exactly what that case already had.
         return undefined;
+    }
+};
+
+/* IS THIS BROWSER SIGNED IN — asked here, and asked FIRST, because the answer decides whether the credential
+ * below is one thing or two. Nothing above it may run without a session: the platform's routes answer a
+ * sessionless call with a 401, and a 401 tears down the signed-in runtime, which on this page means
+ * cancelling the Google mint the router started (composables/useAuth.ts holds the other half of that).
+ *
+ * An unreachable platform answers `false` too, deliberately: nothing further can work either way, and the
+ * error the sign-in then raises names the real problem instead of blaming a session. */
+const platformSession = async (): Promise<boolean> => {
+    if (user.value !== null) {
+        return true;
+    }
+    try {
+        return (await refresh()) !== null;
+    } catch {
+        return false;
     }
 };
 
@@ -107,7 +138,8 @@ const hand = async (): Promise<void> => {
     error.value = undefined;
     stage.value = `checking`;
     try {
-        const held = await platformHeldToken();
+        const session = await platformSession();
+        const held = session ? await platformHeldToken() : undefined;
         if (held !== undefined) {
             await deliver(held);
             return;
@@ -126,6 +158,18 @@ const hand = async (): Promise<void> => {
         if (idToken === undefined) {
             error.value = noticeOf(`Intentic needs your Google sign-in to reach your sandbox.`);
             return;
+        }
+        /* THE SIGN-IN THIS BROWSER DID NOT HAVE, out of the token it just minted, which is the same trade the
+         * login screen makes: one Google interaction proves the user to the platform AND is the credential the
+         * sandbox daemon verifies for itself. Only when there was no session — a signed-in browser keeps the
+         * account it is already on, rather than being switched to whichever one Google answered with.
+         *
+         * A platform that refuses the token (a client-id mismatch, a self-hosted build without the endpoint)
+         * throws to the catch below, where Google's own page is offered: that path returns to this same link,
+         * with a real session, and the hand-off completes on arrival. */
+        if (!session) {
+            stage.value = `handing`;
+            await signInWithGoogleCredential(idToken);
         }
         await deliver(idToken);
     } catch (err) {
@@ -171,7 +215,9 @@ onMounted(() => void hand());
                 </span>
                 <div class="min-w-0">
                     <h1 class="text-lg font-semibold">Signing in to the Intentic app</h1>
-                    <p class="truncate text-xs text-muted">{{ user?.email }}</p>
+                    <!-- Only once there is an account to name. This page no longer arrives with one: a browser
+                         that was never signed in gets its session HERE, out of the Google credential below. -->
+                    <p v-if="user" class="truncate text-xs text-muted">{{ user.email }}</p>
                 </div>
             </header>
 
@@ -218,14 +264,17 @@ onMounted(() => void hand());
                 </button>
             </template>
 
-            <Button
-                v-if="error || stage === `done`"
-                :label="error ? `Try again` : `Send it again`"
-                severity="secondary"
-                class="self-start"
-                :loading="working"
-                @click="hand"
-            />
+            <!-- A failed attempt gets BOTH ways forward, because a retry alone repeats whatever just failed.
+                 The one that most often does is the platform refusing a token Google signed (a client-id
+                 mismatch, a self-hosted build without the endpoint), and Google's own page depends on none of
+                 that machinery: it returns to this same link with a real session, and the hand-off finishes on
+                 arrival. Same pair the login screen offers, for the same failure. -->
+            <div v-if="error || stage === `done`" class="flex flex-wrap items-center gap-3">
+                <Button :label="error ? `Try again` : `Send it again`" severity="secondary" :loading="working" @click="hand" />
+                <button v-if="error" type="button" class="text-xs text-subtle transition-colors hover:text-content" v-action="useGooglesOwnPage">
+                    Use Google's own page.
+                </button>
+            </div>
 
             <p class="border-t border-line pt-3 text-2xs text-subtle">
                 This page exists because Google won't sign you in inside an app window. Nothing is shared with the app beyond this one sign-in.

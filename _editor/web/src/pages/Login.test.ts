@@ -16,9 +16,17 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // environment.ts reads window.env and throws without it.
 
 const push = vi.fn();
+// Where the guard that turned somebody away wrote the page they were going to (router/signIn.ts).
+const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
     useRouter: () => ({ push, replace: vi.fn() }) as never,
+    useRoute: () =>
+        ({
+            get query() {
+                return query.value;
+            },
+        }) as never,
 }));
 
 const signInWithGoogle = vi.fn().mockResolvedValue(undefined);
@@ -69,6 +77,7 @@ const redirectButton = (): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Continue with Google`));
 
 beforeEach(() => {
+    query.value = {};
     push.mockReset();
     signInWithGoogle.mockReset().mockResolvedValue(undefined);
     signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
@@ -90,6 +99,40 @@ it(`signs in to the platform with the token the browser minted`, async () => {
     // The DIRECTION is the security property: a Google credential this window already holds goes INTO the
     // platform. Nothing comes back out, so what the sandbox trusts never depends on the platform being honest.
     expect(signInWithGoogleCredential).toHaveBeenCalledWith(`google-id-token`);
+    expect(push).toHaveBeenCalledWith(`/`);
+});
+
+/* THE PAGE THAT SENT THEM HERE, which both ways out of this screen used to forget: each hardcoded `/`, so a
+ * guard that turned somebody away from a deep link signed them in and then dropped them in the workspace with
+ * the address they asked for gone. Both paths are asserted because they fail independently — one pushes, the
+ * other hands the path to Better Auth as an OAuth callback. */
+it(`lands on the page that asked for the sign-in`, async () => {
+    query.value = { returnTo: `/sandbox/usage` };
+
+    await mount();
+
+    expect(push).toHaveBeenCalledWith(`/sandbox/usage`);
+});
+
+it(`brings Google's redirect back to that same page`, async () => {
+    query.value = { returnTo: `/sandbox/usage` };
+    renderButton.mockResolvedValue(false);
+    getIdToken.mockResolvedValue(undefined);
+
+    await mount();
+    redirectButton()?.click();
+    await nextTick();
+
+    expect(signInWithGoogle).toHaveBeenCalledWith(`/sandbox/usage`);
+});
+
+/* An unchecked destination on THIS screen is an open redirect wearing the one page a user has been taught to
+ * expect Google on: `//host` is protocol-relative to every URL parser there is. */
+it(`refuses a destination that leaves this origin`, async () => {
+    query.value = { returnTo: `//evil.example` };
+
+    await mount();
+
     expect(push).toHaveBeenCalledWith(`/`);
 });
 

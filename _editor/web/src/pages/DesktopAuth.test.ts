@@ -36,7 +36,13 @@ const renderButton = vi.fn<(parent: HTMLElement, dark: boolean) => Promise<boole
 const adoptIdToken = vi.fn<(credential: string) => boolean>().mockReturnValue(true);
 vi.mock(`../composables/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
 const signInWithGoogle = vi.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
-vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle }) }));
+/* THE BROWSER THE APP ACTUALLY OPENS. `user` is what this window's session resolves to, and the case that
+ * used to be unreachable is `null`: the app opens the OS DEFAULT browser, which is routinely a profile nobody
+ * has signed in. A route guard answered that with a bounce to /login, taking the state and challenge with it. */
+const user = ref<{ email: string } | null>({ email: `owner@example.com` });
+const refresh = vi.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
+const signInWithGoogleCredential = vi.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
+vi.mock(`../composables/useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
 const handoff = vi.fn();
 // The credential the platform already holds. Undefined answer = it holds nothing usable, which is the case
 // the Google button below exists for.
@@ -68,6 +74,9 @@ const mount = async (): Promise<HTMLElement> => {
         }),
     );
     app.mount(el);
+    // The chain is several awaits deep (session, then the platform's credential, then Google's): a macrotask
+    // flushes all of it, where a fixed count of ticks goes stale the moment one more await is added.
+    await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     await nextTick();
     return el;
@@ -75,10 +84,13 @@ const mount = async (): Promise<HTMLElement> => {
 
 beforeEach(() => {
     query.value = { state: `nonce-1`, challenge: `chal-1` };
+    user.value = { email: `owner@example.com` };
     getIdToken.mockClear();
     renderButton.mockClear();
     adoptIdToken.mockClear();
     signInWithGoogle.mockClear();
+    refresh.mockReset().mockResolvedValue(null);
+    signInWithGoogleCredential.mockReset().mockResolvedValue(undefined);
     handoff.mockReset();
     googleIdToken.mockReset().mockResolvedValue({});
 });
@@ -191,6 +203,51 @@ it(`always offers Google's own page while the embedded button is up`, async () =
     // Back to THIS link, state and challenge intact, so the hand-off resumes by itself on return.
     expect(signInWithGoogle).toHaveBeenCalledWith(expect.stringContaining(`state=nonce-1`));
     expect(signInWithGoogle.mock.calls[0]?.[0]).toContain(`challenge=chal-1`);
+});
+
+/* ══ THE BROWSER THAT WAS NEVER SIGNED IN ═══════════════════════════════════════════════════════════════
+ *
+ * The ordinary case, not an edge one: the app opens the OS DEFAULT browser, and the window the installer was
+ * downloaded in was somebody's incognito tab or another profile entirely. This page used to be guarded, so
+ * that window was sent to /login — which drops the state and challenge, signs the user in, and pushes into
+ * the workspace. Having an account already made it look like a success: the browser lands in a working
+ * workspace while the app that asked for the sign-in is still sitting on its own Google button. */
+it(`signs an unsigned browser in with the credential it minted, and hands the same one over`, async () => {
+    user.value = null;
+    const minted = credential(60 * 60 * 1000);
+    getIdToken.mockResolvedValueOnce(minted);
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    await mount();
+
+    // One Google interaction, spent twice: it proves the user to the platform (which is what makes the
+    // hand-off mintable at all) and it is the credential the sandbox daemon verifies for itself.
+    expect(signInWithGoogleCredential).toHaveBeenCalledWith(minted);
+    expect(handoff).toHaveBeenCalledWith({ idToken: minted, challenge: `chal-1` });
+});
+
+// The platform's routes answer a sessionless call with a 401, and a 401 tears the signed-in runtime down —
+// including the Google mint this page has in flight. Asking at all is the bug; there is nothing to ask with.
+it(`asks the platform for a credential it cannot be holding`, async () => {
+    user.value = null;
+
+    await mount();
+
+    expect(refresh).toHaveBeenCalled();
+    expect(googleIdToken).not.toHaveBeenCalled();
+});
+
+// A browser that IS signed in keeps the account it is on. Re-spending the token would switch the session to
+// whichever account Google happened to answer with, silently, on a page nobody asked that question.
+it(`leaves a signed-in browser on the account it is already using`, async () => {
+    googleIdToken.mockResolvedValue({});
+    getIdToken.mockResolvedValueOnce(credential(60 * 60 * 1000));
+    handoff.mockResolvedValue({ handoff: `row-1` });
+
+    await mount();
+
+    expect(signInWithGoogleCredential).not.toHaveBeenCalled();
+    expect(handoff).toHaveBeenCalled();
 });
 
 it(`asks Google for nothing when the link is missing its handoff values`, async () => {

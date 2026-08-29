@@ -343,6 +343,16 @@ webview's own jar exactly as it would in a browser. The Google ID token is spent
 Credentials and the verifier never ride the deep link: a deep link is delivered as a process argument,
 readable by anything else on the machine, so only the row's id travels that way.
 
+**The browser this opens in is usually signed out, and the page has to handle that itself.** The app asks the
+OS for the default browser, which is not the window the user downloaded the installer in: a different profile,
+or an incognito tab that is closed by now. That page used to sit behind a session guard, so the ordinary case
+was a bounce to `/login`, which drops the `state` and `challenge` above and ends by pushing into the
+workspace. The result read as success and was not: the browser sat in a signed-in workspace while this app,
+which had just opened it, was still showing its own Google button. An account that already existed made it
+*more* convincing, since the push landed on a real workspace rather than on setup. `/desktop-auth` carries no
+guard now — it resolves its own session and, when there is none, signs in with the very Google credential it
+has to mint for the app anyway, which is the same one-sign-in trade the login screen makes.
+
 **"When that cannot renew" needs a door, and for a long time it had none.** The login screen offered this
 hand-off; the workspace's own sandbox sign-in gate did not: it rendered Google's button, which in this
 webview appears, accepts clicks, and does nothing. A person whose adopted ID token expired before a daemon
