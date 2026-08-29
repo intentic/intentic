@@ -500,11 +500,11 @@ export interface IntenticApi {
          * caller is holding. Resolves with the pick, or undefined if it was dismissed. A second call supersedes
          * the first, resolving it as a dismissal.
          *
-         * EVERY ROW SETTLES IT, including an account and a harness row: each click is one complete answer, so a
-         * caller never has to reconcile a half-changed selection, and the picker never has to hold state that
-         * disagrees with what the caller is showing. Picking a model under a DIFFERENT provider clears the
-         * account with it, an account id is one provider's store key, so carrying it across would pin the run to
-         * an account that provider does not have. */
+         * A MODEL ROW settles it. Account and harness rows behave as they do in the composer: they update the
+         * open selection without closing, and the eventual model pick carries those pins. Dismissing after only
+         * staging a pin still resolves undefined. Picking a model under a DIFFERENT provider clears the account
+         * with it, an account id is one provider's store key, so carrying it across would pin the run to an
+         * account that provider does not have. */
         pick(options: {
             readonly anchor: HTMLElement;
             readonly provider: string;

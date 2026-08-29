@@ -39,6 +39,16 @@ interface ModelRequest {
 // destroyed per open, which is what resets the search query and refreshes the catalogs (see ModelPicker).
 export const modelRequest = shallowRef<ModelRequest | undefined>(undefined);
 
+/* Account and harness rows are settings within the open picker, not its answer. Stage them on the request so
+ * the footer updates immediately and the eventual model row carries the complete choice back to the caller. */
+export const stageModelPick = (patch: Pick<ModelChoice, "account" | "harness">): void => {
+    const pending = modelRequest.value;
+    if (pending === undefined) {
+        return;
+    }
+    modelRequest.value = { ...pending, ...patch };
+};
+
 // Answer the open request, with a choice, or with undefined for a dismissal. Cleared BEFORE the promise
 // settles, so a continuation that opens the picker again isn't torn down by its own predecessor.
 export const settleModelPick = (choice?: ModelChoice): void => {

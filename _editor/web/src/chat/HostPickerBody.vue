@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import type { AgentHarness } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { modelRequest, settleModelPick } from "../composables/chat/hostModelPicker";
-import { modelLabelFor, type PickerEntry } from "../composables/chat/modelPicker";
+import { modelRequest, settleModelPick, stageModelPick } from "../composables/chat/hostModelPicker";
+import type { PickerEntry } from "../composables/chat/modelPicker";
 import { usePickerAccounts } from "../composables/chat/pickerAccounts";
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "./PickerAccounts.vue";
@@ -11,11 +10,9 @@ import PickerAccounts from "./PickerAccounts.vue";
  * component because there are two hosts for it (a sheet on mobile, a popover on desktop) and only the frame
  * differs; the panel they frame is the same panel, and it stopped being a single tag the moment it grew a footer.
  *
- * EVERY ROW ANSWERS THE REQUEST AND CLOSES. That is the difference from the composer's binding, and it follows
- * from who is asking: an extension is AWAITING one value, so a half-changed selection has nowhere to live, there
- * is no conversation here to write it to, and a picker holding state the caller cannot see is a picker that can
- * disagree with the chip that opened it. So an account or a harness row settles the promise exactly as a model
- * row does, carrying the parts nobody touched. */
+ * Like the composer, only a MODEL row answers and closes. Account and harness rows configure that answer in
+ * place: the open request holds those staged pins until a model is picked, while dismissal still returns no
+ * choice to the caller. */
 
 const request = computed(() => modelRequest.value);
 
@@ -40,23 +37,6 @@ const choose = (entry: PickerEntry): void => {
         ...(kept?.harness !== undefined ? { harness: kept.harness } : {}),
     });
 };
-
-// An account or harness row: the model is untouched, so it is re-named from the catalog rather than remembered:
-// the same rule the chip that opened this obeys, and the reason no caller keeps a catalog of its own.
-const settleWith = (patch: { account?: string; harness?: AgentHarness }): void => {
-    const held = request.value;
-    if (held === undefined) {
-        return;
-    }
-    settleModelPick({
-        provider: held.provider,
-        model: held.model,
-        label: modelLabelFor(held.provider, held.model),
-        ...(held.account !== undefined ? { account: held.account } : {}),
-        ...(held.harness !== undefined ? { harness: held.harness } : {}),
-        ...patch,
-    });
-};
 </script>
 
 <template>
@@ -70,8 +50,8 @@ const settleWith = (patch: { account?: string; harness?: AgentHarness }): void =
                     :provider="request.provider"
                     :harness="request.harness ?? `native`"
                     :account="request.account"
-                    @select-account="settleWith({ account: $event })"
-                    @select-harness="settleWith({ harness: $event })"
+                    @select-account="stageModelPick({ account: $event })"
+                    @select-harness="stageModelPick({ harness: $event })"
                     @navigate="settleModelPick()"
                 />
             </div>
