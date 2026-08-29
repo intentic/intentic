@@ -3,7 +3,7 @@
 What we say, in which words, everywhere. Pairs with [positioning.md](positioning.md) (personas +
 pains, P1–P7) and [landing-blueprint.md](landing-blueprint.md) (section placement). The product
 being sold is **intentic-app** (app.intentic.dev): **a machine of their own for your agents**:
-co-piloted agents living in **sandboxes** on hardware you own, still running when you look away,
+co-piloted agents living in **sandboxes**, still running when you look away,
 reached from any browser. The sandbox and CLI that run on your machine are MIT open source on
 GitHub: the trust layer you can read and run yourself.
 
@@ -27,7 +27,7 @@ GitHub: the trust layer you can read and run yourself.
   explanation follows, a semicolon where two clauses genuinely balance, or parentheses for a true
   aside. This applies to everything a visitor reads, on the site and in the app; source comments are
   their own business.
-- **Ownership is an answer, not an opener.** "On hardware you own" removes a fear, it does not create
+- **Ownership is an answer, not an opener.** "Your machine" removes a fear, it does not create
   a want, so it never buys headline or subhead space. It earns its keep in the hero chip, the
   economics band, the trust band, the comparison pages, `/features/host/` and the FAQ, where somebody
   is already asking. It no longer gets a band of its own on the landing page (retired 2026-08-15, see
@@ -54,11 +54,10 @@ GitHub: the trust layer you can read and run yourself.
 
 ## Message hierarchy
 
-**The one thing the page sells:** **your agents get a machine of their own: it runs on hardware you
-own, and every browser is a window onto it.** The agents live on your machine, not in a tab:
+**The one thing the page sells:** **your agents get a machine of their own: every browser is a window onto it.** The agents live on your machine, not in a tab:
 close the laptop and the runs keep going; open any browser (or a phone) and the same fleet is
 there, sorted by who needs you. What that machine is built for are **co-piloted specialized
-agents**: autonomous employees, each a purpose-built sandbox on hardware you own, running on your
+agents**: autonomous employees, each a purpose-built sandbox, running on your
 own Claude/Codex/Grok subscription. Run one, or ten in parallel.
 
 **The golden path is the story spine**, and every band ladders onto one of its steps: connect a
@@ -84,9 +83,9 @@ of surfaces earn the "workspace" claim, and every band on the page ladders up to
 - **observability**: the fleet board, plan mode, per-edit permission modes, changes review,
   transcripts: the surfaces that let you *watch and steer* the agents you run.
 
-**Ownership** is the trust foundation under both (agent on your own hardware, platform off the
+**Ownership** is the trust foundation under both (agent on your machine, platform off the
 command path, code and keys never leave your machine). **Automations** make agents event-driven, and
-a whole team of them costs nothing extra; the **economics** are BYO subscription + your own hardware
+a whole team of them costs nothing extra; the **economics** are BYO subscription + self-hosted
 + a product that is free and MIT: never a meter on model usage.
 
 Landing copy lives in code: `_site/site-content/src/landing.ts` is a single `LandingContent` object
@@ -152,7 +151,7 @@ section.
 ## Glossary (use these words, exactly)
 
 - **sandbox**, the machine side of the product, and **the only noun for it**: the Docker container on
-  hardware the user owns that holds the workspace, runs the agents, and keeps going when every browser
+  the user's machine that holds the workspace, runs the agents, and keeps going when every browser
   is closed. This is the word the app's tab, the API routes, the npm packages and the docs all use, so
   copy that disagrees with it teaches the reader a word the product will not answer to. Never
   "server", never "cloud", never "instance", never "workstation": the word has to keep saying *a real
@@ -258,13 +257,13 @@ section.
   around it to explain it, so all three say what it is.
 - Org description (`_site/site-content/src/site.ts`, JSON-LD): the canonical product sentence; keep
   the site and these docs in sync with it verbatim: `A workspace for coding agents. You delegate.
-  Agents work. You approve. Each one works in a sandbox on hardware you own, in its own git worktree.
+  Agents work. You approve. Each one works in a sandbox, in its own git worktree.
   It keeps running when you close the browser. Reopen from any device, steer the same fleet, and read
   every diff before it lands. Free.`
 - Keywords to carry naturally: the title now carries the category phrase and the tagline carries
   "agents"; the rest are earned by body copy, which says "sandbox": persistent coding
   agent, self-hosted AI agent,
-  run agents on your own hardware, control agents from anywhere, remote agent control, coding
+  run agents self-hosted, control agents from anywhere, remote agent control, coding
   agent, agent sandbox, specialized agent, autonomous agent, AI employee, agent workforce, Claude
   Code, Codex, Grok, AI IDE, Devin alternative, own your code.
 - The **`intentic vs X` / `X alternative`** queries are served by the comparison shelf (`/compare/`),

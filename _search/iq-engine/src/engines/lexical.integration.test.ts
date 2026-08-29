@@ -14,7 +14,7 @@ beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), "iq-lexical-"));
     await writeFile(
         join(root, "lines.md"),
-        ["own its own sandbox on hardware you own", "Ownership — hardware you own, tools you install", "ownership is the trust foundation"].join(
+        ["own its own sandbox", "Ownership — own the machine, hardware you install", "ownership is the trust foundation"].join(
             "\n",
         ),
     );
@@ -30,7 +30,6 @@ test("every occurrence on a line comes back, not just the first", async () => {
     expect(first?.spans).toEqual([
         { start: 0, end: 3 },
         { start: 8, end: 11 },
-        { start: 36, end: 39 },
     ]);
 });
 
@@ -60,7 +59,7 @@ test("word matches whole words only", async () => {
 });
 
 test("literal takes a regex metacharacter as itself", async () => {
-    expect(await search("you own,", { literal: true })).toHaveLength(1);
+    expect(await search("you install", { literal: true })).toHaveLength(1);
     expect(await search("you .wn", {})).toHaveLength(2);
 });
 

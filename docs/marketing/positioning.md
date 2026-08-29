@@ -2,7 +2,7 @@
 
 Who intentic is for, the pains it removes, and why it wins. **The product being sold is
 intentic-app**, the hosted workspace at app.intentic.dev: a persistent **sandbox** per co-piloted
-**specialized agent**, on hardware you own, with any browser as a window onto it. The sandbox and
+**specialized agent**, with any browser as a window onto it. The sandbox and
 CLI those agents run on are MIT open source on GitHub
 (`github.com/intentic/intentic`): the trust layer you can read and run yourself. Every claim traces
 to a file in the repo; if a claim has no path, it doesn't go on the site.
@@ -11,11 +11,10 @@ Companion docs: [messaging.md](messaging.md) (what we say), [landing-blueprint.m
 
 ## What it is
 
-**intentic gives your agents a machine of their own: it runs on hardware you own, and every
-browser is a window onto it.** The agents live on your machine, not in a tab: close the laptop and
+**intentic gives your agents a machine of their own: every browser is a window onto it.** The agents live on your machine, not in a tab: close the laptop and
 the runs keep going; open any browser (or a phone) and the same fleet is there, sorted by who
 needs you. What lives on that machine is a **specialized agent**: an autonomous employee in a
-purpose-built **sandbox** on hardware *you* own: its dev-tools really installed, wired to the
+purpose-built **sandbox**: its dev-tools really installed, wired to the
 systems it may reach (**capabilities**), its context curated for one job, running on your own
 Claude/Codex/Grok subscription. Run one, or ten in parallel.
 
@@ -48,7 +47,7 @@ thin identity store that *cannot* touch your code, secrets, or systems (`README.
 **Category**: the persistent agent sandbox you own, cloud-grade reach and observability with
 local-grade ownership.
 
-**Business model**: bring your own model subscription + your own hardware, and nothing to pay us:
+**Business model**: bring your own model subscription + self-hosted, and nothing to pay us:
 never a meter on model usage. There are no tiers and no limits: every sandbox, capability and shared
 workspace is included. The whole product is MIT open source (`LICENSE`, GitHub).
 
@@ -99,7 +98,7 @@ below, so that is what the page now claims and proves; the rest support it or li
 `/docs/*` and `/compare/`. See
 [landing-blueprint.md](landing-blueprint.md#core-thesis-the-spine) for the whole rationale.
 
-1. **A persistent fleet on hardware you own: still running when you look away, nothing landing
+1. **A persistent fleet: still running when you look away, nothing landing
    unread**: one sandbox and one git worktree per agent, run ten at once; the runs live on your
    machine, not in the tab, so any browser or phone reopens onto the same board; and the review
    boundary is a real branch: land it into your tree or discard it
@@ -118,8 +117,8 @@ below, so that is what the page now claims and proves; the rest support it or li
    supervised, and a human in the loop. The IDE surfaces (editor, files, diffs, terminal) and the
    observability surfaces (fleet board, plan mode, permission modes, changes review, transcripts)
    exist for exactly that. Trust is a UX feature, not a policy PDF. (P4)
-5. **Economics that don't punish usage**: bring your own model subscription, run on your own
-   hardware, pay us nothing. Never a meter on model tokens. It earns its band because "ten agents"
+5. **Economics that don't punish usage**: bring your own model subscription, self-hosted,
+   pay us nothing. Never a meter on model tokens. It earns its band because "ten agents"
    triggers "that must cost a fortune". (P7)
 6. **Minutes to a live workspace**: Google sign-in, one copy-paste command, no Cloudflare account,
    no open ports, workspace opens itself when the sandbox reports in. (P3)

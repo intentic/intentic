@@ -364,7 +364,7 @@ export const productPages: ProductPage[] = [
     {
         slug: "host",
         navLabel: "Host",
-        menuBlurb: "Run on hardware you own",
+        menuBlurb: "Self-hosted",
         icon: "server",
         heading: "Host the work. Keep control.",
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
@@ -385,7 +385,7 @@ export const productPages: ProductPage[] = [
         ],
         blocks: [
             {
-                title: "It runs on hardware you own",
+                title: "Self-hosted",
                 body: "A private tunnel connects your browser to the sandbox. On a server, it keeps running without you.",
                 figure: "ownership",
             },

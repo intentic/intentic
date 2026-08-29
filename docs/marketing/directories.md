@@ -18,7 +18,7 @@ Reuse verbatim; do not re-invent per site. Voice rules are in [messaging.md](mes
 | --- | --- |
 | Name | `intentic` (always lowercase) |
 | Tagline, 39 chars | You delegate. Agents work. You approve. |
-| Short | A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free. |
+| Short | A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change before it is merged. Free. |
 | Website | https://intentic.dev |
 | Source | https://github.com/intentic/intentic (MIT) |
 | Demo | https://intentic.dev/demo/ |
@@ -29,8 +29,8 @@ Reuse verbatim; do not re-invent per site. Voice rules are in [messaging.md](mes
 
 Long description, for the sites that give you a paragraph:
 
-> intentic gives every coding agent a machine of its own: a persistent container sandbox on hardware you own:
-> laptop, desktop or VPS: with a git worktree of its own. Runs continue after you close the browser and reopen
+> intentic gives every coding agent a machine of its own: a persistent container sandbox on
+> laptop, desktop or VPS, with a git worktree of its own. Runs continue after you close the browser and reopen
 > from any device, phone included, sorted by which agent needs you. Plan mode by default, per-hunk diff review,
 > an environment Dockerfile the agent proposes for your approval, credentials held inside the sandbox and
 > injected per turn, and automations that wake an agent on a schedule, a webhook or a live event. Works with
@@ -91,12 +91,12 @@ un-holding this costs a lead time of at least a day, not an afternoon.
 One shot, so it goes out deliberately: a weekday, 08:00–10:00 US Eastern, from an account that exists before
 the day it posts. Title, at 77 of the 80 characters HN allows:
 
-> Show HN: intentic – a browser workspace for coding agents on hardware you own
+> Show HN: intentic – a browser workspace for coding agents
 
 First comment, posted immediately after submitting:
 
 > I kept losing track of which terminal was running which agent, and closing the laptop killed the run. So the
-> agents got a machine instead of a tab: each one lives in its own container sandbox on hardware I own, laptop,
+> agents got a machine instead of a tab: each one lives in its own container sandbox, laptop,
 > desktop or VPS: in a git worktree of its own, and the browser is just a window onto it. Close it, reopen on a
 > phone, the run is still going.
 >

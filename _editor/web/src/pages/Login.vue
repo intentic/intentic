@@ -177,7 +177,7 @@ watch(
                 <span class="beat"><span class="display">Start building with agents</span><span class="stop">.</span></span>
             </h1>
 
-            <p class="animate-fade-in-up hero-sub" style="animation-delay: 160ms">A workspace for coding agents, on hardware you own.</p>
+            <p class="animate-fade-in-up hero-sub" style="animation-delay: 160ms">A workspace for coding agents.</p>
 
             <!-- THE GATE. The one framed object on the screen, and the only place the site's turned corner and
                  lotus finial are drawn here: an ornament earns its keep on a panel big enough to carry it and

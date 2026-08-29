@@ -17,7 +17,7 @@ Every list matches on a different one of these, so the pitch changes per target:
 
 | Claim | Backed by |
 | --- | --- |
-| Self-hosted web app | runs on your own hardware, browser is the only client, MIT including the platform |
+| Self-hosted web app | self-hosted, browser is the only client, MIT including the platform |
 | Agent orchestrator | fleet of parallel agents, one container + git worktree each |
 | Multi-agent-CLI host | Claude Code, Codex, OpenCode, Gemini as interchangeable engines |
 | MCP client | MCP servers wired in per agent as capabilities |
@@ -85,7 +85,7 @@ maintained, working install instructions, and **first released more than 4 month
 name: intentic
 website_url: https://intentic.dev
 source_code_url: https://github.com/intentic/intentic
-description: Workspace for running coding agents on hardware you own. Each agent gets a persistent container sandbox and a git worktree of its own, reached from any browser, and keeps working after you close the tab.
+description: Workspace for running coding agents. Each agent gets a persistent container sandbox and a git worktree of its own, reached from any browser, and keeps working after you close the tab.
 licenses:
   - MIT
 platforms:
@@ -109,7 +109,7 @@ already in it. Its bar is roughly 50 stars and visible traction, and entries go 
 with a star badge:
 
 ```markdown
-- [intentic](https://github.com/intentic/intentic): Self-hosted workspace where each agent gets its own container and git worktree on hardware you own, reachable from any browser or phone, with plan-and-review diffs before anything lands. ![GitHub Repo stars](https://img.shields.io/github/stars/intentic/intentic?style=social)
+- [intentic](https://github.com/intentic/intentic): Self-hosted workspace where each agent gets its own container and git worktree, reachable from any browser or phone, with plan-and-review diffs before anything lands. ![GitHub Repo stars](https://img.shields.io/github/stars/intentic/intentic?style=social)
 ```
 
 ## Tier 3: cheap, low-traffic, worth a batch afternoon
@@ -260,7 +260,7 @@ created 2026-08-04) *or* 100 stars, we have 8, and an early submission is auto-c
 Description: 445 characters, inside the 10–500 limit, third person throughout, no emoji, no second person,
 descriptive rather than promotional as the form demands:
 
-> Self-hosted workspace that runs several Claude Code sessions at once on hardware the user owns. Each
+> Self-hosted workspace that runs several Claude Code sessions at once. Each
 > conversation gets its own Docker sandbox and a git worktree of every repo in the workspace, rebased before
 > every turn, so parallel sessions cannot overwrite each other. A board shows which agents are working and
 > which are waiting on input, and changes reach the main tree only through per-hunk diff review. Codex, Grok
@@ -288,5 +288,5 @@ relevance rather than on stars and are therefore open to us today, live in
 The canonical one-line description for standard awesome format, reused everywhere so the wording compounds:
 
 ```markdown
-- [intentic](https://github.com/intentic/intentic) - Self-hosted workspace for a fleet of coding agents (Claude Code, Codex, OpenCode, Gemini), each in its own container and git worktree on hardware you own, driven from any browser and reviewed as diffs before anything lands.
+- [intentic](https://github.com/intentic/intentic) - Self-hosted workspace for a fleet of coding agents (Claude Code, Codex, OpenCode, Gemini), each in its own container and git worktree, driven from any browser and reviewed as diffs before anything lands.
 ```

@@ -130,7 +130,7 @@ export interface LandingContent {
     finalCta: { heading: string; sub: string };
 }
 
-// One claim, proven once: your agents run on hardware you own, keep running when you look away, and
+// One claim, proven once: your agents keep running when you look away, and
 // any browser, including a phone, reopens onto the same fleet, with nothing reaching your tree until you
 // have read the diff. The hero states it; the five verbs show it; `#workspace` shows what you read it
 // WITH; the bands below answer the objections it raises (what it costs, who builds it) and then hand
@@ -141,7 +141,7 @@ export const landingContent: LandingContent = {
         // the cut with the claim and the price still in it.
         title: "intentic · A workspace for coding agents",
         description:
-            "A workspace for coding agents on hardware you own. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
+            "A workspace for coding agents. They keep running when you close the browser. Reopen anywhere and review every change. Free.",
     },
     hero: {
         // Three beats, split 2 + 1 so the second line lands the one the reader has to believe. The

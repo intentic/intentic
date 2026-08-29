@@ -60,7 +60,7 @@ const SERVERS = [
 const DESCRIPTION = [
     "Every call an intentic sandbox daemon answers, generated from the wire contract the daemon and its browser client both import.",
     "",
-    "The daemon runs beside your code, on hardware you own. There is no shared server and no central API: the address below is your sandbox and nobody else's, which is also why the playground on this site answers from a simulation in your own tab rather than by calling anything.",
+    "The daemon runs beside your code. There is no shared server and no central API: the address below is your sandbox and nobody else's, which is also why the playground on this site answers from a simulation in your own tab rather than by calling anything.",
     "",
     "Two conventions cover the whole surface. Input rides in the path and query for a `GET` and in a JSON body otherwise. A failure comes back as a JSON object with a `message`, never as an empty body — a refusal is a result, not a crash.",
     "",

@@ -86,7 +86,7 @@ const describe = (effect: CapabilityEffect): EffectRow => {
             };
         case "endpoint":
             // Named, not warned: pointing turns at a server is the POINT of this capability, and it is as often
-            // the private choice (a model on your own hardware) as the exposing one. The row states the
+            // the private choice (a local model) as the exposing one. The row states the
             // destination and what leaves for it, and lets the reader judge their own URL.
             return {
                 icon: `cloud-upload`,

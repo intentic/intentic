@@ -4,7 +4,7 @@
 
 ### You delegate. Agents work. You approve.
 
-A workspace for coding agents. Every agent works in a sandbox on hardware **you** own, in a git worktree of its own: and keeps running when you look away.<br>
+A workspace for coding agents. Every agent works in a sandbox, in a git worktree of its own: and keeps running when you look away.<br>
 Run ten in parallel, reopen from any device, read every diff before it lands. Free.
 
 <p>
@@ -35,7 +35,7 @@ Run ten in parallel, reopen from any device, read every diff before it lands. Fr
 
 ## What this is
 
-intentic gives your agents **a machine of their own**: a persistent **sandbox** on hardware you own, with
+intentic gives your agents **a machine of their own**: a persistent **sandbox**, with
 every browser a window onto it. What lives in one is a **specialized agent**: an autonomous employee with
 dev-tools really installed, wired to the systems it operates, and context curated for one job. The runs
 live on your machine, not in a tab: close the laptop and they keep going; reopen from any browser, or your
@@ -118,7 +118,7 @@ workspace and never shown in the file tree.
   identity, the sandbox's URL and the secrets that pair the two, and sits off the command path. The one
   exception is the optional free trial, which lets you chat before connecting any AI account: those messages
   run on intentic's keys and pass through intentic, and every screen that offers it says so.
-- **Your subscriptions, your hardware, free**: each agent runs on your own Claude, ChatGPT or SuperGrok plan.
+- **Your subscriptions, self-hosted, free**: each agent runs on your own Claude, ChatGPT or SuperGrok plan.
   intentic charges nothing and never meters your model usage.
 
 <details>

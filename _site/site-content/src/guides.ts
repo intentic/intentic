@@ -604,9 +604,9 @@ export const guidePages: GuidePage[] = [
                     "The machine sleeps or you want to reach the run from elsewhere, which is a persistence problem rather than a privacy one.",
             },
             {
-                name: "A container on hardware you own",
+                name: "A self-hosted container",
                 what: "The same as above, with a containerized workspace on your desktop, server or VPS. Several agents can share it while editing isolated worktrees.",
-                goodFor: "Running unattended work and several agents at once while keeping everything on your own hardware.",
+                goodFor: "Running unattended work and several agents at once while keeping everything on your machine.",
                 breaksWhen: "You do not want to operate a machine. There is real, if small, ongoing maintenance.",
             },
             {
@@ -617,7 +617,7 @@ export const guidePages: GuidePage[] = [
             },
             {
                 name: "A locally hosted model",
-                what: "Inference runs on your own hardware, so no conversation content leaves at all.",
+                what: "Inference runs locally, so no conversation content leaves at all.",
                 goodFor: "The strictest requirements, and situations where no external processing is acceptable.",
                 breaksWhen:
                     "Capability. Local models remain behind the frontier hosted ones on long agentic coding tasks, and the hardware is not free.",
@@ -670,7 +670,7 @@ export const guidePages: GuidePage[] = [
             {
                 id: "safest-setup",
                 question: "What is the most private way to use a coding agent?",
-                answer: "A local model on your own hardware, with the agent local too, sends nothing anywhere. The realistic compromise is a self-hosted agent with a hosted model on a plan that excludes training, which keeps the repository and credentials on hardware you control.",
+                answer: "A local model on your machine, with the agent local too, sends nothing anywhere. The realistic compromise is a self-hosted agent with a hosted model on a plan that excludes training, which keeps the repository and credentials on hardware you control.",
             },
         ],
         related: [

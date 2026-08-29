@@ -1,11 +1,11 @@
 # intentic.dev: Landing page blueprint
 
 The page that converts, section by section: selling **intentic-app** (app.intentic.dev). The one
-thing sold (a persistent **sandbox** per co-piloted specialized agent, on hardware you own, with
+thing sold (a persistent **sandbox** per co-piloted specialized agent, with
 any browser as a **window** onto it), the voice rules, the glossary, and the objection bank live in
 [messaging.md](messaging.md); personas and pains (P1–P7) in [positioning.md](positioning.md).
 
-**Core thesis (the spine):** you run a fleet of coding agents in parallel on hardware you own; the
+**Core thesis (the spine):** you run a fleet of coding agents in parallel; the
 runs keep going when you look away, and any browser (or a phone) reopens onto the same fleet; and
 nothing reaches your tree until you have read the diff. Every section is a proof of that one sentence
 or an objection to it. It is a **single page**: one continuous scroll, no variants.
@@ -235,7 +235,7 @@ is in `about.ts` because `/about/` shares it.
    against a chat box, two columns of nouns, because the asymmetry is the argument. Replaced the
    ownership ledger on 2026-08-15 (recorded decision above). (P1, P6)
 4. **Economics (`#economics`)**: the deal, and the answer to the reflex that "ten agents" triggers:
-   bring your own model subscription, run on your own hardware, pay us nothing: never a meter on model
+   bring your own model subscription, self-hosted, pay us nothing: never a meter on model
    usage. Carries the free story. (P7)
 5. **About the creator (`#trust`)**: the last objection before the command. The page has just asked a
    visitor to run a container on their own machine and hand it a GitHub token and a database password;

@@ -135,7 +135,7 @@ whole pitch, and every one leads with a specific thing that page actually says.
 An engine quoting an article about us needs the article to say something checkable. The three facts that
 travel best, in this order:
 
-1. A container per agent, on hardware you own, so agents get ports, packages and credentials of their own
+1. A container per agent, so agents get ports, packages and credentials of their own
    rather than sharing one machine's.
 2. Free and MIT including the platform, which is falsifiable in one click and is the reason a writer can
    recommend it without hedging.

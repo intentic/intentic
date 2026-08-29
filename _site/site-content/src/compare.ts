@@ -159,7 +159,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your Mac, or Conductor Cloud on a paid plan" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your Mac, or Conductor Cloud on a paid plan" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS" },
             {
                 label: "Reach it from elsewhere",
@@ -245,7 +245,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your local machine, in a git worktree each" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your local machine, in a git worktree each" },
             { label: "Parallel agents", intentic: "a fleet, sorted by which needs you", them: "100+ at once", theirs: true },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS; Linux experimental; Windows not yet" },
             {
@@ -321,7 +321,7 @@ export const comparePages: ComparePage[] = [
         ],
         table: [
             { label: "What it is", intentic: "a containerized workspace and control surface for an agent fleet", them: "a control surface for the agents on your machine" },
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your machine, against your local checkout" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your machine, against your local checkout" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
             {
                 label: "Harnesses",
@@ -388,7 +388,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your machine, wrapping your local runtimes" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your machine, wrapping your local runtimes" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
             {
                 label: "Agent runtimes",
@@ -471,7 +471,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your machine, in your checkout" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your machine, in your checkout" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Windows, Linux" },
             {
                 label: "On a phone",
@@ -555,7 +555,7 @@ export const comparePages: ComparePage[] = [
             },
         ],
         table: [
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "Cursor's cloud sandboxes, or your local IDE" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "Cursor's cloud sandboxes, or your local IDE" },
             {
                 label: "The editor",
                 intentic: "a shared editor plus desktop sync to the one you have",
@@ -655,7 +655,7 @@ export const comparePages: ComparePage[] = [
             { label: "What it is", intentic: "the machine and fleet an agent works in", them: "an agentic coding tool that intentic can run" },
             {
                 label: "Where the agent runs",
-                intentic: "a Docker sandbox on hardware you own",
+                intentic: "a Docker sandbox",
                 them: "your terminal, or Anthropic-managed cloud VMs on the web",
             },
             {
@@ -751,7 +751,7 @@ export const comparePages: ComparePage[] = [
             { label: "What it is", intentic: "the machine and fleet an agent works in", them: "an open harness that intentic can run" },
             {
                 label: "Where the agent runs",
-                intentic: "a Docker sandbox on hardware you own",
+                intentic: "a Docker sandbox",
                 them: "your machine through a terminal, desktop app or IDE",
             },
             {
@@ -840,7 +840,7 @@ export const comparePages: ComparePage[] = [
                 them: "the rest of it: mail, calendars, notes, the house",
                 theirs: true,
             },
-            { label: "Where it runs", intentic: "a Docker sandbox on hardware you own", them: "a gateway on your own devices" },
+            { label: "Where it runs", intentic: "a Docker sandbox", them: "a gateway on your own devices" },
             { label: "Host operating system", intentic: "macOS, Linux, Windows", them: "macOS, Linux, Windows" },
             {
                 label: "How you reach it",
@@ -932,7 +932,7 @@ export const comparePages: ComparePage[] = [
             },
             {
                 label: "Where the work runs",
-                intentic: "always a Docker sandbox on hardware you own",
+                intentic: "always a Docker sandbox",
                 them: "local, Docker, SSH or a serverless sandbox, as configured",
             },
             { label: "Isolation", intentic: "one sandbox container for the fleet; one git worktree per agent", them: "isolated subagents inside a conversation" },
@@ -959,7 +959,7 @@ export const comparePages: ComparePage[] = [
                 them: "a natural-language cron scheduler",
             },
             { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "MIT" },
-            { label: "Where the agent runs", intentic: "a Docker sandbox on hardware you own", them: "your own machine or server, self-hosted" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox", them: "your own machine or server, self-hosted" },
             {
                 label: "Runs without you at the keyboard",
                 intentic: "automations on cron, webhook, push, alert, email, chat",
@@ -1018,7 +1018,7 @@ export const comparePages: ComparePage[] = [
             { label: "How it gets your code", intentic: "it is already on your machine", them: "cloned from GitHub, or uploaded, into their VM" },
             { label: "Where your service credentials sit", intentic: "inside your sandbox", them: "in the vendor's secret store" },
             { label: "Model billing", intentic: "your own subscription, never metered by us", them: "the vendor's plan, usually with a markup" },
-            { label: "Compute billing", intentic: "hardware you already own", them: "the vendor's, metered or bundled" },
+            { label: "Compute billing", intentic: "self-hosted", them: "the vendor's, metered or bundled" },
             {
                 label: "Supervision",
                 intentic: "fleet board, plan mode, diff review, transcripts",
