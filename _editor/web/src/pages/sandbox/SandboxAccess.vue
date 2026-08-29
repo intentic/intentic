@@ -5,14 +5,15 @@ import {
     Avatar,
     Button,
     clipboardOf,
-    ui,
     Notice,
     type NoticeModel,
     Picker,
     type PickerOption,
     Row,
     RowGroup,
+    RowNote,
     SkeletonRows,
+    ui,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { formatDate } from "@intentic/ui/format";
@@ -335,124 +336,130 @@ const revoke = async (target: string): Promise<void> => {
 <template>
     <div class="flex flex-col gap-6">
         <!-- Members + invites (owner) / read-only note (member). -->
-        <RowGroup label="Access">
+        <!-- density="compact": a roster is a record list, and the rows below are <Row>s now rather than three
+             hand-drawn shapes at px-4 py-3 on a surface whose own outline drew the settings tier. -->
+        <RowGroup density="compact" label="Access">
             <template v-if="isOwner">
-                <div class="flex items-center gap-2.5 px-4 py-3">
-                    <Icon name="user" class="text-muted" />
-                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
-                    <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
-                </div>
+                <Row icon="user" :title="user?.email">
+                    <template #meta>
+                        <span class="rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">Owner</span>
+                    </template>
+                </Row>
                 <div v-if="listing" role="status" aria-busy="true">
                     <template v-if="outline">
                         <span class="sr-only">Reading who has access…</span>
                         <SkeletonRows :rows="2" control />
                     </template>
                 </div>
-                <div v-for="member in members" :key="member.email" class="flex items-center gap-2.5 px-4 py-3">
-                    <Icon name="user" class="text-muted" />
-                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ member.email }}</span>
-                    <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
+                <Row v-for="member in members" :key="member.email" icon="user" :title="member.email">
+                    <template #control>
+                        <!-- The row's role, changeable in place: a re-grade is routine (that is the whole point of
                          tiers), so it must not cost a revoke + re-invite. Ghost rather than a bordered box:
                          the row already has a framed address, a status pill and two buttons on it, and a
                          second box among them read as a form field that had wandered into a list. -->
-                    <Picker
-                        :model-value="member.role"
-                        :options="ROLE_OPTIONS"
-                        variant="ghost"
-                        :disabled="busy"
-                        class="shrink-0"
-                        :aria-label="`Role for ${member.email}`"
-                        :header="`Role for ${member.email}`"
-                        @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
-                    />
-                    <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
-                        badge(member.status).label
-                    }}</span>
-                    <Button
-                        v-if="member.status !== 'accepted'"
-                        label="Resend"
-                        size="small"
-                        severity="secondary"
-                        :text="true"
-                        :disabled="busy"
-                        @click="resend(member.email)"
-                    />
-                    <Button
-                        size="small"
-                        severity="danger"
-                        :text="true"
-                        :rounded="true"
-                        :disabled="busy"
-                        aria-label="Revoke access"
-                        @click="revoke(member.email)"
-                    >
-                        <template #icon><Icon name="times" /></template>
-                    </Button>
-                </div>
+                        <Picker
+                            :model-value="member.role"
+                            :options="ROLE_OPTIONS"
+                            variant="ghost"
+                            :disabled="busy"
+                            class="shrink-0"
+                            :aria-label="`Role for ${member.email}`"
+                            :header="`Role for ${member.email}`"
+                            @update:model-value="(role: GrantedRole | undefined) => role !== undefined && setRole(member.email, role)"
+                        />
+                        <span class="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-semibold" :class="badge(member.status).class">{{
+                            badge(member.status).label
+                        }}</span>
+                        <Button
+                            v-if="member.status !== 'accepted'"
+                            label="Resend"
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            :disabled="busy"
+                            @click="resend(member.email)"
+                        />
+                        <Button
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            :rounded="true"
+                            :disabled="busy"
+                            aria-label="Revoke access"
+                            @click="revoke(member.email)"
+                        >
+                            <template #icon><Icon name="times" /></template>
+                        </Button>
+                    </template>
+                </Row>
 
                 <!-- Invite affordance as the group's footer row (mirrors the Secrets \"add\" pattern). -->
-                <div class="flex flex-col gap-2 px-4 py-3">
-                    <!-- The link goes in the slot, not in the model: it must wrap rather than run out of the
+                <RowNote variant="block">
+                    <div class="flex flex-col gap-2">
+                        <!-- The link goes in the slot, not in the model: it must wrap rather than run out of the
                          box, and it is the one thing on this card a person copies by hand. -->
-                    <Notice v-if="notice" :of="notice">
-                        <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
-                    </Notice>
-                    <form class="flex flex-col gap-1.5" @submit.prevent="invite">
-                        <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
+                        <Notice v-if="notice" :of="notice">
+                            <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
+                        </Notice>
+                        <form class="flex flex-col gap-1.5" @submit.prevent="invite">
+                            <!-- Address first, then role beside Invite: the primary flow is "who, send", and the tier
                              is a refinement on that row. Collaborator preselected; the sentence below teaches
                              the model without sitting between two unrelated controls. -->
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <input
-                                v-model="email"
-                                type="email"
-                                autocomplete="off"
-                                placeholder="teammate@example.com"
-                                :class="[
-                                    ui.input('min-w-0 sm:flex-1'),
-                                    emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase()) ? 'ui-field-input-error' : '',
-                                ]"
-                                @blur="emailTouched = true"
-                            />
-                            <div class="flex items-center gap-2">
-                                <Picker
-                                    v-model="inviteRole"
-                                    :options="ROLE_OPTIONS"
-                                    variant="input"
-                                    :disabled="busy"
-                                    aria-label="Invite role"
-                                    header="Invite as"
-                                    class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <input
+                                    v-model="email"
+                                    type="email"
+                                    autocomplete="off"
+                                    placeholder="teammate@example.com"
+                                    :class="[
+                                        ui.input('min-w-0 sm:flex-1'),
+                                        emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())
+                                            ? 'ui-field-input-error'
+                                            : '',
+                                    ]"
+                                    @blur="emailTouched = true"
                                 />
-                                <Button
-                                    type="submit"
-                                    label="Invite"
-                                    :loading="busy"
-                                    :disabled="busy || !validEmail(email.trim().toLowerCase())"
-                                    class="shrink-0"
-                                >
-                                    <template #icon><Icon name="send" /></template>
-                                </Button>
+                                <div class="flex items-center gap-2">
+                                    <Picker
+                                        v-model="inviteRole"
+                                        :options="ROLE_OPTIONS"
+                                        variant="input"
+                                        :disabled="busy"
+                                        aria-label="Invite role"
+                                        header="Invite as"
+                                        class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+                                    />
+                                    <Button
+                                        type="submit"
+                                        label="Invite"
+                                        :loading="busy"
+                                        :disabled="busy || !validEmail(email.trim().toLowerCase())"
+                                        class="shrink-0"
+                                    >
+                                        <template #icon><Icon name="send" /></template>
+                                    </Button>
+                                </div>
                             </div>
-                        </div>
-                        <p class="text-xs text-muted">{{ roleHint(inviteRole) }}</p>
-                        <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
-                            <Icon name="exclamation-triangle" class="text-2xs" />
-                            Enter a valid email address.
-                        </span>
-                    </form>
-                </div>
+                            <p class="text-xs text-muted">{{ roleHint(inviteRole) }}</p>
+                            <span v-if="emailTouched && email.trim().length > 0 && !validEmail(email.trim().toLowerCase())" class="ui-field-error">
+                                <Icon name="exclamation-triangle" class="text-2xs" />
+                                Enter a valid email address.
+                            </span>
+                        </form>
+                    </div>
+                </RowNote>
             </template>
 
             <template v-else>
-                <div class="flex items-center gap-2.5 px-4 py-3">
-                    <Icon name="user" class="text-muted" />
-                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ user?.email }}</span>
-                    <span class="shrink-0 rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">{{
-                        roleLabel(sandbox.active.value?.role ?? `viewer`)
-                    }}</span>
-                    <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-semibold text-subtle">You</span>
-                </div>
-                <div class="px-4 py-3 text-xs text-muted">Only the sandbox owner can invite people or change roles.</div>
+                <Row icon="user" :title="user?.email">
+                    <template #meta>
+                        <span class="rounded-full bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link">{{
+                            roleLabel(sandbox.active.value?.role ?? `viewer`)
+                        }}</span>
+                        <span class="rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-semibold text-subtle">You</span>
+                    </template>
+                </Row>
+                <RowNote>Only the sandbox owner can invite people or change roles.</RowNote>
             </template>
         </RowGroup>
 
@@ -463,21 +470,20 @@ const revoke = async (target: string): Promise<void> => {
              cannot exist (see the note in the script). The rows are the answers to the three questions asked in
              the order the eye arrives at them: what IS signed in that I can see, why can't I see the rest, and
              what exactly happens if I press this. -->
-        <RowGroup v-if="isOwner" label="Signed-in browsers">
+        <RowGroup v-if="isOwner" density="compact" label="Signed-in browsers">
             <!-- The one signed-in browser the app can name, because it is running in it. -->
-            <Row icon="desktop" density="compact" title="This browser" :description="thisBrowser">
+            <Row icon="desktop" title="This browser" :description="thisBrowser">
                 <template #meta><span class="text-success">Signed in</span></template>
             </Row>
 
             <!-- The empty list, explained where the reader asks about it, rather than left as a blank surface. -->
             <Row
                 icon="shield"
-                density="compact"
                 title="Other browsers aren't listed"
                 description="Each browser keeps its own signed pass and the sandbox stores nothing per device, so there is no list to show — and no device that could quietly stay off one. Signing out covers all of them at once."
             />
 
-            <Row icon="sign-out" density="compact" tone="danger" title="Sign out everywhere">
+            <Row icon="sign-out" tone="danger" title="Sign out everywhere">
                 <template #description>
                     Ends every pass, this browser's included, though you stay signed in here. Everyone else signs in again and gets back in only if
                     they're still on the list above.
@@ -520,26 +526,27 @@ const revoke = async (target: string): Promise<void> => {
         </RowGroup>
 
         <!-- Live presence: who else is connected right now (everyone sees this). -->
-        <RowGroup label="Here now">
-            <div v-if="presenceOthers.length === 0" class="px-4 py-6 text-center text-xs text-muted">No one else is connected right now.</div>
+        <RowGroup density="compact" label="Here now">
+            <RowNote v-if="presenceOthers.length === 0" variant="empty">No one else is connected right now.</RowNote>
             <template v-else>
-                <div
+                <Row
                     v-for="member in presenceOthers"
                     :key="member.email"
-                    class="flex items-center gap-2.5 px-4 py-3"
                     :class="member.idle ? 'opacity-60' : ''"
+                    :title="member.name ?? member.email"
+                    :description="presenceActivity(member)"
                 >
-                    <Avatar :size="32" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
-                    <div class="min-w-0 flex-1">
-                        <div class="truncate text-sm font-medium text-content">{{ member.name ?? member.email }}</div>
-                        <div class="truncate text-xs text-muted">{{ presenceActivity(member) }}</div>
-                    </div>
-                    <!-- The role rides presence: who may do what is a fact every member gets to see. -->
-                    <span class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{
-                        roleLabel(member.role)
-                    }}</span>
-                    <span v-if="member.idle" class="shrink-0 text-2xs text-subtle">idle</span>
-                </div>
+                    <!-- The avatar is the row's mark, so it takes the row's mark size (32 was this file's own
+                         guess at it, against 22 on every other record list in the hub). -->
+                    <template #lead="{ mark }">
+                        <Avatar :size="mark" :name="member.name ?? member.email" :src="member.picture" :hue="identityHue(member.email)" />
+                    </template>
+                    <template #meta>
+                        <!-- The role rides presence: who may do what is a fact every member gets to see. -->
+                        <span class="rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle">{{ roleLabel(member.role) }}</span>
+                        <span v-if="member.idle">idle</span>
+                    </template>
+                </Row>
             </template>
         </RowGroup>
     </div>

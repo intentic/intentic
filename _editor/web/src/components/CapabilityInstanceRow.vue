@@ -150,7 +150,7 @@ const items = computed<MenuItem[]>(() => {
         <!-- Tinted while the form below is over THIS connection: the fields are a long way down a narrow pane,
              and without it a form pre-filled with somebody's live gateway is indistinguishable from one
              pre-filled with the card's defaults. -->
-        <Row density="compact" :selected="editing">
+        <Row :selected="editing">
             <template #title>
                 <span class="flex flex-wrap items-center gap-2">
                     <!-- Mono because it is an identifier, not a label: it is what the agent's skill, its tools

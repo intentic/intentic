@@ -17,6 +17,13 @@ export function useEnvironment() {
     });
     const state = computed(() => query.data.value);
 
+    /* IS A READ IN THE AIR, as a derived boolean rather than left for a caller to pull off `query`. Reaching
+     * through that object in a template does NOT unwrap: only a top-level setup binding does, so the Environment
+     * card's `:spin="query.isFetching"` handed <Icon> the ref itself, which is an object and therefore always
+     * truthy — its refresh button span for the life of the page. Exposed here the way useUsage and useRegistry
+     * already expose theirs, so the binding is a plain boolean at every call site and cannot be got wrong. */
+    const isFetching = computed(() => query.isFetching.value);
+
     // A proposal awaiting review: present and not the custom-section content already approved.
     const proposal = computed(() => {
         const current = state.value;
@@ -44,5 +51,5 @@ export function useEnvironment() {
     // the desktop app, the equivalent one-liner in a browser.
     const slug = computed(() => state.value?.container?.replace(/^intentic-sandbox-/, ``));
 
-    return { state, query, proposal, pending, applied, recurring, serverManaged, slug };
+    return { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug };
 }

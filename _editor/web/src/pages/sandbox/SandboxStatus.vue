@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup, SkeletonRows, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Row, RowGroup, RowNote, SkeletonRows, StatusBadge, type StatusVariant } from "@intentic/ui";
 import { computed } from "vue";
 import VpnCard from "../../components/VpnCard.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
@@ -52,9 +52,9 @@ const stateVariant = (state: string): StatusVariant =>
                     <SkeletonRows :rows="2" control />
                 </template>
             </div>
-            <div v-else-if="runningPanels.length === 0 && activeServices.length === 0" class="px-4 py-6 text-center text-xs text-muted">
+            <RowNote v-else-if="runningPanels.length === 0 && activeServices.length === 0" variant="empty">
                 Nothing running: open a panel from the sidebar.
-            </div>
+            </RowNote>
             <template v-else>
                 <!-- Operator-panel dev servers that are up: link to the panel page for controls; port + preview here. -->
                 <Row v-for="panel in runningPanels" :key="panel.repo" icon="window-maximize">

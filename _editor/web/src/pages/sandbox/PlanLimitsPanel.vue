@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { providerLabel } from "@intentic/sandbox-contract";
-import { ui, RowGroup, SearchBar } from "@intentic/ui";
+import { RowGroup, RowNote, SearchBar, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
 import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
@@ -169,45 +169,47 @@ const roster = computed(() => {
 <template>
     <!-- A @container over the whole section: every column below thins out against the PANEL, which is a hub
          section inside the workspace pane and never the width of the window. -->
-    <RowGroup v-if="rows.length > 0" id="accounts" class="@container" label="Plan limits">
+    <RowGroup v-if="rows.length > 0" id="accounts" density="compact" class="@container" label="Plan limits">
         <!-- 1 · CAPACITY. The section's headline is a count, not a percentage: "how many accounts can I run
              on" is the question, and it survives having 31 of them. -->
-        <div class="flex flex-col gap-2 px-4 py-3">
-            <!-- The headline answers the question the section is opened with: can I start work, and if not,
+        <RowNote variant="block">
+            <div class="flex flex-col gap-2">
+                <!-- The headline answers the question the section is opened with: can I start work, and if not,
                  when: rather than counting connections, which the roster below does anyway. -->
-            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span class="text-sm text-content">
-                    {{ summary.counts.room }} of {{ summary.accounts }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
-                </span>
-                <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
-                    next pool reopens {{ formatReset(summary.nextResetAt) }}
-                </span>
-            </div>
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span class="text-sm text-content">
+                        {{ summary.counts.room }} of {{ summary.accounts }} accounts {{ summary.counts.room === 1 ? `has` : `have` }} room
+                    </span>
+                    <span v-if="summary.nextResetAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
+                        next pool reopens {{ formatReset(summary.nextResetAt) }}
+                    </span>
+                </div>
 
-            <!-- Segments are ACCOUNT COUNTS. A 2px surface gap does the separating, so no segment needs a
+                <!-- Segments are ACCOUNT COUNTS. A 2px surface gap does the separating, so no segment needs a
                  border, and a band with one account still draws a visible sliver. -->
-            <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
-                <div
-                    v-for="segment in capacity"
-                    :key="segment.band"
-                    v-tooltip.top="`${segment.count} ${segment.label}`"
-                    class="h-full rounded-full bg-current"
-                    :class="planLimitBandTone(segment.band)"
-                    :style="{ width: `${segment.share}%` }"
-                />
-            </div>
+                <div v-if="capacityTotal > 0" class="flex h-1.5 gap-0.5">
+                    <div
+                        v-for="segment in capacity"
+                        :key="segment.band"
+                        v-tooltip.top="`${segment.count} ${segment.label}`"
+                        class="h-full rounded-full bg-current"
+                        :class="planLimitBandTone(segment.band)"
+                        :style="{ width: `${segment.share}%` }"
+                    />
+                </div>
 
-            <!-- The legend IS the sentence: every band is a swatch AND its count AND its word, so nothing here
+                <!-- The legend IS the sentence: every band is a swatch AND its count AND its word, so nothing here
                  is carried by colour alone. -->
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-                <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
-                    <span class="size-2 shrink-0 rounded-[2px] bg-current" :class="planLimitBandTone(segment.band)" />
-                    <span class="tabular-nums text-content">{{ segment.count }}</span>
-                    {{ segment.label }}
-                </span>
-                <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ PLAN_LIMIT_BAND_LABEL.none }} </span>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+                    <span v-for="segment in capacity" :key="segment.band" class="flex items-center gap-1.5">
+                        <span class="size-2 shrink-0 rounded-[2px] bg-current" :class="planLimitBandTone(segment.band)" />
+                        <span class="tabular-nums text-content">{{ segment.count }}</span>
+                        {{ segment.label }}
+                    </span>
+                    <span v-if="summary.counts.none > 0" class="text-subtle"> · {{ summary.counts.none }} {{ PLAN_LIMIT_BAND_LABEL.none }} </span>
+                </div>
             </div>
-        </div>
+        </RowNote>
 
         <!-- 2 · PROVIDERS. The provider is the CHOICE a reader makes here — the translator balances turns
              across a provider's accounts, so "which of my 31 Google accounts" is nobody's decision — which
@@ -224,38 +226,39 @@ const roster = computed(() => {
              doing that work (`bg-overlay`) is also `bg-card`'s own colour in the LIGHT scheme, so half of it
              was invisible there. Whitespace and a left edge cost no ink, work in both schemes, and cannot be
              mistaken for one another. -->
-        <div class="flex flex-col gap-6 px-4 py-4">
-            <div v-for="group in groups" :key="group.provider" class="flex gap-2">
-                <!-- THE RAIL: the mark, and under it the line that says how far this provider reaches. The
+        <RowNote variant="block">
+            <div class="flex flex-col gap-6">
+                <div v-for="group in groups" :key="group.provider" class="flex gap-2">
+                    <!-- THE RAIL: the mark, and under it the line that says how far this provider reaches. The
                      chip is the meter track's own tint of the TEXT colour, because that is the one inset that
                      exists in both schemes — `bg-overlay` and `bg-canvas` are within a percent of `bg-card` in
                      light, which is a grouping cue that disappears for half the app's readers. -->
-                <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
-                    <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
-                        <ProviderLogo :provider="group.provider" class="text-xs" />
-                    </span>
-                    <span class="w-px flex-1 bg-line-strong" aria-hidden="true" />
-                </div>
-
-                <div class="flex min-w-0 flex-1 flex-col gap-2">
-                    <!-- `min-h-5` is the mark's own height, so the name keeps its line beside the mark however
-                         the metadata after it wraps. -->
-                    <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
-                        <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
-                        <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
-                        <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
-                            read {{ formatAge(single(group)!.measuredAt!) }}
+                    <div class="flex w-5 shrink-0 flex-col items-center gap-1.5">
+                        <span class="flex size-5 items-center justify-center rounded-md bg-content/10 text-content">
+                            <ProviderLogo :provider="group.provider" class="text-xs" />
                         </span>
-                        <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
+                        <span class="w-px flex-1 bg-line-strong" aria-hidden="true" />
                     </div>
 
-                    <!-- ONE STEP IN FROM THE PROVIDER'S NAME. The name then owns its column outright, and an
+                    <div class="flex min-w-0 flex-1 flex-col gap-2">
+                        <!-- `min-h-5` is the mark's own height, so the name keeps its line beside the mark however
+                         the metadata after it wraps. -->
+                        <div class="flex min-h-5 flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span class="text-sm font-semibold text-content">{{ providerLabel(group.provider) }}</span>
+                            <!-- One account ⇒ its own name, because "1 account" says nothing a reader wanted. -->
+                            <span class="min-w-0 truncate text-2xs text-subtle">{{ groupNote(group) }}</span>
+                            <span v-if="single(group)?.measuredAt !== undefined" class="ml-auto shrink-0 text-2xs text-subtle">
+                                read {{ formatAge(single(group)!.measuredAt!) }}
+                            </span>
+                            <span v-else-if="!isInline(group)" class="ml-auto shrink-0 text-2xs text-muted">{{ groupState(group) }}</span>
+                        </div>
+
+                        <!-- ONE STEP IN FROM THE PROVIDER'S NAME. The name then owns its column outright, and an
                          account heading — set smaller and lighter, and with no mark of its own — cannot be
                          read as another provider, which is exactly what three emails under "Claude Code" used
                          to be read as. -->
-                    <div class="flex flex-col gap-3 pb-1 pl-3">
-                        <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
+                        <div class="flex flex-col gap-3 pb-1 pl-3">
+                            <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
                              refusedRowId): named with its account where the daemon knew one, because a bare provider-wide
                              refusal over 24 bars answers "which of these do I go and fix?" with nothing.
                              It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
@@ -263,234 +266,251 @@ const roster = computed(() => {
                              there is room. Once something taken since has answered it, it drops to a footnote saying so and
                              the provider's own sentence moves to the hover. Two lines at most: the vendors' sentences run to
                              a paragraph with a pricing URL on the end, and the part that matters is at the front. -->
-                        <p
-                            v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
-                            class="line-clamp-2 text-2xs"
-                            :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                            v-tooltip.top="group.refusal.detail"
-                        >
-                            {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
-                        </p>
+                            <p
+                                v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
+                                class="line-clamp-2 text-2xs"
+                                :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                                v-tooltip.top="group.refusal.detail"
+                            >
+                                {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
+                            </p>
 
-                        <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
-                        <template v-if="isInline(group)">
-                            <!-- A hairline between accounts, and none above the first: three accounts of three pools each
+                            <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
+                            <template v-if="isInline(group)">
+                                <!-- A hairline between accounts, and none above the first: three accounts of three pools each
                                  is nine meters in one column, and without a break the reader has to count rows to know
                                  which account a "95%" belongs to. It is the FAINT line and it starts inside the indent,
                                  where the panel's own section dividers are full-bleed: a separator that is subordinate
                                  has to look subordinate, or the panel reads as nine sections instead of four. -->
-                            <div
-                                v-for="(row, index) in group.rows"
-                                :key="row.id"
-                                class="flex flex-col gap-1.5"
-                                :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
-                            >
-                                <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over
+                                <div
+                                    v-for="(row, index) in group.rows"
+                                    :key="row.id"
+                                    class="flex flex-col gap-1.5"
+                                    :class="single(group) === undefined && index > 0 ? `border-t border-line-subtle pt-3` : ``"
+                                >
+                                    <!-- THE ACCOUNT IS A TIER OF ITS OWN: one step under the provider heading it, one over
                                      the pools it heads. It used to be set exactly like a pool label, same size and same
                                      colour, directly above three of them: an email read as a fourth pool that happened
                                      to have no meter, and the eye had nothing to group the meters by. -->
-                                <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                    <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
-                                    <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
+                                    <div v-if="single(group) === undefined" class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span class="min-w-0 truncate text-xs font-medium text-content">{{ row.label }}</span>
+                                        <!-- Whose sign-in this is, when the NAME does not already say it. The label is the
                                          user's to rename and starts as whatever the provider offered, so one row reads
                                          "Claude" beside two emails and identifies nothing: the same rule, and the same
                                          answer, as the Agent tab's identity note. -->
-                                    <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ row.identity }}</span>
-                                    <span
-                                        v-if="row.measuredAt !== undefined"
-                                        class="ml-auto shrink-0 text-2xs"
-                                        :class="row.stale ? `text-muted` : `text-subtle`"
+                                        <span v-if="row.identity !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{
+                                            row.identity
+                                        }}</span>
+                                        <span
+                                            v-if="row.measuredAt !== undefined"
+                                            class="ml-auto shrink-0 text-2xs"
+                                            :class="row.stale ? `text-muted` : `text-subtle`"
+                                        >
+                                            read {{ formatAge(row.measuredAt) }}
+                                        </span>
+                                    </div>
+
+                                    <!-- This account's own refusal, under its own name: see refusedRowId. -->
+                                    <p
+                                        v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
+                                        class="line-clamp-2 text-2xs"
+                                        :class="group.refusal.current ? `text-warning` : `text-subtle`"
+                                        v-tooltip.top="group.refusal.detail"
                                     >
-                                        read {{ formatAge(row.measuredAt) }}
-                                    </span>
-                                </div>
+                                        {{ group.refusal.line }}
+                                    </p>
 
-                                <!-- This account's own refusal, under its own name: see refusedRowId. -->
-                                <p
-                                    v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
-                                    class="line-clamp-2 text-2xs"
-                                    :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                                    v-tooltip.top="group.refusal.detail"
-                                >
-                                    {{ group.refusal.line }}
-                                </p>
+                                    <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
+                                        {{
+                                            row.readable
+                                                ? `No reading yet.`
+                                                : `This plan publishes no limits, spend is all this sandbox can tell you.`
+                                        }}
+                                    </p>
 
-                                <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
-                                    {{ row.readable ? `No reading yet.` : `This plan publishes no limits, spend is all this sandbox can tell you.` }}
-                                </p>
-
-                                <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is
+                                    <!-- A narrow PANEL keeps the reset instead of dropping it: "when does this reopen" is
                                      the number this is opened for: by wrapping the meter onto its own full-width line;
                                      with room, everything sits on one line in fixed columns so rows align. Measured on
                                      the panel, not the window: this is a hub section inside the workspace pane. -->
-                                <div v-for="pool in row.pools" :key="pool.kind" class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap">
-                                    <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
-                                    <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
-                                         pool this screen has no reading for, and those mean opposite things. -->
                                     <div
-                                        class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
+                                        v-for="pool in row.pools"
+                                        :key="pool.kind"
+                                        class="flex flex-wrap items-center gap-x-3 gap-y-1 @xl:flex-nowrap"
                                     >
+                                        <span class="min-w-0 flex-1 truncate text-2xs text-muted @xl:w-40 @xl:flex-none">{{ pool.label }}</span>
+                                        <!-- A pool at 0% still draws a sliver: an empty track is indistinguishable from a
+                                         pool this screen has no reading for, and those mean opposite things. -->
                                         <div
-                                            class="h-full rounded-full bg-current"
-                                            :class="usageTone(pool.percent)"
-                                            :style="{ width: `${Math.max(pool.percent, 1)}%` }"
-                                        />
+                                            class="order-last h-1.5 min-w-0 flex-1 basis-full overflow-hidden rounded-full bg-content/10 @xl:order-none @xl:basis-0"
+                                        >
+                                            <div
+                                                class="h-full rounded-full bg-current"
+                                                :class="usageTone(pool.percent)"
+                                                :style="{ width: `${Math.max(pool.percent, 1)}%` }"
+                                            />
+                                        </div>
+                                        <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
+                                            {{ formatUtilization(pool.percent, row.stale) }}
+                                        </span>
+                                        <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
+                                            {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
+                                        </span>
                                     </div>
-                                    <span class="w-12 shrink-0 text-right text-2xs tabular-nums" :class="usageTone(pool.percent)">
-                                        {{ formatUtilization(pool.percent, row.stale) }}
-                                    </span>
-                                    <span class="shrink-0 truncate text-right text-2xs text-subtle @xl:w-32">
-                                        {{ pool.resetsAt === undefined ? `` : `resets ${formatReset(pool.resetsAt)}` }}
-                                    </span>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
 
-                        <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track
+                            <!-- Large provider: the distribution, as bars. An account with no reading draws an EMPTY track
                              and never a zero-height bar: "0% used" and "we have no idea" are opposite claims, and the
                              second one is what is true. -->
-                        <template v-else>
-                            <div class="flex h-5 items-end gap-0.5">
-                                <span
-                                    v-for="row in barsOf(group)"
-                                    :key="row.id"
-                                    v-tooltip.top="barTooltip(row)"
-                                    class="flex h-full w-1.5 items-end rounded-[2px] bg-content/10"
-                                >
+                            <template v-else>
+                                <div class="flex h-5 items-end gap-0.5">
                                     <span
-                                        v-if="row.percent !== undefined"
-                                        class="w-full rounded-[2px] bg-current"
-                                        :class="usageTone(row.percent)"
-                                        :style="{ height: `${Math.max(row.percent, 4)}%` }"
-                                    />
-                                </span>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
-                                <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
-                                    View accounts
-                                </button>
-                                <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
-                                <span v-if="group.rows.length > MAX_BARS" class="text-subtle">
-                                    showing the {{ MAX_BARS }} most constrained of {{ group.rows.length }}
-                                </span>
-                            </div>
-                        </template>
+                                        v-for="row in barsOf(group)"
+                                        :key="row.id"
+                                        v-tooltip.top="barTooltip(row)"
+                                        class="flex h-full w-1.5 items-end rounded-[2px] bg-content/10"
+                                    >
+                                        <span
+                                            v-if="row.percent !== undefined"
+                                            class="w-full rounded-[2px] bg-current"
+                                            :class="usageTone(row.percent)"
+                                            :style="{ height: `${Math.max(row.percent, 4)}%` }"
+                                        />
+                                    </span>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+                                    <button type="button" class="cursor-pointer text-link hover:underline" @click="openRoster(group.provider)">
+                                        View accounts
+                                    </button>
+                                    <!-- Never a silent cap: a strip that shows 24 of 31 says so. -->
+                                    <span v-if="group.rows.length > MAX_BARS" class="text-subtle">
+                                        showing the {{ MAX_BARS }} most constrained of {{ group.rows.length }}
+                                    </span>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </RowNote>
 
         <!-- 3 · ATTENTION. One condition, so the FIX IS STATED ONCE and the list is nothing but accounts.
              Every entry used to carry its own copy of "sign-in expired: reconnect it on the Agent tab", which
              on a fleet meant the same eleven words down the whole column and the only part that varied, which
              account: wedged between two repetitions of the part that didn't. The heading holds the condition
              and the instruction; the rows hold names. -->
-        <div v-if="summary.attention.length > 0" class="flex flex-col gap-2 px-4 py-3">
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span class="text-2xs font-medium text-danger">Sign-in expired · {{ summary.attention.length }}</span>
-                <span class="text-2xs text-subtle"> reconnect {{ summary.attention.length === 1 ? `it` : `them` }} on the Agent tab </span>
-            </div>
-            <!-- Names wrap as a set rather than stacking one per line: they are short, unordered and read by
+        <RowNote v-if="summary.attention.length > 0" variant="block">
+            <div class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span class="text-2xs font-medium text-danger">Sign-in expired · {{ summary.attention.length }}</span>
+                    <span class="text-2xs text-subtle"> reconnect {{ summary.attention.length === 1 ? `it` : `them` }} on the Agent tab </span>
+                </div>
+                <!-- Names wrap as a set rather than stacking one per line: they are short, unordered and read by
                  scanning for the one you recognise, so a column of them is height spent on nothing. -->
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span v-for="row in attentionShown" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
-                    <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
-                    <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
-                </span>
-                <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
-                <button
-                    v-if="attentionHidden > 0"
-                    type="button"
-                    class="cursor-pointer text-2xs text-link hover:underline"
-                    @click="attentionExpanded = true"
-                >
-                    +{{ attentionHidden }} more
-                </button>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span v-for="row in attentionShown" :key="row.id" v-tooltip.top="row.identity" class="flex min-w-0 items-center gap-1.5 text-2xs">
+                        <ProviderLogo :provider="row.provider" class="shrink-0 text-muted" />
+                        <span class="min-w-0 truncate text-muted">{{ row.label }}</span>
+                    </span>
+                    <!-- Never a silent cap, and never a dead end: the rest are one click away, in place. -->
+                    <button
+                        v-if="attentionHidden > 0"
+                        type="button"
+                        class="cursor-pointer text-2xs text-link hover:underline"
+                        @click="attentionExpanded = true"
+                    >
+                        +{{ attentionHidden }} more
+                    </button>
+                </div>
             </div>
-        </div>
+        </RowNote>
 
         <!-- 4 · ROSTER. The escape hatch: every account, searchable, with the number behind each meter. -->
-        <div class="flex flex-col gap-2 px-4 py-2.5">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <button type="button" class="flex cursor-pointer items-center gap-1.5 text-2xs text-content" @click="rosterOpen = !rosterOpen">
-                    <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
-                    All accounts
-                    <span class="text-subtle">{{ rows.length }}</span>
-                </button>
-                <button
-                    v-if="rosterProvider !== undefined"
-                    type="button"
-                    class="flex cursor-pointer items-center gap-1 rounded-full bg-overlay px-2 py-0.5 text-2xs text-muted hover:text-content"
-                    @click="rosterProvider = undefined"
-                >
-                    {{ providerLabel(rosterProvider) }}<Icon name="times" />
-                </button>
-                <SearchBar
-                    v-if="rosterOpen"
-                    v-model="rosterQuery"
-                    variant="field"
-                    clearable
-                    aria-label="Filter accounts"
-                    placeholder="Filter accounts…"
-                    class="ml-auto w-full @xl:w-56"
-                />
-            </div>
+        <RowNote variant="block">
+            <div class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <button type="button" class="flex cursor-pointer items-center gap-1.5 text-2xs text-content" @click="rosterOpen = !rosterOpen">
+                        <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
+                        All accounts
+                        <span class="text-subtle">{{ rows.length }}</span>
+                    </button>
+                    <button
+                        v-if="rosterProvider !== undefined"
+                        type="button"
+                        class="flex cursor-pointer items-center gap-1 rounded-full bg-overlay px-2 py-0.5 text-2xs text-muted hover:text-content"
+                        @click="rosterProvider = undefined"
+                    >
+                        {{ providerLabel(rosterProvider) }}<Icon name="times" />
+                    </button>
+                    <SearchBar
+                        v-if="rosterOpen"
+                        v-model="rosterQuery"
+                        variant="field"
+                        clearable
+                        aria-label="Filter accounts"
+                        placeholder="Filter accounts…"
+                        class="ml-auto w-full @xl:w-56"
+                    />
+                </div>
 
-            <div v-if="rosterOpen" class="scrollbar-thin overflow-x-auto">
-                <table class="w-full text-2xs">
-                    <thead class="text-left text-subtle">
-                        <tr class="border-b border-line-subtle">
-                            <th class="py-1.5 pr-3 font-medium">Account</th>
-                            <th class="py-1.5 pr-3 font-medium">Provider</th>
-                            <th class="py-1.5 pr-3 font-medium">Binding pool</th>
-                            <th class="py-1.5 pr-3 text-right font-medium">Used</th>
-                            <th class="py-1.5 pr-3 font-medium">Reopens</th>
-                            <th class="py-1.5 font-medium">Read</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-muted">
-                        <tr v-for="row in roster" :key="row.id" class="border-b border-line/50">
-                            <!-- Name over sign-in identity, because this table is where a reader comes to
+                <div v-if="rosterOpen" class="scrollbar-thin overflow-x-auto">
+                    <table class="w-full text-2xs">
+                        <thead class="text-left text-subtle">
+                            <tr class="border-b border-line-subtle">
+                                <th class="py-1.5 pr-3 font-medium">Account</th>
+                                <th class="py-1.5 pr-3 font-medium">Provider</th>
+                                <th class="py-1.5 pr-3 font-medium">Binding pool</th>
+                                <th class="py-1.5 pr-3 text-right font-medium">Used</th>
+                                <th class="py-1.5 pr-3 font-medium">Reopens</th>
+                                <th class="py-1.5 font-medium">Read</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-muted">
+                            <tr v-for="row in roster" :key="row.id" class="border-b border-line/50">
+                                <!-- Name over sign-in identity, because this table is where a reader comes to
                                  reconcile ONE account and a name it can't place is the whole reason they came. -->
-                            <td class="max-w-56 py-1.5 pr-3">
-                                <span class="block truncate text-content">{{ row.label }}</span>
-                                <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
-                            </td>
-                            <td class="py-1.5 pr-3">{{ providerLabel(row.provider) }}</td>
-                            <td class="py-1.5 pr-3">{{ row.binding?.label ?? (row.readable ? `—` : `no published limits`) }}</td>
-                            <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
-                                {{ row.percent === undefined ? `—` : formatUtilization(row.percent, row.stale) }}
-                            </td>
-                            <td class="py-1.5 pr-3">{{ row.binding?.resetsAt === undefined ? `—` : formatReset(row.binding.resetsAt) }}</td>
-                            <td class="py-1.5">{{ row.measuredAt === undefined ? `never` : formatAge(row.measuredAt) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">No account matches that filter.</p>
+                                <td class="max-w-56 py-1.5 pr-3">
+                                    <span class="block truncate text-content">{{ row.label }}</span>
+                                    <span v-if="row.identity !== undefined" class="block truncate text-subtle">{{ row.identity }}</span>
+                                </td>
+                                <td class="py-1.5 pr-3">{{ providerLabel(row.provider) }}</td>
+                                <td class="py-1.5 pr-3">{{ row.binding?.label ?? (row.readable ? `—` : `no published limits`) }}</td>
+                                <td class="py-1.5 pr-3 text-right tabular-nums" :class="row.percent === undefined ? `` : usageTone(row.percent)">
+                                    {{ row.percent === undefined ? `—` : formatUtilization(row.percent, row.stale) }}
+                                </td>
+                                <td class="py-1.5 pr-3">{{ row.binding?.resetsAt === undefined ? `—` : formatReset(row.binding.resetsAt) }}</td>
+                                <td class="py-1.5">{{ row.measuredAt === undefined ? `never` : formatAge(row.measuredAt) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-if="roster.length === 0" :class="ui.emptyState(`py-4`)">No account matches that filter.</p>
+                </div>
             </div>
-        </div>
+        </RowNote>
     </RowGroup>
 
     <!-- An unread state is not an empty one: until the connection read lands, this says nothing about having no
          accounts. It used to say that in words ("Reading your connections…"), which is a sentence where a panel
          goes, so the wait is drawn as the panel instead: the capacity headline, the band strip under it, and
          its legend, which is the whole of what lands here. -->
-    <RowGroup v-else-if="!accountsLoaded && outline" class="@container" role="status" aria-busy="true">
+    <RowGroup v-else-if="!accountsLoaded && outline" density="compact" class="@container" role="status" aria-busy="true">
         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>
         <span class="sr-only">Reading your connections…</span>
-        <div class="flex flex-col gap-2 px-4 py-3" aria-hidden="true">
-            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span class="skeleton block h-4 w-52" />
-                <span class="skeleton ml-auto block h-2.5 w-32" />
-            </div>
-            <!-- The band strip is a single 1.5px-tall rule of segments, so its outline is one bar of that
+        <RowNote variant="block" aria-hidden="true">
+            <div class="flex flex-col gap-2">
+                <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span class="skeleton block h-4 w-52" />
+                    <span class="skeleton ml-auto block h-2.5 w-32" />
+                </div>
+                <!-- The band strip is a single 1.5px-tall rule of segments, so its outline is one bar of that
                  height rather than blocks: a placeholder thicker than the thing it stands for is a promise the
                  panel then breaks. -->
-            <span class="skeleton block h-1.5 w-full rounded-full" />
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
+                <span class="skeleton block h-1.5 w-full rounded-full" />
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span v-for="(width, index) in [`w-20`, `w-24`, `w-16`]" :key="index" class="skeleton block h-2.5" :class="width" />
+                </div>
             </div>
-        </div>
+        </RowNote>
     </RowGroup>
 
     <!-- Said only once it is true, and silent for the beat before the outline earns its place. -->

@@ -41,7 +41,7 @@ const actionNotice = computed<NoticeModel | undefined>(() =>
 const { canShip: canOperate } = useRole();
 
 // The derived environment state (shared with the shell's rebuild banner via one vue-query fetch).
-const { state, query, proposal, pending, applied, recurring, serverManaged, slug } = useEnvironment();
+const { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug } = useEnvironment();
 
 /* Which of the two reads is on screen. "Recipe" rather than "Source" because it says what you are switching TO,
  * and "Contents" rather than "Simplified" because the plain view is not the lesser one: naming it that way
@@ -88,7 +88,11 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
                 <StatusBadge v-else variant="warning" label="Awaiting review" dot />
                 <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="load">
-                    <Icon name="refresh" class="text-sm" :spin="query.isFetching" />
+                    <!-- `isFetching`, not `query.isFetching`: reaching through vue-query's object does not
+                         unwrap in a template, so this handed <Icon> the REF — an object, therefore always
+                         truthy — and the button span for the life of the page. useEnvironment derives the
+                         boolean now, like useUsage and useRegistry do for the same two refresh buttons. -->
+                    <Icon name="refresh" class="text-sm" :spin="isFetching" />
                 </button>
             </template>
         </Row>

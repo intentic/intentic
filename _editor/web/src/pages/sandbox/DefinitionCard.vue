@@ -177,8 +177,8 @@ const cancel = (): Promise<void> =>
                  Held back until the read lands, because the two states are not equally cheap to be wrong
                  about: "Not published" carries a button that creates a repository, and drawing it for the beat
                  before the daemon answers offers that to owners who published months ago. -->
-            <RowGroup v-if="plan === undefined && workspace !== undefined" flat label="Workspace">
-                <Row v-if="published !== undefined" density="compact" :icon="published.icon">
+            <RowGroup v-if="plan === undefined && workspace !== undefined" density="compact" flat label="Workspace">
+                <Row v-if="published !== undefined" :icon="published.icon">
                     <template #title
                         ><span class="block truncate font-mono text-2xs">{{ published.project }}</span></template
                     >
@@ -208,7 +208,7 @@ const cancel = (): Promise<void> =>
 
                 <!-- Unpublished. What blocks the button IS the row's description, so the reader never presses a
                      greyed-out control to find out why it is grey. -->
-                <Row v-else density="compact" icon="cloud-upload" title="Not published">
+                <Row v-else icon="cloud-upload" title="Not published">
                     <template #description>
                         <template v-if="host === undefined">Connect a GitHub or GitLab account first. That is what creates the repository.</template>
                         <template v-else
@@ -251,7 +251,7 @@ const cancel = (): Promise<void> =>
                      A <RouterLink> around the row rather than <Row>'s own `href`, which the component is
                      explicit about: `href` renders a new-tab anchor, and this is in-app navigation. -->
                 <RouterLink to="/workspace/sandbox.toml" class="block">
-                    <Row density="compact" interactive chevron icon="file-edit">
+                    <Row interactive chevron icon="file-edit">
                         <template #title><span class="block truncate font-mono text-2xs">sandbox.toml</span></template>
                         <template #description>
                             Kept at the workspace root and rewritten when this sandbox changes. Commit it to diff your environment over time.
@@ -273,8 +273,8 @@ const cancel = (): Promise<void> =>
             </div>
 
             <!-- What the export could not express, said beside the file it just handed over. -->
-            <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" flat label="Not in the file">
-                <Row v-for="entry in derived.omitted" :key="entry.subject" density="compact" :title="entry.subject" :description="entry.detail" />
+            <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" density="compact" flat label="Not in the file">
+                <Row v-for="entry in derived.omitted" :key="entry.subject" :title="entry.subject" :description="entry.detail" />
             </RowGroup>
 
             <!-- The plan: every item a row with its tick, inapplicable rows greyed with their reason. Nothing
@@ -284,12 +284,11 @@ const cancel = (): Promise<void> =>
                     <StatusBadge variant="info" :label="plan.name ?? `Definition`" />
                     <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you apply.</p>
                 </div>
-                <RowGroup flat label="What would land">
+                <RowGroup density="compact" flat label="What would land">
                     <Row
                         v-for="item in plan.items"
                         :key="item.id"
                         :as="item.applicable ? `label` : `div`"
-                        density="compact"
                         :class="item.applicable ? `cursor-pointer` : `opacity-60`"
                     >
                         <template #title
@@ -305,14 +304,8 @@ const cancel = (): Promise<void> =>
                     </Row>
                 </RowGroup>
 
-                <RowGroup v-if="plan.needsAction.length > 0" flat label="Won't happen by itself">
-                    <Row
-                        v-for="action in plan.needsAction"
-                        :key="action.subject"
-                        density="compact"
-                        :title="action.subject"
-                        :description="action.detail"
-                    />
+                <RowGroup v-if="plan.needsAction.length > 0" density="compact" flat label="Won't happen by itself">
+                    <Row v-for="action in plan.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
                 </RowGroup>
 
                 <div class="flex flex-wrap items-center gap-2">
@@ -334,11 +327,10 @@ const cancel = (): Promise<void> =>
                     <StatusBadge variant="success" label="In agreement" dot />
                     <p class="text-2xs text-subtle">This sandbox matches that definition.</p>
                 </div>
-                <RowGroup v-else flat label="Differences" :count="diff.differences.length">
+                <RowGroup density="compact" v-else flat label="Differences" :count="diff.differences.length">
                     <Row
                         v-for="difference in diff.differences"
                         :key="difference.subject + difference.detail"
-                        density="compact"
                         :title="difference.subject"
                         :description="difference.detail"
                     />
@@ -356,18 +348,12 @@ const cancel = (): Promise<void> =>
             </div>
             <!-- The failure group wears the tone its heading always did: <RowGroup>'s label is a slot precisely
                  so a group whose subject is a failure can say so without the component learning about tones. -->
-            <RowGroup v-if="report.failed.length > 0" flat>
+            <RowGroup v-if="report.failed.length > 0" density="compact" flat>
                 <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
-                <Row v-for="failure in report.failed" :key="failure.id" density="compact" :title="failure.label" :description="failure.error" />
+                <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />
             </RowGroup>
-            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the arrival">
-                <Row
-                    v-for="action in report.needsAction"
-                    :key="action.subject"
-                    density="compact"
-                    :title="action.subject"
-                    :description="action.detail"
-                />
+            <RowGroup v-if="report.needsAction.length > 0" density="compact" flat label="Finish the arrival">
+                <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
         </template>
 

@@ -74,17 +74,13 @@ const emit = defineEmits<{ open: [cardId: string, connectionId: string] }>();
     <div class="flex flex-col gap-6">
         <!-- Grouped by category and counted, so this reads as the same page the catalog does: the rail points at
              the same ten headings either way. -->
-        <RowGroup v-for="group in groups" :key="group.label" :label="group.label" :count="group.rows.length">
-            <Row
-                v-for="row in group.rows"
-                :key="`${row.cardId}:${row.id}`"
-                as="button"
-                density="compact"
-                chevron
-                @click="emit(`open`, row.cardId, row.id)"
-            >
-                <template #lead>
-                    <BrandMark :size="24" :name="row.title" :logo="row.logo" :icon="row.icon" />
+        <RowGroup v-for="group in groups" :key="group.label" density="compact" :label="group.label" :count="group.rows.length">
+            <Row v-for="row in group.rows" :key="`${row.cardId}:${row.id}`" as="button" chevron @click="emit(`open`, row.cardId, row.id)">
+                <!-- 24 was this file's own number for "a row's mark", against 22 on the extensions, secrets,
+                     environment and skills lists: near enough to look deliberate and far enough to be the drift
+                     it was. It comes from the group's tier now. -->
+                <template #lead="{ mark }">
+                    <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
                 </template>
                 <!-- THE NAME LEADS. It is the one word on the row its owner chose, and on a card holding several
                      connections it is the only thing that tells them apart. -->

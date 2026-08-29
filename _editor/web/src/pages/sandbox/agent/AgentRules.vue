@@ -104,18 +104,18 @@ const firedOf = (rule: Rule): string => {
 </script>
 
 <template>
-    <RowGroup label="Rules">
+    <RowGroup density="compact" label="Rules">
         <template #info><RulesInfo /></template>
 
         <template v-for="rule in listed" :key="rule.id">
             <!-- Editing happens where the rule sits, so the list never loses the place you were looking at. -->
-            <Row v-if="editingId === rule.id" icon="pencil" density="compact" :title="rule.label">
+            <Row v-if="editingId === rule.id" icon="pencil" :title="rule.label">
                 <template #below>
                     <RuleForm :rule="rule" :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
                 </template>
             </Row>
 
-            <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" density="compact" :class="{ 'opacity-60': !rule.enabled }">
+            <Row v-else :icon="momentOf(rule.moment).icon" :title="rule.label" :class="{ 'opacity-60': !rule.enabled }">
                 <template #description>
                     <span class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                         <span class="shrink-0 rounded bg-overlay px-1.5 py-0.5 text-2xs text-muted">{{ momentOf(rule.moment).label }}</span>
@@ -162,24 +162,19 @@ const firedOf = (rule: Rule): string => {
         <div v-if="settings === undefined" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">Reading this sandbox's rules…</span>
-                <SkeletonRows :rows="2" density="compact" description control />
+                <SkeletonRows :rows="2" description control />
             </template>
         </div>
-        <Row
-            v-else-if="listed.length === 0 && !adding"
-            icon="shield"
-            density="compact"
-            description="No custom rules added yet."
-        />
+        <Row v-else-if="listed.length === 0 && !adding" icon="shield" description="No custom rules added yet." />
 
-        <Row v-if="adding" icon="plus" density="compact" title="New rule">
+        <Row v-if="adding" icon="plus" title="New rule">
             <template #below>
                 <RuleForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
             </template>
         </Row>
 
         <!-- Hidden while a form is open, so there is only ever one rule being written at a time. -->
-        <Row v-else-if="editingId === undefined" as="button" icon="plus" density="compact" interactive title="Add a rule" @click="startAdd" />
+        <Row v-else-if="editingId === undefined" as="button" icon="plus" interactive title="Add a rule" @click="startAdd" />
     </RowGroup>
 
     <ContextMenu ref="menu" :model="menuModel" :min-width="11" />

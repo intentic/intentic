@@ -38,14 +38,14 @@
 <script setup lang="ts">
 import type { IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
-import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone } from "./row.js";
+import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
 
 const {
     as = `div`,
     interactive = false,
     chevron = false,
     tone = `default`,
-    density = `comfortable`,
+    density,
     selected = false,
     flush = false,
     wideControl = false,
@@ -61,7 +61,12 @@ const {
     interactive?: boolean;
     chevron?: boolean;
     tone?: RowTone;
-    /** comfortable: settings rows · compact: record lists · dense: navigator rails. */
+    /* comfortable: settings rows · compact: record lists · dense: navigator rails.
+     *
+     * LEAVE IT UNSET INSIDE A <RowGroup>: the group publishes its tier and this row reads it, which is what
+     * stops a list drifting a row at a time. Set it only where this row disagrees with the list it is on — a
+     * `flush :heading="2"` masthead above compact rows is comfortable by RANK, not by list. Outside a group it
+     * falls back to `comfortable`, which is what it always defaulted to. */
     density?: RowDensity;
     /** Paints the app-wide selected tint. Implies `interactive`: a row you can pick is a row you can hover. */
     selected?: boolean;
@@ -134,6 +139,11 @@ const {
 
 const emit = defineEmits<{ headerClick: [event: MouseEvent] }>();
 
+/* The tier actually in force: this row's own answer if it gave one, otherwise the <RowGroup> it sits on. Every
+ * `TIERS[...]` read below goes through this, so a group's density reaches the padding, the gap, the icon size,
+ * the title's weight and the description's size in one move. */
+const tier = useRowDensity(() => density);
+
 /* THE HEADER BUTTON EATS ITS OWN CLICK. <DisclosureRow> makes the whole row pressable (the tier's padding is
  * ~40% of a comfortable row's height, and a target that stops at the text leaves a dead strip above and below
  * it), so without this the button's press and the row's press both fire and the row toggles straight back. */
@@ -192,7 +202,7 @@ const picked = as === `button`;
         :aria-current="selected ? `true` : undefined"
         class="group block w-full text-left"
         :class="[
-            flush ? `` : TIERS[density].pad,
+            flush ? `` : TIERS[tier].pad,
             // The app's one hover tint and one selected tint (styles/utilities.css). This used to carry
             // its own `hover:bg-content/5`: the same 5% by luck rather than by reference.
             interactive || selected || href !== undefined || as !== `div` ? `ui-row-select` : ``,
@@ -211,29 +221,34 @@ const picked = as === `button`;
                 :aria-controls="headerButton ? headerControls : undefined"
                 class="flex min-w-0 items-center"
                 :class="[
-                    TIERS[density].gap,
+                    TIERS[tier].gap,
                     headerButton
                         ? `flex-1 cursor-pointer rounded-sm text-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary-500`
                         : ``,
                 ]"
                 @click="onHeaderClick"
             >
-                <slot name="lead" />
-                <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[density].icon, TONES[tone]]" />
+                <!-- THE MARK'S SIZE IS THE TIER'S, HANDED OUT RATHER THAN LOOKED UP. `#lead` content lives in
+                     the caller's file, so before this the number was typed there: 22 on three record lists, 20
+                     on two, 24 on another and 32 on a seventh, all of them meaning "a row's mark". A slot prop
+                     leaves the call site with nothing to get wrong — `<template #lead="{ mark }">` — and it
+                     tracks the group's density for free, which a constant read at the call site would not. -->
+                <slot name="lead" :mark="TIERS[tier].mark" />
+                <Icon v-if="icon !== undefined" :name="icon" :spin="spin" class="shrink-0" :class="[TIERS[tier].icon, TONES[tone]]" />
                 <div class="min-w-0" @click="onHeadlineClick">
                     <component
                         :is="heading === undefined ? `div` : `h${heading}`"
                         v-if="title !== undefined || $slots[`title`]"
                         class="min-w-0"
                         :class="[
-                            TIERS[density].title,
+                            TIERS[tier].title,
                             heading === undefined ? `` : `text-lg`,
                             picked && !selected ? `text-muted group-hover:text-content` : `text-content`,
                         ]"
                     >
                         <slot name="title">{{ title }}</slot>
                     </component>
-                    <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[density].description">
+                    <p v-if="description !== undefined || $slots[`description`]" class="min-w-0 text-muted" :class="TIERS[tier].description">
                         <slot name="description">{{ description }}</slot>
                     </p>
                 </div>

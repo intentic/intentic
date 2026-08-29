@@ -58,8 +58,11 @@ export { default as DagGraph } from "./components/DagGraph.vue";
  * pixels below an <InfoHint> whose `(i)` does not. */
 export { default as DisclosureRow } from "./components/DisclosureRow.vue";
 /* <Row>'s tier table, exported because <DisclosureRow> draws the lead cluster a SECOND time (hidden) to
- * offset the block below it, and a mirror built from restated numbers is a mirror that goes stale. */
-export { ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone } from "./components/row.js";
+ * offset the block below it, and a mirror built from restated numbers is a mirror that goes stale.
+ *
+ * `useRowDensity` is the other half: the tier is declared once on a <RowGroup> and read by every row, outline
+ * and note on its surface. A view needs it only for a row it draws itself and cannot express as a <Row>. */
+export { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TONES, type RowDensity, type RowTone, useRowDensity } from "./components/row.js";
 // Types only. The DAG layout FUNCTIONS ship as `@intentic/ui/dag` for the same reason the markdown engine
 // does: they are plain TypeScript, and a unit test should not have to boot this barrel's component graph (and a
 // DOM with it) to call one. See the note above renderMarkdown's subpath.
@@ -178,6 +181,9 @@ export { default as ResizeSeam } from "./components/ResizeSeam.vue";
 export { default as ResponsiveOverlay } from "./components/ResponsiveOverlay.vue";
 export { default as Row } from "./components/Row.vue";
 export { default as RowGroup } from "./components/RowGroup.vue";
+// The lines on a group's surface that are not records: its empty state, its explanatory sentence, its "add one".
+// Draws at the group's own tier, which is what the 58 hand-written ones could not do. See the component's note.
+export { default as RowNote } from "./components/RowNote.vue";
 export { default as SearchBar } from "./components/SearchBar.vue";
 export { default as SegmentedControl } from "./components/SegmentedControl.vue";
 // The accent → palette-slot resolver, exported for the same reason the figure types are: a view that holds

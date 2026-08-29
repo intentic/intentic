@@ -1,6 +1,18 @@
 <script setup lang="ts">
 import type { CreatorState } from "@intentic-app/api-contract";
-import { Button, type IconName, type NoticeModel, Notice, Row, RowGroup, type RowTone, SkeletonRows, ui, useLoadingReveal } from "@intentic/ui";
+import {
+    Button,
+    type IconName,
+    Notice,
+    type NoticeModel,
+    Row,
+    RowGroup,
+    RowNote,
+    type RowTone,
+    SkeletonRows,
+    ui,
+    useLoadingReveal,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -143,7 +155,7 @@ const connect = async (): Promise<void> => {
                  changes. -->
             <div class="flex flex-col gap-6" role="status" aria-busy="true">
                 <span class="sr-only">Reading your creator status…</span>
-                <RowGroup>
+                <RowGroup density="compact">
                     <template #label><span class="skeleton block h-2.5 w-32" aria-hidden="true" /></template>
                     <SkeletonRows :rows="2" description />
                 </RowGroup>
@@ -163,20 +175,22 @@ const connect = async (): Promise<void> => {
 
                  Absent until a month closes rather than shown as zero: a creator whose first month is still
                  running has earned an amount nobody can state yet. -->
-            <RowGroup v-if="statements.length > 0" label="Earnings" :count="statements.length">
-                <div class="flex flex-col gap-1.5 px-4.5 py-3.5">
-                    <div class="flex flex-wrap items-baseline gap-x-2">
-                        <span class="text-3xl font-semibold leading-none tabular-nums text-content">{{ money(owedTotal) }}</span>
-                        <span class="text-sm text-muted">
-                            owed across {{ statements.length }} closed {{ statements.length === 1 ? `month` : `months` }}
-                        </span>
+            <RowGroup v-if="statements.length > 0" density="compact" label="Earnings" :count="statements.length">
+                <RowNote variant="block">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex flex-wrap items-baseline gap-x-2">
+                            <span class="text-3xl font-semibold leading-none tabular-nums text-content">{{ money(owedTotal) }}</span>
+                            <span class="text-sm text-muted">
+                                owed across {{ statements.length }} closed {{ statements.length === 1 ? `month` : `months` }}
+                            </span>
+                        </div>
+                        <p v-if="!payouts?.payoutsEnabled" class="text-xs text-muted">
+                            Nothing can be sent until a payout account is connected below. Earnings stay yours for twelve months from the month they
+                            were earned.
+                        </p>
                     </div>
-                    <p v-if="!payouts?.payoutsEnabled" class="text-xs text-muted">
-                        Nothing can be sent until a payout account is connected below. Earnings stay yours for twelve months from the month they were
-                        earned.
-                    </p>
-                </div>
-                <Row v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`" density="compact">
+                </RowNote>
+                <Row v-for="statement in statements" :key="`${statement.month}-${statement.publisher}`">
                     <template #title>{{ monthName(statement.month) }}</template>
                     <template #description
                         ><span class="font-mono">{{ statement.publisher }}</span></template
@@ -191,15 +205,8 @@ const connect = async (): Promise<void> => {
             <!-- ══ PUBLISHER NAMES ════════════════════════════════════════════════════════════════════════
                  Absent for most first visits, which is why it renders nothing at all rather than an empty-state
                  box competing with the claim step directly under it. -->
-            <RowGroup v-if="state.claims.length > 0" label="Publisher names" :count="state.claims.length">
-                <Row
-                    v-for="claim in state.claims"
-                    :key="claim.publisher"
-                    density="compact"
-                    icon="check-circle"
-                    tone="success"
-                    :title="claim.publisher"
-                >
+            <RowGroup v-if="state.claims.length > 0" density="compact" label="Publisher names" :count="state.claims.length">
+                <Row v-for="claim in state.claims" :key="claim.publisher" icon="check-circle" tone="success" :title="claim.publisher">
                     <template #description
                         >proved with <span class="font-mono">{{ claim.repo }}</span></template
                     >
@@ -243,11 +250,10 @@ const connect = async (): Promise<void> => {
             <!-- ══ RECEIPTS ═══════════════════════════════════════════════════════════════════════════════
                  Last, because it is the only block here that is purely history. The lead glyph tells a landed
                  payment from one still in flight without reading either line. -->
-            <RowGroup v-if="payments.length > 0" label="Payments" :count="payments.length">
+            <RowGroup v-if="payments.length > 0" density="compact" label="Payments" :count="payments.length">
                 <Row
                     v-for="payment in payments"
                     :key="`${payment.createdAt}-${payment.amountCents}`"
-                    density="compact"
                     :icon="payment.status === `paid` ? `check-circle` : `clock`"
                     :tone="payment.status === `paid` ? `success` : `default`"
                     :title="money(payment.amountCents)"

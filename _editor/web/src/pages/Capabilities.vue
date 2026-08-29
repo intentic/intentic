@@ -12,16 +12,18 @@ import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } fro
 import {
     BrandMark,
     Button,
-    ui,
     ConfirmDialog,
     FilterBar,
     type IconName,
     Notice,
     type NoticeModel,
+    Row,
     RowGroup,
+    RowNote,
     SegmentedControl,
     SplitView,
     StatusBadge,
+    ui,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
@@ -1353,6 +1355,7 @@ const submitLabel = computed(() => {
                                  subject of the heading above rather than an entry under it. -->
                             <RowGroup
                                 v-if="selectedInstances.length > 0 && !selected.singleton"
+                                density="compact"
                                 label="Your connections"
                                 :count="selectedInstances.length"
                             >
@@ -1382,16 +1385,25 @@ const submitLabel = computed(() => {
                              here rather than only in the terminal panel's popover. Same rows, same actions. -->
                             <RowGroup
                                 v-if="cardProcesses.length > 0"
+                                density="compact"
                                 label="Background process"
                                 caption="Relays events to your agent: restart it if this connection stops responding."
                             >
-                                <div v-for="row in cardProcesses" :key="row.id" class="flex items-center gap-2 px-4 py-3 text-xs">
-                                    <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>
-                                    <span class="font-medium text-content">{{ row.name }}</span>
-                                    <span class="text-2xs" :class="row.running ? 'text-muted' : 'text-warning'">{{
-                                        row.running ? "running" : "stopped"
-                                    }}</span>
-                                    <div class="ml-auto flex items-center gap-1">
+                                <Row v-for="row in cardProcesses" :key="row.id">
+                                    <!-- The state dot is the row's mark, so it goes in `#lead` where every other
+                                         list in the app puts one, rather than inline at the head of a title. -->
+                                    <template #lead>
+                                        <span
+                                            class="h-1.5 w-1.5 shrink-0 rounded-full"
+                                            :class="row.running ? 'bg-success' : 'bg-content/25'"
+                                            aria-hidden="true"
+                                        />
+                                    </template>
+                                    <template #title>{{ row.name }}</template>
+                                    <template #meta>
+                                        <span :class="row.running ? 'text-muted' : 'text-warning'">{{ row.running ? "running" : "stopped" }}</span>
+                                    </template>
+                                    <template #control>
                                         <Button v-if="row.session" label="Logs" size="small" :text="true" @click="viewProcessLogs(row)">
                                             <template #icon><Icon name="align-left" /></template>
                                         </Button>
@@ -1415,8 +1427,8 @@ const submitLabel = computed(() => {
                                         >
                                             <template #icon><Icon name="stop" /></template>
                                         </Button>
-                                    </div>
-                                </div>
+                                    </template>
+                                </Row>
                             </RowGroup>
 
                             <!-- Fill this form from the file FortiClient already wrote. Keyed on the card so

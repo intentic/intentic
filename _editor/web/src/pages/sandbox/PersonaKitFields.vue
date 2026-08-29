@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary, SystemPromptMode } from "@intentic/sandbox-contract";
-import { Button, Icon, Notice, Row, SegmentedControl, ui } from "@intentic/ui";
+import { Button, DisclosureRow, Icon, Notice, Row, RowGroup, RowNote, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import SkillForm from "./agent/SkillForm.vue";
@@ -234,14 +234,17 @@ watch(
                 <Icon name="book" class="w-4 shrink-0 text-center text-xs text-subtle" />
                 Its own skills
             </span>
-            <div class="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle">
+            <!-- A REAL <RowGroup>, which is what the line above always said this was ("bordered and divided like
+                 a row group, because that is what it is"). Hand-drawn, it was a surface with no tier on it, so
+                 the <SkillRow>s inside it had to carry their own — and a list whose rows each declare their size
+                 is the drift this whole change is about. The group says `compact` once and they read it. -->
+            <RowGroup density="compact">
                 <!-- The invitation is a ROW inside the list, not a line above it: the Skills page's shape. Above
                      it, an empty list said the same thing twice: a paragraph explaining there is nothing, and a
                      bordered box holding nothing but the button that would fix it. -->
                 <Row
                     v-if="kit.skills.length === 0 && !adding"
                     icon="book"
-                    density="compact"
                     description="None yet. A skill here is instructions the agent reads only while acting as this persona: a house style, a review checklist, the steps for one job."
                 />
 
@@ -260,31 +263,24 @@ watch(
                 />
 
                 <!-- The new skill is written in the same place a written one is read, so the form is never a
-                     different screen from the list it joins: the Skills page's own arrangement. -->
-                <div v-if="adding" class="bg-content/6">
-                    <div class="flex items-center gap-2.5 py-2.5 pl-2.5 pr-3">
-                        <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
-                        <span class="text-sm font-medium text-content">New skill</span>
-                    </div>
-                    <div class="border-t border-line-subtle py-3 pl-9 pr-3">
+                     different screen from the list it joins: the Skills page's own arrangement.
+
+                     An open <DisclosureRow>, for the reason its twin on the agent's skills list is one: the
+                     header, the open wash, the hairline and the drawer's indent are all that component's, and
+                     they were five hand-restated values here. -->
+                <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
+                    <template #below>
                         <SkillForm :disabled="busy" @save="save" @cancel="close" />
-                    </div>
-                </div>
+                    </template>
+                </DisclosureRow>
 
                 <!-- Hidden while something is open, so there is only ever one skill being written or read.
-                     Hand-written rather than <Row>: every tier of the shared row pads to px-4, which pushed the
-                     plus a step right of the chevron column the rows above are hung on. This is the "New skill"
-                     header before it is clicked, so opening the form reads as the row unfolding. -->
-                <button
-                    v-else-if="openName === undefined"
-                    type="button"
-                    class="group flex w-full cursor-pointer items-center gap-2.5 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-content/4"
-                    @click="startAdd"
-                >
-                    <Icon name="plus" aria-hidden="true" class="shrink-0 text-2xs text-subtle" />
-                    <span class="text-sm text-muted transition-colors group-hover:text-content">Write a skill</span>
-                </button>
-            </div>
+                     <RowNote variant="action">, which is the app's one "add one to this list": it takes the
+                     chevron's column and size from the same table the rows above draw their arrows from. The
+                     hand-written version here and its twin on the agent's skills list were two guesses at that
+                     column, and neither landed in it — see the component's note. -->
+                <RowNote v-else-if="openName === undefined" variant="action" label="Write a skill" @click="startAdd" />
+            </RowGroup>
         </div>
 
         <Notice

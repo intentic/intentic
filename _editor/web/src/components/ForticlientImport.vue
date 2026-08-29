@@ -10,7 +10,7 @@
      are still waiting. -->
 <script setup lang="ts">
 import type { ForticlientConnection } from "@intentic/sandbox-contract";
-import { ui, type NoticeModel, RowGroup } from "@intentic/ui";
+import { type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";
 import { importForticlient } from "../composables/sandbox/useVpn";
@@ -98,60 +98,62 @@ const protocolOf = (connection: ForticlientConnection): string => (connection.pr
 
 <template>
     <RowGroup label="Import from FortiClient (optional)">
-        <div class="flex flex-col gap-2 px-4 py-3">
-            <p class="text-2xs text-muted">
-                Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections. Passwords in
-                that file are encrypted by FortiClient and can't be read: you'll still type those.
-            </p>
-            <!-- The zone IS the button, so the drag and the click share one target and there is no small "browse"
+        <RowNote variant="block">
+            <div class="flex flex-col gap-2">
+                <p class="text-2xs text-muted">
+                    Drop an exported FortiClient configuration (File ▸ Settings ▸ Backup) here to fill the form from one of its connections. Passwords
+                    in that file are encrypted by FortiClient and can't be read: you'll still type those.
+                </p>
+                <!-- The zone IS the button, so the drag and the click share one target and there is no small "browse"
                  link beside it to aim at. -->
-            <button
-                type="button"
-                :class="
-                    ui.emptyState(
-                        `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
-                        dragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
-                    )
-                "
-                :disabled="importing"
-                @click="chooseFile?.click()"
-                @dragenter.prevent="onDragEnter"
-                @dragover.prevent
-                @dragleave="onDragLeave"
-                @drop.prevent="onDrop"
-            >
-                <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
-                <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-primary-500' : 'text-muted']" />
-                <span class="text-xs text-content">
-                    <template v-if="importing">Reading…</template>
-                    <template v-else-if="dragging">Drop it to read its connections</template>
-                    <template v-else>Drop the configuration file here</template>
-                </span>
-                <!-- Hidden, never unmounted: dropping the line would shorten the zone under the pointer mid-drag,
+                <button
+                    type="button"
+                    :class="
+                        ui.emptyState(
+                            `flex cursor-pointer flex-col items-center gap-1 py-6 transition-colors`,
+                            dragging ? `border-primary-500 bg-primary-500/5` : `hover:border-line-strong`,
+                        )
+                    "
+                    :disabled="importing"
+                    @click="chooseFile?.click()"
+                    @dragenter.prevent="onDragEnter"
+                    @dragover.prevent
+                    @dragleave="onDragLeave"
+                    @drop.prevent="onDrop"
+                >
+                    <Icon v-if="importing" name="spinner" spin class="text-lg text-info" />
+                    <Icon v-else name="upload" :class="['text-lg', dragging ? 'text-primary-500' : 'text-muted']" />
+                    <span class="text-xs text-content">
+                        <template v-if="importing">Reading…</template>
+                        <template v-else-if="dragging">Drop it to read its connections</template>
+                        <template v-else>Drop the configuration file here</template>
+                    </span>
+                    <!-- Hidden, never unmounted: dropping the line would shorten the zone under the pointer mid-drag,
                      and a cursor near its bottom edge would then leave and re-enter it in a loop. -->
-                <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">or click to choose one</span>
-            </button>
-            <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />
-            <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">No VPN connections found in {{ fileName }}.</p>
-            <template v-if="connections.length > 0">
-                <p class="text-2xs text-subtle">From {{ fileName }}: pick the connection to fill the form with.</p>
-                <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
-                    <button
-                        v-for="connection in connections"
-                        :key="`${connection.provider}-${connection.id}`"
-                        type="button"
-                        class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
-                        @click="emit(`pick`, connection)"
-                    >
-                        <span class="flex items-baseline gap-2">
-                            <span class="font-medium text-content">{{ connection.label }}</span>
-                            <span class="text-2xs text-subtle">{{ protocolOf(connection) }}</span>
-                            <span class="min-w-0 truncate font-mono text-2xs text-muted"> {{ connection.server }}:{{ connection.port }} </span>
-                        </span>
-                        <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
-                    </button>
-                </div>
-            </template>
-        </div>
+                    <span :class="['text-2xs text-subtle', importing || dragging ? 'invisible' : '']">or click to choose one</span>
+                </button>
+                <input ref="chooseFile" type="file" accept=".conf,.xml,text/xml,application/xml" class="hidden" @change="onPick" />
+                <p v-if="fileName !== '' && connections.length === 0" class="text-2xs text-warning">No VPN connections found in {{ fileName }}.</p>
+                <template v-if="connections.length > 0">
+                    <p class="text-2xs text-subtle">From {{ fileName }}: pick the connection to fill the form with.</p>
+                    <div class="scrollbar-thin flex max-h-48 flex-col gap-0.5 overflow-auto">
+                        <button
+                            v-for="connection in connections"
+                            :key="`${connection.provider}-${connection.id}`"
+                            type="button"
+                            class="flex flex-col gap-0.5 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-overlay"
+                            @click="emit(`pick`, connection)"
+                        >
+                            <span class="flex items-baseline gap-2">
+                                <span class="font-medium text-content">{{ connection.label }}</span>
+                                <span class="text-2xs text-subtle">{{ protocolOf(connection) }}</span>
+                                <span class="min-w-0 truncate font-mono text-2xs text-muted"> {{ connection.server }}:{{ connection.port }} </span>
+                            </span>
+                            <span class="text-2xs text-subtle">You'll need to enter: {{ connection.needs.join(", ") }}</span>
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </RowNote>
     </RowGroup>
 </template>

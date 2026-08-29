@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentItem } from "@intentic-app/api-contract";
-import { BrandMark, Code, DisclosureRow, Notice, RowGroup, SearchBar, SkeletonRows, ui } from "@intentic/ui";
+import { BrandMark, Code, DisclosureRow, Notice, RowGroup, RowNote, SearchBar, SkeletonRows, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { ContentsGroup } from "../../composables/sandbox/useEnvironmentContents";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
@@ -186,7 +186,7 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
         <!-- `flat`, because this list is already inside the Environment card: a bordered group per section drew a
              frame around a surface painted in the card's own colour, so the section labels and the gap between
              them do the grouping and the card stays the only frame. -->
-        <RowGroup v-for="group in rowGroups" :key="group.origin" flat undivided :label="group.label" :count="countLabel(group)">
+        <RowGroup v-for="group in rowGroups" :key="group.origin" density="compact" flat undivided :label="group.label" :count="countLabel(group)">
             <!-- The row's chevron used to ride in `#meta`, at the TRAILING edge among the facts, which is where
                  the verbs live and not where a reader looks for a disclosure. <DisclosureRow> puts it in the
                  lead column with the rest of the app's expandable rows, and `disabled` is how a row with
@@ -198,7 +198,6 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             <DisclosureRow
                 v-for="item in group.items"
                 :key="item.id"
-                density="compact"
                 :disabled="!expandable(item)"
                 :class="item.state === `after-rebuild` ? `opacity-70` : undefined"
                 :open="open.has(item.id)"
@@ -206,9 +205,9 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             >
                 <!-- Not switched off, but not here yet: an entry the recipe has and the container does not gets
                      the drained mark, which says the same thing to someone who cannot see the colour. -->
-                <template #lead>
+                <template #lead="{ mark }">
                     <BrandMark
-                        :size="22"
+                        :size="mark"
                         :name="item.name"
                         :logo="environmentVisual(item).logo"
                         :icon="environmentVisual(item).icon"
@@ -310,46 +309,49 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
 
         <!-- THE STAPLES, AS A STRIP. Thirteen names and thirteen versions, which is the entire question anybody
              brings to this group, in three lines instead of thirteen rows. -->
-        <RowGroup v-if="staples !== undefined" flat :label="staples.label" :count="countLabel(staples)">
+        <RowGroup v-if="staples !== undefined" density="compact" flat :label="staples.label" :count="countLabel(staples)">
             <!-- Strip AND sentence in one child of the group, so the group's row divider does not draw a line
-                 between a pill and the sentence that pill just opened. Aligned with the rows above (their own
-                 `px-4`), so all three sections start at one left edge. -->
-            <div class="flex flex-col gap-2 px-4">
-                <div class="flex flex-wrap gap-1.5">
-                    <!-- THE ONE CAPSULE ON THE TAB. Tinted rather than outlined: an outline inside a card is a
+                 between a pill and the sentence that pill just opened. Aligned with the rows above by taking
+                 the group's own tier (<RowNote variant="block">) rather than by restating their `px-4`, so all
+                 three sections start at one left edge and go on doing so if the tier moves. -->
+            <RowNote variant="block">
+                <div class="flex flex-col gap-2">
+                    <div class="flex flex-wrap gap-1.5">
+                        <!-- THE ONE CAPSULE ON THE TAB. Tinted rather than outlined: an outline inside a card is a
                          fourth stroke, where a tint of the text colour steps off the surface in both schemes (the
                          old `bg-canvas` fill was the PAGE behind the card, so a pill read as a hole in it). It
                          carries the app's own selected tint when open, the same one every picked row uses. -->
-                    <button
-                        v-for="item in staples.items"
-                        :key="item.id"
-                        type="button"
-                        :disabled="item.purpose === undefined"
-                        class="inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-2xs transition-colors enabled:cursor-pointer"
-                        :class="
-                            picked === item.id
-                                ? `ui-row-select-on text-content`
-                                : `bg-content/5 text-muted enabled:hover:bg-content/10 enabled:hover:text-content`
-                        "
-                        @click="pick(item.id)"
-                    >
-                        <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
-                        <span class="font-medium">{{ item.name }}</span>
-                        <span
-                            v-if="item.tools[0]?.version !== undefined"
-                            v-tooltip.bottom="provenance(item.tools[0])"
-                            class="font-mono tabular-nums text-subtle"
+                        <button
+                            v-for="item in staples.items"
+                            :key="item.id"
+                            type="button"
+                            :disabled="item.purpose === undefined"
+                            class="inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-2xs transition-colors enabled:cursor-pointer"
+                            :class="
+                                picked === item.id
+                                    ? `ui-row-select-on text-content`
+                                    : `bg-content/5 text-muted enabled:hover:bg-content/10 enabled:hover:text-content`
+                            "
+                            @click="pick(item.id)"
                         >
-                            {{ item.tools[0].version }}
-                        </span>
-                    </button>
+                            <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />
+                            <span class="font-medium">{{ item.name }}</span>
+                            <span
+                                v-if="item.tools[0]?.version !== undefined"
+                                v-tooltip.bottom="provenance(item.tools[0])"
+                                class="font-mono tabular-nums text-subtle"
+                            >
+                                {{ item.tools[0].version }}
+                            </span>
+                        </button>
+                    </div>
+                    <!-- Under the strip rather than beside the pill, so opening one never reflows the grid above it. -->
+                    <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
+                        <span class="font-medium text-content">{{ pickedItem.name }}</span
+                        >: {{ pickedItem.purpose }}
+                    </p>
                 </div>
-                <!-- Under the strip rather than beside the pill, so opening one never reflows the grid above it. -->
-                <p v-if="pickedItem !== undefined" class="text-2xs text-muted">
-                    <span class="font-medium text-content">{{ pickedItem.name }}</span
-                    >: {{ pickedItem.purpose }}
-                </p>
-            </div>
+            </RowNote>
         </RowGroup>
 
         <!-- Four different sentences, and telling them apart matters: still asking, could not ask, asked and
@@ -366,22 +368,24 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
             <!-- Two sections rather than the three that can appear: the outline promises the shape, and a
                  sandbox with nothing added on top has only the base group: over-promising sections is how a
                  placeholder ends up taller than the answer. -->
-            <RowGroup v-for="(section, index) in [4, 3]" :key="index" flat undivided>
+            <RowGroup v-for="(section, index) in [4, 3]" :key="index" density="compact" flat undivided>
                 <template #label><span class="skeleton block h-2.5" :class="index === 0 ? `w-44` : `w-36`" aria-hidden="true" /></template>
-                <SkeletonRows :rows="section" density="compact" />
+                <SkeletonRows :rows="section" />
             </RowGroup>
             <!-- The staples strip: thirteen pills of a name and a version, which is a different shape from a
                  row and reads as one at a glance. -->
-            <RowGroup flat>
+            <RowGroup density="compact" flat>
                 <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
-                <div class="flex flex-wrap gap-1.5 px-4" aria-hidden="true">
-                    <span
-                        v-for="(width, index) in [`w-24`, `w-20`, `w-28`, `w-16`, `w-24`, `w-20`, `w-32`, `w-20`]"
-                        :key="index"
-                        class="skeleton block h-6 rounded-full"
-                        :class="width"
-                    />
-                </div>
+                <RowNote variant="block">
+                    <div class="flex flex-wrap gap-1.5" aria-hidden="true">
+                        <span
+                            v-for="(width, index) in [`w-24`, `w-20`, `w-28`, `w-16`, `w-24`, `w-20`, `w-32`, `w-20`]"
+                            :key="index"
+                            class="skeleton block h-6 rounded-full"
+                            :class="width"
+                        />
+                    </div>
+                </RowNote>
             </RowGroup>
         </div>
         <!-- The sentence survives for the beat before the outline is allowed to appear: nothing at all is drawn

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, FilterBar, Row, RowGroup } from "@intentic/ui";
+import { FilterBar, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";
@@ -121,8 +121,10 @@ onUnmounted(stopRecording);
 
         <FilterBar v-model="query" placeholder="Filter commands…" :count="rows.length" />
 
-        <RowGroup>
-            <Row v-for="row in rows" :key="row.command" density="compact" :title="row.title" :description="row.command">
+        <!-- A record list — a hundred-odd commands, read by scanning — so the group takes the compact tier and
+             its rows and its "nothing matched" line read it from there. -->
+        <RowGroup density="compact">
+            <Row v-for="row in rows" :key="row.command" :title="row.title" :description="row.command">
                 <template #title>
                     <span class="flex items-center gap-2">
                         <span class="truncate">{{ row.title }}</span>
@@ -184,7 +186,7 @@ onUnmounted(stopRecording);
                 </template>
             </Row>
 
-            <p v-if="rows.length === 0" class="px-4 py-6 text-center text-xs text-subtle">No commands match "{{ query }}".</p>
+            <RowNote v-if="rows.length === 0" variant="empty">No commands match "{{ query }}".</RowNote>
         </RowGroup>
     </div>
 </template>

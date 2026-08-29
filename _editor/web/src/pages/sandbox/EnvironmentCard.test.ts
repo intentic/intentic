@@ -28,6 +28,10 @@ vi.mock(`../../composables/sandbox/useEnvironment`, () => ({
     useEnvironment: () => ({
         state: ref(environment),
         query: { refetch: () => {} },
+        // The refresh button's spinner. Carried here rather than left off, because a mock missing a field the
+        // card reads is a card whose binding nothing checks: `query.isFetching` was undefined under this mock
+        // for as long as it was a live ref (and therefore permanently truthy) in the browser.
+        isFetching: ref(false),
         proposal: ref(undefined),
         pending: ref(undefined),
         applied: ref(environment.approved),

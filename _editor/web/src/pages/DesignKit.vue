@@ -55,6 +55,7 @@ import {
     DisclosureRow,
     Row,
     RowGroup,
+    RowNote,
     SandboxVerbs,
     SearchBar,
     SegmentedControl,
@@ -372,6 +373,33 @@ const pickedTier = ref(`collaborator`);
                     </RowGroup>
                 </div>
 
+                <!-- THE THREE TIERS, SIDE BY SIDE, because side by side is the only place this drift was ever
+                     visible either: the extensions tab drew settings-sized rows one tab along from the compact
+                     secrets and personas tabs for as long as nobody had both on one screen.
+                     THE TIER IS SET ONCE, HERE, ON THE GROUP. Neither the rows nor the outline nor the note
+                     below says anything about its size — that is the whole mechanism, and this is what it looks
+                     like. `comfortable` is a settings row, `compact` a record list, `dense` a navigator rail. -->
+                <h3 :class="ui.sectionLabel(`text-2xs`)">Tiers, and the lines that are not rows</h3>
+                <div class="grid gap-4 md:grid-cols-3">
+                    <RowGroup
+                        v-for="tier in [`comfortable`, `compact`, `dense`] as const"
+                        :key="tier"
+                        :density="tier"
+                        :label="tier"
+                        :caption="tier === `comfortable` ? `settings rows` : tier === `compact` ? `record lists` : `navigator rails`"
+                    >
+                        <!-- The mark comes from the slot, never from a number here: that is what `:size="mark"`
+                             is, and it is why these three columns cannot drift apart. -->
+                        <Row title="A record" description="Its mark is the tier's">
+                            <template #lead="{ mark }"><BrandMark :size="mark" name="GitHub" icon="github" /></template>
+                        </Row>
+                        <SkeletonRows :rows="1" />
+                        <RowNote>A sentence on the group's surface.</RowNote>
+                        <RowNote variant="action" label="Add one" />
+                        <RowNote variant="empty">Nothing here yet.</RowNote>
+                    </RowGroup>
+                </div>
+
                 <!-- EVERY SHAPE A DISCLOSURE ROW COMES IN, side by side, because side by side is the only place
                      the drift this component ended was ever visible: fourteen lists had each answered "what does
                      an expandable row look like" alone, and arrived at five chevrons, four indents and four
@@ -379,25 +407,25 @@ const pickedTier = ref(`collaborator`);
                      picks from a picture instead of from whichever file they happened to be in. -->
                 <h3 :class="ui.sectionLabel(`text-2xs`)">Disclosure rows</h3>
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
-                        <DisclosureRow v-model:open="kitRail" density="compact" title="A turn that failed" description="Claude · from discord">
+                    <RowGroup density="compact" label="hit=header · body=rail" caption="evidence about the row, hung off its title">
+                        <DisclosureRow v-model:open="kitRail" title="A turn that failed" description="Claude · from discord">
                             <template #lead><Icon name="sparkles" class="text-xs text-link" /></template>
                             <template #meta><span>4m 2s</span><span>2h ago</span></template>
                             <template #below>
                                 <p class="font-mono text-2xs text-subtle">14:02:11 · error · rate limited</p>
                             </template>
                         </DisclosureRow>
-                        <DisclosureRow density="compact" title="Closed, for the chevron's other angle">
+                        <DisclosureRow title="Closed, for the chevron's other angle">
                             <template #lead><Icon name="cog" class="text-xs text-subtle" /></template>
                             <template #below><span>unused</span></template>
                         </DisclosureRow>
-                        <DisclosureRow density="compact" title="Nothing behind it" description="disabled: no arrow, no hover, no tab stop" disabled>
+                        <DisclosureRow title="Nothing behind it" description="disabled: no arrow, no hover, no tab stop" disabled>
                             <template #lead><Icon name="box" class="text-xs text-subtle" /></template>
                         </DisclosureRow>
                     </RowGroup>
 
-                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
-                        <DisclosureRow v-model:open="kitDrawer" density="compact" body="drawer" hit="pair">
+                    <RowGroup density="compact" label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
+                        <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
                             <!-- THE LINK HUGS ITS TEXT (`w-fit`), which is the half of this mode a picture has to
                                  show: underlined is where you GO, and every other pixel of the row — including
@@ -413,7 +441,7 @@ const pickedTier = ref(`collaborator`);
                                 <p class="text-xs text-muted">A drawer takes the full width and no surface of its own: one row, one wash.</p>
                             </template>
                         </DisclosureRow>
-                        <DisclosureRow v-model:open="kitBefore" density="compact" body="drawer">
+                        <DisclosureRow v-model:open="kitBefore" body="drawer">
                             <!-- The selection column: outside the toggle (a checkbox in a button is invalid and
                                  unusable), inside the tint (the whole line is still one row). -->
                             <template #before><Checkbox :model-value="true" binary size="small" class="ml-4" /></template>

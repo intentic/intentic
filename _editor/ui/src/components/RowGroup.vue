@@ -4,7 +4,9 @@
      belong together" again instead of boxing every line. Pair with <Row>; stack multiple RowGroups in a
      `flex flex-col gap-6` page wrapper. Mirrors the grouped-list already used on the Secrets page. -->
 <script setup lang="ts">
+import { computed } from "vue";
 import { ui } from "../lib/ui.js";
+import { provideRowDensity, type RowDensity } from "./row.js";
 
 // `caption` names the group's SUBJECT when the label alone leaves it ambiguous ("Plan limits: your whole
 // Claude plan, not this sandbox"). It sits inline with the label rather than under the surface because a reader
@@ -25,7 +27,22 @@ import { ui } from "../lib/ui.js";
  * where each row is its own openable entry with a mark, a name and its own spacing (the sandbox's environment
  * contents), the lines are one more stroke on a surface that already has a frame, and the rhythm of the rows is
  * what separates them. */
-defineProps<{ label?: string; count?: string | number; caption?: string; flat?: boolean; undivided?: boolean }>();
+/* `density` IS THE GROUP'S, AND EVERY ROW ON ITS SURFACE READS IT. A record list says `compact` once here
+ * instead of on each of its rows, its loading outline and each note between them — which is what those three
+ * had to do before, and what one of them always eventually forgot. See the long note in row.ts for the four
+ * lists this had already come apart on. `comfortable` is the default because a group of settings rows is what
+ * this component was built for, and that is what every existing call site draws. */
+const { density = `comfortable` } = defineProps<{
+    label?: string;
+    count?: string | number;
+    caption?: string;
+    flat?: boolean;
+    undivided?: boolean;
+    /** comfortable: settings rows · compact: record lists · dense: navigator rails. */
+    density?: RowDensity;
+}>();
+
+provideRowDensity(computed(() => density));
 </script>
 
 <template>

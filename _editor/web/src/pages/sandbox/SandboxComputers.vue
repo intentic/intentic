@@ -10,10 +10,11 @@ import {
     Notice,
     type NoticeModel,
     RowGroup,
+    RowNote,
     sandboxGroups,
     type SandboxVerb,
-    SandboxVerbs,
     sandboxVerbPrompt,
+    SandboxVerbs,
     SearchBar,
     SkeletonRows,
     StatusBadge,
@@ -511,10 +512,9 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                  app's own is the one that needs no capability at all, because it runs ON the computer it
                  manages. Said once rather than per row: nothing here knows which of these machines the reader
                  is actually sitting at. -->
-            <p v-if="inDesktopApp" class="flex items-start gap-2 px-4 py-3 text-xs text-muted">
-                <Icon name="desktop" class="mt-0.5 shrink-0" />
-                <span>This computer's own sandboxes are also in <b>This computer</b>, from the Intentic icon in your tray.</span>
-            </p>
+            <RowNote v-if="inDesktopApp" icon="desktop">
+                This computer's own sandboxes are also in <b>This computer</b>, from the Intentic icon in your tray.
+            </RowNote>
             <!-- IS ANYTHING WRONG RIGHT NOW: answered before a single row is parsed, which is what this view
                  had no way of saying. One measure split by state; the machine count is the group's own label. -->
             <template #actions>
@@ -522,7 +522,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             </template>
             <!-- Only once there is something to hunt through. Ports are matched too, because "which machine has
                  8788" is the question this tab is opened for and it used to be answerable only by reading. -->
-            <div v-if="!isLoading && showFilter" class="px-4 py-2.5">
+            <RowNote v-if="!isLoading && showFilter" variant="block">
                 <SearchBar
                     v-model="query"
                     variant="field"
@@ -530,7 +530,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                     aria-label="Filter computers"
                     :clearable="true"
                 />
-            </div>
+            </RowNote>
             <Notice v-if="computersNotice" :of="computersNotice" class="m-4" />
             <div v-else-if="isLoading" role="status" aria-busy="true">
                 <template v-if="outline">
@@ -538,10 +538,10 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                     <SkeletonRows :rows="2" description />
                 </template>
             </div>
-            <div v-else-if="sorted.length === 0" class="px-4 py-6 text-center text-xs text-muted">
+            <RowNote v-else-if="sorted.length === 0" variant="empty">
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC
                 from Capabilities to let the agent work there.
-            </div>
+            </RowNote>
             <!-- ONE GUTTER PER COMPUTER. The mark sits in a column of its own and everything else: the name,
                  the facts, the machine's whole sandbox list: starts at the same x beside it, so three computers
                  read as three entries rather than as nine indents. That column is the machine's and only the
@@ -742,9 +742,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
             </div>
             <!-- A filter that matched nothing says so where the rows would have been, rather than leaving a
                  group that looks like it has lost its contents. -->
-            <div v-if="shown.length === 0 && sorted.length > 0" class="px-4 py-6 text-center text-xs text-muted">
-                No computer or sandbox here matches "{{ query }}".
-            </div>
+            <RowNote v-if="shown.length === 0 && sorted.length > 0" variant="empty"> No computer or sandbox here matches "{{ query }}". </RowNote>
         </RowGroup>
 
         <DesktopSyncCard :highlight="highlight" />

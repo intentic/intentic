@@ -12,7 +12,7 @@
 import { isShaPinned, type RegistryEntry } from "@intentic/registry";
 import type { Marketplace } from "@intentic-app/api-contract";
 import type { CapabilityKind } from "@intentic/sandbox-contract";
-import { BrandMark, Button, ui, type NoticeModel, RowGroup } from "@intentic/ui";
+import { BrandMark, Button, type NoticeModel, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { browseMarketplace } from "../composables/extensions/useCapabilities";
@@ -101,66 +101,68 @@ const pick = (entry: RegistryEntry): void => {
 
 <template>
     <RowGroup label="From a registry (optional)">
-        <div class="flex flex-col gap-2 px-4 py-3">
-            <div class="flex gap-2">
-                <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
-                <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="ui.input('w-28')" />
-                <Button label="Browse" size="small" :disabled="url.trim().length === 0 || browsing" :loading="browsing" @click="browse" />
-            </div>
-            <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
-                <button
-                    v-for="entry in entries"
-                    :key="entry.name"
-                    type="button"
-                    class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
-                    :disabled="blockedReason(entry) !== undefined"
-                    @click="pick(entry)"
-                >
-                    <!-- The mark the registry carries, which for most rows is the extension's own initials: these
+        <RowNote variant="block">
+            <div class="flex flex-col gap-2">
+                <div class="flex gap-2">
+                    <input v-model="url" placeholder="https://github.com/owner/registry" :class="ui.input('min-w-0 flex-1')" />
+                    <input v-model="token" type="password" autocomplete="off" placeholder="Token" :class="ui.input('w-28')" />
+                    <Button label="Browse" size="small" :disabled="url.trim().length === 0 || browsing" :loading="browsing" @click="browse" />
+                </div>
+                <div v-if="market" class="scrollbar-thin flex max-h-40 flex-col gap-0.5 overflow-auto">
+                    <button
+                        v-for="entry in entries"
+                        :key="entry.name"
+                        type="button"
+                        class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
+                        :disabled="blockedReason(entry) !== undefined"
+                        @click="pick(entry)"
+                    >
+                        <!-- The mark the registry carries, which for most rows is the extension's own initials: these
                          are names nobody has seen before, and a column of marks is the only thing here that can
                          be scanned without reading. -->
-                    <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
-                    <!-- Verified is the only badge: it is the one state a human asserted, and badging "listed"
+                        <BrandMark :size="20" :name="entry.name" :art="entry.art" :logo="entry.logo" :icon="entry.icon" />
+                        <!-- Verified is the only badge: it is the one state a human asserted, and badging "listed"
                          too would dress the honest default up as a review. -->
-                    <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
-                    <span class="font-medium text-content">{{ entry.name }}</span>
-                    <!-- The price, before the click: a premium row needs a membership to install, and its
+                        <Icon v-if="entry.trust === 'verified'" name="shield" class="shrink-0 text-success" title="Verified" />
+                        <span class="font-medium text-content">{{ entry.name }}</span>
+                        <!-- The price, before the click: a premium row needs a membership to install, and its
                          retained use is what pays its creator from the pool. -->
-                    <span
-                        v-if="entry.tier === 'premium'"
-                        class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
-                        v-tooltip.top="premiumHint"
-                        >Premium</span
-                    >
-                    <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
-                    <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned commit and found
+                        <span
+                            v-if="entry.tier === 'premium'"
+                            class="shrink-0 rounded-sm bg-overlay px-1 text-2xs font-medium text-primary-500"
+                            v-tooltip.top="premiumHint"
+                            >Premium</span
+                        >
+                        <span v-if="entry.version" class="text-2xs text-subtle">{{ entry.version }}</span>
+                        <!-- Evidence, not endorsement: the nightly scan re-read this row's pinned commit and found
                          (or didn't) a thing that loads. Silent when there are no checks at all: absence of
                          evidence is not a warning. -->
-                    <Icon
-                        v-if="checksOk(entry)"
-                        name="check"
-                        class="shrink-0 text-success"
-                        v-tooltip.top="`Loads: re-checked at the pinned commit by the registry's nightly scan`"
-                    />
-                    <Icon
-                        v-else-if="checksProblem(entry)"
-                        name="exclamation-triangle"
-                        class="shrink-0 text-warning"
-                        v-tooltip.top="checksProblem(entry)"
-                    />
-                    <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
-                        <Icon name="star" />{{ entry.stars }}
-                    </span>
-                    <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
-                    <span
-                        v-if="blockedReason(entry)"
-                        :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
-                    >
-                        {{ blockedReason(entry) }}
-                    </span>
-                </button>
+                        <Icon
+                            v-if="checksOk(entry)"
+                            name="check"
+                            class="shrink-0 text-success"
+                            v-tooltip.top="`Loads: re-checked at the pinned commit by the registry's nightly scan`"
+                        />
+                        <Icon
+                            v-else-if="checksProblem(entry)"
+                            name="exclamation-triangle"
+                            class="shrink-0 text-warning"
+                            v-tooltip.top="checksProblem(entry)"
+                        />
+                        <span v-if="entry.stars !== undefined" class="inline-flex shrink-0 items-center gap-0.5 text-2xs text-subtle">
+                            <Icon name="star" />{{ entry.stars }}
+                        </span>
+                        <span class="min-w-0 truncate text-2xs text-muted">{{ entry.description }}</span>
+                        <span
+                            v-if="blockedReason(entry)"
+                            :class="['ml-auto shrink-0 text-2xs', entry.trust === 'blocked' ? 'text-danger' : 'text-subtle']"
+                        >
+                            {{ blockedReason(entry) }}
+                        </span>
+                    </button>
+                </div>
+                <p v-if="market && entries.length === 0" class="text-2xs text-subtle">That registry lists no plugins.</p>
             </div>
-            <p v-if="market && entries.length === 0" class="text-2xs text-subtle">That registry lists no plugins.</p>
-        </div>
+        </RowNote>
     </RowGroup>
 </template>

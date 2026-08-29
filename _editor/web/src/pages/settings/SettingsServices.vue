@@ -4,10 +4,11 @@ import {
     Button,
     CopyButton,
     type IconName,
-    type NoticeModel,
     Notice,
+    type NoticeModel,
     Row,
     RowGroup,
+    RowNote,
     type RowTone,
     SkeletonRows,
     StatusBadge,
@@ -233,9 +234,12 @@ const rotate = (slug: string) =>
                  gets: the admission rules, which are rendered from the platform's own numbers and are therefore
                  the one block guaranteed to land. Listings and the create form are withheld — most providers
                  have neither, and promising rows that never arrive is worse than promising nothing. -->
+            <!-- `density="compact"` on the outline because that is the tier of the group it promises (the
+                 admission rules): an outline that states a different height from the rows that land makes the
+                 list jump as it arrives, which is what this one did. -->
             <div class="flex flex-col gap-6" role="status" aria-busy="true">
                 <span class="sr-only">Reading your service listings…</span>
-                <RowGroup>
+                <RowGroup density="compact">
                     <template #label><span class="skeleton block h-2.5 w-40" aria-hidden="true" /></template>
                     <SkeletonRows :rows="4" :lead="false" description control />
                 </RowGroup>
@@ -291,12 +295,14 @@ const rotate = (slug: string) =>
 
             <!-- ══ HOW ADMISSION WORKS ════════════════════════════════════════════════════════════════════
                  The narrative first, then the thresholds as facts. Every figure below is the platform's. -->
-            <RowGroup label="How admission works">
-                <p class="px-4.5 py-3.5 text-sm text-muted">
+            <!-- The thresholds are a record list: short lines of fact, read in bulk. The prose above them is a
+                 note on the same surface, so it takes the group's tier rather than restating `px-4.5 py-3.5`. -->
+            <RowGroup density="compact" label="How admission works">
+                <RowNote>
                     No review queue. Prove your publisher name, connect payouts, and pass a health check: one signed call that succeeds, two bad ones
                     that fail. Pass and you're live on probation. Same five-minute timeout as a paid run, so slow endpoints take time.
-                </p>
-                <Row v-for="rule in ruleRows" :key="rule.key" density="compact" :title="rule.title" :description="rule.description">
+                </RowNote>
+                <Row v-for="rule in ruleRows" :key="rule.key" :title="rule.title" :description="rule.description">
                     <template #meta
                         ><span class="text-content">{{ rule.fact }}</span></template
                     >
@@ -381,7 +387,9 @@ const rotate = (slug: string) =>
                         </div>
                     </template>
                 </Row>
-                <div v-if="actNotice" class="px-4.5 py-3.5"><Notice :of="actNotice" /></div>
+                <RowNote v-if="actNotice" variant="block">
+                    <div></div>
+                </RowNote>
             </RowGroup>
 
             <!-- ══ ADDING ONE ═════════════════════════════════════════════════════════════════════════════
@@ -392,79 +400,81 @@ const rotate = (slug: string) =>
                  the field they apply to, so a malformed slug is caught here rather than by a red box after a
                  round trip. -->
             <RowGroup v-if="ready" label="List a service">
-                <form class="flex flex-col gap-4 px-4.5 py-4" @submit.prevent="create">
-                    <div class="grid gap-4 @xl:grid-cols-2">
-                        <label class="ui-field">
-                            <span class="ui-field-label">Slug</span>
-                            <input v-model="form.slug" spellcheck="false" autocapitalize="off" placeholder="acme-research" :class="ui.input()" />
-                            <span class="text-2xs" :class="form.slug.length > 0 && !slugValid ? `text-danger` : `text-subtle`">
-                                Lower case, digits and hyphens. This is the id agents ask for by name.
-                            </span>
-                        </label>
+                <RowNote variant="block">
+                    <form class="flex flex-col gap-4" @submit.prevent="create">
+                        <div class="grid gap-4 @xl:grid-cols-2">
+                            <label class="ui-field">
+                                <span class="ui-field-label">Slug</span>
+                                <input v-model="form.slug" spellcheck="false" autocapitalize="off" placeholder="acme-research" :class="ui.input()" />
+                                <span class="text-2xs" :class="form.slug.length > 0 && !slugValid ? `text-danger` : `text-subtle`">
+                                    Lower case, digits and hyphens. This is the id agents ask for by name.
+                                </span>
+                            </label>
 
-                        <label class="ui-field">
-                            <span class="ui-field-label">Publisher</span>
-                            <input v-model="form.publisher" spellcheck="false" autocapitalize="off" placeholder="acme" :class="ui.input()" />
-                            <span class="text-2xs text-subtle">A name you've proved on Getting paid.</span>
-                        </label>
+                            <label class="ui-field">
+                                <span class="ui-field-label">Publisher</span>
+                                <input v-model="form.publisher" spellcheck="false" autocapitalize="off" placeholder="acme" :class="ui.input()" />
+                                <span class="text-2xs text-subtle">A name you've proved on Getting paid.</span>
+                            </label>
 
-                        <label class="ui-field @xl:col-span-2">
-                            <span class="ui-field-label">Name</span>
-                            <input v-model="form.name" :maxlength="NAME_MAX" placeholder="Acme Deep Research" :class="ui.input()" />
-                            <span class="text-2xs text-subtle">What members see in the catalog. Up to {{ NAME_MAX }} characters.</span>
-                        </label>
+                            <label class="ui-field @xl:col-span-2">
+                                <span class="ui-field-label">Name</span>
+                                <input v-model="form.name" :maxlength="NAME_MAX" placeholder="Acme Deep Research" :class="ui.input()" />
+                                <span class="text-2xs text-subtle">What members see in the catalog. Up to {{ NAME_MAX }} characters.</span>
+                            </label>
 
-                        <label class="ui-field @xl:col-span-2">
-                            <span class="ui-field-label">Description</span>
-                            <textarea v-model="form.description" :maxlength="DESCRIPTION_MAX" rows="3" :class="ui.input()" />
-                            <span class="text-2xs text-subtle">
-                                The only prose a member reads before paying. {{ form.description.length }}/{{ DESCRIPTION_MAX }}.
-                            </span>
-                        </label>
+                            <label class="ui-field @xl:col-span-2">
+                                <span class="ui-field-label">Description</span>
+                                <textarea v-model="form.description" :maxlength="DESCRIPTION_MAX" rows="3" :class="ui.input()" />
+                                <span class="text-2xs text-subtle">
+                                    The only prose a member reads before paying. {{ form.description.length }}/{{ DESCRIPTION_MAX }}.
+                                </span>
+                            </label>
 
-                        <label class="ui-field @xl:col-span-2">
-                            <span class="ui-field-label">Endpoint</span>
-                            <input
-                                v-model="form.upstreamUrl"
-                                type="url"
-                                spellcheck="false"
-                                autocapitalize="off"
-                                placeholder="https://api.acme.dev/research"
-                                :class="ui.input('font-mono')"
-                            />
-                            <span class="text-2xs" :class="form.upstreamUrl.length > 0 && !urlValid ? `text-danger` : `text-subtle`">
-                                The URL we forward a paid run to, signed with the key you get back.
-                            </span>
-                        </label>
+                            <label class="ui-field @xl:col-span-2">
+                                <span class="ui-field-label">Endpoint</span>
+                                <input
+                                    v-model="form.upstreamUrl"
+                                    type="url"
+                                    spellcheck="false"
+                                    autocapitalize="off"
+                                    placeholder="https://api.acme.dev/research"
+                                    :class="ui.input('font-mono')"
+                                />
+                                <span class="text-2xs" :class="form.upstreamUrl.length > 0 && !urlValid ? `text-danger` : `text-subtle`">
+                                    The URL we forward a paid run to, signed with the key you get back.
+                                </span>
+                            </label>
 
-                        <label class="ui-field">
-                            <span class="ui-field-label">Price</span>
-                            <input
-                                v-model.number="form.creditsPerRun"
-                                type="number"
-                                :min="rules.minCredits"
-                                :max="rules.maxCredits"
-                                step="1"
-                                :class="ui.input('w-32 tabular-nums')"
-                            />
-                            <span class="text-2xs text-subtle">
-                                Credits per run, {{ rules.minCredits }}–{{ rules.maxCredits }}. Capped at {{ rules.probationMaxCredits }} until it
-                                graduates.
-                            </span>
-                        </label>
+                            <label class="ui-field">
+                                <span class="ui-field-label">Price</span>
+                                <input
+                                    v-model.number="form.creditsPerRun"
+                                    type="number"
+                                    :min="rules.minCredits"
+                                    :max="rules.maxCredits"
+                                    step="1"
+                                    :class="ui.input('w-32 tabular-nums')"
+                                />
+                                <span class="text-2xs text-subtle">
+                                    Credits per run, {{ rules.minCredits }}–{{ rules.maxCredits }}. Capped at {{ rules.probationMaxCredits }} until it
+                                    graduates.
+                                </span>
+                            </label>
 
-                        <label class="ui-field @xl:col-span-2">
-                            <span class="ui-field-label">Sample request</span>
-                            <textarea v-model="form.sampleRequest" rows="3" spellcheck="false" :class="ui.input('font-mono')" />
-                            <span class="text-2xs text-subtle">The body the health check posts to your endpoint. It has to answer this one.</span>
-                        </label>
-                    </div>
+                            <label class="ui-field @xl:col-span-2">
+                                <span class="ui-field-label">Sample request</span>
+                                <textarea v-model="form.sampleRequest" rows="3" spellcheck="false" :class="ui.input('font-mono')" />
+                                <span class="text-2xs text-subtle">The body the health check posts to your endpoint. It has to answer this one.</span>
+                            </label>
+                        </div>
 
-                    <div class="flex justify-end">
-                        <Button type="submit" label="Create draft" :loading="creating" :disabled="creating || !formReady" />
-                    </div>
-                    <Notice v-if="createNotice" :of="createNotice" />
-                </form>
+                        <div class="flex justify-end">
+                            <Button type="submit" label="Create draft" :loading="creating" :disabled="creating || !formReady" />
+                        </div>
+                        <Notice v-if="createNotice" :of="createNotice" />
+                    </form>
+                </RowNote>
             </RowGroup>
         </template>
     </div>

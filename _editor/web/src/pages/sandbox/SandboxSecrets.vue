@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, SegmentedControl, SkeletonRows } from "@intentic/ui";
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -57,8 +57,7 @@ const devopsActive = computed(() => capabilities.value.some((entry) => entry.kin
 // Every secret as this tab reads it: named, marked, and sorted with whatever is unfinished first.
 // Provider accounts live on the Agent tab; they are excluded here so nothing downstream needs to filter them.
 const rows = computed<SecretRow[]>(() =>
-    secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value })
-        .filter((row) => row.group !== `provider`),
+    secretRows(inventory.value, { capabilities: capabilities.value, extensions: enabledExtensions.value }).filter((row) => row.group !== `provider`),
 );
 
 const query = ref(``);
@@ -165,10 +164,10 @@ const pushToCi = async (): Promise<void> => {
                  list is long and uniform, so its outline is the one thing a placeholder here can honestly
                  promise: rows, each with a key and the control that reveals it. The label rides INSIDE the
                  reveal: an empty bordered surface with a heading over it is its own flash. -->
-            <RowGroup v-if="outline" label="Your secrets">
+            <RowGroup v-if="outline" density="compact" label="Your secrets">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading your sandbox's secrets…</span>
-                    <SkeletonRows :rows="4" density="compact" control />
+                    <SkeletonRows :rows="4" control />
                 </div>
             </RowGroup>
         </template>
@@ -201,11 +200,7 @@ const pushToCi = async (): Promise<void> => {
 
             <!-- WHAT IS OWED, above everything and only while something is. This is the strip that used to say
                  "3 required secrets are not set", except it is the three secrets. -->
-            <RowGroup
-                v-if="attention.length > 0"
-                label="Needs attention"
-                :count="attention.length"
-            >
+            <RowGroup v-if="attention.length > 0" density="compact" label="Needs attention" :count="attention.length">
                 <SecretEntryRow
                     v-for="row in attention"
                     :key="row.entry.key"
@@ -217,8 +212,8 @@ const pushToCi = async (): Promise<void> => {
 
             <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
             <div class="flex flex-col gap-6">
-                <RowGroup v-if="devopsActive && groupVisible(required)" label="Required by your intent" :count="required.length">
-                    <p v-if="required.length === 0" class="px-4 py-2.5 text-xs text-subtle">Your intent declares no user-supplied secrets yet.</p>
+                <RowGroup v-if="devopsActive && groupVisible(required)" density="compact" label="Required by your intent" :count="required.length">
+                    <RowNote v-if="required.length === 0">Your intent declares no user-supplied secrets yet.</RowNote>
                     <SecretEntryRow
                         v-for="row in required"
                         :key="row.entry.key"
@@ -230,20 +225,24 @@ const pushToCi = async (): Promise<void> => {
 
                 <!-- The gate sits on the group it gates rather than at the top of the page: with DevOps off,
                      everything else on this tab works, and a banner over the whole thing said otherwise. -->
-                <RowGroup v-else-if="!devopsActive && !filtering" label="Your secrets">
-                    <RouterLink
-                        to="/capabilities"
-                        class="flex items-center gap-2 px-4 py-3 text-xs text-content no-underline transition-colors hover:bg-canvas"
-                    >
-                        <Icon name="exclamation-triangle" class="shrink-0 text-warning" />
-                        <span>Keeping your own secrets here needs DevOps active.</span>
-                        <span class="ml-auto inline-flex items-center gap-1 font-medium text-link"
-                            >Activate <Icon name="arrow-right" class="text-2xs"
-                        /></span>
+                <!-- A line that GOES somewhere is a <Row>, wrapped in a <RouterLink> — the pattern <Row> itself
+                     documents for internal navigation, and what makes this sit at the list's own tier instead of
+                     the `px-4 py-3` it was hand-written at, which matches no tier at all. -->
+                <RowGroup v-else-if="!devopsActive && !filtering" density="compact" label="Your secrets">
+                    <RouterLink to="/capabilities" class="block no-underline">
+                        <Row
+                            interactive
+                            chevron
+                            icon="exclamation-triangle"
+                            tone="warning"
+                            title="Keeping your own secrets here needs DevOps active."
+                        >
+                            <template #meta><span class="font-medium text-link">Activate</span></template>
+                        </Row>
                     </RouterLink>
                 </RowGroup>
 
-                <RowGroup v-if="devopsActive && groupVisible(yours)" label="Your secrets" :count="yours.length">
+                <RowGroup v-if="devopsActive && groupVisible(yours)" density="compact" label="Your secrets" :count="yours.length">
                     <SecretEntryRow
                         v-for="row in yours"
                         :key="row.entry.key"
@@ -251,16 +250,12 @@ const pushToCi = async (): Promise<void> => {
                         :expanded="opened === row.entry.key"
                         @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
                     />
-                    <div v-if="!filtering" class="px-4 py-2.5">
-                        <button
-                            v-if="!adding"
-                            type="button"
-                            class="flex items-center gap-2 text-xs text-muted transition-colors hover:text-content"
-                            @click="adding = true"
-                        >
-                            <Icon name="plus" class="text-2xs" /> Add a secret
-                        </button>
-                        <div v-else class="flex flex-col gap-2">
+                    <!-- The list's own "add one", at the list's own tier and with its plus in the column the
+                         chevrons above it are hung on: <RowNote action> rather than the fourth hand-written
+                         spelling of this line (see the component's note). -->
+                    <RowNote v-if="!filtering && !adding" variant="action" label="Add a secret" @click="adding = true" />
+                    <RowNote v-else-if="!filtering" variant="block">
+                        <div class="flex flex-col gap-2">
                             <div class="flex items-start gap-2">
                                 <input
                                     v-model="newKey"
@@ -278,13 +273,11 @@ const pushToCi = async (): Promise<void> => {
                                 Cancel
                             </button>
                         </div>
-                    </div>
+                    </RowNote>
                 </RowGroup>
 
-                <RowGroup v-if="devopsActive && groupVisible(generated)" label="Generated by intentic" :count="generated.length">
-                    <p v-if="generated.length === 0" class="px-4 py-2.5 text-xs text-subtle">
-                        Nothing generated yet: these appear after your first deploy.
-                    </p>
+                <RowGroup v-if="devopsActive && groupVisible(generated)" density="compact" label="Generated by intentic" :count="generated.length">
+                    <RowNote v-if="generated.length === 0">Nothing generated yet: these appear after your first deploy.</RowNote>
                     <SecretEntryRow
                         v-for="row in generated"
                         :key="row.entry.key"
@@ -297,7 +290,7 @@ const pushToCi = async (): Promise<void> => {
                 <!-- Capability credentials: the inventory the Capabilities page shows. Once there are enough rows
                      to bury the rest of the tab, the first three stay visible and the rest sit behind the same
                      toggle the Agent tab uses. -->
-                <RowGroup v-if="groupVisible(visibleCredentials)" label="Capability credentials" :count="credentials.length">
+                <RowGroup v-if="groupVisible(visibleCredentials)" density="compact" label="Capability credentials" :count="credentials.length">
                     <template #actions>
                         <Button :as="RouterLink" to="/capabilities" label="Manage capabilities" size="small" severity="secondary" />
                     </template>

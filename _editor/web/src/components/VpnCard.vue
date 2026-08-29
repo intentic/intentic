@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, Notice, type NoticeModel, Row, RowGroup, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, Row, RowGroup, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import { computed, reactive, ref } from "vue";
@@ -109,11 +109,11 @@ const caption = computed(() =>
 <template>
     <RowGroup label="VPN" :caption="caption">
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
-        <div v-else-if="links.length === 0" class="px-4 py-6 text-center text-xs text-muted">
+        <RowNote v-else-if="links.length === 0" variant="empty">
             No VPN configured.
             <RouterLink to="/capabilities/vpn" class="text-link hover:underline">Add one</RouterLink>
             to put this sandbox on a private network.
-        </div>
+        </RowNote>
         <template v-else>
             <Row v-for="link in links" :key="link.id" :icon="link.state === 'connected' ? 'shield' : 'globe'">
                 <template #title>

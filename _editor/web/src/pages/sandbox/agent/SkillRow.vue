@@ -85,11 +85,12 @@ watch(
     <!-- `body="drawer"`: what opens here is a place to read and edit a file, not evidence hanging off the row's
          name, so it takes the full width. Header and drawer share the open row's one wash, so an expanded row
          reads as a single block rather than as a row that grew a panel under it. -->
-    <DisclosureRow density="compact" body="drawer" :open="expanded" @update:open="emit(`toggle`)">
-        <template #lead>
+    <DisclosureRow body="drawer" :open="expanded" @update:open="emit(`toggle`)">
+        <template #lead="{ mark }">
             <!-- Drained and dimmed on a switched-off skill, so a brand goes quiet with the rest of the row
-                 instead of being the loudest thing on the one row that is off. -->
-            <BrandMark :size="22" :name="skill.name" :logo="visual.logo" :icon="visual.icon" :idle="!skill.enabled" />
+                 instead of being the loudest thing on the one row that is off. Sized and tiered by the
+                 <RowGroup> this row is dropped into, not by this file. -->
+            <BrandMark :size="mark" :name="skill.name" :logo="visual.logo" :icon="visual.icon" :idle="!skill.enabled" />
         </template>
 
         <template #title>

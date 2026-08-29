@@ -6,27 +6,33 @@
      the list is one that drifts from it the first time a tier changes, and the list then jumps as it lands. This
      is the difference between a placeholder and a promise the content keeps.
 
-     Density, lead and control mirror the row the caller is about to draw, because a settings row and a record
-     row are different heights and an outline that ignores which one is coming mis-states the wait. Widths are a
-     fixed uneven set walked in order: real names are uneven, and an outline that reshuffles on every re-render
-     is an animation nobody asked for.
+     DENSITY COMES FROM THE <RowGroup> IT IS DROPPED INTO, which is the whole of what "inherits by construction"
+     was supposed to mean and, until the tier became the group's, was not what happened. The outline re-declared
+     its tier at its own call site, so on the personas list, the payouts page and the services page it promised
+     comfortable rows and then landed compact ones — the list visibly shrank as it arrived, under a comment on
+     the payouts page saying that could not happen. Lead and control are still the caller's: they say what SHAPE
+     is coming, which is a fact about this list's rows and not about their size.
+
+     Widths are a fixed uneven set walked in order: real names are uneven, and an outline that reshuffles on
+     every re-render is an animation nobody asked for.
 
      The bars are decoration: `aria-hidden` here, with the caller owning the one `role="status"` for the region,
      since a list is rarely the only thing on a loading page and five status regions announce a wait five times. -->
 <script setup lang="ts">
 import Row from "./Row.vue";
+import { type RowDensity, useRowDensity } from "./row.js";
 
 const {
     rows = 3,
-    density = `comfortable`,
+    density,
     lead = true,
     description = false,
     control = false,
 } = defineProps<{
     /** How many placeholder rows. Match the shortest list worth promising, not the longest one seen. */
     rows?: number;
-    /** The tier of the rows that are coming. See <Row>. */
-    density?: `comfortable` | `compact` | `dense`;
+    /** The tier of the rows that are coming. Leave unset inside a <RowGroup>: see the note above. */
+    density?: RowDensity;
     /** A leading glyph's square, for lists whose rows carry an icon or an avatar. */
     lead?: boolean;
     /** A second, shorter line under the title, for lists whose rows are titled AND described. */
@@ -34,6 +40,9 @@ const {
     /** A trailing control's block: a switch, a badge, a button. */
     control?: boolean;
 }>();
+
+// The tier the outline is promising: this call's own answer if it gave one, else the group it is standing in.
+const tier = useRowDensity(() => density);
 
 // Walked in order and wrapped, so two rows are never the same length and eight rows do not read as a pattern.
 const TITLE_WIDTHS = [`w-40`, `w-28`, `w-48`, `w-32`, `w-36`, `w-24`];
@@ -50,11 +59,11 @@ const BAR = { comfortable: `h-3.5`, compact: `h-3`, dense: `h-2.5` } as const;
 </script>
 
 <template>
-    <Row v-for="index in rows" :key="index" :density="density" aria-hidden="true">
-        <template v-if="lead" #lead><span class="skeleton block shrink-0" :class="LEAD[density]" /></template>
+    <Row v-for="index in rows" :key="index" :density="tier" aria-hidden="true">
+        <template v-if="lead" #lead><span class="skeleton block shrink-0" :class="LEAD[tier]" /></template>
         <template #title>
             <span class="flex min-h-[1lh] items-center">
-                <span class="skeleton block" :class="[BAR[density], TITLE_WIDTHS[(index - 1) % TITLE_WIDTHS.length]]" />
+                <span class="skeleton block" :class="[BAR[tier], TITLE_WIDTHS[(index - 1) % TITLE_WIDTHS.length]]" />
             </span>
         </template>
         <template v-if="description" #description>

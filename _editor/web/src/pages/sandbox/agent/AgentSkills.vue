@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic-app/api-contract";
-import { Icon, Row, RowGroup, SearchBar, SkeletonRows } from "@intentic/ui";
+import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../composables/extensions/useCapabilities";
 import { useExtensions } from "../../../composables/extensions/useExtensions";
@@ -147,7 +147,7 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
 </script>
 
 <template>
-    <RowGroup label="Skills" :count="count">
+    <RowGroup density="compact" label="Skills" :count="count">
         <template #info><SkillsInfo /></template>
         <!-- The group's own instrument, on the group's own header: it narrows these rows and nothing else on
              the page. A field rather than a bar: there is one control, and a whole toolbar over one group would
@@ -180,53 +180,43 @@ const count = computed<number | undefined>(() => (filtering.value ? matches.valu
             @remove="removeSkill(skill)"
         />
 
-        <Row v-if="error !== undefined" icon="exclamation-triangle" density="compact" :description="error" />
+        <Row v-if="error !== undefined" icon="exclamation-triangle" :description="error" />
         <!-- `settings` is this section's read: until it lands there are no skills to list AND no grounds to say
              so, and the invitation below is written for someone who has none rather than for someone who has
              not been told yet. -->
         <div v-else-if="settings === undefined" role="status" aria-busy="true">
             <template v-if="outline">
                 <span class="sr-only">Reading this sandbox's skills…</span>
-                <SkeletonRows :rows="3" density="compact" description control />
+                <SkeletonRows :rows="3" description control />
             </template>
         </div>
-        <Row
-            v-else-if="skills.length === 0 && !adding"
-            icon="book"
-            density="compact"
-            description="No skills added yet."
-        />
+        <Row v-else-if="skills.length === 0 && !adding" icon="book" description="No skills added yet." />
         <!-- Three different facts, and the wrong one is a lie the reader can see: an empty list, a filter that
              found nothing, and a filter whose only hits are inside the fold below (which is open, so this is
              not it). -->
-        <Row v-else-if="matches.length === 0" icon="search" density="compact" description="Nothing matches that filter." />
+        <Row v-else-if="matches.length === 0" icon="search" description="Nothing matches that filter." />
 
         <!-- The new skill is written in the same place a written one is read, so the form is never a different
              screen from the list it joins. -->
-        <div v-if="adding" class="bg-content/6">
-            <div class="flex items-center gap-2.5 py-2.5 pl-2.5 pr-3">
-                <Icon name="plus" class="shrink-0 text-2xs text-subtle" aria-hidden="true" />
-                <span class="text-sm font-medium text-content">New skill</span>
-            </div>
-            <div class="border-t border-line-subtle py-3 pl-9 pr-3">
+        <!-- AN OPEN <DisclosureRow>, which is what this always drew by hand: a header line, the row's open wash,
+             a hairline, and the form under it at the drawer's own indent. Four numbers (`py-2.5 pl-2.5 pr-3`,
+             `py-3 pl-9 pr-3`) and a tint (`bg-content/6`) restated from a component that owns all five — and the
+             `pl-9` was a guess at an offset <DisclosureRow> derives from the lead cluster it draws twice. As a
+             real one it also gains the way out it never had: the chevron closes the form. -->
+        <DisclosureRow v-if="adding" open body="drawer" icon="plus" title="New skill" @update:open="close">
+            <template #below>
                 <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
-            </div>
-        </div>
+            </template>
+        </DisclosureRow>
 
         <!-- Hidden while something is open, so there is only ever one skill being written or read at a time.
-             Hand-written rather than <Row>: every tier of the shared row pads to px-4, which is what pushed the
-             plus a step right of the chevron column the rest of this group is hung on. This is the "New skill"
-             header below before it is clicked: same padding, same icon, same type, so opening the form reads
-             as the row unfolding, not as a different block arriving. -->
-        <button
-            v-else-if="openId === undefined"
-            type="button"
-            class="group flex w-full cursor-pointer items-center gap-2.5 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-content/4"
-            @click="startAdd"
-        >
-            <Icon name="plus" aria-hidden="true" class="shrink-0 text-2xs text-subtle" />
-            <span class="text-sm text-muted transition-colors group-hover:text-content">Write a skill</span>
-        </button>
+             This used to be hand-written, with the reason recorded here: "every tier of the shared row pads to
+             px-4, which is what pushed the plus a step right of the chevron column the rest of this group is
+             hung on." The complaint was right and the fix was a guess — `pl-2.5` against rows at `px-4` put the
+             plus a step LEFT of that column instead. <RowNote variant="action"> reads the chevron's own gap and
+             size from the table <DisclosureRow> draws it from, so the plus lands exactly where the arrows are,
+             at their size, and follows the group if its tier ever moves. -->
+        <RowNote v-else-if="openId === undefined" variant="action" label="Write a skill" @click="startAdd" />
 
         <!-- EVERYTHING THAT CAME WITH SOMETHING ELSE, behind one line. Last in the group because it is the half
              nobody came here to change, and a row inside the same surface rather than a section of its own, so

@@ -11,6 +11,7 @@ import {
     type NoticeModel,
     PersonaFace,
     RowGroup,
+    RowNote,
     SkeletonRows,
     StatusBadge,
 } from "@intentic/ui";
@@ -291,8 +292,11 @@ const confirmRemove = async (): Promise<void> => {
         <Notice v-if="listNotice" :of="listNotice" class="mb-4" />
         <!-- The empty state below is a real one: it explains what NOT having a persona costs, so it must not
              be shown to somebody who simply has not been told yet. The list's own shape stands in meanwhile. -->
+        <!-- `density="compact"` on the OUTLINE as well as on the list, because that is what it is an outline OF.
+             It used to be the group's only omission: the rows below arrive compact, the placeholder promised
+             comfortable ones, and the list visibly shrank as it landed. The group says it once now. -->
         <template v-if="isLoading">
-            <RowGroup v-if="outline" label="Your personas">
+            <RowGroup v-if="outline" density="compact" label="Your personas">
                 <div role="status" aria-busy="true">
                     <span class="sr-only">Reading your sandbox's personas…</span>
                     <SkeletonRows :rows="2" description control />
@@ -325,7 +329,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
+            <RowGroup v-else density="compact" label="Your personas" :count="personas.length > 0 ? personas.length : undefined">
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
@@ -351,7 +355,6 @@ const confirmRemove = async (): Promise<void> => {
                 <DisclosureRow
                     v-for="persona in personas"
                     :key="persona.id"
-                    density="compact"
                     hit="row"
                     body="drawer"
                     :open="isOpen(persona)"
@@ -360,16 +363,22 @@ const confirmRemove = async (): Promise<void> => {
                     <!-- A persona is a person, so it gets a person's face in full colour (PersonaFace holds
                          that). THE FACE IS A ROW'S MARK HERE, NOT A CARD'S SUBJECT: this is a record list, one
                          tab along from the extensions and environment lists. The rail draws faces at 56 for its
-                         cards; a row's mark is sized like the add-persona line below (32) and the BrandMark
-                         lead marks on the neighbouring lists (22), not like the rail.
+                         cards; a row's mark is the ROW TIER'S size, which is the same 22 those neighbouring
+                         lists give their BrandMarks.
+
+                         It used to be 32, under a comment claiming both 32 and 22 in one sentence — which is
+                         what a number typed at a call site turns into once two surfaces disagree. A round face
+                         does read a shade smaller than a square plate at the same box, and that is real, but
+                         paying for it costs a second number and a rule about when it applies, which is how 32
+                         got here. One size per tier, handed out as `mark`, nothing to remember.
 
                          The disclosure arrow rides in front of the face, where a reader looks for one, rather
                          than in the row's trailing cluster, which is where facts and actions live. It is
                          <DisclosureRow>'s arrow now: this file drew a `chevron-down`/`chevron-right` swap, two
                          files away another drew `chevron-right` + `rotate-90`, and they were the same control.
                          It is also a real button now, so the face is where a keyboard gets in. -->
-                    <template #lead>
-                        <PersonaFace :persona :size="32" />
+                    <template #lead="{ mark }">
+                        <PersonaFace :persona :size="mark" />
                     </template>
 
                     <!-- THE NAME READS AS A NAME until you ask to change it: click-to-rename, on the app's one
@@ -413,13 +422,18 @@ const confirmRemove = async (): Promise<void> => {
                     <template #meta>
                         <!-- The sites this persona speaks on, as marks: two logos side by side say "spans
                              platforms" faster than any wording under them can. A notch under the face that
-                             leads the row (and the size the secrets list gives its marks), because these are
-                             facts ABOUT the card, not the card itself. -->
+                             leads the row, because these are facts ABOUT the card, not the card itself.
+
+                             16, not the tier's 22: #meta is a `text-2xs` cluster by <Row>'s contract, and a mark
+                             drawn at the LEAD's size in it stops reading as a fact and starts competing with the
+                             face for the row's subject. It was 22 while the face was 32 — the same one-notch
+                             relationship, from when the face was a number this file chose. Same 16 <PersonaForm>
+                             gives the account marks in its own lines. -->
                         <span v-if="persona.capabilities.length > 0" class="flex items-center gap-1">
                             <BrandMark
                                 v-for="mark in marks(persona)"
                                 :key="mark.id"
-                                :size="22"
+                                :size="16"
                                 :name="mark.account?.site ?? mark.id"
                                 :logo="mark.account?.logo"
                                 :icon="mark.account?.icon ?? `globe`"
@@ -466,30 +480,33 @@ const confirmRemove = async (): Promise<void> => {
                      appear. Everything else about a persona has a default worth keeping, and the card opens the
                      moment it exists, so this is the one field between "I want a persona" and having one, rather
                      than a form standing in front of thirty answers nobody has an opinion about yet. -->
-                <div v-if="newName !== undefined" class="flex flex-col gap-2 px-4 py-4">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <!-- The face the row above it will have, at the size those rows draw it: this line
-                             becomes one of them the moment the name is committed. -->
-                        <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="32" />
-                        <!-- A name is three words. Capped, because an input stretched across the card reads as a
-                             field expecting a paragraph. Enter commits it, like any single-field form. -->
-                        <input
-                            v-model="newName"
-                            :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
-                            placeholder="Name it: Work, Studio, Reddit Writer…"
-                            aria-label="Name this persona"
-                            autofocus
-                            @keydown.enter="submit"
-                        />
-                        <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
-                        <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
+                <RowNote v-if="newName !== undefined" v-slot="{ mark }" variant="block">
+                    <div class="flex flex-col gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- The face the row above it will have, at the size those rows draw it: this line
+                                 becomes one of them the moment the name is committed. That promise is now kept by
+                                 construction — `mark` is the tier's, the same number the rows above read. -->
+                            <PersonaFace :persona="{ id: newId || `persona`, label: newName || undefined }" :size="mark" />
+                            <!-- A name is three words. Capped, because an input stretched across the card reads
+                                 as a field expecting a paragraph. Enter commits it, like any single-field form. -->
+                            <input
+                                v-model="newName"
+                                :class="ui.input('min-w-0 max-w-xs flex-1 font-medium')"
+                                placeholder="Name it: Work, Studio, Reddit Writer…"
+                                aria-label="Name this persona"
+                                autofocus
+                                @keydown.enter="submit"
+                            />
+                            <Button label="Create" size="small" :loading="save.isPending.value" :disabled="!newValid" @click="submit" />
+                            <button type="button" :class="ui.linkButton('text-xs text-muted hover:text-content')" @click="cancelAdd">Cancel</button>
+                        </div>
+                        <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
+                        <span v-else class="text-xs text-subtle">
+                            It starts with the full toolbox, the whole workspace and the sandbox's own prompt. Change any of that once it opens.
+                        </span>
+                        <Notice v-if="saveError !== undefined" :of="saveError" />
                     </div>
-                    <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
-                    <span v-else class="text-xs text-subtle">
-                        It starts with the full toolbox, the whole workspace and the sandbox's own prompt. Change any of that once it opens.
-                    </span>
-                    <Notice v-if="saveError !== undefined" :of="saveError" />
-                </div>
+                </RowNote>
             </RowGroup>
         </template>
 

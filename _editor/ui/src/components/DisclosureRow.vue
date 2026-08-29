@@ -52,11 +52,11 @@ import { computed, useId } from "vue";
 import Icon from "./Icon.vue";
 import Row from "./Row.vue";
 import type { IconName } from "../icons/iconSets.js";
-import { ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone } from "./row.js";
+import { ROW_BLOCK_PAD, ROW_TIERS, ROW_TOGGLE_GAPS, ROW_TOGGLE_SIZES, type RowDensity, type RowTone, useRowDensity } from "./row.js";
 
 const {
     open = false,
-    density = `comfortable`,
+    density,
     hit = `header`,
     body = `rail`,
     tone = `default`,
@@ -65,7 +65,11 @@ const {
 } = defineProps<{
     /** Open state. `v-model:open` to let the row keep it; bind + listen to let an accordion parent own it. */
     open?: boolean;
-    /** comfortable: settings rows · compact: record lists · dense: navigator rails. Forwarded to <Row>. */
+    /* comfortable: settings rows · compact: record lists · dense: navigator rails. Forwarded to <Row>.
+     *
+     * LEAVE IT UNSET INSIDE A <RowGroup> and the group's tier applies. This is the prop the extensions list
+     * was the one caller in the app never to pass, which is why it drew settings-sized rows one tab along from
+     * the compact secrets and personas lists — see the note in row.ts. */
     density?: RowDensity;
     /* WHAT THE PRESS TARGET IS.
      *
@@ -163,11 +167,18 @@ const onPairClick = (event: MouseEvent): void => {
     }
 };
 
+/* The tier in force, resolved ONCE and then passed DOWN to <Row> explicitly rather than left for <Row> to
+ * inject on its own. Both would land on the same answer, but this component draws the lead cluster a second
+ * time as a hidden mirror and pads its drawer from the same table, and a mirror that resolved the tier by its
+ * own route is a mirror that can disagree with the thing it is mirroring. One read, one answer. */
+const tier = useRowDensity(() => density);
+
 // The tier's own gap between the toggle cluster and the title, and the tighter one INSIDE the cluster. Read
 // from <Row>'s table rather than restated, because the hidden mirror below is only right while they match.
-const gap = computed(() => ROW_TIERS[density].gap);
-const toggleGap = computed(() => ROW_TOGGLE_GAPS[density]);
-const chevronSize = computed(() => ROW_TOGGLE_SIZES[density]);
+const gap = computed(() => ROW_TIERS[tier.value].gap);
+const mark = computed(() => ROW_TIERS[tier.value].mark);
+const toggleGap = computed(() => ROW_TOGGLE_GAPS[tier.value]);
+const chevronSize = computed(() => ROW_TOGGLE_SIZES[tier.value]);
 
 /* THE ONE TINT PAIR, so an open row is the same colour on every list in the app. It was `bg-content/6`,
  * `bg-content/2`, `bg-overlay`, `bg-canvas` and nothing, chosen by which file you were in.
@@ -187,13 +198,9 @@ const tint = computed(() => {
     return ``;
 });
 
-// Padding for a drawer, matched to the row's own so the two read as one block rather than as a panel that
-// missed its edges by two pixels. Deliberately a shade roomier vertically: a drawer holds a form, not a line.
-const DRAWER_PAD = {
-    comfortable: `px-4.5 py-4`,
-    compact: `px-4 py-3.5`,
-    dense: `px-2.5 py-3`,
-} as const satisfies Record<RowDensity, string>;
+// Padding for a drawer: ROW_BLOCK_PAD, which is the same table <RowNote variant="block"> pads from. A drawer
+// under an open row and a form at the tail of the same list are the same shape on the same surface, and they
+// were two hand-written answers to it before.
 </script>
 
 <template>
@@ -207,7 +214,7 @@ const DRAWER_PAD = {
             <div v-if="$slots[`before`]" class="flex shrink-0 items-center"><slot name="before" /></div>
             <Row
                 :class="$slots[`before`] ? `min-w-0 flex-1` : ``"
-                :density="density"
+                :density="tier"
                 :tone="tone"
                 :icon="icon"
                 :title="title"
@@ -251,7 +258,9 @@ const DRAWER_PAD = {
                             :class="[chevronSize, open ? `rotate-90` : ``]"
                             aria-hidden="true"
                         />
-                        <slot name="lead" />
+                        <!-- The tier's mark size, forwarded so a disclosure row's lead is written exactly like a
+                             plain row's: `<template #lead="{ mark }">`. See <Row>. -->
+                        <slot name="lead" :mark="mark" />
                     </component>
                 </template>
 
@@ -276,7 +285,7 @@ const DRAWER_PAD = {
                         <span class="flex shrink-0 cursor-pointer items-center" aria-hidden="true">
                             <span class="invisible flex items-center" :class="toggleGap">
                                 <Icon v-if="!disabled" name="chevron-right" class="shrink-0" :class="chevronSize" />
-                                <slot name="lead" />
+                                <slot name="lead" :mark="mark" />
                             </span>
                         </span>
                         <!-- `@click.stop` because this block is INSIDE <Row>, and the row-wide handler would
@@ -295,7 +304,7 @@ const DRAWER_PAD = {
         <!-- THE DRAWER. A sibling of the row rather than <Row>'s `#below`, because it is full-bleed: pulling it
              back out of the row's padding with negative margins would be four numbers to keep in step with the
              tier table, and every one of them a place to be wrong. -->
-        <div v-if="open && body === `drawer`" :id="bodyId" class="border-t border-line-subtle" :class="DRAWER_PAD[density]">
+        <div v-if="open && body === `drawer`" :id="bodyId" class="border-t border-line-subtle" :class="ROW_BLOCK_PAD[tier]">
             <slot name="below" />
         </div>
     </div>

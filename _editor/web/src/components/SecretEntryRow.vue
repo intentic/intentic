@@ -109,12 +109,19 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
          the name are <DisclosureRow>'s; the four hand-rolled copies of them that used to be here are the reason
          `pl-9` in this file, `pl-10` next door and `pl-8` in the automations list were three answers to one
          question. `body="rail"`: what opens is the secret's RECORD — where it lives, what last spent it — and
-         evidence hangs off the name it is about. -->
-    <DisclosureRow class="@container" density="compact" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
-        <template #lead>
+         evidence hangs off the name it is about.
+
+         No `density`: the <RowGroup> this row is dropped into says `compact` once for the whole list, and the
+         row, its outline and every note between them read it from there. -->
+    <DisclosureRow class="@container" :open="expanded" @update:open="emit(`update:expanded`, !expanded)">
+        <template #lead="{ mark }">
             <!-- The only thing on the row that is not words, and the only one that can be found without
-                 reading: sixteen accounts of the same person differ solely in their last character. -->
-            <BrandMark :size="20" :name="row.title" :logo="row.logo" :icon="row.icon" />
+                 reading: sixteen accounts of the same person differ solely in their last character.
+
+                 Sized by the row's tier rather than by this file, which had it at 20 while the extensions and
+                 environment lists one tab away had the same mark at 22: near enough to look like a mistake and
+                 far enough to be one. The tier itself comes from the <RowGroup> this row is dropped into. -->
+            <BrandMark :size="mark" :name="row.title" :logo="row.logo" :icon="row.icon" />
         </template>
 
         <template #title>

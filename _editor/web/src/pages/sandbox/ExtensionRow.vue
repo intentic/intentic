@@ -26,8 +26,14 @@ import ExtensionUpdateCard from "./ExtensionUpdateCard.vue";
  * THE ONE THING WORTH ITS WEIGHT that isn't words: the manifest's mark. It is the only element here that can be
  * found without reading: twenty-odd rows of grey text differ solely in their middle, and half of these
  * extensions never reach the rail, so for them this is the ONLY place they are ever drawn as anything. It costs
- * no vertical space (22px inside a 40px row) and no horizontal decision (it sits in the chevron's column), which
- * is precisely what the three refusals below are about: they each cost a word, a wrap or a scan.
+ * no vertical space (the compact tier's 22px inside a 40px row) and no horizontal decision (it sits in the
+ * chevron's column), which is precisely what the three refusals below are about: they each cost a word, a wrap
+ * or a scan.
+ *
+ * THE ROW'S TIER AND ITS MARK'S SIZE ARE BOTH THE LIST'S NOW, and this file is why the mechanism exists. It
+ * described the 40px row above while passing no `density` at all — the only <DisclosureRow> in the app that
+ * didn't — so it rendered at the settings tier and the extensions tab stood a third taller than the secrets and
+ * personas tabs beside it. The tier comes from <SandboxExtensions>'s <RowGroup>; the 22 comes from the tier.
  *
  * THREE THINGS THE ROW REFUSES TO SPEND WEIGHT ON, because fifteen rows pay for each of them:
  *
@@ -184,12 +190,15 @@ const tone = computed(() => TONE[entry.state.variant] ?? `text-muted`);
         :open="expanded"
         @update:open="emit(`update:expanded`, !expanded)"
     >
-        <template #lead>
+        <template #lead="{ mark }">
             <!-- The one thing on the row that is not words. Dimmed AND desaturated when the extension is
                  off, so a brand logo goes quiet with the rest of the row instead of being the loudest
-                 thing on the one row that is switched off. -->
+                 thing on the one row that is switched off.
+
+                 `mark` is the tier's, not this file's: the same 22 the secrets, environment and skills lists
+                 each used to type for themselves, from the one table that now holds it. -->
             <BrandMark
-                :size="22"
+                :size="mark"
                 :name="manifest.name"
                 :art="manifest.art"
                 :logo="manifest.logo"
