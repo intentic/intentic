@@ -162,9 +162,9 @@ export const capabilityRecommendations = async (
         return [];
     }
     /* Built AFTER `wanted`, which costs nothing (it reads the list already in hand) and is what makes the key
-     * exact rather than approximate. Dismissals are sorted so two equal sets cannot produce two keys; ` `
+     * exact rather than approximate. Dismissals are sorted so two equal sets cannot produce two keys; `\u0000`
      * separates the pair's halves because it is the one character neither a card name nor a file path holds. */
-    const fingerprint = JSON.stringify([root, wanted, dismissed.map((entry) => `${entry.card} ${entry.evidence}`).toSorted()]);
+    const fingerprint = JSON.stringify([root, wanted, dismissed.map((entry) => `${entry.card}\u0000${entry.evidence}`).toSorted()]);
     const now = Date.now();
     if (memo !== undefined && memo.fingerprint === fingerprint && now - memo.at < RECOMMENDATIONS_TTL_MS) {
         return [...memo.result];
