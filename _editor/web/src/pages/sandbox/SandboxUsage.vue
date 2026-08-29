@@ -205,11 +205,13 @@ const hasSpend = computed(() => current.value.length > 0);
             </button>
             <button
                 type="button"
-                class="ml-auto flex cursor-pointer items-center gap-1 text-2xs text-muted hover:text-content"
+                :class="ui.iconButton('ml-auto')"
+                aria-label="Refresh"
+                v-tooltip.top="'Refresh'"
                 :disabled="isFetching"
                 v-action="() => refetch()"
             >
-                <Icon name="refresh" :class="isFetching ? `animate-spin` : ``" />Refresh
+                <Icon name="refresh" class="text-sm" :spin="isFetching" />
             </button>
         </div>
 
