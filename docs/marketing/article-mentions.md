@@ -62,6 +62,30 @@ Ranked by how directly the page owns a query we want, then by whether the author
 
 None of the nine mention intentic as of 2026-08-12.
 
+## Refresh 2026-08-28: the individual-engineer shortlist
+
+Re-researched against live search results. The 08-12 targets 3 and 5–9 stand (none of the messages below
+were ever sent; that backlog is still open). Eight new individual-authored pages found; vendor roundups
+(Beam, Superset, Parallel Code, MindStudio, DevToolLab, Like One, amux, Nimbalyst, Augment Code, claudefa.st)
+were excluded for the same reason aq.dev was: a product site's comparison never adds a competitor.
+Verified 2026-08-28: neither #1 nor #2 below mentions intentic.
+
+| # | Author / page | Why it matters | The gap to lead with | Route |
+| --- | --- | --- | --- | --- |
+| 1 | [Addy Osmani: The Code Agent Orchestra](https://addyosmani.com/blog/code-agent-orchestra/) | The most influential individual voice in exactly our category. His "Tier 2" (3–10 agents, worktrees + dashboard + diff review + merge control) is intentic's shape verbatim, and his named list (Conductor, Vibe Kanban, Claude Squad, Antigravity, Cursor BG agents) omits us. One mention here outweighs the rest of this table. | Tier 2 tools give agents branch isolation, not runtime isolation: two agents still share one port, one dev DB, one node_modules: and most are macOS-only or die with the terminal. | [@addyosmani](https://x.com/addyosmani) |
+| 2 | [Andrew Lock: Running AI agents safely in a microVM](https://andrewlock.net/running-ai-agents-safely-in-a-microvm-using-docker-sandbox/) | Huge individual .NET readership. His pain framing: "switching between terminal windows to find the agent that's managed to run into a wall": is the fleet board's argument, written by someone else. | A sandbox per session solves safety and none of the visibility: at 4+ agents the failure is not knowing which one is blocked on you. | [@andrewlocknet](https://x.com/andrewlocknet), site contact |
+| 3 | [Mukesh Murugan: Git Worktrees in Claude Code](https://codewithmukesh.com/blog/git-worktrees-claude-code/) | Individual .NET blogger + YouTuber, ranks on the worktree query. | Worktrees solve the git half; the .NET-specific runtime half (two Kestrel ports, one LocalDB) is the paragraph after his last one. | [@iammukeshm](https://x.com/iammukeshm) |
+| 4 | [Felix Schmidt: Claude Code Worktrees the Right Way](https://felixschmidt.software/en/blog/claude-code-worktrees-2026) | Individual engineer blog ranking on `--worktree` setup. | Same runtime-collision gap. | Site contact |
+| 5 | [battyterm on DEV: How I Run a Team of AI Coding Agents in Parallel](https://dev.to/battyterm/how-i-run-a-team-of-ai-coding-agents-in-parallel-p7c) | Individual, and DEV comments are a native reply channel: no cold email needed. | His own opening example (two agents editing the same file) extends to two agents wanting the same port. | DEV comment |
+| 6 | [Gijs (Substack): Running multiple AI Agents in parallel](https://gijs.substack.com/p/running-multiple-ai-agents-in-parallel) | Individual, management-of-agents framing rather than tooling: the audience that buys the fleet story. | Managing agents like a team needs the team to have separate desks: shared-machine collisions read as flaky agents. | Substack reply |
+| 7 | [Rick Hightower (Towards AI): Drive Your Local Claude Code Session From Your Phone](https://pub.towardsai.net/claude-code-drive-your-local-claude-code-session-from-your-phone-your-browser-anywhere-7885f4528a9c) | The phone/remote angle is our sharpest differentiator, and his piece documents Anthropic's own Remote Control limits: one connection per instance, terminal must stay open, ~10-min timeout. | Those limits are the argument: a session that lives in a container on your hardware has no terminal to keep open. | Medium response |
+| 8 | [Developers Digest: Git Worktrees + Claude Code Playbook](https://www.developersdigest.tech/blog/git-worktrees-claude-code-parallel-agents-guide) | Individual creator with a YouTube channel: a mention travels to video. | Worktrees "without context switching" still context-switch the moment agents need to run the app. | X / YouTube |
+
+Send rules unchanged from [What to send](#what-to-send): disclose in the first two lines, link the guide
+not the landing page, no ask. One more fact available since 08-12 that makes the messages land better:
+the repo is at 29 stars with entries live on four awesome lists, so "six days old and rough" copy is stale:
+say "a few weeks old" instead.
+
 ## What to send
 
 The failure mode is a pitch. These authors write about a problem, and the thing that earns a mention is

@@ -165,15 +165,15 @@ moved.
 | Piebald-AI/awesome-gemini-cli | [#87](https://github.com/Piebald-AI/awesome-gemini-cli/pull/87) | Agent Orchestration & CLI Tools | **merged** |
 | debarshibasak/awesome-paas | [#69](https://github.com/debarshibasak/awesome-paas/pull/69) | Cloud IDE or Developer Workspaces | **merged** |
 | awesome-opencode | [#580](https://github.com/awesome-opencode/awesome-opencode/pull/580) | `data/projects/intentic.yaml` | open, CI awaiting maintainer approval |
-| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | open, clean: conflict resolved 2026-08-12 |
+| ikaijua/Awesome-AITools | [#782](https://github.com/ikaijua/Awesome-AITools/pull/782) | AI Coding table | **closed 2026-08-28 poll**: auto-closed by the repo's 14-day-inactivity bot; "feel free to reopen if there are updates", so a comment + reopen revives it |
 | punkpeye/awesome-mcp-clients | [#276](https://github.com/punkpeye/awesome-mcp-clients/pull/276) | Clients, alphabetical | open, clean |
 | steven2358/awesome-generative-ai | [#1191](https://github.com/steven2358/awesome-generative-ai/pull/1191) | `DISCOVERIES.md` → Coding Assistants | open, CI awaiting approval |
 | jamesmurdza/awesome-ai-devtools | [#945](https://github.com/jamesmurdza/awesome-ai-devtools/pull/945) | Agent Infrastructure → Multi-Agent Orchestration | open, clean: template check green |
 | AwesomeHomelab/awesome-homelab | [#114](https://github.com/AwesomeHomelab/awesome-homelab/pull/114) | `data/development.yaml` | open, clean |
 | ai-for-developers/awesome-ai-coding-tools | [#603](https://github.com/ai-for-developers/awesome-ai-coding-tools/pull/603) | Coding Agents | open, clean |
-| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | open, clean |
+| bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | **live** (2026-08-28 poll): maintainer first closed it as "too new", reversed after a stats correction and added the entry himself; the PR reads closed-unmerged but the README carries intentic |
 | RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps | open, clean |
-| andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents: Desktop & Web, alphabetical | open, clean (added 2026-08-10) |
+| andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents: Desktop & Web, alphabetical | **merged** (2026-08-28 poll), entry live |
 
 **The last row is the best-fitting list on this page, and it was found late.** Its taxonomy is ours exactly:
 the Desktop & Web section is browser and mobile agent workspaces with diff review, Garcon and IM.codes sit two
@@ -239,8 +239,11 @@ Codex list a legitimate target rather than a stretch.
    OpenCode and Gemini CLI over ACP", and the body was rewritten into the seven-field
    [recommendation template](https://github.com/ikaijua/Awesome-AITools/issues/233). State went
    `dirty` → `mergeable: true`.
-2. **2026-08-18**: awesome-claude-code, through the issue form, exactly to its style rules. **Prepared below;
-   it is a copy-paste job on the day, not a writing job.**
+2. ~~**2026-08-18**: awesome-claude-code, through the issue form, exactly to its style rules.~~
+   **Submitted 2026-08-28** as [#2666](https://github.com/hesreallyhim/awesome-claude-code/issues/2666),
+   exactly per the prepared copy below (category Alternative Clients, trap box left unchecked), through the
+   web form in a signed-in browser. Ten days late against the 08-18 unlock. The validation bot passed all
+   checks within minutes ("ready for a maintainer to review"); approval is now the maintainer's discretion.
 
 ### awesome-claude-code: the submission, ready to paste on 2026-08-18
 
