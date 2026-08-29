@@ -45,11 +45,13 @@ export type RuleMoment = z.infer<typeof RuleMomentSchema>;
  *             machinery it has no business expressing: the proof ledger behind "verify before finishing"
  *             tracks what a turn edited against what it ran, which is not a shell command and never will be.
  */
-/* The named behaviours a rule can invoke. Both read a record only the daemon keeps, which is what makes them
- * built-ins rather than commands: `verify-edits` weighs what a turn edited against what it ran, and
+/* The named behaviours a rule can invoke. Each reads a record only the daemon keeps, which is what makes them
+ * built-ins rather than commands: `verify-edits` weighs what a turn edited against what it ran,
  * `verify-removals` weighs what a turn DELETED against what the repository's history says about those lines,
- * which is a question `git log` answers and no shell one-liner an owner could type would. */
-export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals"]);
+ * which is a question `git log` answers and no shell one-liner an owner could type would, and
+ * `verify-ui-edits` weighs the rendered surfaces a turn changed against whether it ever looked at one, the one
+ * question a passing suite is structurally unable to answer. */
+export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits"]);
 export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
 export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({

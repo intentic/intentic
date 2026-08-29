@@ -99,6 +99,22 @@ test(`"Check what it deleted" writes the removal-ledger rule beside it, not inst
     expect(ruleById(`verify-edits`)).toBeUndefined();
 });
 
+test(`"Look at what it changed" writes the view-ledger rule beside the other two`, async () => {
+    const host = mount(AgentChecks);
+
+    // The third switch. All three built-ins stand at the same moment over the same turn and answer different
+    // questions about it: what was written against what ran, what was removed against the history, and what was
+    // drawn against whether anyone looked. Turning one on must leave the others alone.
+    toggleAt(host, 2).click();
+    await Promise.resolve();
+
+    expect(ruleById(`verify-ui-edits`)?.moment).toBe(`turn.ending`);
+    expect(ruleById(`verify-ui-edits`)?.action).toEqual({ kind: `builtin`, name: `verify-ui-edits` });
+    expect(ruleById(`verify-ui-edits`)?.enabled).toBe(true);
+    expect(ruleById(`verify-edits`)).toBeUndefined();
+    expect(ruleById(`verify-removals`)).toBeUndefined();
+});
+
 test(`switching it back off disables the rule rather than losing where the user put it`, async () => {
     // Position is priority at a deciding moment, so a row that deleted and re-appended its rule could silently
     // move it below one the user had deliberately placed above.

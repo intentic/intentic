@@ -10,6 +10,7 @@ import {
     verifyRemovalsMessage,
 } from "../agent/agent-removals.js";
 import { commandExitCode, createVerificationLedger, type ScriptsProbe, type VerificationLedger, verifyEditsMessage } from "../agent/agent-verification.js";
+import { createViewLedger, isObservingCall, type ViewLedger, verifyUiEditsMessage } from "../agent/agent-viewing.js";
 import { inWorktree, type IsolationPlan } from "../agents/isolation.js";
 import type { RuleCommandRun } from "./rule-command.js";
 import { conditionHolds } from "./rules.js";
@@ -106,6 +107,10 @@ export interface TurnEndingDeps {
 interface Ledgers {
     readonly verification: VerificationLedger;
     readonly removal: RemovalLedger | undefined;
+    // What was DRAWN against whether anything looked at it. Kept unconditionally beside the proof ledger:
+    // both are two counters and a path filter over hooks that are already firing, and the branch to skip one
+    // would cost more than the one it saves. (`removal` is the exception because it READS FILES.)
+    readonly view: ViewLedger;
 }
 
 /* WHAT EACH BUILT-IN ASKS OF THE TURN, as a total table over the name rather than a chain of ifs: a built-in
@@ -123,6 +128,7 @@ const BUILTINS: Record<RuleBuiltin, (deps: TurnEndingDeps, ledgers: Ledgers) => 
                   git: deps.git,
                   now: deps.now,
               }),
+    "verify-ui-edits": async (_deps, ledgers) => verifyUiEditsMessage(ledgers.view),
 };
 
 // What one rule contributes to the follow-up, or nothing.
@@ -173,7 +179,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
      * is cheap next to the edit itself and it is not free, so a workspace that has not asked for the check does
      * not pay for the snapshot. The proof ledger stays unconditional because the CONDITIONS need it. */
     const wantsRemovals = rules.some((rule) => rule.enabled && rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === "verify-removals");
-    const ledgers: Ledgers = { verification: createVerificationLedger(), removal: wantsRemovals ? createRemovalLedger() : undefined };
+    const ledgers: Ledgers = { verification: createVerificationLedger(), removal: wantsRemovals ? createRemovalLedger() : undefined, view: createViewLedger() };
     const { removal } = ledgers;
     const read = deps.read ?? readWorkspaceFile;
     let followUps = 0;
@@ -211,7 +217,27 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                             const path = editedPath(input.tool_input);
                             if (path !== undefined) {
                                 ledgers.verification.noteEdit(path);
+                                // The view ledger keeps only the rendered surfaces, and filters at its own
+                                // door rather than here: one edit, two records, each with its own idea of
+                                // what is worth asking about.
+                                ledgers.view.noteEdit(path);
                             }
+                        }
+                        return {};
+                    },
+                ],
+            },
+            {
+                /* WHAT THE TURN LOOKED AT. The same matcher the browser session manager stands on
+                 * (browser/browser-sessions.ts), because it is the same population of calls: every browser
+                 * tool this sandbox offers arrives from an MCP server under that shape. Which of them COUNT
+                 * as looking is the ledger's own question (agent-viewing.ts isObservingCall), not the
+                 * matcher's: a close or a resize fires this hook and clears nothing. */
+                matcher: "mcp__.+__browser_.+",
+                hooks: [
+                    async (input) => {
+                        if (input.hook_event_name === "PostToolUse" && isObservingCall(input.tool_name)) {
+                            ledgers.view.noteLook(input.tool_name);
                         }
                         return {};
                     },

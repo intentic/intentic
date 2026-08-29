@@ -198,3 +198,50 @@ export const syncConversation = async (
     const results = await Promise.all(repos.map(({ repo, landedTip }) => syncOne(worktrees, id, repo, landedTip, title, git)));
     return results.filter((result) => result !== undefined);
 };
+
+/* THE SAME SYNC, IMMEDIATELY BEFORE A LAND, and the answer to why a sandbox that already rebases at every
+ * turn start still met the conflict errand several times a day.
+ *
+ * Turn-start is the right moment for the MODEL (it reads today's code) and the wrong one for the LAND. The two
+ * are separated by the whole turn: half an hour and a few hundred tool calls, during which the user lands
+ * other agents and commits them. A land is `git apply --check` against main's working tree, so every
+ * main-line commit that arrived inside that window is a fresh chance to refuse over lines this agent never
+ * touched. The wider the fleet, the wider the window, which is why the errand clustered on exactly the days
+ * with the most parallel work.
+ *
+ * So the branch is brought forward once more, at the last moment before its patch is measured. Every safety
+ * property of the turn-start sync holds unchanged and for the same reasons (see the header): it aborts, it
+ * commits the remainder first so nothing is lost, and it writes only inside this conversation's own worktree.
+ * A blocked repo simply lands from where it was, which is today's behaviour in full.
+ *
+ * `recordWorktree` is injected rather than imported: this module knows git and worktrees, and the registry is
+ * the caller's. Returns the composition to LAND FROM, with `base` moved to the main-line sha each rebased repo
+ * now sits on. Landing from the pre-sync composition would hand anchorOf a base the rebase has just orphaned,
+ * and standing.ts reads `tip !== base` as "this agent produced something". */
+// The shape this needs off a composition row, spelled structurally so the sync layer takes no dependency on
+// the registry's store types. The generic keeps every other field the caller's rows carry (landedHead,
+// landedAt) intact through the rewrite below.
+type ComposedRepo = { readonly repo: string; readonly base: string; readonly landedTip?: string | undefined };
+
+export const syncBeforeLand = async <Repo extends ComposedRepo>(
+    worktrees: AgentWorktrees,
+    entry: { readonly id: string; readonly title?: string | undefined; readonly repos: readonly Repo[] },
+    recordWorktree: (id: string, repos: readonly Repo[]) => Promise<void>,
+    git: GitRunner = defaultGit,
+): Promise<readonly Repo[]> => {
+    const synced = await syncConversation(
+        worktrees,
+        entry.id,
+        entry.repos.map(({ repo, landedTip }) => ({ repo, landedTip })),
+        entry.title,
+        git,
+    );
+    const onto = new Map(synced.filter((repo) => repo.blocked !== true).map((repo) => [repo.repo, repo.onto]));
+    if (onto.size === 0) {
+        return entry.repos;
+    }
+    // oxlint-disable-next-line oxc/no-map-spread -- a fresh record per repo is the point: these are the registry's own persisted rows
+    const moved = entry.repos.map((composed): Repo => ({ ...composed, base: onto.get(composed.repo) ?? composed.base }));
+    await recordWorktree(entry.id, moved);
+    return moved;
+};

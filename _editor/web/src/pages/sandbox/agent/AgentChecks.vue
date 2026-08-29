@@ -26,6 +26,7 @@ const { settings, byId, upsert, remove, setEnabled } = useRules();
 
 const verify = () => byId(NAMED_RULES.verify);
 const removals = () => byId(NAMED_RULES.removals);
+const viewing = () => byId(NAMED_RULES.viewing);
 const prepush = () => byId(NAMED_RULES.prepush);
 
 // The proof ledger is a built-in action: what it does, read what the turn edited against what the turn ran:
@@ -59,6 +60,24 @@ const setRemovals = (on: boolean): void => {
         label: `Check what it deleted`,
         moment: `turn.ending`,
         action: { kind: `builtin`, name: `verify-removals` },
+        enabled: on,
+    });
+};
+
+// Looking at what was drawn is a built-in for the third time and the clearest case of the three: the record it
+// reads, which rendered surfaces this turn changed and whether any browser call observed one afterwards, exists
+// only while the turn is running and is not a question any command can be pointed at.
+const setViewing = (on: boolean): void => {
+    const existing = viewing();
+    if (existing !== undefined) {
+        setEnabled(existing.id, on);
+        return;
+    }
+    upsert({
+        id: NAMED_RULES.viewing,
+        label: `Look at what it changed`,
+        moment: `turn.ending`,
+        action: { kind: `builtin`, name: `verify-ui-edits` },
         enabled: on,
     });
 };
@@ -136,6 +155,26 @@ const savePrepush = (): void => {
                     :model-value="removals()?.enabled ?? false"
                     :disabled="settings === undefined"
                     @update:model-value="setRemovals"
+                />
+            </template>
+        </Row>
+
+        <!-- Look at what it changed: a suite cannot see a clipped label or a border cut at a corner, so a turn
+             that edited a rendered surface and never opened a browser afterwards gets asked to. It asks for a
+             stated expectation before the observation on purpose: the turns that got sent back for how they
+             looked had ALREADY screenshotted more often than the ones that were accepted, so a glance is not
+             the scarce thing. Off by default like its neighbours, and silent on any turn that touched no
+             surface. -->
+        <Row
+            icon="eye"
+            title="Look at what it changed"
+            description="Prompt the assistant to open the view after changes to the interface."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="viewing()?.enabled ?? false"
+                    :disabled="settings === undefined"
+                    @update:model-value="setViewing"
                 />
             </template>
         </Row>

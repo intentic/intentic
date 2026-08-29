@@ -42,6 +42,7 @@ import { composeWirePrompt } from "./turn-preamble.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
 import { createFrameLedger } from "./agent-verification.js";
+import { createViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork } from "./verify-nudge.js";
 import { isFileWorkCall, isSearchCall, searchPrecedesFileWork } from "./tool-calls.js";
 import { mentionsSpentAllowance } from "./failure-sentences.js";
@@ -530,7 +531,33 @@ async function* runConversationTurn(
                 ? await landingPaths(services, finished, span)
                 : undefined;
             const decided = landingVerdict(rules, { repos: span.map(({ repo }) => repo), paths }, input.autoLand ?? finished.autoLand);
-            const landed = await landAgent(services.agentWorktrees, finished, decided.land ? "check" : "measure");
+            /* ONE LAST REBASE, because the sync at the top of this turn is already stale by the time we get
+             * here. The branch was put on today's main line before the model read a line of it, and then the
+             * turn RAN: two hundred tool calls and half an hour, during which the user lands other agents and
+             * commits them. The land below is a patch applied against main's working tree, so every main-line
+             * commit that arrived inside that window is a chance for `git apply --check` to refuse over work
+             * this agent never touched. That refusal costs the conflict errand, the user's click, and a whole
+             * model turn re-resolving a merge the daemon could have avoided for the price of a merge-base.
+             *
+             * The window is widest exactly where it hurts most, a fleet landing in parallel, which is what
+             * left the merge-conflict errand firing several times a day on a sandbox that already rebases
+             * before every turn.
+             *
+             * Best-effort, like the settle-time resync above and NOT like the one at turn start: the work is
+             * finished and sitting on the branch, so a git fault here must cost the rebase and never the land.
+             * A sync that cannot move the branch leaves it exactly where it was, and the land-time conflict
+             * flow behind this is untouched. `syncOnto` carries its own no-op guard for workflow steps, and
+             * re-points `span` for any repo it moves, which the chore below diffs from. */
+            try {
+                await syncOnto();
+            } catch (error) {
+                services.logger.warn({ err: error, id: conversationId }, "agents: pre-land sync failed, landing on the old base");
+            }
+            // Re-read after the sync: `syncOnto` persists the new base per repo it moved, and landing from the
+            // frozen pre-sync composition would hand anchorOf a base the rebase has just orphaned.
+            const resynced = services.agents.entry(conversationId);
+            const landing = resynced !== undefined && isIsolated(resynced) ? resynced : finished;
+            const landed = await landAgent(services.agentWorktrees, landing, decided.land ? "check" : "measure");
             reconciled = true;
             /* A rule that decided a card's fate did something, and the settings list says so. The per-agent
              * override reports no rule, because in that case none decided.
@@ -1131,6 +1158,12 @@ async function* runTurn(
      * sent a child to make its edits still edited, and a verdict that ignored delegated work would report the
      * most careful turns as having done nothing. The child's own report carries its own verdict separately. */
     const verification = createFrameLedger();
+    /* AND DID IT LOOK AT WHAT IT DREW, the same trick on the other half of the turn (agent-viewing.ts). A
+     * separate ledger rather than a third reader on the one above, because it counts a different population
+     * against a different kind of evidence: rendered surfaces against browser observations, where the proof
+     * ledger counts code against checks. A passing suite is structurally unable to speak to a clipped label,
+     * and folding the two would let one clear the other. */
+    const viewing = createViewFrameLedger();
     /* THE AGENT'S OWN CHECKLIST as it last stood, the `todos` frames every runtime that keeps one emits. Last
      * wins: the frame is a whole snapshot, not a delta. Undefined ⇒ this turn kept no checklist, which is not
      * an empty one and must not be recorded as though it were. */
@@ -1264,6 +1297,7 @@ async function* runTurn(
              * then three edits is a turn with no evidence for those edits. */
             if (event.kind === "tool_call" || event.kind === "tool_call_update") {
                 verification.note(event);
+                viewing.note(event);
             } else if (event.kind === "todos") {
                 checklist = event.items;
             } else if (event.kind === "compact") {
@@ -1628,6 +1662,7 @@ async function* runTurn(
                 seed: input,
                 rules: request.turnEndingRules ?? [],
                 ledger: verification,
+                view: viewing,
                 ...(isolation !== undefined ? { isolation: isolation.plan } : {}),
                 cwd: effectiveCwd,
                 ...(request.onRuleFired !== undefined ? { onFired: request.onRuleFired } : {}),

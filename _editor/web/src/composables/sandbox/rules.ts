@@ -9,7 +9,13 @@ import type { Rule } from "@intentic-app/api-contract";
 // The rules whose row lives elsewhere on the tab. Everything else lists. These ids belong to THIS SCREEN, not
 // to the wire contract: a rule with a dedicated row is still an ordinary rule to the daemon, and which surface
 // chooses to render one nicely is no business of the shared schema.
-export const NAMED_RULES = { verify: `verify-edits`, removals: `verify-removals`, prepush: `pre-push`, land: `auto-land` } as const;
+export const NAMED_RULES = {
+    verify: `verify-edits`,
+    removals: `verify-removals`,
+    viewing: `verify-ui-edits`,
+    prepush: `pre-push`,
+    land: `auto-land`,
+} as const;
 
 /* --- what the table says when nothing about the occasion is known yet ---------------------------------------
  *

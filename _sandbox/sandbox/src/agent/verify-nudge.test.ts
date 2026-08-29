@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import { afterEach, expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
+import { createViewFrameLedger, type ViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork, startVerifyNudgeRuntime, type VerifyNudgeRuntime } from "./verify-nudge.js";
 
 /* THE PROOF FOLLOW-UP ON A RUNTIME WITH NO STOP HOOKS. The decision is the same one the Claude arm makes in a
@@ -98,6 +99,79 @@ test("a nudge never answers a nudge", async () => {
     // …and the conversation is free again from the turn after that.
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
     await vi.waitFor(() => expect(started).toHaveLength(2), SETTLES);
+});
+
+/* THE OTHER LEDGER, on the same road. `verify-ui-edits` reads what the turn DREW against whether it looked,
+ * and it has to reach a Codex or Cursor turn the same way `verify-edits` does, off frames rather than a hook
+ * that runtime does not have. */
+const viewRule: Rule = {
+    id: "verify-ui-edits",
+    label: "Look at what it changed",
+    moment: "turn.ending",
+    action: { kind: "builtin", name: "verify-ui-edits" },
+    enabled: true,
+};
+
+const drew = (path: string): ViewFrameLedger => {
+    const ledger = createViewFrameLedger();
+    ledger.note({ kind: "tool_call", id: "1", name: "Edit", category: "edit", status: "completed", locations: [{ path }] });
+    return ledger;
+};
+
+const looked = (path: string): ViewFrameLedger => {
+    const ledger = drew(path);
+    ledger.note({ kind: "tool_call", id: "2", name: "mcp__web__browser_take_screenshot", category: "other", status: "completed" });
+    return ledger;
+};
+
+test("a turn that changed a rendered surface and never looked is sent a follow-up", async () => {
+    const { started } = runtimeWith();
+    const message = await nudgeUnverifiedWork({
+        conversationId: "c1",
+        seed,
+        rules: [viewRule],
+        ledger: edited("/work/src/App.vue"),
+        view: drew("/work/src/App.vue"),
+    });
+    expect(message).toContain("never looked at the result");
+    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+});
+
+test("a turn that looked after its last surface edit is left alone", async () => {
+    const { started } = runtimeWith();
+    const nudged = await nudgeUnverifiedWork({
+        conversationId: "c1",
+        seed,
+        rules: [viewRule],
+        ledger: edited("/work/src/App.vue"),
+        view: looked("/work/src/App.vue"),
+    });
+    expect(nudged).toBeUndefined();
+    expect(started).toHaveLength(0);
+});
+
+/* A caller that keeps no view ledger must not fire this rule on an empty one: "you never looked" is true of an
+ * empty record for the wrong reason, and it would be told to every turn on every runtime that has not been
+ * wired up yet. */
+test("the rule cannot fire without the ledger it reads", async () => {
+    const { started } = runtimeWith();
+    expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [viewRule], ledger: edited("/work/src/App.vue") })).toBeUndefined();
+    expect(started).toHaveLength(0);
+});
+
+// Two rules standing is two things to say and ONE turn to say them in: the follow-up is the expensive half.
+test("both builtins standing produce a single follow-up carrying both", async () => {
+    const { started } = runtimeWith();
+    const message = await nudgeUnverifiedWork({
+        conversationId: "c1",
+        seed,
+        rules: [rule, viewRule],
+        ledger: edited("/work/src/App.vue"),
+        view: drew("/work/src/App.vue"),
+    });
+    expect(message).toContain("no check has passed since the last edit");
+    expect(message).toContain("never looked at the result");
+    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 
 // A conversation whose follow-up never landed must not be left holding a guard against one that is not coming.

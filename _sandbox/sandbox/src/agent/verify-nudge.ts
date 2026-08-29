@@ -1,4 +1,4 @@
-import type { AgentTurn, Rule } from "@intentic/sandbox-contract";
+import type { AgentTurn, Rule, RuleBuiltin } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
@@ -6,6 +6,7 @@ import type { IsolationPlan } from "../agents/isolation.js";
 import { conditionHolds } from "../rules/rules.js";
 import { workspaceRelative } from "../rules/turn-ending.js";
 import { type VerificationLedger, verifyEditsMessage } from "./agent-verification.js";
+import { type ViewLedger, verifyUiEditsMessage } from "./agent-viewing.js";
 import { startConversationTurn } from "./turn-resume.js";
 
 /* THE PROOF FOLLOW-UP, ON THE FIVE RUNTIMES THAT COULD NEVER HAVE IT.
@@ -65,16 +66,12 @@ const pending = new Set<string>();
 /* The rule the owner stood here, or none. `moment` is re-checked though the planner already filtered on it,
  * the same belt the hook path keeps: a rule firing at a moment it was not written for is silent and wrong.
  *
- * Only the `verify-edits` builtin. An `instruct` rule's text and a `command` rule's runner are the hook path's
+ * Only the ledger-reading builtins. An `instruct` rule's text and a `command` rule's runner are the hook path's
  * to deliver, and a command rule in particular needs the turn's own tmux runner in the turn's own cwd, which
  * no longer exists by the time this runs. */
-const verifyRule = (rules: readonly Rule[], paths: readonly string[]): Rule | undefined =>
+const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[]): Rule | undefined =>
     rules.find(
-        (rule) =>
-            rule.moment === "turn.ending" &&
-            rule.action.kind === "builtin" &&
-            rule.action.name === "verify-edits" &&
-            conditionHolds(rule.when, { paths }),
+        (rule) => rule.moment === "turn.ending" && rule.action.kind === "builtin" && rule.action.name === name && conditionHolds(rule.when, { paths }),
     );
 
 export interface VerifyNudge {
@@ -84,6 +81,10 @@ export interface VerifyNudge {
     readonly seed: AgentTurn;
     readonly rules: readonly Rule[];
     readonly ledger: VerificationLedger;
+    // The second record, what the turn DREW against whether it looked (agent-viewing.ts). Optional so a caller
+    // that keeps no such ledger simply cannot fire the rule that reads it, rather than firing it on an empty
+    // one and telling every turn it never looked at anything.
+    readonly view?: ViewLedger | undefined;
     readonly isolation?: IsolationPlan | undefined;
     // The turn's own tree, so a rule written as `src/**` is matched against paths spelled the way the owner
     // spells them (the hook path's rule, kept identical here so the same glob cannot mean two things).
@@ -106,19 +107,38 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
     if (pending.delete(nudge.conversationId)) {
         return undefined;
     }
+    /* The fact set every condition here narrows on: EVERY path the turn edited, prose included, which is what
+     * the proof ledger records and a superset of what the view ledger keeps. One `facts` for all the builtins,
+     * exactly as the hook path does it, so the same glob cannot mean two things depending on which rule read
+     * it or which provider ran the turn. */
     const paths = nudge.ledger.edited().map((path) => workspaceRelative(path, nudge.cwd));
-    const rule = verifyRule(nudge.rules, paths);
-    if (rule === undefined) {
+    /* ONE FOLLOW-UP CARRYING BOTH ASKS, the hook path's "one budget for the whole moment" kept here. Two rules
+     * standing at this moment is two things to say, not two turns to spend, and the turn this starts is the
+     * expensive half. Each decision is made by the same function the Stop hook calls: undefined ⇒ nothing was
+     * edited, or what was edited is already answered for, and either way that rule is silent. */
+    const asks: { readonly rule: Rule; readonly message: string }[] = [];
+    const verify = builtinRule(nudge.rules, "verify-edits", paths);
+    if (verify !== undefined) {
+        const message = await verifyEditsMessage(nudge.ledger, nudge.isolation);
+        if (message !== undefined) {
+            asks.push({ rule: verify, message });
+        }
+    }
+    const viewing = nudge.view === undefined ? undefined : builtinRule(nudge.rules, "verify-ui-edits", paths);
+    if (viewing !== undefined && nudge.view !== undefined) {
+        const message = verifyUiEditsMessage(nudge.view);
+        if (message !== undefined) {
+            asks.push({ rule: viewing, message });
+        }
+    }
+    if (asks.length === 0) {
         return undefined;
     }
-    // The one decision, made by the same function the Stop hook calls: undefined ⇒ nothing was edited, or a
-    // check has passed since the last edit, and either way the turn is done.
-    const message = await verifyEditsMessage(nudge.ledger, nudge.isolation);
-    if (message === undefined) {
-        return undefined;
-    }
+    const message = asks.map((ask) => ask.message).join("\n\n");
     pending.add(nudge.conversationId);
-    nudge.onFired?.(rule);
+    for (const ask of asks) {
+        nudge.onFired?.(ask.rule);
+    }
     void deliver(live, nudge, message).catch((error: unknown) =>
         live.logger.error({ err: error, conversationId: nudge.conversationId }, "verify nudge: delivery crashed"),
     );

@@ -12,6 +12,7 @@ import { agentRepoChanges, agentRepoModules, anchorOf } from "./agent-changes.js
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./agents-store.js";
 import { archivable, archiveAgents, purgeArchived } from "./archive.js";
 import { landAgent, outstandingConflicts } from "./land.js";
+import { syncBeforeLand } from "./sync.js";
 import { describeLandingInBackground } from "./landed-subject.js";
 
 // The fleet routes: list/get the registry, review a conversation worktree's delta vs its recorded bases
@@ -410,12 +411,27 @@ export const createAgentsRoutes = (services: Services) => {
             // the auto-land path captures it before its own land (see streamIsolatedTurn). A cumulative land
             // reads from the base for the same reason the land itself does: the rung it is putting back is
             // the one before anything landed, so a chore told otherwise would diff an empty range.
-            const span = entry.repos.map(({ repo, base, landedTip }) => ({
+            /* The same last-moment rebase the auto-land takes (agents/sync.ts syncBeforeLand), and this road
+             * needs it more: "Land now" is clicked minutes or hours after the turn that wrote the work, with
+             * the user having landed other cards in between, which is precisely the main-line movement that
+             * makes a patch refuse over lines this agent never touched.
+             *
+             * Best-effort: the work is finished and on the branch, so a git fault costs the rebase and never
+             * the land the user just asked for. */
+            let composition = entry.repos;
+            try {
+                composition = [...(await syncBeforeLand(services.agentWorktrees, entry, services.agents.recordWorktree))];
+            } catch (error) {
+                services.logger.warn({ err: error, id: entry.id }, "agents: pre-land sync failed, landing on the old base");
+            }
+            // Snapshotted AFTER the sync, for the reason the auto-land path spells out: a rebase orphans the
+            // sha a span names, and a chore diffed from it carries every main-line commit underneath.
+            const span = composition.map(({ repo, base, landedTip }) => ({
                 repo,
                 from: input.span === "cumulative" ? base : (landedTip ?? base),
                 dir: services.agentWorktrees.worktreeDir(entry.id, repo),
             }));
-            const result = await landAgent(services.agentWorktrees, entry, input.mode, input.span);
+            const result = await landAgent(services.agentWorktrees, { ...entry, repos: composition }, input.mode, input.span);
             // Both halves of what the card will show: recordLanded stores the tips and the conflict report,
             // and re-derives the standing from them. `finish` no longer carries a verdict, it clears how the
             // LAST TURN ended, which a deliberate land is the user moving past (an `error` card they chose to

@@ -576,6 +576,36 @@ conversation's worktree instead of a path that still reaches the shared checkout
   turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
   is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
   already told what it proved), and a nudge never answers a nudge.
+- **The branch is rebased again at the last moment before it lands, not only before the turn starts**
+  (`src/agents/sync.ts` `syncBeforeLand`, called from the auto-land in `src/agent/agent.routes.ts` and the
+  manual land route). Turn-start is the right moment for the MODEL, which then reads today's code, and the
+  wrong one for the LAND: the two are separated by the whole turn, and a long turn is half an hour in which the
+  user lands other agents and commits them. A land is `git apply --check` of a patch against main's working
+  tree, so every main-line commit that arrived inside that window is a fresh chance to refuse over CONTEXT
+  LINES this agent never touched — nothing in conflict, the paperwork simply went stale. That refusal costs the
+  conflict errand, the user's click, and a whole model turn re-resolving a merge, and it clustered on exactly
+  the days with the most parallel work, which is the shape a fleet has. Every safety property of the turn-start
+  sync carries over unchanged, because it is the same call: it aborts and rolls back, it commits the worktree
+  remainder first so nothing is lost, and it writes only inside the conversation's own checkout. Best-effort at
+  this end rather than fatal — the work is finished and sitting on the branch, so a git fault costs the rebase
+  and never the land — and a repo that will not move lands from where it was, which is the old behaviour in
+  full. The composition it hands back carries the moved `base` per repo, because landing from the pre-sync
+  record would hand `anchorOf` a sha the rebase has just orphaned.
+- **A rendered surface gets a different question asked of it than a parser does** (`src/agent/agent-viewing.ts`,
+  the `verify-ui-edits` built-in beside `verify-edits` and `verify-removals`). The proof ledger weighs edited
+  code against the checks that ran, and for a reducer or a route that is the whole story. It is structurally
+  unable to speak to a clipped label: a stylesheet edit type-checks, keeps every test green, and ships a button
+  with its text cut off. So a second ledger counts a different population against different evidence — which
+  `.vue`/`.css`/`.astro`/`.tsx` files the turn changed, against whether any browser call OBSERVED something
+  afterwards — on the same shared counter, so "after" means after and a screenshot taken before the last three
+  CSS edits is not evidence about them. Two deliberate narrowings. The extension list is an ALLOWLIST, the
+  opposite call to the prose filter next door, because a spurious ask here costs a whole model turn and a
+  browser session. And a `browser_close` or `browser_resize` clears nothing: a gate any browser call could
+  clear is one cleared by the very turn it exists to catch. It asks for a COMPARISON rather than a glance,
+  which is the half the sessions behind it actually failed — turns that were sent back for how they looked had
+  already screenshotted MORE often than the ones that were accepted, so looking was never the scarce thing.
+  Off by default like its two siblings, silent on any turn that touched no surface, and it reaches the five
+  runtimes with no Stop hook by the same frame-fed road the proof follow-up takes.
 - **One 4xx is the provider's fault, and it is classified as such.** A turn that runs for ten minutes and then
   dies on `400 prompt_cache_retention is not supported on this model` was refused over a parameter nothing here
   sends: the CLI's outgoing body was captured without it, the field appears nowhere in this repo, and the same

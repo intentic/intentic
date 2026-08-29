@@ -26,16 +26,36 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "action">): Rule => ({
     ...over,
 });
 
-// Drive a hook set the way the SDK does. Each helper fires one event at the set built for a single turn, so a
-// test can interleave edits, commands and stops against ONE ledger, which is the whole thing under test.
+/* Drive a hook set the way the SDK does. Each helper fires one event at the set built for a single turn, so a
+ * test can interleave edits, commands and stops against ONE ledger, which is the whole thing under test.
+ *
+ * The matcher is found BY TOOL NAME rather than by position, the same way the SDK dispatches. These helpers
+ * used to index the array, which meant every hook added to a moment silently re-pointed some other helper at
+ * the wrong matcher: adding the browser hook sent `bash` at it, and three tests failed claiming the proof
+ * ledger had stopped recording commands. */
+const pick = (hooks: ReturnType<typeof turnEndingHooks>, event: "PostToolUse" | "PostToolUseFailure", toolName: string) => {
+    const found = hooks[event]?.find((entry) => entry.matcher !== undefined && new RegExp(`^(?:${entry.matcher})$`).test(toolName));
+    if (found === undefined) {
+        throw new Error(`no ${event} matcher for ${toolName}`);
+    }
+    return found;
+};
+
 const edit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string) => {
-    const matcher = hooks.PostToolUse![0]!;
+    const matcher = pick(hooks, "PostToolUse", "Edit");
     const input = { hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
     return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
 };
 
+// One browser call, by the name the MCP server gives it: whether it COUNTS as looking is the ledger's call.
+const browse = async (hooks: ReturnType<typeof turnEndingHooks>, tool_name: string) => {
+    const matcher = pick(hooks, "PostToolUse", tool_name);
+    const input = { hook_event_name: "PostToolUse", tool_name, tool_input: {}, tool_use_id: "t" } as unknown as HookInput;
+    return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
+};
+
 const bash = async (hooks: ReturnType<typeof turnEndingHooks>, command: string, response: string) => {
-    const matcher = hooks.PostToolUse![1]!;
+    const matcher = pick(hooks, "PostToolUse", "Bash");
     const input = {
         hook_event_name: "PostToolUse",
         tool_name: "Bash",
@@ -47,7 +67,7 @@ const bash = async (hooks: ReturnType<typeof turnEndingHooks>, command: string, 
 };
 
 const bashFailed = async (hooks: ReturnType<typeof turnEndingHooks>, command: string, error: string) => {
-    const matcher = hooks.PostToolUseFailure![0]!;
+    const matcher = pick(hooks, "PostToolUseFailure", "Bash");
     const input = {
         hook_event_name: "PostToolUseFailure",
         tool_name: "Bash",
@@ -82,6 +102,90 @@ describe("no rules", () => {
     test("and a rule for another moment says nothing at a stop", async () => {
         const elsewhere = rule({ id: "x", moment: "push.starting", action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 } });
         expect(await stop(armed([elsewhere], { runCommand: async () => ({ status: "failed", exitCode: 1, output: "no" }) }))).toBeUndefined();
+    });
+});
+
+describe("the verify-ui-edits built-in", () => {
+    const VIEWING: Rule = {
+        id: "verify-ui-edits",
+        label: "Look at what it changed",
+        moment: "turn.ending",
+        action: { kind: "builtin", name: "verify-ui-edits" },
+        enabled: true,
+    };
+
+    const LOOK = "mcp__web__browser_take_screenshot";
+
+    test("a turn that changed a stylesheet and never opened a browser is asked to look", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.css`);
+        const asked = await stop(hooks);
+        expect(asked).toContain("never looked at the result");
+        expect(asked).toContain("src/App.css");
+    });
+
+    test("a look after the last surface edit clears it", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        await browse(hooks, LOOK);
+        expect(await stop(hooks)).toBeUndefined();
+    });
+
+    /* ORDER IS THE WHOLE POINT, the same property the proof ledger is built on. A screenshot taken before the
+     * last three CSS edits is not evidence about them, and a scheme that only asked "did this turn use a
+     * browser at all" would read this turn as verified. */
+    test("but a look BEFORE the last surface edit does not", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        await browse(hooks, LOOK);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/Other.vue`);
+        expect(await stop(hooks)).toContain("never looked at the result");
+    });
+
+    // Opening a browser and closing it is not looking at anything, and a gate any browser call could clear
+    // would be cleared by exactly the turn it exists to catch.
+    test("a browser call that observes nothing does not clear it", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        await browse(hooks, "mcp__web__browser_close");
+        await browse(hooks, "mcp__web__browser_resize");
+        expect(await stop(hooks)).toContain("never looked at the result");
+    });
+
+    // The allowlist is the deliberate half: a spurious ask here costs a whole model turn, so anything that is
+    // not unambiguously a rendered surface is somebody else's question.
+    test("a turn that touched no rendered surface says nothing", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/parser.ts`);
+        await edit(hooks, `${WORKSPACE_ROOT}/README.md`);
+        expect(await stop(hooks)).toBeUndefined();
+    });
+
+    // The two turn.ending builtins read different halves of the same turn, and neither may answer for the
+    // other: a green suite says nothing about a clipped label.
+    test("a passing check does not stand in for looking", async () => {
+        const hooks = armed([VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        await bash(hooks, "pnpm test", PASSED);
+        expect(await stop(hooks)).toContain("never looked at the result");
+    });
+
+    // Both standing is two things to say and one follow-up to say them in, the moment's one budget.
+    test("stands beside verify-edits in a single follow-up", async () => {
+        const verify: Rule = { ...VIEWING, id: "verify-edits", label: "Verify", action: { kind: "builtin", name: "verify-edits" } };
+        const hooks = armed([verify, VIEWING]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        const asked = await stop(hooks);
+        expect(asked).toContain("no check has passed since the last edit");
+        expect(asked).toContain("never looked at the result");
+    });
+
+    // A path condition narrows this moment like any other, and it reads the paths the turn really touched.
+    test("honours a path condition", async () => {
+        const scoped = { ...VIEWING, when: { paths: ["src/legacy/**"] } };
+        const hooks = armed([scoped]);
+        await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
+        expect(await stop(hooks)).toBeUndefined();
     });
 });
 

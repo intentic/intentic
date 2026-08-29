@@ -11,7 +11,7 @@ import { noIsolation } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { IsolatedAgent } from "./agents-store.js";
 import { landAgent } from "./land.js";
-import { syncConversation } from "./sync.js";
+import { syncBeforeLand, syncConversation } from "./sync.js";
 import { createAgentWorktrees, type AgentWorktrees } from "./worktrees.js";
 
 const exec = promisify(execFile);
@@ -368,4 +368,71 @@ test("a synced branch still lands only its own work", async () => {
     expect(outcome.diff.files).toBe(1);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT\n");
     expect(await readFile(join(work, "other.ts"), "utf8")).toBe("moved\n");
+});
+
+/* THE WINDOW BETWEEN THE TURN'S SYNC AND ITS LAND, which is where the conflict errand actually came from.
+ *
+ * The branch is put on today's main line before the model reads a line of it, and then the turn RUNS: a long
+ * turn is half an hour, and in a fleet the user spends it landing and committing other agents. By the time this
+ * turn's own delta is measured, main has moved again, and the land is `git apply --check` of a patch whose
+ * CONTEXT lines no longer match the file it is being applied to. Nothing about this agent's work is in
+ * conflict, the paperwork simply went stale.
+ *
+ * The two tests below are the same scenario with and without the last-moment rebase, which is the only
+ * difference between a card that lands and a card that comes back red asking a model to resolve a merge. */
+const midTurnDrift = async (): Promise<{ work: string; worktrees: AgentWorktrees; base: string }> => {
+    const { work, worktree, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    // Turn start: the branch is already current, and the sync is the no-op it is on most turns.
+    expect(await sync(worktrees)).toEqual([]);
+    // The turn's own work, on the last line.
+    await turn(worktree, () => writeFile(join(worktree, "app.ts"), "one\ntwo\nthree\nfour\nAGENT\n"));
+    // ...and while it ran, the user landed something else and committed it, two lines up. Far enough that the
+    // rebase merges both cleanly, close enough to sit inside the agent patch's own context lines, which is
+    // exactly what makes `git apply` refuse work that does not really conflict.
+    await writeFile(join(work, "app.ts"), "one\ntwo\nUSER\nfour\nfive\n");
+    await sh(work, "add", "-A");
+    await commit(work, "user landed another agent");
+    return { work, worktrees, base };
+};
+
+test("without the last-moment rebase, a land refuses over main-line movement it never touched", async () => {
+    const { work, worktrees, base } = await midTurnDrift();
+    const outcome = await landAgent(worktrees, entryOf(base));
+    expect(outcome.landed).toBeFalsy();
+    // `diverged` is the tell: not "you both edited this line" but "the tree moved under the patch".
+    expect(outcome.conflicts?.[0]?.paths).toEqual([{ path: "app.ts", reason: "diverged" }]);
+    // The user's tree is untouched by the refusal: all of it or none.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nUSER\nfour\nfive\n");
+});
+
+test("with it, the same turn lands clean and both edits survive", async () => {
+    const { work, worktrees, base } = await midTurnDrift();
+    const recorded: { id: string; repos: readonly { repo: string; base: string }[] }[] = [];
+    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "fix the thing", repos: entryOf(base).repos }, async (id, next) => {
+        recorded.push({ id, repos: next });
+    });
+    // The composition it hands back names where the branch NOW sits, and the registry was told.
+    expect(repos[0]?.base).toBe(await sh(work, "rev-parse", "HEAD"));
+    expect(recorded).toHaveLength(1);
+
+    const outcome = await landAgent(worktrees, { ...entryOf(base), repos: [...repos] });
+    expect(outcome.landed).toBe(true);
+    expect(outcome.conflicts).toBeUndefined();
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nUSER\nfour\nAGENT\n");
+    // And only the agent's own line is offered as its work: the user's commit is in main by ancestry now.
+    expect(outcome.diff.files).toBe(1);
+});
+
+// The ordinary turn, where nothing moved: no rebase, no registry write, and the composition comes back as it
+// went in. This is most turns, and it must cost one merge-base per repo and nothing else.
+test("is a no-op on a branch that is already current", async () => {
+    const { work, worktrees } = await setup();
+    const base = await sh(work, "rev-parse", "HEAD");
+    const recorded: string[] = [];
+    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "t", repos: entryOf(base).repos }, async (id) => {
+        recorded.push(id);
+    });
+    expect(repos).toEqual(entryOf(base).repos);
+    expect(recorded).toEqual([]);
 });
