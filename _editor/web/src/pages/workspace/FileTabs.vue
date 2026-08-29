@@ -204,7 +204,7 @@ watch(
                      one this app has never heard of): an unknown name renders the set's fallback, never an error. -->
                 <Icon v-else-if="tab.kind === 'document'" :name="tab.icon as IconName" class="text-2xs text-link" />
                 <ChangeStatusMark v-else :status="tab.status" />
-                <span class="max-w-40 truncate" :class="{ italic: tab.id === preview }">{{ tabLabel(tab) }}</span>
+                <span class="max-w-40 truncate" :class="{ 'ftab-label--preview': tab.id === preview }">{{ tabLabel(tab) }}</span>
                 <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
                     <Icon
                         name="circle-fill"
@@ -276,5 +276,10 @@ watch(
     background: var(--color-canvas);
     color: var(--color-content);
     border-bottom-color: var(--color-primary-500);
+}
+/* Italic slants past its box; truncate clips the last glyph unless we leave room on the right. */
+.ftab-label--preview {
+    font-style: italic;
+    padding-right: 0.2em;
 }
 </style>

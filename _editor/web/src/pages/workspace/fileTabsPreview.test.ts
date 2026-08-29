@@ -56,8 +56,8 @@ it(`draws the peeked tab in italic and leaves the kept ones upright`, async () =
 
     await mountStrip();
 
-    expect(labelOf(`peeked.ts`).className).toContain(`italic`);
-    expect(labelOf(`kept.ts`).className).not.toContain(`italic`);
+    expect(labelOf(`peeked.ts`).className).toContain(`ftab-label--preview`);
+    expect(labelOf(`kept.ts`).className).not.toContain(`ftab-label--preview`);
 });
 
 // The italic says the tab is going away; the tooltip is the only room the strip has to say what stops that.
@@ -82,5 +82,5 @@ it(`asks to keep the tab that was double-clicked`, async () => {
 it(`draws every tab upright when nothing is being peeked at`, async () => {
     await mountStrip();
 
-    expect(labelOf(`peeked.ts`).className).not.toContain(`italic`);
+    expect(labelOf(`peeked.ts`).className).not.toContain(`ftab-label--preview`);
 });
