@@ -1,7 +1,7 @@
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { expect, test } from "vitest";
 import { type NamedSecret, surfaceForms } from "../secrets/secret-registry.js";
-import { maskDeep, maskTargets, redactionHooks } from "./agent-redaction.js";
+import { maskDeep, maskTargets, redactionHooks, unmaskableSecrets } from "./agent-redaction.js";
 
 /* THE PROMISE THIS KEEPS: a credential this sandbox stores never reaches the model, no matter which tool went
  * and got it. The bug these pin is not "masking is broken": it is that masking used to be a property of the
@@ -204,4 +204,22 @@ test("non-string leaves survive the walk unchanged", () => {
     // A tool result carries numbers, booleans and nulls; the walk must not stringify them.
     const value = { n: 26170149, ok: true, nothing: null, missing: undefined };
     expect(maskDeep(value, maskTargets([named("a", "26170149aaaa")]))).toEqual(value);
+});
+
+/* The floor's blind spot, named rather than left to be discovered in a transcript. A stored value below
+ * MIN_LENGTH is never registered as a target, so it is never masked, and nothing about the vault, the Secrets
+ * page or the mask itself distinguishes that from a value that IS covered. These two pin the reporting that
+ * closes the gap: long values are protected and stay silent, short ones are called out by name. */
+test("unmaskableSecrets names the stored values the length floor leaves in the clear", () => {
+    expect(
+        unmaskableSecrets([named("identity/password", "Short1#"), named("github/token", "ghp_aaaaaaaaaaaaaaaaaaaa"), named("db/pin", "  1234  ")]),
+    ).toEqual(["db/pin", "identity/password"]);
+});
+
+test("a value that clears the floor is not reported, and is genuinely masked", () => {
+    const secrets = [named("linear/token", "aaaaaaaaaaaaaaaaaaaa")];
+    expect(unmaskableSecrets(secrets)).toEqual([]);
+    // The two halves agree: nothing reported unprotected is left unmasked, which is what makes the report
+    // worth reading rather than a second list to reconcile by hand.
+    expect(maskTargets(secrets).length).toBeGreaterThan(0);
 });

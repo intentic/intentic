@@ -76,6 +76,23 @@ export const maskTargets = (secrets: readonly NamedSecret[]): readonly MaskTarge
     return [...byTarget.values()].toSorted((a, b) => b.target.length - a.target.length);
 };
 
+/* WHICH STORED SECRETS THE FLOOR ABOVE LEAVES UNPROTECTED, by name, so the gap is something the owner is
+ * told about rather than something they would have to infer from a transcript.
+ *
+ * MIN_LENGTH is not negotiable downward: masking a short value blacks out ordinary output that merely
+ * coincides with it, and a mask that fires on prose is worse than no mask, which is the whole reason the floor
+ * exists. But the consequence is easy to miss and reads exactly like protection: the vault takes any value it
+ * is given, the Secrets page lists it beside the others, and a nine-character password is then simply never
+ * masked. Long API tokens clear the floor and short human-chosen passwords do not, so the credentials most
+ * likely to be reused across accounts are precisely the ones that reach the model intact.
+ *
+ * Names only, never values, this is read by things that log. */
+export const unmaskableSecrets = (secrets: readonly NamedSecret[]): readonly string[] =>
+    secrets
+        .filter(({ value }) => value.trim().length < MIN_LENGTH)
+        .map(({ name }) => name)
+        .toSorted();
+
 const maskString = (text: string, targets: readonly MaskTarget[]): string =>
     targets.reduce((masked, { target, replacement }) => (masked.includes(target) ? masked.split(target).join(replacement) : masked), text);
 

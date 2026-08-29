@@ -22,10 +22,45 @@ import { useSandbox } from "./useSandbox";
 // observed it (the laptop that moves from the desk to a train is the case), and a reload's re-probe costs one
 // loopback request. Chrome remembers its Local Network Access grant per origin, so it is not a fresh prompt.
 const endpoints = ref<Record<string, Endpoint>>({});
-// Sandboxes whose local shortcut was tried and demoted this session. A demotion means "this stopped working
-// while we were on it", re-probing on the next tick would flap between two addresses, so it stands until the
-// user switches away and back, or reloads.
-const demoted = new Set<string>();
+/* Sandboxes whose local shortcut was tried and demoted, and WHEN, because a demotion has to expire.
+ *
+ * A demotion means "this stopped working while we were on it", and re-probing on the next tick would flap
+ * between two addresses, so it has to stand for a while. It used to stand for the whole session, which made
+ * every cause permanent regardless of how temporary it was: the machine sleeping, docker restarting, wifi
+ * dropping for a moment. All of those heal on their own within seconds, and the tab stayed on the tunnel until
+ * someone thought to reload it, paying a round trip to a Cloudflare edge and back for a daemon one hop away.
+ *
+ * So it expires instead, on a backoff. A shortcut that keeps failing backs off toward the cap and stops
+ * costing anything to retry. What makes the retry cheap is that `selectEndpoint` PROBES before it adopts
+ * (endpoint.ts, identity-checked against /health), so a local address that is still broken is rejected without
+ * a connection being moved onto it: the expiry risks one probe, not one outage.
+ *
+ * Expiry is PERMISSION to probe again, not a probe: `resolve` runs on each connect attempt
+ * (useSandboxLiveness), so the shortcut returns at the next reconnect after the cooldown rather than on a
+ * timer of its own. That is the case worth healing anyway. The failures that demote are network-shaped, and a
+ * network that has changed is reconnecting regardless, which is exactly when this is asked again. A tunnel
+ * stream that never breaks keeps the sandbox on the tunnel, and deliberately retargeting a healthy connection
+ * to chase a shortcut is the flapping this backoff exists to prevent. */
+const DEMOTION_BASE_MS = 60_000;
+const DEMOTION_MAX_MS = 30 * 60_000;
+
+interface Demotion {
+    readonly at: number;
+    // Consecutive demotions, which is what the backoff is a function of. Cleared by `reset`, the user's own
+    // "try again", never by an expiry: expiring is what earns the NEXT attempt, not a clean slate.
+    readonly streak: number;
+}
+
+const demoted = new Map<string, Demotion>();
+
+const demotionHolds = (sandboxId: string, now: number): boolean => {
+    const entry = demoted.get(sandboxId);
+    if (entry === undefined) {
+        return false;
+    }
+    const cooldown = Math.min(DEMOTION_BASE_MS * 2 ** (entry.streak - 1), DEMOTION_MAX_MS);
+    return now - entry.at < cooldown;
+};
 // One in-flight resolve per sandbox, so a switch that wakes several consumers still probes once.
 const resolving = new Map<string, Promise<void>>();
 
@@ -66,7 +101,7 @@ const resolve = async (): Promise<void> => {
     const id = activeSandboxId.value;
     const url = daemonUrl.value;
     const sandbox = active.value;
-    if (id === undefined || sandbox === undefined || url === undefined || url === `` || endpoints.value[id] !== undefined || demoted.has(id)) {
+    if (id === undefined || sandbox === undefined || url === undefined || url === `` || endpoints.value[id] !== undefined || demotionHolds(id, Date.now())) {
         return;
     }
     /* Nothing to qualify: the platform put this sandbox's machine somewhere this browser demonstrably is not
@@ -95,7 +130,7 @@ const resolve = async (): Promise<void> => {
         const endpoint = await selectEndpoint({ daemonUrl: url, token: sandbox.token, cloud: sandbox.cloud, hosted: sandbox.hosted });
         // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
         // we probed FOR, never under whatever is active now, is what keeps it off the wrong sandbox.
-        if (!demoted.has(id)) {
+        if (!demotionHolds(id, Date.now())) {
             endpoints.value = { ...endpoints.value, [id]: endpoint };
         }
     })().finally(() => resolving.delete(id));
@@ -103,11 +138,12 @@ const resolve = async (): Promise<void> => {
     return attempt;
 };
 
-/* Give up on the shortcut for this session and fall back to the tunnel. Called when a call fails while the
- * local endpoint is in use, docker restarted, the machine slept, the user is now on a different network than
- * the container. The tunnel is known-good, so this is a repair, not an outage. */
+/* Fall back to the tunnel for now. Called when a call fails while the local endpoint is in use, docker
+ * restarted, the machine slept, the user is now on a different network than the container. The tunnel is
+ * known-good, so this is a repair, not an outage, and it lasts only as long as the backoff above: every one
+ * of those causes is temporary, so the shortcut is owed another probe once it has had time to right itself. */
 const demote = (sandboxId: string): void => {
-    demoted.add(sandboxId);
+    demoted.set(sandboxId, { at: Date.now(), streak: (demoted.get(sandboxId)?.streak ?? 0) + 1 });
     const rest = { ...endpoints.value };
     delete rest[sandboxId];
     endpoints.value = rest;

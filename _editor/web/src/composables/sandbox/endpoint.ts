@@ -36,9 +36,16 @@ const PROBE_TIMEOUT_MS = 1500;
  * daemon managed to serve on it.
  *
  * `local` is HTTPS on `local-<id>.<zone>`, a public name resolving to 127.0.0.1, the only form EVERY browser
- * accepts. `local-insecure` is plain http on 127.0.0.1, which the daemon serves until (or unless) it obtains
- * a certificate; the mixed-content spec calls loopback potentially-trustworthy so Chrome and Firefox take it,
- * and Safari does not (WebKit 171934), which is precisely why the certified form is tried first. */
+ * accepts. `local-insecure` is plain http on 127.0.0.1; the mixed-content spec calls loopback
+ * potentially-trustworthy so Chrome and Firefox take it, and Safari does not (WebKit 171934), which is
+ * precisely why the certified form is tried first.
+ *
+ * The daemon serves BOTH on that one port, at the same time, deciding per connection (sandbox
+ * loopback-listener.ts). That is what makes the second one worth probing rather than a form that stopped
+ * existing the moment issuance landed. It also makes it the candidate that survives an outage: `local` is a
+ * PUBLIC name, so reaching it costs a DNS lookup on the public internet, while `local-insecure` needs no name
+ * at all. When the owner's connection drops, the tunnel goes with it and `local-<id>` stops resolving; plain
+ * loopback is then the only thing still standing between the browser and a daemon on the same machine. */
 export type EndpointKind = "local" | "local-insecure" | "tunnel";
 
 export interface Endpoint {

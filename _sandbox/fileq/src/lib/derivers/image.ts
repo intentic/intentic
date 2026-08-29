@@ -1,7 +1,21 @@
+import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
-import { parse as parseExif } from "exifr";
 import { imageSize } from "image-size";
 import type { DerivedDoc, Deriver } from "./deriver.js";
+
+/* exifr IS CommonJS as far as node is concerned, and taking it as anything else breaks the whole CLI.
+ *
+ * It ships its ESM build under `module` and has no `exports` map, so a bundler and node disagree about what
+ * `"exifr"` means: the linter resolves the .mjs and sees a named `parse`, node resolves `main` (a UMD bundle)
+ * and its CJS lexer cannot find one. `import { parse } from "exifr"` therefore type-checks, lints clean, and
+ * throws at LOAD time. Not on images either, on `fileq --version`, because a failed ESM import takes the
+ * module graph with it: every derive, sweep and read this binary does died on it.
+ *
+ * So the disagreement is settled here rather than papered over: require it as the CommonJS it is, the same
+ * way logs/pane-log-clean.ts takes @xterm/headless, and let the `typeof import` keep the types honest.
+ * Deep-importing dist/full.esm.mjs also works and is worse, that path is private and moves without a major.
+ * Version-pinning cannot help: 7.1.3 is the last release, from 2022. */
+const { parse: parseExif } = createRequire(import.meta.url)("exifr") as typeof import("exifr");
 
 /* Images, the deterministic tier: dimensions, format, and the EXIF facts a camera or an editor left behind.
  * No caption — describing pixels takes a vision model, which costs money or a GPU, and this tier is the one

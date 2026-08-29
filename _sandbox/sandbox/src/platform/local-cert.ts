@@ -110,6 +110,28 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
     }
     const existing = readUsable(config, hostname, Date.now());
     if (existing !== undefined) {
+        /* A CERTIFICATE ON DISK IS NOT A NAME THAT RESOLVES, and conflating the two is how the shortcut dies
+         * quietly for months.
+         *
+         * `local-<id>.<zone>` needs two things: a certificate, which lives here and lasts 90 days, and an A
+         * record pointing at 127.0.0.1, which lives in the platform's zone and is written as a side effect of
+         * asking for that certificate. So a valid certificate used to mean this function returned before ever
+         * mentioning DNS, and the record was re-asserted only when the certificate was next reissued.
+         *
+         * Anything that removed the record in between therefore broke the shortcut until expiry, with nothing
+         * to notice: the daemon has a certificate, serves TLS with it, logs a healthy listener, and the name it
+         * is serving under resolves nowhere. The zone's own orphan reaper does exactly this to a sandbox whose
+         * platform no longer lists it, which is the ordinary consequence of the owner moving to another
+         * platform deployment, and a hand-edited zone or a write that failed at issuance get there too.
+         *
+         * Re-asserting is idempotent (the platform upserts) and costs one request per check, so the record is
+         * now kept alive by the same daily loop that keeps the certificate alive, and a deleted one comes back
+         * within a day rather than within a quarter. Failure is not fatal to anything: the certificate is
+         * still good, the tunnel still works, and the plain-HTTP half of the loopback listener needs no DNS at
+         * all, so this warns and carries on. */
+        await relayChallenge(config, undefined).catch((error: unknown) => {
+            logger.warn({ err: error, hostname }, "could not re-assert the loopback DNS record, the certified shortcut may not resolve");
+        });
         return existing;
     }
     const paths = pathsFor(config);

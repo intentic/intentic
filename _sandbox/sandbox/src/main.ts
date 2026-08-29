@@ -1,5 +1,4 @@
 import { mkdir, rm } from "node:fs/promises";
-import { createSecureServer } from "node:http2";
 import { join } from "node:path";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import { serve, type WebSocketServerLike } from "@hono/node-server";
@@ -71,7 +70,9 @@ import { startResourceMetrics } from "./platform/resource-metrics.js";
 import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { onTurnSettled, turnRunMetrics } from "./agent/turn-runs.js";
 import { browserSessionMetrics } from "./browser/browser-sessions.js";
+import { unmaskableSecrets } from "./agent/agent-redaction.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
+import { createLoopbackListener } from "./platform/loopback-listener.js";
 import { restoreAuthorizedKeys } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
@@ -361,58 +362,30 @@ const main = async (): Promise<void> => {
      * moment 8787 spoke TLS, while the browser needs TLS or Safari refuses the address as mixed content.
      *
      * The certificate is whatever is already on disk, issuance is a CA validating DNS, far slower than a boot
-     * should wait, so it happens in the background and lands at the next restart. Without one the listener
-     * serves plain HTTP, which Chrome and Firefox still accept for loopback; the browser probes both and the
-     * daemon's identity decides. Its own WebSocket server: `ws` in noServer mode is bound to one HTTP server,
-     * so sharing the instance above would leave terminals on this port unupgradeable.
+     * should wait, so it happens in the background and lands at the next restart.
      *
-     * HTTP/2, and that is not a performance nicety, it is what stops the workspace freezing. A browser allows
-     * SIX concurrent HTTP/1.1 connections per origin, and this app holds LONG-LIVED ones: `/events` forever,
-     * plus an `/agent/attach` for every conversation with a live turn (plus `/intentic/apply/events`, plus any
-     * popped-out window, all sharing the one origin). Four or five running agents therefore consume every slot,
-     * and the next request, any ordinary read, has nowhere to go and simply queues in the browser until a
-     * stream ends. Nothing is wrong daemon-side, which is exactly why it presents as "the sandbox froze" with a
-     * silent, healthy log; only dropping the sockets (a reload of every tab, or clearing site data) frees it.
-     * One h2 connection carries ~100 concurrent streams instead, so the cap stops binding at any realistic
-     * number of agents.
-     *
-     * `allowHTTP1` is required rather than tidy: WebSocket has no h2 form here (Node does not advertise the
-     * extended-CONNECT setting RFC 8441 needs), so the browser opens a SEPARATE http/1.1 connection for the
-     * terminal, which this accepts, and whose `upgrade` event still reaches the `ws` server above. It is also
-     * the fallback for any client that does not do ALPN at all. */
+     * BOTH protocols, on this one port, chosen per connection by sniffing the first byte (loopback-listener.ts).
+     * The certified address is a public name and costs a public DNS lookup, so serving TLS *instead of* plain
+     * HTTP once issuance landed left the shortcut dependent on the internet being up to reach a daemon on the
+     * same machine. Offering both is what makes it survive the connection dropping. Its own WebSocket server:
+     * `ws` in noServer mode is bound per HTTP server, so sharing the instance above would leave terminals on
+     * this port unupgradeable. */
     const localCertificate = traits.extraListeners ? readLocalCertificate(config) : undefined;
     const localSockets = new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike;
     // A tunnel-avoiding shortcut is meaningless when the ONLY listener is already loopback, the local
     // profile serves one plain port and nothing else (traits.extraListeners).
     const localServer = !traits.extraListeners
         ? undefined
-        : serve({
+        : createLoopbackListener({
               fetch: app.fetch,
               port: config.local.port,
               hostname: host,
-              websocket: { server: localSockets },
-              ...(localCertificate === undefined
-                  ? {}
-                  : {
-                        createServer: createSecureServer,
-                        serverOptions: {
-                            cert: localCertificate.certificate,
-                            key: localCertificate.privateKey,
-                            allowHTTP1: true,
-                            // Node's default session memory (10MB) is a budget shared by every stream on the
-                            // connection, which is now ALL of them, including transcript replays that arrive in
-                            // multi-megabyte bursts. Exceeding it kills the session, i.e. the whole workspace's
-                            // connection at once, so the ceiling has to be sized for the multiplexing this enables.
-                            maxSessionMemory: 128,
-                        },
-                    }),
+              sockets: localSockets,
+              certificate: localCertificate,
           });
     shutdown.push(() => localServer?.close());
     if (localServer !== undefined) {
-        logger.info(
-            { port: config.local.port, tls: localCertificate !== undefined, hostname: localCertificate?.hostname },
-            "loopback listener ready",
-        );
+        logger.info({ port: config.local.port, tls: localServer.tls, hostname: localCertificate?.hostname }, "loopback listener ready");
     }
     // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
     const localCertRenewal = role.container && traits.extraListeners ? startLocalCertificateRenewal(config, logger) : undefined;
@@ -552,6 +525,18 @@ const main = async (): Promise<void> => {
         });
         if (settings.length > 0) {
             logger.info({ extensions: settings }, "extension setting secrets moved out of the tracked settings file into the private store");
+        }
+        /* Both sweeps above move credentials somewhere a Read cannot reach, and masking (agent-redaction.ts)
+         * is what covers the rest: a value this sandbox stores is replaced by its `{{secret:name}}` reference
+         * in every tool result. Except that masking has a length floor it cannot safely go below, so a short
+         * stored value is quietly outside all of it, and nothing anywhere says so, which makes an unprotected
+         * credential look exactly like a protected one. Say so, by name, once per boot. */
+        const unmaskable = unmaskableSecrets(await services.secretRegistry().catch(() => []));
+        if (unmaskable.length > 0) {
+            logger.warn(
+                { secrets: unmaskable },
+                "these stored secrets are too short to mask, so they reach the model in full when something reads them: replace them with longer values",
+            );
         }
     });
 

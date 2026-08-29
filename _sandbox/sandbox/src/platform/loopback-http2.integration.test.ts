@@ -1,13 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
-import { connect, createSecureServer } from "node:http2";
-import type { AddressInfo } from "node:net";
+import { connect } from "node:http2";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serve, upgradeWebSocket, type WebSocketServerLike } from "@hono/node-server";
+import { upgradeWebSocket, type WebSocketServerLike } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, expect, test } from "vitest";
 import { WebSocket, WebSocketServer } from "ws";
+import { createLoopbackListener } from "./loopback-listener.js";
 
 /* THE LOOPBACK LISTENER'S PROTOCOL: pinned here because getting it wrong does not fail, it FREEZES the app.
  *
@@ -71,28 +71,16 @@ app.get(
     upgradeWebSocket(() => ({ onMessage: (event, ws) => ws.send(`echo:${String(event.data)}`) })),
 );
 
-// main.ts's options, minus the parts that are about WHERE it listens.
-const server = serve({
+// The real thing, not a reconstruction of its options: this is what main.ts builds, so a regression in the
+// module is a failure here rather than a test that keeps passing about a shape nobody uses any more.
+const server = createLoopbackListener({
     fetch: app.fetch,
     port: 0,
     hostname: "127.0.0.1",
-    websocket: { server: new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike },
-    createServer: createSecureServer,
-    serverOptions: {
-        cert: readFileSync(join(dir, "cert.pem")),
-        key: readFileSync(join(dir, "key.pem")),
-        allowHTTP1: true,
-        maxSessionMemory: 128,
-    },
+    sockets: new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike,
+    certificate: { certificate: readFileSync(join(dir, "cert.pem"), "utf8"), privateKey: readFileSync(join(dir, "key.pem"), "utf8") },
 });
-const port = await new Promise<number>((resolve) => {
-    const ready = (): void => resolve((server.address() as AddressInfo).port);
-    if (server.listening) {
-        ready();
-        return;
-    }
-    server.once("listening", ready);
-});
+const port = await server.listening;
 const session = connect(`https://127.0.0.1:${port}`, { rejectUnauthorized: false });
 await new Promise<void>((resolve, reject) => {
     session.once("connect", () => resolve());
@@ -139,4 +127,31 @@ test("a WebSocket still upgrades, over the http/1.1 connection allowHTTP1 keeps 
     });
     socket.close();
     expect(echoed).toBe("echo:hello");
+});
+
+/* THE SAME PORT ALSO ANSWERS PLAIN HTTP, and that is the half that survives the internet going away.
+ *
+ * The TLS side above is reachable only as `local-<id>.<zone>`, a PUBLIC name: the browser has to resolve it
+ * before it can use any of it. This one is reachable as `http://127.0.0.1:<port>` and needs no name at all,
+ * which is why it is the candidate that still works when the owner's connection drops, when public DNS is
+ * unreachable, or when the zone's record has gone missing. Serving TLS *instead of* it once a certificate
+ * arrived is what used to leave a sandbox on the same machine unreachable during an outage. */
+test("plain HTTP is served on the very same port, so the DNS-free candidate always has something to answer it", async () => {
+    const response = await fetch(`http://127.0.0.1:${port}/ping`);
+    expect(await response.text()).toBe("pong");
+});
+
+test("a listener with no certificate still serves plain HTTP, the state every sandbox boots into", async () => {
+    const bare = createLoopbackListener({
+        fetch: app.fetch,
+        port: 0,
+        hostname: "127.0.0.1",
+        sockets: new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike,
+        certificate: undefined,
+    });
+    const barePort = await bare.listening;
+    expect(bare.tls).toBe(false);
+    const response = await fetch(`http://127.0.0.1:${barePort}/ping`);
+    expect(await response.text()).toBe("pong");
+    bare.close();
 });
