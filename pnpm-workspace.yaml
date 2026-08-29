@@ -72,6 +72,14 @@ overrides:
   # miniflare (wrangler's local Workers runtime, a devDependency of the site) pins undici 7.28.0, which has five
   # request/response-smuggling advisories. Patch bump inside the same major.
   "miniflare>undici": 7.29.0
+  # @connectrpc/connect-node (reached through @cursor/sdk) asks for undici ^5.28.4, and the 5.x line is EOL:
+  # all twelve of its open advisories — three of them high — are fixed only in 6.x, so no in-range bump exists.
+  # What connect-node imports is one thing, `Headers`, and it installs it as a global only when the Node major
+  # is below 18 (node-headers-polyfill.js); on this workspace's Node 24 that branch is dead and none of the
+  # vulnerable fetch, WebSocket or Set-Cookie code is ever entered. Bumped anyway so the tree does not carry a
+  # known-bad copy: 6.28.0 is the newest 6.x and the copy discord.js already resolves, so this drops the 5.x
+  # copy rather than adding a second one.
+  "@connectrpc/connect-node>undici": 6.28.0
   # Two packages pin deepmerge-ts to the 7.x line — @prisma/config to an exact 7.1.5 and html-to-text (via
   # mailparser) to ^7.1.5 — and every 7.x release blows the stack on a recursive object graph
   # (GHSA-ggr8-5vv4-36mx, fixed only in 8.0.0; the 7.1.6 that landed just before it is still vulnerable).
