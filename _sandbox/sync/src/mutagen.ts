@@ -2,8 +2,16 @@ import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import type { Log } from "@intentic/local-agent";
-import { binDir, type Pairing } from "./config.js";
+import {
+    type CliLauncher,
+    clearWindowsRunValue,
+    type Log,
+    quotedCommandLine,
+    setWindowsRunValue,
+    stubCommand,
+    windowsLaunchStub,
+} from "@intentic/local-agent";
+import { binDir, mutagenDaemonLogPath, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
 import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
 
@@ -522,4 +530,53 @@ export const runMutagen = (mutagen: string, args: string[]): SpawnSyncReturns<Bu
         throw new Error(`mutagen ${args[0] ?? ""} exited with code ${result.status}`);
     }
     return result;
+};
+
+/* The Run value THIS agent owns for Mutagen's daemon on Windows. A name of our own rather than overwriting
+ * Mutagen's (`Mutagen`), so a user who registered their own daemon by hand still has exactly what they
+ * registered, and an uninstall of ours removes only ours. */
+export const MUTAGEN_RUN_VALUE = "IntenticMutagenDaemon";
+
+/* THE DAEMON HAS TO COME BACK AFTER A REBOOT, and it is the one resident process here that is not ours: it
+ * holds every sync AND forward session, so a machine whose daemon did not start is one where nothing resumes,
+ * whether or not the mirror watcher is running.
+ *
+ * Mutagen registers itself through the mechanism each OS gives it — a launchd agent on macOS, and on Windows
+ * this very Run key, with the value `"<mutagen.exe>" daemon start`. That command is a console program, so
+ * Explorer maps a terminal window for it at every logon: on the machine this was measured on, a second window
+ * beside the agent's own, for as long as `daemon start` took. Where the launcher stub is installed we register
+ * the identical command through it instead and Windows maps nothing.
+ *
+ * `daemon unregister` first, so the two entries can never both exist — ours writing no window, Mutagen's own
+ * writing one — whichever way this machine was set up before. Everywhere else Mutagen's own registration is
+ * exactly right and this is a passthrough. Linux has no register verb at all. */
+export const registerMutagenAutostart = (mutagen: string, launcher: CliLauncher, log: Log): void => {
+    if (process.platform === "linux") {
+        return;
+    }
+    try {
+        const stub = windowsLaunchStub(launcher);
+        if (stub === undefined) {
+            runMutagen(mutagen, ["daemon", "register"]);
+            return;
+        }
+        spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true });
+        setWindowsRunValue(MUTAGEN_RUN_VALUE, quotedCommandLine(stubCommand(stub, mutagenDaemonLogPath, [mutagen, "daemon", "start"])));
+    } catch (error) {
+        log(
+            `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
+        );
+    }
+};
+
+// Both spellings, unconditionally, for the reason unregisterAutostart gives about its own two Linux
+// mechanisms: which one is registered depends on what this machine could do at the time, and an uninstall that
+// leaves the other behind resurrects a daemon at the next login, which is the one thing uninstall must prevent.
+export const unregisterMutagenAutostart = (mutagen: string): void => {
+    if (process.platform === "win32") {
+        clearWindowsRunValue(MUTAGEN_RUN_VALUE);
+    }
+    if (process.platform !== "linux") {
+        spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore", windowsHide: true });
+    }
 };

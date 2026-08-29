@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cliLauncher, quotedCommandLine } from "./launcher.js";
+import { cliLauncher, quotedCommandLine, stubCommand } from "./launcher.js";
 
 /* How a CLI re-invokes itself decides whether its background loop and its autostart entry ever run, and the two
  * install shapes need OPPOSITE argv. The released install is a `bun build --compile` binary whose
@@ -46,5 +46,22 @@ describe("quotedCommandLine", () => {
         expect(quotedCommandLine(["C:\\Program Files\\node.exe", "C:\\Users\\First Last\\cli.js", "mirror"])).toBe(
             '"C:\\Program Files\\node.exe" "C:\\Users\\First Last\\cli.js" "mirror"',
         );
+    });
+});
+
+/* The stub's command line is written into a registry value AND passed to a spawn, so the two shapes come from
+ * one function: a drift between them is a bug that shows up one reboot later. The launcher's own parser is
+ * deliberately rigid about this order (`--log <file> -- <program> …`), so the order is the contract. */
+describe("stubCommand", () => {
+    it("puts the log first and everything the child owns after the separator", () => {
+        expect(stubCommand("C:\\bin\\intentic-launch.exe", "C:\\logs\\host.log", ["C:\\bin\\intentic-host.exe", "run", "--foreground"])).toEqual([
+            "C:\\bin\\intentic-launch.exe",
+            "--log",
+            "C:\\logs\\host.log",
+            "--",
+            "C:\\bin\\intentic-host.exe",
+            "run",
+            "--foreground",
+        ]);
     });
 });

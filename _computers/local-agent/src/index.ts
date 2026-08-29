@@ -15,11 +15,13 @@
  * agent by name. This package is those lessons as code, so the fourth agent inherits them by importing. */
 
 export { agentHome, writeSecretFile, type AgentHome, type Log } from "./home.js";
-export { cliLauncher, quotedCommandLine, type CliLauncher } from "./launcher.js";
+export { cliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub, type CliLauncher } from "./launcher.js";
 export {
+    clearWindowsRunValue,
     linuxDesktopEntry,
     macLaunchAgentXml,
     registerAutostart,
+    setWindowsRunValue,
     unregisterAutostart,
     windowsRunAddArgs,
     windowsRunDeleteArgs,

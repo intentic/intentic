@@ -56,6 +56,34 @@ function Add-IntenticPath {
     }
 }
 
+# THE WINDOWLESS LAUNCHER, downloaded next to the agent - and the difference between a machine that quietly
+# resumes syncing at every boot and one that flashes black console windows on the desktop while doing it.
+#
+# Windows gives every CONSOLE-subsystem program a console when Explorer starts it, and both the agent and
+# Mutagen's own `daemon start` are console programs, so the logon entries naming them directly put terminals on
+# screen for 1-2 seconds at every single boot. intentic-launch is a ~200 KB GUI-subsystem program (the loader
+# creates no console for it at all) that starts a command with CREATE_NO_WINDOW and exits; the agent registers
+# BOTH logon entries through it when it finds it beside itself. Nothing else works: a hidden PowerShell host and
+# a Task Scheduler logon task were both measured showing a window.
+#
+# Best-effort, and it says what its absence costs: the syncing is the job, the silence is the polish. Same
+# download-then-swap as the agent above, for the same reason - the stub may be running at this very moment.
+# Every Windows agent installer carries an identical copy of this function (a test in the desktop crate holds
+# them together); they are standalone irm|iex files and cannot share code.
+function Get-IntenticLauncher {
+    param([string]$BinDir, [string]$Arch)
+    $stub = Join-Path $BinDir 'intentic-launch.exe'
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/intentic/intentic/releases/latest/download/intentic-launch-windows-$Arch.exe" -OutFile "$stub.tmp"
+        Remove-Item -Force -ErrorAction SilentlyContinue "$stub.old"
+        if (Test-Path $stub) { Move-Item -Force -Path $stub -Destination "$stub.old" }
+        Move-Item -Force -Path "$stub.tmp" -Destination $stub
+    } catch {
+        Remove-Item -Force -ErrorAction SilentlyContinue "$stub.tmp"
+        Write-Warning "Could not download the windowless launcher ($($_.Exception.Message)). Everything still works; a console window will flash on your desktop when this machine starts the agent at login."
+    }
+}
+
 $url = $env:SANDBOX_URL
 $pair = $env:PAIR_TOKEN
 $dir = $env:SYNC_DIR
@@ -85,6 +113,7 @@ if (-not $bin) {
         Move-Item -Force -Path "$dest.tmp" -Destination $dest
         $bin = $dest
         Add-IntenticPath -Folder (Split-Path $dest) -Command 'intentic-sync'
+        Get-IntenticLauncher -BinDir (Split-Path $dest) -Arch $arch
     } catch {
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"
         $installed = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source

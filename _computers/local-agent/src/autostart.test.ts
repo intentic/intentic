@@ -138,9 +138,14 @@ describe("linuxDesktopEntry", () => {
 // machine (elevation), and schtasks always wants a password it has no stdin to read.
 const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
+const STUB = "C:\\Users\\dev\\.intentic\\sync\\bin\\intentic-launch.exe";
+
 describe("windowsRunAddArgs", () => {
-    it("writes a forced per-user Run value that starts the DETACHED command with the launcher it was handed", () => {
-        expect(windowsRunAddArgs(SPEC, NODE)).toEqual([
+    /* THE SHAPE THAT PUTS NOTHING ON THE DESKTOP. The stub is a GUI-subsystem program, so the loader never
+     * gives it a console, and it starts the loop with CREATE_NO_WINDOW — one process at logon, no window at
+     * any point, and the loop's output going straight into the log the agent already advertises. */
+    it("starts the FOREGROUND loop through the stub, logging where the spec says", () => {
+        expect(windowsRunAddArgs(SPEC, BINARY, STUB)).toEqual([
             "add",
             RUN_KEY,
             "/v",
@@ -148,21 +153,29 @@ describe("windowsRunAddArgs", () => {
             "/t",
             "REG_SZ",
             "/d",
-            '"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror"',
+            `"${STUB}" "--log" "${LOG}" "--" "/home/dev/.intentic/sync/bin/intentic-sync" "mirror" "--watch"`,
             "/f",
         ]);
     });
 
-    it("registers a compiled binary with the command directly", () => {
-        expect(windowsRunAddArgs(SPEC, BINARY).at(-2)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror"');
+    it("hands the stub a node invocation whole, entry script and all", () => {
+        expect(windowsRunAddArgs(SPEC, NODE, STUB).at(-2)).toBe(
+            `"${STUB}" "--log" "${LOG}" "--" "/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror" "--watch"`,
+        );
     });
 
-    it("never registers the foreground loop: Explorer would leave its console window on screen all session", () => {
+    /* No stub — a developer's checkout, where there is no compiled binary to install one beside. Autostart is
+     * still worth having, and it is the DETACHED command that gets registered: Explorer starts a Run value in
+     * the interactive session, so registering the foreground loop without a stub would leave a console window
+     * on screen for the whole session rather than flashing for two seconds. */
+    it("falls back to the detached command when no stub is installed", () => {
+        expect(windowsRunAddArgs(SPEC, NODE).at(-2)).toBe('"/usr/bin/node" "/opt/intentic/sync/dist/cli.js" "mirror"');
+        expect(windowsRunAddArgs(SPEC, BINARY).at(-2)).toBe('"/home/dev/.intentic/sync/bin/intentic-sync" "mirror"');
         expect(windowsRunAddArgs(SPEC, BINARY).join(" ")).not.toContain("--watch");
     });
 
     it("deletes exactly the value it adds, or uninstall leaves the agent resurrecting at every login", () => {
-        const added = windowsRunAddArgs(SPEC, BINARY);
+        const added = windowsRunAddArgs(SPEC, BINARY, STUB);
         expect(windowsRunDeleteArgs(SPEC)).toEqual(["delete", added[1], "/v", added[3], "/f"]);
     });
 });

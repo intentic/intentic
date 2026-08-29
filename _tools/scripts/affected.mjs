@@ -177,7 +177,8 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
  * here rather than scattered, because the whole point of this file is that the package closure above is
  * computed and this list is the small remainder that is not.
  *
- *   ic          a Rust crate (_sandbox/ic/Cargo.toml), not a workspace package at all.
+ *   ic          two Rust crates (_sandbox/ic, _computers/win-launcher), neither a workspace package at all.
+ *               One trigger for both: they are gated by the same job, in the same image, in seconds.
  *   shims       _site/site/public/scripts holds the connect/recreate one-liners. They are BUNDLED into the
  *               desktop installer by stage-desktop-scripts.sh: an input to the desktop build with no
  *               package edge, and deliberately narrower than "the site package changed", which would drag
@@ -192,7 +193,7 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
  *               with its probe. */
 const LOOSE = {
     desktop: /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(build-desktop|build-ic|verify-desktop-bundle|verify-desktop-install|stage-desktop-scripts|desktop-artifacts)\.sh|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
-    ic: /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/)/,
+    ic: /^(_sandbox\/ic\/|_computers\/win-launcher\/|_site\/site\/public\/scripts\/)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_tools\/scripts\/(prepare-image-trees|publish-images|compose-image-dockerfile|merge-image-manifests|promote-image-tag)\.(sh|mjs)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/(docker-release|deploy-platform)\.sh|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     "ci-base-changed": /^_tools\/ci-base\//,

@@ -20,8 +20,8 @@
   and comes back when a person remembers. Nothing about the desktop requirement asks for that. The task this
   registers is unattended in every way a service is except the one that matters to the tiers:
 
-    • no window — the listener is started through a hidden host, so there is nothing on the desktop to close by
-      accident and nothing to keep open on purpose;
+    • no window — the listener is started through intentic-launch.exe, so there is nothing on the desktop to
+      close by accident and nothing to keep open on purpose;
     • self-healing — a repeating trigger re-runs the task every few minutes, and `IgnoreNew` makes that a no-op
       while the listener is alive. So a crash, a network drop, a failed self-update or an operator who killed it
       is repaired within minutes, by the machine, with nobody signed in. Task Scheduler's own restart-on-failure
@@ -221,23 +221,60 @@ if (-not $Repair) {
     if (-not $configured) { Die 'the runner refused to configure — check the URL scope and that the token is fresh.' }
 }
 
+# ── the windowless launcher ──────────────────────────────────────────────────────────────────────────────────
+# What the task's action actually executes. Fetched from the latest release on every run, like every other
+# intentic binary a machine downloads, so a -Repair also picks up a newer one, and renamed rather than
+# overwritten because on a machine being repaired the previous copy is the live task's own action process.
+#
+# FAILS LOUDLY, unlike the same download in the agent installers. This script is run by a person, at a keyboard,
+# on a machine whose whole job is CI: the alternative to the stub is a Terminal window sitting on that machine's
+# desktop for the life of the runner, waiting for somebody to close it and stop CI. That is the outage this file
+# exists to prevent, and it must not be reached by a failed download nobody read.
+Step 'fetching the windowless launcher...'
+$LauncherStub = Join-Path $RunnerRoot 'intentic-launch.exe'
+try {
+    Invoke-WebRequest -UseBasicParsing -ErrorAction Stop `
+        -Uri 'https://github.com/intentic/intentic/releases/latest/download/intentic-launch-windows-amd64.exe' `
+        -OutFile "$LauncherStub.tmp"
+    Remove-Item -Force -ErrorAction SilentlyContinue "$LauncherStub.old"
+    if (Test-Path $LauncherStub) { Move-Item -Force -Path $LauncherStub -Destination "$LauncherStub.old" -ErrorAction Stop }
+    Move-Item -Force -Path "$LauncherStub.tmp" -Destination $LauncherStub -ErrorAction Stop
+} catch {
+    Remove-Item -Force -ErrorAction SilentlyContinue "$LauncherStub.tmp"
+    Die "could not install intentic-launch.exe into $RunnerRoot ($($_.Exception.Message)). Without it the listener runs in a visible Terminal window on this machine's desktop, which is the one thing this task exists to avoid."
+}
+
 # ── the session ──────────────────────────────────────────────────────────────────────────────────────────────
 Step "registering a logon task that runs the listener in $Account's own desktop session..."
 
 # NO WINDOW ON THE DESKTOP. `run.cmd` is a console program, so a task that executes it directly puts a cmd
 # window on the session's desktop for as long as the runner lives — and that window becomes the runner as far as
 # anybody looking at the machine is concerned: closing it stops CI, and a person who does not know that closes
-# it. Started through a hidden PowerShell host instead, the console is never mapped; the child `cmd.exe` that
-# run.cmd is inherits that hidden console rather than creating one of its own.
+# it.
+#
+# THIS USED TO BE A HIDDEN POWERSHELL HOST, and the claim written here was that "the console is never mapped".
+# It is not true on a current Windows 11, where Windows Terminal is the default console host: `-WindowStyle
+# Hidden` hides the console the PowerShell host owns, while the window on the desktop belongs to
+# WindowsTerminal.exe, a different process that never gets the hint. Measured on such a machine by enumerating
+# top-level windows every 25 ms — a task running `powershell -WindowStyle Hidden` mapped a Terminal window and
+# kept it for as long as its child ran, which for this task is the runner's entire life. The one thing this
+# comment promised was the one thing it did not do.
+#
+# intentic-launch.exe (_computers/win-launcher) is what actually holds it: a GUI-subsystem program, so the
+# loader creates no console for it at all, starting `run.cmd` with CREATE_NO_WINDOW. Its own header carries the
+# full measurement table, including the Task Scheduler variants.
+#
+# `--wait`, so this process lives exactly as long as the listener does. A task is "running" only while its
+# action process is, and that is what makes `-MultipleInstances IgnoreNew` swallow the watchdog repetitions
+# below rather than starting a second listener every $WatchdogMinutes.
+#
+# `cmd.exe /c run.cmd` rather than run.cmd itself: CreateProcess cannot execute a batch file, only an image, so
+# the shell is named explicitly rather than left to a runtime's own guess about it.
 #
 # `run.cmd` and not `Runner.Listener.exe`: run.cmd is the loop that handles the runner's own self-update, which
 # exits with a distinguished code expecting to be restarted. Bypassing it works right up to the first update.
-#
-# Single-quoted inside the -Command, so a $RunnerRoot with a space in it survives; the doubling is PowerShell's
-# own escape for a literal quote, for the path nobody should have but somebody will.
-$launcher = "& '" + ($RunnerRoot -replace "'", "''") + "\run.cmd'"
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -Command `"$launcher`"" `
+$action = New-ScheduledTaskAction -Execute $LauncherStub `
+    -Argument "--log `"$RunnerRoot\_diag\intentic-launch.log`" --wait -- cmd.exe /c `"$RunnerRoot\run.cmd`"" `
     -WorkingDirectory $RunnerRoot
 
 # TWO TRIGGERS, AND THE SECOND ONE IS WHY THIS IS UNATTENDED. At logon for the obvious reason. Then a repeating
@@ -332,7 +369,9 @@ if ($KeepAwake) {
 # It can take a running job down with it. That is the right trade for a command somebody ran deliberately to
 # repair this machine, and the job is retried against the runner that comes back.
 Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
-$shells = @('cmd.exe', 'powershell.exe', 'pwsh.exe', 'conhost.exe')
+# `intentic-launch.exe` is in this list because with --wait it IS one of these hosts: the task's action process,
+# sitting above the `cmd.exe` that is run.cmd, alive for as long as the listener is.
+$shells = @('cmd.exe', 'powershell.exe', 'pwsh.exe', 'conhost.exe', 'intentic-launch.exe')
 $listeners = @(Get-CimInstance Win32_Process -Filter "Name='Runner.Listener.exe'" -ErrorAction SilentlyContinue)
 $hosting = [System.Collections.Generic.List[object]]::new()
 foreach ($live in $listeners) {
@@ -370,8 +409,12 @@ if (-not $registered) {
     Die "the '$TaskName' task is not registered, so nothing supervises this runner."
 }
 $hosted = ($registered.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join ' '
-if ($hosted -notmatch 'WindowStyle\s+Hidden') {
-    Die "the task still runs the listener in a visible console ($hosted). Re-run this script; if it persists, the registration was refused."
+# THE ACTION IS THE STUB, and this used to assert `-WindowStyle Hidden` instead — an assertion that passed on
+# every machine while the window it was about sat on the desktop (see the action block above). Asserting the
+# program rather than a flag is what makes the check about the property: only a GUI-subsystem parent maps
+# nothing, and `--wait` is what keeps the task "running" so the watchdog repetition stays a no-op.
+if ($hosted -notmatch 'intentic-launch\.exe' -or $hosted -notmatch '--wait') {
+    Die "the task does not run the listener through intentic-launch.exe --wait ($hosted), so it would put a Terminal window on this desktop. Re-run this script; if it persists, the registration was refused."
 }
 $repetition = ($registered.Triggers | Where-Object { $_.Repetition.Interval } | Select-Object -First 1).Repetition.Interval
 if (-not $repetition) {

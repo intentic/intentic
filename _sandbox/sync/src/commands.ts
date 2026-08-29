@@ -10,7 +10,16 @@ import { MIRROR_AUTOSTART } from "./autostart.js";
 import { mirrorLogPath, type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { readLiveWatcherPid, retirePairingMirror, runMirrorWatch, startMirrorWatcher, stopMirror, stopWatcher } from "./mirror.js";
-import { ensureMutagen, ensureSyncSession, existingSyncSessions, retireOrphanSessions, runMutagen, syncSessionNames } from "./mutagen.js";
+import {
+    ensureMutagen,
+    ensureSyncSession,
+    existingSyncSessions,
+    registerMutagenAutostart,
+    retireOrphanSessions,
+    runMutagen,
+    syncSessionNames,
+    unregisterMutagenAutostart,
+} from "./mutagen.js";
 import { machineReport } from "./report.js";
 import { syncSshPort, tunnelReady } from "./tunnel.js";
 import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
@@ -271,17 +280,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // the first minute rather than waiting out the watcher's cadence.
     runGitBridge(realBridgeExec, pairing, out, undefined);
     // Register the Mutagen daemon to autostart at login and resume sessions across reboots, it holds BOTH
-    // sync and forward sessions, so this covers mirror-only too. Its own native mechanism (launchd/Task
-    // Scheduler); no register verb on Linux. Best-effort: already-registered isn't worth failing on.
-    if (process.platform !== "linux") {
-        try {
-            runMutagen(mutagen, ["daemon", "register"]);
-        } catch (error) {
-            out(
-                `note: could not register the Mutagen daemon for autostart (${error instanceof Error ? error.message : String(error)}); it still runs while you're logged in.`,
-            );
-        }
-    }
+    // sync and forward sessions, so this covers mirror-only too. Mutagen's own mechanism everywhere except
+    // Windows, where its own is a console command in the Run key and ours is the same command through the
+    // launcher stub (mutagen.ts). Best-effort: already-registered isn't worth failing on.
+    registerMutagenAutostart(mutagen, cliLauncher("intentic-sync"), out);
     // Say the fleet out loud, BEFORE the ending block. Pairing a sandbox on a machine that already had one
     // is the exact moment the user needs to know the others are still syncing, the silence there is what
     // made a lost pairing take days to notice, and it is detail under this step, not part of the verdict.
@@ -635,7 +637,7 @@ const uninstall = buildCommand<SandboxFlags>({
             if (pairing.mode === "sync") {
                 // The pair goes together. A surviving backup session would keep mirroring a sandbox this machine
                 // has just unpaired, writing into a folder the owner considers released.
-                spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing.sandboxId)], { stdio: "ignore" });
+                spawnSync(mutagen, ["sync", "terminate", ...syncSessionNames(pairing.sandboxId)], { stdio: "ignore", windowsHide: true });
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
             await retirePairingMirror(mutagen, pairing.sandboxId);
@@ -663,10 +665,8 @@ const uninstall = buildCommand<SandboxFlags>({
         // own sessions: leave its daemon alone and say so instead.
         const ownCopy = mutagen !== "mutagen";
         if (ownCopy) {
-            if (process.platform !== "linux") {
-                spawnSync(mutagen, ["daemon", "unregister"], { stdio: "ignore" });
-            }
-            spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore" });
+            unregisterMutagenAutostart(mutagen);
+            spawnSync(mutagen, ["daemon", "stop"], { stdio: "ignore", windowsHide: true });
         }
         this.process.stdout.write(
             ownCopy

@@ -301,6 +301,10 @@ jobs:
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
       - run: bash _tools/scripts/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
+      # The Windows launcher stub, which is what the two agents above actually register at logon: without it in
+      # the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
+      # console window on the desktop at every boot. Same xwin toolchain as the ic build above; ~200 KB.
+      - run: bash _tools/scripts/build-win-launcher.sh windows-x64
       - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --linux-only
       # …and prove those exact bytes install and run before anything ships them: installs the .deb and the
       # AppImage on a bare Debian, starts the app under Xvfb and fires a real xdg-open intentic:// at it.
@@ -315,6 +319,7 @@ jobs:
           path: |
             _sandbox/sync/dist-bin
             _computers/host/dist-bin
+            _computers/win-launcher/dist-bin
             _sandbox/ic/dist-bin
             _editor/desktop-app/dist-bin
           if-no-files-found: error
@@ -482,12 +487,14 @@ jobs:
         if: ${{ steps.release.outputs.released == 'true' }}
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
-          # The same four directories publish-github.sh attaches to the Release: the desktop installers and
-          # the cross-compiled machine-agent binaries behind the two `curl ... | sh` one-liners. Those
-          # one-liners are the single most trust-hungry thing this project asks anyone to run.
+          # The same five directories publish-github.sh attaches to the Release: the desktop installers, the
+          # cross-compiled machine-agent binaries behind the two `curl ... | sh` one-liners, and the Windows
+          # launcher stub those agents register at logon. Those one-liners are the single most trust-hungry
+          # thing this project asks anyone to run.
           subject-path: |
             _sandbox/sync/dist-bin/*
             _computers/host/dist-bin/*
+            _computers/win-launcher/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*
 

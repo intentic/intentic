@@ -286,7 +286,10 @@ export const resolvedEndpoint = (sshGOutput: string): { hostname?: string; port?
 // see our config dials the alias as a literal hostname and the whole story arrives as "unable to receive server
 // magic number: EOF (error output: ssh: Could not resolve hostname intentic-sync-…)".
 export const assertSshConfigVisible = (ssh: string, alias: string, expectedPort: number): void => {
-    const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8" });
+    // `windowsHide` like every other non-interactive spawn in this agent: its output is read here, not shown,
+    // and `ensureSyncSession` reaches this from the watcher, where a console-less parent turns any console
+    // child into a window on somebody's desktop (see @intentic/local-agent's detached.ts).
+    const result = spawnSync(ssh, ["-G", alias], { encoding: "utf8", windowsHide: true });
     if (result.error !== undefined) {
         throw new Error(`could not run "${ssh}", the SSH client Mutagen drives the sync transport with: ${result.error.message}`);
     }

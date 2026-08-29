@@ -24,8 +24,9 @@ _editor/desktop-app/src-tauri/target
 _editor/desktop-app/src-tauri/gen
 _editor/desktop-app/src-tauri/staged-scripts
 _site/site/public/desktop
-# ic (the host-side CLI): its Rust build tree.
+# ic (the host-side CLI) and the Windows launcher stub: their Rust build trees.
 _sandbox/ic/target
+_computers/win-launcher/target
 /tmp
 **/tmp
 **/.astro-indexnow-cache.json

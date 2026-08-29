@@ -19,7 +19,8 @@ to carry raw TCP. It also means nothing but this agent has to be installed.
 - Pause Mutagen sessions after their sandbox remains unreachable for an hour, avoiding permanent reconnect and
   rescan load while retaining the pairing; resume them automatically when the sandbox returns.
 - Bridge git, so operations behave sanely across the mirror.
-- Install itself as an autostarting background agent.
+- Install itself as an autostarting background agent, and register Mutagen's daemon to come back at login too:
+  it holds every sync and forward session, so a machine whose daemon did not start is one where nothing resumes.
 
 ## Key files
 
@@ -40,6 +41,12 @@ hardware. It shares the install-and-stay-alive plumbing in `@intentic/local-agen
 
 - **Bidirectional sync has no undo.** The integration tests here run against real directories and a real Mutagen
   for exactly that reason; a unit test that mocks the sync proves nothing about the case that loses work.
+- **On Windows this agent owns Mutagen's logon entry rather than letting Mutagen register its own.** Mutagen's
+  `daemon register` writes `"<mutagen.exe>" daemon start` into the same per-user `Run` key, and that is a console
+  program, so Explorer maps a terminal window for it at every boot — a second one beside the watcher's. Ours
+  runs the identical command through [`intentic-launch.exe`](../../_computers/win-launcher), and setup
+  unregisters Mutagen's own so the two can never both exist. Everywhere else Mutagen's mechanism is exactly
+  right and this is a passthrough.
 - Enrollment is one call on purpose. Every additional step is a step a user performs wrong on a bad connection.
 - The transport lives in the background watcher, not in `setup`. `setup` therefore starts the watcher BEFORE it
   probes ssh or hands anything to Mutagen: every step after that one needs the port to be open.

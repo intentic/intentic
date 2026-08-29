@@ -8,7 +8,7 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
         <agent>.log          spawnDetached()      — the loop's output has nowhere else to go
         <agent>.pid          livePid()            — find the loop again, pid + the boot it belongs to
 
-HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation
+HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation, through the launcher stub
 ~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent
 ~/.config/autostart/         registerAutostart()  — Linux desktop session
 
@@ -52,22 +52,41 @@ its old permissions forever.
 
 **`launcher.ts`**: `cliLauncher(cliName)` answers how to re-invoke this CLI. The subtlety is the compiled
 binary: `bun build --compile` reports an `argv[1]` inside its own virtual filesystem and re-injects it on every
-launch, so passing it again shifts the command to `argv[2]` where the parser never looks.
+launch, so passing it again shifts the command to `argv[2]` where the parser never looks. `windowsLaunchStub()`
+finds the other half of a Windows install, [`intentic-launch.exe`](../win-launcher), sitting next to the agent's
+own executable.
 
 **`autostart.ts`**: `registerAutostart(spec, launcher, log)` against an `AutostartSpec` the agent declares.
-Windows gets the **detached** command (Explorer starts a Run entry in the interactive session, where the
-foreground loop would park a black console window on the desktop from login until shutdown); launchd and the
-desktop session, which supervise what they start, get the **foreground** one. `launchAgent` is optional: an
-agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never reads.
+launchd and the desktop session, which supervise what they start, get the **foreground** command. So does
+Windows, but through the stub: `intentic-launch.exe --log <log> -- <agent> <foreground args>`. `launchAgent` is
+optional: an agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never
+reads.
 
-**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. The loop is spawned `detached` on **every**
-platform: on POSIX for its own session, on Windows because without it the loop is torn down the moment its
-parent exits: measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie
-there for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
+Windows earns that indirection. Explorer starts a Run entry in the interactive session, and the loader gives
+every console-subsystem program a console — which on Windows 11, where the default console host is Windows
+Terminal, is a terminal window on the desktop. The entry used to name the agent's own **detached** command,
+which spawns the loop and exits, so what a user saw at every single boot was a black window for one to two
+seconds. Nothing softer works: `powershell -WindowStyle Hidden` hides the console *its* host owns while the
+window belongs to WindowsTerminal.exe, and a Task Scheduler logon task maps a window like anything else. Only a
+program whose PE subsystem is GUI never gets a console, which is the whole of what the stub is. `detachedArgs`
+remains the fallback for an install with no stub beside it (a developer running `node dist/cli.js`), and
+registration says out loud that a window will flash.
+
+**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. On POSIX the loop is spawned
+`detached` for its own session; on Windows because without it the loop is torn down the moment its parent
+exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie there
+for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
 (`CREATE_NO_WINDOW` is ignored alongside `DETACHED_PROCESS`), so a detached loop on Windows has no console at
 all, and Windows hands a console child of a console-less process a new console *with a window*. That is why
 every spawn inside a loop (git and ssh in sync's bridge, docker and PowerShell in host's tools) passes
 `windowsHide` itself; the flag applies whether or not the parent has a console, where inheritance did not.
+
+Where the stub is installed, `spawnDetached` goes through it on Windows and the bargain improves: the loop gets
+`CREATE_NO_WINDOW`, so it has a console of its own with **no window on it**, and every console child inherits
+that console instead of being handed a fresh one. The per-spawn `windowsHide` stays — it is what covers a loop
+started any other way — but it stops being the only thing between a user and a black window. The stub prints
+the loop's pid on its stdout, because its own pid belongs to a process that has already exited by the time the
+settle check below would probe it.
 
 `spawnDetached` also answers only once the loop has **survived** a short settle window, and throws naming its log
 otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
@@ -116,5 +135,6 @@ business: which is why host's scopes and sync's Mutagen sessions are nowhere nea
 - [src/home.ts](src/home.ts): the `~/.intentic/<agent>` directory and its 0600 floor.
 - [src/autostart.ts](src/autostart.ts): login autostart, per platform.
 - [src/detached.ts](src/detached.ts): the background loop, and surviving a closed terminal.
-- [src/launcher.ts](src/launcher.ts): `cliLauncher()`, including the compiled-binary argv case.
+- [src/launcher.ts](src/launcher.ts): `cliLauncher()` and the Windows launcher stub, including the
+  compiled-binary argv case.
 - [src/ui.ts](src/ui.ts), the renderer: the pipe/terminal/nested split, the checklist, the ranked ending.

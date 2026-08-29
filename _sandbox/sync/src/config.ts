@@ -27,6 +27,13 @@ export const userSshConfigPath = join(sshDir, "config");
 export const mirrorPidPath = join(baseDir, "mirror.pid");
 export const mirrorLogPath = join(baseDir, "mirror.log");
 
+/* Where `mutagen daemon start` writes when WE are the ones starting it at logon (Windows: see
+ * registerMutagenAutostart). Mutagen's own registration is a console command in the Run key, which flashes a
+ * terminal on the desktop at every boot; ours goes through the launcher stub, and a launched-at-logon command
+ * has nowhere to put its output unless it is given a file. Separate from mirror.log because it is a different
+ * program's output and it is written by a different process at a different moment. */
+export const mutagenDaemonLogPath = join(baseDir, "mutagen-daemon.log");
+
 /* WHEN THE WATCHER LAST COMPLETED A PASS, a live pid is not the same fact, and the difference is the whole
  * incident this file exists for. The watcher holds its tunnel listeners on the event loop, so a rejection that
  * escapes the loop leaves the PROCESS perfectly alive while the loop it was running is gone: the pidfile stays

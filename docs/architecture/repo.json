@@ -65,7 +65,14 @@
             "id": "computers",
             "name": "Your computer",
             "oneLiner": "How an agent reaches your own machine \u2014 with your permission, within your switches.",
-            "packages": ["_computers/browser", "_computers/desktop", "_computers/host", "_computers/local-agent", "_computers/webext"]
+            "packages": [
+                "_computers/browser",
+                "_computers/desktop",
+                "_computers/host",
+                "_computers/local-agent",
+                "_computers/webext",
+                "_computers/win-launcher"
+            ]
         },
         {
             "accent": "4",

@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { uptime } from "node:os";
+import { basename } from "node:path";
 import { setTimeout } from "node:timers/promises";
-import type { CliLauncher } from "./launcher.js";
+import { type CliLauncher, stubCommand, windowsLaunchStub } from "./launcher.js";
 
 /* THE RESIDENT BACKGROUND LOOP, one per machine, outliving the terminal that started it, found again across
  * processes through a pidfile.
@@ -111,7 +112,14 @@ export const livePid = async (pidPath: string): Promise<number | undefined> => {
  * `windowsHide` itself. Interactive commands are the exception and keep the user's console, because that is
  * where their output is meant to land. Mutagen meets the same rule from the other side: its daemon is detached
  * too, so it spawns every ssh with CREATE_NEW_CONSOLE plus a hidden window
- * (pkg/agent/transport/process_windows.go). */
+ * (pkg/agent/transport/process_windows.go).
+ *
+ * THE LAUNCHER STUB CHANGES THAT BARGAIN, and it is why Windows now has a path of its own below. A loop started
+ * through `intentic-launch.exe` gets CREATE_NO_WINDOW instead of DETACHED_PROCESS: a console of its own with no
+ * window on it, which the OS hands down to every console child it spawns. The per-spawn `windowsHide` stays —
+ * it is still the only thing covering a loop somebody started the other way — but it stops being the single
+ * point of failure between a user and a black window. The stub is spawned `detached` for the reason above: it
+ * must not be a job-object member, or the loop it starts dies with the command that asked for it. */
 
 /* How long the loop is given to prove it is really up. The failure this catches is instant, a child that is
  * torn down with its parent is gone within a second, so the window is short enough to sit inside a setup
@@ -119,22 +127,68 @@ export const livePid = async (pidPath: string): Promise<number | undefined> => {
 const SETTLE_MS = 2_000;
 const SETTLE_POLL_MS = 100;
 
-/* Start the loop detached, its stdout and stderr appended to `logPath`, the only place its output can go once no
- * terminal owns it. Answers the pid once the loop has SURVIVED the settle window, and throws naming the log when
- * it hasn't.
+// How long the stub is given to answer with a pid. It starts one process and exits — milliseconds — so this is
+// not a budget, it is the difference between a wrong file at that path wedging `setup` forever and one failure
+// that names the file.
+const STUB_REPLY_MS = 10_000;
+
+// Start the loop ourselves, the way every platform without a stub does it.
+const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string[]): number => {
+    const logFd = openSync(logPath, "a");
+    const [command, ...leading] = launcher;
+    const child = spawn(command, [...leading, ...args], { detached: true, stdio: ["ignore", logFd, logFd] });
+    child.unref();
+    if (child.pid === undefined) {
+        throw new Error(`could not start ${command} in the background. Details: ${logPath}`);
+    }
+    return child.pid;
+};
+
+/* Start it through the Windows stub, whose stdout carries the pid of what it started. That pid is the whole
+ * reason this reads a pipe rather than firing and forgetting: the stub's OWN pid belongs to a process that is
+ * already gone, and handing that to the settle loop below would report a dead launcher as a dead agent every
+ * single time. A stub that fails has already written the reason into the log; what is on its stderr is a
+ * malformed command line, which is ours, so both are worth carrying into the error. */
+const spawnThroughStub = async (stub: string, logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
+    const [command, ...rest] = stubCommand(stub, logPath, [...launcher, ...args]);
+    const child = spawn(command, rest, { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    let answered = "";
+    let complained = "";
+    child.stdout?.on("data", (chunk: Buffer) => (answered += chunk.toString()));
+    child.stderr?.on("data", (chunk: Buffer) => (complained += chunk.toString()));
+    const status = await new Promise<number | null>((resolve, reject) => {
+        const timer = globalThis.setTimeout(() => {
+            child.kill();
+            reject(new Error(`${basename(stub)} did not answer within ${STUB_REPLY_MS}ms. Details: ${logPath}`));
+        }, STUB_REPLY_MS);
+        timer.unref();
+        child.once("error", (error) => {
+            clearTimeout(timer);
+            reject(error);
+        });
+        child.once("close", (code) => {
+            clearTimeout(timer);
+            resolve(code);
+        });
+    });
+    const pid = Number(answered.trim());
+    if (status !== 0 || !Number.isInteger(pid) || pid <= 0) {
+        const said = complained.trim();
+        throw new Error(`${basename(stub)} could not start the background loop${said === "" ? "" : `: ${said}`}. Details: ${logPath}`);
+    }
+    return pid;
+};
+
+/* Start the loop in the background, its stdout and stderr appended to `logPath`, the only place its output can
+ * go once no terminal owns it. Answers the pid once the loop has SURVIVED the settle window, and throws naming
+ * the log when it hasn't.
  *
  * The wait is the whole point. A pid proves only that the OS created a process, and every caller here turns that
  * pid straight into a sentence telling the user their machine is now doing something, which is how a loop that
  * died on startup got reported as a success for as long as it did, on the one platform where it always died. */
 export const spawnDetached = async (logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
-    const logFd = openSync(logPath, "a");
-    const [command, ...leading] = launcher;
-    const child = spawn(command, [...leading, ...args], { detached: true, stdio: ["ignore", logFd, logFd] });
-    child.unref();
-    const pid = child.pid;
-    if (pid === undefined) {
-        throw new Error(`could not start ${command} in the background. Details: ${logPath}`);
-    }
+    const stub = windowsLaunchStub(launcher);
+    const pid = stub === undefined ? spawnHere(logPath, launcher, args) : await spawnThroughStub(stub, logPath, launcher, args);
     for (let waited = 0; waited < SETTLE_MS; waited += SETTLE_POLL_MS) {
         await setTimeout(SETTLE_POLL_MS);
         if (!isProcessAlive(pid)) {

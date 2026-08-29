@@ -838,6 +838,68 @@ mod tests {
         }
     }
 
+    /* THE WINDOWLESS LAUNCHER, WHICH ONLY THE TWO AGENT INSTALLERS FETCH.
+     *
+     * `computer.ps1` and `sync.ps1` install a resident agent that has to come back after a reboot, and on
+     * Windows that means a `HKCU\…\Run` value. Explorer starts one in the interactive session, where a
+     * CONSOLE-subsystem program — which both agents and Mutagen's daemon are — is handed a console window: a
+     * black terminal on the desktop at every boot, measured at 1-2 seconds each. `intentic-launch.exe` is the
+     * GUI-subsystem stub that makes the entry silent, and the agent uses it ONLY if it is sitting next to the
+     * binary, so an installer that forgets to fetch it takes the flashing window back with nobody noticing
+     * until the next reboot.
+     *
+     * The other three scripts (connect, connect-host, recreate) install `ic`, which is a command a person runs
+     * rather than a resident agent, so they neither need this nor carry it. */
+    #[test]
+    fn both_agent_installers_fetch_the_windowless_launcher() {
+        let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
+        for (path, text) in powershell_scripts() {
+            let name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let agent_installer = name == "computer.ps1" || name == "sync.ps1";
+            let block = launcher_fetch_block(&text);
+            assert_eq!(
+                agent_installer,
+                block.is_some(),
+                "{}: an installer that puts a resident agent on a Windows machine fetches intentic-launch.exe \
+                 (and nothing else does). Without it the agent's logon entry starts a console program \
+                 directly, which puts a terminal window on the user's desktop at every boot.",
+                path.display(),
+            );
+            if let Some(block) = block {
+                assert!(
+                    text.contains("Get-IntenticLauncher -BinDir"),
+                    "{} defines Get-IntenticLauncher and never calls it.",
+                    path.display(),
+                );
+                blocks.push((path, block));
+            }
+        }
+        let (first_path, first) = &blocks[0];
+        for (path, block) in &blocks[1..] {
+            assert_eq!(
+                block,
+                first,
+                "{} and {} fetch the launcher stub differently. These files cannot share code, so the copies \
+                 have to be identical — fix the one that drifted rather than relaxing this test.",
+                path.display(),
+                first_path.display(),
+            );
+        }
+    }
+
+    /// The `Get-IntenticLauncher` function, up to the brace that closes it. None for a script that has no such
+    /// function. The prose above each copy names that agent's own commands, so only the body is compared.
+    fn launcher_fetch_block(text: &str) -> Option<String> {
+        let start = text.find("function Get-IntenticLauncher {")?;
+        let rest = &text[start..];
+        let end = rest.find("\n}\n").map(|at| at + 3).unwrap_or(rest.len());
+        Some(rest[..end].to_string())
+    }
+
     /// The `Add-IntenticPath` function, up to the brace that closes it. None for a script that has no such
     /// function. The prose above each copy names that script's own commands, so only the body is compared.
     fn add_to_path_block(text: &str) -> Option<String> {

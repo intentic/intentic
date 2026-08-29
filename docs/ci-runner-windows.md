@@ -86,7 +86,7 @@ So the task the script registers is unattended in every way a service is, except
 
 | | |
 | --- | --- |
-| no window | the listener runs under a hidden host, so there is nothing on the desktop to close by accident and nothing to keep open on purpose |
+| no window | the listener runs under `intentic-launch.exe` (see below), so there is nothing on the desktop to close by accident and nothing to keep open on purpose |
 | self-healing | a repeating trigger re-runs the task every 3 minutes, and the task's `IgnoreNew` policy makes that a no-op while the listener is alive. A crash, a dropped network, a failed self-update or an operator's Ctrl-C is repaired within minutes, by the machine, with nobody signed in |
 | survives a reboot | `-AutoLogon`, below |
 | does not sleep through work | `-KeepAwake`, below |
@@ -94,6 +94,18 @@ So the task the script registers is unattended in every way a service is, except
 Task Scheduler's own restart-on-failure is set too, as the fast path — but it is not a substitute: it only fires
 for what the scheduler *calls* a failure, and a listener that exited zero, which is what a graceful stop and most
 self-update handoffs look like, is not one. That is the gap the repetition closes.
+
+**"No window" was a claim before it was a fact.** The action used to be `powershell.exe -WindowStyle Hidden
+-Command run.cmd`, and on a current Windows 11 — where Windows Terminal is the default console host — that
+hides the console the PowerShell host owns while the window on the desktop belongs to `WindowsTerminal.exe`, a
+different process that never gets the request. Measured by enumerating top-level windows every 25 ms: a task
+started that way maps a Terminal window and keeps it for as long as its child runs, which for this task is the
+runner's entire life. So the action is now
+[`intentic-launch.exe`](../_computers/win-launcher) `--wait -- cmd.exe /c run.cmd`: a GUI-subsystem program,
+which the loader never gives a console at all, starting `run.cmd` with `CREATE_NO_WINDOW`. `--wait` is what
+keeps the task in the `Running` state for the listener's lifetime, which is what `IgnoreNew`, `Stop-ScheduledTask`
+and `doctor`'s supervision check all read. Re-run `setup-windows-runner.ps1 -Repair` on a machine registered
+before this to pick it up; the script downloads the stub into the runner root itself.
 
 `doctor` reports which of the three shapes this machine is, and a hand-started runner is a **note in a passing
 log** rather than a failure: that runner is running the job that is asking, and the problem is about the next

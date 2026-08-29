@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { type CliLauncher, quotedCommandLine } from "./launcher.js";
+import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
 
 /* LOGIN AUTOSTART, so the machine is doing its job again after a reboot without anyone remembering to start
@@ -12,12 +12,17 @@ import type { Log } from "./home.js";
  * The mechanisms are the user's OWN, per platform, and all three are chosen for the same reason: no elevation,
  * no password prompt, no machine-wide change.
  *
- *   Windows, the per-user Run key. Task Scheduler was the wrong tool twice over and failed on every
+ *   Windows, the per-user Run key, running the loop through the LAUNCHER STUB (see below). Task Scheduler was
+ *             the wrong tool three times over. Two of them are about registering it at all, and failed on every
  *             non-elevated shell: `/SC ONLOGON` registers a trigger for "whenever a user (ANY user) logs on",
  *             which is a machine-wide change, and schtasks "always prompts for a password ... even when you
  *             schedule a task on the local computer using the current user account", which against a spawn's
  *             empty stdin can only fail. Mutagen writes to this exact key, and its registration kept succeeding
- *             in the same runs where the schtasks one died.
+ *             in the same runs where the schtasks one died. The third is the one that would matter even if a
+ *             task registered cleanly: a logon task running as the interactive user shows a console window for
+ *             a console program exactly as Explorer does — measured at ~2.1 s, and ~1.5 s through the
+ *             `-WindowStyle Hidden` PowerShell host everyone reaches for. Task Scheduler buys supervision, not
+ *             silence, and silence is what this is for.
  *   macOS  , a launchd LaunchAgent. Optional: an agent that has not been exercised there declares no
  *             `launchAgent` and gets a note instead of a file, rather than an XDG entry macOS never reads.
  *   Linux  , a systemd USER UNIT where there is a user manager to run it, and an XDG autostart entry only where
@@ -58,13 +63,16 @@ export interface AutostartSpec {
     readonly launchAgent?: LaunchAgentSpec;
     /* The CLI arguments each kind of mechanism runs, after the launcher.
      *
-     * `detached` is for Windows, whose Run entry Explorer starts in the INTERACTIVE session, where a console
-     * program owns a console window for as long as it lives. Registering the foreground loop there would park a
-     * black window on the desktop from login until shutdown, so the Run value runs the short command that
-     * spawns the hidden loop and exits.
+     * `foreground` is what every mechanism that can start the loop DIRECTLY gets: launchd and the desktop
+     * session because they supervise what they start and want to see it stop, and Windows because the launcher
+     * stub gives the loop a windowless console and then gets out of the way. One process at logon, and its
+     * output goes straight to the log.
      *
-     * `foreground` is for the mechanisms that SUPERVISE what they start (launchd, the desktop session): they
-     * want the loop itself, in the foreground, so they can see it stop. */
+     * `detached` is the Windows fallback, and only that: it is the short command that spawns the loop and
+     * exits, which is what a Run value has to name when the stub is not installed beside the agent (a
+     * developer's `node dist/cli.js`). Explorer starts a Run entry in the INTERACTIVE session, where a console
+     * program owns a console window for as long as it lives, so this shape trades a window that stays for one
+     * that flashes — the whole reason the stub exists. */
     readonly detachedArgs: readonly string[];
     readonly foregroundArgs: readonly string[];
     // What the user is told when registration fails. Agent-specific, because what they lose and how to retry is.
@@ -91,7 +99,7 @@ const reason = (error: unknown): string => (error instanceof Error ? error.messa
 // reason is the tool's business (schtasks answers on stdout, launchctl on stderr), so both are kept, and a spawn
 // that never ran hands back its own error rather than a status of null.
 const register = (command: string, args: readonly string[]): void => {
-    const result = spawnSync(command, args, { encoding: "utf8" });
+    const result = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
     if (result.error !== undefined) {
         throw result.error;
     }
@@ -101,20 +109,53 @@ const register = (command: string, args: readonly string[]): void => {
     }
 };
 
-// `reg add … /f` overwrites whatever is there, so a re-run after the agent moves re-points the entry.
-export const windowsRunAddArgs = (spec: AutostartSpec, launcher: CliLauncher): string[] => [
+/* `reg add … /f` overwrites whatever is there, so a re-run after the agent moves re-points the entry.
+ *
+ * WITH THE STUB the value is the whole thing: `intentic-launch.exe --log <log> -- <agent> <foreground args>`,
+ * one GUI-subsystem process that starts the loop with CREATE_NO_WINDOW and exits inside a few milliseconds.
+ * Nothing is ever mapped on the desktop, the loop's output lands in the log the agent already advertises, and
+ * the intermediate `run`/`mirror` process — the one whose two-second settle wait WAS the window everybody saw —
+ * is gone from the logon path.
+ *
+ * WITHOUT IT the old shape, because it is better than no autostart: the detached command, a console window on
+ * the desktop for as long as that command takes. registerAutostart says so out loud when it gets here. */
+export const windowsRunAddArgs = (spec: AutostartSpec, launcher: CliLauncher, stub?: string): string[] =>
+    windowsRunValueAddArgs(
+        spec.windowsRunValue,
+        quotedCommandLine(
+            stub === undefined ? [...launcher, ...spec.detachedArgs] : stubCommand(stub, spec.logPath, [...launcher, ...spec.foregroundArgs]),
+        ),
+    );
+
+export const windowsRunDeleteArgs = (spec: AutostartSpec): string[] => windowsRunValueDeleteArgs(spec.windowsRunValue);
+
+/* ONE PER-USER RUN VALUE, under the name whoever owns it chose. Every Windows autostart this repo writes comes
+ * down to these two argvs, and they are exported because an agent's OWN loop is not the only thing that has to
+ * come back after a reboot: the sync agent registers Mutagen's daemon here too, because Mutagen's own
+ * `daemon register` writes a console `mutagen daemon start` into this same key and that flashes a terminal on
+ * the desktop at every logon, which is the whole thing the launcher stub exists to prevent. */
+export const windowsRunValueAddArgs = (name: string, commandLine: string): string[] => [
     "add",
     WINDOWS_RUN_KEY,
     "/v",
-    spec.windowsRunValue,
+    name,
     "/t",
     "REG_SZ",
     "/d",
-    quotedCommandLine([...launcher, ...spec.detachedArgs]),
+    commandLine,
     "/f",
 ];
 
-export const windowsRunDeleteArgs = (spec: AutostartSpec): string[] => ["delete", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue, "/f"];
+export const windowsRunValueDeleteArgs = (name: string): string[] => ["delete", WINDOWS_RUN_KEY, "/v", name, "/f"];
+
+// Write one. Throws with what reg.exe actually said, for a caller that has somewhere to put that.
+export const setWindowsRunValue = (name: string, commandLine: string): void => register(regExe(), windowsRunValueAddArgs(name, commandLine));
+
+// Remove one. `reg delete` exits non-zero when the value is already gone, which is the normal case for a second
+// uninstall — ignoring that is this function's `rm --force`.
+export const clearWindowsRunValue = (name: string): void => {
+    spawnSync(regExe(), windowsRunValueDeleteArgs(name), { stdio: "ignore", windowsHide: true });
+};
 
 /* The states `systemctl --user is-system-running` reports when there IS a user manager to talk to. "degraded"
  * counts, it means some unrelated unit of the user's failed, not that ours can't run, and so does a startup
@@ -309,7 +350,18 @@ export const registerAutostart = async (spec: AutostartSpec, launcher: CliLaunch
             return await registerMac(spec, spec.launchAgent, launcher);
         }
         if (process.platform === "win32") {
-            register(regExe(), windowsRunAddArgs(spec, launcher));
+            /* The stub is what makes this entry silent, and its absence is a fact about the install rather than
+             * a failure: a developer running `node dist/cli.js` has no binary to put one beside. Registering the
+             * old flashing shape and SAYING so beats both alternatives — refusing to register (a machine that
+             * silently stops resuming after a reboot) and registering it quietly (the bug this whole path
+             * exists to remove, back again with nobody told). */
+            const stub = windowsLaunchStub(launcher);
+            if (stub === undefined) {
+                log(
+                    `note: ${WINDOWS_LAUNCH_STUB} isn't installed beside this agent, so ${spec.id} will start at login through a console window that flashes on the desktop. Re-run the install command from the capability card to get it.`,
+                );
+            }
+            register(regExe(), windowsRunAddArgs(spec, launcher, stub));
             return false;
         }
         if (process.platform === "linux") {
@@ -337,9 +389,7 @@ export const unregisterAutostart = async (spec: AutostartSpec, log: Log): Promis
             return;
         }
         if (process.platform === "win32") {
-            // `reg delete` exits non-zero when the value is already gone, which is the normal case for a second
-            // uninstall, ignoring that is this branch's `rm --force`.
-            spawnSync(regExe(), windowsRunDeleteArgs(spec), { stdio: "ignore" });
+            clearWindowsRunValue(spec.windowsRunValue);
             return;
         }
         /* Both Linux mechanisms, unconditionally. Which one is registered depends on what the machine could run at

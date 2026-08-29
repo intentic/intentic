@@ -1,0 +1,20 @@
+[package]
+name = "intentic-launch"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# NO DEPENDENCIES, and that is a property worth keeping rather than an accident of a small program. This binary
+# is downloaded onto a user's PC beside the agent it starts, so its size is user-visible in exactly the way
+# _sandbox/ic's is, and std already carries the only two things it needs: `CommandExt::creation_flags` for
+# CREATE_NO_WINDOW, and a file handle to hand the child as stdout/stderr.
+
+# Same strip + LTO trade the other two shipped crates settled on, plus the size-first knobs a program this small
+# can afford: nothing here is hot, and `opt-level = "z"` with one codegen unit is what keeps the artifact in the
+# low hundreds of KB next to an 85 MB agent.
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"

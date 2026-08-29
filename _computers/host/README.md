@@ -121,14 +121,18 @@ the rest; naming none disconnects everything and takes the autostart entry and t
 
 State lives in `~/.intentic/host`: `config.json` (0600, one entry per linked sandbox: its URL, this machine's
 id there, the enrollment token and the cached scopes), `audit.jsonl` (every call, kept even across an
-uninstall: it is the user's record, not the agent's), `host.log`, and `trash/`.
+uninstall: it is the user's record, not the agent's), `host.log`, and `trash/`. On Windows `bin/` holds two
+executables rather than one: the agent, and the [launcher stub](../win-launcher) that starts it at logon
+without a console window.
 
 ## Gotchas worth knowing before editing
 
-- **Every spawn in this package passes `windowsHide`.** The connection loop runs `detached` (without it, Windows
-  tears it down with the command that started it), which leaves it with no console: and Windows gives a console
-  child of a console-less process one of its own, window included. The flag is per-spawn for that reason: it
-  applies whether or not the parent has a console.
+- **Every spawn in this package passes `windowsHide`.** A connection loop started from a terminal runs
+  `detached` (without it, Windows tears it down with the command that started it), which leaves it with no
+  console: and Windows gives a console child of a console-less process one of its own, window included. The flag
+  is per-spawn for that reason: it applies whether or not the parent has a console. A loop started at logon goes
+  through [`intentic-launch.exe`](../win-launcher) instead and has a console with no window, which its children
+  inherit — belt as well as braces, and the reason the boot no longer flashes a black window on the desktop.
 - **The enrollment token rides the hello FRAME, never the URL.** A durable credential in a query string ends up
   in edge logs, connector logs and every proxy between here and the sandbox.
 - **A refusal is a value, not an exception.** Scope errors come back as ordinary tool results so the model tells

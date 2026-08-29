@@ -621,9 +621,11 @@ jobs:
       - run: cargo clippy --manifest-path _editor/desktop-app/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path _editor/desktop-app/src-tauri/Cargo.toml
 
-  # The ic host-side CLI (_sandbox/ic, Rust): the binary behind the connect/recreate/connect-host bootstrap
-  # shims. Same cargo gate as the desktop crate — fmt, clippy at -D warnings, tests — in the same image (it
-  # bakes the rust toolchain); no webkit/tauri in this crate, so the build is seconds off a warm registry.
+  # The two shipped Rust crates that are not the desktop app: the ic host-side CLI (_sandbox/ic), the binary
+  # behind the connect/recreate/connect-host bootstrap shims, and the Windows launcher stub
+  # (_computers/win-launcher) the machine-side agents register at logon. Same cargo gate as the desktop crate —
+  # fmt, clippy at -D warnings, tests — in the same image (it bakes the rust toolchain); no webkit/tauri in
+  # either, so both are seconds off a warm registry.
   ic-check:
     needs: [changes, preflight, ci-base, ci-desktop]
     if: ${{ !cancelled() && needs.changes.outputs.ic == 'true' && needs.preflight.result == 'success' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
@@ -663,6 +665,14 @@ jobs:
       # about the time clippy took.
       - run: cargo xwin check --manifest-path _sandbox/ic/Cargo.toml --target x86_64-pc-windows-msvc
       - run: cargo test --manifest-path _sandbox/ic/Cargo.toml
+      # The launcher stub. The Windows target is not an extra here, it is the ONLY target the shipped binary is
+      # ever built for: everything this crate does past argument parsing sits behind `#[cfg(windows)]`, so the
+      # Linux fmt/clippy/test steps see the parser and nothing else. `clippy -D warnings` on the Linux side
+      # (the crate is small enough to be clean there) and `xwin check` on the side that ships.
+      - run: cargo fmt --manifest-path _computers/win-launcher/Cargo.toml --all --check
+      - run: cargo clippy --manifest-path _computers/win-launcher/Cargo.toml --all-targets -- -D warnings
+      - run: cargo xwin check --manifest-path _computers/win-launcher/Cargo.toml --target x86_64-pc-windows-msvc
+      - run: cargo test --manifest-path _computers/win-launcher/Cargo.toml
 
   # The desktop ARTIFACTS: build the Linux bundles exactly the way the release builds them, then verify what
   # came out. Two tiers, ordered by cost, each proving something the one before it cannot:
