@@ -84,7 +84,15 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
     }
     // Neutralized here at the pipeline boundary so every consumer — the capsule on stdout as much as the
     // sidecar — gets folded text; a forged marker in a pdf's Title must not reach a transcript either.
-    const doc = neutralizeDoc(await deriver.derive(absPath));
+    // A parser dying on one corrupt file is that FILE's outcome, never the sweep's: a 500-document pass must
+    // not be killed by the one docx that lies about what it is, so the failure reads as a loud skip.
+    let doc: DerivedDoc;
+    try {
+        doc = neutralizeDoc(await deriver.derive(absPath));
+    } catch (error) {
+        const detail = (error instanceof Error ? error.message : String(error)).split("\n")[0];
+        return { kind: "skipped", relPath, reason: `derive-failed (${format}): ${detail}` };
+    }
     const written = await writeSidecar(workspaceRoot, { relPath, sourceSha, deriverStamp: stamp, doc, derivedAt: now() });
     return { kind: "derived", relPath, format, sidecarPath: written.path, body: written.body, doc, tokens: written.tokens };
 };

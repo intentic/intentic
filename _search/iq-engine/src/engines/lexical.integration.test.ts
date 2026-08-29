@@ -71,6 +71,8 @@ test("literal takes a regex metacharacter as itself", async () => {
      * halves with it or fails loudly. */
     expect(await search("you .nstall", {})).toHaveLength(1);
     expect(await search("you .nstall", { literal: true })).toHaveLength(0);
+    // And across lines: the wildcard stands in for the 'w', so "Ownership" and "ownership" both hit.
+    expect(await search("o.nership", {})).toHaveLength(2);
 });
 
 test("a file with more matches than the cap reports the cap AND that it is one", async () => {

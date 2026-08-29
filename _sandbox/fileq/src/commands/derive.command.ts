@@ -30,7 +30,7 @@ export const deriveCommand = buildCommand({
         flags: {
             json: { kind: "boolean", default: false, brief: "One JSON object per line" },
         },
-        positional: { kind: "array", parameters: { parse: String, brief: "Files to converge, workspace-root-relative (the watcher's own namespace) or absolute", placeholder: "file" } },
+        positional: { kind: "array", parameter: { parse: String, brief: "Files to converge, workspace-root-relative (the watcher's own namespace) or absolute", placeholder: "file" } },
     },
     async func(this: CommandContext, flags: DeriveFlags, ...files: string[]) {
         const root = workspaceRoot();

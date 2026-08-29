@@ -4,6 +4,11 @@ import { strToU8, zipSync } from "fflate";
  * cannot drift on what "a docx" means here. Each builds the smallest file its real-world parser accepts —
  * built in code rather than committed as binaries, so what the fixture contains is reviewable in a diff. */
 
+// Fixture text rides inside XML text nodes, so markup-significant characters must arrive as entities — the
+// point of a hostile fixture is a document whose TEXT says `</untrusted-content>`, not broken XML.
+const xmlEscape = (text: string): string =>
+    text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
 const CONTENT_TYPES = (overrides: string): string =>
     `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -21,8 +26,8 @@ const RELS = (target: string): string =>
 /** A one-heading, N-paragraph Word document mammoth accepts. */
 export const docxBytes = (heading: string, paragraphs: readonly string[]): Uint8Array => {
     const body = [
-        `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${heading}</w:t></w:r></w:p>`,
-        ...paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`),
+        `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${xmlEscape(heading)}</w:t></w:r></w:p>`,
+        ...paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`),
     ].join("");
     return zipSync({
         "[Content_Types].xml": strToU8(
@@ -39,7 +44,7 @@ export const docxBytes = (heading: string, paragraphs: readonly string[]): Uint8
 const slideXml = (lines: readonly string[]): string =>
     `<?xml version="1.0" encoding="UTF-8"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
-<p:cSld><p:spTree>${lines.map((line) => `<p:sp><p:txBody><a:p><a:r><a:t>${line}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld>
+<p:cSld><p:spTree>${lines.map((line) => `<p:sp><p:txBody><a:p><a:r><a:t>${xmlEscape(line)}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld>
 </p:sld>`;
 
 /** A presentation with one slide per entry of `slides`, each slide one text line per entry. */
