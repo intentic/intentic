@@ -108,6 +108,25 @@ describe(`the name two components share`, () => {
         expect(componentStem(`src/components/Button/index.tsx`)).toBeUndefined();
     });
 
+    /* The same argument, for the names the framework hands out rather than the author. A monorepo has one root
+     * per app and a Next App Router has one `page` per route, so these families form by construction: the thirty
+     * `page.tsx` of a thirty-route app would sort above every real finding the chore has. */
+    test(`framework entry names never form a family`, () => {
+        expect(componentStem(`apps/web/src/App.vue`)).toBeUndefined();
+        expect(componentStem(`apps/desktop/src/App.vue`)).toBeUndefined();
+        expect(componentStem(`app/dashboard/page.tsx`)).toBeUndefined();
+        expect(componentStem(`app/settings/layout.tsx`)).toBeUndefined();
+        expect(componentStem(`app/settings/not-found.tsx`)).toBeUndefined();
+    });
+
+    // …and only on the whole name. A component that merely BEGINS with one is the author's own and keeps its
+    // stem, or the guard above would swallow half the components in a repo that prefixes them.
+    test(`a component that only starts with a framework name is kept`, () => {
+        expect(componentStem(`src/shell/AppShell.vue`)).toBe(`appshell`);
+        expect(componentStem(`src/ErrorBoundary.tsx`)).toBe(`errorboundary`);
+        expect(componentStem(`src/PageHeader.vue`)).toBe(`pageheader`);
+    });
+
     /* The trap in stripping a trailing number. `H1` and `H2` are different components and reduce to the same
      * single letter, so the stem is only accepted when what survives is still long enough to mean something:
      * otherwise the untouched name is kept and the two stay apart. */

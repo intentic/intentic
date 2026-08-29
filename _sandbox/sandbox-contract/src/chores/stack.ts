@@ -220,6 +220,19 @@ const MIN_STEM = 3;
 const QUALIFIER_PREFIX = /^(base|the)/;
 const QUALIFIER_SUFFIX = /(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/;
 
+/* NAMES THE FRAMEWORK CHOSE, NOT THE AUTHOR, and therefore never evidence of anything.
+ *
+ * A repository gets one of these per app (`app`, `main`, `root`) or one per route directory (Next's App Router
+ * mandates `page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`) BY CONSTRUCTION, so two files
+ * sharing one is a fact about the framework and not about duplication. A monorepo with two front-ends has two
+ * `App.vue`; a thirty-route Next app has thirty `page.tsx`, which sorts to the top of the families list and becomes
+ * the loudest thing the chore says while being entirely false.
+ *
+ * Same argument as `index` below, and the same disposal. Matched against the whole base name rather than as a
+ * prefix, so `AppShell.vue` and `ErrorBoundary.tsx` are ordinary components and keep their own stems: the only
+ * files dropped are the ones that could not have been built twice in the first place. */
+const FRAMEWORK_NAMES = new Set([`index`, `app`, `main`, `root`, `page`, `layout`, `loading`, `error`, `template`, `default`, `notfound`]);
+
 /* THE NAME TWO COMPONENTS SHARE WHEN THEY ARE THE SAME COMPONENT TWICE, or `undefined` when the file has no
  * name worth comparing.
  *
@@ -228,14 +241,17 @@ const QUALIFIER_SUFFIX = /(v[0-9]+|new|old|legacy|copy|component|[0-9]+)$/;
  * component is making a claim anyone can agree or disagree with in a second. A fuzzy distance would be right more
  * often and checkable never, and an unarguable finding is one nobody can improve.
  *
- * `index` is dropped rather than normalised. Every barrel file in the repository is called it, and a family of
- * forty index files is a finding about the naming convention rather than about any duplication. */
+ * `index` is dropped rather than normalised, along with the rest of the framework's own vocabulary
+ * (FRAMEWORK_NAMES). Every barrel file in the repository is called it, and a family of forty index files is a
+ * finding about the naming convention rather than about any duplication. */
 export const componentStem = (path: string): string | undefined => {
     const file = normalizePath(path).split(`/`).pop() ?? ``;
     // `.component.ts` loses both suffixes, `.vue` loses one, taking everything before the first dot handles both
     // without a table, since a component's name is never the part after a dot.
     const base = (file.split(`.`)[0] ?? ``).toLowerCase().replace(/[^a-z0-9]/g, ``);
-    if (base === `` || base === `index`) {
+    // Tested before the stripping below, so a framework name is dropped on its own terms rather than after a
+    // qualifier rule has had a chance to turn it into something else.
+    if (base === `` || FRAMEWORK_NAMES.has(base)) {
         return undefined;
     }
     const withoutSuffix = base.replace(QUALIFIER_SUFFIX, ``);
