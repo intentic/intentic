@@ -343,6 +343,9 @@ catalogs:
     oxlint:
       specifier: 1.76.0
       version: 1.76.0
+    oxlint-plugin-complexity:
+      specifier: 2.1.8
+      version: 2.1.8
     parse5:
       specifier: 8.0.1
       version: 8.0.1
@@ -454,6 +457,7 @@ overrides:
   mermaid>dompurify: 3.4.13
   miniflare>undici: 7.29.0
   deepmerge-ts: 8.0.1
+  '@oxlint/plugins': 1.76.0
 
 pnpmfileChecksum: sha256-BOb8HDKOsWHIuE0xQAP/KuMtToJuuCvJ72HTd9z8UQM=
 
@@ -473,6 +477,9 @@ importers:
       '@intentic/constants':
         specifier: workspace:*
         version: link:_tools/constants
+      '@oxlint/plugins':
+        specifier: 1.76.0
+        version: 1.76.0
       '@semantic-release/exec':
         specifier: 'catalog:'
         version: 7.1.0(semantic-release@25.0.8(supports-color@10.2.2)(typescript@5.9.3))(supports-color@10.2.2)
@@ -488,6 +495,9 @@ importers:
       oxlint:
         specifier: 'catalog:'
         version: 1.76.0
+      oxlint-plugin-complexity:
+        specifier: 'catalog:'
+        version: 2.1.8(diff@8.0.4)(estree-walker@3.0.3)(oxc-parser@0.142.0)
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -5899,6 +5909,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@oxlint/plugins@1.76.0':
+    resolution: {integrity: sha512-twmbsVrYAjkaOw6I2pDiYSAxVLNOV8kcqMzajJ599SpqXzea+GjDCZVad1VUqNR/4thWjM4PER5n+3/TQtTkZQ==}
+    engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
+
   '@parcel/watcher-android-arm64@2.6.0':
     resolution: {integrity: sha512-trgpLSCKRC/huFjXX/Smh+0sWe4+YtKfktIToiMl59ghz7z+qkH6kMvNnUbLyRs9N11t8l4svSCs1+5B3rOAhA==}
     engines: {node: '>= 10.0.0'}
@@ -10343,6 +10357,21 @@ packages:
 
   oxc-resolver@11.24.2:
     resolution: {integrity: sha512-FY91FiDBj7ls5MsFS9jN3tjz2o0/zsdSsymlakySaBwVJZorHhkWyICLZMKxlu1R9vYo+sd3z1jwb4J8x7bNDw==}
+
+  oxlint-plugin-complexity@2.1.8:
+    resolution: {integrity: sha512-4BnfNeQkeuEwUti+QAOBaCUuEWZaubk7L94dNl60RXzrs/pjzNOXhWx4rAmK8g/HoBrkIyJ8kqyto5nU0vDG9g==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      diff: '>=5.0.0'
+      estree-walker: '>=3.0.0'
+      oxc-parser: '>=0.60.0'
+    peerDependenciesMeta:
+      diff:
+        optional: true
+      estree-walker:
+        optional: true
+      oxc-parser:
+        optional: true
 
   oxlint@1.76.0:
     resolution: {integrity: sha512-6QoFioEU4fNdiUx/2Eo6TRd6NG7H7njnRCz8rhB66cZmMHDTqcm1Rjvl8Wry+ZTQMBAmyb4Mlf62Mk5X+eHSOw==}
@@ -15077,6 +15106,8 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.76.0':
     optional: true
+
+  '@oxlint/plugins@1.76.0': {}
 
   '@parcel/watcher-android-arm64@2.6.0':
     optional: true
@@ -19961,6 +19992,14 @@ snapshots:
       '@oxc-resolver/binding-wasm32-wasi': 11.24.2
       '@oxc-resolver/binding-win32-arm64-msvc': 11.24.2
       '@oxc-resolver/binding-win32-x64-msvc': 11.24.2
+
+  oxlint-plugin-complexity@2.1.8(diff@8.0.4)(estree-walker@3.0.3)(oxc-parser@0.142.0):
+    dependencies:
+      '@oxlint/plugins': 1.76.0
+    optionalDependencies:
+      diff: 8.0.4
+      estree-walker: 3.0.3
+      oxc-parser: 0.142.0
 
   oxlint@1.76.0:
     optionalDependencies:
