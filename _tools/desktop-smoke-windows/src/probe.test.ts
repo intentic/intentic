@@ -36,7 +36,9 @@ const dialog = (closesOnPress: number, options: { readonly focusFails?: number; 
             },
             press: async () => {
                 presses.push(`0x1234`);
-                if (presses.length >= closesOnPress) open = false;
+                if (presses.length >= closesOnPress) {
+                    open = false;
+                }
             },
             sleep: async (ms) => {
                 clock += ms;

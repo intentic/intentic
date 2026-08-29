@@ -21,7 +21,7 @@ export const stepLead = (order: readonly string[], lead: string | null, delta: n
     }
     const i = lead === null ? -1 : order.indexOf(lead);
     if (i === -1) {
-        return (delta > 0 ? order[0] : order[order.length - 1]) ?? null;
+        return (delta > 0 ? order[0] : order.at(-1)) ?? null;
     }
     return order[Math.min(order.length - 1, Math.max(0, i + delta))] ?? null;
 };

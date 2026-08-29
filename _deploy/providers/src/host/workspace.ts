@@ -221,8 +221,7 @@ export const createWorkspaceProvider = (executor: SshExecutor = sshExecutor): Pr
                 // The rm destroys the old container's `docker logs`, keep its tail on the host first, so a
                 // failed recreate still has the predecessor's record (fetchable via `intentic deploy logs`).
                 `(docker logs --tail 2000 ${CONTAINER} > /opt/intentic/workspace-previous.log 2>&1 || true) && ` +
-                    `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ` +
-                    runCommand,
+                    `(docker rm -f ${CONTAINER} 2>/dev/null || true) && ${runCommand}`,
             );
             if (run.code !== 0) {
                 throw new Error(`failed to start workspace sandbox on host: exited ${run.code}: ${run.stderr.trim()}`);

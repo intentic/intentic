@@ -167,7 +167,7 @@ export const wireguardExitDriver: ExitDriver = {
         await rm(exitStateDir(id), { recursive: true, force: true });
     },
     missingTool: async () => ((await toolMissing("wg-quick", ["--help"])) ? "wg-quick" : undefined),
-    start: async function* (id, raw, country): AsyncGenerator<IntenticLine> {
+    async *start(id, raw, country): AsyncGenerator<IntenticLine> {
         const wanted = country ?? raw.country;
         const all = profiles(raw);
         if (all.length === 0) {
@@ -182,7 +182,7 @@ export const wireguardExitDriver: ExitDriver = {
         }
         yield* bring(id, profile);
     },
-    rotate: async function* (id, raw): AsyncGenerator<IntenticLine> {
+    async *rotate(id, raw): AsyncGenerator<IntenticLine> {
         const previous = await readSelection(id);
         const all = profiles(raw);
         const country = previous?.country ?? raw.country;

@@ -183,8 +183,8 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                with nothing saved, does it fall back to revealing the current page. */
             const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
             const saved = sessionStorage.getItem(scrollKey);
-            if (saved !== null) sidebar.scrollTop = Number(saved);
-            else sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+            if (saved !== null) {sidebar.scrollTop = Number(saved);}
+            else {sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });}
 
             edges();
             sidebar.addEventListener(
@@ -203,7 +203,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         const links = new Map<string, HTMLElement>();
         for (const link of document.querySelectorAll<HTMLElement>("[data-toc-link]")) {
             const id = link.dataset.tocLink;
-            if (id) links.set(id, link);
+            if (id) {links.set(id, link);}
         }
 
         if (links.size > 0) {
@@ -213,7 +213,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
             let current = "";
 
             const paint = (id: string) => {
-                if (id === current) return;
+                if (id === current) {return;}
                 const previous = current === "" ? undefined : links.get(current);
                 previous?.classList.remove(...ACTIVE);
                 previous?.classList.add(...IDLE);
@@ -226,15 +226,15 @@ const { section, prev, next } = bookNeighbours(book, pageId);
             const order = [...links.keys()];
             const settle = () => {
                 const first = order.find((id) => visible.has(id));
-                if (first) paint(first);
+                if (first) {paint(first);}
             };
 
             const observer = new IntersectionObserver(
                 (entries) => {
                     for (const entry of entries) {
                         const id = entry.target.id;
-                        if (entry.isIntersecting) visible.add(id);
-                        else visible.delete(id);
+                        if (entry.isIntersecting) {visible.add(id);}
+                        else {visible.delete(id);}
                     }
                     settle();
                 },
@@ -243,7 +243,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
 
             for (const id of order) {
                 const heading = document.getElementById(id);
-                if (heading) observer.observe(heading);
+                if (heading) {observer.observe(heading);}
             }
 
             paint(order[0] ?? "");

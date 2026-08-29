@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { BottomSheet, Button, clipboardOf, ConfirmDialog, Modal, type NoticeModel, NoticeStack, PullToRefresh, SegmentedControl } from "@intentic/ui";
+import {
+    BottomSheet,
+    Button,
+    clipboardOf,
+    ConfirmDialog,
+    Modal,
+    type NoticeModel,
+    NoticeStack,
+    PullToRefresh,
+    SegmentedControl,
+    useLoadingReveal,
+    iconForEntry,
+} from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useLoadingReveal } from "@intentic/ui";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { reportOpenPath } from "../../composables/usePresence";
 import { outgoingMark, outgoingSummary } from "../../composables/workspace/outgoingWork";
@@ -26,7 +37,6 @@ import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants"
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
 import { filesToEntries } from "./dropEntries";
 import { explorerShows } from "./explorerFilter";
-import { iconForEntry } from "@intentic/ui";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";

@@ -5,8 +5,7 @@ import { z } from "zod";
 import { composeDown, composeUp, containerImage, containerLabel, stateDir, waitReady } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
-import type { SshSession } from "../core/ssh.js";
-import { type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
 
 const KIND = "authentik";
 // Authentik runs DB migrations on first boot, so allow a generous readiness window.

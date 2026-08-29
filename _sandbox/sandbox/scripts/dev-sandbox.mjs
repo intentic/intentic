@@ -22,11 +22,10 @@
 // shared lib triggers a full image rebuild. That's intentional under the "auto-rebuild whole image"
 // model (the sandbox bundles several @intentic/* libs, and over-rebuilding is safe, just slower).
 import { spawn } from "node:child_process";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve, sep } from "node:path";
 import { watch } from "chokidar";
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_DIR = import.meta.dirname;
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEBOUNCE_MS = 500;
 // Which sandbox this loop drives, forwarded verbatim to both swap scripts. Empty means "the one on this

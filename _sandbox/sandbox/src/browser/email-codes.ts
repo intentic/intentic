@@ -55,7 +55,7 @@ export const siteToken = (site: string): string => {
             .replace(/^https?:\/\//, "")
             .split("/")[0] ?? "";
     const labels = host.split(".").filter((label) => label !== "");
-    return (labels.length >= 2 ? labels[labels.length - 2] : labels[0]) ?? site.toLowerCase();
+    return (labels.length >= 2 ? labels.at(-2) : labels[0]) ?? site.toLowerCase();
 };
 
 // One fetched mail, already reduced to what the tool may say.

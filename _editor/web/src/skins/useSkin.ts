@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 // The scheme singleton and the preference primitive off their own entry points rather than the barrel: this file
 // is plain state on two attributes, and reaching them through @intentic/ui would drag the whole component graph
 // (and mermaid, shiki and vue-flow behind it) into every module and unit test that only wants to know which skin

@@ -177,8 +177,8 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
 <script is:inline define:vars={{ endpoint }}>
     const el = (tag, className, text) => {
         const node = document.createElement(tag);
-        if (className) node.className = className;
-        if (text !== undefined) node.textContent = text;
+        if (className) {node.className = className;}
+        if (text !== undefined) {node.textContent = text;}
         return node;
     };
 
@@ -188,7 +188,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
         header.append(el(`h2`, `text-base font-semibold tracking-tight text-content`, service.name));
         // The probation badge, said here exactly as the spend card says it: this listing passed the published
         // admission gates but has not served enough runs to graduate.
-        if (service.probation) header.append(el(`span`, `chip border border-primary-600/35 bg-primary-600/12 text-primary-300`, `New`));
+        if (service.probation) {header.append(el(`span`, `chip border border-primary-600/35 bg-primary-600/12 text-primary-300`, `New`));}
         card.append(header);
         card.append(el(`p`, `text-xs text-subtle`, `by ${service.publisher}`));
         card.append(el(`p`, `text-sm leading-relaxed text-muted`, service.description));
@@ -196,7 +196,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
         foot.append(el(`span`, `font-mono font-semibold text-content`, `${service.creditsPerRun} credits/run`));
         foot.append(el(`span`, `text-subtle`, `${service.servedRuns.toLocaleString(`en-GB`)} served`));
         // A refund means a run that failed to answer and charged nothing — the number a flaky service cannot hide.
-        if (service.refundedRuns > 0) foot.append(el(`span`, `text-subtle`, `${service.refundedRuns.toLocaleString(`en-GB`)} refunded`));
+        if (service.refundedRuns > 0) {foot.append(el(`span`, `text-subtle`, `${service.refundedRuns.toLocaleString(`en-GB`)} refunded`));}
         card.append(foot);
         return card;
     };
@@ -209,7 +209,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
             empty.classList.remove(`hidden`);
         } else {
             const grid = document.getElementById(`catalog-services`);
-            for (const service of data.services) grid.append(serviceCard(service));
+            for (const service of data.services) {grid.append(serviceCard(service));}
         }
         // The wanted list renders even when the catalog is empty — on a young platform it IS the page.
         if (Array.isArray(data.wanted) && data.wanted.length > 0) {
@@ -226,7 +226,7 @@ const runArrows = runNodes.slice(0, -1).map((node) => ({ y1: node.y + NODE_R + 3
 
     fetch(endpoint, { headers: { accept: `application/json` } })
         .then((response) => {
-            if (!response.ok) throw new Error(`the platform answered ${response.status}`);
+            if (!response.ok) {throw new Error(`the platform answered ${response.status}`);}
             return response.json();
         })
         .then(render)

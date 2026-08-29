@@ -119,10 +119,16 @@ const emptyReason = computed(() => {
 const counts = computed<TallyItem[]>(() => {
     const tally = { running: 0, stopped: 0, unhealthy: 0, updates: 0 };
     for (const resource of resources.value) {
-        if (resource.state === `running`) tally.running++;
-        else if (resource.state === `unhealthy`) tally.unhealthy++;
-        else if (resource.state === `stopped`) tally.stopped++;
-        if (resource.updateAvailable) tally.updates++;
+        if (resource.state === `running`) {
+            tally.running++;
+        } else if (resource.state === `unhealthy`) {
+            tally.unhealthy++;
+        } else if (resource.state === `stopped`) {
+            tally.stopped++;
+        }
+        if (resource.updateAvailable) {
+            tally.updates++;
+        }
     }
     return [
         { label: `unhealthy`, value: tally.unhealthy, variant: `danger` },

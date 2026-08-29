@@ -5,8 +5,7 @@ import { z } from "zod";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { containerLabel } from "../core/backing-ssh.js";
 import { listStampedContainers } from "../core/list-stamped.js";
-import type { SshSession } from "../core/ssh.js";
-import { type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
 import { SERVICE_LOGGING } from "../services/compose-service.js";
 
 const signozSchema = sshSchema.extend({

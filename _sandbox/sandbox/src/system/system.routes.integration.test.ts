@@ -103,7 +103,7 @@ test("system.usage folds the LEDGER (all-time, never pruned) per provider+accoun
 
 test("system.killTerminal routes a panel-* session through the process manager, so `running` unmaps immediately", async () => {
     const processes = fakeProcesses();
-    const client = clientFor(createApp(services({ processes: processes })));
+    const client = clientFor(createApp(services({ processes })));
     expect(await client.system.killTerminal({ name: "panel-app" })).toEqual({ ok: true });
     expect(processes.stopped).toEqual(["app"]);
 });
@@ -420,18 +420,14 @@ test("POST /system/sync/pair: the operating tier may mint sync, lower roles are 
         services({ auth: { authorize: async () => ({ email: "m@x.com", role: "maintainer" as const }), authorizeOwner: rejectForbidden } }),
     );
     expect(
-        await (
-            await maintainer.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer m" } })
-        ).json(),
+        await (await maintainer.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer m" } })).json(),
     ).toMatchObject({ mode: "sync" });
 
     const collaborator = createApp(
         services({ auth: { authorize: async () => ({ email: "c@x.com", role: "collaborator" as const }), authorizeOwner: rejectForbidden } }),
     );
     expect(
-        await (
-            await collaborator.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer c" } })
-        ).json(),
+        await (await collaborator.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer c" } })).json(),
     ).toMatchObject({ mode: "mirror" });
 });
 

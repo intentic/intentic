@@ -174,7 +174,7 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
 
     return {
         enforcing: true,
-        consult: async function* (program, subject) {
+        async *consult(program, subject) {
             const classes = classifyCommand(program).filter((commandClass) => !granted.has(commandClass));
             const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());
             if (held === undefined) {

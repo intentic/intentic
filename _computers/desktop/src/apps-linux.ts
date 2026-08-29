@@ -41,7 +41,7 @@ export const linuxApps = {
     focusWindow: async (id: string): Promise<void> => {
         if (isWayland()) {
             if (swayRunning() && (await has("swaymsg"))) {
-                await run("swaymsg", ["[con_id=" + id + "]", "focus"]);
+                await run("swaymsg", [`[con_id=${id}]`, "focus"]);
                 return;
             }
             throw new DesktopError(

@@ -87,8 +87,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
         }),
-        codexAgent: async function* () {},
-        grokAgent: async function* () {},
+        async *codexAgent() {},
+        async *grokAgent() {},
         ...overrides,
     });
 
@@ -112,8 +112,8 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         // The delegation note asks which other coding agents this sandbox can hand work to; none, here.
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
-        codexAgent: async function* () {},
-        agent: async function* () {},
+        async *codexAgent() {},
+        async *agent() {},
     });
 
     const plan = await planTurn(services, { prompt: "do the thing" } as AgentTurn, contextIn(root));
@@ -137,8 +137,8 @@ test("a persona with no file reads does not get the diagnostic tools", async () 
     const services = servicesIn(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
-        codexAgent: async function* () {},
-        agent: async function* () {},
+        async *codexAgent() {},
+        async *agent() {},
         personas: unstubbed<Services["personas"]>("personas", {
             list: async () => [{ id: "reader", name: "Reader", powers: { files: "none", shell: false } }] as never,
         }),

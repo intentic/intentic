@@ -282,7 +282,7 @@ export const dockerHandler: CapabilityHandler = {
         const directive = gpuAsked(config) ? `${DOCKER_DIRECTIVE}\n${GPU_FRAGMENT}` : DOCKER_DIRECTIVE;
         return engine === undefined ? directive : `${engine}\n${directive}`;
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         if (await cliMissing()) {
             // Two worlds have no docker CLI: a bare dev run (nothing to do, the engine exists in a real
             // sandbox) and a core image (the docker pack rides the overlay, same rebuild that grants the

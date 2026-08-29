@@ -47,7 +47,7 @@ vi.mock("../exit/exit-drivers.js", () => ({
         tor: {
             missingTool: async () => undefined,
             probe: async () => ({ state: "down" }),
-            start: async function* (id: string): AsyncGenerator<IntenticLine> {
+            async *start(id: string): AsyncGenerator<IntenticLine> {
                 started(id);
                 await new Promise<void>((resolve) => onDial(resolve));
                 yield { kind: "log", message: "up" };

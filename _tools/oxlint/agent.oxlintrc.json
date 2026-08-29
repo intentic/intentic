@@ -1,0 +1,67 @@
+{
+    // THE AUTHORING STANDARD — what code written in this repo from now on is held to.
+    //
+    // It is the root .oxlintrc.json plus the backlog rules main does not satisfy yet. Nothing here is a
+    // different opinion from the root config; it is the same standard without the allowance main needs to
+    // stay green.
+    //
+    // The anti-slop half lives in anti-slop.oxlintrc.json, which extends this file. It is separate only
+    // because it needs a dependency (@oxlint/plugins) that is not installed yet — see the README.
+    //
+    // Applied by .claude/hooks/oxlint-edit.mjs to files an agent has just written, and to those files only.
+    // The hook reports a diagnostic ONLY if it is absent from the same file at HEAD, so touching a legacy file
+    // never hands the agent somebody else's backlog — it is held to this standard for what it changed.
+    //
+    // Run it by hand over a path with:  pnpm lint:agent <path>
+    "$schema": "../../node_modules/oxlint/configuration_schema.json",
+    "extends": ["../../.oxlintrc.json"],
+    "rules": {
+        // ── The backlog, switched back on ────────────────────────────────────────────────────────────────
+        // Same 36 rules the root config lists as off, in the same order. When main's count for one reaches
+        // zero, delete it from the root config's backlog — this file does not change.
+        "typescript/consistent-type-imports": "error",
+        "vitest/no-conditional-expect": "error",
+        "promise/no-multiple-resolved": "error",
+        "no-console": ["error", { "allow": ["warn", "error"] }],
+        "no-shadow": "error",
+        "oxc/no-map-spread": "error",
+        "unicorn/no-array-sort": "error",
+        "vitest/expect-expect": "error",
+        "promise/no-callback-in-promise": "error",
+        "promise/no-nesting": "error",
+        "no-sequences": "error",
+        "prefer-const": "error",
+        "vitest/valid-title": "error",
+        "import/first": "error",
+        "unicorn/prefer-native-coercion-functions": "error",
+        "no-unsafe-optional-chaining": "error",
+        "no-useless-concat": "error",
+        "promise/no-promise-in-callback": "error",
+        "prefer-regex-literals": "error",
+        "unicorn/prefer-structured-clone": "error",
+        "no-use-before-define": "error",
+        "vitest/no-standalone-expect": "error",
+        "typescript/no-explicit-any": "error",
+        "vitest/no-commented-out-tests": "error",
+        "no-script-url": "error",
+        "unicorn/error-message": "error",
+        "no-new-func": "error",
+        "no-control-regex": "error",
+        "unicorn/no-useless-spread": "error",
+        "no-unmodified-loop-condition": "error",
+        "require-yield": "error",
+        "unicorn/no-useless-length-check": "error",
+        "import/no-named-as-default": "error",
+        "unicorn/prefer-array-index-of": "error",
+        "no-unassigned-vars": "error",
+        "typescript/no-import-type-side-effects": "error"
+    },
+    "overrides": [
+        {
+            "files": ["**/*.vue"],
+            "rules": {
+                "no-use-before-define": "error"
+            }
+        }
+    ]
+}

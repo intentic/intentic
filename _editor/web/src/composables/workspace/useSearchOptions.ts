@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
 /* What the workspace search box remembers between searches (module-level singleton, persisted): the three

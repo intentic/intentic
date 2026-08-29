@@ -66,7 +66,9 @@ const packageManifestOf = (file) => {
             return JSON.parse(readFileSync(join(directory, `package.json`), `utf8`));
         } catch {
             const parent = dirname(directory);
-            if (parent === directory) return undefined;
+            if (parent === directory) {
+                return undefined;
+            }
             directory = parent;
         }
     }
@@ -76,12 +78,20 @@ const packageManifestOf = (file) => {
  * for that key: the map's own ordering does not matter here, because the question is not "what would a resolver
  * pick" but "does this package publish a source entry for this subpath, and where". */
 const sourceTarget = (node) => {
-    if (typeof node === `string`) return undefined;
-    if (node === null || typeof node !== `object`) return undefined;
-    if (typeof node[SOURCE_CONDITION] === `string`) return node[SOURCE_CONDITION];
+    if (typeof node === `string`) {
+        return undefined;
+    }
+    if (node === null || typeof node !== `object`) {
+        return undefined;
+    }
+    if (typeof node[SOURCE_CONDITION] === `string`) {
+        return node[SOURCE_CONDITION];
+    }
     for (const value of Object.values(node)) {
         const found = sourceTarget(value);
-        if (found !== undefined) return found;
+        if (found !== undefined) {
+            return found;
+        }
     }
     return undefined;
 };
@@ -92,7 +102,9 @@ export const sourceFirstWorkspace = () => ({
     // reach entirely. Once this answers with a path inside the workspace, neither happens.
     enforce: `pre`,
     resolveId(id, importer) {
-        if (!WORKSPACE_SCOPES.some((scope) => id.startsWith(scope))) return null;
+        if (!WORKSPACE_SCOPES.some((scope) => id.startsWith(scope))) {
+            return null;
+        }
         const [name, subpath] = splitSubpath(id);
 
         /* FROM THE IMPORTER, not from this file. Only the site's own direct dependencies resolve from here, and
@@ -109,14 +121,20 @@ export const sourceFirstWorkspace = () => ({
             return null;
         }
         const installedManifest = packageManifestOf(resolved);
-        if (installedManifest === undefined) return null;
+        if (installedManifest === undefined) {
+            return null;
+        }
 
         const workspaceDirectory = installedManifest.repository?.directory;
-        if (workspaceDirectory === undefined) return null;
+        if (workspaceDirectory === undefined) {
+            return null;
+        }
 
         const directory = join(WORKSPACE_ROOT, workspaceDirectory);
         const manifest = JSON.parse(readFileSync(join(directory, `package.json`), `utf8`));
-        if (manifest.name !== name) return null;
+        if (manifest.name !== name) {
+            return null;
+        }
 
         const target = sourceTarget(manifest.exports?.[subpath]);
         // No source entry for this subpath is a legitimate answer — a package may publish only built output — so

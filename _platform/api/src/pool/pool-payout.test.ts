@@ -101,7 +101,9 @@ describe(`the payout run`, () => {
             claims: [{ publisher: `acme`, userId: `u1` }],
             accounts: payable(`u1`),
         });
-        const gateway = gatewayWith(async () => Promise.reject(new Error(`insufficient funds`)));
+        const gateway = gatewayWith(async () => {
+            throw new Error(`insufficient funds`);
+        });
 
         const outcomes = await runPayouts({ prisma, config, gateway, now: () => NOW });
 

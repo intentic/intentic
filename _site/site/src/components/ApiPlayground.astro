@@ -68,9 +68,9 @@ const { payload } = Astro.props;
        below the target moves it. */
     const openFromHash = () => {
         const id = decodeURIComponent(location.hash.slice(1));
-        if (id === "") return;
+        if (id === "") {return;}
         const target = document.querySelector<HTMLDetailsElement>(`details[data-api-op="${CSS.escape(id)}"]`);
-        if (!target) return;
+        if (!target) {return;}
         target.open = true;
         target.scrollIntoView({ block: "start" });
     };
@@ -103,14 +103,14 @@ const { payload } = Astro.props;
     const setup = (panel: HTMLElement) => {
         const id = panel.dataset.play;
         const operation = id === undefined ? undefined : byId.get(id);
-        if (operation === undefined) return;
+        if (operation === undefined) {return;}
 
         const fields = panel.querySelector<HTMLElement>("[data-play-fields]");
         const send = panel.querySelector<HTMLButtonElement>("[data-play-send]");
         const reset = panel.querySelector<HTMLButtonElement>("[data-play-reset]");
         const address = panel.querySelector<HTMLElement>("[data-play-url]");
         const out = panel.querySelector<HTMLElement>("[data-play-out]");
-        if (!fields || !send || !reset || !address || !out) return;
+        if (!fields || !send || !reset || !address || !out) {return;}
 
         const inputs = new Map<string, HTMLInputElement | HTMLSelectElement>();
         let bodyBox: HTMLTextAreaElement | undefined;
@@ -145,8 +145,8 @@ const { payload } = Astro.props;
             if (parameter.options && parameter.options.length > 0) {
                 const select = document.createElement("select");
                 select.className = "api-input";
-                if (!parameter.required) select.append(new Option("(omit)", ""));
-                for (const option of parameter.options) select.append(new Option(option, option));
+                if (!parameter.required) {select.append(new Option("(omit)", ""));}
+                for (const option of parameter.options) {select.append(new Option(option, option));}
                 select.value = parameter.example;
                 select.addEventListener("change", paint);
                 inputs.set(parameter.name, select);
@@ -236,9 +236,9 @@ const { payload } = Astro.props;
         reset.addEventListener("click", () => {
             for (const parameter of operation.params) {
                 const input = inputs.get(parameter.name);
-                if (input) input.value = parameter.example;
+                if (input) {input.value = parameter.example;}
             }
-            if (bodyBox !== undefined && operation.body !== undefined) bodyBox.value = operation.body;
+            if (bodyBox !== undefined && operation.body !== undefined) {bodyBox.value = operation.body;}
             out.hidden = true;
             paint();
         });

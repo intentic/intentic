@@ -19,11 +19,10 @@
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { writeDroppedRepo } from "./dropped-repo.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = import.meta.dirname;
 const DEMO = process.env.DEMO_URL ?? "http://127.0.0.1:47146/demo";
 const OUT = process.env.PROMO_OUT ?? "/tmp/intentic-promo";
 const DROP_SOURCE = "/tmp/promo-drop/checkout-worker";

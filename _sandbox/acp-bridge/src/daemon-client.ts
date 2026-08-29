@@ -43,7 +43,7 @@ export const createDaemonClient = (url: string, token: string): DaemonClient => 
     };
 
     return {
-        streamTurn: async function* (turn, signal) {
+        async *streamTurn(turn, signal) {
             const response = await request("/agent", {
                 method: "POST",
                 headers: { "content-type": "application/json" },

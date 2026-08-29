@@ -89,12 +89,18 @@ const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[
         }),
         delete: vi.fn(async ({ where }: { where: { id: string } }) => {
             const index = payments.findIndex((row) => row.id === where.id);
-            if (index >= 0) payments.splice(index, 1);
+            if (index >= 0) {
+                payments.splice(index, 1);
+            }
             return {};
         }),
     };
     const prisma = {
-        sandbox: { findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) => (where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null)) },
+        sandbox: {
+            findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) =>
+                where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
+            ),
+        },
         wallet: walletDelegate,
         walletPayment: paymentDelegate,
         $transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run({ wallet: walletDelegate, walletPayment: paymentDelegate })),
@@ -161,10 +167,15 @@ it("signs a payment inside the caps, and records it against the day", async () =
 it("signs exactly the EIP-3009 typed data, in the token's own domain", async () => {
     const seen: unknown[] = [];
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
-    await app({ prisma, custody: custody({ signTypedData: async (_id, typedData) => { seen.push(typedData); return `0x${`ab`.repeat(65)}`; } }) })(
-        `/sign`,
-        signBody(),
-    );
+    await app({
+        prisma,
+        custody: custody({
+            signTypedData: async (_id, typedData) => {
+                seen.push(typedData);
+                return `0x${`ab`.repeat(65)}`;
+            },
+        }),
+    })(`/sign`, signBody());
     expect(seen[0]).toMatchObject({
         primaryType: `TransferWithAuthorization`,
         // chainId and verifyingContract come from the PLATFORM's own table, never from the caller: a
@@ -222,16 +233,20 @@ it("refuses an over-long validity window rather than trimming it", async () => {
 
 it("refuses an already-expired authorization", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
-    const response = await app({ prisma })(
-        `/sign`,
-        signBody({}, { validAfter: `1000`, validBefore: String(Math.floor(NOW.getTime() / 1000) - 10) }),
-    );
+    const response = await app({ prisma })(`/sign`, signBody({}, { validAfter: `1000`, validBefore: String(Math.floor(NOW.getTime() / 1000) - 10) }));
     expect(response.status).toBe(400);
 });
 
 it("drops the payment row when the custody provider refuses, so a failed sign eats no budget", async () => {
     const { prisma, payments } = fakePrisma({ wallets: [seededWallet] });
-    const response = await app({ prisma, custody: custody({ signTypedData: async () => { throw new Error(`wallet frozen`); } }) })(`/sign`, signBody());
+    const response = await app({
+        prisma,
+        custody: custody({
+            signTypedData: async () => {
+                throw new Error(`wallet frozen`);
+            },
+        }),
+    })(`/sign`, signBody());
     expect(response.status).toBe(502);
     expect(payments).toHaveLength(0);
 });
@@ -245,7 +260,9 @@ it("404s everything when no custody provider is configured", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
     const off = { ...config, wallet: { custodyUrl: ``, custodyKey: `` } };
     expect((await app({ prisma, config: off })(`/sign`, signBody())).status).toBe(404);
-    expect((await app({ prisma, config: off })(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } })).status).toBe(404);
+    expect(
+        (await app({ prisma, config: off })(`/ensure`, { network: `eip155:8453`, policy: { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` } })).status,
+    ).toBe(404);
 });
 
 it("creates one wallet per account and network, and re-states the caps on a repeat ensure", async () => {

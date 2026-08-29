@@ -1,12 +1,27 @@
 {
+    // THE LANDABLE STANDARD. Everything in this file is green on main and `pnpm lint` gates it.
+    //
+    // There is a second, stricter config next door — _tools/oxlint/agent.oxlintrc.json — which extends this one
+    // and is applied ONLY to files an agent has just written (see .claude/hooks/oxlint-edit.sh). That split is
+    // deliberate: a standard the repo cannot currently meet is a standard agents learn to disable, so the rules
+    // that still have a legacy backlog live on the authoring side of the line and ratchet inward from there,
+    // instead of sitting here red.
+    //
+    // Rules are ENUMERATED rather than pulled in by category. Oxlint's categories are buckets of available
+    // rules, not curated presets (there is no `recommended` preset yet — oxc-project/oxc#20758), and the wide
+    // ones are internally contradictory: `restriction` alone carries no-async-await, no-optional-chaining and
+    // no-rest-spread-properties, which fight require-await, prefer-optional-chain and half of this codebase.
+    // Enumerating also pins the rule set across oxlint upgrades, so a bump cannot silently change what an agent
+    // is being told to do mid-task.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["typescript", "unicorn", "oxc", "import", "vue"],
+    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "vitest"],
     "categories": {
         "correctness": "error",
         "suspicious": "error",
         "perf": "error"
     },
     "rules": {
+        // ── Repo-specific ────────────────────────────────────────────────────────────────────────────────
         "typescript/no-extraneous-class": ["error", { "allowWithDecorator": true }],
         "import/no-unassigned-import": [
             "error",
@@ -14,11 +29,298 @@
                 "allow": ["**/*.css", "**/composables/sandbox/sandboxScope", "**/composables/sandbox/sandboxScreen", "**/extension-host/hostModules"]
             }
         ],
+        // `_` is this repo's throwaway binding, not a private-member sigil. `_all`/`_count`/`_sum` are Prisma's
+        // aggregate result keys and `_zod` is zod's internals marker — names libraries chose, which no amount of
+        // linting here will change.
         "no-underscore-dangle": [
             "error",
-            { "allow": ["__API_URL__", "__POSTHOG_KEY__", "__intentic", "__INTENTIC_DESKTOP__", "__termFrames", "_core", "_renderService"] }
+            {
+                "allow": [
+                    "_",
+                    "_all",
+                    "_count",
+                    "_sum",
+                    "_zod",
+                    "__API_URL__",
+                    "__POSTHOG_KEY__",
+                    "__intentic",
+                    "__INTENTIC_DESKTOP__",
+                    "__termFrames",
+                    "_core",
+                    "_renderService"
+                ]
+            }
         ],
-        "no-await-in-loop": "off"
+        // `fix.imports` lets --fix delete an unused import outright, which is the whole point of the edit hook:
+        // the agent never sees a diagnostic for something a tool could just remove. Variable removal stays off —
+        // deleting a binding can delete an initialiser's side effect with it.
+        "no-unused-vars": ["error", { "args": "none", "varsIgnorePattern": "^_", "fix": { "imports": "safe-fix", "variables": "off" } }],
+
+        // ── Turned off on purpose ────────────────────────────────────────────────────────────────────────
+        // Each of these fires in the hundreds or thousands here and is wrong, not merely unmet. Left on, they
+        // would be the noise an agent learns to reach past — and the disable comment it writes to get past
+        // them is worth less than the rule was.
+        //
+        // Sequential awaits in a loop are the intent throughout the daemon (ordered writes, rate-limited
+        // fetches), not an oversight. 953 hits.
+        "no-await-in-loop": "off",
+        // Miscounts the arguments of the call being asserted on: `expect(await fn(a, b, c))` reads as three
+        // arguments to expect(). 109 hits, all false. Upstream rule bug, not a codebase problem.
+        "vitest/valid-expect": "off",
+        // Wants a type parameter on every vi.fn()/vi.mock(). 977 hits of pure ceremony.
+        "vitest/require-mock-type-parameters": "off",
+        // Wants a message argument on every .toThrow(). 89 hits; the thrown type is usually the assertion.
+        "vitest/require-to-throw-message": "off",
+        // The repo wraps genuine callback APIs (node-pty, watchers, Playwright events) — 189 hits, none of
+        // which have an await to prefer.
+        "promise/prefer-await-to-callbacks": "off",
+        // Fires on the void-returning `.then()` that is idiomatic here. 72 hits.
+        "promise/always-return": "off",
+        // Factory closures and per-call helpers are deliberate. 185 hits.
+        "unicorn/consistent-function-scoping": "off",
+        // `"\x1f"` is a control character this repo handles on purpose — _tools/scripts/control-chars.mjs
+        // exists to police exactly these bytes. Rewriting them to `""` is churn against that check.
+        "unicorn/no-hex-escape": "off",
+        // The next three are cosmetic, and their autofixes were measured across this repo before being
+        // rejected: together they rewrote ~400 files, and catch-error-name's renames alone walked no-shadow
+        // from 17 hits to 104 by colliding with outer `error` bindings. A rule that costs a 400-file diff and
+        // introduces violations of another rule is not paying for itself.
+        "unicorn/catch-error-name": "off", // `catch (e)` → `catch (error)`, 170 renames
+        "unicorn/prefer-string-replace-all": "off", // `.replace(/x/g)` → `.replaceAll`, 230 sites
+        "promise/param-names": "off", // Promise executor arg naming, 74 sites
+        // OFF BECAUSE ITS AUTOFIX IS NOT VALUE-SAFE. appendChild() returns the node it appended; append()
+        // returns undefined. Oxlint ships the rewrite as a plain --fix, and it silently broke two call sites
+        // here that used the return value — caught by tsc, not by the linter. The edit hook applies --fix
+        // without showing the agent what it changed, so a fix that can alter a value is the one kind this
+        // setup must not carry.
+        "unicorn/prefer-dom-node-append": "off",
+
+        // ── Debug residue and agent leftovers ────────────────────────────────────────────────────────────
+        // console.warn/error are real product behaviour; console.log is something left behind.
+        "no-warning-comments": ["error", { "terms": ["@nocommit", "FIXME"] }],
+        // THE LOAD-BEARING ONE. Without it the cheapest way for an agent to make the linter quiet is a blanket
+        // `oxlint-disable`, and every other rule here becomes advisory.
+        "unicorn/no-abusive-eslint-disable": "error",
+        "vitest/no-focused-tests": "error",
+        "vitest/no-disabled-tests": "error",
+        "vitest/no-identical-title": "error",
+
+        // ── Type honesty (no checker needed) ─────────────────────────────────────────────────────────────
+        "typescript/no-empty-object-type": "error",
+        "typescript/no-unsafe-function-type": "error",
+        "typescript/no-wrapper-object-types": "error",
+        "typescript/no-duplicate-enum-values": "error",
+        "typescript/no-unsafe-declaration-merging": "error",
+        "typescript/no-misused-new": "error",
+        "typescript/no-require-imports": "error",
+        "typescript/triple-slash-reference": "error",
+        "typescript/no-extra-non-null-assertion": "error",
+        "typescript/no-confusing-non-null-assertion": "error",
+        "typescript/no-non-null-asserted-nullish-coalescing": "error",
+        "typescript/no-non-null-asserted-optional-chain": "error",
+        "typescript/no-unnecessary-type-constraint": "error",
+        "typescript/no-unnecessary-parameter-property-assignment": "error",
+        "typescript/prefer-as-const": "error",
+        "typescript/prefer-literal-enum-member": "error",
+        "typescript/no-useless-empty-export": "error",
+        "typescript/no-namespace": "error",
+        "typescript/ban-ts-comment": "error",
+
+        // ── Core correctness and intent ──────────────────────────────────────────────────────────────────
+        "eqeqeq": ["error", "always", { "null": "ignore" }],
+        // Brace-less `if` is where a later single-line edit silently lands outside the branch — a failure mode
+        // that costs an agent nothing to avoid and a reviewer real time to spot.
+        "curly": "error",
+        "array-callback-return": "error",
+        "no-throw-literal": "error",
+        "preserve-caught-error": "error",
+        "no-var": "error",
+        "object-shorthand": "error",
+        "no-unused-private-class-members": "error",
+        "no-constant-binary-expression": "error",
+        "no-new-wrappers": "error",
+        "no-implied-eval": "error",
+        "no-extra-bind": "error",
+        "no-useless-rename": "error",
+        "no-object-constructor": "error",
+        "no-array-constructor": "error",
+        "no-multi-str": "error",
+        "no-return-assign": "error",
+        "no-self-compare": "error",
+        "no-unneeded-ternary": "error",
+        "default-case-last": "error",
+        "grouped-accessor-pairs": "error",
+        "symbol-description": "error",
+        "operator-assignment": "error",
+        "prefer-object-has-own": "error",
+        "prefer-arrow-callback": ["error", { "allowNamedFunctions": true }],
+        "prefer-exponentiation-operator": "error",
+        "prefer-numeric-literals": "error",
+        "prefer-promise-reject-errors": "error",
+        "prefer-rest-params": "error",
+        "prefer-spread": "error",
+        "prefer-template": "error",
+        "radix": "error",
+
+        // ── Promises ─────────────────────────────────────────────────────────────────────────────────────
+        "promise/no-return-wrap": "error",
+        "promise/no-new-statics": "error",
+        "promise/valid-params": "error",
+        "promise/no-return-in-finally": "error",
+        "promise/spec-only": "error",
+
+        // ── Modern built-ins ─────────────────────────────────────────────────────────────────────────────
+        "unicorn/throw-new-error": "error",
+        "unicorn/new-for-builtins": "error",
+        "unicorn/no-instanceof-builtins": "error",
+        "unicorn/no-invalid-fetch-options": "error",
+        // Owns `typeof x === "undefined"` and autofixes it. Kept ahead of anti-slop/no-runtime-typeof, which
+        // is configured not to re-flag the same narrowing (see agent.oxlintrc.json).
+        "unicorn/no-typeof-undefined": "error",
+        "unicorn/no-useless-promise-resolve-reject": "error",
+        "unicorn/no-magic-array-flat-depth": "error",
+        "unicorn/no-unnecessary-slice-end": "error",
+        "unicorn/no-await-in-promise-methods": "error",
+        "unicorn/no-single-promise-in-promise-methods": "error",
+        "unicorn/no-console-spaces": "error",
+        "unicorn/consistent-empty-array-spread": "error",
+        "unicorn/require-array-join-separator": "error",
+        "unicorn/text-encoding-identifier-case": "error",
+        "unicorn/prefer-node-protocol": "error",
+        "unicorn/prefer-string-slice": "error",
+        "unicorn/prefer-string-starts-ends-with": "error",
+        "unicorn/prefer-array-flat-map": "error",
+        "unicorn/prefer-array-some": "error",
+        "unicorn/prefer-at": "error",
+        "unicorn/prefer-set-size": "error",
+        "unicorn/prefer-number-properties": "error",
+        "unicorn/prefer-optional-catch-binding": "error",
+        "unicorn/prefer-import-meta-properties": "error",
+
+        // ── Imports ──────────────────────────────────────────────────────────────────────────────────────
+        "import/no-duplicates": "error",
+        "import/no-self-import": "error",
+        "import/no-empty-named-blocks": "error",
+        "import/no-mutable-exports": "error",
+        "import/no-named-default": "error",
+        "import/no-absolute-path": "error",
+        "import/no-webpack-loader-syntax": "error",
+        "node/no-exports-assign": "error",
+        "node/no-new-require": "error",
+
+        // ── Type-aware ───────────────────────────────────────────────────────────────────────────────────
+        // These need a checker and only run under `pnpm lint:types` (oxlint --type-aware, backed by
+        // oxlint-tsgolint). Plain `pnpm lint` ignores them at no cost, so they are declared here — one place
+        // where the standard lives — rather than in a separate file.
+        //
+        // This is the half of the linter that catches what a language model actually gets wrong: a dropped
+        // await, an `any` crossing a boundary, a cast the checker cannot justify, a union that grew a member
+        // while a switch did not. None of it is visible without types.
+        "typescript/no-floating-promises": "error",
+        "typescript/no-misused-promises": "error",
+        "typescript/await-thenable": "error",
+        "typescript/require-await": "error",
+        "typescript/return-await": "error",
+        "typescript/no-unnecessary-condition": "error",
+        // Directly counters model staleness: an agent writes against the API it remembers from training, and
+        // this is what says the memory is out of date.
+        "typescript/no-deprecated": "error",
+        "typescript/no-unsafe-argument": "error",
+        "typescript/no-unsafe-assignment": "error",
+        "typescript/no-unsafe-call": "error",
+        "typescript/no-unsafe-member-access": "error",
+        "typescript/no-unsafe-return": "error",
+        "typescript/no-unsafe-enum-comparison": "error",
+        "typescript/no-unsafe-unary-minus": "error",
+        "typescript/switch-exhaustiveness-check": "error",
+        "typescript/use-unknown-in-catch-callback-variable": "error",
+        "typescript/restrict-template-expressions": "error",
+        "typescript/restrict-plus-operands": "error",
+        "typescript/no-base-to-string": "error",
+        "typescript/no-confusing-void-expression": "error",
+        "typescript/no-misused-spread": "error",
+        "typescript/no-array-delete": "error",
+        "typescript/no-for-in-array": "error",
+        "typescript/no-meaningless-void-operator": "error",
+        "typescript/no-mixed-enums": "error",
+        "typescript/no-duplicate-type-constituents": "error",
+        "typescript/no-redundant-type-constituents": "error",
+        "typescript/no-unnecessary-boolean-literal-compare": "error",
+        "typescript/no-unnecessary-type-assertion": "error",
+        "typescript/no-unnecessary-type-arguments": "error",
+        "typescript/no-unnecessary-type-conversion": "error",
+        "typescript/no-unnecessary-type-parameters": "error",
+        "typescript/no-unnecessary-template-expression": "error",
+        "typescript/no-useless-default-assignment": "error",
+        "typescript/non-nullable-type-assertion-style": "error",
+        "typescript/related-getter-setter-pairs": "error",
+        "typescript/require-array-sort-compare": "error",
+        "typescript/unbound-method": "error",
+        "typescript/prefer-nullish-coalescing": "error",
+        "typescript/prefer-optional-chain": "error",
+        "typescript/prefer-find": "error",
+        "typescript/prefer-includes": "error",
+        "typescript/prefer-readonly": "error",
+        "typescript/prefer-reduce-type-parameter": "error",
+        "typescript/prefer-return-this-type": "error",
+
+        // ── Type-aware rules deliberately NOT enabled ────────────────────────────────────────────────────
+        // Duplicates of cheaper rules above. Two diagnostics on one line with two different remedies is how a
+        // fix loop starts oscillating, so in each pair the always-on rule wins and the type-aware twin is off.
+        "typescript/only-throw-error": "off", // duplicate of no-throw-literal
+        "typescript/prefer-promise-reject-errors": "off", // duplicate of the eslint rule
+        "typescript/no-implied-eval": "off", // duplicate of the eslint rule
+        "typescript/prefer-string-starts-ends-with": "off", // duplicate of the unicorn rule
+        // Type assertions are owned by anti-slop in agent.oxlintrc.json, which offers a way through (justify
+        // it with a SAFETY comment) instead of a demand that cannot always be met.
+        "typescript/no-unsafe-type-assertion": "off",
+        // Noise without a matching gain: strict-boolean-expressions rejects every truthiness check, and
+        // prefer-readonly-parameter-types wants deep-readonly signatures across the whole codebase.
+        "typescript/strict-boolean-expressions": "off",
+        "typescript/prefer-readonly-parameter-types": "off",
+        // ── BACKLOG: enforced on new code, not yet true of main ─────────────────────────────────────────
+        // These are part of the standard — _tools/oxlint/agent.oxlintrc.json turns every one of them back on,
+        // and the edit hook applies that config to any file an agent touches. They are off HERE, and only
+        // here, because main does not satisfy them yet and a red `pnpm lint` teaches agents to ignore lint.
+        // The number after each rule is how many violations main currently carries. Fix them and delete the
+        // line; the count is the work, and the list only ever shrinks.
+        // Total: 272 violations across 36 rules, measured at oxlint 1.76.0.
+        "typescript/consistent-type-imports": "off", // 47
+        "vitest/no-conditional-expect": "off", // 33
+        "promise/no-multiple-resolved": "off", // 23
+        "no-console": "off", // 23
+        "no-shadow": "off", // 17
+        "oxc/no-map-spread": "off", // 15
+        "unicorn/no-array-sort": "off", // 14
+        "vitest/expect-expect": "off", // 10
+        "promise/no-callback-in-promise": "off", // 8
+        "promise/no-nesting": "off", // 8
+        "no-sequences": "off", // 8
+        "prefer-const": "off", // 6
+        "vitest/valid-title": "off", // 6
+        "import/first": "off", // 6
+        "unicorn/prefer-native-coercion-functions": "off", // 4
+        "no-unsafe-optional-chaining": "off", // 4
+        "no-useless-concat": "off", // 4
+        "promise/no-promise-in-callback": "off", // 3
+        "prefer-regex-literals": "off", // 3
+        "unicorn/prefer-structured-clone": "off", // 3
+        "no-use-before-define": "off", // 3
+        "vitest/no-standalone-expect": "off", // 3
+        "typescript/no-explicit-any": "off", // 3
+        "vitest/no-commented-out-tests": "off", // 2
+        "no-script-url": "off", // 2
+        "unicorn/error-message": "off", // 2
+        "no-new-func": "off", // 2
+        "no-control-regex": "off", // 2
+        "unicorn/no-useless-spread": "off", // 1
+        "no-unmodified-loop-condition": "off", // 1
+        "require-yield": "off", // 1
+        "unicorn/no-useless-length-check": "off", // 1
+        "import/no-named-as-default": "off", // 1
+        "unicorn/prefer-array-index-of": "off", // 1
+        "no-unassigned-vars": "off", // 1
+        "typescript/no-import-type-side-effects": "off" // 1
     },
     "env": {
         "node": true,
@@ -38,19 +340,55 @@
         "**/tmp",
         "**/assets/js/env.js",
         "_editor/web/public/ext-shims",
-        "_sandbox/sandbox/operator-templates"
+        "_sandbox/sandbox/operator-templates",
+        // Vendored upstream source — kept byte-identical so it stays diffable against dmmulroy/anti-slop.
+        "_tools/oxlint/anti-slop"
     ],
     "overrides": [
         {
             "files": ["**/*.vue"],
             "rules": {
-                "no-use-before-define": "error"
+                // Part of the backlog above, and off for the same reason: 3 sites in `<script setup>` call a
+                // `const` arrow declared further down. Benign at runtime — the call happens inside a handler,
+                // long after setup has run — but the rule is right that reading it is harder than it needs to
+                // be. agent.oxlintrc.json turns it back on for any .vue an agent touches.
+                "no-use-before-define": "off"
             }
         },
         {
-            "files": ["**/*.test.ts"],
+            // Tooling whose output IS stdout: CLIs, build scripts, benchmarks, e2e harnesses. console.log is
+            // the product here, not a leftover.
+            "files": [
+                "**/*.mjs",
+                "**/scripts/**",
+                "**/*.config.*",
+                "_tools/scripts/**",
+                "_tools/e2e/**",
+                "_tools/localhost-https/**",
+                "_tools/dev-public/**",
+                "_search/iq-bench/**",
+                "_sandbox/gate/**",
+                "_sandbox/gate-action/**",
+                "_deploy/cli/**"
+            ],
             "rules": {
-                "unicorn/consistent-function-scoping": "off"
+                "no-console": "off"
+            }
+        },
+        {
+            "files": ["**/*.test.ts", "**/*.integration.test.ts", "**/*.spec.ts"],
+            "rules": {
+                // vi.mock() is hoisted and has to be declared above the imports it intercepts, which puts a
+                // statement between the import list and leaves this rule with nothing useful to say.
+                "import/first": "off",
+                // A test may hold a deliberately wrong shape to assert the code rejects it.
+                "typescript/no-explicit-any": "off",
+                "typescript/no-unsafe-assignment": "off",
+                "typescript/no-unsafe-argument": "off",
+                "typescript/no-unsafe-member-access": "off",
+                "typescript/no-unsafe-call": "off",
+                "typescript/no-unsafe-return": "off",
+                "typescript/unbound-method": "off"
             }
         },
         {

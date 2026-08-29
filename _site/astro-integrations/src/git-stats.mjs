@@ -21,7 +21,7 @@ function git(args) {
     try {
         const out = execSync(`git ${args}`, {
             cwd: process.cwd(),
-            encoding: "utf-8",
+            encoding: "utf8",
             stdio: ["ignore", "pipe", "ignore"],
         }).trim();
         return out || null;

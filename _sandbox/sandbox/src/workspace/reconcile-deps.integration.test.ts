@@ -79,7 +79,12 @@ test("a queued first-time setup survives until a later coordinator starts it", a
     await write(root, "app/pnpm-lock.yaml", "");
     // The first daemon cannot open a panel at all, so the request outlives it on disk: the case a restart
     // mid-setup leaves behind.
-    const failing = { start: async () => Promise.reject(new Error("tmux unavailable")), running: () => false } as unknown as ManagedProcesses;
+    const failing = {
+        start: async () => {
+            throw new Error("tmux unavailable");
+        },
+        running: () => false,
+    } as unknown as ManagedProcesses;
     const stranded = createDependencyCoordinator({
         workspace: { root },
         processes: failing,

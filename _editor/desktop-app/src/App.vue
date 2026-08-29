@@ -354,7 +354,7 @@ const runOutcome = (id: string, ok: boolean, startedAt: number): Record<string, 
         exitCode: exit?.kind === `exit` ? exit.code : null,
         steps: phases.length,
         // Only on the way out: on a run that worked, the last step is just the last step.
-        ...(ok || phases.length === 0 ? {} : { failedStep: phases[phases.length - 1] }),
+        ...(ok || phases.length === 0 ? {} : { failedStep: phases.at(-1) }),
     };
 };
 

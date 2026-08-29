@@ -143,7 +143,7 @@ export const exitHandler: CapabilityHandler = {
             await exitDrivers[exit.provider].erase(from, exit);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const exit = config as ExitConfig;
         const entry = { id, config: exit };
         const driver = exitDrivers[exit.provider];

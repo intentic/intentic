@@ -64,7 +64,7 @@ export const failureStreaks = (runs: readonly PipelineRun[]): FailureStreak[] =>
         // makes it look older, never newer, so it cannot resurrect a badge the user already cleared).
         const firstGreen = newestFirst.findIndex((run) => run.status === `success`);
         const failing = firstGreen === -1 ? newestFirst : newestFirst.slice(0, firstGreen);
-        const oldest = failing[failing.length - 1];
+        const oldest = failing.at(-1);
         streaks.push({
             repo: newest.repo,
             branch: newest.branch,

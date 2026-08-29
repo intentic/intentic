@@ -218,8 +218,12 @@ export const answerConfirm = async (
     const closed = async (): Promise<boolean> => {
         const deadline = ops.now() + ANSWER_SETTLE_MS;
         for (;;) {
-            if ((await ops.showing()) === undefined) return true;
-            if (ops.now() >= deadline) return false;
+            if ((await ops.showing()) === undefined) {
+                return true;
+            }
+            if (ops.now() >= deadline) {
+                return false;
+            }
             await ops.sleep(ANSWER_POLL_MS);
         }
     };
@@ -240,7 +244,9 @@ export const answerConfirm = async (
             await ops.sleep(ANSWER_POLL_MS);
             continue;
         }
-        if (await closed()) return undefined;
+        if (await closed()) {
+            return undefined;
+        }
     }
     return refusal;
 };

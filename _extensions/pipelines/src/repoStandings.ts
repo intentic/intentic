@@ -34,9 +34,15 @@ export interface RepoStanding {
 }
 
 const rank = (standing: Omit<RepoStanding, `silent`>): number => {
-    if (standing.failing > 0) return 0;
-    if (standing.running > 0) return 1;
-    if (standing.repo.hookWarning !== undefined) return 2;
+    if (standing.failing > 0) {
+        return 0;
+    }
+    if (standing.running > 0) {
+        return 1;
+    }
+    if (standing.repo.hookWarning !== undefined) {
+        return 2;
+    }
     return standing.runs.length > 0 ? 3 : 4;
 };
 

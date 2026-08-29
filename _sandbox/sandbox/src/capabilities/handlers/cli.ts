@@ -100,7 +100,7 @@ export const cliHandler: CapabilityHandler = {
      * is the old skill directory, which nothing would otherwise delete and which would go on offering the agent
      * a cheatsheet for credentials that no longer exist under those names. */
     rename: { carry: async (ctx, from) => removeLoadedSkill(ctx.files, ctx.workspace.root, from) },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const cliConfig = config as CliConfig;
         const { provider } = cliConfig;
         const connector = (await contributionRegistry(hostOf(ctx))).get(contributionKey("cli", provider));

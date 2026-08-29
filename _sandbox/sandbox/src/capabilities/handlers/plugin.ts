@@ -26,7 +26,7 @@ export const pluginHandler: CapabilityHandler = {
         reapply: false,
         carry: async (ctx, from, to) => ctx.files.move(pluginDir(ctx.workspace.root, from), pluginDir(ctx.workspace.root, to)),
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { url, ref, token } = config as PluginConfig;
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {

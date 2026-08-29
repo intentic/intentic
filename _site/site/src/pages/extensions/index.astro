@@ -48,8 +48,8 @@ const groups = [
  * card renders as it always did. This is evidence, not endorsement: "loads" and "somebody read it" are
  * different claims, made by different parties, and the page keeps them apart. */
 const loadsProblem = (entry: RegistryEntry): string | undefined => {
-    if (entry.checks === undefined) return undefined;
-    if (entry.checks.manifest !== "ok") return `At the pinned commit, ${entry.checks.manifest}`;
+    if (entry.checks === undefined) {return undefined;}
+    if (entry.checks.manifest !== "ok") {return `At the pinned commit, ${entry.checks.manifest}`;}
     return entry.checks.bundle === "ok" || entry.checks.bundle === "none" ? undefined : `At the pinned commit, the bundle ${entry.checks.bundle}`;
 };
 const loadsOk = (entry: RegistryEntry): boolean => entry.checks !== undefined && loadsProblem(entry) === undefined;

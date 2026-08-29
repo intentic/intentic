@@ -28,7 +28,7 @@ export const mcpHandler: CapabilityHandler = {
     // Registration IS the manifest entry, so moving the entry is the entire rename. What changes for the agent
     // is the server's name and therefore its tool prefix, which is exactly what the owner asked for.
     rename: {},
-    apply: async function* (_ctx, _id, config) {
+    async *apply(_ctx, _id, config) {
         const { url } = config as McpConfig;
         yield { kind: "log", message: `Registered MCP server ${url}, the agent can call it next turn.` };
     },

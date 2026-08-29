@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /* THE MOTION BUDGET, MADE UNAVOIDABLE.
@@ -16,7 +15,7 @@ import { describe, expect, it } from "vitest";
  * Scanned rather than listed, for the same reason the extension conformance tests scan: a list of "animations
  * we have" is a list that is wrong within a week. */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const uiRoot = resolve(here, `../../ui/src`);
 const extensionsRoot = resolve(here, `../../../_extensions`);
 const stylesheet = resolve(uiRoot, `styles/utilities.css`);
@@ -82,10 +81,14 @@ const reducedMotionBlock = (): string => {
     expect(start, `utilities.css must carry a prefers-reduced-motion block`).toBeGreaterThan(-1);
     let depth = 0;
     for (let index = css.indexOf(`{`, start); index < css.length; index += 1) {
-        if (css[index] === `{`) depth += 1;
+        if (css[index] === `{`) {
+            depth += 1;
+        }
         if (css[index] === `}`) {
             depth -= 1;
-            if (depth === 0) return css.slice(start, index + 1);
+            if (depth === 0) {
+                return css.slice(start, index + 1);
+            }
         }
     }
     throw new Error(`unterminated prefers-reduced-motion block`);
@@ -104,7 +107,9 @@ describe(`reduced motion`, () => {
     it(`carries a rule for everything it says is stopped or slowed`, () => {
         const block = reducedMotionBlock();
         for (const [name, { verdict, why }] of Object.entries(DECIDED)) {
-            if (verdict === `kept`) continue;
+            if (verdict === `kept`) {
+                continue;
+            }
             expect(block, `${name} is recorded as ${verdict} (${why}) but the stylesheet never names it`).toContain(`.${name}`);
         }
     });

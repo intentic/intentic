@@ -1,4 +1,4 @@
-import { type DraftsList, type DraftSummary } from "@intentic/sandbox-contract";
+import type { DraftsList, DraftSummary } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";

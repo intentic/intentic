@@ -221,8 +221,7 @@ export const railRank = (id: string): number => {
 
 // Which band a rail element renders in. An unlisted id lands in the last group, matching where railRank puts it,
 // the two must agree, or a tile would sort into one run and be drawn under another's divider.
-const railGroupOf = (id: string): RailGroup =>
-    RAIL_GROUPS.find((group) => group.items.some((item) => item.id === id)) ?? RAIL_GROUPS[RAIL_GROUPS.length - 1]!;
+const railGroupOf = (id: string): RailGroup => RAIL_GROUPS.find((group) => group.items.some((item) => item.id === id)) ?? RAIL_GROUPS.at(-1)!;
 
 /* Cut a rail-ordered run into its bands, dropping the ones nothing landed in, so a surface never draws a
  * separator (or a heading) over nothing on a workspace where a whole band has not activated. Shared by the

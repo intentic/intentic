@@ -152,10 +152,15 @@ const ciUrl = (repo: CiRepo): string => (repo.host === `github` ? `${repo.url}/a
 const counts = computed<TallyItem[]>(() => {
     const c = { running: 0, success: 0, failed: 0, other: 0 };
     for (const run of scopedRuns.value) {
-        if (run.status === `running`) c.running++;
-        else if (run.status === `success`) c.success++;
-        else if (run.status === `failed`) c.failed++;
-        else c.other++;
+        if (run.status === `running`) {
+            c.running++;
+        } else if (run.status === `success`) {
+            c.success++;
+        } else if (run.status === `failed`) {
+            c.failed++;
+        } else {
+            c.other++;
+        }
     }
     return [
         { label: `failed`, value: c.failed, variant: `danger` },
@@ -167,7 +172,9 @@ const counts = computed<TallyItem[]>(() => {
 
 const successRate = computed(() => {
     const terminal = scopedRuns.value.filter((r) => r.status === `success` || r.status === `failed`);
-    if (terminal.length === 0) return undefined;
+    if (terminal.length === 0) {
+        return undefined;
+    }
     return Math.round((terminal.filter((r) => r.status === `success`).length / terminal.length) * 100);
 });
 

@@ -255,7 +255,7 @@ export const ipsecDriver: VpnDriver = {
         await exec("ipsec", ["reload"]).catch(() => undefined);
     },
     missingTool: async () => ((await toolMissing("ipsec", ["--version"])) ? "strongswan (ipsec)" : undefined),
-    connect: async function* (id, raw) {
+    async *connect(id, raw) {
         const ipsec = config(raw);
         const conn = connName(id);
         const status = await exec("ipsec", ["statusall", conn]).catch(() => ({ stdout: "" }));

@@ -78,7 +78,7 @@ export const totpCode = (seed: string, nowMs: number): TotpCode => {
     counter.writeBigUInt64BE(BigInt(Math.floor(seconds / period)));
     const hash = createHmac(algorithm, key).update(counter).digest();
     // RFC 4226 dynamic truncation: the last nibble picks where in the hash the 31-bit code is read.
-    const offset = (hash[hash.length - 1] ?? 0) & 0x0f;
+    const offset = (hash.at(-1) ?? 0) & 0x0f;
     const value = hash.readUInt32BE(offset) & 0x7fffffff;
     return { code: String(value % 10 ** digits).padStart(digits, "0"), secondsRemaining: period - (seconds % period) };
 };

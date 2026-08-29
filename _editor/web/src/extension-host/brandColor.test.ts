@@ -113,7 +113,7 @@ describe(`brand mark colours`, () => {
         // blue channel clearly ahead of red, red clearly ahead of green, exactly as the official #362D59 is
         // ordered.
         const dark = brandPalette(CATALOG.sentry)?.markDark ?? ``;
-        const [r, g, b] = [dark.slice(1, 3), dark.slice(3, 5), dark.slice(5, 7)].map((c) => parseInt(c, 16));
+        const [r, g, b] = [dark.slice(1, 3), dark.slice(3, 5), dark.slice(5, 7)].map((c) => Number.parseInt(c, 16));
         expect(b ?? 0).toBeGreaterThan(r ?? 0);
         expect(r ?? 0).toBeGreaterThan(g ?? 0);
     });
@@ -127,7 +127,7 @@ describe(`brand mark colours`, () => {
         const palette = brandPalette(CATALOG.youtube);
         const mark = palette?.markLight ?? ``;
         expect(lightnessSeparation(mark, palette?.plateLight ?? ``)).toBeGreaterThanOrEqual(MIN_SEPARATION_LIGHT);
-        const [r, g, b] = [mark.slice(1, 3), mark.slice(3, 5), mark.slice(5, 7)].map((c) => parseInt(c, 16));
+        const [r, g, b] = [mark.slice(1, 3), mark.slice(3, 5), mark.slice(5, 7)].map((c) => Number.parseInt(c, 16));
         expect(g).toBe(0);
         expect(b).toBe(0);
         expect(r ?? 0).toBeLessThan(0xff);

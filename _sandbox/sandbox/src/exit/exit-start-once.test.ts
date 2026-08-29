@@ -48,7 +48,7 @@ vi.mock("./exit-drivers.js", () => ({
             probe: async () => ({ state: "down" }),
             // Parked until the test lets it go, which is what makes "a second call while one is in flight"
             // expressible at all.
-            start: async function* (id: string): AsyncGenerator<IntenticLine> {
+            async *start(id: string): AsyncGenerator<IntenticLine> {
                 started.push(id);
                 await new Promise<void>((resolve) => onDial(resolve));
                 yield { kind: "log", message: "up" };

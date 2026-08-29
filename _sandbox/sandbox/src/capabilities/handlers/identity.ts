@@ -68,7 +68,7 @@ export const identityHandler: CapabilityHandler = {
             await moveSession(ctx.workspace.root, from, to);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { email, mailbox } = config as IdentityConfig;
         if (!email.includes("@")) {
             throw new Error(`"${email}" is not an email address: the identity IS an address, so this field is the card`);

@@ -4,8 +4,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
-import { filterScope, langOf } from "./scan.js";
-import { sweep } from "./scan.js";
+import { filterScope, langOf, sweep } from "./scan.js";
 import type { FileEntry } from "../types.js";
 
 let root: string;

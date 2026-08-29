@@ -1,7 +1,6 @@
 import { readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 
 // The release flow bumps package versions before building the release image, so this is the readable version
@@ -55,6 +54,6 @@ const newestMtimeMs = (dir: string): number => {
  * directory walk of a few hundred files, off the request path after the first hello. */
 let identity: string | undefined;
 export const buildId = (): string => {
-    identity ??= `${version}:${newestMtimeMs(dirname(fileURLToPath(import.meta.url)))}`;
+    identity ??= `${version}:${newestMtimeMs(import.meta.dirname)}`;
     return identity;
 };

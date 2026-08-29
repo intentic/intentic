@@ -86,7 +86,7 @@ const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: stri
     const state = await remoteState(dir, {}, git).catch(() => ({ ahead: 0, behind: 0 }) as Awaited<ReturnType<typeof remoteState>>);
     const branch = state.branch === undefined || state.branch === "" ? undefined : state.branch;
     if (state.remote === undefined) {
-        return { ...(branch === undefined ? {} : { branch }) };
+        return branch === undefined ? {} : { branch };
     }
     const url = (await git(dir, ["remote", "get-url", state.remote]).catch(() => undefined))?.stdout.trim();
     return { ...(url === undefined || url === "" ? {} : { remote: url }), ...(branch === undefined ? {} : { branch }) };

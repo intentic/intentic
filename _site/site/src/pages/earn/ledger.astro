@@ -57,8 +57,8 @@ const endpoint = `${API_URL}/pool/transparency`;
 
     const el = (tag, className, text) => {
         const node = document.createElement(tag);
-        if (className) node.className = className;
-        if (text !== undefined) node.textContent = text;
+        if (className) {node.className = className;}
+        if (text !== undefined) {node.textContent = text;}
         return node;
     };
 
@@ -68,7 +68,7 @@ const endpoint = `${API_URL}/pool/transparency`;
         const wrap = el(`div`, `border-t border-line pt-3`);
         wrap.append(el(`div`, `font-mono text-xl font-semibold tracking-tight text-content`, value));
         wrap.append(el(`div`, `mt-1 text-2xs text-subtle`, label));
-        if (note) wrap.append(el(`div`, `mt-0.5 text-2xs text-subtle`, note));
+        if (note) {wrap.append(el(`div`, `mt-0.5 text-2xs text-subtle`, note));}
         return wrap;
     };
 
@@ -94,7 +94,7 @@ const endpoint = `${API_URL}/pool/transparency`;
                 open ? `In progress` : `Closed`,
             ),
         );
-        if (!open) header.append(el(`span`, `text-2xs text-subtle`, `closed ${day(entry.closedAt)} · payable ${day(entry.payableAt)}`));
+        if (!open) {header.append(el(`span`, `text-2xs text-subtle`, `closed ${day(entry.closedAt)} · payable ${day(entry.payableAt)}`));}
         card.append(header);
 
         const stats = el(`div`, `grid gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-4`);
@@ -107,12 +107,12 @@ const endpoint = `${API_URL}/pool/transparency`;
             stats.append(stat(`Payment fees`, money(entry.feeCents), `what Stripe took`));
             stats.append(stat(`Pool ceiling`, money(entry.poolCents)));
             stats.append(stat(`Earned`, money(entry.earnedCents)));
-            if (entry.sweptCents > 0) stats.append(stat(`Returned from expiry`, money(entry.sweptCents), `unclaimed past its window`));
+            if (entry.sweptCents > 0) {stats.append(stat(`Returned from expiry`, money(entry.sweptCents), `unclaimed past its window`));}
             stats.append(stat(`Distributed`, money(entry.distributedCents)));
             stats.append(stat(`Paid out`, money(entry.paidCents)));
-            if (entry.pendingCents > 0) stats.append(stat(`In flight`, money(entry.pendingCents)));
-            if (entry.carriedCents > 0) stats.append(stat(`Carried`, money(entry.carriedCents), `owed, under the payout minimum or not yet due`));
-            if (entry.unclaimedCents > 0) stats.append(stat(`Unclaimed`, money(entry.unclaimedCents), `waiting for its publisher`));
+            if (entry.pendingCents > 0) {stats.append(stat(`In flight`, money(entry.pendingCents)));}
+            if (entry.carriedCents > 0) {stats.append(stat(`Carried`, money(entry.carriedCents), `owed, under the payout minimum or not yet due`));}
+            if (entry.unclaimedCents > 0) {stats.append(stat(`Unclaimed`, money(entry.unclaimedCents), `waiting for its publisher`));}
         }
         card.append(stats);
 
@@ -160,13 +160,13 @@ const endpoint = `${API_URL}/pool/transparency`;
         rules.classList.remove(`hidden`);
 
         const months = document.getElementById(`ledger-months`);
-        for (const entry of data.months) months.append(monthCard(entry));
+        for (const entry of data.months) {months.append(monthCard(entry));}
         document.getElementById(`ledger-loading`).classList.add(`hidden`);
     };
 
     fetch(endpoint, { headers: { accept: `application/json` } })
         .then((response) => {
-            if (!response.ok) throw new Error(`the platform answered ${response.status}`);
+            if (!response.ok) {throw new Error(`the platform answered ${response.status}`);}
             return response.json();
         })
         .then(render)

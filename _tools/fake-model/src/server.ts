@@ -185,7 +185,12 @@ const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => 
                         delta: {
                             role: "assistant",
                             tool_calls: [
-                                { index: 0, id: `call_${index + 1}`, type: "function", function: { name: "bash", arguments: JSON.stringify({ command: step.shell }) } },
+                                {
+                                    index: 0,
+                                    id: `call_${index + 1}`,
+                                    type: "function",
+                                    function: { name: "bash", arguments: JSON.stringify({ command: step.shell }) },
+                                },
                             ],
                         },
                         finish_reason: null,
@@ -197,7 +202,11 @@ const chatChunks = (step: ScriptedStep, index: number): readonly JsonValue[] => 
     }
     return [
         { ...head, choices: [{ index: 0, delta: { role: "assistant", content: step.text ?? "ok" }, finish_reason: null }] },
-        { ...head, choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: step.usage?.inputTokens ?? 1, completion_tokens: step.usage?.outputTokens ?? 1, total_tokens: 2 } },
+        {
+            ...head,
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+            usage: { prompt_tokens: step.usage?.inputTokens ?? 1, completion_tokens: step.usage?.outputTokens ?? 1, total_tokens: 2 },
+        },
     ];
 };
 
@@ -225,7 +234,14 @@ const anthropicFrames = (step: ScriptedStep, index: number): readonly SseFrame[]
         ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
         ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }],
         ["content_block_stop", { type: "content_block_stop", index: 0 }],
-        ["message_delta", { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: step.usage?.outputTokens ?? 1 } }],
+        [
+            "message_delta",
+            {
+                type: "message_delta",
+                delta: { stop_reason: "end_turn", stop_sequence: null },
+                usage: { output_tokens: step.usage?.outputTokens ?? 1 },
+            },
+        ],
         ["message_stop", { type: "message_stop" }],
     ];
 };
@@ -278,19 +294,25 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
                 }
                 // Recorded like a Responses body so one set of readers answers about either dialect; `input` is
                 // synthesized from `messages` so `userMessages` means the same thing on both.
-                const parsedChat = JSON.parse(body) as { messages?: readonly { role?: string; content?: unknown }[]; model?: string; tools?: JsonValue };
+                const parsedChat = JSON.parse(body) as {
+                    messages?: readonly { role?: string; content?: unknown }[];
+                    model?: string;
+                    tools?: JsonValue;
+                };
                 requests.push({
                     model: parsedChat.model,
                     ...(parsedChat.tools === undefined ? {} : { tools: parsedChat.tools }),
                     input: (parsedChat.messages ?? []).map((message) => ({
                         type: "message",
                         role: String(message.role),
-                        content: [{ type: "input_text", text: typeof message.content === "string" ? message.content : JSON.stringify(message.content) }],
+                        content: [
+                            { type: "input_text", text: typeof message.content === "string" ? message.content : JSON.stringify(message.content) },
+                        ],
                     })),
                 } as ResponsesRequest);
                 const index = answered;
                 answered += 1;
-                const step = options.respond?.(requests[requests.length - 1]!) ?? stepFor(script, index);
+                const step = options.respond?.(requests.at(-1)!) ?? stepFor(script, index);
                 if (step.failWith !== undefined) {
                     sendJson(response, step.failWith.status, step.failWith.body);
                     return;

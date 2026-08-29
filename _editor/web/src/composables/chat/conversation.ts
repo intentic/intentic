@@ -770,10 +770,9 @@ export class Conversation {
             return ``;
         }
         const resetsAt = allowance.percent >= SPENT_PERCENT ? allowance.resetsAt : undefined;
-        return (
-            ` · ${allowance.name} ${formatUtilization(allowance.percent, headroom.stale)} used` +
-            (resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`)
-        );
+        return ` · ${allowance.name} ${formatUtilization(allowance.percent, headroom.stale)} used${
+            resetsAt === undefined ? `` : `, resets ${formatReset(resetsAt)}`
+        }`;
     }
 
     /* Upsert/remove the one pending "switched" divider as the user toggles provider / account / harness /

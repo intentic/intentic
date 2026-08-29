@@ -257,7 +257,7 @@ export const torDriver: ExitDriver = {
         await rm(exitStateDir(id), { recursive: true, force: true });
     },
     missingTool: async () => ((await toolMissing("tor", ["--version"])) ? "tor" : undefined),
-    start: async function* (id, config, country): AsyncGenerator<IntenticLine> {
+    async *start(id, config, country): AsyncGenerator<IntenticLine> {
         const wanted = country ?? config.country;
         if ((await livePid(id)) !== undefined) {
             // Already running: this is a MOVE, not a second tor. Cheap, and the reason a country switch on an
@@ -274,7 +274,7 @@ export const torDriver: ExitDriver = {
         await writeSelection(id, { country: wanted });
         yield { kind: "log", message: `tor is up. SOCKS proxy on 127.0.0.1:${exitProxyPort(id)}.` };
     },
-    rotate: async function* (id): AsyncGenerator<IntenticLine> {
+    async *rotate(id): AsyncGenerator<IntenticLine> {
         if ((await livePid(id)) === undefined) {
             throw new Error(`${id} is not running, start it before rotating.`);
         }
@@ -294,7 +294,7 @@ export const torDriver: ExitDriver = {
             }
             const log = await logTail(logPath(id), 4);
             // A log with content and no process is a start that failed; the reason is worth carrying up.
-            return log === "" ? { state: "down" } : { state: "failed", detail: log.split("\n").slice(-1)[0] };
+            return log === "" ? { state: "down" } : { state: "failed", detail: log.split("\n").at(-1) };
         }
         const log = await readFile(logPath(id), "utf8").catch(() => "");
         return /Bootstrapped 100%/.test(log) ? { state: "up" } : { state: "starting" };

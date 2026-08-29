@@ -395,9 +395,7 @@ export const workspaceMapOf = ({ root, cwd }: WorkspaceMapInput): WorkspaceMap |
 };
 
 const sizeOf = (area: MapArea): string =>
-    `${area.files} file${area.files === 1 ? "" : "s"}${area.kinds.length > 0 ? ` · ${area.kinds.join(", ")}` : ""}` +
-    // Said on the shelf's line so a reader knows there is a level below whether or not it is shown one.
-    (area.packages > 0 ? ` · ${area.packages} packages` : "");
+    `${area.files} file${area.files === 1 ? "" : "s"}${area.kinds.length > 0 ? ` · ${area.kinds.join(", ")}` : ""}${area.packages > 0 ? ` · ${area.packages} packages` : ""}`;
 
 const areaLine = (area: MapArea, width: number, indent: string): string =>
     `${indent}${area.name.padEnd(width - indent.length)}  ${sizeOf(area)}${area.here && area.children.length === 0 ? "  ← you are here" : ""}`;

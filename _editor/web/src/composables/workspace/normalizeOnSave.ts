@@ -30,7 +30,7 @@ export const normalizationEdits = (lines: readonly string[], trimTrailingWhitesp
     }
     // Whitespace-only document: normalize to empty (one deleting edit, unless it already is empty).
     if (last === 0) {
-        const lastLine = lines[lines.length - 1]!;
+        const lastLine = lines.at(-1)!;
         return lines.length === 1 && lastLine === ``
             ? []
             : [{ startLine: 1, startColumn: 1, endLine: lines.length, endColumn: lastLine.length + 1, text: `` }];
@@ -56,7 +56,7 @@ export const normalizationEdits = (lines: readonly string[], trimTrailingWhitesp
             .map((line) => `\n${line}`)
             .join(``);
     if (tail !== `\n`) {
-        edits.push({ startLine: last, startColumn: kept + 1, endLine: lines.length, endColumn: lines[lines.length - 1]!.length + 1, text: `\n` });
+        edits.push({ startLine: last, startColumn: kept + 1, endLine: lines.length, endColumn: lines.at(-1)!.length + 1, text: `\n` });
     }
     return edits;
 };

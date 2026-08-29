@@ -47,8 +47,12 @@ const skipped = [];
  * is no Windows to hand a certificate to and the answer is confidently wrong. Finding the binary and getting a
  * store listing out of it asks the same question in a way that cannot lie. */
 const windowsCertutil = () => {
-    if (process.platform === `win32`) return `certutil`;
-    if (process.platform !== `linux`) return undefined;
+    if (process.platform === `win32`) {
+        return `certutil`;
+    }
+    if (process.platform !== `linux`) {
+        return undefined;
+    }
     return [`certutil.exe`, `/mnt/c/Windows/System32/certutil.exe`].find((candidate) => attempt(candidate, `-store`, `-user`, `Root`));
 };
 
@@ -57,9 +61,13 @@ const windowsCertutil = () => {
  * UNC path, which certutil reads only when the WSL file server is willing, the caller falls back to putting a
  * copy on the Windows filesystem where no share is involved. */
 const windowsReadable = (scratch) => {
-    if (process.platform === `win32`) return CA_CRT;
+    if (process.platform === `win32`) {
+        return CA_CRT;
+    }
     const source = scratch === undefined ? CA_CRT : join(scratch, `localhost-com-ca.crt`);
-    if (scratch !== undefined) copyFileSync(CA_CRT, source);
+    if (scratch !== undefined) {
+        copyFileSync(CA_CRT, source);
+    }
     return run(`wslpath`, `-w`, source).trim();
 };
 
@@ -72,7 +80,9 @@ const addToWindowsStore = (certutil, scratch) => {
 
 const trustWindows = () => {
     const certutil = windowsCertutil();
-    if (certutil === undefined) return false;
+    if (certutil === undefined) {
+        return false;
+    }
 
     /* Windows puts up a Security Warning dialog for a new root and blocks until it is answered: correctly,
      * since a root is exactly the thing nothing should be able to install behind your back. Say so first: an
@@ -148,7 +158,9 @@ const trustLinux = () => {
  * calling the wrong binary, so this only runs where they cannot be confused. */
 const firefoxProfileRoots = () => {
     const home = homedir();
-    if (process.platform === `darwin`) return [join(home, `Library`, `Application Support`, `Firefox`, `Profiles`)];
+    if (process.platform === `darwin`) {
+        return [join(home, `Library`, `Application Support`, `Firefox`, `Profiles`)];
+    }
     return [
         join(home, `.mozilla`, `firefox`),
         join(home, `snap`, `firefox`, `common`, `.mozilla`, `firefox`),
@@ -165,7 +177,9 @@ const trustFirefox = () => {
                 .map((entry) => join(root, entry.name)),
         )
         .filter((profile) => existsSync(join(profile, `cert9.db`)));
-    if (profiles.length === 0) return;
+    if (profiles.length === 0) {
+        return;
+    }
 
     if (!found(`certutil`)) {
         skipped.push(`Firefox (${profiles.length} profile(s)), install NSS tools first (Arch: nss, Debian/Ubuntu: libnss3-tools)`);

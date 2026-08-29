@@ -84,7 +84,7 @@ export const hostGrantSummary = (values: Readonly<Record<string, string>>): stri
     if (allowed.length === 0) {
         return `Read files only.`;
     }
-    const list = allowed.length === 1 ? allowed[0] : `${allowed.slice(0, -1).join(`, `)} and ${allowed[allowed.length - 1]}`;
+    const list = allowed.length === 1 ? allowed[0] : `${allowed.slice(0, -1).join(`, `)} and ${allowed.at(-1)}`;
     const everything = allowed.length === HOST_SWITCHES.length;
     return `May ${list}${everything ? `.` : `, and nothing else.`}`;
 };

@@ -227,8 +227,8 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                without moving the common case where it already shows. */
             const scrollKey = `rail-scroll:${location.pathname.split("/")[1] || "root"}`;
             const saved = sessionStorage.getItem(scrollKey);
-            if (saved !== null) sidebar.scrollTop = Number(saved);
-            else sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+            if (saved !== null) {sidebar.scrollTop = Number(saved);}
+            else {sidebar.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });}
 
             edges();
             sidebar.addEventListener(
@@ -259,7 +259,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         const links = new Map<string, HTMLElement>();
         for (const link of document.querySelectorAll<HTMLElement>("[data-toc-link]")) {
             const id = link.dataset.tocLink;
-            if (id) links.set(id, link);
+            if (id) {links.set(id, link);}
         }
 
         if (links.size > 0) {
@@ -269,7 +269,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
             let current = "";
 
             const paint = (id: string) => {
-                if (id === current) return;
+                if (id === current) {return;}
                 const previous = current === "" ? undefined : links.get(current);
                 previous?.classList.remove(...ACTIVE);
                 previous?.classList.add(...IDLE);
@@ -285,15 +285,15 @@ const { section, prev, next } = bookNeighbours(book, pageId);
                 const first = order.find((id) => visible.has(id));
                 // Nothing in the band means we are mid-section: keep whatever was last marked rather than
                 // clearing, which would leave the rail blank through the longest sections.
-                if (first) paint(first);
+                if (first) {paint(first);}
             };
 
             const observer = new IntersectionObserver(
                 (entries) => {
                     for (const entry of entries) {
                         const id = entry.target.id;
-                        if (entry.isIntersecting) visible.add(id);
-                        else visible.delete(id);
+                        if (entry.isIntersecting) {visible.add(id);}
+                        else {visible.delete(id);}
                     }
                     settle();
                 },
@@ -302,7 +302,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
 
             for (const id of order) {
                 const heading = document.getElementById(id);
-                if (heading) observer.observe(heading);
+                if (heading) {observer.observe(heading);}
             }
 
             // First paint: before any scrolling the reader is at the top, so mark the first section.
@@ -317,7 +317,7 @@ const { section, prev, next } = bookNeighbours(book, pageId);
         for (const anchor of document.querySelectorAll<HTMLAnchorElement>(".docs-anchor")) {
             anchor.addEventListener("click", (event) => {
                 // Let modified clicks (open in new tab, etc.) behave normally.
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {return;}
                 const url = anchor.href;
                 // History rather than default navigation, so the copy feedback is not wiped by a jump repaint.
                 event.preventDefault();

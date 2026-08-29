@@ -72,7 +72,7 @@ const segments = (combo: string): string[] => {
         return ["+"];
     }
     const parts = combo.split("+");
-    if (parts.length >= 3 && parts[parts.length - 1] === "" && parts[parts.length - 2] === "") {
+    if (parts.length >= 3 && parts.at(-1) === "" && parts.at(-2) === "") {
         return [...parts.slice(0, -2), "+"];
     }
     return parts;
@@ -84,7 +84,7 @@ export const parseChord = (combo: string): Chord => {
         throw new DesktopError("No key given.");
     }
     const parts = segments(trimmed);
-    const key = parts[parts.length - 1] ?? "";
+    const key = parts.at(-1) ?? "";
     const modifiers: Modifier[] = [];
     for (const part of parts.slice(0, -1)) {
         const modifier = MODIFIERS[part.trim().toLowerCase()];

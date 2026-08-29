@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 // Both off their own entry points rather than the barrel, the same reason skins/useSkin.ts gives: this is a
 // plain state module, and reaching the kit through @intentic/ui would drag its whole component graph (and
 // mermaid, shiki and vue-flow behind it) into every window that merely holds an imported theme — which, now

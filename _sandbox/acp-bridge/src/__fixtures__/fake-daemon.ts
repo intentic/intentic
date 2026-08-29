@@ -20,7 +20,7 @@ export const fakeDaemon = (scenario: (prompt: string) => AgentEvent[]): FakeDaem
         replies,
         prompts,
         client: {
-            streamTurn: async function* (turn, signal) {
+            async *streamTurn(turn, signal) {
                 prompts.push(turn.prompt);
                 for (const event of scenario(turn.prompt)) {
                     if (signal.aborted) {

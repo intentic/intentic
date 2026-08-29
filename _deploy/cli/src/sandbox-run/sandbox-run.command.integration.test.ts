@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { localDaemonPort } from "@intentic/sandbox-run";
@@ -13,7 +12,7 @@ import { expect, test } from "vitest";
  * scripts drive it. */
 
 const exec = promisify(execFile);
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const packageRoot = join(import.meta.dirname, "..", "..");
 const TSX = join(packageRoot, "node_modules", ".bin", "tsx");
 const CLI = join(packageRoot, "src", "cli.ts");
 
@@ -30,7 +29,9 @@ const runVerb = async (args: string[], stdin: string): Promise<{ stdout: string;
         return { stdout, stderr, code: 0 };
     } catch (error) {
         const failure = error as { code?: number | string; stdout?: string; stderr?: string };
-        if (typeof failure.code !== "number") throw error;
+        if (typeof failure.code !== "number") {
+            throw error;
+        }
         return { stdout: failure.stdout ?? "", stderr: failure.stderr ?? "", code: failure.code };
     }
 };
@@ -56,7 +57,7 @@ test("prints the canonical run command: replayed env filtered here, multi-line k
  * contract's `definition` field stays the TOML text every OTHER caller hands it. A corrupted trip here is a
  * runner that boots, serves, and silently opens as a bare workspace. */
 test("--definition-b64 rides through to SANDBOX_DEFINITION_SEED on the emitted command", async () => {
-    const toml = 'schemaVersion = 1\n\n[settings]\nautoLand = false\n';
+    const toml = "schemaVersion = 1\n\n[settings]\nautoLand = false\n";
     const b64 = Buffer.from(toml, "utf8").toString("base64");
     const { stdout } = await runVerb(["--slug", "s9", "--image", "i", "--base-image", "i", "--definition-b64", b64], "");
     expect(stdout).toContain(`-e SANDBOX_DEFINITION_SEED=${b64}`);

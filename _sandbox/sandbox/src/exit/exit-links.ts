@@ -119,10 +119,11 @@ export async function* startExit(entry: ExitEntry, country: string | undefined):
     if (wanted !== undefined && seen.country !== undefined && seen.country !== wanted.toUpperCase()) {
         await stopExit(entry);
         throw new Error(
-            `${entry.id} was asked for ${countryName(wanted)} but came out in ${seen.countryName ?? seen.country} (${seen.ip}). Stopped it: an exit in the wrong country is worse than none, because everything pointed at it would believe otherwise.` +
-                (entry.config.provider === "tor"
+            `${entry.id} was asked for ${countryName(wanted)} but came out in ${seen.countryName ?? seen.country} (${seen.ip}). Stopped it: an exit in the wrong country is worse than none, because everything pointed at it would believe otherwise.${
+                entry.config.provider === "tor"
                     ? ` Tor could not hold a circuit through ${wanted.toUpperCase()}; that usually means the country has too little exit capacity right now.`
-                    : ""),
+                    : ""
+            }`,
         );
     }
     await writeSelection(entry.id, { ...(wanted === undefined ? {} : { country: wanted.toUpperCase() }), ...(await selectionServer(entry.id)) });

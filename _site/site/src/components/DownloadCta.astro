@@ -63,11 +63,11 @@ const targets = Object.fromEntries(
             : /Linux|X11/i.test(hint) && !/Android|CrOS/i.test(hint)
               ? "linux"
               : null;
-        if (!key) return;
+        if (!key) {return;}
 
         for (const cta of document.querySelectorAll("[data-download-cta]")) {
             const platform = JSON.parse(cta.dataset.platforms || "{}")[key];
-            if (!platform) continue;
+            if (!platform) {continue;}
             cta.href = platform.href;
             cta.querySelector("[data-download-label]").textContent = `Download for ${platform.name}`;
         }

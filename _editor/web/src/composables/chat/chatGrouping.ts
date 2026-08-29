@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
 /* HOW THE CHAT LIST IS CUT INTO GROUPS, by where a chat STANDS, or by who it is ACTING AS.

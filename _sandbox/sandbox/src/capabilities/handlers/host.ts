@@ -40,7 +40,7 @@ export const hostHandler: CapabilityHandler = {
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const host = config as HostConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("host", host.platform));
         if (contribution === undefined) {

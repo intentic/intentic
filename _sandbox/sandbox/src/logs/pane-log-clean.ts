@@ -38,7 +38,9 @@ class TitleStripper {
             if (this.#pendingEsc) {
                 this.#pendingEsc = false;
                 if (this.#inTitle) {
-                    if (char === "\\") this.#inTitle = false; // ESC \ (ST) ends the title
+                    if (char === "\\") {
+                        this.#inTitle = false;
+                    } // ESC \ (ST) ends the title
                     continue; // drop the held ESC and this char either way
                 }
                 if (char === "k") {
@@ -48,9 +50,12 @@ class TitleStripper {
                 out += "\x1b"; // a real ESC we held across the boundary: keep it, then handle char
             }
             if (this.#inTitle) {
-                if (char === "\x07")
-                    this.#inTitle = false; // BEL also ends the title
-                else if (char === "\x1b") this.#pendingEsc = true;
+                if (char === "\x07") {
+                    this.#inTitle = false;
+                } // BEL also ends the title
+                else if (char === "\x1b") {
+                    this.#pendingEsc = true;
+                }
                 continue;
             }
             if (char === "\x1b") {
@@ -110,7 +115,9 @@ const main = async (): Promise<void> => {
     };
     // Coalescing, non-overlapping flusher: repeated triggers just re-arm `dirty`; the loop drains it.
     const drain = (): Promise<void> => {
-        if (draining !== undefined) return draining;
+        if (draining !== undefined) {
+            return draining;
+        }
         draining = (async () => {
             try {
                 while (dirty) {
@@ -133,7 +140,9 @@ const main = async (): Promise<void> => {
         void drain();
     };
     const schedule = (): void => {
-        if (debounce !== undefined) clearTimeout(debounce);
+        if (debounce !== undefined) {
+            clearTimeout(debounce);
+        }
         debounce = setTimeout(() => {
             if (maxWait !== undefined) {
                 clearTimeout(maxWait);
@@ -152,9 +161,15 @@ const main = async (): Promise<void> => {
         schedule();
     }
 
-    if (debounce !== undefined) clearTimeout(debounce);
-    if (maxWait !== undefined) clearTimeout(maxWait);
-    if (draining !== undefined) await draining; // let any in-flight flush settle, then write the final state
+    if (debounce !== undefined) {
+        clearTimeout(debounce);
+    }
+    if (maxWait !== undefined) {
+        clearTimeout(maxWait);
+    }
+    if (draining !== undefined) {
+        await draining;
+    } // let any in-flight flush settle, then write the final state
     await persist();
 };
 

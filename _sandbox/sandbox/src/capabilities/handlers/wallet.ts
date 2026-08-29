@@ -40,7 +40,7 @@ export const walletHandler: CapabilityHandler = {
     // Nothing is keyed by the name: the ledger is the sandbox's, the wallet is the owner's, the CLI takes no
     // id. The re-apply re-asks the platform, which answers the same address.
     rename: {},
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const wallet = config as WalletConfig;
         const network = usdcNetworkOf(wallet.network);
         yield { kind: "log", message: `Asking the platform for this owner's wallet on ${network?.label ?? wallet.network}…` };

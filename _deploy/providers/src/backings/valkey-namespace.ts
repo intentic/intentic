@@ -3,8 +3,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { z } from "zod";
 import { containerId } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
-import type { SshSession } from "../core/ssh.js";
-import { type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
 
 const namespaceSchema = sshSchema.extend({
     instance: z.string(),

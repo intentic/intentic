@@ -68,7 +68,7 @@ export class InputHistory {
     // cost one slot in the ring, not three presses of ↑ to get past it.
     record(text: string): void {
         const entry = text.trim();
-        if (entry === `` || this.entries[this.entries.length - 1] === entry) {
+        if (entry === `` || this.entries.at(-1) === entry) {
             this.reset();
             return;
         }

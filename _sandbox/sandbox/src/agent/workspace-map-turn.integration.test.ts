@@ -84,9 +84,9 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
             accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
         }),
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
-        codexAgent: async function* () {},
-        grokAgent: async function* () {},
-        agent: async function* () {},
+        async *codexAgent() {},
+        async *grokAgent() {},
+        async *agent() {},
         ...overrides,
     });
 

@@ -4,8 +4,7 @@ import { z } from "zod";
 import { composeDown, composeUp, containerImage, containerLabel, restampBacking, stateDir, waitReady } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
-import type { SshSession } from "../core/ssh.js";
-import { type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 
 const KIND = "valkey";

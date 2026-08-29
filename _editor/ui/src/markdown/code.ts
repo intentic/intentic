@@ -213,11 +213,11 @@ export const codeBlockHtml = (block: CodeBlock, index: number, colour: boolean):
     const copied = block.code === copiedCode;
     return (
         `<div class="ui-code md-code">` +
-        `<div class="md-code-actions">` +
-        (lang === `` ? `` : `<span class="md-code-lang">${lang}</span>`) +
-        `<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="Copy ${lang === `` ? `` : `${lang} `}code">` +
-        (copied ? `Copied` : `Copy`) +
-        `</button>` +
+        `<div class="md-code-actions">${
+            lang === `` ? `` : `<span class="md-code-lang">${lang}</span>`
+        }<button type="button" class="md-code-copy${copied ? ` md-code-copied` : ``}" aria-label="Copy ${lang === `` ? `` : `${lang} `}code">${
+            copied ? `Copied` : `Copy`
+        }</button>` +
         `</div>${body}</div>`
     );
 };

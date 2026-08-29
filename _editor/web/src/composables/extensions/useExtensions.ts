@@ -1,6 +1,8 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import type { CapabilityKind, ExtensionUpdatePolicy, InvalidWorkspaceExtension } from "@intentic/sandbox-contract";
 import {
+    type CapabilityKind,
+    type ExtensionUpdatePolicy,
+    type InvalidWorkspaceExtension,
     ExtensionUpdateAppliedSchema,
     ExtensionUpdatePreviewSchema,
     type ExtensionSummary,

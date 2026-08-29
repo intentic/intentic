@@ -28,11 +28,11 @@ export const growTextarea = (element: HTMLTextAreaElement | null | undefined, ma
     }
     element.style.height = `auto`;
     const style = getComputedStyle(element);
-    const oneLine = parseFloat(style.lineHeight) + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const oneLine = Number.parseFloat(style.lineHeight) + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
     if (element.scrollHeight <= 0 || element.scrollHeight < oneLine) {
         return;
     }
-    const border = style.boxSizing === `border-box` ? parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth) : 0;
+    const border = style.boxSizing === `border-box` ? Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth) : 0;
     const height = element.scrollHeight + border;
     element.style.height = `${maxHeight === undefined ? height : Math.min(height, maxHeight)}px`;
 };

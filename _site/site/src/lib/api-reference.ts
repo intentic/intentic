@@ -63,7 +63,9 @@ const SANDBOX = "https://sandbox-a1b2c3d4e5f6.intentic.dev";
 const FEW_WORDS = 6;
 const terse = (text: string | undefined): string | undefined => {
     const trimmed = text?.trim();
-    if (trimmed === undefined || trimmed === "") return undefined;
+    if (trimmed === undefined || trimmed === "") {
+        return undefined;
+    }
     const firstSentence = trimmed.split(/(?<=[.!?])\s/u)[0] ?? trimmed;
     const words = firstSentence.replace(/[.,;:]+$/u, "").split(/\s+/u);
     return words.length <= FEW_WORDS ? words.join(" ") : `${words.slice(0, FEW_WORDS).join(" ")}…`;
@@ -79,8 +81,12 @@ const firstType = (schema: SchemaNode): string | undefined =>
     Array.isArray(schema.type) ? schema.type.find((entry) => entry !== "null") : schema.type;
 
 const resolve = (schema: SchemaNode | undefined, root: SchemaNode): SchemaNode | undefined => {
-    if (schema === undefined) return undefined;
-    if (schema.$ref === undefined) return schema;
+    if (schema === undefined) {
+        return undefined;
+    }
+    if (schema.$ref === undefined) {
+        return schema;
+    }
     const name = schema.$ref.startsWith("#/$defs/") ? schema.$ref.slice("#/$defs/".length) : undefined;
     return name === undefined ? undefined : root.$defs?.[name];
 };
@@ -91,8 +97,12 @@ const resolve = (schema: SchemaNode | undefined, root: SchemaNode): SchemaNode |
  * shapes", because listing them inline is a paragraph in a table cell. */
 const typeLabel = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): string => {
     const schema = resolve(raw, root);
-    if (schema === undefined || depth > 4) return "unknown";
-    if (schema.const !== undefined) return JSON.stringify(schema.const);
+    if (schema === undefined || depth > 4) {
+        return "unknown";
+    }
+    if (schema.const !== undefined) {
+        return JSON.stringify(schema.const);
+    }
     if (schema.enum !== undefined) {
         const values = schema.enum.map((entry) => JSON.stringify(entry));
         // Past four the cell turns into a paragraph, and the reader's question is answered by the first few
@@ -104,17 +114,27 @@ const typeLabel = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): st
     if (branches !== undefined) {
         const real = branches.filter((entry) => firstType(entry) !== "null");
         const nullable = real.length !== branches.length;
-        if (real.length === 1) return `${typeLabel(real[0], root, depth + 1)}${nullable ? " | null" : ""}`;
+        if (real.length === 1) {
+            return `${typeLabel(real[0], root, depth + 1)}${nullable ? " | null" : ""}`;
+        }
         const labels = real.map((entry) => typeLabel(entry, root, depth + 1));
         const distinct = [...new Set(labels)];
-        if (distinct.every((entry) => !entry.includes("{"))) return distinct.join(" | ") + (nullable ? " | null" : "");
+        if (distinct.every((entry) => !entry.includes("{"))) {
+            return distinct.join(" | ") + (nullable ? " | null" : "");
+        }
         return `one of ${real.length} shapes`;
     }
-    if (schema.allOf !== undefined) return "object";
+    if (schema.allOf !== undefined) {
+        return "object";
+    }
 
     const type = firstType(schema);
-    if (type === "array") return `${typeLabel(schema.items, root, depth + 1)}[]`;
-    if (type === "object" || schema.properties !== undefined) return "object";
+    if (type === "array") {
+        return `${typeLabel(schema.items, root, depth + 1)}[]`;
+    }
+    if (type === "object" || schema.properties !== undefined) {
+        return "object";
+    }
     return type ?? "unknown";
 };
 
@@ -126,8 +146,12 @@ const discriminatorOf = (branch: SchemaNode, root: SchemaNode): { field: string;
     const resolved = resolve(branch, root);
     for (const [name, child] of Object.entries(resolved?.properties ?? {})) {
         const property = resolve(child, root);
-        if (property?.const !== undefined) return { field: name, value: JSON.stringify(property.const) };
-        if (property?.enum?.length === 1) return { field: name, value: JSON.stringify(property.enum[0]) };
+        if (property?.const !== undefined) {
+            return { field: name, value: JSON.stringify(property.const) };
+        }
+        if (property?.enum?.length === 1) {
+            return { field: name, value: JSON.stringify(property.enum[0]) };
+        }
     }
     return undefined;
 };
@@ -141,14 +165,22 @@ const discriminatorOf = (branch: SchemaNode, root: SchemaNode): { field: string;
  * empty. */
 const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): RefRow[] => {
     const schema = resolve(raw, root);
-    if (schema === undefined) return [];
-    if (depth > 3) return [];
+    if (schema === undefined) {
+        return [];
+    }
+    if (depth > 3) {
+        return [];
+    }
 
     const branches = schema.anyOf ?? schema.oneOf;
     if (branches !== undefined) {
         const real = branches.filter((entry) => firstType(entry) !== "null");
-        if (real.length === 0) return [];
-        if (real.length === 1) return schemaRows(real[0], root, depth);
+        if (real.length === 0) {
+            return [];
+        }
+        if (real.length === 1) {
+            return schemaRows(real[0], root, depth);
+        }
 
         /* A CHOICE BETWEEN SHAPES, rendered as the choice it is. Connecting something, a capability's config,
          * is twenty different shapes behind one route, and the union is the whole content of the request: a
@@ -167,7 +199,9 @@ const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): R
          * wire envelope, so the union that IS the answer, the forty kinds of thing a turn can say, is a level
          * further down than every other union on this surface. Stopping at one level documented the envelope
          * and then showed the first frame kind as though it were the only one. */
-        if (named.length < 2 || depth > 2) return schemaRows(real[0], root, depth);
+        if (named.length < 2 || depth > 2) {
+            return schemaRows(real[0], root, depth);
+        }
 
         /* Enough that the two genuinely wide unions on this surface, connecting something and answering a
          * parked card, are documented rather than sampled. Past twenty a table stops being a table, and the
@@ -190,11 +224,17 @@ const schemaRows = (raw: SchemaNode | undefined, root: SchemaNode, depth = 0): R
         }
         return rows;
     }
-    if (schema.allOf !== undefined) return schema.allOf.flatMap((entry) => schemaRows(entry, root, depth));
-    if (firstType(schema) === "array") return schemaRows(schema.items, root, depth);
+    if (schema.allOf !== undefined) {
+        return schema.allOf.flatMap((entry) => schemaRows(entry, root, depth));
+    }
+    if (firstType(schema) === "array") {
+        return schemaRows(schema.items, root, depth);
+    }
 
     const properties = schema.properties;
-    if (properties === undefined) return [];
+    if (properties === undefined) {
+        return [];
+    }
 
     const required = new Set(schema.required ?? []);
     return Object.entries(properties).flatMap(([name, child]) => {
@@ -253,7 +293,11 @@ const curlFor = (operation: { method: string; path: string; params: RefParam[]; 
 const typescriptFor = (operationId: string, params: RefParam[], body: Record<string, unknown> | undefined): string => {
     const [group = "", route = ""] = operationId.split(".");
     const input: Record<string, unknown> = {};
-    for (const param of params) if (param.required) input[param.name] = param.example;
+    for (const param of params) {
+        if (param.required) {
+            input[param.name] = param.example;
+        }
+    }
     Object.assign(input, body ?? {});
     const argument = Object.keys(input).length === 0 ? "" : pretty(input);
     return `import { sandbox } from "@intentic/sandbox-client";\n\nconst result = await sandbox.${group}.${route}(${argument});`;
@@ -296,7 +340,9 @@ export const groupOperations = async (group: string): Promise<RefOperation[]> =>
     for (const [path, item] of Object.entries(paths)) {
         for (const [method, raw] of Object.entries(item)) {
             const operationId = raw.operationId ?? "";
-            if (operationId.split(".")[0] !== group) continue;
+            if (operationId.split(".")[0] !== group) {
+                continue;
+            }
 
             const params = (raw.parameters ?? []).map((parameter) => paramFrom({ ...parameter, schema: asSchema(parameter.schema) }, {}));
 
@@ -348,7 +394,9 @@ export const groupCounts = async (): Promise<Record<string, number>> => {
     for (const item of Object.values(paths)) {
         for (const raw of Object.values(item)) {
             const group = (raw.operationId ?? "").split(".")[0];
-            if (group !== undefined && group !== "") counts[group] = (counts[group] ?? 0) + 1;
+            if (group !== undefined && group !== "") {
+                counts[group] = (counts[group] ?? 0) + 1;
+            }
         }
     }
     return counts;

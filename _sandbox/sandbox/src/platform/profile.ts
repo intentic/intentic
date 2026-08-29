@@ -123,9 +123,9 @@ export const requireLocalContract = (config: Config): void => {
         return;
     }
     process.stderr.write(
-        `FATAL: SANDBOX_PROFILE=local serves this machine only, with no authentication, but this env says otherwise:\n` +
-            complaints.map((line) => `  - ${line}\n`).join("") +
-            `Unset these (or drop SANDBOX_PROFILE=local) and restart.\n`,
+        `FATAL: SANDBOX_PROFILE=local serves this machine only, with no authentication, but this env says otherwise:\n${complaints
+            .map((line) => `  - ${line}\n`)
+            .join("")}Unset these (or drop SANDBOX_PROFILE=local) and restart.\n`,
     );
     process.exit(78); // EX_CONFIG, same as the auth floor
 };

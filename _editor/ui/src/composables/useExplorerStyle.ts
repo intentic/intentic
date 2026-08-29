@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { explorerStyles, type ExplorerStyle } from "../icons/explorerStyle.js";
 import { definePreference } from "./preference.js";
 

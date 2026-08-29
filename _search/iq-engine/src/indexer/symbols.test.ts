@@ -34,7 +34,7 @@ test("TS extraction: interfaces, arrow consts, plain consts, classes, methods, f
     expect(byName.get("Registry")!.endLine).toBeGreaterThan(byName.get("Registry")!.line);
 });
 
-test("test files map fn/const to test kind", () => {
+test("files map fn/const to test kind", () => {
     const symbols = extractSymbols("alpha/src/widget.spec.ts", "ts", "export const specSmoke = () => true;");
     expect(symbols[0]?.kind).toBe("test");
 });

@@ -37,13 +37,11 @@ it("converts USD and atomic units without floats, in both directions", () => {
 });
 
 it("reads a v2 challenge off the response header", () => {
-    const parsed = parseChallenge(
-        "https://api.example.com/premium",
-        new Headers({ "payment-required": base64(V2_CHALLENGE) }),
-        "",
-    );
+    const parsed = parseChallenge("https://api.example.com/premium", new Headers({ "payment-required": base64(V2_CHALLENGE) }), "");
     expect(parsed.kind).toBe("quotes");
-    if (parsed.kind !== "quotes") return;
+    if (parsed.kind !== "quotes") {
+        return;
+    }
     expect(parsed.quotes).toHaveLength(1);
     expect(parsed.quotes[0]).toMatchObject({
         x402Version: 2,
@@ -72,7 +70,9 @@ it("reads a v1 challenge off the 402 body, and normalizes its network name to CA
     });
     const parsed = parseChallenge("https://api.example.com/v1", new Headers(), body);
     expect(parsed.kind).toBe("quotes");
-    if (parsed.kind !== "quotes") return;
+    if (parsed.kind !== "quotes") {
+        return;
+    }
     // The whole point of the adapter: a v1 wire lands in the same vocabulary the policy check reads.
     expect(parsed.quotes[0]).toMatchObject({ x402Version: 1, network: "eip155:8453", v1Network: "base", amountAtomic: 50_000n });
 });
@@ -84,7 +84,9 @@ it("refuses the MPP dialect by name rather than misreading it as an x402 price",
         `{"type":"https://paymentauth.org/problems/payment-required","status":402}`,
     );
     expect(parsed.kind).toBe("unsupported");
-    if (parsed.kind !== "unsupported") return;
+    if (parsed.kind !== "unsupported") {
+        return;
+    }
     expect(parsed.reason).toContain("MPP");
 });
 
@@ -104,7 +106,9 @@ it("refuses a challenge that offers no exact-scheme price", () => {
 it("mints an authorization bounded by the challenge's own timeout, capped at five minutes", () => {
     const now = 1_800_000_000_000;
     const quotes = parseChallenge("https://api.example.com/premium", new Headers({ "payment-required": base64(V2_CHALLENGE) }), "");
-    if (quotes.kind !== "quotes") throw new Error("expected quotes");
+    if (quotes.kind !== "quotes") {
+        throw new Error("expected quotes");
+    }
     const authorization = mintAuthorization(quotes.quotes[0]!, "0x857b06519E91e3A54538791bDbb0E22373e36b66", now);
     expect(authorization.value).toBe("100000");
     expect(authorization.to).toBe("0x209693Bc6afc0C5328bA36FaF03C514EF312287C");
@@ -118,7 +122,9 @@ it("mints an authorization bounded by the challenge's own timeout, capped at fiv
 it("caps an over-long validity window rather than signing what the endpoint asked for", () => {
     const greedy = { ...V2_CHALLENGE, accepts: [{ ...V2_CHALLENGE.accepts[0], maxTimeoutSeconds: 86_400 }] };
     const parsed = parseChallenge("https://api.example.com/premium", new Headers({ "payment-required": base64(greedy) }), "");
-    if (parsed.kind !== "quotes") throw new Error("expected quotes");
+    if (parsed.kind !== "quotes") {
+        throw new Error("expected quotes");
+    }
     const now = 1_800_000_000_000;
     const authorization = mintAuthorization(parsed.quotes[0]!, "0x857b06519E91e3A54538791bDbb0E22373e36b66", now);
     expect(Number(authorization.validBefore) - Math.floor(now / 1000)).toBe(300);
@@ -126,7 +132,9 @@ it("caps an over-long validity window rather than signing what the endpoint aske
 
 it("builds the retry header in the challenge's own wire version", () => {
     const v2 = parseChallenge("https://api.example.com/premium", new Headers({ "payment-required": base64(V2_CHALLENGE) }), "");
-    if (v2.kind !== "quotes") throw new Error("expected quotes");
+    if (v2.kind !== "quotes") {
+        throw new Error("expected quotes");
+    }
     const authorization = mintAuthorization(v2.quotes[0]!, "0x857b06519E91e3A54538791bDbb0E22373e36b66", 1_800_000_000_000);
     const header = paymentHeader(v2.quotes[0]!, authorization, `0x${"ab".repeat(65)}`);
     expect(header.name).toBe("PAYMENT-SIGNATURE");

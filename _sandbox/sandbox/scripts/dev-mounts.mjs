@@ -16,10 +16,9 @@
 // dependencies (including its native builds: node-pty is rebuilt inside the image against its ABI, and a host
 // copy would be wrong).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_DIR = import.meta.dirname;
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 
 // Where the image puts the daemon, and where it puts the workspace packages pruned in beside it.

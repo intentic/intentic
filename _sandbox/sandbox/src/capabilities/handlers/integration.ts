@@ -12,7 +12,7 @@ export const integrationHandler: CapabilityHandler = {
     // this only withdraws the old declaration. Both are ordinary commits to that repo, which is what adding and
     // removing an integration already are.
     rename: { carry: async (ctx, from) => removeManagedEntry(ctx.config, from, `chore(intentic): rename "${from}"`) },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { provider, ...values } = config as IntegrationConfig;
         const entry: InventoryEntry = { kind: "backend", provider, name: id, values };
         await upsertManagedEntry(ctx.config, entry, `chore(intentic): add ${provider} "${id}"`);

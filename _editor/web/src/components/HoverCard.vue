@@ -89,7 +89,9 @@ const placement = ref<{ content: HoverCardContent; left: number; width: number; 
 const says = (message: HoverCardMessage): boolean => (message.text ?? ``).trim() !== `` || (message.attachments?.length ?? 0) > 0;
 
 const show = (event: MouseEvent, content: HoverCardContent): void => {
-    if ((content.title ?? ``).trim() === `` && !(content.messages ?? []).some(says)) return; // nothing to reveal
+    if ((content.title ?? ``).trim() === `` && !(content.messages ?? []).some(says)) {
+        return;
+    } // nothing to reveal
     const el = event.currentTarget as HTMLElement;
     // The anchor may live in the floating window, whose viewport (and fixed-position origin) is its own: measure
     // and clamp against that window, not the main realm's globalThis.
@@ -155,7 +157,9 @@ const hide = (): void => {
  * drawn: the card is a glance, and a row of file-name chips is not what it is for. */
 const messages = computed(() => {
     const content = placement.value?.content;
-    if (content === undefined) return [];
+    if (content === undefined) {
+        return [];
+    }
     const title = content.title?.trim();
     return (content.messages ?? [])
         .map((message) => {

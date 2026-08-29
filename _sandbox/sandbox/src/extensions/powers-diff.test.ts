@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { diffPowers } from "@intentic/extension-manifest";
+import { ExtensionManifestSchema, diffPowers } from "@intentic/extension-manifest";
 
 const manifest = (overrides: object = {}) =>
     ExtensionManifestSchema.parse({

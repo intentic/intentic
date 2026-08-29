@@ -12,8 +12,6 @@ import type { Services } from "../composition.js";
 
 import { extensionProcessKey } from "../extensions/extension-processes.js";
 
-import { spokenLinesOf } from "../sessions/transcript-search.js";
-
 import {
     clientFor,
     codexConnectedProxy,
@@ -37,7 +35,7 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "session", sessionId: "sess-iso" };
                     yield { kind: "usage", costUsd: 0.5, inputTokens: 10, outputTokens: 5 };
@@ -74,7 +72,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     cwd = request.cwd;
                     yield { kind: "session", sessionId: "sess-workspace" };
                     yield { kind: "usage", costUsd: 0.25, inputTokens: 8, outputTokens: 3 };
@@ -110,7 +108,7 @@ test("a thrown workspace turn settles its surfaced card as an error", async () =
         createApp(
             services({
                 // The adapter dies on the first pull, before any frame: a provider outage, a missing binary.
-                agent: async function* () {
+                async *agent() {
                     yield await Promise.reject(new Error("adapter crashed"));
                 },
             }),
@@ -140,7 +138,7 @@ test("an existing conversation keeps its registered placement when a later clien
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     cwds.push(request.cwd);
                     yield { kind: "done" };
                 },
@@ -177,7 +175,7 @@ test("a turn's title seeds a fresh entry and agents.rename overwrites it", async
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "done" };
                 },
             }),
@@ -204,7 +202,7 @@ test("agents.search matches titles and later lines, across the archive", async (
     const app = createApp(
         services({
             // One SDK session per conversation, told apart by the prompt each turn carries.
-            agent: async function* (request) {
+            async *agent(request) {
                 yield { kind: "session", sessionId: request.prompt.includes("login") ? "sess-1" : "sess-2" };
                 yield { kind: "done" };
             },
@@ -297,7 +295,7 @@ test("agents.search reads the daemon transcript for a provider with no SDK promp
         services({
             config: withTranslator,
             cliProxy: codexConnectedProxy,
-            codexAgent: async function* () {
+            async *codexAgent() {
                 yield { kind: "done" };
             },
             // Native Codex has no Claude SDK session to search. The daemon transcript is the provider-neutral
@@ -349,7 +347,7 @@ test("a mid-write land is refused, and the same land with `force` goes through",
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     await gate;
                     yield { kind: "done" };
                 },
@@ -371,7 +369,7 @@ test("a turn parked on a question lands without a force: it is waiting for the u
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield {
                         kind: "question",
                         requestId: "q1",
@@ -408,7 +406,7 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     await gate;
                     yield { kind: "usage", costUsd: 0.25, inputTokens: 4, outputTokens: 2 };
                     yield { kind: "done" };
@@ -497,7 +495,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     requests.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
                     yield { kind: "session", sessionId: "sess-live" };
                     yield { kind: "done" };
@@ -554,7 +552,7 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "session", sessionId: "sess-live" };
                     yield { kind: "done" };
                 },
@@ -686,7 +684,7 @@ test("agents.place is refused while the agent's turn is running", async () => {
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     await gate;
                     yield { kind: "done" };
                 },

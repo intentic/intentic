@@ -290,7 +290,9 @@ describe(`creator routes`, () => {
         const prisma = fakePrisma({ publisherClaim: { findMany: vi.fn() } });
         const broken: RegistryReader = {
             reposOf: vi.fn(async () => []),
-            publishersOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
+            publishersOf: vi.fn(async () => {
+                throw new Error(`registry down`);
+            }),
         };
 
         // A suggestion list that fails is a missing convenience; the text box below it still claims.
@@ -302,8 +304,12 @@ describe(`creator routes`, () => {
     it(`challenge still answers when the registry cannot be read`, async () => {
         const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null) } });
         const broken: RegistryReader = {
-            reposOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
-            publishersOf: vi.fn(async () => Promise.reject(new Error(`registry down`))),
+            reposOf: vi.fn(async () => {
+                throw new Error(`registry down`);
+            }),
+            publishersOf: vi.fn(async () => {
+                throw new Error(`registry down`);
+            }),
         };
         const routes = creatorRoutes({ reader: broken });
 
@@ -350,7 +356,9 @@ describe(`payout connection`, () => {
         // The two things that really stop this route: Connect not enabled on the platform's account, an
         // account that cannot be onboarded: are both fixed by someone READING the reason. A raw throw
         // serializes as "Internal server error" on the one card whose job is saying what to do next.
-        const createAccount = vi.fn(async () => Promise.reject(new Error(`Stripe refused: sign up for Connect to create accounts.`)));
+        const createAccount = vi.fn(async () => {
+            throw new Error(`Stripe refused: sign up for Connect to create accounts.`);
+        });
         const prisma = fakePrisma({ payoutAccount: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() } });
         const routes = creatorRoutes({ gateway: gatewayWith({ createAccount }) });
 
@@ -389,7 +397,9 @@ describe(`payout connection`, () => {
     });
 
     it(`falls back to the stored answer when Stripe cannot be reached, and never invents readiness`, async () => {
-        const account = vi.fn(async () => Promise.reject(new Error(`stripe down`)));
+        const account = vi.fn(async () => {
+            throw new Error(`stripe down`);
+        });
         const prisma = fakePrisma({
             publisherClaim: { findMany: vi.fn().mockResolvedValue([]) },
             payoutAccount: {
@@ -507,13 +517,21 @@ describe(`domain claims`, () => {
 
     it(`tells apart a wrong token, a missing file, and an unreadable domain`, async () => {
         const someoneElses = claimToken(baseConfig, `u2`, `acme.dev`);
-        const mismatched = await checkDomainClaim(baseConfig, user.id, `acme.dev`, servingFetch({ [wellKnown(`acme.dev`)]: someoneElses }), publicLookup);
+        const mismatched = await checkDomainClaim(
+            baseConfig,
+            user.id,
+            `acme.dev`,
+            servingFetch({ [wellKnown(`acme.dev`)]: someoneElses }),
+            publicLookup,
+        );
         expect(mismatched.attempts).toEqual([{ repo: `acme.dev`, outcome: `mismatched` }]);
 
         const absent = await checkDomainClaim(baseConfig, user.id, `acme.dev`, servingFetch({}), publicLookup);
         expect(absent.attempts).toEqual([{ repo: `acme.dev`, outcome: `absent` }]);
 
-        const dead = vi.fn(async () => Promise.reject(new Error(`connection refused`))) as unknown as typeof fetch;
+        const dead = vi.fn(async () => {
+            throw new Error(`connection refused`);
+        }) as unknown as typeof fetch;
         const unreadable = await checkDomainClaim(baseConfig, user.id, `acme.dev`, dead, publicLookup);
         expect(unreadable.attempts).toEqual([{ repo: `acme.dev`, outcome: `unreadable` }]);
     });
@@ -540,16 +558,18 @@ describe(`domain claims`, () => {
         expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `absent` }] })).toContain(
             `Serve the line shown here as plain text`,
         );
-        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `unreadable` }] })).toContain(
-            `must resolve publicly`,
-        );
+        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `unreadable` }] })).toContain(`must resolve publicly`);
     });
 
     it(`challenge for a dotted name answers the well-known path, with no registry read`, async () => {
         const prisma = fakePrisma({ publisherClaim: { findUnique: vi.fn().mockResolvedValue(null) } });
         const broken: RegistryReader = {
-            reposOf: vi.fn(async () => Promise.reject(new Error(`must not be read`))),
-            publishersOf: vi.fn(async () => Promise.reject(new Error(`must not be read`))),
+            reposOf: vi.fn(async () => {
+                throw new Error(`must not be read`);
+            }),
+            publishersOf: vi.fn(async () => {
+                throw new Error(`must not be read`);
+            }),
         };
 
         const result = await call(creatorRoutes({ reader: broken }).challenge, { publisher: `acme.dev` }, { context: context({ prisma }) });

@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 /* Write dist/manifest.json with THIS build's version in it.
  *
@@ -22,7 +21,7 @@ import { fileURLToPath } from "node:url";
  *   node _computers/webext/scripts/stamp-manifest.mjs
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const root = join(here, "..");
 const { version: packageVersion } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const manifest = JSON.parse(readFileSync(join(root, "static", "manifest.json"), "utf8"));

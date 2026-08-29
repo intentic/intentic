@@ -159,7 +159,7 @@ export const vpnHandler: CapabilityHandler = {
             await vpnDrivers[vpn.provider].erase(from, vpn);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const vpn = config as VpnConfig;
         const entry = { id, config: vpn };
         const driver = vpnDrivers[vpn.provider];

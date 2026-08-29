@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport } from "@intentic-app/api-contract";
+import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport, HostedStatus } from "@intentic-app/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
 import {
@@ -47,7 +47,6 @@ import { type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, probeDaemon }
 import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView } from "./hostedWait";
-import type { HostedStatus } from "@intentic-app/api-contract";
 import AppBrand from "../components/AppBrand.vue";
 
 /* The setup gate's destination (outside the workspace shell). Setup asks for no identity decisions: the

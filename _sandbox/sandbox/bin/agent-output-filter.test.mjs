@@ -40,7 +40,7 @@ describe("filterOutput", () => {
     });
 
     it("caps long success output to head + tail with an elision marker", () => {
-        const raw = Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n") + "\n";
+        const raw = `${Array.from({ length: 300 }, (_, i) => `line ${i}`).join("\n")}\n`;
         const out = run(raw);
         expect(out).toContain("line 0");
         expect(out).toContain("line 29");
@@ -51,13 +51,13 @@ describe("filterOutput", () => {
     });
 
     it("keeps failures whole up to a generous tail cap", () => {
-        const raw = Array.from({ length: 600 }, (_, i) => `line ${i}`).join("\n") + "\n";
+        const raw = `${Array.from({ length: 600 }, (_, i) => `line ${i}`).join("\n")}\n`;
         const out = run(raw, { exit: "2" });
         expect(out).not.toContain("line 50\n");
         expect(out).toContain("… 100 earlier lines elided …");
         expect(out).toContain("line 599");
         // 300 lines on failure passes untouched.
-        const short = raw.split("\n").slice(0, 300).join("\n") + "\n";
+        const short = `${raw.split("\n").slice(0, 300).join("\n")}\n`;
         expect(run(short, { exit: "2" })).toBe(short);
     });
 

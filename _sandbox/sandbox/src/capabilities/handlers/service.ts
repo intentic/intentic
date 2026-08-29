@@ -24,7 +24,7 @@ export const serviceHandler: CapabilityHandler = {
     rename: {
         refuse: "A provisioned service is named in your infrastructure, where its containers and volumes carry that name, declare the new one and retire this, rather than renaming it here.",
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { service, domain, on, expose } = config as ServiceConfig;
         const entry: InventoryEntry = { kind: "service", service, name: id, on, expose, values: { domain } };
         await upsertManagedEntry(ctx.config, entry, `chore(intentic): add ${service} "${id}"`);

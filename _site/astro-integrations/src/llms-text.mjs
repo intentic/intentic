@@ -70,13 +70,15 @@ export default function llmsText(options) {
                     const htmlPath = path.join(distDir, page.pathname, "index.html");
                     let html;
                     try {
-                        html = readFileSync(htmlPath, "utf-8");
+                        html = readFileSync(htmlPath, "utf8");
                     } catch {
                         continue;
                     }
 
                     const meta = readMeta(html);
-                    if (meta.noindex || !meta.title) continue;
+                    if (meta.noindex || !meta.title) {
+                        continue;
+                    }
 
                     const body = htmlToMarkdown(extractContent(html), { origin });
                     if (!body) {
@@ -88,7 +90,7 @@ export default function llmsText(options) {
                     const description = decodeAttr(meta.description ?? "");
                     const url = `${origin}${pathname}`;
                     const mdPath = markdownPathFor(pathname);
-                    const markdown = frontMatter({ title, description, url, updated: meta.modified?.slice(0, 10) }) + `\n${body}\n`;
+                    const markdown = `${frontMatter({ title, description, url, updated: meta.modified?.slice(0, 10) })}\n${body}\n`;
 
                     const outPath = path.join(distDir, mdPath);
                     mkdirSync(path.dirname(outPath), { recursive: true });
@@ -107,12 +109,18 @@ export default function llmsText(options) {
                 const unlisted = [...built.keys()].filter((pathname) => pathname !== "/" && !listed.has(pathname));
 
                 const index = [`# ${options.name}`, "", `> ${options.summary}`];
-                if (options.details) index.push("", options.details);
+                if (options.details) {
+                    index.push("", options.details);
+                }
                 for (const section of [...sections, ...(unlisted.length ? [{ label: "More", paths: unlisted }] : [])]) {
                     const entries = section.paths.map((pathname) => built.get(pathname)).filter(Boolean);
-                    if (entries.length === 0) continue;
+                    if (entries.length === 0) {
+                        continue;
+                    }
                     index.push("", `## ${section.label}`, "");
-                    for (const entry of entries) index.push(`- [${entry.title}](${entry.mdUrl}): ${entry.description}`);
+                    for (const entry of entries) {
+                        index.push(`- [${entry.title}](${entry.mdUrl}): ${entry.description}`);
+                    }
                 }
                 writeFileSync(path.join(distDir, "llms.txt"), `${index.join("\n")}\n`);
 
@@ -121,7 +129,9 @@ export default function llmsText(options) {
                 const full = [`# ${options.name}`, "", `> ${options.summary}`, ""];
                 for (const pathname of order) {
                     const entry = built.get(pathname);
-                    if (!entry) continue;
+                    if (!entry) {
+                        continue;
+                    }
                     // No title line: every page's Markdown already opens with its own h1.
                     full.push("", "---", "", `Source: ${entry.url}`, "", entry.markdown);
                 }

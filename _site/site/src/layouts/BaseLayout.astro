@@ -167,7 +167,7 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
                 const observer = new IntersectionObserver(
                     (entries) => {
                         for (const entry of entries) {
-                            if (!entry.isIntersecting) continue;
+                            if (!entry.isIntersecting) {continue;}
                             entry.target.classList.add("visible");
                             observer.unobserve(entry.target);
                         }

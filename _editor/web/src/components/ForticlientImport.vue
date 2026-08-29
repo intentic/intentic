@@ -9,7 +9,7 @@
      FortiClient encrypts them with a key tied to the machine that exported them, so each row says which fields
      are still waiting. -->
 <script setup lang="ts">
-import { type ForticlientConnection } from "@intentic/sandbox-contract";
+import type { ForticlientConnection } from "@intentic/sandbox-contract";
 import { ui, type NoticeModel, RowGroup } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { ref } from "vue";

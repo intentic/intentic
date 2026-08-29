@@ -178,7 +178,7 @@ describe(`usage series`, () => {
 
     it(`carries every provider as a segment in every column, so the stack order never shifts`, () => {
         const series = usageSeries([row({ day: `2026-07-21`, provider: `codex`, costUsd: 3 })], window, [`claude`, `codex`], asIs);
-        expect(series.every((bucket) => bucket.segments.map((segment) => segment.key).join() === `claude,codex`)).toBe(true);
+        expect(series.every((bucket) => bucket.segments.map((segment) => segment.key).join(",") === `claude,codex`)).toBe(true);
         expect(series[1]?.segments).toEqual([
             { key: `claude`, value: 0 },
             { key: `codex`, value: 3 },

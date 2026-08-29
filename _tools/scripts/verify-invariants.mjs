@@ -27,9 +27,8 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const root = resolve(fileURLToPath(import.meta.url), "../../..");
+const root = resolve(import.meta.filename, "../../..");
 const src = join(root, "_sandbox/sandbox/src");
 
 /* The subsystems that predate the invariant registry and have not yet been audited. Each entry is a promise to

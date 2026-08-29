@@ -15,7 +15,7 @@
  */
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 
 // The catalogs are daemon-owned; the picker refreshes them on open. Mocked to no-ops so the mount is about what
 // the panel RENDERS from the module state each test seeds, not about a fetch.

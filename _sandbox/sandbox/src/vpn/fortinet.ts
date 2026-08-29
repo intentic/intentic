@@ -106,7 +106,7 @@ export const fortinetDriver: VpnDriver = {
         await rm(logPath(id), { force: true });
     },
     missingTool: async () => ((await toolMissing("openconnect")) ? "openconnect" : undefined),
-    connect: async function* (id, raw, options: VpnDialOptions) {
+    async *connect(id, raw, options: VpnDialOptions) {
         const fortinet = config(raw);
         if ((await livePid(id)) !== undefined) {
             yield { kind: "log", message: `${id} is already connected to ${fortinetGateway(fortinet)}.` };

@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import type { Services } from "../composition.js";
 import { parseSkillFile } from "./skill-file.js";

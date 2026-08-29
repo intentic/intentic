@@ -227,16 +227,36 @@ const ALTERNATE: Record<string, unknown> = {
 /* Suffix and substring rules, applied when the exact name is unknown. These carry most of the timestamps and
  * ids, which between them are a good third of every payload in this API. */
 const byShape = (name: string): unknown | undefined => {
-    if (name.endsWith("at") && name.length > 2) return WHEN;
-    if (name.endsWith("time") || name === "timestamp") return WHEN;
-    if (name.endsWith("since")) return EARLIER;
-    if (name.endsWith("id") || name.endsWith("ids")) return name.endsWith("s") ? ["a1b2c3d4", "e5f6a7b8"] : "a1b2c3d4";
-    if (name.endsWith("sha")) return SHA;
-    if (name.endsWith("path") || name.endsWith("paths")) return name.endsWith("s") ? ["src/app.ts"] : "src/app.ts";
-    if (name.endsWith("url") || name.endsWith("uri")) return "https://sandbox-a1b2c3d4e5f6.intentic.dev";
-    if (name.endsWith("count") || name.endsWith("total")) return 3;
-    if (name.endsWith("message")) return "Fix the flaky parser test";
-    if (name.endsWith("error")) return "The repository has no remote configured.";
+    if (name.endsWith("at") && name.length > 2) {
+        return WHEN;
+    }
+    if (name.endsWith("time") || name === "timestamp") {
+        return WHEN;
+    }
+    if (name.endsWith("since")) {
+        return EARLIER;
+    }
+    if (name.endsWith("id") || name.endsWith("ids")) {
+        return name.endsWith("s") ? ["a1b2c3d4", "e5f6a7b8"] : "a1b2c3d4";
+    }
+    if (name.endsWith("sha")) {
+        return SHA;
+    }
+    if (name.endsWith("path") || name.endsWith("paths")) {
+        return name.endsWith("s") ? ["src/app.ts"] : "src/app.ts";
+    }
+    if (name.endsWith("url") || name.endsWith("uri")) {
+        return "https://sandbox-a1b2c3d4e5f6.intentic.dev";
+    }
+    if (name.endsWith("count") || name.endsWith("total")) {
+        return 3;
+    }
+    if (name.endsWith("message")) {
+        return "Fix the flaky parser test";
+    }
+    if (name.endsWith("error")) {
+        return "The repository has no remote configured.";
+    }
     return undefined;
 };
 
@@ -250,10 +270,16 @@ const byShape = (name: string): unknown | undefined => {
  * YYYY-MM-DD means a date, and one that says ISO timestamp means an instant. Guessing from prose beyond that
  * would make every reworded sentence in the contract a silent change to these pages. */
 const fromDescription = (description: string | undefined): unknown | undefined => {
-    if (description === undefined) return undefined;
+    if (description === undefined) {
+        return undefined;
+    }
     const lower = description.toLowerCase();
-    if (lower.includes("yyyy-mm-dd")) return "2026-08-21";
-    if (lower.includes("iso") && (lower.includes("timestamp") || lower.includes("instant") || lower.includes("stamp"))) return WHEN;
+    if (lower.includes("yyyy-mm-dd")) {
+        return "2026-08-21";
+    }
+    if (lower.includes("iso") && (lower.includes("timestamp") || lower.includes("instant") || lower.includes("stamp"))) {
+        return WHEN;
+    }
     return undefined;
 };
 
@@ -269,14 +295,17 @@ const BY_FORMAT: Record<string, unknown> = {
     ipv4: "203.0.113.42",
 };
 
-const firstType = (schema: SchemaNode): string | undefined => (Array.isArray(schema.type) ? schema.type.find((entry) => entry !== "null") : schema.type);
+const firstType = (schema: SchemaNode): string | undefined =>
+    Array.isArray(schema.type) ? schema.type.find((entry) => entry !== "null") : schema.type;
 
 /* Resolve `#/$defs/x` against the schema the walk started from. The generator emits exactly one shape of
  * reference — a local definition, for the handful of recursive types (a file tree, a transcript) — so this
  * deliberately understands that one and nothing else, and returns undefined rather than guessing at a form
  * it has never seen. */
 const resolve = (schema: SchemaNode, root: SchemaNode): SchemaNode | undefined => {
-    if (schema.$ref === undefined) return schema;
+    if (schema.$ref === undefined) {
+        return schema;
+    }
     const name = schema.$ref.startsWith("#/$defs/") ? schema.$ref.slice("#/$defs/".length) : undefined;
     return name === undefined ? undefined : root.$defs?.[name];
 };
@@ -285,15 +314,23 @@ const resolve = (schema: SchemaNode, root: SchemaNode): SchemaNode | undefined =
  * expanding for ever; at the limit it stops rather than emitting a truncated object, so what comes out is
  * always a value the schema would accept. */
 const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, depth: number, variant = 0): unknown => {
-    if (raw === undefined || depth > 5) return undefined;
+    if (raw === undefined || depth > 5) {
+        return undefined;
+    }
     const schema = resolve(raw, root);
-    if (schema === undefined) return undefined;
+    if (schema === undefined) {
+        return undefined;
+    }
 
     // A fixed value beats every heuristic: it is the only value the schema permits.
-    if (schema.const !== undefined) return schema.const;
+    if (schema.const !== undefined) {
+        return schema.const;
+    }
     // The second entry in a list takes the second choice where the schema offers one, for the same reason it
     // takes an alternate value: a list of two identical enums says nothing about what the field varies over.
-    if (schema.enum !== undefined && schema.enum.length > 0) return schema.enum[Math.min(variant, schema.enum.length - 1)];
+    if (schema.enum !== undefined && schema.enum.length > 0) {
+        return schema.enum[Math.min(variant, schema.enum.length - 1)];
+    }
 
     /* A union takes its first branch, minus the `null` one. Zod emits an optional as `anyOf: [T, null]` and a
      * discriminated union as a list of object branches; in both cases the first non-null branch is the case a
@@ -317,56 +354,86 @@ const build = (raw: SchemaNode | undefined, name: string, root: SchemaNode, dept
         const out: Record<string, unknown> = {};
         for (const [key, child] of Object.entries(properties)) {
             const value = build(child, key, root, depth + 1, variant);
-            if (value !== undefined) out[key] = value;
+            if (value !== undefined) {
+                out[key] = value;
+            }
         }
         /* A record — an object with no named properties but a shape for its values — gets two entries rather
          * than one, because one entry reads like a fixed field and two read like a map. */
         if (Object.keys(properties).length === 0 && typeof schema.additionalProperties === "object") {
             const first = build(schema.additionalProperties, name, root, depth + 1, 0);
             const second = build(schema.additionalProperties, name, root, depth + 1, 1);
-            if (first !== undefined) return { "src/app.ts": first, "README.md": second ?? first };
+            if (first !== undefined) {
+                return { "src/app.ts": first, "README.md": second ?? first };
+            }
         }
         return out;
     }
 
     if (type === "array") {
         const named = BY_NAME[lower] ?? byShape(lower);
-        if (Array.isArray(named)) return named;
+        if (Array.isArray(named)) {
+            return named;
+        }
         /* Two entries, not one, and the second one DIFFERENT. A list rendered with a single element reads as
          * an object with a stray bracket round it; a list rendered as the same element twice reads as a
          * rendering bug. What a reader wants to know about a list is what varies between its entries. */
         const singular = lower.replace(/s$/u, "");
         const first = build(schema.items, singular, root, depth + 1, 0);
-        if (first === undefined) return [];
+        if (first === undefined) {
+            return [];
+        }
         const second = build(schema.items, singular, root, depth + 1, 1);
         return [first, second ?? first];
     }
 
-    if (schema.default !== undefined) return schema.default;
+    if (schema.default !== undefined) {
+        return schema.default;
+    }
 
     const stated = fromDescription(schema.description);
-    if (stated !== undefined) return stated;
+    if (stated !== undefined) {
+        return stated;
+    }
 
     const alternate = variant > 0 ? ALTERNATE[lower] : undefined;
     const named = alternate ?? BY_NAME[lower] ?? byShape(lower);
     if (named !== undefined && (typeof named !== "object" || type === undefined)) {
         // Type-check the dictionary hit against the schema, so a field called `count` declared as a string
         // does not come out as a number the daemon would refuse.
-        if (type === undefined) return named;
-        if (type === "string" && typeof named === "string") return named;
-        if ((type === "number" || type === "integer") && typeof named === "number") return named;
-        if (type === "boolean" && typeof named === "boolean") return named;
+        if (type === undefined) {
+            return named;
+        }
+        if (type === "string" && typeof named === "string") {
+            return named;
+        }
+        if ((type === "number" || type === "integer") && typeof named === "number") {
+            return named;
+        }
+        if (type === "boolean" && typeof named === "boolean") {
+            return named;
+        }
     }
 
     if (type === "string") {
         const byFormat = schema.format === undefined ? undefined : BY_FORMAT[schema.format];
-        if (byFormat !== undefined) return byFormat;
+        if (byFormat !== undefined) {
+            return byFormat;
+        }
         return "…";
     }
-    if (type === "integer") return schema.minimum ?? 1;
-    if (type === "number") return schema.minimum ?? 1;
-    if (type === "boolean") return true;
-    if (type === "null") return null;
+    if (type === "integer") {
+        return schema.minimum ?? 1;
+    }
+    if (type === "number") {
+        return schema.minimum ?? 1;
+    }
+    if (type === "boolean") {
+        return true;
+    }
+    if (type === "null") {
+        return null;
+    }
     // `unknown` in the contract, which is a real shape a few routes have: an opaque payload forwarded whole.
     return {};
 };

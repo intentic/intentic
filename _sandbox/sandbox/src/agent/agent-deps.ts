@@ -128,13 +128,13 @@ const notice = (issue: DependencyIssue, names: readonly string[], canInstall: bo
         `${shown}${names.length > NAMED ? ` and ${names.length - NAMED} more` : ""} ${one ? "is" : "are"} declared under /work ` +
         `and not installed, so that failure is the install being behind rather than a mistake in the code. Do not edit working ` +
         `source to satisfy it, and do not run an install yourself: from inside a turn it writes to a scratch layer that is ` +
-        `discarded when the conversation ends, and it rewrites the dependency tree other live conversations are reading. The ` +
-        (issue.state === "stale"
-            ? `daemon has queued its repair, so this project's own checks are available on a later turn, not this one. `
-            : canInstall
-              ? `this project has never been set up; call \`mcp__deps__install\` to queue it for after the turn. `
-              : `this project has never been set up and this persona cannot change it; ask the owner to install it. `) +
-        `Everything ` +
+        `discarded when the conversation ends, and it rewrites the dependency tree other live conversations are reading. The ${
+            issue.state === "stale"
+                ? `daemon has queued its repair, so this project's own checks are available on a later turn, not this one. `
+                : canInstall
+                  ? `this project has never been set up; call \`mcp__deps__install\` to queue it for after the turn. `
+                  : `this project has never been set up and this persona cannot change it; ask the owner to install it. `
+        }Everything ` +
         `already installed checks normally in the meantime: call \`mcp__deps__status\` for which projects those are. Finish ` +
         `the rest of the task, say this verification is deferred, and offer to re-run it next turn.`
     );

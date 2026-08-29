@@ -37,10 +37,9 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const root = resolve(import.meta.dirname, "../..");
 const [base, head, ...flags] = process.argv.slice(2);
 const explain = flags.includes("--explain");
 if (!head) {
@@ -55,14 +54,17 @@ const note = (line) => explain && console.error(line);
  * A first push to a branch, a force-push, or a manual dispatch has no usable base. Treat everything as
  * changed rather than silently skipping the jobs that decide whether anything is checked at all: the same
  * fallback the shell block here used to carry, and the same zero-SHA case. */
-const usable = base && !/^0+$/.test(base) && (() => {
-    try {
-        git("cat-file", "-e", `${base}^{commit}`);
-        return true;
-    } catch {
-        return false;
-    }
-})();
+const usable =
+    base &&
+    !/^0+$/.test(base) &&
+    (() => {
+        try {
+            git("cat-file", "-e", `${base}^{commit}`);
+            return true;
+        } catch {
+            return false;
+        }
+    })();
 const changed = (usable ? git("diff", "--name-only", base, head) : git("ls-files")).split("\n").filter(Boolean);
 note(usable ? `base ${base} → head ${head}: ${changed.length} changed paths` : `no usable base (${base}), treating every tracked path as changed`);
 
@@ -157,12 +159,20 @@ const payloadScript = readFileSync(join(root, "_tools/scripts/prepare-image-tree
 const treesBlock = payloadScript.match(/^TREES="\n([\s\S]*?)^"/m);
 const bundlesLine = payloadScript.match(/^BUNDLES="([^"]*)"/m);
 if (!treesBlock || !bundlesLine) {
-    console.error("affected.mjs: cannot read TREES/BUNDLES out of _tools/scripts/prepare-image-trees.sh, the shape changed, so the `images` trigger can no longer be derived from it");
+    console.error(
+        "affected.mjs: cannot read TREES/BUNDLES out of _tools/scripts/prepare-image-trees.sh, the shape changed, so the `images` trigger can no longer be derived from it",
+    );
     process.exit(1);
 }
 const imagePayload = new Set([
-    ...treesBlock[1].split("\n").map((line) => line.split(":")[0].trim()).filter(Boolean),
-    ...bundlesLine[1].split(/\s+/).filter(Boolean).map((ext) => `@intentic/ext-${ext}`),
+    ...treesBlock[1]
+        .split("\n")
+        .map((line) => line.split(":")[0].trim())
+        .filter(Boolean),
+    ...bundlesLine[1]
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((ext) => `@intentic/ext-${ext}`),
 ]);
 for (const name of imagePayload) {
     if (!packages.has(name)) {
@@ -192,7 +202,8 @@ note(`image payload (${imagePayload.size}): ${[...imagePayload].sort().join(", "
  *               script has no business holding. So they are answered here as PATHS only, and ci.yml ORs each
  *               with its probe. */
 const LOOSE = {
-    desktop: /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(build-desktop|build-ic|verify-desktop-bundle|verify-desktop-install|stage-desktop-scripts|desktop-artifacts)\.sh|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
+    desktop:
+        /^(_sandbox\/ic\/|_site\/site\/public\/scripts\/|_tools\/ci-desktop\/|_tools\/scripts\/(build-desktop|build-ic|verify-desktop-bundle|verify-desktop-install|stage-desktop-scripts|desktop-artifacts)\.sh|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|nightly|release|windows-smoke)\.yml))/,
     ic: /^(_sandbox\/ic\/|_computers\/win-launcher\/|_site\/site\/public\/scripts\/)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_tools\/scripts\/(prepare-image-trees|publish-images|compose-image-dockerfile|merge-image-manifests|promote-image-tag)\.(sh|mjs)|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/(docker-release|deploy-platform)\.sh|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
@@ -223,9 +234,9 @@ for (const trigger of Object.keys(LOOSE)) {
     const viaPath = changed.filter((path) => LOOSE[trigger].test(path));
     answers[trigger] = viaGraph.length > 0 || viaPath.length > 0;
     note(
-        `${trigger}=${answers[trigger]}` +
-            (viaGraph.length > 0 ? ` · packages: ${viaGraph.slice(0, 6).join(", ")}${viaGraph.length > 6 ? ` +${viaGraph.length - 6}` : ""}` : "") +
-            (viaPath.length > 0 ? ` · paths: ${viaPath.slice(0, 4).join(", ")}${viaPath.length > 4 ? ` +${viaPath.length - 4}` : ""}` : ""),
+        `${trigger}=${answers[trigger]}${
+            viaGraph.length > 0 ? ` · packages: ${viaGraph.slice(0, 6).join(", ")}${viaGraph.length > 6 ? ` +${viaGraph.length - 6}` : ""}` : ""
+        }${viaPath.length > 0 ? ` · paths: ${viaPath.slice(0, 4).join(", ")}${viaPath.length > 4 ? ` +${viaPath.length - 4}` : ""}` : ""}`,
     );
 }
 

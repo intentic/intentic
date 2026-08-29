@@ -198,7 +198,7 @@ describe(`WORKSPACE_STATE_FILES`, () => {
         for (const file of WORKSPACE_STATE_FILES) {
             for (const parent of WORKSPACE_STATE_FILES.filter((other) => other !== file && file.path.startsWith(other.path))) {
                 expect(
-                    parent.portability === file.portability && parent.invalidates.join() === file.invalidates.join(),
+                    parent.portability === file.portability && parent.invalidates.join(",") === file.invalidates.join(","),
                     `${file.path} says nothing its parent ${parent.path} doesn't already say`,
                 ).toBe(false);
             }

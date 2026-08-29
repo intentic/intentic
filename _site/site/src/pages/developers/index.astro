@@ -44,9 +44,9 @@ const lcChips = extensionLifecycle.map((stage, i) => {
 // The flow line through every chip centre: straight along a lane, an S-curve where the lane changes.
 const lcFlow = lcChips
     .map((chip, i) => {
-        if (i === 0) return `M ${chip.cx} ${chip.cy}`;
+        if (i === 0) {return `M ${chip.cx} ${chip.cy}`;}
         const prev = lcChips[i - 1];
-        if (prev.cy === chip.cy) return `L ${chip.cx} ${chip.cy}`;
+        if (prev.cy === chip.cy) {return `L ${chip.cx} ${chip.cy}`;}
         return `C ${prev.cx + 40} ${prev.cy} ${chip.cx - 40} ${chip.cy} ${chip.cx} ${chip.cy}`;
     })
     .join(" ");
@@ -57,7 +57,7 @@ const lcArrows = lcChips
     .filter(({ prev, chip }) => prev.cy === chip.cy)
     .map(({ prev, chip }) => `M ${(prev.left + LC.chipW + chip.left) / 2 - 4} ${chip.cy} L ${(prev.left + LC.chipW + chip.left) / 2 + 4} ${chip.cy}`);
 const lcFirst = lcChips[1];
-const lcLast = lcChips[lcChips.length - 1];
+const lcLast = lcChips.at(-1);
 // The return arc: Maintain's new sha re-entering review at Publish.
 const lcReturn = `M ${lcLast.cx} ${lcLaneY.author - 15} L ${lcLast.cx} 26 Q ${lcLast.cx} 18 ${lcLast.cx - 8} 18 L ${lcFirst.cx + 8} 18 Q ${lcFirst.cx} 18 ${lcFirst.cx} 26 L ${lcFirst.cx} ${lcLaneY.author - 19}`;
 

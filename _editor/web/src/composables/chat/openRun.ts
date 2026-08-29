@@ -41,7 +41,7 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
             harness: session.harness ?? active.value.harness.value,
         });
     });
-    reveal({ verb: `panes`, entries, focus: entries[entries.length - 1]!.conversationId, caret: false });
+    reveal({ verb: `panes`, entries, focus: entries.at(-1)!.conversationId, caret: false });
     return true;
 };
 

@@ -47,7 +47,7 @@ const blockingWake = (prompts: string[]): { wake: WakeFn; release: () => void } 
     });
     return {
         release: () => unblock(),
-        wake: async function* (_services, input) {
+        async *wake(_services, input) {
             prompts.push(input.prompt);
             await gate;
             yield { kind: "done" };

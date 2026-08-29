@@ -8,7 +8,7 @@ import { geminiProvider } from "../gemini/gemini-provider.js";
 import { grokProvider } from "../grok/grok-provider.js";
 import { kimiProvider } from "../kimi/kimi-provider.js";
 import type { AgentAdapter } from "./adapter.js";
-import { type BootRole, type ProviderCatalog, type ProviderModule, type SharedProviderReads } from "./provider-module.js";
+import type { BootRole, ProviderCatalog, ProviderModule, SharedProviderReads } from "./provider-module.js";
 
 export type { ProviderCatalog } from "./provider-module.js";
 
@@ -20,7 +20,14 @@ export type { ProviderCatalog } from "./provider-module.js";
  *
  * ORDER IS MEANINGFUL in one place only: the pack fragments compose an image overlay in list order, and the
  * committed overlay hash must be stable across daemon versions, so this order is part of that stability. */
-export const PROVIDER_MODULES: readonly ProviderModule[] = [claudeProvider, codexProvider, cursorProvider, grokProvider, geminiProvider, kimiProvider];
+export const PROVIDER_MODULES: readonly ProviderModule[] = [
+    claudeProvider,
+    codexProvider,
+    cursorProvider,
+    grokProvider,
+    geminiProvider,
+    kimiProvider,
+];
 
 /* THE DISCOVERY GUARD, at module init rather than only in a test: a native provider without a module would
  * otherwise ship as a picker row whose catalog, readiness and secrets rows silently do not exist — the exact

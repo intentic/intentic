@@ -1,7 +1,6 @@
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 /* The tasks agent-bench runs, and the only thing that decides whether a run passed. Every task grades
  * MECHANICALLY, an exact grid, an exact integer, because an LLM judge would put the thing under test on both
@@ -24,7 +23,7 @@ import { fileURLToPath } from "node:url";
  *           curated answer": CursorBench itself is Cursor-internal and not published, so it cannot be run here.
  */
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = import.meta.dirname;
 const SANDBOX_SRC = resolve(HERE, "../src");
 const CONTRACT_SRC = resolve(HERE, "../../../_sandbox/sandbox-contract/src");
 

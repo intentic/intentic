@@ -48,8 +48,11 @@ interface Call {
 const callArgs = (text: string, openParen: number): string => {
     let depth = 0;
     for (let i = openParen; i < text.length; i++) {
-        if (text[i] === "(") depth++;
-        else if (text[i] === ")" && --depth === 0) return text.slice(openParen + 1, i);
+        if (text[i] === "(") {
+            depth++;
+        } else if (text[i] === ")" && --depth === 0) {
+            return text.slice(openParen + 1, i);
+        }
     }
     return text.slice(openParen + 1);
 };
@@ -152,7 +155,9 @@ const scanCalls = (text: string, helpers: Map<string, string>, segments: Map<str
         // The call's opening `(` sits just before the path's quote (regex allows only `\s*` between them). Anchor
         // there rather than lastIndexOf("("): a path like `/x/${encodeURIComponent(id)}` carries its own parens.
         let paren = match[0].length - (match[1] ?? "").length - 2;
-        while (paren > 0 && /\s/.test(match[0][paren] ?? "")) paren--;
+        while (paren > 0 && /\s/.test(match[0][paren] ?? "")) {
+            paren--;
+        }
         const args = callArgs(text, match.index + paren);
         const literal = /method:\s*[`'"]([A-Za-z]+)/.exec(args)?.[1];
         const helper = literal ? undefined : [...helpers].find(([helperName]) => new RegExp(`\\b${helperName}\\s*\\(`).test(args));

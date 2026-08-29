@@ -34,8 +34,12 @@ const REPO_MARKER_SUFFIXES = [".sln", ".csproj"];
 
 const repoMarker = (children: readonly TreeNode[]): string | undefined => {
     for (const child of children) {
-        if (child.type !== "file") continue;
-        if (REPO_MARKERS.has(child.name) || REPO_MARKER_SUFFIXES.some((s) => child.name.endsWith(s))) return child.name;
+        if (child.type !== "file") {
+            continue;
+        }
+        if (REPO_MARKERS.has(child.name) || REPO_MARKER_SUFFIXES.some((s) => child.name.endsWith(s))) {
+            return child.name;
+        }
     }
     return undefined;
 };
@@ -63,9 +67,15 @@ const ARCHIVE_MIMES = new Set([
 ]);
 
 const mimeBucket = (mime: string): WorkspaceBucket | undefined => {
-    if (mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/")) return "media";
-    if (DOC_MIMES.has(mime)) return "documents";
-    if (ARCHIVE_MIMES.has(mime)) return "archives";
+    if (mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/")) {
+        return "media";
+    }
+    if (DOC_MIMES.has(mime)) {
+        return "documents";
+    }
+    if (ARCHIVE_MIMES.has(mime)) {
+        return "archives";
+    }
     return undefined;
 };
 
@@ -116,8 +126,12 @@ const isProbablyText = async (abs: string): Promise<boolean> => {
         const buf = Buffer.alloc(4096);
         const { bytesRead } = await fd.read(buf, 0, 4096, 0);
         for (const b of buf.subarray(0, bytesRead)) {
-            if (b === 9 || b === 10 || b === 13) continue; // tab, LF, CR
-            if (b < 32) return false; // NUL / other C0 control byte ⇒ binary
+            if (b === 9 || b === 10 || b === 13) {
+                continue;
+            } // tab, LF, CR
+            if (b < 32) {
+                return false;
+            } // NUL / other C0 control byte ⇒ binary
         }
         return true;
     } finally {
@@ -134,8 +148,12 @@ const classifyFile = async (abs: string, path: string): Promise<Item> => {
     }
     const ext = extname(path).toLowerCase();
     const byExt = EXT_BUCKET[ext];
-    if (byExt) return { path, bucket: byExt, reason: `ext:${ext}` };
-    if (await isProbablyText(abs)) return { path, bucket: "documents", reason: "text-content" };
+    if (byExt) {
+        return { path, bucket: byExt, reason: `ext:${ext}` };
+    }
+    if (await isProbablyText(abs)) {
+        return { path, bucket: "documents", reason: "text-content" };
+    }
     return { path, bucket: "other", reason: "unknown" };
 };
 

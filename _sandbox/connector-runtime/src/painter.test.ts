@@ -75,7 +75,12 @@ test("a reply past the character ceiling spills into follow-up messages, losing 
 test("a failed post kills the stream and reports once instead of throwing into the turn", async () => {
     const errors: unknown[] = [];
     const painter = createStreamingPainter(
-        { post: async () => Promise.reject(new Error("channel_not_found")), update: async () => undefined },
+        {
+            post: async () => {
+                throw new Error("channel_not_found");
+            },
+            update: async () => undefined,
+        },
         (error) => errors.push(error),
         TUNING,
     );

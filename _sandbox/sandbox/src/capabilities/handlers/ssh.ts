@@ -41,7 +41,7 @@ export const sshHandler: CapabilityHandler = {
     // otherwise `ssh <old-name>` would go on working, which is a second machine as far as anyone reading the
     // config is concerned. The skill is shared by every alias and says nothing about any one of them.
     rename: { carry: async (_ctx, from) => removeSshHost(from) },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const ssh = config as SshConfig;
         await writeSshHost(id, { host: ssh.host, user: ssh.user, port: ssh.port, ...(ssh.auth === "key" ? { identityFile: hostKeyPath(id) } : {}) });
         if (ssh.auth === "key") {

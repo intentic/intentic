@@ -130,7 +130,7 @@
 
         const search = (query: string): Hit[] => {
             const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 1);
-            if (terms.length === 0 || entries === undefined) return [];
+            if (terms.length === 0 || entries === undefined) {return [];}
             const phrase = query.toLowerCase().trim();
             const found: Hit[] = [];
 
@@ -138,11 +138,11 @@
                 const titleText = `${entry.title} ${entry.section} ${entry.blurb}`.toLowerCase();
                 // Every term must appear on the page somewhere, or the result is noise.
                 const pageText = `${titleText} ${entry.blocks.map((block) => `${block.heading} ${block.text}`).join(" ")}`.toLowerCase();
-                if (!terms.every((term) => pageText.includes(term))) continue;
+                if (!terms.every((term) => pageText.includes(term))) {continue;}
 
                 let best: Hit | undefined;
                 const consider = (candidate: Hit) => {
-                    if (best === undefined || candidate.score > best.score) best = candidate;
+                    if (best === undefined || candidate.score > best.score) {best = candidate;}
                 };
 
                 if (terms.some((term) => titleText.includes(term))) {
@@ -161,7 +161,7 @@
                     const body = block.text.toLowerCase();
                     const inHeading = terms.filter((term) => heading.includes(term)).length;
                     const inBody = terms.filter((term) => body.includes(term)).length;
-                    if (inHeading === 0 && inBody === 0) continue;
+                    if (inHeading === 0 && inBody === 0) {continue;}
                     consider({
                         url: block.anchor ? `${entry.url}#${block.anchor}` : entry.url,
                         title: entry.title,
@@ -176,7 +176,7 @@
                     });
                 }
 
-                if (best) found.push(best);
+                if (best) {found.push(best);}
             }
 
             return found.toSorted((a, b) => b.score - a.score).slice(0, 12);
@@ -188,7 +188,7 @@
                 const active = index === cursor;
                 row.classList.toggle("bg-overlay", active);
                 row.setAttribute("aria-selected", String(active));
-                if (active) row.scrollIntoView({ block: "nearest" });
+                if (active) {row.scrollIntoView({ block: "nearest" });}
             });
         };
 
@@ -226,34 +226,34 @@
         };
 
         const open = () => {
-            if (dialog.open) return;
+            if (dialog.open) {return;}
             dialog.showModal();
             input.value = "";
             render("");
             input.focus();
             void load().then(() => {
                 // The reader may have typed while the index was in flight.
-                if (dialog.open) render(input.value);
+                if (dialog.open) {render(input.value);}
             });
         };
 
         const close = () => {
-            if (dialog.open) dialog.close();
+            if (dialog.open) {dialog.close();}
         };
 
-        for (const trigger of document.querySelectorAll("[data-search-open]")) trigger.addEventListener("click", open);
-        for (const trigger of document.querySelectorAll("[data-search-close]")) trigger.addEventListener("click", close);
+        for (const trigger of document.querySelectorAll("[data-search-open]")) {trigger.addEventListener("click", open);}
+        for (const trigger of document.querySelectorAll("[data-search-close]")) {trigger.addEventListener("click", close);}
 
         // Clicking the backdrop closes it: the dialog's own box stops the event, so anything reaching the
         // dialog element itself was outside that box.
         dialog.addEventListener("click", (event) => {
-            if (event.target === dialog) close();
+            if (event.target === dialog) {close();}
         });
 
         input.addEventListener("input", () => render(input.value));
 
         input.addEventListener("keydown", (event) => {
-            if (hits.length === 0) return;
+            if (hits.length === 0) {return;}
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 cursor = (cursor + (event.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
@@ -261,7 +261,7 @@
             } else if (event.key === "Enter") {
                 event.preventDefault();
                 const target = hits[cursor];
-                if (target) window.location.href = target.url;
+                if (target) {window.location.href = target.url;}
             }
         });
 
@@ -271,7 +271,7 @@
         const hint = document.querySelector<HTMLElement>("[data-search-hint]");
         // userAgent rather than the deprecated navigator.platform. Getting this wrong shows the other key's
         // label, and both shortcuts are bound regardless. So a miss costs a wrong hint, never a dead control.
-        if (hint && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)) hint.textContent = "⌘K";
+        if (hint && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)) {hint.textContent = "⌘K";}
 
         document.addEventListener("keydown", (event) => {
             const target = event.target as HTMLElement | null;

@@ -1,7 +1,6 @@
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { checkProject, findTsconfig } from "./checker.js";
 
@@ -71,7 +70,7 @@ test("a config chain that does not load is a refusal, not a diagnostic", async (
  * agent errors its own toolchain never shows it, so it is refused, with the reason. */
 test("missing node globals with an ancestor @types directory is a refusal", async () => {
     const dir = fixture();
-    const realTypes = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "node_modules", "@types");
+    const realTypes = join(import.meta.dirname, "..", "..", "..", "node_modules", "@types");
     mkdirSync(join(dir, "node_modules"));
     symlinkSync(realTypes, join(dir, "node_modules", "@types"));
     mkdirSync(join(dir, "pkg"));

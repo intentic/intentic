@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import type { ShikiLang } from "../lib/shikiLangs.js";
 import { definePreference } from "./preference.js";
 

@@ -15,7 +15,9 @@ const files = import.meta.glob<{ default: ImageMetadata }>("../assets/product/*.
 
 export function shotAsset(name: string): ImageMetadata {
     const file = files[`../assets/product/${name}.png`];
-    if (file === undefined) throw new Error(`No screenshot named "${name}": capture.mts writes them to src/assets/product/.`);
+    if (file === undefined) {
+        throw new Error(`No screenshot named "${name}": capture.mts writes them to src/assets/product/.`);
+    }
     return file.default;
 }
 

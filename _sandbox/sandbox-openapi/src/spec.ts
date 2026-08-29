@@ -156,9 +156,13 @@ export const sandboxSpec = async (): Promise<SandboxSpecDocument> => {
      * /events, so a path-derived tag would file the daemon's own identity route under a group called "info". */
     for (const item of Object.values(paths)) {
         for (const operation of Object.values(item)) {
-            if (operation.operationId === undefined) continue;
+            if (operation.operationId === undefined) {
+                continue;
+            }
             const label = operationGroup(operation.operationId);
-            if (label !== undefined) operation.tags = [label];
+            if (label !== undefined) {
+                operation.tags = [label];
+            }
         }
     }
 
@@ -170,7 +174,7 @@ export const sandboxSpec = async (): Promise<SandboxSpecDocument> => {
         ...(generated as unknown as SandboxSpecDocument),
         paths: inGroupOrder(paths),
         components: {
-            ...(generated.components ?? {}),
+            ...generated.components,
             securitySchemes: securitySchemes(),
         },
     };

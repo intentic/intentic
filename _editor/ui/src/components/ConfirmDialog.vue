@@ -25,7 +25,7 @@
      a path set, a plain boolean, and none of them wants this component deciding what "closed" means for it. -->
 <script setup lang="ts" generic="T">
 import Button from "./Button.vue";
-import { type IconName } from "../icons/iconSets.js";
+import type { IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
 import Modal from "./Modal.vue";
 

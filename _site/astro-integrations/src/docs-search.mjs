@@ -70,12 +70,20 @@ function decodeEntities(text) {
 
 /** Readable text for one subtree: no markup, cells delimited, code kept because route and field names are searched. */
 function textOf(node) {
-    if (node.type === "text") return decodeEntities(node.value).replace(/\s+/g, " ");
-    if (DROPPED_TAGS.has(node.tag) || node.attrs["aria-hidden"] === "true" || node.attrs.hidden !== undefined) return "";
+    if (node.type === "text") {
+        return decodeEntities(node.value).replace(/\s+/g, " ");
+    }
+    if (DROPPED_TAGS.has(node.tag) || node.attrs["aria-hidden"] === "true" || node.attrs.hidden !== undefined) {
+        return "";
+    }
     const inner = node.children.map(textOf).join("");
-    if (node.tag === "td" || node.tag === "th") return `${inner.trim()}${CELL}`;
+    if (node.tag === "td" || node.tag === "th") {
+        return `${inner.trim()}${CELL}`;
+    }
     // A row ends a sequence of cells: drop the last cell's trailing separator rather than running rows together.
-    if (node.tag === "tr") return `${inner.replace(/ · $/, "")} `;
+    if (node.tag === "tr") {
+        return `${inner.replace(/ · $/, "")} `;
+    }
     return node.tag === "code" || node.tag === "a" || node.tag === "strong" || node.tag === "em" ? inner : `${inner} `;
 }
 
@@ -99,17 +107,25 @@ function isSectionHeading(node) {
 }
 
 function hasSectionHeading(node) {
-    if (node.type !== "el") return false;
+    if (node.type !== "el") {
+        return false;
+    }
     return node.children.some((child) => isSectionHeading(child) || hasSectionHeading(child));
 }
 
 /** Find the element carrying a class, anywhere in the tree. */
 function findByClass(nodes, className) {
     for (const node of nodes) {
-        if (node.type !== "el") continue;
-        if (node.attrs.class?.split(/\s+/).includes(className)) return node;
+        if (node.type !== "el") {
+            continue;
+        }
+        if (node.attrs.class?.split(/\s+/).includes(className)) {
+            return node;
+        }
         const found = findByClass(node.children, className);
-        if (found) return found;
+        if (found) {
+            return found;
+        }
     }
     return undefined;
 }
@@ -127,7 +143,9 @@ export function blocksFromPage(html) {
     /* .docs-body, not <article>: the article also holds the breadcrumb, the page header and the previous/next
      * footer, and indexing those makes every page match the shelf it is on and the pages either side of it. */
     const body = findByClass(parseHtml(html), "docs-body");
-    if (!body) return [];
+    if (!body) {
+        return [];
+    }
 
     /** @type {SearchBlock[]} */
     const blocks = [];
@@ -142,8 +160,11 @@ export function blocksFromPage(html) {
                 continue;
             }
             // Recurse only where a heading is hidden below, so a wrapped section still opens a block.
-            if (hasSectionHeading(node)) walk(node.children);
-            else current.text += textOf(node);
+            if (hasSectionHeading(node)) {
+                walk(node.children);
+            } else {
+                current.text += textOf(node);
+            }
         }
     };
     walk(body.children);
@@ -163,7 +184,9 @@ export function docsSearchIndex(pages, htmlFor) {
     const entries = [];
     for (const page of pages) {
         const html = htmlFor(page);
-        if (html === undefined) continue;
+        if (html === undefined) {
+            continue;
+        }
         entries.push({ url: page.url, title: page.title, section: page.section, blurb: page.blurb, blocks: blocksFromPage(html) });
     }
     return entries;
@@ -187,7 +210,7 @@ export default function docsSearch(options) {
                 const distDir = fileURLToPath(dir);
                 const entries = docsSearchIndex(options.pages, (page) => {
                     try {
-                        return readFileSync(path.join(distDir, page.url, "index.html"), "utf-8");
+                        return readFileSync(path.join(distDir, page.url, "index.html"), "utf8");
                     } catch {
                         logger.warn(`No built page for ${page.url}; it will be missing from search.`);
                         return undefined;

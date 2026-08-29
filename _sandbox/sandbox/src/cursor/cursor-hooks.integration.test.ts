@@ -61,14 +61,14 @@ const askSessionEnv = (dir: string, payload: unknown): Promise<unknown> => askHo
 const denying = (reason: string): CommandGate => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
-    consult: async function* () {
+    async *consult() {
         return { allow: false, reason };
     },
 });
 const allowing = (): CommandGate => ({
     enforcing: true,
     // eslint-disable-next-line require-yield
-    consult: async function* () {
+    async *consult() {
         return { allow: true };
     },
 });
@@ -151,7 +151,7 @@ test("a turn whose gate enforces nothing short-circuits to allow", async () => {
     const gate: CommandGate = {
         enforcing: false,
         // eslint-disable-next-line require-yield
-        consult: async function* () {
+        async *consult() {
             throw new Error("an unenforcing gate must never be consulted");
         },
     };
@@ -177,7 +177,7 @@ test("frames the gate yields are pushed to the turn's own stream", async () => {
     const card: AgentEvent = { kind: "permission", requestId: "r1", toolName: "Shell", displayName: "Run command", reason: "rule" };
     const gate: CommandGate = {
         enforcing: true,
-        consult: async function* () {
+        async *consult() {
             yield card;
             return { allow: true };
         },

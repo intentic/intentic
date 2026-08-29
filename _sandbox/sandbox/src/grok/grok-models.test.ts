@@ -47,8 +47,12 @@ test("discoverXaiModels excludes media-generation models (image/video) from the 
 
 test("discoverXaiModels falls back to /v1/language-models when /v1/models is empty", async () => {
     const fake = (async (url: string | URL) => {
-        if (String(url).endsWith("/v1/models")) return jsonResponse({ data: [] });
-        if (String(url).endsWith("/v1/language-models")) return jsonResponse({ models: [{ id: "grok-4.20-multi-agent-0309" }] });
+        if (String(url).endsWith("/v1/models")) {
+            return jsonResponse({ data: [] });
+        }
+        if (String(url).endsWith("/v1/language-models")) {
+            return jsonResponse({ models: [{ id: "grok-4.20-multi-agent-0309" }] });
+        }
         throw new Error(`unexpected call: ${String(url)}`);
     }) as unknown as typeof fetch;
     expect(await discoverXaiModels("tok", fake)).toEqual([{ id: "grok-4.20-multi-agent-0309", label: "grok-4.20-multi-agent-0309" }]);
@@ -76,7 +80,9 @@ test("discoverXaiModels probes the chat endpoint and parses 'Did you mean' when 
 
 test("discoverXaiModels returns [] when nothing yields models", async () => {
     const fake = (async (url: string | URL) => {
-        if (String(url).includes("/chat/completions")) return jsonResponse({ error: { message: "internal error" } }, 500);
+        if (String(url).includes("/chat/completions")) {
+            return jsonResponse({ error: { message: "internal error" } }, 500);
+        }
         return jsonResponse({ data: [] });
     }) as unknown as typeof fetch;
     expect(await discoverXaiModels("tok", fake)).toEqual([]);

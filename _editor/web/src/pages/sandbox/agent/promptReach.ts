@@ -40,4 +40,4 @@ export const promptReach = (): PromptReach => {
 // "A, B and C", the list as a person would read it aloud. A group is never empty in practice (every provider
 // declares one of the two answers), but an empty one renders as nothing rather than as a dangling "and".
 export const spokenList = (items: readonly string[]): string =>
-    items.length <= 1 ? (items[0] ?? ``) : `${items.slice(0, -1).join(`, `)} and ${items[items.length - 1]}`;
+    items.length <= 1 ? (items[0] ?? ``) : `${items.slice(0, -1).join(`, `)} and ${items.at(-1)}`;

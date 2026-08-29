@@ -8,7 +8,7 @@ import type { Auth } from "../auth.js";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
 import { LIVE_STATUSES } from "./pool-admission.js";
-import { fileServiceWant, normalizedWant, readServiceCatalog, WANT_MAX, WANT_MIN, WANTS_PER_DAY } from "./pool-catalog.js";
+import { fileServiceWant, readServiceCatalog, WANT_MAX, WANT_MIN, WANTS_PER_DAY } from "./pool-catalog.js";
 import { refundCredits, spendCredits } from "./pool-credits.js";
 import { DEMO_SLUG, demoRespond, parseDemoRequest } from "./pool-demo.js";
 import { buildLedger } from "./pool-ledger.js";

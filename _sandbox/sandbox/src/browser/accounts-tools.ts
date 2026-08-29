@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createRequest, resolveRequest } from "../agent/agent-requests.js";
 import type { OpenAccountInput } from "../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "./browser-sessions.js";
-import { fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
+import { type fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
 import { hasSession, markConnected, profileOwner } from "./session-store.js";
 
 /* THE ACCOUNTS TOOLS: what lets the agent CONNECT a browser account itself, sign in, sign up, open a NEW

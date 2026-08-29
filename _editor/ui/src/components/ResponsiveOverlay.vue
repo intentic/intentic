@@ -19,7 +19,7 @@
      derives the document it teleports into, the viewport it measures the free room against, and the click that
      must never dismiss it, all from that element. -->
 <script setup lang="ts">
-import { type Cross, type Side } from "../lib/anchorPlacement.js";
+import type { Cross, Side } from "../lib/anchorPlacement.js";
 import { useDevice } from "../composables/useDevice.js";
 import AnchoredOverlay from "./AnchoredOverlay.vue";
 import BottomSheet from "./BottomSheet.vue";

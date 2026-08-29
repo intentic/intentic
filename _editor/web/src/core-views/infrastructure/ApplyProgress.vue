@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Button, Card, ui, Notice, type NoticeModel } from "@intentic/ui";
+import { Button, Card, ui, Notice, type NoticeModel, ProgressRing } from "@intentic/ui";
 import PlanStepRow from "../../components/PlanStepRow.vue";
-import { ProgressRing } from "@intentic/ui";
 import type { useApplyProgress } from "./useApplyProgress";
 
 /* The live apply progress, replacing the old spinner + "follow progress in the terminal": per-resource rows

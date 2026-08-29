@@ -1,4 +1,4 @@
-import { type IDisposable } from "./lifecycle.js";
+import type { IDisposable } from "./lifecycle.js";
 
 /* THE FOUR SHAPES OF "DON'T DO THAT AGAIN YET", WRITTEN ONCE.
  *

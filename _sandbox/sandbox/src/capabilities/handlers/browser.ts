@@ -78,7 +78,7 @@ export const browserHandler: CapabilityHandler = {
             await ((config as BrowserConfig).identity === undefined ? moveSession : moveMarker)(ctx.workspace.root, from, to);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { platform, identity } = config as BrowserConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("browser", platform));
         if (contribution === undefined) {

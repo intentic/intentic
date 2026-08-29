@@ -13,7 +13,9 @@ const readSSE = async (body, onFrame, onActivity) => {
     for (;;) {
         const { value, done } = await reader.read();
         onActivity?.();
-        if (done) break;
+        if (done) {
+            break;
+        }
         buffer += decoder.decode(value, { stream: true });
         let sep;
         while ((sep = buffer.indexOf("\n\n")) !== -1) {
@@ -22,8 +24,11 @@ const readSSE = async (body, onFrame, onActivity) => {
             let event = "message";
             const data = [];
             for (const line of frame.split("\n")) {
-                if (line.startsWith("event:")) event = line.slice(6).trim();
-                else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+                if (line.startsWith("event:")) {
+                    event = line.slice(6).trim();
+                } else if (line.startsWith("data:")) {
+                    data.push(line.slice(5).replace(/^ /, ""));
+                }
             }
             onFrame(event, data.join("\n"));
         }
@@ -94,7 +99,9 @@ const readSSE = async (body, onFrame, onActivity) => {
     const sendBtn = root.querySelector(".send");
     root.querySelector(".btn").addEventListener("click", () => {
         panel.classList.toggle("open");
-        if (panel.classList.contains("open")) input.focus();
+        if (panel.classList.contains("open")) {
+            input.focus();
+        }
     });
 
     const addMsg = (cls, text) => {
@@ -113,7 +120,9 @@ const readSSE = async (body, onFrame, onActivity) => {
     const IDLE_MS = 30_000;
     const send = async () => {
         const content = input.value.trim();
-        if (!content || busy) return;
+        if (!content || busy) {
+            return;
+        }
         busy = true;
         sendBtn.disabled = true;
         input.value = "";
@@ -144,7 +153,9 @@ const readSSE = async (body, onFrame, onActivity) => {
                 res.body,
                 (event, data) => {
                     if (event === "delta") {
-                        if (!agentEl) agentEl = addMsg("agent", "");
+                        if (!agentEl) {
+                            agentEl = addMsg("agent", "");
+                        }
                         agentText += data;
                         agentEl.textContent = agentText;
                         log.scrollTop = log.scrollHeight;
@@ -156,7 +167,9 @@ const readSSE = async (body, onFrame, onActivity) => {
                 },
                 bump,
             );
-            if (agentText) history.push({ author: "agent", content: agentText });
+            if (agentText) {
+                history.push({ author: "agent", content: agentText });
+            }
         } catch {
             addMsg("note", "Couldn't reach support. Please try again.");
         } finally {
@@ -169,6 +182,8 @@ const readSSE = async (body, onFrame, onActivity) => {
 
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") send();
+        if (e.key === "Enter") {
+            send();
+        }
     });
 })();

@@ -78,7 +78,7 @@ test("a second concurrent turn for the same conversation is refused with CONFLIC
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     await gate;
                     yield { kind: "done" };
                 },
@@ -119,7 +119,7 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "error", code: "rate_limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" };
                     yield { kind: "done" };
                 },
@@ -152,7 +152,7 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     seen.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
                     yield { kind: "session", sessionId: "s-void" };
                     if (refuse) {
@@ -191,7 +191,7 @@ test("agent.resume answers NOT_FOUND when nothing is held for the conversation",
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "done" };
                 },
             }),
@@ -218,7 +218,7 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     // Exactly what the `ask` tool does: the card names the conversation it parked, which is
                     // what lets the reply route end that turn.
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
@@ -263,7 +263,7 @@ test("a dismissed question settles the turn's books on the branch, and lands not
                 // A REAL checkout has a before-state to pin, which the harness's absent one never does, so this
                 // is the one route suite that reaches the turn's anchor store. Nothing here reads it back.
                 turnAnchors: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
-                agent: async function* (request) {
+                async *agent(request) {
                     // The turn does some work, then hits the fork it cannot call and parks on the card.
                     await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
                     const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
@@ -309,7 +309,7 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
         createApp(
             services({
                 transcripts: { ...transcripts, append: async (_agent, messages) => void recorded.push(...messages) },
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "delta", text: "on it" };
                     // Yielding has handed that frame to the pump, so the steer below cannot land ahead of it.
                     running?.();
@@ -358,7 +358,7 @@ test("a turn that fails before the provider bills anything still lands on the le
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "error", code: "claude-not-entitled", message: "Claude Code is not enabled for this organization" };
                     yield { kind: "done" };
                 },
@@ -388,7 +388,7 @@ test("a turn that succeeds is recorded as such, with the experiment metrics it e
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "delta", text: "done" };
                     yield { kind: "usage", costUsd: 0.5, inputTokens: 10, outputTokens: 20 };
                     yield { kind: "done" };
@@ -412,16 +412,35 @@ test("a turn that succeeds is recorded as such, with the experiment metrics it e
  * the ledger used to write the same row for each. The facts that separate them were all being computed and
  * thrown away at turn end: what was edited, what ran after it, what the agent still had open, how full the
  * window was. Folded off the FRAME stream, so a Codex or Cursor turn is judged exactly as a Claude one is. */
-const editFrame = (id: string, path: string) => ({ kind: "tool_call" as const, id, name: "Edit", category: "edit" as const, status: "completed" as const, locations: [{ path }] });
-const checkFrame = (id: string, command: string) => ({ kind: "tool_call" as const, id, name: "Bash", category: "execute" as const, status: "in_progress" as const, target: command });
-const checkResult = (id: string, text: string) => ({ kind: "tool_call_update" as const, id, status: "completed" as const, content: [{ type: "text" as const, text }] });
+const editFrame = (id: string, path: string) => ({
+    kind: "tool_call" as const,
+    id,
+    name: "Edit",
+    category: "edit" as const,
+    status: "completed" as const,
+    locations: [{ path }],
+});
+const checkFrame = (id: string, command: string) => ({
+    kind: "tool_call" as const,
+    id,
+    name: "Bash",
+    category: "execute" as const,
+    status: "in_progress" as const,
+    target: command,
+});
+const checkResult = (id: string, text: string) => ({
+    kind: "tool_call_update" as const,
+    id,
+    status: "completed" as const,
+    content: [{ type: "text" as const, text }],
+});
 
 test("a turn that proved its edits is recorded as verified, naming the check that spoke", async () => {
     const ledger: Record<string, unknown>[] = [];
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield editFrame("1", "/work/src/parser.ts");
                     yield checkFrame("2", "pnpm test src/parser.test.ts");
                     yield checkResult("2", "2 passed\n--- [exit 0, 3s]");
@@ -445,7 +464,7 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield {
                         kind: "todos",
                         items: [
@@ -491,7 +510,7 @@ test("a turn the provider never answered records no verdict at all", async () =>
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "error", code: "claude-not-entitled", message: "not enabled" };
                     yield { kind: "done" };
                 },
@@ -514,7 +533,7 @@ test("the ledger carries the requested model as well as the resolved one", async
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "usage", costUsd: 0.1 };
                     yield { kind: "done" };
                 },
@@ -533,7 +552,7 @@ test("an empty model pick is recorded as no pick at all, not as an empty one", a
     const client = clientFor(
         createApp(
             services({
-                agent: async function* () {
+                async *agent() {
                     yield { kind: "usage", costUsd: 0.1 };
                     yield { kind: "done" };
                 },

@@ -87,7 +87,9 @@ export const enrollKey = async (
                 body: JSON.stringify({ key }),
             });
         } catch (error) {
-            if (attempt >= attempts) throw error;
+            if (attempt >= attempts) {
+                throw error;
+            }
             process.stderr.write(`enrolling the sync key: sandbox tunnel not reachable yet, retrying (${attempt}/${attempts})…\n`);
             await sleep(delayMs);
             continue;
@@ -96,9 +98,7 @@ export const enrollKey = async (
             throw new Error("pairing expired: click 'Enable desktop sync' again in your browser for a fresh command.");
         }
         if (response.status >= 500 && attempt < attempts) {
-            process.stderr.write(
-                `enrolling the sync key: sandbox tunnel warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`,
-            );
+            process.stderr.write(`enrolling the sync key: sandbox tunnel warming up (HTTP ${response.status}), retrying (${attempt}/${attempts})…\n`);
             await sleep(delayMs);
             continue;
         }

@@ -14,7 +14,7 @@
      a second row cost it a corner, and a hint alone on a row of its own reads as a stray control rather
      than as something belonging to the heading beside it. Put anything wider than an icon in the body. -->
 <script setup lang="ts">
-import { type IconName } from "../icons/iconSets.js";
+import type { IconName } from "../icons/iconSets.js";
 
 const { step, icon, title, done = false } = defineProps<{ step?: number; icon?: IconName; title: string; done?: boolean }>();
 </script>

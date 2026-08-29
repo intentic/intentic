@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import type { WorkspaceLink, WorkspaceTreeEntry } from "@intentic-app/api-contract";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { Button, clipboardOf, ConfirmDialog, ContextMenu, type IconName, useExplorerStyle, vAction } from "@intentic/ui";
+import {
+    Button,
+    clipboardOf,
+    ConfirmDialog,
+    ContextMenu,
+    type IconName,
+    useExplorerStyle,
+    vAction,
+    explorerTreatment,
+    iconForEntry,
+} from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, type VNode, watch } from "vue";
 import { useLayout } from "../../composables/useLayout";
@@ -15,7 +25,6 @@ import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
 import { useReceipts } from "../../composables/receipts";
-import { explorerTreatment, iconForEntry } from "@intentic/ui";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { dragOffer } from "./dragSource";
 import { filesToEntries } from "./dropEntries";
@@ -784,7 +793,7 @@ const revealPasted = (dir: string, paths: readonly string[]): void => {
         toggleExpand(dir);
     }
     selection.value = new Set(paths);
-    anchor.value = paths[paths.length - 1] ?? null;
+    anchor.value = paths.at(-1) ?? null;
     lead.value = anchor.value;
 };
 
@@ -881,7 +890,7 @@ const onKeydown = (event: KeyboardEvent): void => {
         }
         event.preventDefault();
     } else if (event.key === `Home` || event.key === `End`) {
-        const next = event.key === `Home` ? order[0] : order[order.length - 1];
+        const next = event.key === `Home` ? order[0] : order.at(-1);
         if (next !== undefined) {
             if (event.shiftKey) {
                 extendTo(next);

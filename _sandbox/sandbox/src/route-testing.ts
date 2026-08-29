@@ -13,10 +13,9 @@ import { createMediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets } from "./auth/ws-tickets.js";
 
 import { createORPCClient } from "@orpc/client";
-import type { AnyContractRouter } from "@orpc/contract";
+import type { AnyContractRouter, ContractRouterClient } from "@orpc/contract";
 import type { AnyRouter } from "@orpc/server";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import type { Hono } from "hono";
 import { afterEach, expect, vi } from "vitest";
@@ -524,17 +523,17 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // Registered but never consulted: with no live turn the gate answers allow, which is what an unwired
         // hook service does anyway.
         cursorHooks: { start: async () => {}, register: () => () => {}, ready: () => false, close: async () => {} },
-        cursorAgent: async function* () {
+        async *cursorAgent() {
             yield { kind: "done" };
         },
         history: fakeHistory(),
-        agent: async function* () {
+        async *agent() {
             yield { kind: "done" };
         },
-        codexAgent: async function* () {
+        async *codexAgent() {
             yield { kind: "done" };
         },
-        grokAgent: async function* () {
+        async *grokAgent() {
             yield { kind: "done" };
         },
         openCode: {
@@ -549,7 +548,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             recordModels: async () => {},
             disconnect: async () => {},
         },
-        intentic: async function* () {},
+        async *intentic() {},
         // Thirty-seven methods, of which the routes below reach a dozen; the rest stay unstubbed and name
         // themselves if a route ever does reach one.
         git: unstubbed("git", {

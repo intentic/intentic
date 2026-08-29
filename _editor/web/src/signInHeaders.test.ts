@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /* THE RESPONSE HEADERS SIGN-IN DEPENDS ON, pinned where they are cheap to check.
@@ -21,7 +20,7 @@ import { describe, expect, it } from "vitest";
  * Scoped to what sign-in needs and nothing else: the rest of that header set is security policy this has no
  * standing to freeze, and a test that pinned all of it would be a second copy of the file. */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const nginxConf = readFileSync(resolve(here, `../nginx.conf`), `utf8`);
 
 // The header lines only: the file explains itself at length, and those comments quote the very values this

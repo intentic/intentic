@@ -39,7 +39,7 @@ export const wireguardDriver: VpnDriver = {
     // wireguard-tools and the resolvconf its DNS= handling shells out to both arrive with the capability's
     // image fragment; wg-quick is the one that must exist to dial.
     missingTool: async () => ((await toolMissing("wg-quick", ["--help"])) ? "wg-quick" : undefined),
-    connect: async function* (id, raw) {
+    async *connect(id, raw) {
         const name = interfaceName(id);
         if (await tunnelUp(name)) {
             yield { kind: "log", message: `${id} is already up on ${name}.` };

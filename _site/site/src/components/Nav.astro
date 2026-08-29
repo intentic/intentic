@@ -174,10 +174,10 @@ const isCurrentPage = (href: string): boolean => bare(href) === bare(currentPath
     }
 
     document.addEventListener("click", (event) => {
-        if (!(event.target as Element | null)?.closest("[data-menu]")) menus.forEach(close);
+        if (!(event.target as Element | null)?.closest("[data-menu]")) {menus.forEach(close);}
     });
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") menus.forEach(close);
+        if (event.key === "Escape") {menus.forEach(close);}
     });
 
     /* The lift. Every page opens with the plate behind the bar, so the bar starts with no ground of its

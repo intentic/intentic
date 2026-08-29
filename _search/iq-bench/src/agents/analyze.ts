@@ -312,6 +312,6 @@ export const analyze = (args: string[]): void => {
         return { record, analytics: analyzeEvents(toolEvents(readFileSync(path, "utf8"))) };
     });
     const report = renderAnalytics(runs);
-    writeFileSync(join(dir, "analytics.md"), report + "\n");
+    writeFileSync(join(dir, "analytics.md"), `${report}\n`);
     console.log(`${report}\nwritten: ${join(dir, "analytics.md")}`);
 };

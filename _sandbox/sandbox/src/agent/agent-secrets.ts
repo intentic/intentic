@@ -71,9 +71,9 @@ export const resolveCommandSecrets = async (command: string, secrets: SecretAcce
     if (unknown.length > 0) {
         const known = registry.map((secret) => secret.name);
         return {
-            refusal:
-                `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ` +
-                (known.length === 0 ? "nothing is stored yet; ask the owner to add it on the Secrets view" : `stored names: ${known.join(", ")}`),
+            refusal: `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ${
+                known.length === 0 ? "nothing is stored yet; ask the owner to add it on the Secrets view" : `stored names: ${known.join(", ")}`
+            }`,
         };
     }
     for (const name of used) {

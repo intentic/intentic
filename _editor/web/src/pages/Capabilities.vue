@@ -8,7 +8,7 @@ import {
     type CapabilityEffect,
     capabilityEffects,
 } from "@intentic-app/capability-catalog";
-import { type CapabilityProbe, type CapabilityRecommendation, type CapabilitySummary } from "@intentic-app/api-contract";
+import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic-app/api-contract";
 import {
     BrandMark,
     Button,
@@ -25,7 +25,7 @@ import {
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { type CapabilityField, contributionDiscriminator } from "@intentic/extension-manifest";
-import { type CapabilityKind, type ForticlientConnection } from "@intentic/sandbox-contract";
+import type { CapabilityKind, ForticlientConnection } from "@intentic/sandbox-contract";
 import { type ComputedRef, computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
@@ -629,13 +629,7 @@ const openConnect = (instance: CapabilitySummary): void => {
  * that may not even be this one, so the flow is a code they paste into the extension rather than a command.
  * `install` comes off the card itself, since where an extension is installed from is the one thing a browser
  * family genuinely differs in. */
-const {
-    browserFor,
-    revoke: revokeBrowser,
-    refresh: refreshBrowsers,
-    start: startBrowsers,
-    stop: stopBrowsers,
-} = useWebExtConnect();
+const { browserFor, revoke: revokeBrowser, refresh: refreshBrowsers, start: startBrowsers, stop: stopBrowsers } = useWebExtConnect();
 const browserConnectVisible = ref(false);
 const browserConnectId = ref(``);
 const browserInstall = ref(``);

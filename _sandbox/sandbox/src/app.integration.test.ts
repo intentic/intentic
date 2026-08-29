@@ -562,7 +562,7 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
                         return undefined;
                     },
                 }),
-                agent: async function* () {
+                async *agent() {
                     yield* events;
                 },
             }),
@@ -590,7 +590,7 @@ test("agent.run resolves the oauth token from the sandbox store (not the body) a
                     clear: async () => {},
                     list: async () => [{ id: "default", label: "Claude", connectedAt: 0 }],
                 },
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -617,7 +617,7 @@ test("agent.run selects the Claude account named on the turn and forwards its to
                         { id: "b", label: "personal", connectedAt: 2 },
                     ],
                 },
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -635,7 +635,7 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
             services({
                 config: withTranslator,
                 cliProxy: codexConnectedProxy,
-                codexAgent: async function* (request) {
+                async *codexAgent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -655,7 +655,7 @@ test("agent.run gates a Codex turn with no subscription and no api key as subscr
         createApp(
             services({
                 config: withTranslator,
-                codexAgent: async function* () {
+                async *codexAgent() {
                     codexCalled = true;
                     yield { kind: "done" };
                 },
@@ -691,11 +691,11 @@ test("agent.run sends a Gemini turn to the native runtime even when the Claude C
                     disconnect: async () => {},
                     models: async () => [],
                 },
-                agent: async function* () {
+                async *agent() {
                     claudeCodeCalled = true;
                     yield { kind: "done" };
                 },
-                geminiAgent: async function* () {
+                async *geminiAgent() {
                     nativeCalled = true;
                     yield { kind: "done" };
                 },
@@ -723,7 +723,7 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
                     disconnect: async () => {},
                     models: async () => [{ id: "kimi-k3", label: "Kimi K3" }],
                 },
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -765,7 +765,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and drops 
                             default: models[0]!,
                         }),
                     },
-                    geminiAgent: async function* (request) {
+                    async *geminiAgent(request) {
                         seen = request;
                         yield { kind: "done" };
                     },
@@ -790,7 +790,7 @@ test("agent.run gates a Gemini turn with no Google account connected", async () 
         createApp(
             services({
                 config: withTranslator,
-                geminiAgent: async function* () {
+                async *geminiAgent() {
                     nativeCalled = true;
                     yield { kind: "done" };
                 },
@@ -829,11 +829,11 @@ test("agent.run sends a Gemini turn with no harness to the native OpenCode runti
                     disconnect: async () => {},
                     models: async () => [],
                 },
-                agent: async function* () {
+                async *agent() {
                     claudeCodeCalled = true;
                     yield { kind: "done" };
                 },
-                geminiAgent: async function* () {
+                async *geminiAgent() {
                     nativeCalled = true;
                     yield { kind: "done" };
                 },
@@ -856,7 +856,7 @@ test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather th
                 config: withTranslator,
                 cliProxy: codexConnectedProxy,
                 codexThreadExists: async () => false,
-                codexAgent: async function* (request) {
+                async *codexAgent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -890,7 +890,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                         recordModels: async () => {},
                         disconnect: async () => {},
                     },
-                    grokAgent: async function* (request) {
+                    async *grokAgent(request) {
                         seen.push(request.model);
                         yield { kind: "done" };
                     },
@@ -912,7 +912,7 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
                 capabilities: memoryCapabilitiesStore([
                     { id: "linear", kind: "mcp", config: { url: "https://mcp.linear.app/sse", token: "external" } },
                 ]),
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -963,7 +963,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
         createApp(
             services({
                 claudeStore: { read: async () => undefined, write: async () => {}, clear: async () => {}, list: async () => [] },
-                agent: async function* () {
+                async *agent() {
                     agentCalled = true;
                     yield { kind: "done" };
                 },
@@ -998,7 +998,7 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
                     search: async () => [],
                     exists: async () => false,
                 },
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -1032,7 +1032,7 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -1061,7 +1061,7 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     seen = request;
                     yield { kind: "done" };
                 },
@@ -1092,7 +1092,7 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     const client = clientFor(
         createApp(
             services({
-                agent: async function* (request) {
+                async *agent(request) {
                     request.signal.addEventListener("abort", () => abort?.(), { once: true });
                     started?.();
                     await aborted;

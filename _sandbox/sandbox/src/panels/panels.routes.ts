@@ -1,11 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { ARTIFACT_FILE, CONFIG_FILE } from "@intentic/scaffold";
+import { ARTIFACT_FILE, CONFIG_FILE, REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import { panelsContract, previewLabel, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
-import { REPO_ROLES, type RepoRole } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { resolvePanelUpstream } from "./panel-upstream.js";

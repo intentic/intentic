@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
 export type IconRailSize = "compact" | "comfortable";

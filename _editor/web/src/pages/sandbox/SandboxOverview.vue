@@ -73,8 +73,12 @@ const logo = computed(() => sandbox.active.value?.image ?? undefined);
 const avatarLetter = computed(() => (editing.value ? name.value : (sandbox.active.value?.name ?? ``)).trim().charAt(0));
 const nameError = computed<string | undefined>(() => {
     const trimmed = name.value.trim();
-    if (trimmed.length === 0) return `Name is required.`;
-    if (trimmed.length > 60) return `Name must be 60 characters or fewer.`;
+    if (trimmed.length === 0) {
+        return `Name is required.`;
+    }
+    if (trimmed.length > 60) {
+        return `Name must be 60 characters or fewer.`;
+    }
     return undefined;
 });
 const canSave = computed(() => {
@@ -85,11 +89,21 @@ const canSave = computed(() => {
 // The single line under the title, present in every state so nothing can grow or shrink beneath it: the
 // sandbox's status when idle, the rename hint while editing, and errors (from either control) in place of both.
 const subline = computed<{ text: string; tone: string }>(() => {
-    if (error.value !== undefined) return { text: error.value, tone: `text-danger` };
-    if (editing.value && nameTouched.value && nameError.value !== undefined) return { text: nameError.value, tone: `text-danger` };
-    if (editing.value) return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
-    if (availability.value === `busy`) return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
-    if (availability.value === `starting` || availability.value === `warming`) return { text: `Getting the workspace ready…`, tone: `text-muted` };
+    if (error.value !== undefined) {
+        return { text: error.value, tone: `text-danger` };
+    }
+    if (editing.value && nameTouched.value && nameError.value !== undefined) {
+        return { text: nameError.value, tone: `text-danger` };
+    }
+    if (editing.value) {
+        return { text: `Enter saves · Esc cancels.`, tone: `text-muted` };
+    }
+    if (availability.value === `busy`) {
+        return { text: `The sandbox is busy, live actions resume automatically.`, tone: `text-muted` };
+    }
+    if (availability.value === `starting` || availability.value === `warming`) {
+        return { text: `Getting the workspace ready…`, tone: `text-muted` };
+    }
     return { text: ``, tone: `text-muted` };
 });
 

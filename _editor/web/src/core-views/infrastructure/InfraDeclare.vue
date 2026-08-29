@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
-import { type InventoryEntry } from "@intentic-app/api-contract";
+import type { InventoryEntry } from "@intentic-app/api-contract";
 import { Button, Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";

@@ -187,7 +187,7 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
         if (options.transcripts !== undefined) {
             await mkdir(options.transcripts, { recursive: true });
             const name = `${task.id.replace(/[^a-z0-9]+/gi, "-")}-${arm.name}-${index}.jsonl`;
-            await writeFile(join(options.transcripts, name), frames.map((frame) => JSON.stringify(frame)).join("\n") + "\n");
+            await writeFile(join(options.transcripts, name), `${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`);
         }
         return {
             task: task.id,

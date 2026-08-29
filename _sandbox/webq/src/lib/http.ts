@@ -91,7 +91,7 @@ const decode = (bytes: Uint8Array, contentType: string): string => {
     const headerCharset = /charset=["']?([\w-]+)/i.exec(contentType)?.[1];
     const sniffed = headerCharset ?? sniffMetaCharset(bytes);
     try {
-        return new TextDecoder(sniffed ?? "utf-8", { fatal: false }).decode(bytes);
+        return new TextDecoder(sniffed ?? "utf8", { fatal: false }).decode(bytes);
     } catch {
         return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
     }

@@ -83,7 +83,7 @@ it(`follows growth while parked at the bottom, and leaves a reader who scrolled 
     const box = geometry(scroller, 1000, 400);
     await nextTick();
 
-    const observed = observers[observers.length - 1] as FakeObserver;
+    const observed = observers.at(-1) as FakeObserver;
     box.scrollHeight = 1400;
     observed.fire();
     expect(scroller.scrollTop).toBe(1000);

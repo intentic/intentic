@@ -1,0 +1,70 @@
+{
+    // THE AUTHORING STANDARD PLUS anti-slop. Separate from agent.oxlintrc.json for one reason only: it needs
+    // `@oxlint/plugins` in the tree, and that dependency is not installed yet. Everything else about it is the
+    // same standard.
+    //
+    // NOT YET LIVE. To turn it on:
+    //   1. pnpm-workspace.yaml catalog:  "@oxlint/plugins": 1.76.0   (must match the `oxlint` pin exactly —
+    //      the JS plugin ABI is explicitly not semver-stable, and a mismatched pair fails at config-load time)
+    //   2. root package.json devDependencies:  "@oxlint/plugins": "catalog:"
+    //   3. pnpm install
+    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of agent.oxlintrc.json
+    //
+    // Until step 4 the rules below are vendored, configured and unrun. Measure them before wiring the hook to
+    // them: `pnpm lint:slop` over the repo says how big the backlog is, and the answer decides whether these
+    // land as errors or as the next ratchet entry.
+    "$schema": "../../node_modules/oxlint/configuration_schema.json",
+    "extends": ["./agent.oxlintrc.json"],
+    "jsPlugins": [{ "name": "anti-slop", "specifier": "./anti-slop/index.ts" }],
+    "rules": {
+        // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
+        // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has
+        // thrown away the evidence that it is correct — the shape a model reaches for when it does not know
+        // something and needs the compiler to stop asking.
+        //
+        // `as unknown as T` — laundering. Discards every piece of evidence the checker had.
+        "anti-slop/no-chained-type-assertions": "error",
+        // Widen a known value, then assert it back. The round trip exists to silence the checker.
+        "anti-slop/no-widen-then-assert": "error",
+        "anti-slop/no-known-value-widening": "error",
+        // `unknown` in a signature is the other escape hatch once `no-explicit-any` closes the first. Closing
+        // one alone just moves the traffic, which is why both are on.
+        "anti-slop/no-unknown-parameters": "error",
+        "anti-slop/no-unknown-returns": "error",
+        "anti-slop/no-unknown-type-aliases": "error",
+        "anti-slop/no-unsafe-dictionary-type": "error",
+        "anti-slop/no-object-parameters": "error",
+        // The rule that pays for the whole set: an assertion is allowed, but it has to say what invariant
+        // makes it safe. That turns an unanswerable "prove this cast" into something an agent can actually
+        // do, and leaves a reviewable trail where it could not.
+        "anti-slop/require-safety-comment-for-type-assertion": "error",
+        // Ad-hoc `typeof` narrowing instead of parsing at the boundary. `allowInTypeGuards` is on because a
+        // declared type guard is the sanctioned place for exactly this, and because unicorn/no-typeof-undefined
+        // already owns (and autofixes) the `typeof x === "undefined"` case — two rules rewriting one line in
+        // different directions is how a fix loop starts oscillating.
+        "anti-slop/no-runtime-typeof": ["error", { "allowInTypeGuards": true }],
+        // Reflect.get/apply defeat typed member access for no gain. Zero hits here; on to keep it that way.
+        "anti-slop/no-reflect-get": "error",
+        "anti-slop/no-reflect-apply": "error",
+        "anti-slop/no-shape-in-symbol-names": "error",
+        "anti-slop/no-conditional-empty-object-spread": "error",
+
+        // NOT enabled: upstream rejects vi.mock outright in favour of real dependency seams. That is a
+        // coherent position and not this repo's — 461 call sites across the suites disagree with it, and a
+        // rule that would fire on all of them is not a standard, it is a rewrite of the testing architecture
+        // filed as a lint rule.
+        "anti-slop/no-module-mocking": "off"
+    },
+    "overrides": [
+        {
+            // anti-slop's type rules are about production contracts. A test signature that takes `unknown` is
+            // usually the test doing its job — handing a deliberately wrong shape to the code under test.
+            "files": ["**/*.test.ts", "**/*.integration.test.ts", "**/*.spec.ts"],
+            "rules": {
+                "anti-slop/no-unknown-parameters": "off",
+                "anti-slop/no-object-parameters": "off",
+                "anti-slop/no-unsafe-dictionary-type": "off"
+            }
+        }
+    ]
+}

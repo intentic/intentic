@@ -79,10 +79,10 @@ const servicesWith = (overrides: Partial<Services> = {}): Services =>
          * or not it goes on to run. Grok's own gate reads the same method and overrides it with the same
          * answer: one seam, asked by two callers, which is why it belongs in the shared fixture. */
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => false }),
-        codexAgent: async function* () {},
-        grokAgent: async function* () {},
-        agent: async function* () {},
-        acpAgent: async function* () {},
+        async *codexAgent() {},
+        async *grokAgent() {},
+        async *agent() {},
+        async *acpAgent() {},
         ...overrides,
     });
 

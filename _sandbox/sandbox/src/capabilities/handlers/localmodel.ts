@@ -585,7 +585,7 @@ export const localModelHandler: CapabilityHandler = {
         const cuda = await packFragment("llamacpp-cuda");
         return [engine, cuda, GPU_DIRECTIVE].filter((part) => part !== undefined).join("\n");
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const model = config as LocalModelConfig;
         const source = localModelSource(model);
         if (source === undefined) {

@@ -128,7 +128,9 @@ export function bookDestinations(book: Book): { label: string; href: string; des
 export function bookNeighbours(book: Book, id: string): { section?: BookSection; prev?: BookPage; next?: BookPage } {
     const placements = bookPlacements(book);
     const placement = placements.find((entry) => entry.page.id === id);
-    if (placement === undefined) return {};
+    if (placement === undefined) {
+        return {};
+    }
     const shelf = placements.filter((entry) => entry.section === placement.section).map((entry) => entry.page);
     const index = shelf.findIndex((page) => page.id === id);
     return { section: placement.section, prev: shelf[index - 1], next: shelf[index + 1] };

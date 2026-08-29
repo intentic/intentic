@@ -1,7 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 /* The small Chrome Web Store promotional tile.
  *
@@ -13,7 +12,7 @@ import { fileURLToPath } from "node:url";
  *   node _computers/webext/scripts/render-store-assets.mjs
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const workspace = join(here, "..", "..", "..");
 const out = join(here, "..", "assets", "store");
 const ornaments = join(workspace, "_site/site/src/components/ornaments.ts");

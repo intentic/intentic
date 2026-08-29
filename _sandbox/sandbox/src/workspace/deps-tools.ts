@@ -61,9 +61,10 @@ const line = (status: ProjectSetupStatus, canInstall: boolean): string => {
 };
 
 const standingRule = (canInstall: boolean): string =>
-    "Never run a dependency install yourself from inside a turn: it writes to a scratch layer that is discarded when " +
-    "the conversation ends, and it rewrites the dependency tree other live conversations are reading. " +
-    (canInstall ? "Use `mcp__deps__install`." : "This persona cannot request one; ask the owner.");
+    `Never run a dependency install yourself from inside a turn: it writes to a scratch layer that is discarded when ` +
+    `the conversation ends, and it rewrites the dependency tree other live conversations are reading. ${
+        canInstall ? "Use `mcp__deps__install`." : "This persona cannot request one; ask the owner."
+    }`;
 
 export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInstance =>
     createSdkMcpServer({
@@ -71,10 +72,9 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
         tools: [
             tool(
                 "status",
-                "Whether each project under /work actually has its declared dependencies installed. Call this when an import " +
-                    "will not resolve, a test fails on a missing module, or before you trust a type-check: it tells you whether " +
-                    "the failure is your code or an install that is behind. " +
-                    standingRule(deps.canInstall),
+                `Whether each project under /work actually has its declared dependencies installed. Call this when an import ` +
+                    `will not resolve, a test fails on a missing module, or before you trust a type-check: it tells you whether ` +
+                    `the failure is your code or an install that is behind. ${standingRule(deps.canInstall)}`,
                 {},
                 async () => {
                     const projects = await deps.dependencies.status();

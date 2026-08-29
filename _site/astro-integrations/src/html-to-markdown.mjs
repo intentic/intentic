@@ -92,11 +92,16 @@ function findTagEnd(html, from) {
     for (let i = from; i < html.length; i++) {
         const ch = html[i];
         if (quote) {
-            if (ch === quote) quote = "";
+            if (ch === quote) {
+                quote = "";
+            }
             continue;
         }
-        if (ch === '"' || ch === "'") quote = ch;
-        else if (ch === ">") return i;
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+        } else if (ch === ">") {
+            return i;
+        }
     }
     return html.length;
 }
@@ -124,10 +129,14 @@ export function parseHtml(html) {
     while (i < html.length) {
         const lt = html.indexOf("<", i);
         if (lt === -1) {
-            if (i < html.length) stack[stack.length - 1].children.push({ type: "text", value: html.slice(i) });
+            if (i < html.length) {
+                stack.at(-1).children.push({ type: "text", value: html.slice(i) });
+            }
             break;
         }
-        if (lt > i) stack[stack.length - 1].children.push({ type: "text", value: html.slice(i, lt) });
+        if (lt > i) {
+            stack.at(-1).children.push({ type: "text", value: html.slice(i, lt) });
+        }
 
         if (html.startsWith("<!--", lt)) {
             const end = html.indexOf("-->", lt);
@@ -163,10 +172,12 @@ export function parseHtml(html) {
         const selfClosing = inner.trimEnd().endsWith("/");
         /** @type {Node} */
         const node = { type: "el", tag, attrs: parseAttrs(inner.slice(nameMatch[1].length)), children: [] };
-        stack[stack.length - 1].children.push(node);
+        stack.at(-1).children.push(node);
         i = end + 1;
 
-        if (VOID_TAGS.has(tag) || selfClosing) continue;
+        if (VOID_TAGS.has(tag) || selfClosing) {
+            continue;
+        }
 
         if (RAW_TEXT_TAGS.has(tag)) {
             const close = html.toLowerCase().indexOf(`</${tag}`, i);
@@ -186,14 +197,19 @@ export function parseHtml(html) {
 function rawText(nodes) {
     let out = "";
     for (const node of nodes) {
-        if (node.type === "text") out += decodeEntities(node.value);
-        else if (!RAW_TEXT_TAGS.has(node.tag)) out += rawText(node.children);
+        if (node.type === "text") {
+            out += decodeEntities(node.value);
+        } else if (!RAW_TEXT_TAGS.has(node.tag)) {
+            out += rawText(node.children);
+        }
     }
     return out;
 }
 
 function absolutize(url, origin) {
-    if (!url) return url;
+    if (!url) {
+        return url;
+    }
     return url.startsWith("/") ? `${origin}${url}` : url;
 }
 
@@ -206,7 +222,9 @@ function asBlock(body) {
 function renderList(node, ctx) {
     const ordered = node.tag === "ol";
     const items = node.children.filter((child) => child.type === "el" && child.tag === "li");
-    if (items.length === 0) return "";
+    if (items.length === 0) {
+        return "";
+    }
     const lines = items.map((item, index) => {
         const marker = ordered ? `${index + 1}. ` : "- ";
         const body = renderNodes(item.children, ctx).trim();
@@ -221,18 +239,24 @@ function renderTable(node, ctx) {
     const rows = [];
     const collect = (nodes) => {
         for (const child of nodes) {
-            if (child.type !== "el") continue;
+            if (child.type !== "el") {
+                continue;
+            }
             if (child.tag === "tr") {
                 rows.push(
                     child.children
                         .filter((cell) => cell.type === "el" && (cell.tag === "td" || cell.tag === "th"))
                         .map((cell) => renderNodes(cell.children, ctx).replace(/\s+/g, " ").trim()),
                 );
-            } else collect(child.children);
+            } else {
+                collect(child.children);
+            }
         }
     };
     collect(node.children);
-    if (rows.length === 0) return "";
+    if (rows.length === 0) {
+        return "";
+    }
     const [head, ...body] = rows;
     const lines = [`| ${head.join(" | ")} |`, `| ${head.map(() => "---").join(" | ")} |`, ...body.map((row) => `| ${row.join(" | ")} |`)];
     return `\n\n${lines.join("\n")}`;
@@ -243,7 +267,9 @@ function renderNode(node, ctx) {
         // Astro's formatter breaks prose across source lines; collapse it back to one paragraph.
         return decodeEntities(node.value).replace(/\s+/g, " ");
     }
-    if (DROPPED_TAGS.has(node.tag) || node.attrs["aria-hidden"] === "true" || node.attrs.hidden !== undefined) return "";
+    if (DROPPED_TAGS.has(node.tag) || node.attrs["aria-hidden"] === "true" || node.attrs.hidden !== undefined) {
+        return "";
+    }
 
     switch (node.tag) {
         case "h1":
@@ -268,7 +294,9 @@ function renderNode(node, ctx) {
             return renderTable(node, ctx);
         case "pre": {
             const code = rawText(node.children).replace(/\n+$/, "");
-            if (!code.trim()) return "";
+            if (!code.trim()) {
+                return "";
+            }
             const lang = node.attrs["data-language"] ?? findLanguage(node.children) ?? "";
             return `\n\n\`\`\`${lang}\n${code}\n\`\`\``;
         }
@@ -289,7 +317,9 @@ function renderNode(node, ctx) {
         case "a": {
             const text = renderNodes(node.children, ctx).replace(/\s+/g, " ").trim();
             const href = node.attrs.href;
-            if (!text) return "";
+            if (!text) {
+                return "";
+            }
             return href ? `[${text}](${absolutize(href, ctx.origin)})` : text;
         }
         case "img": {
@@ -314,7 +344,9 @@ function renderNode(node, ctx) {
             return text ? `\n\n*${text}*` : "";
         }
         default: {
-            if (BLOCK_TAGS.has(node.tag)) return asBlock(renderNodes(node.children, ctx));
+            if (BLOCK_TAGS.has(node.tag)) {
+                return asBlock(renderNodes(node.children, ctx));
+            }
             // An unrecognised inline container is almost always a chip or a label in a diagram, and those
             // sit flush against each other in the markup. Without a separator "Sandbox rules" and
             // "AI oversight" come out as one word. The trailing whitespace collapse tidies up the rest.
@@ -326,17 +358,25 @@ function renderNode(node, ctx) {
 
 function findLanguage(nodes) {
     for (const node of nodes) {
-        if (node.type !== "el") continue;
-        if (node.attrs["data-language"]) return node.attrs["data-language"];
+        if (node.type !== "el") {
+            continue;
+        }
+        if (node.attrs["data-language"]) {
+            return node.attrs["data-language"];
+        }
         const found = findLanguage(node.children);
-        if (found) return found;
+        if (found) {
+            return found;
+        }
     }
     return undefined;
 }
 
 function renderNodes(nodes, ctx) {
     let out = "";
-    for (const node of nodes) out += renderNode(node, ctx);
+    for (const node of nodes) {
+        out += renderNode(node, ctx);
+    }
     return out;
 }
 

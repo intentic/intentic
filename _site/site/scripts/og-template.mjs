@@ -45,9 +45,15 @@ export function ogFonts() {
  */
 function eyebrowFor(pathname) {
     const p = `/${pathname.replace(/^\/+/, "").replace(/\/+$/, "")}`;
-    if (p.startsWith("/docs")) return "Documentation";
-    if (p.startsWith("/product")) return "The product";
-    if (p === "/faq") return "FAQ";
+    if (p.startsWith("/docs")) {
+        return "Documentation";
+    }
+    if (p.startsWith("/product")) {
+        return "The product";
+    }
+    if (p === "/faq") {
+        return "FAQ";
+    }
     return "intentic";
 }
 

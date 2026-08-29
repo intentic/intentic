@@ -126,7 +126,7 @@ export const blockByName = (relPath: string): PublicBlock | undefined => {
     if (segments.some((segment) => segment.startsWith("."))) {
         return "hidden";
     }
-    const name = segments[segments.length - 1] ?? "";
+    const name = segments.at(-1) ?? "";
     return CREDENTIAL_NAMES.test(name) || CREDENTIAL_EXTS.has(extname(name).toLowerCase()) ? "credential-name" : undefined;
 };
 

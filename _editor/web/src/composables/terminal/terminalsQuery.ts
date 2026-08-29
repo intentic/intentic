@@ -1,4 +1,5 @@
-import { TerminalSessionSchema, TerminalsListSchema } from "@intentic-app/api-contract";
+import type { TerminalSessionSchema } from "@intentic-app/api-contract";
+import { TerminalsListSchema } from "@intentic-app/api-contract";
 import { computed, type ComputedRef, ref } from "vue";
 import type { z } from "zod";
 import { queryClient } from "../queryPersistence";
@@ -30,8 +31,7 @@ export const terminalsKey = TERMINALS.of();
 
 export type TerminalSession = z.infer<typeof TerminalSessionSchema>;
 
-export const fetchTerminals = async (): Promise<TerminalSession[]> =>
-    TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions;
+export const fetchTerminals = async (): Promise<TerminalSession[]> => TerminalsListSchema.parse(await sandboxJson(`/system/terminals`)).sessions;
 
 // A read at most this old counts as current. The panel relists in reaction to the shared entry's own poll, so
 // without a freshness window every arriving poll would echo one redundant request back at the daemon. Mutations

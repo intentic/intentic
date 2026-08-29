@@ -13,7 +13,6 @@ import {
     writeSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { extensionUiNames } from "../names.mjs";
 
 /* Builds the PUBLISHED @intentic/extension-ui: the artifact an author outside this monorepo compiles against.
@@ -51,7 +50,7 @@ import { extensionUiNames } from "../names.mjs";
  * correctness of a published artifact rests on.
  */
 
-const HERE = dirname(fileURLToPath(import.meta.url));
+const HERE = import.meta.dirname;
 const PKG = resolve(HERE, "..");
 const EDITOR = resolve(PKG, "..");
 const STAGING = join(PKG, ".types-staging");

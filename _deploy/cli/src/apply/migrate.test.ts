@@ -49,9 +49,15 @@ test("detectHostMoves ignores an unchanged address, a new id, a removed id, and 
 // Records every exec by the host it ran on, plus each SFTP transfer, so a test can assert the migration drove
 // the right commands on the old vs new machine.
 const respond = (command: string): SshResult => {
-    if (command.includes("name=^intentic-backup$")) return { stdout: "intentic-backup", stderr: "", code: 0 };
-    if (command.includes("label=intentic.id")) return { stdout: "intentic-forgejo\nintentic-backup", stderr: "", code: 0 };
-    if (command.includes("project=komodo")) return { stdout: "komodo-core-1", stderr: "", code: 0 };
+    if (command.includes("name=^intentic-backup$")) {
+        return { stdout: "intentic-backup", stderr: "", code: 0 };
+    }
+    if (command.includes("label=intentic.id")) {
+        return { stdout: "intentic-forgejo\nintentic-backup", stderr: "", code: 0 };
+    }
+    if (command.includes("project=komodo")) {
+        return { stdout: "komodo-core-1", stderr: "", code: 0 };
+    }
     return { stdout: "", stderr: "", code: 0 };
 };
 

@@ -102,7 +102,9 @@ export function assertNoCodeBleed(html: string, pageId: string): void {
             continue;
         }
         depth += match[1] === "/" ? -1 : 1;
-        if (depth < 0) depth = 0;
+        if (depth < 0) {
+            depth = 0;
+        }
     }
 }
 
@@ -118,11 +120,15 @@ export function extractDocsContent(html: string): DocsContent {
     // Attributes are captured so an authored `id` survives and a classed heading can be recognised and skipped.
     const processed = html.replace(/<h([23])([^>]*)>([\s\S]*?)<\/h\1>/g, (whole, rawLevel: string, attrs: string, inner: string) => {
         // Furniture inside a card or panel, not a section of this page.
-        if (/\sclass=/.test(attrs)) return whole;
+        if (/\sclass=/.test(attrs)) {
+            return whole;
+        }
 
         const level = Number(rawLevel) as 2 | 3;
         const text = plainText(inner);
-        if (text === "") return whole;
+        if (text === "") {
+            return whole;
+        }
 
         const authored = /\sid="([^"]*)"/.exec(attrs)?.[1];
         let id = authored ?? slugify(text);
@@ -130,7 +136,9 @@ export function extractDocsContent(html: string): DocsContent {
         // reachable rather than the first silently swallowing the link.
         if (used.has(id)) {
             let suffix = 2;
-            while (used.has(`${id}-${suffix}`)) suffix += 1;
+            while (used.has(`${id}-${suffix}`)) {
+                suffix += 1;
+            }
             id = `${id}-${suffix}`;
         }
         used.add(id);

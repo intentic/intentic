@@ -46,7 +46,9 @@ const desktopDevRoutes = {
         server.middlewares.use((request, response, next) => {
             const pathname = new URL(request.url ?? "/", "http://localhost").pathname.replace(/\/$/u, "");
             const route = DESKTOP_ROUTES[pathname];
-            if (route === undefined) return next();
+            if (route === undefined) {
+                return next();
+            }
 
             const staged = new URL(`./public/desktop/${route.staged}`, import.meta.url);
             if (existsSync(staged)) {
@@ -110,7 +112,9 @@ export default defineConfig({
                           ws: true,
                           configure: (proxy) => {
                               proxy.on("error", (_error, _request, response) => {
-                                  if (!("writeHead" in response)) return;
+                                  if (!("writeHead" in response)) {
+                                      return;
+                                  }
                                   response.writeHead(503, { "content-type": "text/html; charset=utf-8" });
                                   response.end(
                                       `<!doctype html><meta charset="utf-8"><title>Demo not running</title>` +
@@ -141,7 +145,9 @@ export default defineConfig({
                     item.changefreq = "weekly";
                 }
                 const lastmod = lastModForUrl(item.url);
-                if (lastmod) item.lastmod = lastmod;
+                if (lastmod) {
+                    item.lastmod = lastmod;
+                }
                 return item;
             },
         }),

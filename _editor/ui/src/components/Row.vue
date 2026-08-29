@@ -36,7 +36,7 @@
      Rounding is deliberately NOT a prop: it is the container's business, and Vue's fallthrough puts it one
      `class="rounded-md"` away for the rails that want it. -->
 <script setup lang="ts">
-import { type IconName } from "../icons/iconSets.js";
+import type { IconName } from "../icons/iconSets.js";
 import Icon from "./Icon.vue";
 import { ROW_TIERS as TIERS, ROW_TONES as TONES, type RowDensity, type RowTone } from "./row.js";
 

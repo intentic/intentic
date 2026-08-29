@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract";
-import { Button, timeAgo, vAction } from "@intentic/ui";
+import { Button, timeAgo, vAction, ui, SegmentedControl, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { ui, SegmentedControl, StatusBadge } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import ActionLink from "../../components/ActionLink.vue";
 import { startAgent } from "../../composables/agents/agentActions";

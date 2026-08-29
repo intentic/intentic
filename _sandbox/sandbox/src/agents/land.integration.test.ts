@@ -740,7 +740,7 @@ test("the card's diffstat counts the agent's own work, not the main line it sync
 test("after merging main into the branch, land measures from the merge-base, not the stale landedTip", async () => {
     const { work, worktrees, conversation } = await setup();
     const lines = (...replaced: [number, string][]): string =>
-        ["one", "two", "three", "four", "five", "six", "seven"].map((word, at) => replaced.find(([i]) => i === at)?.[1] ?? word).join("\n") + "\n";
+        `${["one", "two", "three", "four", "five", "six", "seven"].map((word, at) => replaced.find(([i]) => i === at)?.[1] ?? word).join("\n")}\n`;
     await writeFile(join(work, "long.ts"), lines());
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "long file");

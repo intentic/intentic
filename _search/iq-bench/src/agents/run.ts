@@ -135,7 +135,7 @@ export const agents = async (args: string[]): Promise<void> => {
                 caps: { maxTurns: task.caps.maxTurns, timeoutMs },
             };
             records.push(record);
-            appendFileSync(runsPath, JSON.stringify(record) + "\n");
+            appendFileSync(runsPath, `${JSON.stringify(record)}\n`);
             spent += result.costUsd ?? 0;
             const cost = result.costUsd === undefined ? "" : `, $${result.costUsd.toFixed(3)}`;
             console.log(
@@ -146,6 +146,6 @@ export const agents = async (args: string[]): Promise<void> => {
         }
     }
     const report = renderAgentsReport(records);
-    writeFileSync(join(outDir, "summary.md"), report + "\n");
+    writeFileSync(join(outDir, "summary.md"), `${report}\n`);
     console.log(`\n${report}\n\nresults: ${outDir}`);
 };

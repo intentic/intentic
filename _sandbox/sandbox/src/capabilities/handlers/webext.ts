@@ -41,7 +41,7 @@ export const webextHandler: CapabilityHandler = {
             await removeLoadedSkill(ctx.files, ctx.workspace.root, from);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const browser = config as WebExtConfig;
         const contribution = (await contributionRegistry(hostOf(ctx))).get(contributionKey("webext", browser.platform));
         if (contribution === undefined) {

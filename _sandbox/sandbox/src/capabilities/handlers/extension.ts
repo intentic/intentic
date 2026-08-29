@@ -54,7 +54,7 @@ export const extensionHandler: CapabilityHandler = {
             await ctx.files.move(previousDir(root, from), previousDir(root, to)).catch(() => undefined);
         },
     },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const { url, ref, path, token, tier } = config as ExtensionConfig;
         const session = capabilityJobSession(id);
         if (ctx.terminalRun.visible) {

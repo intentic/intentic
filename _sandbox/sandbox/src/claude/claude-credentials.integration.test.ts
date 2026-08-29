@@ -215,7 +215,11 @@ test("an invalid_grant marks the account revoked instead of retrying the dead to
 
 test("a transient refresh failure propagates and leaves the credential alone", async () => {
     const store = memoryStore(stored({ accessToken: "stale", refreshToken: "r1", expiresAt: Date.now() - 1000 }));
-    await expect(ensureFreshToken(store, "a", async () => Promise.reject(new TokenRequestError(503, "upstream")))).rejects.toThrow("503");
+    await expect(
+        ensureFreshToken(store, "a", async () => {
+            throw new TokenRequestError(503, "upstream");
+        }),
+    ).rejects.toThrow("503");
     expect(store.current()?.revokedAt).toBeUndefined();
     expect(store.current()?.refreshToken).toBe("r1");
 });

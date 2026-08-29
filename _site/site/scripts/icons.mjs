@@ -25,12 +25,11 @@
  * So all three ship, and this script is the one place their geometry is decided.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import sharp from "sharp";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const ORNAMENTS = join(here, "../src/components/ornaments.ts");
 const PUBLIC = join(here, "../public");
 
@@ -42,9 +41,13 @@ const EMBER = "#e07b27";
  * literal holding a whole <svg>; what is wanted is the paths inside it and the viewBox it is drawn on. */
 const kit = await readFile(ORNAMENTS, "utf8");
 const lotusSvg = /export const LOTUS = `([\s\S]*?)`;/u.exec(kit)?.[1];
-if (!lotusSvg) throw new Error(`No LOTUS export found in ${ORNAMENTS}`);
+if (!lotusSvg) {
+    throw new Error(`No LOTUS export found in ${ORNAMENTS}`);
+}
 const viewBox = /viewBox="([^"]+)"/u.exec(lotusSvg)?.[1];
-if (!viewBox) throw new Error("The LOTUS drawing has no viewBox to scale from");
+if (!viewBox) {
+    throw new Error("The LOTUS drawing has no viewBox to scale from");
+}
 const allPaths = lotusSvg.match(/<path\b[^>]*\/>/gu) ?? [];
 /* The two leaves, dropped: they are the only paths the kit draws at .42, which is what makes them
  * identifiable here without the icon holding its own copy of the drawing. If the lotus is ever redrawn at

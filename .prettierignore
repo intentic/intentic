@@ -43,3 +43,6 @@ _archive
 **/*.scss
 **/*.html
 **/*.md
+
+# Vendored upstream source (dmmulroy/anti-slop) — kept byte-identical so it stays diffable against upstream.
+_tools/oxlint/anti-slop

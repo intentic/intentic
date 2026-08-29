@@ -15,7 +15,6 @@ import {
     openSpawnedChild,
     resetSubagents,
     settleSpawnedChild,
-    subagentAgentId,
     subagentCountsOf,
     subagentHooks,
     subagentInParentTree,
@@ -295,7 +294,11 @@ describe("spawned children", () => {
     it("keeps a failure's error beside whatever it managed to say", () => {
         openSpawnedChild(turn(), birth);
         settleSpawnedChild(birth.id, { failed: true, report: "Got as far as the lexer.", error: "provider refused the model" });
-        expect(listSubagentSessions()[0]).toMatchObject({ status: "failed", summary: "Got as far as the lexer.", error: "provider refused the model" });
+        expect(listSubagentSessions()[0]).toMatchObject({
+            status: "failed",
+            summary: "Got as far as the lexer.",
+            error: "provider refused the model",
+        });
     });
 
     it("hands the transcript reader the child's conversation key", () => {
@@ -435,7 +438,10 @@ describe("how a subagent ends", () => {
 
     it("stamps the verification the moment it ends, whichever road it came down", () => {
         openSpawnedChild(turn(), { id: "sub-verify-1", description: "port the parser" });
-        noteChildWork({ kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/parser.ts" }] }, "sub-verify-1");
+        noteChildWork(
+            { kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/parser.ts" }] },
+            "sub-verify-1",
+        );
         // Still working: a standing read mid-flight would call every child unproven before it reaches its tests.
         expect(listSubagentSessions()[0]?.verification).toBeUndefined();
         settleSpawnedChild("sub-verify-1", { failed: false, report: "Ported it." });
@@ -444,7 +450,10 @@ describe("how a subagent ends", () => {
 
     it("carries the verdict on the same frame as the report, for an SDK child too", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-v" }));
-        noteChildWork({ kind: "tool_call", id: "c1", name: "Write", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] }, "call-v");
+        noteChildWork(
+            { kind: "tool_call", id: "c1", name: "Write", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] },
+            "call-v",
+        );
         noteChildWork({ kind: "tool_call", id: "c2", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" }, "call-v");
         noteChildWork({ kind: "tool_call_update", id: "c2", status: "completed", content: [{ type: "text", text: "--- [exit 0, 2s]" }] }, undefined);
         const frame = update(noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-v", status: "completed", summary: "done" }));
@@ -455,9 +464,18 @@ describe("how a subagent ends", () => {
      * fact about whether anything checked it arrives in the same breath. */
     it("appends the warning to a Task result the parent is about to read", async () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-w" }));
-        noteChildWork({ kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] }, "call-w");
+        noteChildWork(
+            { kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] },
+            "call-w",
+        );
         const output = await subagentHooks(turn()).PostToolUse?.[0]?.hooks[0]?.(
-            { hook_event_name: "PostToolUse", tool_name: "Task", tool_use_id: "call-w", tool_input: {}, tool_response: "Done." } as unknown as HookInput,
+            {
+                hook_event_name: "PostToolUse",
+                tool_name: "Task",
+                tool_use_id: "call-w",
+                tool_input: {},
+                tool_response: "Done.",
+            } as unknown as HookInput,
             "t1",
             { signal: new AbortController().signal },
         );
@@ -469,7 +487,13 @@ describe("how a subagent ends", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-q" }));
         noteChildWork({ kind: "tool_call", id: "c1", name: "Grep", category: "search", status: "completed", target: "needle" }, "call-q");
         const output = await subagentHooks(turn()).PostToolUse?.[0]?.hooks[0]?.(
-            { hook_event_name: "PostToolUse", tool_name: "Task", tool_use_id: "call-q", tool_input: {}, tool_response: "Found it." } as unknown as HookInput,
+            {
+                hook_event_name: "PostToolUse",
+                tool_name: "Task",
+                tool_use_id: "call-q",
+                tool_input: {},
+                tool_response: "Found it.",
+            } as unknown as HookInput,
             "t1",
             { signal: new AbortController().signal },
         );

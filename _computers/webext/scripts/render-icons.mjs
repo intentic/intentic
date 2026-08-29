@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 
 /* The four PNGs Chrome wants, drawn from the same lotus as the favicon and the desktop app.
@@ -24,7 +23,7 @@ import { createRequire } from "node:module";
  *   node _computers/webext/scripts/render-icons.mjs
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const root = join(here, "..", "..", "..");
 const icons = join(here, "..", "static", "icons");
 const ORNAMENTS = join(root, "_site/site/src/components/ornaments.ts");

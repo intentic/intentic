@@ -530,7 +530,7 @@ const gatedWake = (prompts: string[]): { wake: WakeFn; started: Promise<void>; r
     return {
         started: started.promise,
         release: held.resolve,
-        wake: async function* (_services, input) {
+        async *wake(_services, input) {
             prompts.push(input.prompt);
             started.resolve();
             await held.promise;

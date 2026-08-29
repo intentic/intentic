@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import exifr from "exifr";
+import { parse as parseExif } from "exifr";
 import { imageSize } from "image-size";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 
@@ -29,7 +29,7 @@ export const imageDeriver: Deriver = {
         } catch {
             lines.push("- Dimensions: unreadable");
         }
-        const exif = (await exifr.parse(bytes).catch(() => undefined)) as Record<string, unknown> | undefined;
+        const exif = (await parseExif(bytes).catch(() => undefined)) as Record<string, unknown> | undefined;
         if (exif !== undefined) {
             for (const { label, keys } of EXIF_LINES) {
                 const parts = keys.map((key) => exif[key]).filter((value) => value !== undefined && value !== "");

@@ -1,4 +1,4 @@
-import { type AddCapabilityInput } from "@intentic-app/capability-catalog";
+import type { AddCapabilityInput } from "@intentic-app/capability-catalog";
 import {
     CapabilitiesListSchema,
     type CapabilityProbe,

@@ -20,12 +20,11 @@
  * percent and every AVIF decoder that exists reads it.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import sharp from "sharp";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const MASTER = join(here, "../src/assets/angkor/temple-master.png");
 const OUT_DIR = join(here, "../public/assets/angkor");
 

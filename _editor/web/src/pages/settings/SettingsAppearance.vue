@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ColorPicker, Row, RowGroup, SegmentedControl, useExplorerStyle, useTextSize, useTheme } from "@intentic/ui";
-import { explorerTreatment, type IconName } from "@intentic/ui";
+import {
+    ColorPicker,
+    Row,
+    RowGroup,
+    SegmentedControl,
+    useExplorerStyle,
+    useTextSize,
+    useTheme,
+    explorerTreatment,
+    type IconName,
+} from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useToolCalls } from "../../composables/chat/useToolCalls";
@@ -129,10 +138,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
     <div class="flex flex-col gap-6">
         <!-- Look: whole-workspace appearance choices. -->
         <RowGroup label="Look">
-            <Row
-                :icon="THEME_ICON[themeChoice]"
-                title="Theme"
-            >
+            <Row :icon="THEME_ICON[themeChoice]" title="Theme">
                 <template #control
                     ><SegmentedControl :model-value="themeChoice" :options="themeOptions" @update:model-value="setThemeChoice"
                 /></template>
@@ -142,11 +148,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                  genuinely too wide to stand beside anything; what is left is one control, and a row of circles
                  parked on its own line read as a second setting with no name. `wide-control` is what lets it
                  wrap onto a second line in a narrow pane instead of stretching the row past it. -->
-            <Row
-                icon="palette"
-                title="Colour"
-                wide-control
-            >
+            <Row icon="palette" title="Colour" wide-control>
                 <template #control>
                     <ColorPicker :model-value="accent" class="justify-end" @update:model-value="setAccent" />
                 </template>
@@ -192,22 +194,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
             <Row as="label" icon="folder-open" title="File nesting" description="Fold a folder's files under its package.json in the explorer.">
                 <template #control><ToggleSwitch v-model="fileNesting" /></template>
             </Row>
-            <Row
-                as="label"
-                icon="eye"
-                title="Show ignored files"
-                description="Show node_modules, build output, and gitignored paths."
-            >
+            <Row as="label" icon="eye" title="Show ignored files" description="Show node_modules, build output, and gitignored paths.">
                 <template #control>
                     <ToggleSwitch :model-value="showIgnored" @update:model-value="toggleShowIgnored()" />
                 </template>
             </Row>
-            <Row
-                as="label"
-                icon="filter"
-                title="Hide tests"
-                description="Hide test files and folders in explorer."
-            >
+            <Row as="label" icon="filter" title="Hide tests" description="Hide test files and folders in explorer.">
                 <template #control>
                     <ToggleSwitch :model-value="hideTests" @update:model-value="toggleHideTests()" />
                 </template>
@@ -219,20 +211,12 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
              reason the explorer's switches are in both places: this is where someone looks for it once they know
              it exists. Both apply to the workspace's Changes tab and an agent's review alike. -->
         <RowGroup label="Changes">
-            <Row
-                as="label"
-                icon="box"
-                title="Group by module"
-                description="Group files by package in review lists."
-            >
+            <Row as="label" icon="box" title="Group by module" description="Group files by package in review lists.">
                 <template #control><ToggleSwitch v-model="groupByModule" /></template>
             </Row>
             <!-- Not `as=\"label\"`, unlike the switches around it: a label wrapping three buttons hands every
                  click on the description to the first of them. -->
-            <Row
-                icon="forward"
-                title="Where a diff opens"
-            >
+            <Row icon="forward" title="Where a diff opens">
                 <template #control
                     ><SegmentedControl :model-value="diffOpen" :options="DIFF_OPEN_OPTIONS" @update:model-value="setDiffOpen"
                 /></template>
@@ -244,12 +228,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
              rather than reading its answer wants. Also flipped from the chat itself, for the same reason the
              explorer's switches are in both places. -->
         <RowGroup label="Chat">
-            <Row
-                as="label"
-                icon="eye"
-                title="Show tool calls"
-                description="Display individual tool calls in transcript."
-            >
+            <Row as="label" icon="eye" title="Show tool calls" description="Display individual tool calls in transcript.">
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
             </Row>
         </RowGroup>

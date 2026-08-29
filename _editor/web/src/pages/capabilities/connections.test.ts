@@ -1,5 +1,4 @@
-import type { CapabilitySummary } from "@intentic-app/api-contract";
-import type { CapabilityStatus } from "@intentic-app/api-contract";
+import type { CapabilitySummary, CapabilityStatus } from "@intentic-app/api-contract";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { awaitingLogin, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";

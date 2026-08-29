@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { DEFAULT_ACCENT, normalizeAccent, themeCss, themeVars } from "../lib/themeColor.js";
 import { definePreference } from "./preference.js";
 

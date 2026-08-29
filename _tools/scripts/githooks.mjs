@@ -28,10 +28,9 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 // This file's own location, not the working directory: `prepare` runs from wherever the installer chose.
-const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const root = dirname(dirname(import.meta.dirname));
 
 const git = (...args) => execFileSync(`git`, args, { cwd: root, stdio: `ignore` });
 

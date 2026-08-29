@@ -148,7 +148,7 @@ test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` fo
         createApp(
             services({
                 workspace: secretsWorkspace(),
-                intentic: async function* (run) {
+                async *intentic(run) {
                     pushes.push([...run.args]);
                     yield { kind: `log`, message: `pushed` };
                 },

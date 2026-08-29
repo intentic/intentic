@@ -134,7 +134,7 @@ const setConversations = (next: readonly Conversation[], focus: string, reason: 
      * closed tab, so this falls through to the last tab exactly as it always has. */
     const focused = next.some((conversation) => conversation.conversationId === focus)
         ? focus
-        : (panes.value.find((id) => next.some((conversation) => conversation.conversationId === id)) ?? next[next.length - 1]!.conversationId);
+        : (panes.value.find((id) => next.some((conversation) => conversation.conversationId === id)) ?? next.at(-1)!.conversationId);
     // The focused tab is always kept, so the list can never come out empty. A dropped draft needs no teardown:
     // untouched means no turn to detach from and no transcript to evict.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !untouchedDraft(conversation));
@@ -1619,7 +1619,7 @@ const closePane = (conversationId: string): void => {
     panes.value = rest;
     if (activeId.value === conversationId) {
         // The neighbour that took its place on screen, which is where the eye already is.
-        setActive(rest[rest.length - 1]!);
+        setActive(rest.at(-1)!);
     }
 };
 

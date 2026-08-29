@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 /* THE POPUP, OPENABLE IN AN ORDINARY TAB — for looking at, and for the store listing's screenshots.
  *
@@ -20,7 +19,7 @@ import { fileURLToPath } from "node:url";
  * which is the one thing that keeps a debugging surface out of a signed artifact.
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const dist = join(here, "..", "dist");
 
 // The state a listing screenshot should show: connected, working, with something waiting for the person — the

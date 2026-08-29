@@ -27,7 +27,7 @@ export const decodeCursor = (cursor: string): { id: string; offset: number } | u
     if (cursor.length <= ID_LENGTH || !/^[0-9a-f]{8}[0-9a-z]+$/.test(cursor)) {
         return undefined;
     }
-    return { id: cursor.slice(0, ID_LENGTH), offset: parseInt(cursor.slice(ID_LENGTH), 36) };
+    return { id: cursor.slice(0, ID_LENGTH), offset: Number.parseInt(cursor.slice(ID_LENGTH), 36) };
 };
 
 const spoolDir = (indexDir: string): string => join(indexDir, "spool");

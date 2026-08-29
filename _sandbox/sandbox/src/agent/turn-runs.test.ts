@@ -18,7 +18,7 @@ const crankedTurn = (): { turnFn: TurnFn; push: (event: AgentEvent) => void; fai
         push: feed,
         fail: feed,
         close: () => feed(CLOSE),
-        turnFn: async function* () {
+        async *turnFn() {
             for (;;) {
                 const next = buffer.shift();
                 if (next === undefined) {

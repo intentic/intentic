@@ -1,5 +1,5 @@
 import { fakeForgejoApi } from "@intentic/providers";
-import { type GitRunner } from "@intentic/scaffold";
+import type { GitRunner } from "@intentic/scaffold";
 import { expect, test } from "vitest";
 import { adoptRepos } from "./adopt.js";
 

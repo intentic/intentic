@@ -61,10 +61,10 @@ const summaryServices = (input: {
 }): Services =>
     ({
         config: { sandbox: { image: "", channel: "", environmentHash: input.parentOverlayHash ?? "" } },
-        sandboxSettings: { get: async () => ({ ...(input.parentSettings ?? {}) }) },
+        sandboxSettings: { get: async () => ({ ...input.parentSettings }) },
         runners: { list: async () => [{ id: "rig" }] },
         runnerHub: {
-            state: () => ({ online: true, ...(input.state ?? {}) }),
+            state: () => ({ online: true, ...input.state }),
             definitionToml: () => input.runnerToml,
         },
     }) as unknown as Services;
@@ -76,7 +76,12 @@ const runnerClaim = async (settings: Record<string, unknown>): Promise<string> =
 test("agreement is an EMPTY drift list, distinct from the absent one a silent runner gets", async () => {
     const toml = await runnerClaim({ terseOutput: true });
     const agreeing = await runnerSummaries(
-        summaryServices({ parentSettings: { terseOutput: true }, parentOverlayHash: "h1", runnerToml: toml, state: { image: "img", overlayHash: "h1" } }),
+        summaryServices({
+            parentSettings: { terseOutput: true },
+            parentOverlayHash: "h1",
+            runnerToml: toml,
+            state: { image: "img", overlayHash: "h1" },
+        }),
     );
     expect(agreeing[0]?.drift).toEqual([]);
 
@@ -89,7 +94,12 @@ test("agreement is an EMPTY drift list, distinct from the absent one a silent ru
 test("a differing overlay hash and a differing setting each earn their line, with their own remedies", async () => {
     const toml = await runnerClaim({});
     const summaries = await runnerSummaries(
-        summaryServices({ parentSettings: { terseOutput: true }, parentOverlayHash: "h1", runnerToml: toml, state: { image: "img", overlayHash: "h2" } }),
+        summaryServices({
+            parentSettings: { terseOutput: true },
+            parentOverlayHash: "h1",
+            runnerToml: toml,
+            state: { image: "img", overlayHash: "h2" },
+        }),
     );
     const drift = summaries[0]?.drift ?? [];
     expect(drift.map((line) => line.subject)).toEqual(["Environment overlay", "Setting terseOutput"]);
@@ -99,9 +109,7 @@ test("a differing overlay hash and a differing setting each earn their line, wit
 });
 
 test("a claim that does not parse costs its drift lines, never the list", async () => {
-    const summaries = await runnerSummaries(
-        summaryServices({ parentOverlayHash: "", runnerToml: "not = [valid", state: { image: "img" } }),
-    );
+    const summaries = await runnerSummaries(summaryServices({ parentOverlayHash: "", runnerToml: "not = [valid", state: { image: "img" } }));
     expect(summaries[0]?.drift?.map((line) => line.subject)).toEqual(["Declared settings"]);
 });
 

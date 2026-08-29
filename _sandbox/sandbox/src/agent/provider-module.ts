@@ -1,5 +1,4 @@
-import type { NativeProvider, SecretInventoryEntry, TranslatorAccounts } from "@intentic/sandbox-contract";
-import type { Model } from "@intentic/sandbox-contract";
+import type { NativeProvider, SecretInventoryEntry, TranslatorAccounts, Model } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { stateRelPath } from "../workspace/state-paths.js";
 import type { Services } from "../composition.js";

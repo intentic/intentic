@@ -14,7 +14,7 @@ function gitLastModified(relPath) {
     try {
         const out = execSync(`git log -1 --format=%cI -- ${JSON.stringify(relPath)}`, {
             cwd: projectRoot,
-            encoding: "utf-8",
+            encoding: "utf8",
             stdio: ["ignore", "pipe", "ignore"],
         }).trim();
         return out || null;
@@ -29,10 +29,14 @@ function gitLastModified(relPath) {
  */
 function urlPathToSource(pathname) {
     const trimmed = pathname.replace(/\/+$/, "");
-    if (trimmed === "") return "src/pages/index.astro";
+    if (trimmed === "") {
+        return "src/pages/index.astro";
+    }
     const candidates = [`src/pages${trimmed}.astro`, `src/pages${trimmed}/index.astro`];
     for (const c of candidates) {
-        if (existsSync(path.join(projectRoot, c))) return c;
+        if (existsSync(path.join(projectRoot, c))) {
+            return c;
+        }
     }
     return null;
 }
@@ -41,7 +45,9 @@ const cache = new Map();
 
 /** Return ISO lastmod for a sitemap URL, or null if no source file / no git history. */
 export function lastModForUrl(url) {
-    if (cache.has(url)) return cache.get(url);
+    if (cache.has(url)) {
+        return cache.get(url);
+    }
     const u = new URL(url);
     const src = urlPathToSource(u.pathname);
     if (!src) {

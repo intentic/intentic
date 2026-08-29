@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract";
-import { type IconName, useExplorerStyle } from "@intentic/ui";
+import { type IconName, useExplorerStyle, ChangeStatusMark, explorerColorClass, iconForEntry } from "@intentic/ui";
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
-import { ChangeStatusMark, explorerColorClass, iconForEntry } from "@intentic/ui";
-import { type WorkspaceTab } from "./workspaceTabs";
+import type { WorkspaceTab } from "./workspaceTabs";
 import { basename } from "@intentic/ui/path";
 
 /* The open-item tab strip (VSCode-style): one pill per open file, snapshot diff, or generated workspace surface.

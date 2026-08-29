@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 
 /* WHAT bin/queue-run PROMISES, checked against real processes and a real kernel lock.
@@ -16,7 +15,7 @@ import { expect, test } from "vitest";
  * Timings are deliberately coarse (a 300ms body against a 1s poll) so a loaded runner cannot fail this on
  * latency: every assertion is about ORDER and COUNT, never about how long something took. */
 
-const QUEUE_RUN = join(dirname(fileURLToPath(import.meta.url)), "../../bin/queue-run");
+const QUEUE_RUN = join(import.meta.dirname, "../../bin/queue-run");
 
 interface Run {
     readonly code: number | null;

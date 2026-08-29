@@ -16,10 +16,7 @@ export const adminUsers = async (prisma: PrismaClient, input: AdminUsersInput): 
     const query = input.query?.trim();
     const where: Prisma.UserWhereInput | undefined = query
         ? {
-              OR: [
-                  { email: { contains: query, mode: `insensitive` } },
-                  { name: { contains: query, mode: `insensitive` } },
-              ],
+              OR: [{ email: { contains: query, mode: `insensitive` } }, { name: { contains: query, mode: `insensitive` } }],
           }
         : undefined;
     const [rows, total] = await Promise.all([
@@ -54,6 +51,6 @@ export const adminUsers = async (prisma: PrismaClient, input: AdminUsersInput): 
             ...(row.membership ? { membershipStatus: row.membership.status } : {}),
         })),
         total,
-        ...(rows.length > input.limit ? { nextCursor: page[page.length - 1]!.id } : {}),
+        ...(rows.length > input.limit ? { nextCursor: page.at(-1)!.id } : {}),
     };
 };

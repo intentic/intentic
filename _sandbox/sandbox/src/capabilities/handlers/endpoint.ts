@@ -35,7 +35,7 @@ export const endpointHandler: CapabilityHandler = {
     // name's, for the same reason `remove` does, a stale list left behind is what the next endpoint given that
     // name would inherit, and the translator's provider list is rebuilt from these.
     rename: { carry: async (ctx, from) => ctx.endpointModels.forget(from) },
-    apply: async function* (ctx, id, config) {
+    async *apply(ctx, id, config) {
         const catalog = await ctx.endpointModels.models(id, config as EndpointConfig);
         if (catalog.models.length === 0) {
             yield {

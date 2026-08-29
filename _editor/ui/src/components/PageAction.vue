@@ -78,7 +78,9 @@ const { href, hint, label, quiet } = defineProps<
 const iconOnly = computed(() => quiet === true || href !== undefined);
 // With no visible label the tooltip carries both halves, because it is the only place either one is said.
 const tooltip = computed(() => {
-    if (!iconOnly.value) return hint;
+    if (!iconOnly.value) {
+        return hint;
+    }
     return hint === undefined ? label : `${label}, ${hint}`;
 });
 </script>

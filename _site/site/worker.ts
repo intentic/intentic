@@ -73,13 +73,17 @@ const MOVED_PAGES: Record<string, string> = {
 
 function movedPath(pathname: string): string | undefined {
     const exact = MOVED_PAGES[pathname.replace(/\/$/u, "")];
-    if (exact !== undefined) return exact;
+    if (exact !== undefined) {
+        return exact;
+    }
     let moved: string | undefined;
     if (pathname === "/product" || pathname.startsWith("/product/")) {
         const [verb = "", ...tail] = pathname.slice("/product".length).replace(/^\//u, "").split("/");
         moved = ["/features", MOVED_VERBS[verb] ?? verb, ...tail].join("/");
     }
-    if (moved === undefined) return undefined;
+    if (moved === undefined) {
+        return undefined;
+    }
     // Astro builds with trailingSlash: "always", so a moved page has to land on the slashed form or the asset
     // layer answers with the 404 page. Real files (the .md mirrors, llms.txt) keep their exact name instead.
     return /\.[a-z0-9]+$/iu.test(moved) || moved.endsWith("/") ? moved : `${moved}/`;
@@ -103,7 +107,9 @@ const SITEMAP_ALIAS = "/sitemap.xml";
 // page, so it needs to say which of the two is the real one. A .md file can't carry <link rel=canonical>,
 // so the header does it, otherwise the pair reads as duplicate content.
 function canonicalForMarkdown(pathname: string): string | undefined {
-    if (!pathname.endsWith(".md")) return undefined;
+    if (!pathname.endsWith(".md")) {
+        return undefined;
+    }
     const withoutExt = pathname.slice(0, -".md".length);
     return withoutExt === "/index" ? "/" : `${withoutExt}/`;
 }
@@ -177,7 +183,9 @@ async function resolveDownload(asset: (version: string) => string, key: string):
  * is the chain the audit warned about, and legacy paths are exactly the URLs old enough to still be written
  * down as http:// somewhere. */
 function httpsRedirect(url: URL): Response | undefined {
-    if (url.protocol !== "http:") return undefined;
+    if (url.protocol !== "http:") {
+        return undefined;
+    }
     const secure = new URL(url.href);
     secure.protocol = "https:";
     secure.pathname = movedPath(url.pathname) ?? url.pathname;
@@ -189,7 +197,9 @@ export default {
         const url = new URL(request.url);
 
         const secure = httpsRedirect(url);
-        if (secure !== undefined) return secure;
+        if (secure !== undefined) {
+            return secure;
+        }
 
         const response = await route(request, url, env);
         // Header sets are immutable on a response that came from fetch(), so this is a copy either way.
@@ -227,7 +237,9 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
     const canonical = canonicalForMarkdown(url.pathname);
     if (canonical !== undefined) {
         const asset = await env.ASSETS.fetch(request);
-        if (asset.status !== 200) return asset;
+        if (asset.status !== 200) {
+            return asset;
+        }
         return new Response(asset.body, {
             status: asset.status,
             headers: {

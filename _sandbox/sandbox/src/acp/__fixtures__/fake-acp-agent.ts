@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { agent, type AgentApp, client, methods, type SessionUpdate } from "@agentclientprotocol/sdk";
-import type { AgentCapabilities } from "@agentclientprotocol/sdk";
+import { agent, type AgentApp, client, methods, type SessionUpdate, type AgentCapabilities } from "@agentclientprotocol/sdk";
 import { decidePermission } from "../acp-permissions.js";
 import type { AcpConnection, TurnHooks } from "../acp-connection.js";
 

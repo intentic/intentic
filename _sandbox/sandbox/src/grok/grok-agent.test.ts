@@ -422,9 +422,15 @@ const fakeOpenCode = (
             let closed = false;
             return {
                 next(): Promise<IteratorResult<Event>> {
-                    if (order[0] === undefined) order.push("read");
-                    if (closed) return Promise.resolve({ done: true, value: undefined as never });
-                    if (i < withHello.length) return Promise.resolve({ done: false, value: withHello[i++]! });
+                    if (order[0] === undefined) {
+                        order.push("read");
+                    }
+                    if (closed) {
+                        return Promise.resolve({ done: true, value: undefined as never });
+                    }
+                    if (i < withHello.length) {
+                        return Promise.resolve({ done: false, value: withHello[i++]! });
+                    }
                     return new Promise<IteratorResult<Event>>((resolve) => {
                         releaseHang = () => resolve({ done: true, value: undefined as never });
                     });

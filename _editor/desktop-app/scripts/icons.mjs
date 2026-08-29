@@ -15,12 +15,11 @@
  * Output lands in src-tauri/icons/, the directory tauri.conf.json already names.
  * ═══════════════════════════════════════════════════════════════════════════════════════════════════ */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import sharp from "sharp";
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const DESKTOP = join(here, "..");
 const ORNAMENTS = join(DESKTOP, "../../_site/site/src/components/ornaments.ts");
 const OUT = join(DESKTOP, "src-tauri/icons");
@@ -29,7 +28,9 @@ const EMBER = "#e07b27";
 
 const kit = await readFile(ORNAMENTS, "utf8");
 const lotusSvg = /export const LOTUS = `([\s\S]*?)`;/u.exec(kit)?.[1];
-if (!lotusSvg) throw new Error(`No LOTUS export found in ${ORNAMENTS}`);
+if (!lotusSvg) {
+    throw new Error(`No LOTUS export found in ${ORNAMENTS}`);
+}
 const allPaths = lotusSvg.match(/<path\b[^>]*\/>/gu) ?? [];
 const petals = allPaths.filter((path) => !path.includes('opacity=".42"'));
 if (petals.length !== allPaths.length - 2) {
@@ -132,8 +133,6 @@ await writeFile(join(OUT, "icon.ico"), ico);
 console.log(`icon.ico  ${ICO_SIZES.join("/")}  ${(ico.length / 1024).toFixed(1)} KB`);
 
 /* ICNS: one PNG per layer type. */
-const icnsLayers = await Promise.all(
-    ICNS_LAYERS.map(async ([size, type]) => [size, type, await png(size)]),
-);
+const icnsLayers = await Promise.all(ICNS_LAYERS.map(async ([size, type]) => [size, type, await png(size)]));
 await writeFile(join(OUT, "icon.icns"), buildIcns(icnsLayers));
 console.log(`icon.icns  ${ICNS_LAYERS.map(([s]) => s).join("/")}  ${(icnsLayers.reduce((n, [, , d]) => n + d.length, 8) / 1024).toFixed(1)} KB`);

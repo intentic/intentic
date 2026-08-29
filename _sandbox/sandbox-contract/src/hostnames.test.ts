@@ -25,8 +25,8 @@ test("preview and port hostnames round-trip through their Host-header parsers", 
 });
 
 test("the two schemes never bleed into each other, and stray/wrong-id hosts parse to nothing", () => {
-    expect(portSlotFromHost("preview-app-" + ID + ".example.com", ID)).toBeUndefined();
-    expect(panelFromHost("port-a-" + ID + ".example.com", ID)).toBeUndefined();
+    expect(portSlotFromHost(`preview-app-${ID}.example.com`, ID)).toBeUndefined();
+    expect(panelFromHost(`port-a-${ID}.example.com`, ID)).toBeUndefined();
     expect(panelFromHost("app.example.com", ID)).toBeUndefined();
     expect(panelFromHost(`preview-app-000000000000.example.com`, ID)).toBeUndefined();
     expect(portSlotFromHost(`port-a-000000000000.example.com`, ID)).toBeUndefined();

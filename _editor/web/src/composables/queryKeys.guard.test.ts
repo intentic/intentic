@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, resolve } from "node:path";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 
@@ -23,7 +22,7 @@ import { describe, expect, it } from "vitest";
  * Scanned rather than listed, on the repo's rule: a list of "files that touch the cache" is a list that is
  * wrong within a week, and the file that gets added to it last is the one that would have needed it. */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const appRoot = resolve(here, `..`);
 const registry = resolve(here, `queryKeys.ts`);
 
@@ -56,7 +55,7 @@ const sourceFiles = (dir: string): string[] => {
 };
 
 // The registry states the paths and this file quotes them; every other file in the app is subject to the rules.
-const AUTHORITIES = new Set([registry, fileURLToPath(import.meta.url)]);
+const AUTHORITIES = new Set([registry, import.meta.filename]);
 
 const appSources = sourceFiles(appRoot)
     .filter((file) => !AUTHORITIES.has(file))
@@ -74,7 +73,9 @@ const queryKeyArrays = (text: string): string[] => {
         let depth = 0;
         for (let i = open; i < text.length; i += 1) {
             const char = text[i];
-            if (char === `[`) depth += 1;
+            if (char === `[`) {
+                depth += 1;
+            }
             if (char === `]`) {
                 depth -= 1;
                 if (depth === 0) {

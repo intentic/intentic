@@ -1,4 +1,4 @@
-import { hostContract, type HostScopes } from "@intentic/sandbox-contract";
+import { type hostContract, type HostScopes } from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";

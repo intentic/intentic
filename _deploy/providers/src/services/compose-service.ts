@@ -6,8 +6,7 @@ import { z } from "zod";
 import { containerLabel } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
 import { listStampedContainers } from "../core/list-stamped.js";
-import type { SshSession } from "../core/ssh.js";
-import type { SshExecutor } from "../core/ssh.js";
+import type { SshSession, SshExecutor } from "../core/ssh.js";
 
 // The inputs every catalog service shares (see state-resolver's resolveService): the host SSH block, the
 // host-internal ip, and the routed domain. Per-service schemas extend this with their pinned image inputs.

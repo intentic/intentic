@@ -1,7 +1,7 @@
 import { CHORES, choreAutomationPrompt, FIX_DEPS_AUTOMATION } from "@intentic/sandbox-contract/chores";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract";
 import type { AutomationTemplateContribution } from "@intentic/extension-manifest";
-import { CI_EVENT_TYPES, CI_PROVIDER } from "../ci/events.js";
+import { CI_PROVIDER } from "../ci/events.js";
 import { installedExtensions } from "../extensions/installed-extensions.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
 

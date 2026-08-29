@@ -1,5 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract";
-import type { ListenerMessage } from "@intentic/sandbox-contract";
+import type { PipelineRun, ListenerMessage } from "@intentic/sandbox-contract";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
@@ -41,8 +40,12 @@ const typesFor = (status: "failed" | "success", previous: "failed" | "success" |
 const sha7 = (sha: string): string => sha.slice(0, 7);
 
 const headline = (type: string, run: PipelineRun): string => {
-    if (type === "pipeline_fixed") return "CI fixed (back to green)";
-    if (type === "pipeline_broken") return "CI just broke (was green)";
+    if (type === "pipeline_fixed") {
+        return "CI fixed (back to green)";
+    }
+    if (type === "pipeline_broken") {
+        return "CI just broke (was green)";
+    }
     return run.status === "failed" ? "CI failed" : "CI passed";
 };
 

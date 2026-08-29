@@ -205,7 +205,7 @@ export const vpngateDriver: ExitDriver = {
         await rm(exitStateDir(id), { recursive: true, force: true });
     },
     missingTool: async () => ((await toolMissing("openvpn", ["--version"])) ? "openvpn" : undefined),
-    start: async function* (id, config, country): AsyncGenerator<IntenticLine> {
+    async *start(id, config, country): AsyncGenerator<IntenticLine> {
         const wanted = country ?? config.country;
         yield { kind: "log", message: "Fetching VPN Gate's server list…" };
         const { servers, live } = await cachedServers();
@@ -221,7 +221,7 @@ export const vpngateDriver: ExitDriver = {
         }
         yield* dialServer(id, server);
     },
-    rotate: async function* (id, config): AsyncGenerator<IntenticLine> {
+    async *rotate(id, config): AsyncGenerator<IntenticLine> {
         const previous = await readSelection(id);
         const { servers } = await cachedServers();
         const country = previous?.country ?? config.country;
@@ -247,7 +247,7 @@ export const vpngateDriver: ExitDriver = {
                 return { state: "unavailable" };
             }
             const log = await logTail(logPath(id), 3);
-            return log === "" ? { state: "down" } : { state: "failed", detail: log.split("\n").slice(-1)[0] };
+            return log === "" ? { state: "down" } : { state: "failed", detail: log.split("\n").at(-1) };
         }
         if ((await tunnelAddress(id)) === undefined) {
             return { state: "starting", interface: name };

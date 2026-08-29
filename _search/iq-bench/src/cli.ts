@@ -33,19 +33,19 @@ const retrieval = async (args: string[]): Promise<void> => {
         ...(config !== undefined ? { config } : {}),
     });
     const dir = resultsDir();
-    writeFileSync(join(dir, "retrieval.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+    writeFileSync(join(dir, "retrieval.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
     const report = renderRetrievalReport(rows, metas, skippedModels);
-    writeFileSync(join(dir, "summary.md"), report + "\n");
+    writeFileSync(join(dir, "summary.md"), `${report}\n`);
     console.log(`\n${report}\n\nresults: ${dir}`);
 };
 
 const impact = async (args: string[]): Promise<void> => {
     const repo = flagValue(args, "--repo");
-    const { rows, meta } = await runImpact({ ...(repo !== undefined ? { repo } : {}) });
+    const { rows, meta } = await runImpact(repo !== undefined ? { repo } : {});
     const dir = resultsDir();
-    writeFileSync(join(dir, "impact.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+    writeFileSync(join(dir, "impact.jsonl"), `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
     const report = renderImpactReport(rows, meta);
-    writeFileSync(join(dir, "summary.md"), report + "\n");
+    writeFileSync(join(dir, "summary.md"), `${report}\n`);
     console.log(`\n${report}\n\nresults: ${dir}`);
 };
 

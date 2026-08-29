@@ -84,7 +84,7 @@ const { data } = useQuery({
     queryFn: () => host.sandbox.json<{ lines: string[] }>(\`/logs\`),
     enabled: () => host.sandbox.reachable(),
 });
-<\/script>
+</script>
 
 <template>
     <ul>

@@ -41,10 +41,14 @@ const openssl = (...args) => execFileSync(`openssl`, args, { stdio: [`ignore`, `
 
 /** Days until the certificate stops being valid, or null when there is no readable certificate there. */
 const daysLeft = (path) => {
-    if (!existsSync(path)) return null;
+    if (!existsSync(path)) {
+        return null;
+    }
     const notAfter = openssl(`x509`, `-in`, path, `-noout`, `-enddate`).toString().trim().replace(`notAfter=`, ``);
     const expires = Date.parse(notAfter);
-    if (Number.isNaN(expires)) return null;
+    if (Number.isNaN(expires)) {
+        return null;
+    }
     return (expires - Date.now()) / 86_400_000;
 };
 
@@ -132,7 +136,9 @@ const mintLeaf = () => {
  * refusing to start with an error about the key: far from anything that suggests certificates. Comparing the
  * public halves catches it here, where the fix is to re-sign. */
 const leafUsable = () => {
-    if (!existsSync(LEAF_CRT) || !existsSync(LEAF_KEY)) return false;
+    if (!existsSync(LEAF_CRT) || !existsSync(LEAF_KEY)) {
+        return false;
+    }
     try {
         openssl(`verify`, `-CAfile`, CA_CRT, LEAF_CRT);
         return openssl(`x509`, `-in`, LEAF_CRT, `-noout`, `-pubkey`).equals(openssl(`pkey`, `-in`, LEAF_KEY, `-pubout`));

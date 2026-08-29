@@ -87,10 +87,9 @@ export const draftContent = (entry: RuntimeInstall, step: string): string => {
     return (
         `${AUTO_MARKER} ${entry.tool}\n` +
         `# ${entry.tool} — installed at runtime ${times} (first ${date(entry.firstAt)}, last ${date(entry.lastAt)}) and\n` +
-        `# lost on every container recreate. Drafted by the daemon from the runtime-install ledger; last installed by:\n` +
-        (command === undefined ? "" : `#   ${command.replaceAll("\n", " ")}\n`) +
-        `# Approve to bake it into the image; reject to stop it being proposed.\n` +
-        `${step}\n`
+        `# lost on every container recreate. Drafted by the daemon from the runtime-install ledger; last installed by:\n${
+            command === undefined ? "" : `#   ${command.replaceAll("\n", " ")}\n`
+        }# Approve to bake it into the image; reject to stop it being proposed.\n${step}\n`
     );
 };
 

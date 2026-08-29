@@ -131,8 +131,7 @@ const groupState = (group: PlanLimitGroup): string => {
 const barTooltip = (row: PlanLimitRow): string =>
     row.percent === undefined
         ? `${row.label} · no reading yet`
-        : `${row.label} · ${row.binding?.label ?? ``} ${formatUtilization(row.percent, row.stale)}` +
-          (row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`);
+        : `${row.label} · ${row.binding?.label ?? ``} ${formatUtilization(row.percent, row.stale)}${row.binding?.resetsAt === undefined ? `` : ` · resets ${formatReset(row.binding.resetsAt)}`}`;
 
 // ---- attention -------------------------------------------------------------------------------------------------
 

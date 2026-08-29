@@ -298,7 +298,7 @@ const runnerServices = (
         // exact-equality assertions above depend on.
         workspace: { root: "/nowhere" },
         files: { read: async () => overrides.approved },
-        sandboxSettings: { get: async () => ({ ...(overrides.settings ?? {}) }) },
+        sandboxSettings: { get: async () => ({ ...overrides.settings }) },
         runners: {
             mintPairing: (id: string) => {
                 minted.push(id);

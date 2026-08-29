@@ -186,13 +186,13 @@ test("filterOutput: no footer when nothing was dropped", () => {
     expect(filterOutput("hello\nworld\n", "echo hi", "0", "0", "").out).toBe("hello\nworld\n");
 });
 
-test("test cleaner: drops per-test pass lines on green, keeps the summary", () => {
+test("cleaner: drops per-test pass lines on green, keeps the summary", () => {
     const lines = ["✓ src/a.test.ts (3)", "✓ src/b.test.ts (2)", "Test Files  2 passed (2)", "Tests  5 passed (5)"];
     const out = cleanLines(lines, { command: "vitest run", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
     expect(out).toEqual(["Test Files  2 passed (2)", "Tests  5 passed (5)"]);
 });
 
-test("test cleaner: a failing run keeps everything (command cleaners skip on non-zero exit)", () => {
+test("cleaner: a failing run keeps everything (command cleaners skip on non-zero exit)", () => {
     const lines = ["✓ src/a.test.ts (3)", "FAIL src/b.test.ts", "AssertionError: expected 1 to be 2"];
     expect(cleanLines(lines, { command: "vitest run", exitCode: "1", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
 });

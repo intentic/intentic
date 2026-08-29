@@ -1,10 +1,9 @@
 import type { ExtensionModule } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
+import { extensionApiVersion, satisfiesEngines, resetSandboxScope } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
-import { resetSandboxScope } from "@intentic/extension-api";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../composables/extensions/useExtensionSettings";
 import { sandboxError, sandboxJson, sandboxRequest } from "../composables/sandbox/sandboxClient";

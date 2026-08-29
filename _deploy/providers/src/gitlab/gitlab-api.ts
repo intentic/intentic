@@ -131,7 +131,7 @@ export const gitlabApi: GitLabApi = {
             throw new Error(`GitLab API GET file ${path}: ${response.status}`);
         }
         const data = parseResponse(fileSchema, await response.json(), "GitLab /repository/files");
-        return { content: Buffer.from(data.content, "base64").toString("utf-8") };
+        return { content: Buffer.from(data.content, "base64").toString("utf8") };
     },
 
     commitFile: async ({ url, token, owner, name, path, content, branch, message }) => {

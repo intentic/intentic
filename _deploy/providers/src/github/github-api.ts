@@ -114,7 +114,7 @@ export const githubApi: GitHubApi = {
             throw new Error(`GitHub API GET /repos/${owner}/${repo}/contents/${path}: ${response.status}`);
         }
         const data = parseResponse(contentSchema, await response.json(), "GitHub /contents");
-        return { content: Buffer.from(data.content, "base64").toString("utf-8"), sha: data.sha };
+        return { content: Buffer.from(data.content, "base64").toString("utf8"), sha: data.sha };
     },
 
     commitFile: async ({ token, owner, repo, path, content, branch, message, sha }) => {

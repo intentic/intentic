@@ -1,4 +1,4 @@
-import { type Ref } from "vue";
+import type { Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 
 /* The user keymap: per-command chord OVERRIDES layered over each command's declared default. A developer expects to

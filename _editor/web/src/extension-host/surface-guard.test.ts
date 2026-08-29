@@ -64,8 +64,9 @@ const apiMembers = (): string[] => {
     let depth = 0;
     let end = text.length;
     for (let i = open; i < text.length; i++) {
-        if (text[i] === `{`) depth++;
-        else if (text[i] === `}` && --depth === 0) {
+        if (text[i] === `{`) {
+            depth++;
+        } else if (text[i] === `}` && --depth === 0) {
             end = i;
             break;
         }
@@ -82,8 +83,9 @@ const nestedMembers = (block: string): string[] => {
     let depth = 0;
     let end = text.length;
     for (let i = open; i < text.length; i++) {
-        if (text[i] === `{`) depth++;
-        else if (text[i] === `}` && --depth === 0) {
+        if (text[i] === `{`) {
+            depth++;
+        } else if (text[i] === `}` && --depth === 0) {
             end = i;
             break;
         }

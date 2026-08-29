@@ -54,8 +54,12 @@ const fakeSsh = (): SshExecutor => {
     return {
         connect: async () => ({
             exec: async (command): Promise<SshResult> => {
-                if (command.includes("docker version")) return ok("24.0.0");
-                if (command.includes("ip -4 -o route")) return ok("10.0.0.5\n");
+                if (command.includes("docker version")) {
+                    return ok("24.0.0");
+                }
+                if (command.includes("ip -4 -o route")) {
+                    return ok("10.0.0.5\n");
+                }
                 // Capture every heredoc-written file (compose.yaml, config.toml, runner config.yaml, ...).
                 const write = /cat > (\S+) <<'(\w+)'\n([\s\S]*)\2/.exec(command);
                 if (write?.[1] !== undefined && write[3] !== undefined) {
@@ -74,13 +78,19 @@ const fakeSsh = (): SshExecutor => {
                     gitTokenPersisted = true;
                     return ok("gtok");
                 }
-                if (command.includes("command -v docker")) return ok("/usr/local/bin/docker");
-                if (command.includes("docker-buildx")) return ok("/usr/local/libexec/docker/cli-plugins/docker-buildx");
+                if (command.includes("command -v docker")) {
+                    return ok("/usr/local/bin/docker");
+                }
+                if (command.includes("docker-buildx")) {
+                    return ok("/usr/local/libexec/docker/cli-plugins/docker-buildx");
+                }
                 // Compose-project image inspect (komodo/signoz): report each running service's image from the
                 // compose file the provider wrote.
                 const project = /com\.docker\.compose\.project=(\w+)/.exec(command);
                 if (project?.[1] !== undefined) {
-                    if (!started.has(`intentic-${project[1]}`)) return ok("");
+                    if (!started.has(`intentic-${project[1]}`)) {
+                        return ok("");
+                    }
                     const images = serviceImages(files.get(`/opt/intentic/${project[1]}/compose.yaml`) ?? "");
                     return ok(
                         Object.entries(images)
@@ -93,22 +103,32 @@ const fakeSsh = (): SshExecutor => {
                 const backupInspect = /docker inspect --format '[^']*intentic\.schedule[^']*' (\S+)/.exec(command);
                 if (backupInspect?.[1] !== undefined) {
                     const name = backupInspect[1];
-                    if (!started.has(name)) return ok("");
+                    if (!started.has(name)) {
+                        return ok("");
+                    }
                     const labels = containerLabels.get(name);
                     return ok(`${containerImages.get(name) ?? ""}|${labels?.schedule ?? ""}|${labels?.repo ?? ""}`);
                 }
                 // Single-container image inspect (forgejo/forgejo-runner/tunnel).
                 const inspect = /docker inspect --format '\{\{\.Config\.Image\}\}' (\S+)/.exec(command);
-                if (inspect?.[1] !== undefined) return ok(containerImages.get(inspect[1]) ?? "");
+                if (inspect?.[1] !== undefined) {
+                    return ok(containerImages.get(inspect[1]) ?? "");
+                }
                 const label = /docker ps --filter "label=intentic.id=([^"]+)"/.exec(command);
-                if (label?.[1] !== undefined) return ok(started.has(label[1]) ? "komodo-core-1" : "");
+                if (label?.[1] !== undefined) {
+                    return ok(started.has(label[1]) ? "komodo-core-1" : "");
+                }
                 const ps = /docker ps --filter "name=\^([^$]+)\$"/.exec(command);
-                if (ps?.[1] !== undefined) return ok(started.has(ps[1]) ? ps[1] : "");
+                if (ps?.[1] !== undefined) {
+                    return ok(started.has(ps[1]) ? ps[1] : "");
+                }
                 const run = /docker run .*--name (\S+)/.exec(command);
                 if (run?.[1] !== undefined) {
                     started.add(run[1]);
                     const image = /(\S+@sha256:[0-9a-f]+)/.exec(command);
-                    if (image?.[1] !== undefined) containerImages.set(run[1], image[1]);
+                    if (image?.[1] !== undefined) {
+                        containerImages.set(run[1], image[1]);
+                    }
                     // The backup container carries its schedule/repo as create-time labels (what its observe reads back).
                     const schedule = labelValue(command, "schedule");
                     const repo = labelValue(command, "repo");
@@ -126,19 +146,33 @@ const fakeSsh = (): SshExecutor => {
                         const file = /-f (\S+\/compose\.yaml)/.exec(command);
                         const content = file?.[1] !== undefined ? (files.get(file[1]) ?? "") : "";
                         for (const match of content.matchAll(/intentic\.id=([^"\s,\]]+)/g)) {
-                            if (match[1] !== undefined) started.add(match[1]);
+                            if (match[1] !== undefined) {
+                                started.add(match[1]);
+                            }
                         }
                     }
                     return ok("up");
                 }
-                if (command.includes("wget -q --spider")) return ok("", started.has("intentic-forgejo") ? 0 : 1);
-                if (command.includes("cat /data/.runner")) return ok(started.has("intentic-forgejo-runner") ? "http://10.0.0.5:3000" : "");
+                if (command.includes("wget -q --spider")) {
+                    return ok("", started.has("intentic-forgejo") ? 0 : 1);
+                }
+                if (command.includes("cat /data/.runner")) {
+                    return ok(started.has("intentic-forgejo-runner") ? "http://10.0.0.5:3000" : "");
+                }
                 // Runner config read (configuredJobImage): return the file the provider wrote.
                 const read = /cat (\/\S+) 2>\/dev\/null/.exec(command);
-                if (read?.[1] !== undefined && files.has(read[1])) return ok(files.get(read[1]));
-                if (command.includes("packages-token")) return ok(packagesTokenPersisted ? "ptok" : "");
-                if (command.includes("git-token")) return ok(gitTokenPersisted ? "gtok" : "");
-                if (command.includes("runner-token")) return ok(tokenPersisted ? "rtok" : "");
+                if (read?.[1] !== undefined && files.has(read[1])) {
+                    return ok(files.get(read[1]));
+                }
+                if (command.includes("packages-token")) {
+                    return ok(packagesTokenPersisted ? "ptok" : "");
+                }
+                if (command.includes("git-token")) {
+                    return ok(gitTokenPersisted ? "gtok" : "");
+                }
+                if (command.includes("runner-token")) {
+                    return ok(tokenPersisted ? "rtok" : "");
+                }
                 return ok();
             },
             dispose: async () => {},

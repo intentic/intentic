@@ -3,8 +3,7 @@ import { shellQuote, sqlIdentifier, sqlLiteral } from "@intentic/sandbox-run/quo
 import { z } from "zod";
 import { containerId } from "../core/backing-ssh.js";
 import { hasPendingRef, parseInputs, sshSchema, sshTarget } from "../core/inputs.js";
-import type { SshSession } from "../core/ssh.js";
-import { type SshExecutor, sshExecutor } from "../core/ssh.js";
+import { type SshSession, type SshExecutor, sshExecutor } from "../core/ssh.js";
 
 const databaseSchema = sshSchema.extend({
     // The id of the Postgres instance container to docker-exec into (stamped intentic.id=<instance>).

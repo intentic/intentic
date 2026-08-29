@@ -218,8 +218,12 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
 
     const nameError = computed<string | undefined>(() => {
         const trimmed = form.id.trim();
-        if (trimmed.length === 0) return `Name is required.`;
-        if (!NAME_RE.test(trimmed)) return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
+        if (trimmed.length === 0) {
+            return `Name is required.`;
+        }
+        if (!NAME_RE.test(trimmed)) {
+            return `Use letters, digits, hyphens and underscores; must start with a letter or digit.`;
+        }
         return undefined;
     });
     const promptError = computed<string | undefined>(() => (form.prompt.trim() === `` ? `Prompt is required.` : undefined));
@@ -370,16 +374,30 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
         } else {
             webchat.antiBot = form.antiBot;
         }
-        if (form.googleClientId.trim() === ``) delete webchat.googleClientId;
-        else webchat.googleClientId = form.googleClientId.trim();
-        if (form.turnstileSiteKey.trim() === ``) delete webchat.turnstileSiteKey;
-        else webchat.turnstileSiteKey = form.turnstileSiteKey.trim();
+        if (form.googleClientId.trim() === ``) {
+            delete webchat.googleClientId;
+        } else {
+            webchat.googleClientId = form.googleClientId.trim();
+        }
+        if (form.turnstileSiteKey.trim() === ``) {
+            delete webchat.turnstileSiteKey;
+        } else {
+            webchat.turnstileSiteKey = form.turnstileSiteKey.trim();
+        }
         // A stripped secret is an empty input meaning "unchanged". A supplied one replaces it.
-        if (form.turnstileSecret.trim() !== ``) webchat.turnstileSecret = form.turnstileSecret.trim();
-        if (form.greeting.trim() === ``) delete webchat.greeting;
-        else webchat.greeting = form.greeting.trim();
-        if (dailyMessageMax.value === undefined) delete webchat.dailyMessageMax;
-        else webchat.dailyMessageMax = dailyMessageMax.value;
+        if (form.turnstileSecret.trim() !== ``) {
+            webchat.turnstileSecret = form.turnstileSecret.trim();
+        }
+        if (form.greeting.trim() === ``) {
+            delete webchat.greeting;
+        } else {
+            webchat.greeting = form.greeting.trim();
+        }
+        if (dailyMessageMax.value === undefined) {
+            delete webchat.dailyMessageMax;
+        } else {
+            webchat.dailyMessageMax = dailyMessageMax.value;
+        }
         return webchat;
     };
 
@@ -416,40 +434,67 @@ export function useAutomationForm(sources: ComputedRef<readonly AvailableSource[
             prompt: form.prompt,
             enabled: original?.enabled ?? true,
         };
-        if (form.guard.trim() === ``) delete automation.guard;
-        else automation.guard = form.guard.trim();
+        if (form.guard.trim() === ``) {
+            delete automation.guard;
+        } else {
+            automation.guard = form.guard.trim();
+        }
         if (form.agent === `claude`) {
             delete automation.agent;
             delete automation.harness;
         } else {
             automation.agent = form.agent;
-            if (form.harness === `native`) delete automation.harness;
-            else automation.harness = form.harness;
+            if (form.harness === `native`) {
+                delete automation.harness;
+            } else {
+                automation.harness = form.harness;
+            }
         }
         // Blank ⇒ absent ⇒ the provider's first account, independent of which provider is selected.
-        if (form.account === ``) delete automation.account;
-        else automation.account = form.account;
+        if (form.account === ``) {
+            delete automation.account;
+        } else {
+            automation.account = form.account;
+        }
         // Blank ⇒ absent ⇒ no outward accounts at all (see the form state's note), the one field here whose
         // default is to take something away rather than to leave it unspecified.
-        if (form.actsAs === ``) delete automation.actsAs;
-        else automation.actsAs = form.actsAs;
+        if (form.actsAs === ``) {
+            delete automation.actsAs;
+        } else {
+            automation.actsAs = form.actsAs;
+        }
         // Empty ⇒ absent ⇒ whatever the persona allows. A list here is applied ON TOP of the card, so it can
         // only ever narrow, which is why the field is offered at all and why it needs no validation against it.
         const narrowed = form.allowedTools
             .split(`,`)
             .map((name) => name.trim())
             .filter((name) => name !== ``);
-        if (narrowed.length > 0) automation.allowedTools = narrowed;
-        else delete automation.allowedTools;
-        if (form.model === ``) delete automation.model;
-        else automation.model = form.model;
-        if (form.requireApproval) automation.requireApproval = true;
-        else delete automation.requireApproval;
-        if (form.holdForSeconds > 0) automation.holdForSeconds = form.holdForSeconds;
-        else delete automation.holdForSeconds;
+        if (narrowed.length > 0) {
+            automation.allowedTools = narrowed;
+        } else {
+            delete automation.allowedTools;
+        }
+        if (form.model === ``) {
+            delete automation.model;
+        } else {
+            automation.model = form.model;
+        }
+        if (form.requireApproval) {
+            automation.requireApproval = true;
+        } else {
+            delete automation.requireApproval;
+        }
+        if (form.holdForSeconds > 0) {
+            automation.holdForSeconds = form.holdForSeconds;
+        } else {
+            delete automation.holdForSeconds;
+        }
         // A workspace trigger is a chore by definition; clock-based chores carry the stored form flag.
-        if (form.kind === `workspace` || form.chore) automation.chore = true;
-        else delete automation.chore;
+        if (form.kind === `workspace` || form.chore) {
+            automation.chore = true;
+        } else {
+            delete automation.chore;
+        }
         if (isFrontDesk.value) {
             automation.webchat = webchatOf();
             /* A FRONT DESK THAT NAMED NO PERSONA GETS THE FRONT DESK, the read-only card, which the daemon writes

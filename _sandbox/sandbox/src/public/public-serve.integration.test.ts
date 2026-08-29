@@ -1,6 +1,6 @@
 import http from "node:http";
 import { mkdtemp, readdir, readlink, writeFile } from "node:fs/promises";
-import { type AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, test } from "vitest";

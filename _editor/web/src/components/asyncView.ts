@@ -1,7 +1,6 @@
-import { Notice } from "@intentic/ui";
+import { Notice, useLoadingReveal } from "@intentic/ui";
 import { type Component, computed, defineComponent, h, ref, shallowRef } from "vue";
 import { useRoute } from "vue-router";
-import { useLoadingReveal } from "@intentic/ui";
 import { clearStaleChunkReload, isStaleChunkError, recoverStaleChunk } from "../router/staleChunk";
 
 /* A VIEW WHOSE CODE ARRIVES BEHIND AN OUTLINE, the mechanism behind the app's routing rule that NAVIGATION

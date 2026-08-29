@@ -1,5 +1,5 @@
 import type { ResourceType } from "@intentic/resources";
-import {
+import type {
     ActivityConnectionSchema,
     ActivityEventSchema,
     ActivityStatusSchema,
@@ -29,7 +29,6 @@ import {
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
-    GrantedRoleSchema,
     ImportReportSchema,
     MigrationHostSchema,
     MigrationItemSchema,
@@ -41,10 +40,8 @@ import {
     LogFileEntrySchema,
     LogReadSchema,
     MarketplaceSchema,
-    MemberRoleSchema,
     PanelSummarySchema,
     PushConfigSchema,
-    PushNotificationSchema,
     RepoAppSchema,
     RuleFiringsSchema,
     RuleMomentSchema,
@@ -95,6 +92,7 @@ import {
     WorkspaceSearchSpanSchema,
     WorkspaceSearchTagSchema,
 } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, MemberRoleSchema, PushNotificationSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 
 // The oRPC OpenAPI handler is mounted under this prefix on the server; the client

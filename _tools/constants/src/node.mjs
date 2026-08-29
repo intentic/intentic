@@ -56,9 +56,13 @@ const startDir = (from) => {
 const walkUp = (dir, marker) => {
     let current = dir;
     for (;;) {
-        if (existsSync(resolve(current, marker))) return current;
+        if (existsSync(resolve(current, marker))) {
+            return current;
+        }
         const parent = dirname(current);
-        if (parent === current) return "";
+        if (parent === current) {
+            return "";
+        }
         current = parent;
     }
 };
@@ -71,7 +75,9 @@ const walkUp = (dir, marker) => {
  * wrong directory is how a config loader silently reads no .env and every credential arrives empty. */
 export const repoRoot = (from) => {
     const found = walkUp(startDir(from), REPO_MARKER);
-    if (found === "") throw new Error(`repoRoot: no ${REPO_MARKER} above ${startDir(from)}, is this a complete checkout?`);
+    if (found === "") {
+        throw new Error(`repoRoot: no ${REPO_MARKER} above ${startDir(from)}, is this a complete checkout?`);
+    }
     return found;
 };
 
@@ -82,6 +88,8 @@ export const repoRoot = (from) => {
  * Stops at the FIRST package.json above the caller, so a package's own manifest always wins over the root's. */
 export const packageRoot = (from) => {
     const found = walkUp(startDir(from), "package.json");
-    if (found === "") throw new Error(`packageRoot: no package.json above ${startDir(from)}`);
+    if (found === "") {
+        throw new Error(`packageRoot: no package.json above ${startDir(from)}`);
+    }
     return found;
 };

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMessage } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -10,7 +10,6 @@ import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
-import type { ListenerMessage } from "@intentic/sandbox-contract";
 import { createMessageBatcher, dispatchListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
 import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
 

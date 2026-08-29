@@ -44,23 +44,24 @@ export const formatJsResult = (result: JsRunResult, timeoutSeconds: number): str
 // Exported for the tests that pin its honesty: what a scoped plan promises the model must be what js-runtime
 // enforces, and the sentence that admits what the fence cannot cut must not quietly disappear.
 export const jsToolDescription = (plan: JsExecutionPlan): string =>
-    "Run a JavaScript program in the workspace: the code execution mode, a peer of the shell. " +
-    "The script is an ES module (top-level `await` works) run on Node 24: `fetch` and every `node:` builtin are there, " +
-    "and imports resolve against the workspace's own node_modules where they exist. " +
-    "Prefer it over shell one-liners for logic: reading and transforming files, calling HTTP APIs, anything you would " +
-    "otherwise assemble from grep/curl/jq pipes. " +
-    (plan.readRoots.length === 0
-        ? "This session's scripts have NO filesystem access: work in memory and print results. "
-        : `Reads are allowed under ${plan.readRoots.join(", ")}; ` +
-          (plan.writeRoots.length === 0
-              ? "nothing on disk may be changed: writes are refused by the runtime itself. "
-              : `writes under ${plan.writeRoots.join(", ")}. `)) +
-    (plan.allowSpawn
-        ? "Starting other programs (child_process) works. "
-        : "Starting other programs is refused by the runtime, this session has no shell, and a script is not a way around that; if the task needs one, say so. ") +
-    "A `{{secret:name}}` reference in the script is resolved to the stored value on the way into the process, so carry " +
-    "credentials as references, never pasted values. " +
-    "stdout and stderr come back tail-capped with the exit status; the process is killed at the timeout.";
+    `Run a JavaScript program in the workspace: the code execution mode, a peer of the shell. ` +
+    `The script is an ES module (top-level \`await\` works) run on Node 24: \`fetch\` and every \`node:\` builtin are there, ` +
+    `and imports resolve against the workspace's own node_modules where they exist. ` +
+    `Prefer it over shell one-liners for logic: reading and transforming files, calling HTTP APIs, anything you would ` +
+    `otherwise assemble from grep/curl/jq pipes. ${
+        plan.readRoots.length === 0
+            ? "This session's scripts have NO filesystem access: work in memory and print results. "
+            : `Reads are allowed under ${plan.readRoots.join(", ")}; ` +
+              (plan.writeRoots.length === 0
+                  ? "nothing on disk may be changed: writes are refused by the runtime itself. "
+                  : `writes under ${plan.writeRoots.join(", ")}. `)
+    }${
+        plan.allowSpawn
+            ? "Starting other programs (child_process) works. "
+            : "Starting other programs is refused by the runtime, this session has no shell, and a script is not a way around that; if the task needs one, say so. "
+    }A \`{{secret:name}}\` reference in the script is resolved to the stored value on the way into the process, so carry ` +
+    `credentials as references, never pasted values. ` +
+    `stdout and stderr come back tail-capped with the exit status; the process is killed at the timeout.`;
 
 export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInstance =>
     createSdkMcpServer({

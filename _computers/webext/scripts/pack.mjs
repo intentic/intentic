@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, sep } from "node:path";
 import { deflateRawSync } from "node:zlib";
 
 /* THE ARTIFACT A STORE TAKES: dist/ as one zip.
@@ -23,7 +22,7 @@ import { deflateRawSync } from "node:zlib";
  *   node _computers/webext/scripts/pack.mjs   → dist.zip beside dist/
  */
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const root = join(here, "..");
 const dist = join(root, "dist");
 const out = join(root, "dist.zip");

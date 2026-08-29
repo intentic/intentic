@@ -204,7 +204,9 @@ export function developersHref(id: string): string {
  * page and the bar, the phone menu and the footer all follow. The throw is the anti-drift half of the same
  * bargain, turning a page that moved into a loud build failure instead of a blank menu row. */
 const servicesPage = developersPages.find((page) => page.id === "services");
-if (servicesPage === undefined) throw new Error("The api book has no services page for the nav row to derive from.");
+if (servicesPage === undefined) {
+    throw new Error("The api book has no services page for the nav row to derive from.");
+}
 
 export const developersServicesDestination = {
     label: servicesPage.title,

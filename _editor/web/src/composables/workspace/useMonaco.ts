@@ -195,10 +195,7 @@ export const editorType = (surface: EditorSurface = `file`): { fontSize: number;
 });
 
 /** Keep an editor's type current for as long as the component holding it lives. */
-export const watchEditorType = (
-    apply: (type: { fontSize: number; lineHeight: number }) => void,
-    surface: EditorSurface = `file`,
-): void => {
+export const watchEditorType = (apply: (type: { fontSize: number; lineHeight: number }) => void, surface: EditorSurface = `file`): void => {
     watch(useTextSize().scale, () => apply(editorType(surface)));
 };
 

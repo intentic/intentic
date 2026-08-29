@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow, useLoadingReveal } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -16,7 +16,6 @@ import { lensPersonaId } from "../../composables/workspace/personaReach";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
-import { useLoadingReveal } from "@intentic/ui";
 import { type SidebarPanel, useLayout } from "../../composables/useLayout";
 import { toAppPx, uiLength } from "../../composables/uiScale";
 import { reportOpenPath } from "../../composables/usePresence";

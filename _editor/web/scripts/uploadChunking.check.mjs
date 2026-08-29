@@ -37,7 +37,9 @@ assert.deepEqual(chunkItems([]), []);
         chunks.map((c) => c.length),
         [1, 1, 1],
     );
-    for (const c of chunks) assert.ok(bytesOf(c) <= CHUNK_BYTES);
+    for (const c of chunks) {
+        assert.ok(bytesOf(c) <= CHUNK_BYTES);
+    }
 }
 
 // Two that fit together, then one that tips the running sum over → [2, 1].
@@ -48,7 +50,9 @@ assert.deepEqual(chunkItems([]), []);
         chunks.map((c) => c.length),
         [2, 1],
     );
-    for (const c of chunks) assert.ok(bytesOf(c) <= CHUNK_BYTES);
+    for (const c of chunks) {
+        assert.ok(bytesOf(c) <= CHUNK_BYTES);
+    }
 }
 
 // A single file larger than the byte cap gets its OWN chunk and never absorbs its neighbors.

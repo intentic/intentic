@@ -309,11 +309,7 @@ export const voiceStatus = (): string => {
     const minutes = Math.round((Date.now() - session.startedAt) / 60_000);
     const participants = [...session.participants];
     const transcribed = session.transcriber.transcribed();
-    return (
-        `In #${session.channel.name} for ${minutes} min, ${transcribed} utterances transcribed, speaking now: ` +
-        `${session.speaking.size}, participants so far: ${participants.length > 0 ? participants.join(", ") : "none yet"}.` +
-        (transcribed > 0 ? ` Live transcript at ${session.relPath}.` : "")
-    );
+    return `In #${session.channel.name} for ${minutes} min, ${transcribed} utterances transcribed, speaking now: ${session.speaking.size}, participants so far: ${participants.length > 0 ? participants.join(", ") : "none yet"}.${transcribed > 0 ? ` Live transcript at ${session.relPath}.` : ""}`;
 };
 
 // Process shutdown (SIGTERM): flush what we have so a restart never eats a call's transcript.

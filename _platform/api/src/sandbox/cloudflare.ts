@@ -273,7 +273,9 @@ const provisionTunnel = async (args: {
 // from the token alone (no Cloudflare call). The platform always has a non-empty token, so undefined is a bug.
 const sandboxTunnelId = (connectToken: string): string => {
     const id = sandboxIdFromToken(connectToken);
-    if (id === undefined) throw new Error(`sandboxTunnelId called with an empty connect token`);
+    if (id === undefined) {
+        throw new Error(`sandboxTunnelId called with an empty connect token`);
+    }
     return id;
 };
 

@@ -290,8 +290,7 @@ export const usageDetail = (headroom: PlanHeadroom): string =>
     [
         ...headroom.pools.map(
             (pool) =>
-                `${pool.label} ${formatUtilization(pool.percent, headroom.stale)}` +
-                (pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`),
+                `${pool.label} ${formatUtilization(pool.percent, headroom.stale)}${pool.resetsAt === undefined ? `` : ` (resets ${formatReset(pool.resetsAt)})`}`,
         ),
         `measured ${formatAge(headroom.measuredAt)}`,
     ].join(` · `);

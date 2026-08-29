@@ -6,10 +6,12 @@ import { packTar } from "../src/pages/workspace/tarStream.ts";
 const td = new TextDecoder();
 const readCStr = (buf, off, len) => {
     let end = off;
-    while (end < off + len && buf[end] !== 0) end++;
+    while (end < off + len && buf[end] !== 0) {
+        end++;
+    }
     return td.decode(buf.subarray(off, end));
 };
-const readOctal = (buf, off, len) => parseInt(readCStr(buf, off, len).trim() || "0", 8);
+const readOctal = (buf, off, len) => Number.parseInt(readCStr(buf, off, len).trim() || "0", 8);
 const pad = (n) => (512 - (n % 512)) % 512;
 const isZero = (buf, off) => buf.subarray(off, off + 512).every((b) => b === 0);
 
@@ -40,7 +42,9 @@ const drain = async (stream) => {
     const reader = stream.getReader();
     for (;;) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+            break;
+        }
         chunks.push(value);
     }
     const total = chunks.reduce((n, c) => n + c.byteLength, 0);

@@ -1,5 +1,5 @@
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
-import { ORPCError } from "@orpc/server";
+import type { ORPCError } from "@orpc/server";
 import { describe, expect, it } from "vitest";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
@@ -234,7 +234,11 @@ describe(`adminAttention`, () => {
                           id: `sb1`,
                           name: `dev box`,
                           setupCodeClaimedAt: new Date(`2026-08-25T08:00:00Z`),
-                          setupReport: { stage: `creating-tunnel`, failed: [{ check: `tunnel`, problem: `zrok enable refused`, remedy: `` }], at: `x` },
+                          setupReport: {
+                              stage: `creating-tunnel`,
+                              failed: [{ check: `tunnel`, problem: `zrok enable refused`, remedy: `` }],
+                              at: `x`,
+                          },
                           owner: { email: `alice@example.com` },
                       },
                   ]
@@ -351,7 +355,9 @@ describe(`adminCosts`, () => {
         });
         // The month key and the week's day keys are the same strings the meters bill by.
         expect(captured.usageWhere).toEqual({ month: `2026-08` });
-        expect(captured.trialWeekWhere).toEqual({ day: { in: [`2026-08-19`, `2026-08-20`, `2026-08-21`, `2026-08-22`, `2026-08-23`, `2026-08-24`, `2026-08-25`] } });
+        expect(captured.trialWeekWhere).toEqual({
+            day: { in: [`2026-08-19`, `2026-08-20`, `2026-08-21`, `2026-08-22`, `2026-08-23`, `2026-08-24`, `2026-08-25`] },
+        });
     });
 });
 
@@ -379,7 +385,12 @@ describe(`adminUserDetail`, () => {
             },
             session: {
                 findMany: async () => [
-                    { createdAt: new Date(`2026-08-25T09:00:00Z`), expiresAt: new Date(`2026-09-25T09:00:00Z`), ipAddress: `1.2.3.4`, userAgent: `Firefox` },
+                    {
+                        createdAt: new Date(`2026-08-25T09:00:00Z`),
+                        expiresAt: new Date(`2026-09-25T09:00:00Z`),
+                        ipAddress: `1.2.3.4`,
+                        userAgent: `Firefox`,
+                    },
                 ],
             },
             account: { findMany: async () => [{ providerId: `google` }, { providerId: `google` }] },
@@ -409,7 +420,11 @@ describe(`adminUserDetail`, () => {
             },
             sandboxMember: {
                 findMany: async () => [
-                    { role: `viewer`, acceptedAt: new Date(`2026-08-10T00:00:00Z`), sandbox: { name: `team box`, owner: { email: `boss@example.com` } } },
+                    {
+                        role: `viewer`,
+                        acceptedAt: new Date(`2026-08-10T00:00:00Z`),
+                        sandbox: { name: `team box`, owner: { email: `boss@example.com` } },
+                    },
                 ],
             },
             publisherClaim: { findMany: async () => [{ publisher: `alice` }] },
@@ -427,7 +442,9 @@ describe(`adminUserDetail`, () => {
         expect(detail?.membership).toEqual({ status: `active`, currentPeriodEnd: `2026-09-01T00:00:00.000Z` });
         expect(detail?.creditsToday).toBe(40);
         expect(detail?.hostedMonthMinutes).toBe(120);
-        expect(detail?.wallets).toEqual([{ network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, payments30d: 4 }]);
+        expect(detail?.wallets).toEqual([
+            { network: `eip155:8453`, address: `0xabc`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, payments30d: 4 },
+        ]);
         expect(detail?.sandboxes[0]).toMatchObject({
             id: `sb1`,
             setupClaimedAt: `2026-08-02T01:00:00.000Z`,
@@ -507,10 +524,7 @@ describe(`adminUsers`, () => {
         const captured: { findArgs?: Record<string, unknown>; countArgs?: unknown } = {};
         await adminUsers(prismaWith([], 0, captured), { limit: 50, query: `  Radarsu ` });
         const where = {
-            OR: [
-                { email: { contains: `Radarsu`, mode: `insensitive` } },
-                { name: { contains: `Radarsu`, mode: `insensitive` } },
-            ],
+            OR: [{ email: { contains: `Radarsu`, mode: `insensitive` } }, { name: { contains: `Radarsu`, mode: `insensitive` } }],
         };
         expect(captured.findArgs?.[`where`]).toEqual(where);
         expect(captured.countArgs).toEqual({ where });
@@ -821,7 +835,13 @@ describe(`sendAdminDigest`, () => {
     it(`with items and the latch won it goes to every admin (unconfigured mailer logs the decline, still counted sent)`, async () => {
         logged.info.length = 0;
         logged.warn.length = 0;
-        await sendAdminDigest(attentionPrisma(true, 2), configWith({ admin: { emails: `radarsu@gmail.com, ops@example.com`, mutations: false } }), logger, `2026-08-24`, () => NOW);
+        await sendAdminDigest(
+            attentionPrisma(true, 2),
+            configWith({ admin: { emails: `radarsu@gmail.com, ops@example.com`, mutations: false } }),
+            logger,
+            `2026-08-24`,
+            () => NOW,
+        );
         expect(logged.info).toContain(`admin digest sent`);
         // The unconfigured mailer declined twice — once per admin — instead of throwing.
         expect(logged.warn.filter((message) => message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
@@ -914,15 +934,19 @@ describe(`retryPayout`, () => {
 
     it(`refuses an unknown id and a payout that is not pending, in sentences`, async () => {
         expect((await retryPayout(deps(null, null), `p1`)).message).toBe(`No payout with that id.`);
-        expect((await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`)).message).toContain(
-            `is paid`,
-        );
+        expect(
+            (await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`)).message,
+        ).toContain(`is paid`);
     });
 
     it(`pays a pending payout through the shared settle path under its own idempotency key`, async () => {
         let idempotencyKey: string | undefined;
         const result = await retryPayout(
-            deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` }, { stripeAccountId: `acct`, payoutsEnabled: true }, undefined),
+            deps(
+                { id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` },
+                { stripeAccountId: `acct`, payoutsEnabled: true },
+                undefined,
+            ),
             `p1`,
         );
         expect(result).toEqual({ paid: true, message: `Paid: $25.00 transferred.` });
@@ -931,9 +955,13 @@ describe(`retryPayout`, () => {
 
     it(`a transfer that fails again stays pending and says so`, async () => {
         const result = await retryPayout(
-            deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` }, { stripeAccountId: `acct`, payoutsEnabled: true }, async () => {
-                throw new Error(`account requirements past due`);
-            }),
+            deps(
+                { id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` },
+                { stripeAccountId: `acct`, payoutsEnabled: true },
+                async () => {
+                    throw new Error(`account requirements past due`);
+                },
+            ),
             `p1`,
         );
         expect(result.paid).toBe(false);

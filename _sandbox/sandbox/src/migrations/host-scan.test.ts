@@ -2,8 +2,7 @@ import { expect, test } from "vitest";
 import type { HostHub } from "../hosts/host-hub.js";
 import { detectOpenclaw } from "./openclaw.js";
 import { probeHost, scanHost } from "./host-scan.js";
-import { planHermes } from "./hermes.js";
-import { detectHermes } from "./hermes.js";
+import { planHermes, detectHermes } from "./hermes.js";
 
 /* The direct read, against a fake machine that answers the two tools it needs. The point of these is that a
  * connected computer produces the SAME map an archive does, so the adapters, and everything after them, are

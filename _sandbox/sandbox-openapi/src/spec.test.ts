@@ -16,10 +16,14 @@ import { sandboxSpec, serializeSpec, type SandboxSpecDocument, type SpecOperatio
 const contractRoutes = (): { group: string; route: string; method: string; path: string }[] => {
     const found: { group: string; route: string; method: string; path: string }[] = [];
     for (const [group, procedures] of Object.entries(sandboxContract)) {
-        if (procedures === null || typeof procedures !== "object") continue;
+        if (procedures === null || typeof procedures !== "object") {
+            continue;
+        }
         for (const [route, procedure] of Object.entries(procedures as Record<string, unknown>)) {
             const meta = (procedure as { "~orpc"?: { route?: { method?: string; path?: string } } })["~orpc"]?.route;
-            if (meta?.method === undefined || meta.path === undefined) continue;
+            if (meta?.method === undefined || meta.path === undefined) {
+                continue;
+            }
             found.push({ group, route, method: meta.method, path: meta.path });
         }
     }
@@ -121,7 +125,11 @@ describe("the shelves", () => {
          * reader walking the document top to bottom would meet the groups in different orders, and every
          * previous/next link on the site would be describing a sequence the document does not have. */
         const runs: string[] = [];
-        for (const group of SPEC_GROUPS) if (runs[runs.length - 1] !== group.shelf) runs.push(group.shelf);
+        for (const group of SPEC_GROUPS) {
+            if (runs.at(-1) !== group.shelf) {
+                runs.push(group.shelf);
+            }
+        }
         expect(runs).toEqual([...new Set(runs)]);
         // And the runs appear in the shelves' own declared order, so the rail is not a permutation either.
         expect(runs).toEqual(SPEC_SHELVES.map((shelf) => shelf.name));
@@ -155,12 +163,18 @@ describe("request and response shapes", () => {
          * json-schema.org URI, which is a banner and never a value the daemon sends. */
         const banners: string[] = [];
         const walk = (node: unknown, path: string): void => {
-            if (node === null || typeof node !== "object") return;
+            if (node === null || typeof node !== "object") {
+                return;
+            }
             if (!Array.isArray(node)) {
                 const dialect = (node as Record<string, unknown>)["$schema"];
-                if (typeof dialect === "string" && dialect.startsWith("https://json-schema.org/")) banners.push(path);
+                if (typeof dialect === "string" && dialect.startsWith("https://json-schema.org/")) {
+                    banners.push(path);
+                }
             }
-            for (const [key, value] of Object.entries(node)) walk(value, `${path}/${key}`);
+            for (const [key, value] of Object.entries(node)) {
+                walk(value, `${path}/${key}`);
+            }
         };
         walk(await sandboxSpec(), "");
         expect(banners).toEqual([]);
@@ -182,8 +196,12 @@ describe("request and response shapes", () => {
         for (const entry of operations(spec)) {
             const request = JSON.stringify(entry.operation.requestBody ?? {});
             const response = JSON.stringify(entry.operation.responses ?? {});
-            if (request.includes(`"stringbool"`)) requestStrings.push(`${entry.method} ${entry.path}`);
-            if (response.includes(`"stringbool"`)) responseBooleans.push(`${entry.method} ${entry.path}`);
+            if (request.includes(`"stringbool"`)) {
+                requestStrings.push(`${entry.method} ${entry.path}`);
+            }
+            if (response.includes(`"stringbool"`)) {
+                responseBooleans.push(`${entry.method} ${entry.path}`);
+            }
         }
         // Both directions are derived from the same converter call, so agreement here is the property under
         // test; the counts themselves are the contract's business, not this test's.
@@ -195,10 +213,16 @@ describe("request and response shapes", () => {
         const wrong: string[] = [];
         for (const entry of operations(spec)) {
             const templated = [...entry.path.matchAll(/\{([^}]+)\}/gu)].map((match) => match[1]);
-            if (templated.length === 0) continue;
-            const declared = (entry.operation.parameters ?? []).filter((parameter) => parameter.in === "path").map((parameter) => parameter.name);
+            if (templated.length === 0) {
+                continue;
+            }
+            const declared = new Set(
+                (entry.operation.parameters ?? []).filter((parameter) => parameter.in === "path").map((parameter) => parameter.name),
+            );
             for (const name of templated) {
-                if (!declared.includes(name as string)) wrong.push(`${entry.method} ${entry.path} is missing path parameter ${name}`);
+                if (!declared.has(name as string)) {
+                    wrong.push(`${entry.method} ${entry.path} is missing path parameter ${name}`);
+                }
             }
         }
         expect(wrong).toEqual([]);
