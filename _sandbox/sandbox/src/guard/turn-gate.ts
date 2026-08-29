@@ -1,5 +1,5 @@
 import type { AdmissionRule, AgentCapabilities, CommandClass } from "@intentic/sandbox-contract";
-import { type CommandGate, createCommandGate } from "./command-gate.js";
+import { type CommandGate, type CommandGateOptions, createCommandGate } from "./command-gate.js";
 import { clearTurnTaint, createTurnTaint, publishTurnTaint, type TurnTaint } from "./turn-taint.js";
 
 /* ONE PLACE EVERY VENDOR RUNTIME BUILDS ITS SAFETY WIRING, so the five lines that mint a gate and publish a
@@ -34,6 +34,10 @@ export interface TurnGateInput {
      *
      * Absent ⇒ "hooks", the ceiling, which is the safe default for a caller that builds a request by hand. */
     readonly rulebook?: AgentCapabilities["rulebook"];
+    // Turn a held program into one plain sentence for its card (settings.explainCommands). Absent ⇒ cards carry
+    // the program alone. Passed through untouched: what it costs and whether it is worth it are turn-plan.ts's
+    // call, and a vendor runtime's card is the same card the Claude loop raises.
+    readonly explainCommand?: CommandGateOptions["explain"];
     readonly signal: AbortSignal;
 }
 
@@ -100,6 +104,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             signal: turn.signal,
             taint,
+            explain: turn.explainCommand,
         }),
         release: () => {
             if (turn.conversationId !== undefined) {

@@ -55,6 +55,27 @@ vi.mock("@intentic/ui", async () => {
                 return vue.h(`div`, { class: `figure-stub` }, String(this.figure[`kind`]));
             },
         }),
+        /* The shared card shell (ChatCard) IMPORTS its icon rather than taking the global one ChatMessageView's
+         * own template uses, so this mock now has to answer for it. Rendered as `<i name>`, which is exactly
+         * what the global registration renders: one shape for both, or `marks()` below would see two. */
+        Icon: vue.defineComponent({
+            props: { name: { type: String, required: true }, spin: Boolean },
+            render(): unknown {
+                return vue.h(`i`, { name: this.name });
+            },
+        }),
+        // The command block's copy control. Its own behaviour (the clipboard, the copied state) is the design
+        // system's to test; what matters here is that a card holding a program still mounts.
+        CopyButton: vue.defineComponent({
+            props: { text: { type: String, required: true } },
+            render(): unknown {
+                return vue.h(`button`, { class: `copy-stub` });
+            },
+        }),
+        ui: { linkButton: (extra: string) => extra },
+        // Highlighting is asynchronous and dynamically imports a grammar chunk; in jsdom it never lands, and
+        // the block is written to render plain-but-marked until it does. Answering undefined IS that path.
+        useHighlighter: () => ({ tokenizeLine: async () => undefined }),
     };
 });
 // The document card renders through the ENGINE rather than the app's composable (see ChatDocumentBody), so the
@@ -348,6 +369,102 @@ describe(`ChatMessageView question card`, () => {
 /* An errand is the app's prompt, not the user's (errands.ts): the row says what was asked for, and the words
  * the agent actually got are behind one press rather than gone: the audit trail is the whole reason this is a
  * fold rather than a suppression. */
+/* THE PERMISSION CARD, which is the one card in this transcript that asks a person to take responsibility for
+ * something. What it has to get right is not the decision (that is the gate's) but the READING: which part of
+ * this is the part that stopped it, and, when the sentence is standing in front of the command, that the
+ * command is never actually gone. */
+describe(`ChatMessageView permission card`, () => {
+    const COMMAND = `cd /work && rg -n token .env.production`;
+    // Derived, not hand-counted: these offsets stand in for the classifier's own, and a fixture off by two
+    // tests the arithmetic of whoever wrote the fixture rather than the card.
+    const CREDENTIAL = { start: COMMAND.indexOf(`.env.production`), end: COMMAND.length };
+    const held = (extra: Record<string, unknown> = {}): ChatMessage =>
+        ({
+            id: 3,
+            role: `assistant`,
+            text: ``,
+            permission: {
+                requestId: `perm-1`,
+                status: `pending`,
+                toolName: `Bash`,
+                title: `This command would read credential material`,
+                alwaysLabel: `Allow everything that would read credential material this turn`,
+                program: { text: COMMAND, language: `bash`, truncated: false, spans: [CREDENTIAL] },
+                ...extra,
+            },
+        }) as ChatMessage;
+
+    // Every piece of the rendered program, in order, with the marked ones named: the card must show the whole
+    // command and mark exactly the fragment the gate pointed at.
+    const program = (element: HTMLElement): { all: string; marked: string[] } => {
+        const spans = [...element.querySelectorAll<HTMLElement>(`pre span`)];
+        return {
+            all: spans.map((span) => span.textContent).join(``),
+            marked: spans.filter((span) => span.classList.contains(`chat-command-mark`)).map((span) => span.textContent ?? ``),
+        };
+    };
+
+    /* Colour is asynchronous and never lands in jsdom, which is exactly the state this asserts against: the
+     * marks are the GATE's and do not depend on a grammar chunk, so a card whose highlighting has not arrived
+     * (or never will, offline, or in a language we ship no grammar for) still answers the question it exists to
+     * ask. */
+    it(`shows the whole command and marks the fragment that held it`, () => {
+        const rendered = program(mount(held()));
+        expect(rendered.all).toBe(COMMAND);
+        expect(rendered.marked).toEqual([`.env.production`]);
+    });
+
+    // With no sentence to stand in for it, the command IS the body: nothing to disclose, so nothing offering to.
+    it(`shows the command outright when there is no explanation`, () => {
+        const element = mount(held());
+        expect(element.textContent).not.toContain(`Show the command`);
+        expect(element.querySelector(`pre`)).not.toBeNull();
+    });
+
+    /* THE DISCLOSURE, and the property that makes it defensible. Folded, the card still names the fragments it
+     * was stopped for: hiding the command may never hide the evidence, or the fold has turned a wall of shell
+     * into a card nobody can audit. */
+    it(`folds the command behind a labelled control while keeping the marked fragments on the card`, async () => {
+        const element = mount(held({ explain: `Searches the workspace for token references and reads a credentials file.` }));
+        expect(element.textContent).toContain(`Searches the workspace for token references`);
+        expect(element.querySelector(`pre`)).toBeNull();
+        // The evidence, still stated.
+        expect(element.textContent).toContain(`Stopped for`);
+        expect([...element.querySelectorAll(`code.chat-command-chip`)].map((chip) => chip.textContent)).toEqual([`.env.production`]);
+
+        const toggle = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) =>
+            button.textContent?.includes(`Show the command`),
+        );
+        expect(toggle?.getAttribute(`aria-expanded`)).toBe(`false`);
+        toggle?.click();
+        await nextTick();
+        expect(program(element).all).toBe(COMMAND);
+        expect(element.textContent).toContain(`Hide the command`);
+    });
+
+    // The daemon cut the program; the card says so rather than ending mid-word and letting a reader believe
+    // they have seen all of it.
+    it(`says when the program was shortened`, () => {
+        const element = mount(held({ program: { text: `cat .env`, language: `bash`, truncated: true, spans: [] } }));
+        expect(element.textContent).toContain(`Shortened for this card`);
+    });
+
+    // The title is a SENTENCE, so it wraps in full rather than truncating behind a tooltip: this is the one
+    // line that says what the card is about, and a reader on a narrow pane must not have to hover for it.
+    it(`wraps its title rather than truncating it`, () => {
+        const element = mount(held());
+        const title = element.querySelector(`.chat-card-title`);
+        expect(title?.textContent).toBe(`This command would read credential material`);
+        expect(title?.classList.contains(`truncate`)).toBe(false);
+    });
+
+    it(`freezes with the answer that settled it, and offers nothing once it has`, () => {
+        const element = mount(held({ status: `always` }));
+        expect(element.textContent).toContain(`✓ Always allowed`);
+        expect([...element.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Allow once`))).toBe(false);
+    });
+});
+
 /* THE ANSWER'S BODY, which is prose AND the pictures drawn in it. A turn is rendered as parts precisely so a
  * ```mermaid an agent writes becomes a diagram in the chat rather than a wall of arrow syntax: for a long time
  * the file preview drew the diagrams and the answer that wrote them did not. */

@@ -26,8 +26,12 @@ import { openWorkTerminal, useWorkTerminals } from "../composables/terminal/useW
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useToolCalls } from "../composables/chat/useToolCalls";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
+import ChatCard from "./ChatCard.vue";
+import ChatCommandBlock from "./ChatCommandBlock.vue";
 import ChatDecisionButton from "./ChatDecisionButton.vue";
 import ChatDocumentBody from "./ChatDocumentBody.vue";
+import { markedFragments } from "./commandPieces";
+import { capabilityStatus, helpStatus, offerStatus, permissionStatus, planStatus, questionStatus } from "./cardStatus";
 import ChatTodoList from "./ChatTodoList.vue";
 import ChatToolRows from "./ChatToolRows.vue";
 import ChatToolRun from "./ChatToolRun.vue";
@@ -250,6 +254,20 @@ const permissionTitle = computed(() => {
         return ``;
     }
     return permission.title ?? permission.displayName ?? permission.toolName;
+});
+
+/* WHETHER THE COMMAND IS SHOWING, when a sentence is standing in front of it. Closed to start, and only ever
+ * reachable at all when there IS a sentence: with none, the program is the card's body and there is nothing to
+ * disclose. Local to the card and not persisted, deliberately, this is a per-decision choice, and remembering
+ * "I opened the last one" would silently expand a card the next decision may not need it on.
+ *
+ * The FRAGMENTS are what make closing it defensible: they are the part of the command the gate actually
+ * stopped it for, and they stay on the card whether it is open or closed. Hiding the command must never hide
+ * the evidence, or a fold has turned a wall of text into a card nobody can audit. */
+const commandOpen = ref(false);
+const commandFragments = computed(() => {
+    const program = props.message.permission?.program;
+    return program === undefined ? [] : markedFragments(program.text, program.spans);
 });
 
 // The approved run's latest status line off the provider's stream: what the card shows living while the
@@ -1075,18 +1093,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <Icon name="pencil" class="text-2xs" />Placed by you
             </p>
 
-            <div v-if="message.plan" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="list-check" class="text-sm text-link" />
-                    <!-- Sideways: this reveals the title of the very body it sits on, and under the header is
-                         exactly where that body starts. -->
-                    <span class="min-w-0 flex-1 truncate text-sm font-semibold text-content" v-tooltip.left.overflow="planTitle(message.plan)">{{
-                        planTitle(message.plan)
-                    }}</span>
-                    <span v-if="message.plan.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
-                    <span v-else-if="message.plan.status === 'rejected'" class="text-2xs font-medium text-muted">✕ Kept planning</span>
-                    <span v-else-if="message.plan.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
-                </div>
+            <!-- A NAME, not prose: the plan's own heading, which the body below opens with. -->
+            <ChatCard
+                v-if="message.plan"
+                icon="list-check"
+                icon-class="text-link"
+                :title="planTitle(message.plan)"
+                :status="planStatus(message.plan)"
+            >
                 <div class="md-prose chat-markdown chat-markdown-compact px-3.5 py-3">
                     <template v-for="(part, index) in plan" :key="index">
                         <div v-if="part.kind === `html`" class="md-part" v-html="part.html"></div>
@@ -1104,7 +1118,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     max-height="22rem"
                     class="mx-3.5 mb-3"
                 />
-                <div v-if="message.plan.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.plan.status === 'pending'" #actions>
                     <!-- One approval, not a posture menu: saying yes to a plan is saying yes to the work in it,
                          and the container is the isolation boundary. -->
                     <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePlan(message, true)"
@@ -1113,29 +1127,20 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="decidePlan(message, false)"
                         >No, keep planning</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
-            <div v-if="message.question" class="chat-surface chat-question w-full overflow-hidden rounded-xl">
-                <!-- The question wraps in full here rather than truncating behind a tooltip; a multi-question
-                     card carries a generic title and breaks each question out inline in the body below.
-                     Body tier, font-medium: this header is a SENTENCE, often two lines of it, and prose held
-                     a size above the answer it is asking about reads as a banner shouted at the reader rather
-                     than as a question being asked: the same ask sits at this size in the multi-question
-                     card's body. Weight alone separates it from the options under it, and one step of it is
-                     enough. The other card headers (plan / permission) keep the title tier: they are single
-                     truncated lines, not prose. -->
-                <div class="chat-question-header flex items-start gap-2 px-3.5 py-2">
-                    <Icon name="comments" class="mt-0.5 text-sm text-link" />
-                    <span class="min-w-0 flex-1 text-xs font-medium text-content">{{
-                        message.question.questions.length > 1 ? "A few questions" : message.question.questions[0]?.question
-                    }}</span>
-                    <span v-if="message.question.status === 'answered'" class="mt-0.5 shrink-0 text-2xs font-medium text-success">✓ Answered</span>
-                    <span v-else-if="message.question.status === 'cancelled'" class="mt-0.5 shrink-0 text-2xs font-medium text-muted"
-                        >✕ Dismissed</span
-                    >
-                </div>
-
+            <!-- PROSE: the question wraps in full rather than truncating behind a tooltip, and a multi-question
+                 card carries a generic title and breaks each question out inline in the body below. The tier
+                 this card set is now the shell's `prose` mode; see ChatCard. -->
+            <ChatCard
+                v-if="message.question"
+                icon="comments"
+                icon-class="text-link"
+                prose
+                :title="message.question.questions.length > 1 ? 'A few questions' : (message.question.questions[0]?.question ?? '')"
+                :status="questionStatus(message.question)"
+            >
                 <!-- WHAT THE QUESTION IS ABOUT, above the options and inside the same card: the write-up this
                      turn produced (agent.ts attaches it; the model is asked for nothing). A choice between
                      options describing a document is unanswerable without the document, and by the time the card
@@ -1285,45 +1290,83 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         </div>
                     </div>
 
-                    <div v-if="message.question.status === 'pending'" class="flex items-center gap-2 pt-1">
-                        <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers"
-                            >Submit</ChatDecisionButton
-                        >
-                        <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
-                             does not say, so the tooltip does, before the click rather than after it. -->
-                        <ChatDecisionButton
-                            tone="secondary"
-                            :disabled="settling"
-                            v-tooltip.bottom="'Also stops the turn'"
-                            @click="cancelQuestion(message)"
-                            >Dismiss</ChatDecisionButton
-                        >
-                    </div>
                 </div>
-            </div>
+                <!-- Moved into the shell's own answer row rather than sitting inside the options block, which
+                     is where it used to be: every other card puts its answers behind the same rule, and a
+                     Submit that floats under the last option reads as one more thing in the list. -->
+                <template v-if="message.question.status === 'pending'" #actions>
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers"
+                        >Submit</ChatDecisionButton
+                    >
+                    <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
+                         does not say, so the tooltip does, before the click rather than after it. -->
+                    <ChatDecisionButton tone="secondary" :disabled="settling" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
+                        >Dismiss</ChatDecisionButton
+                    >
+                </template>
+            </ChatCard>
 
-            <div v-if="message.permission" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="shield" class="text-sm text-primary-500" />
-                    <!-- Same reasoning as the question card above: permissionTitle is usually a full prompt
-                         sentence ("Run `pnpm test` in the workspace root?"), so it takes the sentence weight,
-                         not the title weight the plan card's short name gets. -->
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" v-tooltip.left.overflow="permissionTitle">{{
-                        permissionTitle
-                    }}</span>
-                    <span v-if="message.permission.status === 'allowed'" class="text-2xs font-medium text-success">✓ Allowed</span>
-                    <span v-else-if="message.permission.status === 'always'" class="text-2xs font-medium text-success">✓ Always allowed</span>
-                    <span v-else-if="message.permission.status === 'denied'" class="text-2xs font-medium text-muted">✕ Denied</span>
-                    <span v-else-if="message.permission.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
-                </div>
+            <!-- PROSE, at last matching the comment this card has carried all along: permissionTitle is a full
+                 sentence ("This command would read credential material"), so it wraps at the body tier rather
+                 than truncating a size up. -->
+            <ChatCard
+                v-if="message.permission"
+                icon="shield"
+                prose
+                :title="permissionTitle"
+                :status="permissionStatus(message.permission)"
+            >
+                <div class="flex flex-col gap-2 px-3.5 py-3">
+                    <!-- THE SENTENCE FIRST when there is one (settings.explainCommands): what the program does
+                         and what it is for, in the words the quick model wrote from the program text. It leads
+                         because it is the thing that can be read in the two seconds this card gets, and it is
+                         never the only account of the command, which sits under it either way. -->
+                    <span v-if="message.permission.explain" class="text-xs leading-relaxed text-content/85">{{ message.permission.explain }}</span>
+                    <span v-else-if="message.permission.description" class="text-xs text-content/85">{{ message.permission.description }}</span>
 
-                <div class="flex flex-col gap-1 px-3.5 py-3">
-                    <span v-if="message.permission.description" class="text-xs text-content/85">{{ message.permission.description }}</span>
+                    <template v-if="message.permission.program">
+                        <!-- THE EVIDENCE, ALWAYS ON THE CARD. These are the fragments that put the command in
+                             the class that held it, and they stay visible whether or not the command below is
+                             folded away: hiding the command must never hide the reason it was stopped, or the
+                             disclosure has traded a wall of shell for a card nobody can audit. Only shown
+                             beside a sentence, though: with the command already expanded they would be the
+                             same characters twice, marked in the same colour, one line apart. -->
+                        <div v-if="message.permission.explain && commandFragments.length > 0" class="flex flex-wrap items-center gap-1.5">
+                            <span class="text-2xs text-subtle">Stopped for</span>
+                            <code
+                                v-for="fragment in commandFragments"
+                                :key="fragment"
+                                class="chat-command-chip max-w-full truncate rounded px-1.5 py-0.5 font-mono text-2xs"
+                                >{{ fragment }}</code
+                            >
+                        </div>
+
+                        <!-- A DISCLOSURE, and deliberately neither a hover nor a tab.
+                             Hover has no touch or keyboard equivalent, so putting the exact text of what you
+                             are approving behind one hides it from every phone and every keyboard user. Tabs
+                             would make the command a peer VIEW of its own summary, so reading the actual thing
+                             costs a deliberate switch away from the card's default — on a safety prompt, the
+                             default has to be the thing itself or one labelled click from it.
+                             Only offered when a sentence stands in for it; with no sentence there is nothing
+                             to collapse behind and the command is simply the body. -->
+                        <button
+                            v-if="message.permission.explain"
+                            type="button"
+                            class="flex items-center gap-1 self-start text-2xs text-muted hover:text-content"
+                            :aria-expanded="commandOpen"
+                            @click="commandOpen = !commandOpen"
+                        >
+                            <Icon :name="commandOpen ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                            {{ commandOpen ? "Hide the command" : "Show the command" }}
+                        </button>
+                        <ChatCommandBlock v-if="commandOpen || !message.permission.explain" :program="message.permission.program" />
+                    </template>
+
                     <span v-if="message.permission.path" class="font-mono text-2xs text-subtle">{{ message.permission.path }}</span>
                     <span v-if="message.permission.reason" class="text-2xs text-subtle">Requested because: {{ message.permission.reason }}</span>
                 </div>
 
-                <div v-if="message.permission.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.permission.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePermission(message, 'once')"
                         >Allow once</ChatDecisionButton
                     >
@@ -1347,78 +1390,69 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         @click="decidePermission(message, 'deny')"
                         >No</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- The agent's browser needs a person: a captcha, a sign-in step it cannot clear. The primary
                  action NAVIGATES rather than decides: the live stage, Take control and "hand back" are all on
                  /browsers, so the card resolves from over there (the resolved frame freezes it here). Chat
                  offers only the answer that needs no browser: can't help now. -->
-            <div v-if="message.browserHelp" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="desktop" class="text-sm text-warning" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
-                        >The agent's browser needs you: {{ message.browserHelp.account }}</span
-                    >
-                    <span v-if="message.browserHelp.status === 'helped'" class="text-2xs font-medium text-success">✓ You helped</span>
-                    <span v-else-if="message.browserHelp.status === 'declined'" class="text-2xs font-medium text-muted">✕ Couldn't help</span>
-                    <span v-else-if="message.browserHelp.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
-                </div>
-
+            <ChatCard
+                v-if="message.browserHelp"
+                icon="desktop"
+                icon-class="text-warning"
+                :title="`The agent's browser needs you: ${message.browserHelp.account}`"
+                :status="helpStatus(message.browserHelp)"
+            >
                 <div class="flex flex-col gap-1 px-3.5 py-3">
                     <span class="text-xs text-content/85">{{ message.browserHelp.message }}</span>
                 </div>
 
-                <div v-if="message.browserHelp.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.browserHelp.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)"
                         >Open the browser</ChatDecisionButton
                     >
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineBrowserHelp(message)"
                         >Can't help now</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- The agent's terminal needs a person: a command it started is sitting at a prompt it cannot
                  answer. The browser card's twin, and deliberately identical in shape: the primary action
                  NAVIGATES (opens the terminal panel on that session, where the live prompt and "hand back"
                  are), and chat offers only the answer that needs no terminal. -->
-            <div v-if="message.terminalHelp" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="terminal" class="text-sm text-warning" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">The agent's terminal needs you</span>
-                    <span v-if="message.terminalHelp.status === 'helped'" class="text-2xs font-medium text-success">✓ You helped</span>
-                    <span v-else-if="message.terminalHelp.status === 'declined'" class="text-2xs font-medium text-muted">✕ Couldn't help</span>
-                    <span v-else-if="message.terminalHelp.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Stopped</span>
-                </div>
-
+            <ChatCard
+                v-if="message.terminalHelp"
+                icon="terminal"
+                icon-class="text-warning"
+                title="The agent's terminal needs you"
+                :status="helpStatus(message.terminalHelp)"
+            >
                 <div class="flex flex-col gap-1 px-3.5 py-3">
                     <span class="text-xs text-content/85">{{ message.terminalHelp.message }}</span>
                 </div>
 
-                <div v-if="message.terminalHelp.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.terminalHelp.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)"
                         >Open the terminal</ChatDecisionButton
                     >
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)"
                         >Can't help now</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- A priced service run asking for the owner's click: the product's spend gate. Every number on
                  it is the platform's (relayed through the daemon's offer card, never typed by the model); the
                  agent's own words are the one `why` line. The click here is the ONLY way the run can happen:
                  the agent's command sits parked on the daemon until this card settles it. -->
-            <div v-if="message.serviceOffer" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="star" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content">Run {{ message.serviceOffer.offer.name }}?</span>
-                    <span v-if="message.serviceOffer.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
-                    <span v-else-if="message.serviceOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
-                    <span v-else-if="message.serviceOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
-                </div>
-
+            <ChatCard
+                v-if="message.serviceOffer"
+                icon="star"
+                :title="`Run ${message.serviceOffer.offer.name}?`"
+                :status="offerStatus(message.serviceOffer)"
+            >
                 <div class="flex flex-col gap-1 px-3.5 py-3">
                     <span class="text-xs text-content/85">{{ message.serviceOffer.offer.description }}</span>
                     <span class="font-mono text-2xs text-subtle"
@@ -1442,14 +1476,14 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
 
                 <!-- The run living: the provider's own status line, streamed through the platform while the
                      answer is composed: the paid seconds visible instead of a spinner of unknowable length. -->
-                <div v-if="serviceStatus" class="flex items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <div v-if="serviceStatus" class="chat-card-row flex items-center gap-2 px-3.5 py-2.5">
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ serviceStatus }}</span>
                 </div>
 
                 <!-- The receipt, from the platform's own answer: what a served run cost and what is left, or the
                      two ways it ended free: a refunded no-answer, a refusal that raced the allowance. -->
-                <div v-if="message.serviceOffer.receipt" class="border-t border-line px-3.5 py-2.5">
+                <div v-if="message.serviceOffer.receipt" class="chat-card-row px-3.5 py-2.5">
                     <span v-if="message.serviceOffer.receipt.outcome === 'ok'" class="font-mono text-2xs text-muted"
                         >Served · {{ formatCredits(message.serviceOffer.receipt.credits) }} credits<template
                             v-if="message.serviceOffer.receipt.remaining !== undefined"
@@ -1463,7 +1497,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <span v-else class="text-2xs text-muted">The platform refused the run after all: nothing charged.</span>
                 </div>
 
-                <div v-if="message.serviceOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.serviceOffer.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decideServiceOffer(message, true)"
                         >Run: {{ formatCredits(message.serviceOffer.offer.creditsPerRun) }} credits</ChatDecisionButton
                     >
@@ -1471,25 +1505,20 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideServiceOffer(message, false)"
                         >Skip: free</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- A USDC payment asking for the owner's click: the wallet's spend gate. Every number on it is
                  the daemon's arithmetic over the ENDPOINT's own 402 challenge and the wallet's ledger, never
                  typed by the model; the agent's own words are the one `why` line. The click here is the ONLY
                  way the money can move: the agent's command sits parked on the daemon until this card settles
                  it, and the signature is minted off-box by the platform only after it does. -->
-            <div v-if="message.paymentOffer" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="credit-card" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
-                        >Pay ${{ message.paymentOffer.offer.amountUsd }} {{ message.paymentOffer.offer.assetName }}?</span
-                    >
-                    <span v-if="message.paymentOffer.status === 'approved'" class="text-2xs font-medium text-success">✓ Approved</span>
-                    <span v-else-if="message.paymentOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
-                    <span v-else-if="message.paymentOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
-                </div>
-
+            <ChatCard
+                v-if="message.paymentOffer"
+                icon="credit-card"
+                :title="`Pay $${message.paymentOffer.offer.amountUsd} ${message.paymentOffer.offer.assetName}?`"
+                :status="offerStatus(message.paymentOffer)"
+            >
                 <div class="flex flex-col gap-1 px-3.5 py-3">
                     <span v-if="message.paymentOffer.offer.description" class="text-xs text-content/85">{{
                         message.paymentOffer.offer.description
@@ -1516,7 +1545,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- The receipt, from the endpoint's own settlement answer: what was paid and the onchain
                      transaction, or the one honest failure: a payment that never settled spends nothing,
                      because the signed authorization simply expires. -->
-                <div v-if="message.paymentOffer.receipt" class="border-t border-line px-3.5 py-2.5">
+                <div v-if="message.paymentOffer.receipt" class="chat-card-row px-3.5 py-2.5">
                     <span v-if="message.paymentOffer.receipt.outcome === 'paid'" class="truncate font-mono text-2xs text-muted"
                         >Paid ${{ message.paymentOffer.receipt.amountUsd
                         }}<template v-if="message.paymentOffer.receipt.transaction"> · {{ message.paymentOffer.receipt.transaction }}</template></span
@@ -1524,7 +1553,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <span v-else class="text-2xs text-muted">The payment didn't go through: nothing was spent.</span>
                 </div>
 
-                <div v-if="message.paymentOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.paymentOffer.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePaymentOffer(message, true)"
                         >Pay ${{ message.paymentOffer.offer.amountUsd }}</ChatDecisionButton
                     >
@@ -1532,28 +1561,20 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)"
                         >Skip: free</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- A missing capability asking for the owner's setup: the product's setup gate. The title and the
                  card id are the catalog's own words (resolved by the daemon that validated the ask, never typed
                  by the model); the agent's own words are the one `why` line. Connect is a decision AND a
                  navigation: setup happens on the Capabilities page, and the agent stays parked until the
                  connection comes live: the outcome row below is what says how that wait ended. -->
-            <div v-if="message.capabilityOffer" class="chat-surface w-full overflow-hidden rounded-xl">
-                <div class="flex items-center gap-2 border-b border-line px-3.5 py-2">
-                    <Icon name="bolt" class="text-sm text-primary-500" />
-                    <span class="min-w-0 flex-1 truncate text-sm font-medium text-content"
-                        >{{ message.capabilityOffer.offer.name }} isn't connected yet</span
-                    >
-                    <span v-if="message.capabilityOffer.outcome?.outcome === 'connected'" class="text-2xs font-medium text-success">✓ Connected</span>
-                    <span v-else-if="message.capabilityOffer.outcome?.outcome === 'unfinished'" class="text-2xs font-medium text-muted"
-                        >✕ Setup didn't finish</span
-                    >
-                    <span v-else-if="message.capabilityOffer.status === 'skipped'" class="text-2xs font-medium text-muted">✕ Skipped</span>
-                    <span v-else-if="message.capabilityOffer.status === 'cancelled'" class="text-2xs font-medium text-muted">✕ Not answered</span>
-                </div>
-
+            <ChatCard
+                v-if="message.capabilityOffer"
+                icon="bolt"
+                :title="`${message.capabilityOffer.offer.name} isn't connected yet`"
+                :status="capabilityStatus(message.capabilityOffer)"
+            >
                 <div class="flex flex-col gap-1 px-3.5 py-3">
                     <span v-if="capabilityDescription" class="text-xs text-content/85">{{ capabilityDescription }}</span>
                     <span v-if="message.capabilityOffer.offer.why" class="text-2xs text-subtle"
@@ -1565,7 +1586,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                      to it for whoever closed the page mid-flow. Settles via the outcome frame. -->
                 <div
                     v-if="message.capabilityOffer.status === 'connecting' && !message.capabilityOffer.outcome"
-                    class="flex items-center gap-2 border-t border-line px-3.5 py-2.5"
+                    class="chat-card-row flex items-center gap-2 px-3.5 py-2.5"
                 >
                     <Icon name="spinner" class="text-2xs text-link" spin />
                     <span class="min-w-0 flex-1 truncate text-2xs text-muted">Waiting for you to finish setup…</span>
@@ -1575,7 +1596,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <!-- How an accepted ask ended: the agent's side of it, so the row reads as what happened next. -->
-                <div v-if="message.capabilityOffer.outcome" class="border-t border-line px-3.5 py-2.5">
+                <div v-if="message.capabilityOffer.outcome" class="chat-card-row px-3.5 py-2.5">
                     <span v-if="message.capabilityOffer.outcome.outcome === 'connected'" class="text-2xs text-muted"
                         >Connected<template v-if="message.capabilityOffer.outcome.id"> as "{{ message.capabilityOffer.outcome.id }}"</template>: the
                         agent is continuing with it.</span
@@ -1583,7 +1604,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <span v-else class="text-2xs text-muted">The setup didn't finish while the agent waited: it continued without it.</span>
                 </div>
 
-                <div v-if="message.capabilityOffer.status === 'pending'" class="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2.5">
+                <template v-if="message.capabilityOffer.status === 'pending'" #actions>
                     <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="connectCapability(message)"
                         >Connect {{ message.capabilityOffer.offer.name }}</ChatDecisionButton
                     >
@@ -1592,8 +1613,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideCapabilityOffer(message, false)"
                         >Not now</ChatDecisionButton
                     >
-                </div>
-            </div>
+                </template>
+            </ChatCard>
 
             <!-- The loader is a status line, not a message: it sits at the meta tier with the tool cards it
                  trails, and takes the assistant bubble's padding so the stack keeps one left edge. -->

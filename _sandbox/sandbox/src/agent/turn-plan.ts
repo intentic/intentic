@@ -66,6 +66,8 @@ import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
 import { setupNoticeFor, setupNoticeTitle } from "../workspace/workspace-setup.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "./iq-search-instruction.js";
+import { explainCommand } from "./command-explainer.js";
+import type { CommandGateOptions } from "../guard/command-gate.js";
 
 /* WHICH RUNTIME SERVES A TURN, AND WHAT IT IS HANDED, the one question every turn has to answer before it can
  * stream anything, and the one the turn route used to answer inline as a four-arm if/else chain wrapped around
@@ -164,6 +166,17 @@ export interface TurnContext {
  * turn names the step instead of the phase, and because they overlap, the turn pays the SLOWEST rather than
  * the total. Nothing here reads anything else here, with two exceptions the harness arm spells out.
  */
+/* THE PERMISSION CARD'S PLAIN-SENTENCE PASS, bound to this sandbox's accounts, or nothing at all.
+ *
+ * `undefined` when the owner left the setting off, and that absence is the whole economy of the feature: the
+ * gate calls what it was handed, so a workspace that never opened the switch never reaches a quick model and
+ * never pays for one. Nothing downstream needs a flag to check.
+ *
+ * A closure over `services` rather than the services themselves, because the seam it fills lives in guard/,
+ * which is deliberately ignorant of accounts, chains and quotas (see CommandGateOptions.explain). */
+const explainerFor = (services: Services, on: boolean): CommandGateOptions["explain"] =>
+    on ? (program, language, signal) => explainCommand(services, program, language, signal) : undefined;
+
 export const conversationExperimentArm = (conversationId: string | undefined, holdout: number): boolean => {
     if (conversationId === undefined) {
         return Math.random() >= holdout;
@@ -655,6 +668,7 @@ export const planHarnessTurn = async (
         subagentDepth,
         actionRules,
         commandRules,
+        explainCommands,
     } = settings;
     /* The rules armed where a turn ends. STANDING, not matching: their conditions are read at the Stop, when
      * the turn has actually edited something to narrow on (rules/turn-ending.ts). */
@@ -980,6 +994,8 @@ export const planHarnessTurn = async (
              * one no longer means "no hook": the gate is wired on every turn because it also carries the taint
              * floor, which is not the owner's rulebook but a fact about what this turn has read (agent.ts). */
             ...(Object.keys(commandRules).length > 0 ? { commandRules } : {}),
+            // The card's plain-sentence pass, undefined unless the owner switched it on; see explainerFor.
+            explainCommand: explainerFor(services, explainCommands),
             /* Whether outside content CAUSED this turn, and what to call it. A listener wake is a stranger's
              * message and a webchat wake is a stranger on a public widget, the same distinction the admission
              * floor draws (guard/actions.ts wakeSourceOf), read here for the taint the command gate consults.

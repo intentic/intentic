@@ -699,6 +699,27 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "What an agent may run inside the sandbox, for the six kinds of command that are hard to take back: rewriting git history, deleting recursively, wiping a disk or a container volume, reading credential files, publishing a package, reaching out to the network. Everything else is recoverable in a container that is itself disposable, and gating it would be friction bought with nothing. Leaving a kind unset is not the same as allowing it: wiping a disk is held for your approval until you say otherwise, because nothing here brings that back.",
         ),
+    /* WHETHER A HELD COMMAND IS TRANSLATED BEFORE YOU ANSWER FOR IT. Off by default, and the default is the
+     * argument: the card is already complete without this, and switching it on spends one quick-model call per
+     * card raised, on the owner's own connected account.
+     *
+     * It buys the case the card is worst at. A held command is regularly a hundred-plus characters of pipeline
+     * the agent assembled, and the question the card actually asks, "do you want this to happen", is not
+     * answerable by reading shell quickly. The classifier already marks WHICH fragment held it (the card paints
+     * those); a sentence is what says what the rest of it does and why the agent wanted it.
+     *
+     * NEVER THE AGENT'S OWN WORDS. The sentence comes from the quick model reading the command text, not from
+     * the model being gated: a card that let the asking agent write its own justification would be a safety
+     * prompt whose persuasive half is authored by the thing it is meant to gate.
+     *
+     * The command itself is never replaced by it, only folded behind a disclosure the sentence sits above, and
+     * the marked fragments stay on the card either way, see ChatMessageView's permission card. */
+    explainCommands: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Have the quick model describe each held command in one plain sentence, above the command itself. Costs one quick-model call per card raised, on your own connected account. The command is always still there to read.",
+        ),
     /* HOW MUCH AN AGENT MAY DELEGATE, the three ceilings the Claude Code harness enforces on its own Agent
      * tool, surfaced here because their defaults are tuned for a laptop and this is a container the owner sized.
      *

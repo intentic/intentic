@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
+import { vendorSubject } from "./command-gate.js";
 import { createTurnGate, type TurnGateInput, turnIsGated } from "./turn-gate.js";
 import { conversationTainted } from "./turn-taint.js";
+
+// What a vendor runtime hands the gate, built by the production helper rather than spelled out three times:
+// every field of a subject (which grammar colours its card, what its title calls it) is the helper's answer,
+// and a literal here would be this file's second opinion about it.
+const SUBJECT = vendorSubject("bash");
 
 const turn = (overrides: Partial<Parameters<typeof createTurnGate>[0]> = {}): Parameters<typeof createTurnGate>[0] => ({
     signal: new AbortController().signal,
@@ -89,7 +95,7 @@ test("a workspace with no rules at all is still gated", () => {
  * would be a lie about their own turn. */
 test('a runtime declaring "refuse-only" refuses a hold, without claiming nobody is watching', async () => {
     const { gate, release } = createTurnGate(turn({ commandRules: { "git.destructive": "hold" }, rulebook: "refuse-only" }));
-    const consulting = gate.consult("git push --force origin main", { toolName: "bash", displayName: "Run command", noun: "command" });
+    const consulting = gate.consult("git push --force origin main", SUBJECT);
     const step = await consulting.next();
     // No card: it never yields one, which is the whole point of the shape.
     expect(step.done).toBe(true);
@@ -103,7 +109,7 @@ test('a runtime declaring "refuse-only" refuses a hold, without claiming nobody 
 // A deny is unaffected: it never wanted to ask, so refuse-only costs it nothing.
 test('a deny is enforced in full on a "refuse-only" runtime', async () => {
     const { gate, release } = createTurnGate(turn({ commandRules: { "git.destructive": "deny" }, rulebook: "refuse-only" }));
-    const step = await gate.consult("git push --force origin main", { toolName: "bash", displayName: "Run command", noun: "command" }).next();
+    const step = await gate.consult("git push --force origin main", SUBJECT).next();
     expect(step.done).toBe(true);
     expect((step.value as { allow: boolean }).allow).toBe(false);
     release();
@@ -119,7 +125,7 @@ test("every rulebook value produces its own shape, from the declaration alone", 
         const { gate, taint, release } = createTurnGate(
             turn({ commandRules: { "git.destructive": "hold" }, ...(rulebook === undefined ? {} : { rulebook }) }),
         );
-        const step = await gate.consult("git push --force origin main", { toolName: "bash", displayName: "Run command", noun: "command" }).next();
+        const step = await gate.consult("git push --force origin main", SUBJECT).next();
         release();
         // A parked shape yields a card first; a refusing one returns straight away.
         return { parks: step.done !== true, bornTainted: taint.tainted() };

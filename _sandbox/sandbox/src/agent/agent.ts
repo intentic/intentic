@@ -49,7 +49,7 @@ import { installSteeringHooks } from "./agent-installs.js";
 import type { ClassifiedInstall } from "../environment/runtime-installs.js";
 import { redactionHooks } from "./agent-redaction.js";
 import { type SecretAccess, secretCommandHooks } from "./agent-secrets.js";
-import { commandGateHooks } from "../guard/command-gate.js";
+import { type CommandGateOptions, commandGateHooks } from "../guard/command-gate.js";
 import { outboundGateHooks } from "../guard/outbound-gate.js";
 import { outsideResultHooks } from "../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../guard/turn-taint.js";
@@ -262,6 +262,14 @@ export interface AgentRequest {
      * read. A turn with no rules and no outside content still reaches every decide and is allowed by all of
      * them, which costs one classify per Bash call. */
     readonly commandRules?: Partial<Readonly<Record<CommandClass, AdmissionRule>>>;
+    /* Turn a held program into one plain sentence for its card (settings.explainCommands, wired in
+     * turn-plan.ts). Absent ⇒ cards go out with the program alone, which is the default.
+     *
+     * A FUNCTION ON THE REQUEST rather than a flag, for the reason every service-shaped dependency here is:
+     * this module is handed what it needs to run a turn and does not reach for `Services`, so the account
+     * chain, the quota memo and the provider walk stay behind one seam (agent/command-explainer.ts) that a
+     * test can replace with a stub. */
+    readonly explainCommand?: CommandGateOptions["explain"];
     /* What the serving runtime can DO about that rulebook, from the pair's capability record
      * (capabilitiesOf().rulebook). The vendor adapters read it to shape their gate: "none" gets no consult and a
      * permanently-set taint bit, "refuse-only" cannot park on a card so holds refuse, "approval" and "hooks"
@@ -636,6 +644,7 @@ const baseOptions = (
                 push,
                 signal: request.signal,
                 taint,
+                explain: request.explainCommand,
             }),
             /* The outside-content envelope on everything the agent PULLS IN mid-turn, a fetched page, a foreign
              * MCP server's answer, the output of a curl that reached the internet (guard/outside-results.ts). Its

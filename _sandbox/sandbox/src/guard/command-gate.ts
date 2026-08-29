@@ -1,5 +1,14 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { type AdmissionRule, type AgentEvent, classifyCommand, COMMAND_CLASS_LABELS, type CommandClass } from "@intentic/sandbox-contract";
+import {
+    type AdmissionRule,
+    type AgentEvent,
+    COMMAND_CLASS_LABELS,
+    type CommandClass,
+    type CommandMatch,
+    type CommandSpan,
+    matchCommand,
+    type ProgramAsk,
+} from "@intentic/sandbox-contract";
 import { createRequest } from "../agent/agent-requests.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
@@ -64,6 +73,19 @@ export interface CommandGateOptions {
     /* This turn's outside-content bit (guard/turn-taint.ts), READ per command rather than snapshotted: the
      * page that taints a turn usually arrives mid-turn, several tool calls before the command that matters. */
     readonly taint: TurnTaint;
+    /* TRANSLATE A HELD PROGRAM INTO ONE SENTENCE FOR THE CARD, when the owner switched that on
+     * (SandboxSettings.explainCommands). Absent ⇒ cards go out with the program alone, which is the default.
+     *
+     * A CALLBACK RATHER THAN `Services`, so this module keeps knowing nothing about accounts, provider chains
+     * or quotas: the wiring that owns those (agent/turn-plan.ts) hands down a function, and the gate's own test
+     * suite can hand down a stub without standing up a quick model. Resolving to undefined is the ordinary
+     * answer for "no sentence worth showing", and a rejection is treated the same way.
+     *
+     * Explicitly `| undefined` rather than bare-optional so a caller can forward its own maybe-absent field in
+     * one assignment: under exactOptionalPropertyTypes the bare form makes every call site spread a
+     * conditional, which is a branch apiece for a value that means the same thing present-and-undefined as
+     * absent. */
+    readonly explain?: ((program: string, language: ProgramAsk["language"], signal: AbortSignal) => Promise<string | undefined>) | undefined;
 }
 
 // How much of the command the card shows. Long enough for a heredoc's first lines to identify what this is,
@@ -80,14 +102,40 @@ export interface GateSubject {
     readonly displayName: string;
     // How the title reads: "This command would delete files recursively".
     readonly noun: string;
+    // Which grammar colours it on the card, and which word the explainer's prompt uses for it. The two
+    // execution backends, named as Shiki names them.
+    readonly language: ProgramAsk["language"];
 }
 
-const BASH_SUBJECT: GateSubject = { toolName: "Bash", displayName: "Run command", noun: "command" };
-const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script" };
+const BASH_SUBJECT: GateSubject = { toolName: "Bash", displayName: "Run command", noun: "command", language: "bash" };
+const JS_SUBJECT: GateSubject = { toolName: JS_TOOL_NAME, displayName: "Run code", noun: "script", language: "javascript" };
 
 // A vendor runtime's own command tool, whatever it calls it. One subject for all of them: the card names the
 // consequence, and which vendor tool carried it is in the transcript beside it either way.
-export const vendorSubject = (toolName: string): GateSubject => ({ toolName, displayName: "Run command", noun: "command" });
+export const vendorSubject = (toolName: string): GateSubject => ({ toolName, displayName: "Run command", noun: "command", language: "bash" });
+
+/* THE PROGRAM AS THE CARD WILL HOLD IT: the head of it, and the marked fragments that survive the cut.
+ *
+ * The spans come from the classifier (matchCommand), so the card marks what the RULE fired on rather than
+ * re-running the patterns in a browser and marking whatever a second copy of them found. Clipping them here is
+ * what keeps that true after truncation: an offset past `SHOWN` points into text nobody was sent, and a span
+ * left straddling the cut would paint to the end of a string that ends somewhere else. A hold whose every
+ * fragment sits past the cut keeps its card and simply has nothing to mark, which is honest, the reason is
+ * still in the title and the `Show all` toggle still reaches the rest.
+ *
+ * ONLY THE HELD CLASS'S fragments. The title says which consequence stopped this ("would read credential
+ * material"), so marking a second matched class's fragments beside it would point at text nobody is being asked
+ * about, under a sentence that does not describe it. */
+const programAsk = (program: string, subject: GateSubject, matches: readonly CommandMatch[], held: CommandClass): ProgramAsk => {
+    const text = program.slice(0, SHOWN);
+    const spans: readonly CommandSpan[] = matches.find((match) => match.commandClass === held)?.spans ?? [];
+    return {
+        text,
+        language: subject.language,
+        truncated: program.length > text.length,
+        spans: spans.filter((span) => span.start < text.length).map((span) => ({ start: span.start, end: Math.min(span.end, text.length) })),
+    };
+};
 
 // Allow ⇒ run it. Refuse ⇒ do not, and hand `reason` back to the model as the refusal, in the vendor's own
 // vocabulary at the call site.
@@ -160,6 +208,68 @@ const decide = (
     return held;
 };
 
+/* THE THREE WAYS A HELD COMMAND IS REFUSED WITHOUT EVER REACHING A CARD, in the words the model reads back.
+ * Undefined ⇒ raise the card and wait, which is the ordinary path.
+ *
+ * Lifted out of `consult` because they are one question ("can this be asked at all, and of whom") answered
+ * before anything about cards, waiting or explaining begins, and leaving them inline put four unrelated
+ * decisions in one function. Each refusal tells the model not to retry, for the reason each header gives: a
+ * turn that works around a refusal it was just given is the failure these sentences exist to prevent. */
+const refusalFor = (verdict: GuardVerdict, options: CommandGateOptions): GateOutcome | undefined => {
+    if (verdict.effect === "deny") {
+        return { allow: false, reason: verdict.reason };
+    }
+    if (options.unattended) {
+        return {
+            allow: false,
+            reason:
+                `${verdict.reason}, and this turn is running unattended: there is nobody to approve it. ` +
+                `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
+        };
+    }
+    if (options.canPark === false) {
+        return {
+            allow: false,
+            reason:
+                `${verdict.reason}, and this agent cannot pause to ask: it was refused instead. ` +
+                `Do not retry: carry on with what you can do without this command, and say plainly what you left undone. ` +
+                `The owner can change the rule, or run this on an agent that can ask.`,
+        };
+    }
+    return undefined;
+};
+
+/* THE PLAIN SENTENCE FOR A CARD ALREADY ON SCREEN, or nothing at all. Yields at most one `permission_note`.
+ *
+ * A SECOND FRAME RACED AGAINST THE ANSWER, which is the whole design and the reason it is not a field on the
+ * card. The card is up and the person may settle it in two seconds; the quick model may take considerably
+ * longer, because its chain steps over spent accounts one refusal at a time. So `settling` — the waiter, already
+ * started by the caller — is the other runner, and if the person wins there is nothing to say: a note for a card
+ * that has already resolved is a frame arriving after `resolved`, which every client would then have to learn to
+ * ignore.
+ *
+ * A REJECTION IS SILENCE. Nothing connected, a chain spent to the bottom, a credential that failed resolution:
+ * none of that is anything the person answering this card can act on, and none of it changes what the card
+ * says. The card was complete when it went out. */
+async function* explanationFrames(
+    requestId: string,
+    program: string,
+    subject: GateSubject,
+    options: CommandGateOptions,
+    settling: Promise<unknown>,
+): AsyncGenerator<AgentEvent> {
+    if (options.explain === undefined) {
+        return;
+    }
+    const explained = await Promise.race([
+        options.explain(program, subject.language, options.signal).catch(() => undefined),
+        settling.then(() => undefined),
+    ]);
+    if (explained !== undefined && explained !== "") {
+        yield { kind: "permission_note", requestId, explain: explained };
+    }
+}
+
 export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     /* WHAT "ALWAYS" REMEMBERS, the classes the user has already said yes to, for the rest of THIS TURN. The
      * closure is built once per turn, and the button's label says so rather than promising a memory that is not
@@ -175,30 +285,23 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
     return {
         enforcing: true,
         async *consult(program, subject) {
-            const classes = classifyCommand(program).filter((commandClass) => !granted.has(commandClass));
-            const held = classes.length === 0 ? undefined : decide(classes, options.rules, options.taint.source());
+            // Matched rather than merely classified, so the fragments that fired are in hand if this ends on a
+            // card. An allowed command drops them a line later and pays only the offsets the same walk collected.
+            const matches = matchCommand(program).filter((match) => !granted.has(match.commandClass));
+            const held =
+                matches.length === 0
+                    ? undefined
+                    : decide(
+                          matches.map((match) => match.commandClass),
+                          options.rules,
+                          options.taint.source(),
+                      );
             if (held === undefined) {
                 return ALLOWED;
             }
-            if (held.verdict.effect === "deny") {
-                return { allow: false, reason: held.verdict.reason };
-            }
-            if (options.unattended) {
-                return {
-                    allow: false,
-                    reason:
-                        `${held.verdict.reason}, and this turn is running unattended: there is nobody to approve it. ` +
-                        `Do not retry: carry on with what you can do without this command, and say plainly what you left undone.`,
-                };
-            }
-            if (options.canPark === false) {
-                return {
-                    allow: false,
-                    reason:
-                        `${held.verdict.reason}, and this agent cannot pause to ask: it was refused instead. ` +
-                        `Do not retry: carry on with what you can do without this command, and say plainly what you left undone. ` +
-                        `The owner can change the rule, or run this on an agent that can ask.`,
-                };
+            const refused = refusalFor(held.verdict, options);
+            if (refused !== undefined) {
+                return refused;
             }
             const { id, wait } = createRequest("permission", {
                 kind: "permission",
@@ -206,17 +309,21 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
                 decision: "deny",
                 feedback: "The turn ended before you answered.",
             });
+            // The card carries the program AS A PROGRAM, with the fragments its own held class fired on.
             yield {
                 kind: "permission",
                 requestId: id,
                 toolName: subject.toolName,
                 title: `This ${subject.noun} would ${COMMAND_CLASS_LABELS[held.commandClass]}`,
                 displayName: subject.displayName,
-                description: program.slice(0, SHOWN),
+                program: programAsk(program, subject, matches, held.commandClass),
                 reason: held.verdict.reason,
                 alwaysLabel: `Allow everything that would ${COMMAND_CLASS_LABELS[held.commandClass]} this turn`,
             };
-            const { reply, resolved } = await wait(options.signal);
+            // The waiter is started BEFORE the sentence is asked for, so the two race; see explanationFrames.
+            const settling = wait(options.signal);
+            yield* explanationFrames(id, program, subject, options, settling);
+            const { reply, resolved } = await settling;
             // Every parked card owes the stream its resolution frame: it is what freezes the card in a replayed
             // transcript, and the only honest account of how long the turn was parked.
             yield resolved;

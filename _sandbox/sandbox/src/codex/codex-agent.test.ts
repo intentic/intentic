@@ -742,7 +742,12 @@ test("a held class raises a permission card and approves the command when the us
     }
 
     const card = events.find((event) => event.kind === "permission");
-    expect(card).toMatchObject({ title: expect.stringContaining("delete files recursively"), description: "rm -rf build" });
+    // The vendor's command reaches the card as a PROGRAM, marked where the classifier fired, exactly as the
+    // Claude path's does: one gate, one card, whichever runtime carried the call.
+    expect(card).toMatchObject({
+        title: expect.stringContaining("delete files recursively"),
+        program: { text: "rm -rf build", language: "bash", spans: [{ start: 0, end: 12 }] },
+    });
     expect(events.some((event) => event.kind === "resolved")).toBe(true);
     expect(decisions).toEqual([true]);
 });

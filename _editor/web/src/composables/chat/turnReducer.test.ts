@@ -257,6 +257,39 @@ describe(`interactive cards`, () => {
         // `kind` is wire framing, not part of the ask the card renders.
         expect(state.messages[1]!.permission).not.toHaveProperty(`kind`);
     });
+
+    // The program rides as a program, with the gate's own offsets: the card colours it and marks the fragment
+    // that held it, neither of which it could do from a prose `description`.
+    it(`carries a held command's program and its marked fragments`, () => {
+        const program = { text: `cat .env`, language: `bash` as const, truncated: false, spans: [{ start: 4, end: 8 }] };
+        const { state } = run(started(), { kind: `permission`, requestId: `perm1`, toolName: `Bash`, program });
+        expect(state.messages[1]!.permission).toMatchObject({ program });
+    });
+});
+
+/* THE LATE SENTENCE. It lands on a card that is already on screen and already answerable, so the only things
+ * worth pinning down are that it reaches the right card and that it settles nothing. */
+describe(`a permission note`, () => {
+    const held = (): TurnState =>
+        run(started(), {
+            kind: `permission`,
+            requestId: `perm1`,
+            toolName: `Bash`,
+            program: { text: `cat .env`, language: `bash`, truncated: false, spans: [] },
+        }).state;
+
+    it(`adds the sentence to the card it names, without settling it`, () => {
+        const { state } = run(held(), { kind: `permission_note`, requestId: `perm1`, explain: `Prints the contents of the .env file.` });
+        expect(state.messages[1]!.permission).toMatchObject({ status: `pending`, explain: `Prints the contents of the .env file.` });
+    });
+
+    /* A replay that starts after the card was answered still carries the note, and a second card's note must
+     * not land on the first. Both are the same property: the requestId is the only thing that matches. */
+    it(`changes nothing when no card holds that id`, () => {
+        const before = held();
+        const { state } = run(before, { kind: `permission_note`, requestId: `other`, explain: `Not this card.` });
+        expect(state.messages[1]!.permission).not.toHaveProperty(`explain`);
+    });
 });
 
 /* A card the user answered in ANOTHER window, or in this one, before a reload replayed the run from seq 0:

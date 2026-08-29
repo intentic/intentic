@@ -408,7 +408,18 @@ reports the profile.
   machine agent reads before running anything on somebody's own computer, so the two enforcement points cannot
   drift about what counts as a recursive delete. It is regex over shell text and says so: friction for
   well-behaved work, never the boundary for a hostile one, which stays structural (the container, the
-  worktree, the land gate, an automation's tool allowlist).
+  worktree, the land gate, an automation's tool allowlist). The classifier reports WHERE as well as whether
+  (`matchCommand` hands back the offsets each pattern fired at), and the gate carries those onto the card with
+  the program itself, so the browser marks the fragment the rule actually stopped rather than re-running the
+  patterns and marking whatever a second copy of them finds.
+- [src/agent/command-explainer.ts](src/agent/command-explainer.ts): one plain sentence about a held command,
+  for the card a person is about to answer. Off unless the owner asks for it (`settings.explainCommands`), and
+  wired as a callback the gate is handed rather than as anything guard/ knows about, so the account chain stays
+  behind one seam. It reads the PROGRAM and never the turn's own account of it: a card whose persuasive half
+  was written by the model being gated would argue for its own approval, and the turn that raises most of these
+  cards is exactly the one that has read a stranger's words. The card never waits for it — the sentence rides a
+  later `permission_note` frame, raced against the user's answer, because the quick-model chain can spend tens
+  of seconds stepping over spent accounts and a safety prompt that appears after that reads as a freeze.
 - [src/guard/outside-results.ts](src/guard/outside-results.ts): the mid-turn half of the envelope around
   anything the owner did not write — it wraps every MCP server except the daemon's own control servers (an
   exception list a conformance test pins, so a server added without a decision fails the suite); the other

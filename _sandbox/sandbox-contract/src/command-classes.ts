@@ -26,7 +26,55 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  *
  * `[^|;&]*` in a pattern keeps a flag tied to the verb before it, so a later command in a pipeline cannot lend
  * its flags to an earlier one, `git push origin | grep -f patterns` is not a force-push.
+ *
+ * IT REPORTS WHERE, not just whether (matchCommand below). A permission card holding four hundred characters of
+ * shell has to answer one question before anything else on it can be read: which part of this is the part that
+ * stopped it. That answer only exists here, at the moment a pattern fires, and re-deriving it in the browser
+ * would be a second classifier with all the ways to disagree with this one. So every table hands back offsets
+ * and the card marks them; `classifyCommand` is the same walk with the offsets dropped.
  */
+
+// A half-open slice of the command text, in UTF-16 code units, the offsets a renderer slices with.
+export interface CommandSpan {
+    readonly start: number;
+    readonly end: number;
+}
+
+// One class the command fell in, and the fragments that put it there. `spans` is never empty: a class with
+// nothing to point at is a class this walk does not report.
+export interface CommandMatch {
+    readonly commandClass: CommandClass;
+    readonly spans: readonly CommandSpan[];
+}
+
+/* The `g` twin of a table's patterns, built once. The tables are written WITHOUT `g` because a lastIndex that
+ * survives a call is the classic way a shared regex starts skipping every other match, and `test` is what the
+ * verdict path wants. `matchAll` demands one, so the twins live here instead of being flagged in place.
+ * (`matchAll` clones the regex it is given, so these stay stateless too.) */
+const globally = (patterns: readonly RegExp[]): readonly RegExp[] => patterns.map((pattern) => new RegExp(pattern.source, `${pattern.flags}g`));
+
+// Every occurrence of every pattern, as spans over `command`. The WHOLE match, not a capture group: a pattern
+// here is written to span the consequence (`git push … --force`, `curl … https://`), and cutting it back to a
+// group would point at the flag while leaving the verb it belongs to unmarked.
+const spansOf = (patterns: readonly RegExp[], command: string): CommandSpan[] =>
+    patterns.flatMap((pattern) => [...command.matchAll(pattern)].map((match) => ({ start: match.index, end: match.index + match[0].length })));
+
+/* Sorted, with overlaps folded together. Two patterns firing on one fragment is ordinary here (a script's
+ * recursive delete matches both the with-a-literal-path pattern and the any-path one), and handing a renderer
+ * overlapping ranges makes it either double-paint or reinvent this. Adjacency is NOT merged: touching spans
+ * from genuinely different fragments read correctly as two marks. */
+const normalize = (spans: readonly CommandSpan[]): CommandSpan[] => {
+    const merged: CommandSpan[] = [];
+    for (const span of [...spans].sort((left, right) => left.start - right.start || left.end - right.end)) {
+        const last = merged.at(-1);
+        if (last !== undefined && span.start < last.end) {
+            merged[merged.length - 1] = { start: last.start, end: Math.max(last.end, span.end) };
+            continue;
+        }
+        merged.push(span);
+    }
+    return merged;
+};
 
 const GIT_DESTRUCTIVE = [
     /\bgit\s+push\b[^|;&]*\s(?:-f\b|--force\b|--force-with-lease\b|--delete\b)/,
@@ -104,6 +152,9 @@ interface RmInvocation {
     readonly recursive: boolean;
     readonly force: boolean;
     readonly operands: readonly string[];
+    // Where this invocation sits in the command, so a card can point at `rm -rf /work` rather than at the whole
+    // line it was buried in. The invocation as matched, verb through last operand.
+    readonly span: CommandSpan;
 }
 
 // A shell word with its quoting removed, so `"/work"`, `'/work'` and `/work` are one operand and not three.
@@ -133,7 +184,7 @@ const parseRm = (command: string): RmInvocation[] => {
             }
             operands.push(unquote(word));
         }
-        parsed.push({ recursive, force, operands });
+        parsed.push({ recursive, force, operands, span: { start: invocation.index, end: invocation.index + invocation[0].trimEnd().length } });
     }
     return parsed;
 };
@@ -218,13 +269,19 @@ const NODE_RECURSIVE_RM_PATH = /\b(?:rm|rmSync|rmdir|rmdirSync)\s*\(\s*(['"`])([
 const RIMRAF = /\brimraf(?:\.sync|Sync|\.native|\.rimraf)?\s*\(/;
 const RIMRAF_PATH = /\brimraf(?:\.sync|Sync|\.native|\.rimraf)?\s*\(\s*(['"`])([^'"`]*)\1/g;
 
-// Whether the script deletes a tree at all, however the path reaches it.
-const deletesRecursively = (program: string): boolean => NODE_RECURSIVE_RM.test(program) || RIMRAF.test(program);
+// Where a script deletes a tree, however the path reaches it. Empty ⇒ it does not.
+const recursiveDeletes = (program: string): CommandSpan[] => spansOf(globally([NODE_RECURSIVE_RM, RIMRAF]), program);
 
-// The literal paths a script hands to a recursive delete. Empty when every path it deletes is computed, which
-// is the honest answer rather than a guess: the class above already holds, only the root question goes unasked.
-const nodeDeleteTargets = (program: string): string[] =>
-    [...program.matchAll(NODE_RECURSIVE_RM_PATH), ...program.matchAll(RIMRAF_PATH)].map((match) => match[2] as string);
+/* The literal paths a script hands to a recursive delete, each with the call it sits in. Empty when every path
+ * it deletes is computed, which is the honest answer rather than a guess: the class above already holds, only
+ * the root question goes unasked.
+ *
+ * The two `_PATH` patterns are already global, so they are used directly; matchAll clones them either way. */
+const nodeDeleteTargets = (program: string): { readonly target: string; readonly span: CommandSpan }[] =>
+    [...program.matchAll(NODE_RECURSIVE_RM_PATH), ...program.matchAll(RIMRAF_PATH)].map((match) => ({
+        target: match[2] as string,
+        span: { start: match.index, end: match.index + match[0].length },
+    }));
 
 /* --- state nothing brings back -------------------------------------------------------------------------
  *
@@ -258,26 +315,52 @@ const SYSTEM_DESTRUCTIVE = [
     /\b(?:docker(?:\s+compose|-compose)?|podman-compose)\s+down\b[^|;&]*\s(?:-v\b|--volumes\b)/,
 ];
 
-const isRecursiveForceRm = (command: string): boolean => parseRm(command).some((invocation) => invocation.recursive && invocation.force);
+const recursiveForceRms = (command: string): CommandSpan[] =>
+    parseRm(command)
+        .filter((invocation) => invocation.recursive && invocation.force)
+        .map((invocation) => invocation.span);
 
 // A recursive delete aimed at a root, in either spelling the gate can be handed: the shell's `rm -rf /` and
 // the script's `fs.rmSync("/", { recursive: true })`.
-const deletesARoot = (program: string): boolean =>
-    parseRm(program).some((invocation) => invocation.recursive && invocation.force && invocation.operands.some(isRootTarget)) ||
-    nodeDeleteTargets(program).some(isRootTarget);
+const rootDeletes = (program: string): CommandSpan[] => [
+    ...parseRm(program)
+        .filter((invocation) => invocation.recursive && invocation.force && invocation.operands.some(isRootTarget))
+        .map((invocation) => invocation.span),
+    ...nodeDeleteTargets(program)
+        .filter((delete_) => isRootTarget(delete_.target))
+        .map((delete_) => delete_.span),
+];
 
-const MATCHES: Readonly<Record<CommandClass, (command: string) => boolean>> = {
-    "git.destructive": (command) => GIT_DESTRUCTIVE.some((pattern) => pattern.test(command)),
-    "files.destructive": (command) => isRecursiveForceRm(command) || deletesRecursively(command),
-    "system.destructive": (command) => SYSTEM_DESTRUCTIVE.some((pattern) => pattern.test(command)) || deletesARoot(command),
-    "secrets.access": (command) => SECRETS_ACCESS.some((pattern) => pattern.test(command)),
-    "package.publish": (command) => PACKAGE_PUBLISH.some((pattern) => pattern.test(command)),
-    "network.outbound": (command) => NETWORK_OUTBOUND.some((pattern) => pattern.test(command)),
+// The `g` twins, built once at load rather than per call: a card is minted per held command and a classify runs
+// per command the agent types, so recompiling six tables of patterns each time is work with no reader.
+const GIT_DESTRUCTIVE_G = globally(GIT_DESTRUCTIVE);
+const SECRETS_ACCESS_G = globally(SECRETS_ACCESS);
+const PACKAGE_PUBLISH_G = globally(PACKAGE_PUBLISH);
+const NETWORK_OUTBOUND_G = globally(NETWORK_OUTBOUND);
+const SYSTEM_DESTRUCTIVE_G = globally(SYSTEM_DESTRUCTIVE);
+
+// WHERE each class fires, one entry per class. Empty ⇒ the command is not in it, so membership and evidence are
+// the same walk and cannot disagree: there is no way to be held for a class with nothing to show for it.
+const MATCHES: Readonly<Record<CommandClass, (command: string) => CommandSpan[]>> = {
+    "git.destructive": (command) => spansOf(GIT_DESTRUCTIVE_G, command),
+    "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command)],
+    "system.destructive": (command) => [...spansOf(SYSTEM_DESTRUCTIVE_G, command), ...rootDeletes(command)],
+    "secrets.access": (command) => spansOf(SECRETS_ACCESS_G, command),
+    "package.publish": (command) => spansOf(PACKAGE_PUBLISH_G, command),
+    "network.outbound": (command) => spansOf(NETWORK_OUTBOUND_G, command),
 };
 
-// Every class the command falls in, in the catalog's own order so a card and a log name them the same way twice.
-export const classifyCommand = (command: string): CommandClass[] =>
-    CommandClassSchema.options.filter((commandClass) => MATCHES[commandClass](command));
+/* Every class the command falls in AND the fragments that put it there, in the catalog's own order so a card and
+ * a log name them the same way twice. The primitive; classifyCommand is this with the offsets dropped. */
+export const matchCommand = (command: string): CommandMatch[] =>
+    CommandClassSchema.options.flatMap((commandClass) => {
+        const spans = normalize(MATCHES[commandClass](command));
+        return spans.length === 0 ? [] : [{ commandClass, spans }];
+    });
+
+// Every class the command falls in, for the callers that only take a verdict from it (the gate's rulebook
+// consult, the machine agent's scope switch).
+export const classifyCommand = (command: string): CommandClass[] => matchCommand(command).map((match) => match.commandClass);
 
 // What the card says the command would DO. The class name is a settings key, not a sentence to show a person.
 export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {

@@ -29,6 +29,29 @@ export const AskQuestionSchema = z.object({
 });
 export type AskQuestion = z.infer<typeof AskQuestionSchema>;
 
+/* THE PROGRAM A COMMAND CARD IS HOLDING, as the thing it is rather than as prose about it.
+ *
+ * It used to ride in `description`, the field every other permission ask fills with a sentence, which left the
+ * card with no way to know it was holding four hundred characters of shell: it rendered them as a paragraph,
+ * wrapped mid-flag, and the fragment that caused the hold was somewhere in the middle of it.
+ *
+ * `spans` is the gate's own evidence, computed by the classifier at the moment the rule fired (contract's
+ * command-classes.ts, matchCommand) and carried rather than re-derived: a browser that re-ran the patterns
+ * would be a second classifier, and the day the two disagreed the card would be marking a fragment that is not
+ * the one anybody was held for. Offsets are into `text` AFTER truncation, so they are always paintable.
+ *
+ * `language` is a Shiki grammar id, and the two are the two execution backends the gate reads (command-gate's
+ * EXECUTION_SOURCES): a shell line and a script. */
+export const ProgramAskSchema = z.object({
+    text: z.string().describe("What would run."),
+    language: z.enum(["bash", "javascript"]).describe("Which of the two backends it is written for, named as the grammar that colours it."),
+    truncated: z.boolean().describe("Whether this is the head of a longer program, so the card can say so instead of ending mid-word."),
+    spans: z
+        .array(z.object({ start: z.number().int().nonnegative(), end: z.number().int().nonnegative() }))
+        .describe("Which fragments of the text put it in the class that held it. Offsets into text, in order, never overlapping."),
+});
+export type ProgramAsk = z.infer<typeof ProgramAskSchema>;
+
 // One per-tool permission prompt (the SDK's canUseTool callback, surfaced as a card). The daemon passes the
 // bridge's own rendered strings through rather than re-deriving them, so the prompt reads exactly as Claude
 // Code words it. `alwaysLabel` is present only when the SDK offered rules to persist, without it the card
@@ -49,6 +72,15 @@ export const PermissionAskSchema = z.object({
         .optional()
         .describe(
             "The wording for an always-allow answer. Present only when there is something an always could actually remember; without it the only answers are once and no.",
+        ),
+    program: ProgramAskSchema.optional().describe(
+        "The program this card is holding, when the card is about one. Present on a command gate's card and absent on every other permission ask.",
+    ),
+    explain: z
+        .string()
+        .optional()
+        .describe(
+            "One plain sentence saying what the program does and why the agent wants it. Written by the quick model, never by the agent being gated, and only when the owner switched the setting on.",
         ),
 });
 export type PermissionAsk = z.infer<typeof PermissionAskSchema>;
@@ -484,8 +516,9 @@ export type ParkedCard = z.infer<typeof ParkedCardSchema>;
 // ~40 SDKMessage types down to this union: high-value block types get a dedicated frame
 // (delta/thinking/tool_call/tool_call_update/todos/usage/rate_limit_info/account_usage/context_usage/init/compact); any SDK message
 // without a UI mapping is dropped. `plan`/`question`/`permission` pause the turn until the user answers on the
-// `POST /agent/reply` side channel, and `resolved` releases the one it names; `mode` reports the live
-// permission posture as the agent changes it.
+// `POST /agent/reply` side channel, and `resolved` releases the one it names; `permission_note` adds a sentence
+// to a permission card already on screen without settling it; `mode` reports the live permission posture as the
+// agent changes it.
 // `parentToolUseId` tags frames produced inside a subagent (Task tool); `subagent`/`subagent_update` report the
 // subagent itself, keyed by the same tool_use id those tagged frames carry.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
@@ -875,6 +908,19 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // already moved on. It rides verbatim, exactly as the client POSTed it; absent, nobody answered (the turn
     // was stopped, or died under the card), which is not a decision and must not replay as one.
     z.object({ kind: z.literal("resolved"), requestId: z.string(), reply: AgentReplySchema.optional() }),
+    /* A LATE SENTENCE FOR A CARD ALREADY ON SCREEN: the quick model's plain-language reading of a held command,
+     * landing on the permission card named by `requestId` (see PermissionAsk.explain).
+     *
+     * A frame of its own rather than a field on the card, because the card MUST NOT WAIT FOR IT. This is a
+     * safety prompt and the turn is parked on it; a quick-model rung can take tens of seconds before the chain
+     * steps down (agent/quick-model.ts measured one at 58), and holding the card back for that reads exactly
+     * like the agent freezing, which is the failure the explanation was meant to prevent rather than cause. So
+     * the card goes out complete and unexplained, and this arrives if and when it does. Same shape and the same
+     * reason as `service_event`, which streams a running service's status onto an offer already rendered.
+     *
+     * Never arrives at all when the setting is off, when nothing is connected to answer, or when the user
+     * settles the card first, and none of those change what the card says. */
+    z.object({ kind: z.literal("permission_note"), requestId: z.string(), explain: z.string() }),
     // The turn's permission mode, whenever it changes, the user's pick at turn start, then every move the
     // AGENT makes on its own (EnterPlanMode on a request that needs thinking through, ExitPlanMode once the
     // user approves). The composer's mode selector follows this, so the UI never lies about the live posture.

@@ -1433,17 +1433,21 @@
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 24%, transparent);
 }
 
-/* ── THE QUESTION CARD ─────────────────────────────────────────────────────────────────────────────────────
+/* ── THE DECISION CARDS ────────────────────────────────────────────────────────────────────────────────────
  * The same translucent surface the assistant messages use, not the opaque plate the ui-card gets. A plate
  * read as a darker slab against the lighter assistant bubbles next to it; the translucent wash puts the
  * question on the same ground as the conversation it sits inside. The tooth, the gold rule and the
  * inscription header still distinguish it — it is still carved, just carved from the same stone as the
  * messages rather than from a heavier block dropped into the stream.
  *
+ * Written for the question card and now reaching all eight of them, which is what `.chat-card` is: they are
+ * one component (ChatCard.vue), so this skin no longer has to choose which of them gets carved. The plan card
+ * and the permission prompt were going ungilded next to a question card in the same transcript.
+ *
  * UNLAYERED, because the card's own `chat-surface` class is unlayered (chat.css sits outside every layer),
  * and the option rows carry Tailwind's `border` utility which sits in the utilities layer. A rule inside
  * `@layer components` cannot outrank either. */
-[data-skin="sanctum"] .chat-question {
+[data-skin="sanctum"] .chat-card {
     background-color: color-mix(in srgb, var(--color-overlay) 35%, transparent);
     background-image: var(--sanctum-tooth);
     border-color: var(--sanctum-rule);
@@ -1451,24 +1455,23 @@
         inset 0 1px 0 rgba(240, 214, 168, 0.07),
         0 2px 4px -1px rgba(0, 0, 0, 0.35);
 }
-[data-skin="sanctum"] .chat-question-header {
-    border-bottom-color: var(--sanctum-rule);
+/* The rules INSIDE a card — the answer row, a receipt, a running service's status line. The header carries no
+   rule in any skin (see ChatCard), so this is the only divider a card has to colour. */
+[data-skin="sanctum"] .chat-card .chat-card-row {
+    border-top-color: var(--sanctum-rule);
 }
-[data-skin="sanctum"] .chat-question-header > :first-child {
+[data-skin="sanctum"] .chat-card-header > :first-child {
     color: rgba(201, 160, 92, 0.55);
 }
-[data-skin="sanctum"] .chat-question-header > .flex-1 {
-    color: var(--sanctum-gold);
-    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
-}
+[data-skin="sanctum"] .chat-card-title,
 [data-skin="sanctum"] .chat-question-title {
     color: var(--sanctum-gold);
     text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
-[data-skin="sanctum"] .chat-question .ui-row-select {
+[data-skin="sanctum"] .chat-card .ui-row-select {
     border-color: transparent;
 }
-[data-skin="sanctum"] .chat-question .chat-option-picked {
+[data-skin="sanctum"] .chat-card .chat-option-picked {
     background: rgba(201, 160, 92, 0.1);
     border-color: transparent;
 }

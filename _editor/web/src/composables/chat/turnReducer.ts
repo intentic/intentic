@@ -256,6 +256,12 @@ const hasProse = (state: TurnState, id: number | null): boolean => {
     return (state.messages.find((message) => message.id === id)?.text ?? ``) !== ``;
 };
 
+// Both halves of "this bubble is finished", as one question: a text block ending at the TOP LEVEL of the turn
+// (a subagent's block closes nothing out here) with prose in the open bubble to close. Named rather than
+// inlined at the one call site, so the text_end case reads as the decision it makes rather than as its test.
+const closesBubble = (state: TurnState, event: Extract<AgentEvent, { kind: "text_end" }>): boolean =>
+    event.parentToolUseId === undefined && hasProse(state, state.bubbleId);
+
 // The bubble the current frame writes to, allocating a fresh assistant message when the turn's bubble was
 // cleared (start of turn already has one; a plan card clears it for the next).
 const withBubble = (state: TurnState): { state: TurnState; id: number } => {
@@ -359,6 +365,36 @@ const capabilityOfferStatusOf = (reply: AgentReply | undefined): CapabilityOffer
 const paymentOfferStatusOf = (reply: AgentReply | undefined): PaymentOfferStatus =>
     reply?.kind !== `payment_offer` ? `cancelled` : reply.approve ? `approved` : `skipped`;
 
+/* The quick model's plain sentence for a command card already on screen, patched onto the card the requestId
+ * names. Not a new card and not a settlement: the card stays pending and answerable, and gains a line above
+ * the shell it is holding.
+ *
+ * It arrives as its own frame because the card must not WAIT for it (see the frame's note in events.ts), and it
+ * is patched by requestId for the same reason a service event is: by the time it lands the transcript has
+ * usually moved on and the card is no longer the last thing in it. A note for a card this transcript does not
+ * hold, a replay that starts after the card was answered, changes nothing. */
+const noteCard = (state: TurnState, event: Extract<AgentEvent, { kind: "permission_note" }>): TurnState => ({
+    ...state,
+    messages: state.messages.map(
+        (message): ChatMessage =>
+            message.permission?.requestId === event.requestId
+                ? { ...message, permission: { ...message.permission, explain: event.explain } }
+                : message,
+    ),
+});
+
+// One event off an approved run's stream, appended to the offer the requestId names: the run showing itself
+// living, which the card renders as its latest status line while the receipt is pending.
+const appendServiceEvent = (state: TurnState, event: Extract<AgentEvent, { kind: "service_event" }>): TurnState => ({
+    ...state,
+    messages: state.messages.map(
+        (message): ChatMessage =>
+            message.serviceOffer?.requestId === event.requestId
+                ? { ...message, serviceOffer: { ...message.serviceOffer, events: [...(message.serviceOffer.events ?? []), event.event] } }
+                : message,
+    ),
+});
+
 // Freeze the card the frame names, wherever it hangs. Idempotent by construction: the window that answered
 // already wrote this exact status when its reply came back, so the frame only ever changes a transcript that
 // did NOT answer, a replay after a reload, or a second window watching the same run.
@@ -452,7 +488,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             // next delta flushes the remainder there before typing into the new one (see enqueueText). A flush
             // here would snap the whole tail of every block, including the closing summary, whose block ends
             // the moment the model stops writing, into place with no typing at all.
-            if (event.parentToolUseId === undefined && hasProse(state, state.bubbleId)) {
+            if (closesBubble(state, event)) {
                 return step({ ...state, bubbleId: null });
             }
             return step(state);
@@ -658,16 +694,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 ),
             });
         case `service_event`:
-            // One event off the approved run's stream, appended to the card the requestId names, the run
-            // showing itself living. The card renders the latest status line while the receipt is pending.
-            return step({
-                ...state,
-                messages: state.messages.map((message): ChatMessage =>
-                    message.serviceOffer?.requestId === event.requestId
-                        ? { ...message, serviceOffer: { ...message.serviceOffer, events: [...(message.serviceOffer.events ?? []), event.event] } }
-                        : message,
-                ),
-            });
+            return step(appendServiceEvent(state, event));
         case `service_receipt`:
             // The approved run's outcome, patched onto the card the requestId names: served-and-charged,
             // refunded (the service failed to answer, nothing charged), or refused after the click.
@@ -689,6 +716,8 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                         : message,
                 ),
             });
+        case `permission_note`:
+            return step(noteCard(state, event));
         case `resolved`:
             // The card above was released, and the frame says how. The surface that ANSWERED already froze its
             // own card (decidePlan / answerQuestion / decidePermission), so this is a no-op there; it earns its
