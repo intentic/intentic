@@ -78,6 +78,26 @@ const open = (path: string): void => {
     selected.value = path;
 };
 
+/* THE ARROWS WALK THE ANSWER WITHOUT LEAVING THE FIELD, which is the interaction this section was already
+ * shaped for and did not have: search IS the navigation here, the list re-ranks under every keystroke, and
+ * reaching the second hit meant taking a hand off the keyboard to click it.
+ *
+ * IT MOVES THE SELECTION ITSELF rather than a highlight over it. This view has no "which row is armed" state
+ * to keep separate: picking a note opens it, and the list already opens its first answer unasked, so a second
+ * cursor would only be a thing that can disagree with the one on screen. The index scrolls itself to whatever
+ * ends up selected (NoteIndex), so this stays a statement about WHICH note.
+ *
+ * It clamps rather than wrapping. A search's answers are ranked, so the top of the list is a meaningful place
+ * to be, and arriving there by pressing Down once more past the last hit is a jump nobody asked for. */
+const step = (delta: number): void => {
+    const paths = hits.value.map((hit) => hit.path);
+    if (paths.length === 0) {
+        return;
+    }
+    const at = selected.value === undefined ? -1 : paths.indexOf(selected.value);
+    selected.value = paths[Math.min(paths.length - 1, Math.max(0, at + delta))];
+};
+
 // "Show these in the list": re-aim the list at everything linking to the open note. The one navigation that
 // genuinely replaces the query, so it clears the rest of the filters rather than compounding with them.
 const showLinked = (path: string): void => {
@@ -164,6 +184,8 @@ const startKnowledge = async (): Promise<void> => {
             clearable
             :count="hits.length"
             :busy="isFetching && !isLoading"
+            @keydown.down.prevent="step(1)"
+            @keydown.up.prevent="step(-1)"
         >
             <template v-if="options.types.length > 0 || options.tags.length > 0" #controls>
                 <Picker
@@ -231,13 +253,22 @@ const startKnowledge = async (): Promise<void> => {
         </div>
 
         <div v-else class="flex max-h-panel-lg min-h-0 gap-4" :class="stacked ? `flex-col` : undefined">
-            <!-- In a narrow body the index folds above the note instead of beside it: a 16rem column next to a
+            <!-- In a narrow body the index folds above the note instead of beside it: a 14rem column next to a
                  note leaves neither of them readable, and hiding the note behind a list would put two clicks
                  between the reader and the thing they came for.
                  UNFRAMED, which is the shared rail's rule and not this section's preference: an index is chrome
                  pointing AT something, so a box around it makes it compete with the note it points at. The
-                 gutter is what separates the two, at the same 1rem every split screen in the app uses. -->
-            <div class="flex min-w-0 shrink-0 flex-col" :class="stacked ? `max-h-56` : `max-h-full w-64`">
+                 gutter is what separates the two, at the same 1rem every split screen in the app uses.
+
+                 14rem, WHERE <SplitView>'S RAIL IS 16. That component's one width answers for five SCREENS,
+                 each of which is an index and a body and nothing else; this is a hub SECTION, so the reader
+                 already crossed the hub's own column of sections to get here and the note is the third pane in
+                 from the left. Measured with a chat panel open — which is where this is read, not on an empty
+                 1440px window — 16rem of index left the note 360px to render prose in, and the index was
+                 spending a quarter of its own width on a date. The rows now carry a name instead of a pill and
+                 a timestamp (NoteIndex), so 14rem shows MORE of every title than 16rem did, and the note gets
+                 the difference. -->
+            <div class="flex min-w-0 shrink-0 flex-col" :class="stacked ? `max-h-56` : `max-h-full w-56`">
                 <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
             </div>
 

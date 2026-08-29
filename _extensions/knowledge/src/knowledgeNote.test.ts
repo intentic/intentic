@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { folderOf, linkifyNoteRefs, toneOfType } from "./knowledgeNote.js";
+import { dotOfType, linkifyNoteRefs, toneOfType } from "./knowledgeNote.js";
 
 const decorate = (html: string, links: Record<string, string> = {}): HTMLDivElement => {
     const holder = document.createElement(`div`);
@@ -87,9 +87,13 @@ describe(`toneOfType`, () => {
     });
 });
 
-describe(`folderOf`, () => {
-    it(`names the folder, and nothing for a note at the top`, () => {
-        expect(folderOf(`person/ada-lovelace.md`)).toBe(`person`);
-        expect(folderOf(`_vocabulary.md`)).toBeUndefined();
+describe(`dotOfType`, () => {
+    it(`paints the dot the tone's own colour, so it can never disagree with the badge`, () => {
+        expect(dotOfType(`person`)).toBe(dotOfType(`person`));
+        expect(dotOfType(`person`)).toMatch(/^bg-/);
+    });
+
+    it(`still marks a note with no kind, in the neutral role`, () => {
+        expect(dotOfType(undefined)).toBe(`bg-subtle`);
     });
 });

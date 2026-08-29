@@ -84,9 +84,24 @@ export const toneOfType = (type: string | undefined): Tone => {
     return TONES[hash % TONES.length]!;
 };
 
-// A note's folder, for the one-line subtitle under its title in the list. The filename is already the row's
-// name, so repeating it there would spend the line on nothing.
-export const folderOf = (path: string): string | undefined => {
-    const cut = path.lastIndexOf(`/`);
-    return cut === -1 ? undefined : path.slice(0, cut);
+/* THE SAME COLOUR AS THE PANE'S BADGE, WORN AS A DOT, for the index column.
+ *
+ * A pill is the right shape for the kind beside a note's title in the PANE, where the width is there to read a
+ * word in. In a 14rem index it is not: measured, the badge and the trailing date between them left a note's
+ * NAME 65px of a 256px row, so two thirds of the list truncated to one word and the thing you pick by was the
+ * smallest thing on the row. The kind's job in a LIST is recognition, not reading — "same as that one" — and a
+ * 6px dot does that at a twentieth of the width. The word itself has not gone anywhere: it rides the row's
+ * quiet second line, where the space is free.
+ *
+ * Derived from `toneOfType` rather than from a palette of its own, so the dot and the badge one click apart can
+ * never disagree about what `decision` looks like. */
+const TONE_DOTS: Record<Tone, string> = {
+    primary: `bg-primary-500`,
+    info: `bg-info`,
+    success: `bg-success`,
+    warning: `bg-warning`,
+    danger: `bg-danger`,
+    neutral: `bg-subtle`,
 };
+
+export const dotOfType = (type: string | undefined): string => TONE_DOTS[toneOfType(type)];

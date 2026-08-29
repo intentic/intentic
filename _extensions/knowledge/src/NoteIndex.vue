@@ -1,18 +1,8 @@
 <script setup lang="ts">
-import {
-    freshness,
-    Icon,
-    type NavGroup,
-    NavRail,
-    Row,
-    SkeletonRows,
-    StatusBadge,
-    useLoadingReveal,
-    type StatusVariant,
-} from "@intentic/extension-ui";
-import { computed } from "vue";
+import { formatTimestamp, freshness, Icon, type NavGroup, NavRail, Row, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
+import { computed, nextTick, watch } from "vue";
 import type { SearchHit } from "./contract";
-import { folderOf, toneOfType } from "./knowledgeNote";
+import { dotOfType } from "./knowledgeNote";
 
 /* WHICH NOTE: the search's answers, as the thing you pick from.
  *
@@ -31,7 +21,32 @@ import { folderOf, toneOfType } from "./knowledgeNote";
  *
  * ONE UNLABELLED GROUP. The rail can section its rows and this list must not: hits arrive ranked by how well
  * they answer the query, and cutting them into headed groups would reorder the answer into something the
- * search did not say. */
+ * search did not say.
+ *
+ * ── THE ROW IS TWO LINES AND THE NAME OWNS THE FIRST ONE ──────────────────────────────────────────────────
+ *
+ * It used to be a name sharing its line with a kind pill, over a second line repeating the note's folder, with
+ * a full calendar date pinned to the right. Measured on a real knowledge base that is 52px of row height to
+ * carry 65px of NAME: the pill took ~55px and the date ~80px off a 256px column, and a <Row>'s title WRAPS
+ * rather than truncating, so what was left turned "Soft delete everything" into "Soft dele…". The one thing a
+ * reader picks by was the smallest thing on the row, and the selection tint — a wash over the full width — read
+ * as a slab with its content huddled in one corner of it.
+ *
+ * So the three passengers each moved to where they cost nothing:
+ *
+ *  · THE KIND IS A DOT (see dotOfType), the same colour its badge paints in the pane, and the word rides the
+ *    second line. Recognition is what a kind is for in a list; reading it is what the pane is for.
+ *  · THE DATE LEFT THE ROW'S RIGHT EDGE for that same second line. A trailing cluster is `shrink-0`, so it was
+ *    setting the width of every row in the column to serve a fact nobody searches by.
+ *  · THE FOLDER IS GONE. `kb new` files a note under its own kind, so it said "decision" a second time under a
+ *    badge already reading `decision` — and when it was suppressed for saying so, the line fell back to the
+ *    whole PATH, which begins with the same folder. The path is on the note's own header, once, where it is
+ *    a fact about the file rather than a row's only description.
+ *
+ * WHAT IS ON THE SECOND LINE IS WHAT THE FIRST ONE CANNOT SAY. Evidence when the search found words the row is
+ * not otherwise showing (a header fact, a line of prose); the note's own quiet facts when it did not. Never
+ * both: they answer the same question, and a row that prints the answer twice is how the line stops being
+ * read. */
 
 const { hits, selected, isLoading } = defineProps<{
     hits: readonly SearchHit[];
@@ -53,34 +68,42 @@ const outline = useLoadingReveal(
     computed(() => `note-search`),
 );
 
-// Why a note matched, in the words the reader would use. `all` is the unfiltered browse case, where the answer
-// is "everything" and the row needs no explanation at all.
-const WHY: Record<string, string> = { title: ``, alias: `also called`, tag: `tagged`, type: `kind`, field: ``, body: ``, all: `` };
+/* WHY A NOTE IS IN THE ANSWER, for the two hits that cannot show it. `title` and `type` matched on something
+ * the reader is already looking at (the name, and the kind on the line below it), and `field` and `body` bring
+ * the matching words themselves as a snippet, which says it better than any label could. An alias and a tag
+ * are the pair whose matching text appears NOWHERE on the row, and they are exactly the hits that otherwise
+ * read as the search having returned something at random.
+ *
+ * A SENTENCE RATHER THAN A LABEL, and it takes the whole line. Written as a `TAG` chip in front of the note's
+ * facts it came out as "TAG person · 43m ago", where the eye pairs the label with the word after it and reads
+ * the tag as being "person" — which is the one thing it is not. The line answers one question at a time. */
+const REASON: Record<string, string> = { alias: `matched an alias`, tag: `matched a tag` };
 
 interface NoteRow {
     readonly path: string;
     readonly title: string;
     readonly type: string | undefined;
-    readonly evidence: string;
-    readonly modifiedAt: number;
-    readonly why: string;
-    readonly variant: StatusVariant;
+    // The evidence, the reason, or the note's own quiet facts — whichever the first line cannot say. Never two
+    // of them; see the header note.
+    readonly detail: string;
+    // Present only while `detail` IS the freshness: the exact moment behind the rounded words, as a tooltip.
+    readonly at: string | undefined;
+    readonly dot: string;
 }
 
 const rows = computed<NoteRow[]>(() =>
     hits.map((hit) => {
-        // The folder is only worth the line when it says something the badge does not. `kb new` files a note
-        // under its own kind, so for most notes the folder IS the kind: printed here it read as the
-        // word "person" twice on one row, which is how a reader learns to stop reading the second line.
-        const folder = folderOf(hit.path);
+        const reason = hit.snippet ?? REASON[hit.matched];
+        // A kind and a freshness, joined only when there is a kind: an untyped note would otherwise open its
+        // line on a separator with nothing in front of it.
+        const facts = [hit.type, freshness(hit.modifiedAt)].filter((part) => part !== undefined && part !== ``).join(` · `);
         return {
             path: hit.path,
             title: hit.title,
             type: hit.type,
-            evidence: hit.snippet ?? (folder === hit.type ? undefined : folder) ?? hit.path,
-            modifiedAt: hit.modifiedAt,
-            why: WHY[hit.matched] ?? hit.matched,
-            variant: toneOfType(hit.type) as StatusVariant,
+            detail: reason ?? facts,
+            at: reason === undefined ? formatTimestamp(hit.modifiedAt) : undefined,
+            dot: dotOfType(hit.type),
         };
     }),
 );
@@ -88,33 +111,75 @@ const rows = computed<NoteRow[]>(() =>
 // Empty rather than one empty group: the rail draws #empty only when it has no groups at all, and a headed
 // group with nothing under it is a heading pointing at a blank.
 const groups = computed<NavGroup<NoteRow>[]>(() => (rows.value.length === 0 ? [] : [{ key: `hits`, items: rows.value }]));
+
+/* THE OPEN NOTE STAYS ON SCREEN, whoever moved it. Three things pick a note here and only one of them is a
+ * click on a row: the arrow keys in the search field above, and following a link inside the note itself, both
+ * land on rows this column may be scrolled past. Without this the list silently disagrees with the pane, which
+ * is worse than a list that is merely wrong, because the reader has no reason to doubt it.
+ *
+ * `nearest` so a row already in view is never yanked to an edge, and after a tick because the selection
+ * regularly arrives WITH the rows it points into (a fresh search opens its first hit). */
+const rowEls = new Map<string, HTMLElement>();
+const keepRow = (path: string, instance: unknown): void => {
+    const el = (instance as { $el?: unknown } | null)?.$el;
+    if (el instanceof HTMLElement) {
+        rowEls.set(path, el);
+    } else {
+        rowEls.delete(path);
+    }
+};
+watch(
+    () => selected,
+    async (path) => {
+        if (path === undefined) {
+            return;
+        }
+        await nextTick();
+        rowEls.get(path)?.scrollIntoView({ block: `nearest` });
+    },
+);
 </script>
 
 <template>
     <NavRail :groups="groups" aria-label="Notes">
         <template #row="{ item: row }">
-            <Row :key="row.path" as="button" density="dense" class="rounded-lg" :selected="row.path === selected" @click="emit(`pick`, row.path)">
-                <!-- THE KIND RIDES THE TITLE LINE AND THE TIME RIDES THE TRAILING CELL, which is a width
-                     decision. In a 16rem column both marks in the trailing cluster left a name like "Soft
-                     delete everything" about 100px to live in, and a Row's title WRAPS rather than truncating:
-                     so a third of the list turned into two-line rows and the column stopped being scannable.
-                     The kind is an attribute of the name, so it belongs beside it and truncates with it. -->
+            <Row
+                :key="row.path"
+                :ref="(instance: unknown) => keepRow(row.path, instance)"
+                as="button"
+                density="dense"
+                class="rounded-md"
+                :selected="row.path === selected"
+                @click="emit(`pick`, row.path)"
+            >
+                <!-- WHAT KIND OF THING THIS IS, at 6px. Drawn even for a note with no kind (neutral), because
+                     the alternative is every untyped row starting its title 16px left of its neighbours', and a
+                     ragged left edge costs a scanning column more than a grey dot does.
+
+                     IT CARRIES THE WORD FOR ANYONE NOT READING THE COLOUR. The pill it replaced was text, so a
+                     screen reader heard the kind on every row; a coloured dot that is only decorative would
+                     have taken that away — and on an alias or a tag hit, where the line below is explaining the
+                     match instead, there is nothing else on the row that says it. The neutral dot on an untyped
+                     note has no word to give and stays decoration. -->
+                <template #lead>
+                    <span
+                        class="size-1.5 shrink-0 rounded-full"
+                        :class="row.dot"
+                        :role="row.type === undefined ? undefined : `img`"
+                        :aria-label="row.type"
+                        :aria-hidden="row.type === undefined ? `true` : undefined"
+                        :title="row.type"
+                    ></span>
+                </template>
+                <!-- The whole line, so a name is the thing that fits rather than the thing that is left over. -->
                 <template #title>
-                    <span class="flex min-w-0 items-center gap-1.5">
-                        <span class="min-w-0 truncate">{{ row.title }}</span>
-                        <StatusBadge v-if="row.type" :variant="row.variant" size="xs" :label="row.type" />
-                    </span>
+                    <span class="block truncate">{{ row.title }}</span>
                 </template>
-                <!-- The evidence: the sentence a body match was found on, the fact a header match was, or where
-                     the note lives when it matched by name and there is nothing to quote. -->
+                <!-- One thing: the sentence a body match was found on, the header fact a field match was, why
+                     an alias or a tag hit is here at all, or — when the search explains itself — what kind of
+                     thing this is and how fresh. -->
                 <template #description>
-                    <span class="flex min-w-0 items-baseline gap-1.5">
-                        <span v-if="row.why" class="shrink-0 uppercase tracking-wide">{{ row.why }}</span>
-                        <span class="min-w-0 flex-1 truncate">{{ row.evidence }}</span>
-                    </span>
-                </template>
-                <template #meta>
-                    <span>{{ freshness(row.modifiedAt) }}</span>
+                    <span class="block truncate leading-tight" :title="row.at">{{ row.detail }}</span>
                 </template>
             </Row>
         </template>
