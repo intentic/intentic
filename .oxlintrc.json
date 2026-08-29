@@ -79,7 +79,7 @@
         // Factory closures and per-call helpers are deliberate. 185 hits.
         "unicorn/consistent-function-scoping": "off",
         // `"\x1f"` is a control character this repo handles on purpose — _tools/scripts/control-chars.mjs
-        // exists to police exactly these bytes. Rewriting them to `""` is churn against that check.
+        // exists to police exactly these bytes. Rewriting them to the literal byte is churn against that check.
         "unicorn/no-hex-escape": "off",
         // The next three are cosmetic, and their autofixes were measured across this repo before being
         // rejected: together they rewrote ~400 files, and catch-error-name's renames alone walked no-shadow

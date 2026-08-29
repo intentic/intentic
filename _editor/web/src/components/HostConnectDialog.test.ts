@@ -6,7 +6,7 @@
 // pinned is that flipping it actually rewrites the line the user copies.
 import PrimeVue from "primevue/config";
 import { expect, it, vi } from "vitest";
-import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createApp, defineComponent, h, ref } from "vue";
 
 // The two things the composable reads from a live sandbox: where it is, and a pairing token minted for the
 // capability. Everything else about the command is built here, which is what this test is about.
@@ -62,10 +62,14 @@ it(`rewrites the command between the working-tree script and the released one`, 
     expect(document.body.textContent).toContain(`sh _site/site/public/scripts/computer.sh`);
 
     pill(`Standard`).click();
-    await nextTick();
 
-    // Same env, fetched delivery: the form that runs on a machine that has never seen the repo.
-    expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/computer |`);
+    /* Same env, fetched delivery: the form that runs on a machine that has never seen the repo.
+     *
+     * WAITED FOR RATHER THAN TICKED, for the same reason the token above is: Code highlights through Shiki in a
+     * promise, and holds the PREVIOUS markup while the next pass is in flight rather than flashing back to an
+     * unhighlighted block (Code.vue's `v-if="html"` and its stale-result guard). So the rewritten command lands
+     * a microtask later than the click, not a render tick later, and a bare nextTick reads the old command. */
+    await vi.waitFor(() => expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/computer |`));
     expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`);
     expect(document.body.textContent).not.toContain(`_site/site/public/scripts/computer.sh`);
 });
