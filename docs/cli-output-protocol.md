@@ -9,7 +9,7 @@ Implementations:
 | Emits | Where |
 | --- | --- |
 | `ic` (Rust) | `_sandbox/ic/src/ui.rs` |
-| `intentic-sync`, `intentic-host` (TypeScript) | `_computers/local-agent/src/ui.ts` |
+| `intentic-machine` (TypeScript) | `_computers/local-agent/src/ui.ts` |
 | the served bootstrap shims (sh, PowerShell) | `_site/site/public/scripts/connect.{sh,ps1}` |
 
 Parsers:

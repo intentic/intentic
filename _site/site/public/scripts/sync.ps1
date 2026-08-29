@@ -1,8 +1,9 @@
-# intentic desktop sync (Windows) - install the sync agent on THIS machine, two-way sync a local folder with
+# intentic desktop sync (Windows) - enable desktop sync on THIS machine: two-way sync a local folder with
 # your sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this
-# machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs into %USERPROFILE%\.intentic\sync,
-# puts that folder on your PATH, and registers per-user logon tasks (the Mutagen daemon + the port-mirror
-# watcher) so both resume after a reboot. `intentic-sync uninstall` removes everything.
+# machine's localhost (both powered by Mutagen). Runs as YOU (no admin): installs the one machine agent into
+# %USERPROFILE%\.intentic\machine (shared with the connected-computer capability, if you enable that too), puts
+# that folder on your PATH, and registers per-user logon entries (the agent + the Mutagen daemon) so both
+# resume after a reboot. `intentic-machine sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   $env:SANDBOX_URL='https://sandbox-<id>.<zone>'; $env:PAIR_TOKEN='<token>'; $env:SYNC_DIR="$HOME\intentic\<name>-<id>"; irm https://intentic.dev/sync.ps1 | iex
@@ -10,11 +11,11 @@
 # Required env: SANDBOX_URL, PAIR_TOKEN (the one-time token from the card).
 # Optional: SYNC_DIR (default: ~\intentic\<id>, the same id the sandbox's own URL carries); TAKEOVER (any non-empty value takes over sync from another machine).
 #   AGENT_BIN  local dev / dogfooding an unreleased build: run this command instead of downloading a release,
-#              whitespace-separated (e.g. "node C:\intentic\_apps\sync\dist\cli.js"; a path with spaces needs a wrapper .cmd).
+#              whitespace-separated (e.g. "node C:\intentic\_computers\machine\dist\cli.js"; a path with spaces needs a wrapper .cmd).
 $ErrorActionPreference = 'Stop'
 
-# THE FOLDER A DOWNLOADED BINARY LANDS IN, PUT ON THE USER'S PATH - so `intentic-sync status`, `upgrade` and
-# `uninstall`, which this header and the setup output both name, are real commands rather than a promise the
+# THE FOLDER A DOWNLOADED BINARY LANDS IN, PUT ON THE USER'S PATH - so `intentic-machine status`, `upgrade` and
+# `sync uninstall`, which this header and the setup output both name, are real commands rather than a promise the
 # installer that made them cannot keep. The .sh twin gets this free with a symlink into ~/.local/bin; Windows
 # has no such folder, so the user's own PATH is the only place to say it. Every Windows installer here carries
 # an identical copy - they are standalone irm|iex files and cannot share code, so a test in the desktop crate
@@ -99,31 +100,31 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' 
 # ignore rules that decide whether a project's .git travels to the sandbox among them).
 $bin = $env:AGENT_BIN
 if (-not $bin) {
-    $dest = Join-Path $HOME '.intentic\sync\bin\intentic-sync.exe'
+    $dest = Join-Path $HOME '.intentic\machine\bin\intentic-machine.exe'
     New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-    Write-Host 'Downloading the intentic-sync agent...'
+    Write-Host 'Downloading the intentic machine agent...'
     try {
         # Download beside the target, then swap: the mirror watcher runs FROM $dest, and Windows refuses to
         # overwrite or delete a running executable - but it does allow RENAMING one out of the way, which leaves
         # the live watcher running from the renamed file while the new binary takes its place. The leftover is
         # cleared on the next run, once nothing is executing it. A half-download never becomes $dest either.
-        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/intentic/intentic/releases/latest/download/intentic-sync-windows-$arch.exe" -OutFile "$dest.tmp"
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/intentic/intentic/releases/latest/download/intentic-machine-windows-$arch.exe" -OutFile "$dest.tmp"
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.old"
         if (Test-Path $dest) { Move-Item -Force -Path $dest -Destination "$dest.old" }
         Move-Item -Force -Path "$dest.tmp" -Destination $dest
         $bin = $dest
-        Add-IntenticPath -Folder (Split-Path $dest) -Command 'intentic-sync'
+        Add-IntenticPath -Folder (Split-Path $dest) -Command 'intentic-machine'
         Get-IntenticLauncher -BinDir (Split-Path $dest) -Arch $arch
     } catch {
         Remove-Item -Force -ErrorAction SilentlyContinue "$dest.tmp"
-        $installed = (Get-Command intentic-sync -ErrorAction SilentlyContinue).Source
+        $installed = (Get-Command intentic-machine -ErrorAction SilentlyContinue).Source
         if ($installed) { Write-Warning "Could not download the latest agent - continuing with the installed $installed."; $bin = $installed }
         elseif (Get-Command npx -ErrorAction SilentlyContinue) { $bin = 'npx' }
         else { Write-Error 'Could not download the agent and no npx fallback (install Node.js, or see the docs).'; exit 1 }
     }
 }
 
-$syncArgs = @('setup', '--url', $url, '--pair', $pair)
+$syncArgs = @('sync', 'setup', '--url', $url, '--pair', $pair)
 if (-not [string]::IsNullOrEmpty($dir)) { $syncArgs += @('--dir', $dir) }
 if (-not [string]::IsNullOrEmpty($env:TAKEOVER)) { $syncArgs += @('--takeover') }
 if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
@@ -134,4 +135,4 @@ if (-not [string]::IsNullOrEmpty($env:AGENT_BIN)) {
     # list as one space-joined string (connect.ps1 has the long version). Only `@name` splats.
     $agentArgs = $lead + $syncArgs
     & $parts[0] @agentArgs
-} elseif ($bin -eq 'npx') { & npx -y '@intentic/sync@latest' @syncArgs } else { & $bin @syncArgs }
+} elseif ($bin -eq 'npx') { & npx -y '@intentic/machine@latest' @syncArgs } else { & $bin @syncArgs }

@@ -7,7 +7,7 @@
 # of the publish job — so a failure in any of them means this command never runs:
 #   windows-build   the NSIS installer (executed on a real Windows machine by windows-verify before publish)
 #   linux-build     the Linux bundles (installed + launched on a bare Debian there, before they were uploaded),
-#                   plus the cross-compiled machine agents (intentic-sync, intentic-host, ic)
+#                   plus the cross-compiled machine agent + host CLI (intentic-machine, ic)
 #   sandbox-arm64 / images-amd64   the container images, under version tags release-images.sh later stitches
 # Building serially here is what this replaces: ~11 minutes of installers + binaries inside the one job that
 # holds the release lock, after everything was already verified. Staging the SAME bytes the verifiers approved
@@ -39,16 +39,16 @@ node "$DIR/verify-publish-set.mjs" "${PUB[@]}"
 # would ship agents that report the wrong version forever. The chmod is not cosmetic: Actions artifacts do
 # not preserve file modes, so the downloaded binaries arrive non-executable — harmless to the Release (the
 # install one-liners chmod what they download), fatal to this probe without it.
-for probe in _sandbox/sync/dist-bin/intentic-sync-linux-amd64 _computers/host/dist-bin/intentic-host-linux-amd64 _sandbox/ic/dist-bin/ic-linux-amd64; do
+for probe in _computers/machine/dist-bin/intentic-machine-linux-amd64 _sandbox/ic/dist-bin/ic-linux-amd64; do
   if [ ! -f "$probe" ]; then
     echo "error: $probe is missing — the linux-build artifact did not arrive" >&2
     exit 1
   fi
   chmod +x "$probe"
 done
-reported="$(_sandbox/sync/dist-bin/intentic-sync-linux-amd64 version 2>/dev/null || true)"
+reported="$(_computers/machine/dist-bin/intentic-machine-linux-amd64 version 2>/dev/null || true)"
 if [ "$reported" != "$VERSION" ]; then
-  echo "error: the staged intentic-sync reports '${reported}', not ${VERSION} — the linux-build artifact was built at a different version" >&2
+  echo "error: the staged intentic-machine reports '${reported}', not ${VERSION} — the linux-build artifact was built at a different version" >&2
   exit 1
 fi
 

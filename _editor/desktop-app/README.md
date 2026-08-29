@@ -35,7 +35,7 @@ from any device. The app adds no third plane. It is three thin native things aro
    spawned as a child process with its output streamed into the app's own screen.
 3. **A lifecycle manager.** Setup progress, then one row per sandbox carrying its folder, its localhost ports,
    its image and its verbs: start, stop, restart, update, roll back, logs, remove. What **desktop sync** is
-   doing here is read by spawning `intentic-sync status --json` exactly as the lifecycle actions spawn their
+   doing here is read by spawning `intentic-machine status --json` exactly as the lifecycle actions spawn their
    scripts, and the whole row is `@intentic/ui`'s `MachineDetail` with `@intentic/ui`'s `SandboxVerbs` on it:
    the same two components the web app's Computers tab uses, so the two cannot describe one machine
    differently or offer different buttons for it.
@@ -43,7 +43,7 @@ from any device. The app adds no third plane. It is three thin native things aro
    That third item was the app's largest blind spot: `SYNC_DIR` rides the setup link into `connect.sh` and was
    never heard from again, so the window that exists to be the no-terminal way to run a sandbox could show a
    container as up and say nothing whatsoever about the sync the same setup had just configured. The only
-   rendering of those facts was `intentic-sync status`, in a terminal.
+   rendering of those facts was the agent's printed status, in a terminal.
 
    Enabling sync after setup was the same gap from the other side: the SPA's Desktop sync card minted a
    pairing and then handed the app's own user a one-liner to paste in a terminal. Inside the app that card
@@ -184,7 +184,7 @@ needs, and say what it is doing to a window instead of a terminal
 | Update · Rebuild · Roll back | `recreate.sh <slug> [<sha256>\|--rollback]` / `recreate.ps1 -Slug … [-Hash …\|-Rollback]` |
 | Remove | `cleanup.sh <slug> -y` / `cleanup.ps1 -Slug … -Yes` |
 | Start · Stop · Restart · Logs | `docker` directly: there is no script that lists, cycles or tails |
-| The desktop-sync panel | `intentic-sync status --json` (its own install under `~/.intentic/sync/bin` first, then PATH) |
+| The machine-agent panel | `intentic-machine status --json` (its own install under `~/.intentic/machine/bin` first, then PATH) |
 
 The scripts are **bundled as resources** from `_site/site/public/scripts/`, by way of a staging directory:
 [`_tools/scripts/stage-desktop-scripts.sh`](../../_tools/scripts/stage-desktop-scripts.sh) empties
@@ -505,7 +505,7 @@ The release workflow computes the version, cross-builds its Windows NSIS candida
 on Windows before publication. `release-prepare.sh` then runs `_tools/scripts/build-desktop.sh` for the Linux
 `deb`/`rpm`/AppImage and stages the already-tested Windows candidate beside them; it does not rebuild it.
 `latest.json` and the artifacts land in `dist-bin/`, and `publish-github.sh` attaches them to the **GitHub
-Release**, exactly like `intentic-sync` and `intentic-host`.
+Release**, exactly like `intentic-machine`.
 
 Updater artifacts are minisign-signed when `TAURI_SIGNING_PRIVATE_KEY` is set in CI (generate a pair with
 `pnpm --filter @intentic/desktop-app exec tauri signer generate`; the pubkey is committed in

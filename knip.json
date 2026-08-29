@@ -56,8 +56,8 @@
         "_deploy/cli": {
             "entry": ["src/cli.ts", "src/demo.ts", "src/**/*.test.ts", "doh-lookup.mjs"]
         },
-        "_sandbox/sync": {
-            "entry": ["src/cli.ts", "src/**/*.test.ts", "scripts/*.sh"]
+        "_computers/machine": {
+            "entry": ["src/cli.ts", "src/**/*.test.ts"]
         },
         "_sandbox/gate-action": {
             "entry": ["src/main.ts", "src/**/*.test.ts"]

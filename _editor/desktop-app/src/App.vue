@@ -28,7 +28,7 @@ import {
     expectedStop,
     folderEntries,
     forgetResumableSetup,
-    machineReport,
+    machineStatus,
     onPendingRecreate,
     onPendingSetup,
     onPendingSync,
@@ -56,7 +56,7 @@ import {
     updateState,
     workspaceOpen,
     type DesktopInfo,
-    type MachineReport,
+    type MachineStatus,
     type Requirement,
     type RequirementProgress,
     type RunEvent,
@@ -114,7 +114,7 @@ const sandboxes = ref<SandboxStatus[]>([]);
 const listError = ref<string | undefined>(undefined);
 // What desktop sync is doing here. Undefined = no agent on this computer, which is a fact about the machine and
 // not a failure; a string = the agent is installed but would not answer, which is.
-const report = ref<MachineReport | undefined>(undefined);
+const status = ref<MachineStatus | undefined>(undefined);
 const reportError = ref<string | undefined>(undefined);
 const busy = ref<{ slug: string; verb: SandboxVerb } | undefined>(undefined);
 
@@ -304,14 +304,14 @@ const refresh = async (): Promise<void> => {
         sandboxes.value = [];
         listError.value = String(error);
     }
-    /* The sync half, read separately and allowed to fail separately: the two answers come from different places
-     * (docker, and the sync agent) and either can be absent on a perfectly working computer. Folding them into
-     * one try would let a machine with no sync agent read as a machine with no sandboxes. */
+    /* The agent half, read separately and allowed to fail separately: the two answers come from different
+     * places (docker, and the machine agent) and either can be absent on a perfectly working computer. Folding
+     * them into one try would let a machine with no agent read as a machine with no sandboxes. */
     try {
-        report.value = await machineReport();
+        status.value = await machineStatus();
         reportError.value = undefined;
     } catch (error) {
-        report.value = undefined;
+        status.value = undefined;
         reportError.value = String(error);
     }
 };
@@ -337,7 +337,9 @@ const slugOf = (group: MachineSandboxGroup): string | undefined => group.sandbox
  * have the last two and none of the first (a pairing whose container is stopped and pruned), so "is there a row"
  * is all three, not just docker's answer. Below this, the screen says so in its own words rather than letting the
  * shared view fall through to a sentence written for the SPA's reader. */
-const hasRows = computed(() => sandboxes.value.length > 0 || (report.value?.pairings.length ?? 0) > 0 || (report.value?.ports.length ?? 0) > 0);
+const hasRows = computed(
+    () => sandboxes.value.length > 0 || (status.value?.sync.pairings.length ?? 0) > 0 || (status.value?.sync.ports.length ?? 0) > 0,
+);
 
 /* HOW A FINISHED RUN IS REPORTED: the outcome, and where it stopped, and nothing else.
  *
@@ -1171,13 +1173,13 @@ onUnmounted(() => {
                      they belong ON the sandbox they are for rather than under a heading of their own. -->
             <section v-if="hasRows || reportError" class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4">
                 <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-                <MachineDetail :pairings="report?.pairings" :ports="report?.ports" :sandboxes="sandboxRows" :watcher="report?.watcher">
+                <MachineDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :watcher="status?.sync.watcher">
                     <!-- What the list is, and the state of the agent behind it, on one line: the watcher is
                              a fact about the MACHINE rather than about any row under it. -->
                     <template #heading>
                         <span class="flex items-center gap-2 text-2xs font-semibold tracking-wide text-subtle uppercase">
                             Sandboxes on this computer
-                            <span v-if="report?.agents.sync" class="font-mono normal-case">agent v{{ report.agents.sync }}</span>
+                            <span v-if="status?.version" class="font-mono normal-case">agent v{{ status.version }}</span>
                         </span>
                     </template>
                     <template #actions="{ group }">

@@ -4,7 +4,7 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  *
  * IT LIVES IN THE CONTRACT PACKAGE because there are TWO enforcement points and they must not drift. The
  * sandbox's own gate (sandbox/src/guard/command-gate.ts) judges what the agent types here; the machine agent's
- * shell tool (_computers/host/src/tools/shell.ts) judges what it sends to somebody's laptop. Those answer to
+ * shell tool (_computers/machine/src/computer/tools/shell.ts) judges what it sends to somebody's laptop. Those answer to
  * different policy (a rulebook with a permission card here, a scope switch on the card there) but they must
  * agree on WHAT A COMMAND IS, or a class the owner thought they had covered turns out to mean something else on
  * the surface where it mattered most. One table, two consults.

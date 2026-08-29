@@ -144,7 +144,7 @@ reports the profile.
   not, so a fresh sandbox is not one mistyped path away from it. An explicit `allow` still outranks the floor,
   everything recoverable is still never asked about, and the cost is stated where it is paid: the vendor
   runtimes whose gate is their own approval channel now ask per command rather than never.
-  The same classifier runs a second time on a different machine: `_computers/host` reads it beside its scopes,
+  The same classifier runs a second time on a different machine: `_computers/machine` reads it beside its scopes,
   so a destructive command sent to somebody's own laptop needs that computer's `destructive` switch, which is
   off until they turn it on. The sandbox can afford to hold only what nothing undoes because the container is
   disposable; a laptop has no image to be recreated from, and the two defaults differ for exactly that reason.

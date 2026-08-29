@@ -12,7 +12,7 @@
 # base leads the list: it depends on no workspace package, and moving the when-expressions into it made it a
 # runtime dependency of extension-manifest — publishing that one without this one ships a dead specifier.
 PUB=(_tools/base _tools/constants _sandbox/sandbox-run _deploy/graph _deploy/resources _deploy/engine _deploy/need-resolver _deploy/providers \
-     _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _editor/extension-ui _computers/local-agent _sandbox/sync _computers/desktop _computers/browser _computers/host _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
+     _sandbox/extension-manifest _sandbox/registry _sandbox/sandbox-contract _sandbox/extension-api _editor/extension-ui _computers/local-agent _computers/desktop _computers/browser _computers/machine _sandbox/acp-bridge _sandbox/gate _sandbox/scaffold _deploy/state-resolver _deploy/cli \
      _sandbox/workspace-ignore _search/iq-engine _search/iq-recall _search/iq _deploy/sdk _tools/registry-scan)
 
 # Every dir that carries the release version = the published set plus the two private packages that put the

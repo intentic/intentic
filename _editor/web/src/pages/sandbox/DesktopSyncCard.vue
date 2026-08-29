@@ -9,7 +9,7 @@ import ScriptSourceSwitch from "../../components/ScriptSourceSwitch.vue";
  * copy-paste one-liner carrying a single-use pairing token → "enabled" once the daemon reports the key enrolled.
  * No Google sign-in on the laptop; reuses the shared Code + status-pill markup. The card is explicit that the
  * one-liner installs a resident agent doing TWO things: file sync and localhost port mirroring, and that
- * Disable revokes access but leaves the agent installed (`intentic-sync uninstall` removes it).
+ * Disable revokes access but leaves the agent installed (`intentic-machine sync uninstall` removes it).
  *
  * Two enrollment modes surface here: full "sync" (file sync + ports, single holder, owner-only) and "mirror"
  * (ports only, any number of machines). An owner can pick either: including mirroring a second computer while
@@ -152,8 +152,8 @@ onUnmounted(stop);
                     </p>
                     <p>
                         Nothing is reaching its folder. That computer may be asleep or offline, or its sync agent was pointed at a different sandbox.
-                        Run <span class="font-mono">intentic-sync status</span> there to see every sandbox it pairs, then re-enable below if this one
-                        is missing.
+                        Run <span class="font-mono">intentic-machine status</span> there to see every sandbox it pairs, then re-enable below if this
+                        one is missing.
                     </p>
                 </div>
                 <div v-if="canOperate" class="flex items-center justify-between gap-2">
@@ -188,7 +188,8 @@ onUnmounted(stop);
                      installation stays until uninstall runs on that machine. -->
                 <p v-if="!enrolled && revokedFrom !== undefined" class="text-2xs text-subtle">
                     Access for <span class="font-mono text-content">{{ revokedFrom }}</span> is revoked. Its port mirroring stops by itself within a
-                    minute. To remove the agent from that computer, run <span class="font-mono text-content">intentic-sync uninstall</span> there.
+                    minute. To remove the agent from that computer, run
+                    <span class="font-mono text-content">intentic-machine sync uninstall</span> there.
                 </p>
                 <p v-if="takeover" class="text-2xs text-warning">
                     This takes over from {{ syncingFrom ?? "the other computer" }}. Its sync stops when you run the command below.
@@ -254,9 +255,7 @@ onUnmounted(stop);
                             <template v-if="pairMode === 'mirror'">
                                 Enrolls this computer and puts the sandbox's dev servers on its localhost. No files are synced.
                             </template>
-                            <template v-else>
-                                Pick the folder in a system dialog: it and the sandbox's files then stay in step, both ways.
-                            </template>
+                            <template v-else> Pick the folder in a system dialog: it and the sandbox's files then stay in step, both ways. </template>
                         </p>
                     </div>
                     <p class="text-2xs text-subtle">
@@ -294,8 +293,8 @@ onUnmounted(stop);
                             localhost ports survive reboots.
                         </li>
                         <li>
-                            <span class="font-mono text-content">intentic-sync uninstall</span> removes all of it; disabling sync here also makes the
-                            watcher shut itself down.
+                            <span class="font-mono text-content">intentic-machine sync uninstall</span> removes all of it; disabling sync here also
+                            makes the watcher shut itself down.
                         </li>
                     </ul>
                 </template>

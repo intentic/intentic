@@ -73,7 +73,9 @@ vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
 /* THIS SANDBOX'S RUNNERS ON A MACHINE, mocked for the reason the computers list is: the real hook is a
  * vue-query read, and this bare `createApp` has no plugin to provide a client. What the row draws from it is
  * the subject here. */
-const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>([]);
+const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
+    [],
+);
 vi.mock(`../../composables/sandbox/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: () => Promise.resolve(`made`),
@@ -505,7 +507,7 @@ it(`says when a computer's sync agent is behind, and what to run`, () => {
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`0.1.0`);
     expect(text).toContain(`1.183.0 available`);
-    expect(text).toContain(`intentic-sync upgrade`);
+    expect(text).toContain(`intentic-machine upgrade`);
 });
 
 // A current agent gets neither: a row that nags at a machine with nothing to do is how people learn to read past
@@ -516,7 +518,7 @@ it(`says nothing about updating a computer that is already current`, () => {
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`1.183.0`);
     expect(text).not.toContain(`available`);
-    expect(text).not.toContain(`intentic-sync upgrade`);
+    expect(text).not.toContain(`intentic-machine upgrade`);
 });
 
 // And a sandbox that has never reached the registry has no yardstick, so it makes no claim about anyone's agent.
@@ -526,7 +528,7 @@ it(`makes no claim when this sandbox doesn't know the latest release`, () => {
     expect(text).toContain(`desktop sync`);
     expect(text).toContain(`0.1.0`);
     expect(text).not.toContain(`available`);
-    expect(text).not.toContain(`intentic-sync upgrade`);
+    expect(text).not.toContain(`intentic-machine upgrade`);
 });
 
 /* THE PAIRING INVITATION IS A CLAIM ABOUT THE READER, and an unread list is not grounds for it. The empty state

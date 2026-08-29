@@ -31,7 +31,7 @@ Everything except the certificate.
 | The signer | `_tools/scripts/sign-windows.sh`: one binary in, signed in place |
 | The app exe, installer and uninstaller | `bundle.windows.signCommand` in `src-tauri/tauri.conf.json` calls it per binary |
 | `ic.exe` | `_tools/scripts/build-ic.sh` calls it after each Windows target |
-| `intentic-sync.exe`, `intentic-host.exe` | `_tools/scripts/build-agent-binaries.sh`, same |
+| `intentic-machine.exe` | `_tools/scripts/build-agent-binaries.sh`, same |
 | The guard | `verify-desktop-bundle.sh` fails the release if signing was configured and an artifact came out unsigned |
 | The secrets | `WINDOWS_SIGN_*` in `.github/workflows/release.yml`, on all three desktop jobs |
 

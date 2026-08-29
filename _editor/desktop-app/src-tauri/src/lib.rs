@@ -1,3 +1,4 @@
+mod agent_status;
 mod auth;
 mod commands;
 mod scripts;
@@ -81,6 +82,8 @@ pub fn run() {
             app.manage(auth::PendingAuth::default());
             app.manage(update::UpdateState::default());
             create_tray(app.handle())?;
+            // After the tray exists: the refresh loop retitles the agent row this row-handle now points at.
+            agent_status::start(app.handle());
 
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
@@ -170,11 +173,18 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let update = MenuItemBuilder::with_id("update", "Checking for updates…")
         .enabled(false)
         .build(app)?;
+    /* THE MACHINE AGENT'S ROW, same reasoning as the update row: the agent is a headless resident process with
+     * no face of its own (its logon start maps no window, by design), and the tray is the one surface a user
+     * meets without opening anything. The sentence is the agent's own `status --json` summary (agent_status.rs),
+     * so this row and `intentic-machine status` in a terminal cannot disagree. Clickable, and the click opens
+     * the "This computer" screen, which renders the full report behind the sentence. */
+    let agent = MenuItemBuilder::with_id("agent", "Machine agent: checking…").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&open)
         .item(&manager)
         .separator()
+        .item(&agent)
         .item(&update)
         .separator()
         .item(&quit)
@@ -186,6 +196,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => windows::show_workspace(app),
             "manager" => windows::show_launcher(app),
+            "agent" => windows::show_launcher(app),
             "update" => update::act(app),
             "quit" => app.exit(0),
             _ => {}
@@ -194,8 +205,9 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
-    // Held so the state can retitle it without rebuilding the menu — a rebuilt tray menu flickers on Windows
+    // Held so the state can retitle them without rebuilding the menu — a rebuilt tray menu flickers on Windows
     // and loses whatever the user has open.
     app.manage(update::TrayUpdate(update));
+    app.manage(agent_status::TrayAgent(agent));
     Ok(())
 }

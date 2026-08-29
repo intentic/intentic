@@ -26,7 +26,7 @@
  * What remains is the PE subsystem, which is decided at link time and cannot be flashed: the loader creates NO
  * console for a GUI-subsystem process, so there is nothing to show. `bun build --compile` can produce one
  * (`--windows-hide-console`, verified), but that binary is 85 MB and a GUI-subsystem CLI writes to no
- * terminal — `intentic-host status` would print into the void. Hence a separate program, this one, whose whole
+ * terminal — `intentic-machine status` would print into the void. Hence a separate program, this one, whose whole
  * job is to be that subsystem for four milliseconds.
  *
  * WHAT THE CHILD INHERITS, which is the second reason this exists. CREATE_NO_WINDOW gives the agent a console

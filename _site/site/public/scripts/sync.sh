@@ -1,9 +1,10 @@
 #!/bin/sh
-# intentic desktop sync — install the sync agent on THIS machine, two-way sync a local folder with your
+# intentic desktop sync — enable desktop sync on THIS machine: two-way sync a local folder with your
 # sandbox's /work (block-delta, near-real-time), and mirror the sandbox's dev-server ports onto this machine's
-# localhost (both powered by Mutagen). Runs as YOU (no sudo): it installs into ~/.intentic/sync and registers
-# per-user login agents (the Mutagen daemon + the port-mirror watcher) so both resume after a reboot.
-# `intentic-sync uninstall` removes everything.
+# localhost (both powered by Mutagen). Runs as YOU (no sudo): it installs the one machine agent into
+# ~/.intentic/machine (shared with the connected-computer capability, if you enable that too) and registers
+# per-user login entries (the agent + the Mutagen daemon) so both resume after a reboot.
+# `intentic-machine sync uninstall` removes everything.
 #
 # Usage (the platform's Desktop sync card hands you this):
 #   curl -fsSL https://intentic.dev/sync | env SANDBOX_URL='https://sandbox-<id>.<zone>' PAIR_TOKEN='<token>' SYNC_DIR="$HOME/intentic/<name>-<id>" sh
@@ -15,7 +16,7 @@
 #   SYNC_DIR     local folder to sync (default: ~/intentic/<id>, the same id the sandbox's own URL carries)
 #   TAKEOVER     any non-empty value takes over sync from another machine already enrolled on this sandbox.
 #   AGENT_BIN    run THIS agent command instead of downloading a release — for local dev / dogfooding an
-#                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_sandbox/sync/dist/cli.js".
+#                unreleased build, e.g. AGENT_BIN="node /path/to/intentic/_computers/machine/dist/cli.js".
 set -eu
 
 URL="${SANDBOX_URL:-}"
@@ -45,38 +46,38 @@ case "$arch" in
 esac
 
 # Resolve the agent: an explicit AGENT_BIN (local dev), else the published binary — downloaded on EVERY run, so
-# re-running the card's command upgrades an existing install. Short-circuiting on an installed `intentic-sync`
+# re-running the card's command upgrades an existing install. Short-circuiting on an installed `intentic-machine`
 # pinned a machine to the version it first paired with — via the very symlink this script creates — and agent
 # fixes could never reach anyone already syncing (the ignore rules that decide whether a project's .git travels
 # to the sandbox among them). Only a failed download falls back to what's installed, then to npx.
 BIN="${AGENT_BIN:-}"
 if [ -z "$BIN" ]; then
-    dest="${HOME}/.intentic/sync/bin/intentic-sync"
+    dest="${HOME}/.intentic/machine/bin/intentic-machine"
     mkdir -p "$(dirname "$dest")"
-    echo "Downloading the intentic-sync agent…"
+    echo "Downloading the intentic machine agent…"
     # Download beside the target and rename into place: the mirror watcher runs FROM $dest, and overwriting a
     # running executable fails outright ("Text file busy"). A rename swaps the directory entry instead, leaving
     # the live process on the old inode until it next restarts. It also means a half-downloaded agent is never
     # what runs. The download error stays visible (a masked network/permission failure used to silently drop to npx).
-    if curl -fsSL "https://github.com/intentic/intentic/releases/latest/download/intentic-sync-${os}-${arch}" -o "${dest}.tmp"; then
+    if curl -fsSL "https://github.com/intentic/intentic/releases/latest/download/intentic-machine-${os}-${arch}" -o "${dest}.tmp"; then
         chmod +x "${dest}.tmp"
         mv -f "${dest}.tmp" "$dest"
         BIN="$dest"
-        # Put `intentic-sync` on PATH for the status/pause/resume commands the setup output suggests.
+        # Put `intentic-machine` on PATH for the status/pause/resume commands the setup output suggests.
         mkdir -p "$HOME/.local/bin"
-        ln -sf "$dest" "$HOME/.local/bin/intentic-sync"
+        ln -sf "$dest" "$HOME/.local/bin/intentic-machine"
         case ":$PATH:" in
             *":$HOME/.local/bin:"*) ;;
-            *) echo "note: add ~/.local/bin to your PATH to use \`intentic-sync\` directly (or run $dest)." ;;
+            *) echo "note: add ~/.local/bin to your PATH to use \`intentic-machine\` directly (or run $dest)." ;;
         esac
     else
         rm -f "${dest}.tmp"
-        BIN="$(command -v intentic-sync || true)"
+        BIN="$(command -v intentic-machine || true)"
         if [ -n "$BIN" ]; then
             echo "note: could not download the latest agent — continuing with the installed $BIN." >&2
         elif command -v npx >/dev/null 2>&1; then
-            echo "Falling back to npx (@intentic/sync@latest)…" >&2
-            BIN="npx -y @intentic/sync@latest"
+            echo "Falling back to npx (@intentic/machine@latest)…" >&2
+            BIN="npx -y @intentic/machine@latest"
         else
             echo "error: could not download the agent and no npx fallback (install Node.js, or see the docs)." >&2
             exit 1
@@ -84,9 +85,9 @@ if [ -z "$BIN" ]; then
     fi
 fi
 
-set -- setup --url "$URL" --pair "$PAIR"
+set -- sync setup --url "$URL" --pair "$PAIR"
 [ -n "$DIR" ] && set -- "$@" --dir "$DIR"
 [ -n "${TAKEOVER:-}" ] && set -- "$@" --takeover
-# BIN may be "npx -y @intentic/sync@latest" (intentional word-split); a real path runs directly.
+# BIN may be "npx -y @intentic/machine@latest" (intentional word-split); a real path runs directly.
 # shellcheck disable=SC2086
 exec $BIN "$@"

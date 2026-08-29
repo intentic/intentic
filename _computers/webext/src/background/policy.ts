@@ -3,7 +3,7 @@ import type { WebExtGrant, WebExtScopes } from "@intentic/sandbox-contract";
 /* THE ENFORCEMENT POINT — every decision about what may happen in this browser is made here, in the browser,
  * and nowhere else.
  *
- * That placement is the whole security argument, exactly as it is for a connected computer (@intentic/host's
+ * That placement is the whole security argument, exactly as it is for a connected computer (@intentic/machine's
  * policy.ts). The sandbox could be compromised; the agent in it reads the open internet all day and can be
  * talked into things. Neither can widen what happens here, because the sandbox does not decide — it asks, and
  * this answers. The daemon checks no scope, so there is no second implementation to drift out of agreement

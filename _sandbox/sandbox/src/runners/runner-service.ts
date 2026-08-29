@@ -22,7 +22,7 @@ import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync
 import type { RunnerIdentity } from "./runner-identity.js";
 
 /* WHAT THIS RUNNER ANSWERS, the oRPC server on the socket it dialled out (the host router's inversion,
- * _computers/host/src/router.ts). Everything of substance is a thin adapter onto machinery this daemon
+ * _computers/machine/src/computer/router.ts). Everything of substance is a thin adapter onto machinery this daemon
  * already has: a turn is streamAgent, the same composition every local turn runs through, and a sync is
  * stock git against the parent's door (runner-sync.ts). That reuse IS the design: a remote turn behaves
  * like a local one because it is the same code, only dispatched from elsewhere. */

@@ -294,15 +294,15 @@ jobs:
           for d in "${PUB[@]}"; do filters+=("--filter=./$d"); done
           pnpm turbo run build "${filters[@]}"
       - run: bash _tools/scripts/set-versions.sh "$RELEASE_VERSION"
-      - run: bash _tools/scripts/build-agent-binaries.sh _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
-      # The connected-computer agent ships for exactly the platforms the capability offers cards for (Windows, Linux).
-      - run: bash _tools/scripts/build-agent-binaries.sh _computers/host intentic-host linux-x64 linux-arm64 windows-x64
+      # The one machine-side agent (computer links + desktop sync), for every platform either capability's card
+      # can land on: the sync half has always covered macOS, the computer half rides along there.
+      - run: bash _tools/scripts/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The ic host-side CLI ships for every platform a connect/recreate one-liner can land on: the .sh shims
       # cover Linux + macOS, the .ps1 shims Windows. All five come off the zig/xwin toolchains baked into this
       # image, with no Apple SDK anywhere in it (build-ic.sh header).
       - run: bash _tools/scripts/build-ic.sh linux-x64 linux-arm64 windows-x64 darwin-x64 darwin-arm64
-      # The Windows launcher stub, which is what the two agents above actually register at logon: without it in
-      # the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
+      # The Windows launcher stub, which is what the machine agent above actually registers at logon: without it
+      # in the release, `computer.ps1`/`sync.ps1` cannot install it and every Windows machine goes back to a
       # console window on the desktop at every boot. Same xwin toolchain as the ic build above; ~200 KB.
       - run: bash _tools/scripts/build-win-launcher.sh windows-x64
       - run: bash _tools/scripts/build-desktop.sh "$RELEASE_VERSION" --linux-only
@@ -317,8 +317,7 @@ jobs:
         with:
           name: linux-release-artifacts
           path: |
-            _sandbox/sync/dist-bin
-            _computers/host/dist-bin
+            _computers/machine/dist-bin
             _computers/win-launcher/dist-bin
             _sandbox/ic/dist-bin
             _editor/desktop-app/dist-bin
@@ -487,13 +486,12 @@ jobs:
         if: ${{ steps.release.outputs.released == 'true' }}
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
-          # The same five directories publish-github.sh attaches to the Release: the desktop installers, the
-          # cross-compiled machine-agent binaries behind the two `curl ... | sh` one-liners, and the Windows
-          # launcher stub those agents register at logon. Those one-liners are the single most trust-hungry
-          # thing this project asks anyone to run.
+          # The same four directories publish-github.sh attaches to the Release: the desktop installers, the
+          # cross-compiled machine-agent binary behind the `curl ... | sh` one-liners, and the Windows launcher
+          # stub the agent registers at logon. Those one-liners are the single most trust-hungry thing this
+          # project asks anyone to run.
           subject-path: |
-            _sandbox/sync/dist-bin/*
-            _computers/host/dist-bin/*
+            _computers/machine/dist-bin/*
             _computers/win-launcher/dist-bin/*
             _sandbox/ic/dist-bin/*
             _editor/desktop-app/dist-bin/*

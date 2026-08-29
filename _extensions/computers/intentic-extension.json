@@ -22,7 +22,7 @@
                             "Add the computer here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
                             "Run it in `PowerShell` on that computer: it installs a small agent.",
                             "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
-                            "Revoke any time from this card; `intentic-host uninstall` removes the agent."
+                            "Revoke any time from this card; `intentic-machine computer uninstall` removes the agent."
                         ]
                     }
                 },
@@ -43,7 +43,7 @@
                             "Add the computer here: a one-time command appears straight away, and `Connect` on its card brings it back later.",
                             "Run it in a terminal on that computer: it installs a small agent.",
                             "Nothing is opened on your network: the connection is outbound, so no port forwarding and no VPN.",
-                            "Revoke any time from this card; `intentic-host uninstall` removes the agent."
+                            "Revoke any time from this card; `intentic-machine computer uninstall` removes the agent."
                         ]
                     }
                 },

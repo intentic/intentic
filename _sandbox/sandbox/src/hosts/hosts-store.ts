@@ -9,7 +9,7 @@ import { jsonFile } from "../store/json-file.js";
  * long-lived socket to this daemon (hosts/host-hub.ts is the live half).
  *
  * The shape is the desktop-sync pairing (platform/sync.ts) narrowed to one machine: the owner mints a
- * single-use, short-lived pairing token in the browser, the one-liner carries it, and the @intentic/host agent
+ * single-use, short-lived pairing token in the browser, the one-liner carries it, and the @intentic/machine agent
  * redeems it exactly once for a durable per-machine token. Nothing about the machine's identity is asserted by
  * the machine, the pairing already names WHICH capability it enrolls, so a redeemed token can only ever become
  * the computer the owner was looking at when they clicked Connect.

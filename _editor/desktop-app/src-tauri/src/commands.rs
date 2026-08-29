@@ -680,7 +680,7 @@ pub fn sync_script(args: &SyncArgs, dir: Option<&str>, host: Host, version: &str
         file: host.script("sync.sh", "sync.ps1"),
         args: Vec::new(),
         env,
-        // Runs as the user by design — the agent installs into ~/.intentic/sync and registers per-user
+        // Runs as the user by design — the agent installs into ~/.intentic/machine and registers per-user
         // login entries, and nothing about it needs root anywhere.
         elevate: false,
         host,
@@ -711,17 +711,17 @@ pub async fn folder_entries(path: String) -> CommandResult<u32> {
     .map_err(|error| error.to_string())?
 }
 
-/// What desktop sync is doing on THIS computer — the folders it keeps in step, the ports it put on localhost,
-/// and whether the watcher behind them is alive.
+/// What this machine's agent is doing — the sandboxes that may work on this computer, the folders sync keeps in
+/// step, the ports it put on localhost, and whether the one resident loop behind all of it is alive.
 ///
 /// None of it was reachable from this app before. `syncDir` rides the setup link into `connect.sh` and is never
 /// heard from again, so the window that exists to be the no-terminal way to run a sandbox could say a container
 /// was up and nothing at all about the sync the same setup had just configured. The only place those facts lived
-/// was `intentic-sync status`, in a terminal.
+/// was `intentic-machine status`, in a terminal.
 ///
 /// Returned as the agent's raw JSON rather than parsed here: this process has no schema for it (no Node), the
 /// webview does, and re-stating the shape in Rust would be one more thing to keep in lockstep. `None` means no
-/// sync agent is installed — which the screen renders as a fact about the computer, not as a failure.
+/// machine agent is installed — which the screen renders as a fact about the computer, not as a failure.
 #[tauri::command]
 pub async fn machine_report() -> CommandResult<Option<String>> {
     tauri::async_runtime::spawn_blocking(scripts::sync_report)
@@ -1232,7 +1232,7 @@ mod tests {
         assert_eq!(env_of(&run, "SYNC_DIR"), None);
     }
 
-    /* The sync agent's own install location, per host. Cross-built like everything else here, so the Windows
+    /* The machine agent's own install location, per host. Cross-built like everything else here, so the Windows
      * spelling first executes on a user's PC — and getting it wrong is invisible rather than loud: the PATH
      * fallback would still find a global copy on a developer's machine and find nothing on a real user's, who
      * would then see a window that simply never mentions their sync. */
@@ -1242,8 +1242,8 @@ mod tests {
         assert_eq!(
             unix,
             vec![
-                "/home/ada/.intentic/sync/bin/intentic-sync".to_string(),
-                "intentic-sync".to_string()
+                "/home/ada/.intentic/machine/bin/intentic-machine".to_string(),
+                "intentic-machine".to_string()
             ]
         );
 
@@ -1251,8 +1251,8 @@ mod tests {
         assert_eq!(
             windows,
             vec![
-                "C:\\Users\\Ada\\.intentic\\sync\\bin\\intentic-sync.exe".to_string(),
-                "intentic-sync.exe".to_string()
+                "C:\\Users\\Ada\\.intentic\\machine\\bin\\intentic-machine.exe".to_string(),
+                "intentic-machine.exe".to_string()
             ]
         );
     }
@@ -1261,7 +1261,7 @@ mod tests {
     fn a_machine_with_no_home_still_tries_the_path() {
         assert_eq!(
             scripts::sync_agent_candidates(Host::Unix, None),
-            vec!["intentic-sync".to_string()]
+            vec!["intentic-machine".to_string()]
         );
     }
 }

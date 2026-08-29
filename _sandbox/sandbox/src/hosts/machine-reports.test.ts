@@ -28,8 +28,12 @@ const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => 
 /* `run_command` answers in PROSE: it is written for the agent, which is its only other caller, so a machine
  * reader has to find its JSON inside a human answer. These pin that extraction, because it is the one place this
  * feature depends on the shape of somebody else's output. */
+// The status envelope the agent prints: the machine report rides as its `sync` half.
+const statusEnvelope = (machine: MachineReport): string =>
+    JSON.stringify({ version: "1.0.0", summary: "syncing", computer: { links: [] }, sync: machine });
+
 test("finds the report inside run_command's prose answer", () => {
-    const answer = `Exit code 0 (success).\n--- stdout ---\n${JSON.stringify(report("laptop"))}`;
+    const answer = `Exit code 0 (success).\n--- stdout ---\n${statusEnvelope(report("laptop"))}`;
     expect(reportFrom(answer)?.hostname).toBe("laptop");
 });
 
@@ -38,7 +42,7 @@ test("survives a banner before it and a warning after it", () => {
         "Exit code 0 (success).",
         "--- stdout ---",
         "Welcome to your shell!",
-        JSON.stringify(report("laptop")),
+        statusEnvelope(report("laptop")),
         "--- stderr ---",
         "warning: something unrelated",
     ].join("\n");
@@ -48,7 +52,7 @@ test("survives a banner before it and a warning after it", () => {
 // "There is no report here" has to be distinguishable from a report, or a machine with no agent reads as a
 // machine with no folders and no ports.
 test("finds nothing when the command printed no report", () => {
-    expect(reportFrom("Exit code 127 (failed).\n--- stderr ---\nintentic-sync: command not found")).toBeUndefined();
+    expect(reportFrom("Exit code 127 (failed).\n--- stderr ---\nintentic-machine: command not found")).toBeUndefined();
     // JSON that is not a report is not a report.
     expect(reportFrom(`--- stdout ---\n{"hostname":"laptop"}`)).toBeUndefined();
     // Brace-shaped but not JSON: a candidate line that will not parse must be skipped, not thrown on, this runs
@@ -58,7 +62,7 @@ test("finds nothing when the command printed no report", () => {
 
 // ...and a bad line must not hide a good one that follows it.
 test("keeps looking past a line that only looked like JSON", () => {
-    const answer = `--- stdout ---\n${JSON.stringify(report("laptop"))}\n{ tail garbage }`;
+    const answer = `--- stdout ---\n${statusEnvelope(report("laptop"))}\n{ tail garbage }`;
     expect(reportFrom(answer)?.hostname).toBe("laptop");
 });
 
@@ -217,7 +221,7 @@ test("waits for the first reading of a machine, then serves it while refreshing 
     vi.useFakeTimers({ toFake: ["Date"] });
     let hostname = "first";
     const { services, calls } = fakeServices("cached-pc", async (call) =>
-        call.tool === "run_command" ? answer(JSON.stringify(report(hostname))) : answer("[]"),
+        call.tool === "run_command" ? answer(statusEnvelope(report(hostname))) : answer("[]"),
     );
 
     // Cold: this one pays the round trip, which is the only time anybody does.
@@ -245,7 +249,7 @@ test("coalesces concurrent readers into a single round trip", async () => {
     const held = new Promise<void>((resolve) => (release = resolve));
     const { services, calls } = fakeServices("busy-pc", async (call) => {
         await held;
-        return call.tool === "run_command" ? answer(JSON.stringify(report("busy"))) : answer("[]");
+        return call.tool === "run_command" ? answer(statusEnvelope(report("busy"))) : answer("[]");
     });
 
     const readers = [computers(services), computers(services), computers(services)];
@@ -262,7 +266,7 @@ test("coalesces concurrent readers into a single round trip", async () => {
  * all: if it did not, this test would pass with the calls back in sequence. */
 test("asks for the status and the fleet in one go, and bounds the pair with one deadline", async () => {
     const { services, calls } = fakeServices("bare-pc", async (call) =>
-        call.tool === "run_command" ? answer("intentic-sync: command not found", false) : answer("[]"),
+        call.tool === "run_command" ? answer("intentic-machine: command not found", false) : answer("[]"),
     );
 
     expect((await computers(services))[0]?.gap).toBe("no-agent");

@@ -3,14 +3,14 @@ import { z } from "zod";
 import { HostFactsSchema } from "./hosts.js";
 /* The other end of desktop sync, stated as a fact instead of a claim.
  *
- * Everything here already existed, as `intentic-sync status` output on a terminal nobody running the desktop app
+ * Everything here already existed, as the machine agent's printed status on a terminal nobody running the desktop app
  * has open, and as `docker ps` rows only the desktop app could see. Three surfaces each held a third of it: the
  * desktop app knew the containers and nothing about sync, the Desktop sync card knew an enrollment record and
- * printed "Manage: intentic-sync status" for the rest, and the folder a machine syncs into was known to neither
+ * printed the status command for the rest, and the folder a machine syncs into was known to neither
  * (SYNC_DIR is local agent state; the daemon is never told it). This is that one shape, so the same report can
  * be produced by the agent, read by the daemon, and rendered by one component in both apps.
  *
- * The producer is `intentic-sync status --json` in every carrier, the desktop app spawns it, the mirror watcher
+ * The producer is `intentic-machine status --json` in every carrier (this report rides as its `sync` half), the desktop app spawns it, the mirror watcher
  * posts it, a `host` capability runs it over run_command. One producer is what keeps the three from drifting,
  * the same argument as the desktop app spawning connect.sh rather than reimplementing it.
  *
@@ -220,7 +220,7 @@ export const ComputerGapSchema = z.enum([
     // Connected, but "Run commands" is switched off on its capability card, so the daemon may not ask it
     // anything. The one gap the user can close in a single click, and the UI says which switch.
     "scope-off",
-    // Reachable, asked, but has no `intentic-sync` on it, so nothing knows about folders or mirrored ports there.
+    // Reachable, asked, but has no `intentic-machine` on it, so nothing knows about folders or mirrored ports there.
     "no-agent",
     // A sync-enrolled machine that has not posted a report yet: either it just enrolled, or its agent predates
     // machine reports. Distinct from "no-agent" because the agent IS there and the folders ARE syncing.

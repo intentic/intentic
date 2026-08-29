@@ -45,7 +45,7 @@
                 "/_sandbox/sandbox/Dockerfile$/",
                 "/_site/site/public/scripts/connect\\.sh$/",
                 "/_site/site/public/scripts/connect-host\\.sh$/",
-                "/_sandbox/sync/src/mutagen\\.ts$/",
+                "/_computers/machine/src/sync/mutagen\\.ts$/",
             ],
             matchStrings: ["CLOUDFLARED_VERSION[^\\n]*?(?<currentValue>20[0-9]{2}\\.[0-9]+\\.[0-9]+)"],
             depNameTemplate: "cloudflare/cloudflared",

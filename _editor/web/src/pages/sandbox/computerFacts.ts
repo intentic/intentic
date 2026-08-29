@@ -98,7 +98,7 @@ export const computerDoors = (computer: Computer, latest?: string): ComputerDoor
 };
 
 /* Whether this computer's SYNC agent is one the user should replace, the one door that earns a remedy on the
- * row, because it is the one with a command behind it (`intentic-sync upgrade`). The computer agent's version is
+ * row, because it is the one with a command behind it (`intentic-machine upgrade`). The computer agent's version is
  * reported the same way and shown the same way, but nothing here should print an instruction for updating it that
  * has not been built: a wrong command is worse than a fact with no command attached. */
 export const syncAgentBehind = (computer: Computer, latest?: string): boolean => isBehind(computer.report?.agents.sync, latest);

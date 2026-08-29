@@ -130,14 +130,14 @@ const panelReach = (_method: string, path: string): boolean => !CREDENTIAL_ROUTE
 
 /* The desktop-sync agent's two routes, and it is worth saying why there are two rather than one.
  *
- * It READS the listening-ports list, what port mirroring is driven from (`intentic-sync mirror` reconciles
+ * It READS the listening-ports list, what port mirroring is driven from (the machine agent's mirror loop reconciles
  * Mutagen forwards against it). Still read-only in the sense that matters: not the ports MUTATIONS, so the agent
  * can learn which ports exist and can never forward one publicly.
  *
  * It WRITES one thing: its own machine report, the folders it syncs into, the ports it got onto localhost, and
  * whether its watcher is alive. That is the half of desktop sync the sandbox has never been able to see (SYNC_DIR
  * is local agent state and never reaches the daemon), so the Desktop sync card could only ever claim a machine
- * was enrolled and point the user at `intentic-sync status` on a terminal for the rest.
+ * was enrolled and point the user at `intentic-machine status` on a terminal for the rest.
  *
  * The write grants nothing back: the report is stored in memory, filed under the enrollment whose token presented
  * it rather than under any name the body claims, and read back only by this sandbox's own collaborators. It does

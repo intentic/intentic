@@ -189,12 +189,12 @@ fn volume_names(prefix: &str) -> Vec<String> {
         .collect()
 }
 
-/// Host-side desktop-sync state (per-user: ~/.intentic/sync, the ssh include, the Mutagen session + daemon
+/// Host-side machine-agent state (per-user: ~/.intentic/machine, the ssh include, the Mutagen sessions + daemon
 /// registration) — removed as the INVOKING user, mirroring how connect installed it. The agent's own
 /// `uninstall` does the session/ssh-config work; best-effort, state may be absent.
 #[cfg(unix)]
 fn remove_sync_state() {
-    println!("intentic: removing desktop-sync state…");
+    println!("intentic: removing machine-agent state…");
     let (as_user, home) = match (docker::is_root(), std::env::var("SUDO_USER")) {
         (true, Ok(user)) if !user.is_empty() => {
             let home = std::process::Command::new("sh")
@@ -210,7 +210,7 @@ fn remove_sync_state() {
             std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()),
         ),
     };
-    let agent = home.join(".intentic/sync/bin/intentic-sync");
+    let agent = home.join(".intentic/machine/bin/intentic-machine");
     if agent.exists() {
         let mut cmd = match &as_user {
             Some(user) => {
@@ -227,21 +227,21 @@ fn remove_sync_state() {
             .status();
     }
     for path in [
-        home.join(".intentic/sync"),
-        home.join(".local/bin/intentic-sync"),
-        home.join(".ssh/intentic-sync.conf"),
+        home.join(".intentic/machine"),
+        home.join(".local/bin/intentic-machine"),
+        home.join(".ssh/intentic-machine.conf"),
     ] {
         let _ = std::fs::remove_dir_all(&path).or_else(|_| std::fs::remove_file(&path));
     }
 }
 
-/// The Windows twin (cleanup.ps1) removes %USERPROFILE%\.intentic\sync and the agent's login task via the
+/// The Windows twin (cleanup.ps1) removes %USERPROFILE%\.intentic\machine and the agent's login entry via the
 /// agent's own uninstall; mirror that shape.
 #[cfg(windows)]
 fn remove_sync_state() {
-    println!("intentic: removing desktop-sync state…");
+    println!("intentic: removing machine-agent state…");
     let home = std::path::PathBuf::from(std::env::var("USERPROFILE").unwrap_or_default());
-    let agent = home.join(".intentic\\sync\\bin\\intentic-sync.exe");
+    let agent = home.join(".intentic\\machine\\bin\\intentic-machine.exe");
     if agent.exists() {
         let _ = std::process::Command::new(&agent)
             .arg("uninstall")
@@ -249,7 +249,7 @@ fn remove_sync_state() {
             .stderr(std::process::Stdio::null())
             .status();
     }
-    let _ = std::fs::remove_dir_all(home.join(".intentic\\sync"));
+    let _ = std::fs::remove_dir_all(home.join(".intentic\\machine"));
 }
 
 fn auth_volume() -> String {

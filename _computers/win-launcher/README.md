@@ -2,21 +2,21 @@
 
 The ~200 KB Windows program that starts another program without putting a window on anybody's desktop.
 
-Everything the machine-side agents leave resident — [`@intentic/host`](../host)'s connection loop,
-[`@intentic/sync`](../../_sandbox/sync)'s mirror watcher, Mutagen's daemon — has to come back after a reboot,
+Everything the machine-side agent leaves resident — [`@intentic/machine`](../machine)'s one loop (sandbox
+connections + the mirror watcher), and Mutagen's daemon beside it — has to come back after a reboot,
 and on Windows that means a per-user `HKCU\…\Run` value. Explorer starts one in the interactive session, and
-the loader gives a console to any program whose PE subsystem says CONSOLE. All three are console programs. So
-every boot showed a black window for one to two seconds per agent, on machines whose owners had asked to see
-nothing at all.
+the loader gives a console to any program whose PE subsystem says CONSOLE. Both are console programs. So every
+boot showed a black window for one to two seconds per entry, on machines whose owners had asked to see nothing
+at all.
 
 This is the fix, and it is a whole separate executable because the property that fixes it is decided at link
 time: a **GUI-subsystem** program is never given a console, so there is nothing to map. It starts the real
 command with `CREATE_NO_WINDOW` and gets out of the way.
 
 ```
-HKCU\…\Run\IntenticHost
-  → intentic-launch.exe --log %USERPROFILE%\.intentic\host\run.log
-                        -- intentic-host.exe run --foreground
+HKCU\…\Run\IntenticMachine
+  → intentic-launch.exe --log %USERPROFILE%\.intentic\machine\machine.log
+                        -- intentic-machine.exe run --foreground
 ```
 
 ## Why not something already on the machine
@@ -39,7 +39,7 @@ fact rules out hiding the console from inside the agent through `bun:ffi`, and i
 supervision rather than silence.
 
 `bun build --compile --windows-hide-console` does produce a GUI-subsystem binary, but that binary is 85 MB and
-a GUI-subsystem CLI writes to no terminal — `intentic-host status` would print into the void. Hence a small
+a GUI-subsystem CLI writes to no terminal — `intentic-machine status` would print into the void. Hence a small
 program with one job, and a Rust crate with no dependencies at all: `std` has both halves (`creation_flags` for
 the flag, a file handle for the child's stdio).
 

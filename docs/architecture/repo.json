@@ -4,7 +4,7 @@
             "accent": "1",
             "id": "editor",
             "name": "The editor",
-            "oneLiner": "The screen you actually look at \u2014 files, chat, terminals.",
+            "oneLiner": "The screen you actually look at — files, chat, terminals.",
             "packages": ["_editor/desktop-app", "_editor/extension-ui", "_editor/ui", "_editor/web"]
         },
         {
@@ -22,7 +22,6 @@
                 "_sandbox/sandbox-contract",
                 "_sandbox/sandbox-run",
                 "_sandbox/scaffold",
-                "_sandbox/sync",
                 "_sandbox/webchat-widget",
                 "_sandbox/webq",
                 "_sandbox/workspace-ignore",
@@ -65,12 +64,12 @@
             "accent": "neutral",
             "id": "computers",
             "name": "Your computer",
-            "oneLiner": "How an agent reaches your own machine \u2014 with your permission, within your switches.",
+            "oneLiner": "How an agent reaches your own machine — with your permission, within your switches.",
             "packages": [
                 "_computers/browser",
                 "_computers/desktop",
-                "_computers/host",
                 "_computers/local-agent",
+                "_computers/machine",
                 "_computers/webext",
                 "_computers/win-launcher"
             ]
@@ -132,7 +131,7 @@
     ],
     "glossary": [
         {
-            "means": "One private box per project. Your files, your agents, your terminals \u2014 nobody else's.",
+            "means": "One private box per project. Your files, your agents, your terminals — nobody else's.",
             "term": "sandbox"
         },
         {
@@ -160,7 +159,7 @@
             "term": "extension"
         },
         {
-            "means": "Something you have connected \u2014 a GitHub account, a database, an API key.",
+            "means": "Something you have connected — a GitHub account, a database, an API key.",
             "term": "capability"
         },
         {

@@ -199,7 +199,7 @@ export function useDesktopSync() {
 
     // Disable: revoke EVERY enrollment on the daemon (the owner kill switch). Mutagen's SSH transport dies and
     // each machine's mirror watcher notices the rejected token and tears itself down. The installed agent stays
-    // until `intentic-sync uninstall` runs there; revokedFrom lets the card say so.
+    // until `intentic-machine sync uninstall` runs there; revokedFrom lets the card say so.
     const disable = async (): Promise<void> => {
         revokedFrom.value = syncingFrom.value ?? `the enrolled computer`;
         await sandboxRequest(`/system/authorized-key`, { method: `DELETE` });

@@ -3,7 +3,7 @@
 
      This is the BODY only, deliberately. The desktop app frames it as a section of its manager window and the web
      app frames it as an expanded row on the Computers tab; the chrome differs, and every fact inside it does not.
-     Before this existed the same facts had exactly one rendering: `intentic-sync status`, on a terminal that the
+     Before this existed the same facts had exactly one rendering: the agent's printed status, on a terminal that the
      desktop app's whole premise is not needing.
 
      ONE ROW PER SANDBOX, which is the redesign. The report's own shape: a flat list of folders and a flat list
@@ -209,7 +209,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <StatusBadge variant="warning" :dot="true" size="xs" label="Sync agent stalled" />
                     <span class="text-xs text-warning">
                         Its process is alive but has stopped making rounds, so ports and commits below may be out of date. Restart it with
-                        <span class="font-mono">intentic-sync mirror --stop</span> then <span class="font-mono">intentic-sync mirror</span>
+                        <span class="font-mono">intentic-machine run --stop</span> then <span class="font-mono">intentic-machine run</span>
                     </span>
                 </template>
                 <template v-else-if="watcher.running">
@@ -223,7 +223,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <StatusBadge variant="warning" :dot="true" size="xs" label="Sync agent stopped" />
                     <span class="text-xs text-warning">
                         Nothing is reaching this computer's folders or ports until it restarts:
-                        <span class="font-mono">intentic-sync mirror</span>
+                        <span class="font-mono">intentic-machine run</span>
                     </span>
                 </template>
             </div>

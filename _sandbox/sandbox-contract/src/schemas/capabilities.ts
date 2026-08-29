@@ -278,7 +278,7 @@ export const IdentityConfigSchema = z.object({
 });
 export type IdentityConfig = z.infer<typeof IdentityConfigSchema>;
 /* A connected COMPUTER of the user's own, the inverse of `ssh`, which reaches a server the sandbox can dial.
- * A machine behind NAT can't be dialled, so it dials US: the @intentic/host agent (installed by a one-liner,
+ * A machine behind NAT can't be dialled, so it dials US: the @intentic/machine agent (installed by a one-liner,
  * enrolled with a single-use pairing token) holds one outbound WebSocket to this daemon and serves an MCP tool
  * surface, shell, files, screenshots, from the far end. The daemon tunnels the agent's JSON-RPC over it and
  * never implements a tool itself, so the machine's capabilities evolve with ITS binary, not with a daemon release.

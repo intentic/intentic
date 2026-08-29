@@ -1,12 +1,12 @@
 #!/bin/sh
-# Cross-compile one of the agents that run on the USER's machine into standalone binaries — the release assets
-# the install one-liners download (sync.sh/sync.ps1 for intentic-sync, computer.sh/computer.ps1 for
-# intentic-host). Runs after `pnpm turbo run build`; expects <package-dir>/dist/cli.js and `bun` on PATH.
+# Cross-compile an agent that runs on the USER's machine into standalone binaries — the release assets the
+# install one-liners download (computer.sh/computer.ps1 and sync.sh/sync.ps1 both fetch intentic-machine).
+# Runs after `pnpm turbo run build`; expects <package-dir>/dist/cli.js and `bun` on PATH.
 #
-#   bash _tools/scripts/build-agent-binaries.sh _sandbox/sync intentic-sync linux-x64 linux-arm64 darwin-x64 …
+#   bash _tools/scripts/build-agent-binaries.sh _computers/machine intentic-machine linux-x64 linux-arm64 darwin-x64 …
 #
 # Targets are explicit per agent rather than a shared list: shipping a binary for a platform no card can hand a
-# command for implies support that does not exist (intentic-host is Windows + Linux; sync also covers macOS).
+# command for implies support that does not exist.
 set -eu
 . "$(dirname "$0")/repo-root.sh"
 cd "$(repo_root)"

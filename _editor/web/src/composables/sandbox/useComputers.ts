@@ -9,7 +9,7 @@ import { useSandboxQuery } from "./useSandboxQuery";
  * (hosts/machine-reports.ts merges the two doors).
  *
  * This is the read that made the Desktop sync card's claims checkable. That card could say a machine was enrolled
- * and then had to print `intentic-sync status` for the rest, because the daemon genuinely did not know which
+ * and then had to print the agent's status command for the rest, because the daemon genuinely did not know which
  * folder was syncing or which ports had reached localhost. Now the machines say so themselves.
  *
  * Polled rather than pushed: the facts are a snapshot of somebody's laptop and move in seconds at most, and the

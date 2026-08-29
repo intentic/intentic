@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "types": ["node"],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*"],
+    "exclude": ["./src/**/*.test.ts", "./src/computer/testing.ts"],
+    "references": [
+        { "path": "../../_computers/browser" },
+        { "path": "../../_computers/desktop" },
+        { "path": "../../_computers/local-agent" },
+        { "path": "../../_sandbox/sandbox-contract" }
+    ],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

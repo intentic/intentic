@@ -65,7 +65,7 @@ export interface DesktopInfo {
  * closing its own window, which changes nothing. */
 export type CloseAction = `tray` | `quit`;
 
-/* What desktop sync is doing on this computer, as `intentic-sync status --json` reports it.
+/* What desktop sync is doing on this computer, the sync half of `intentic-machine status --json`.
  *
  * The row types come from `@intentic/ui`, because the component that renders them is the reason this app reads
  * any of it, there is no second shape to keep in step. `sandboxes` is deliberately absent: the agent never
@@ -81,6 +81,17 @@ export interface MachineReport {
     // When the agent took the reading. This app asks on demand, so it is always moments old, carried because the
     // shape is the contract's, and a reader that ignores it is not a reader that may drop it.
     capturedAt: number;
+}
+
+/* Everything the machine agent knows, both halves: the sandboxes that may WORK ON this computer (the computer
+ * capability's links, tokens never included) and the sync report above. `summary` is the same one-liner the
+ * tray row shows — composed by the agent, beside its other sentences, so no surface re-derives it. */
+export interface MachineStatus {
+    version: string;
+    running?: number;
+    summary: string;
+    computer: { links: { sandboxUrl: string; id: string }[] };
+    sync: MachineReport;
 }
 
 /* What a running script says, as it says it. `run` is the operation's own id (`setup`, `recreate:<slug>`,
@@ -164,12 +175,12 @@ export const sandboxPower = (slug: string, action: PowerAction): Promise<void> =
 export const sandboxRecreate = (slug: string, hash?: string, rollback = false): Promise<void> => invoke(`sandbox_recreate`, { slug, hash, rollback });
 export const sandboxRemove = (slug: string): Promise<void> => invoke(`sandbox_remove`, { slug });
 export const sandboxLogs = (slug: string, tail: number): Promise<string> => invoke(`sandbox_logs`, { slug, tail });
-/* The sync agent's report, or undefined when this computer has no agent, an ordinary state (a machine set up
- * before desktop sync existed), which the screen states rather than treats as a failure. Rust hands back the raw
- * JSON because that process has no schema for it; parsing belongs on the side that does. */
-export const machineReport = async (): Promise<MachineReport | undefined> => {
+/* The machine agent's status, or undefined when this computer has no agent, an ordinary state (a machine set
+ * up before either capability existed), which the screen states rather than treats as a failure. Rust hands
+ * back the raw JSON because that process has no schema for it; parsing belongs on the side that does. */
+export const machineStatus = async (): Promise<MachineStatus | undefined> => {
     const raw = await invoke<string | null>(`machine_report`);
-    return raw === null ? undefined : (JSON.parse(raw) as MachineReport);
+    return raw === null ? undefined : (JSON.parse(raw) as MachineStatus);
 };
 /* Hand the window back to the workspace, at the app's root or at a path under it. The path is how this window
  * reaches the SPA's Computers tab, the same machine's containers through the other door, so the two screens

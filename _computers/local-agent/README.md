@@ -17,18 +17,18 @@ stdout                       createUi(process)    — the one renderer every age
 
 ## Why it exists
 
-Three agents ship to a user's machine and have nothing in common except how they are **installed** and how they
+Two agents ship to a user's machine and have nothing in common except how they are **installed** and how they
 **stay alive**:
 
 | | what it does | uses |
 | --- | --- | --- |
-| [`@intentic/host`](../../_computers/host) | lets the sandbox's agent work on this computer | home, launcher, autostart, detached, ui |
-| [`@intentic/sync`](../../_sandbox/sync) | mirrors files and ports between machine and sandbox | home, launcher, autostart, detached, ui |
+| [`@intentic/machine`](../../_computers/machine) | lets the sandbox's agent work on this computer, and mirrors files and ports between the two | home, launcher, autostart, detached, ui |
 | [`@intentic/acp-bridge`](../../_sandbox/acp-bridge) | lets an editor talk to the sandbox | home |
 
-They were written months apart, and each copy of that plumbing was made from the last one: a shape with a known
-ending. The second copy is a snapshot of the first on the day it was taken, and every fix after that lands in
-only one of them. It already had:
+The machine agent's two halves (and the standalone host/sync agents they used to be) were written months apart,
+and each copy of that plumbing was made from the last one: a shape with a known ending. The second copy is a
+snapshot of the first on the day it was taken, and every fix after that lands in only one of them. It already
+had:
 
 - **sync wrote its token file world-readable.** Its config module was copied from host's *before* the 0600 floor
   was added there, and nothing afterwards compared the two.

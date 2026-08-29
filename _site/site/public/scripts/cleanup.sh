@@ -112,12 +112,13 @@ remove_all() {
     done
 }
 
-# Host-side desktop-sync state (per-user: ~/.intentic/sync, ~/.ssh/intentic-sync.conf and the Include of it, the
-# Mutagen session + daemon registration) — removed as the INVOKING user, mirroring how connect.sh installed it.
-# This is host/desktop-wide, not per-sandbox, so it runs only when NO sandboxes remain (or on --all). The agent's
-# own `uninstall` terminates the session and strips the ssh-config Include; best-effort, state may be absent.
+# Host-side machine-agent state (per-user: ~/.intentic/machine, ~/.ssh/intentic-machine.conf and the Include of
+# it, the Mutagen sessions + daemon registration) — removed as the INVOKING user, mirroring how connect.sh
+# installed it. This is host/desktop-wide, not per-sandbox, so it runs only when NO sandboxes remain (or on
+# --all). The agent's own `uninstall` terminates the sessions and strips the ssh-config Include; best-effort,
+# state may be absent.
 remove_sync_state() {
-    echo "intentic: removing desktop-sync state…"
+    echo "intentic: removing machine-agent state…"
     if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
         sync_user="sudo -u $SUDO_USER -H"
         sync_home="$(eval echo "~$SUDO_USER")"
@@ -125,12 +126,12 @@ remove_sync_state() {
         sync_user=""
         sync_home="$HOME"
     fi
-    if [ -x "$sync_home/.intentic/sync/bin/intentic-sync" ]; then
+    if [ -x "$sync_home/.intentic/machine/bin/intentic-machine" ]; then
         # shellcheck disable=SC2086 -- $sync_user word-splits into `sudo -u <user> -H` on purpose (empty when not under sudo)
-        $sync_user "$sync_home/.intentic/sync/bin/intentic-sync" uninstall >/dev/null 2>&1 || true
+        $sync_user "$sync_home/.intentic/machine/bin/intentic-machine" uninstall >/dev/null 2>&1 || true
     fi
     # shellcheck disable=SC2086 -- see above
-    $sync_user rm -rf "$sync_home/.intentic/sync" "$sync_home/.local/bin/intentic-sync" "$sync_home/.ssh/intentic-sync.conf" 2>/dev/null || true
+    $sync_user rm -rf "$sync_home/.intentic/machine" "$sync_home/.local/bin/intentic-machine" "$sync_home/.ssh/intentic-machine.conf" 2>/dev/null || true
 }
 
 # The shared dev agent-auth volume (connect.sh's INTENTIC_AGENT_AUTH_VOLUME): the AI-provider OAuth stores for

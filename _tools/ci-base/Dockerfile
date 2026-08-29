@@ -53,7 +53,7 @@ RUN apt-get update \
 # matched), and baking one repository's checkout path into a shared CI image is the worse trade.
 RUN git config --system --add safe.directory '*'
 
-# bun — _sandbox/sync/scripts/build-binaries.sh cross-compiles the release's intentic-sync binaries with
+# bun — _tools/scripts/build-agent-binaries.sh cross-compiles the release's intentic-machine binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is bookworm, so the binary is linked against
 # the same glibc as this image.

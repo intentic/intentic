@@ -139,7 +139,7 @@ export const createHostMcpRoute =
                     result: {
                         protocolVersion: MCP_PROTOCOL_VERSION,
                         capabilities: { tools: {} },
-                        serverInfo: { name: `intentic-host:${id}`, version: services.hostHub.state(id).version ?? "offline" },
+                        serverInfo: { name: `intentic-machine:${id}`, version: services.hostHub.state(id).version ?? "offline" },
                     },
                 });
             }

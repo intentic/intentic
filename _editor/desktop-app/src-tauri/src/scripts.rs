@@ -469,7 +469,7 @@ pub fn docker_output(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Where `intentic-sync` lives on this machine, in the order worth trying. The agent's own installer puts it
+/// Where `intentic-machine` lives on this machine, in the order worth trying. The agent's own installer puts it
 /// under the home it manages, and that copy is the one this app's setup just installed — so it is preferred over
 /// whatever a PATH lookup might find (a stale global, a different user's build). A bare name last means a
 /// user who installed it their own way still works.
@@ -480,27 +480,30 @@ pub fn sync_agent_candidates(host: Host, home: Option<&str>) -> Vec<String> {
     let mut candidates = Vec::new();
     if let Some(home) = home {
         let (sep, exe) = match host {
-            Host::Windows => ('\\', "intentic-sync.exe"),
-            Host::Unix => ('/', "intentic-sync"),
+            Host::Windows => ('\\', "intentic-machine.exe"),
+            Host::Unix => ('/', "intentic-machine"),
         };
-        candidates.push(format!("{home}{sep}.intentic{sep}sync{sep}bin{sep}{exe}"));
+        candidates.push(format!(
+            "{home}{sep}.intentic{sep}machine{sep}bin{sep}{exe}"
+        ));
     }
     candidates.push(match host {
-        Host::Windows => "intentic-sync.exe".to_string(),
-        Host::Unix => "intentic-sync".to_string(),
+        Host::Windows => "intentic-machine.exe".to_string(),
+        Host::Unix => "intentic-machine".to_string(),
     });
     candidates
 }
 
-/// This machine's desktop-sync report — `intentic-sync status --json`, the SAME producer the daemon reads
-/// through a host capability and the same one the terminal command prints.
+/// This machine's agent status — `intentic-machine status --json`, the SAME producer the terminal command
+/// prints: the sandbox links the computer half holds, the sync half's whole machine report, and whether the one
+/// resident loop behind both is alive.
 ///
-/// Running the agent rather than reading its state file is the whole point: the file holds pairings, but the
-/// report also asks Mutagen what each session is doing and checks whether the watcher is alive, and a second
-/// implementation of that in Rust is precisely the lockstep this app exists to avoid (see the header).
+/// Running the agent rather than reading its state files is the whole point: the files hold links and pairings,
+/// but the status also asks Mutagen what each session is doing and checks whether the loop is alive, and a
+/// second implementation of that in Rust is precisely the lockstep this app exists to avoid (see the header).
 ///
-/// `Ok(None)` is "no sync agent on this computer" — an ordinary state for a machine set up before desktop sync,
-/// and not an error. Only a machine that HAS the agent and could not be asked is one.
+/// `Ok(None)` is "no machine agent on this computer" — an ordinary state for a machine set up before either
+/// capability, and not an error. Only a machine that HAS the agent and could not be asked is one.
 pub fn sync_report() -> Result<Option<String>, String> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -783,7 +786,7 @@ mod tests {
     /* THE PROMISE AN INSTALLER MAKES THE MOMENT IT PRINTS A COMMAND NAME.
      *
      * Every downloading script here drops a binary into a folder under %USERPROFILE%\.intentic and then tells
-     * the user to run it BY NAME — `intentic-host status`, `intentic-sync uninstall`, `ic sandbox doctor
+     * the user to run it BY NAME — `intentic-machine status`, `intentic-machine sync uninstall`, `ic sandbox doctor
      * <slug>`. Nothing on Windows puts that folder on PATH. The .sh twins get it free with a symlink into
      * ~/.local/bin, which is exactly why the gap survived: the shell side was right, so the shape looked
      * finished from both directions.

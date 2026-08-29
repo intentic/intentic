@@ -24,7 +24,7 @@ export const HostHelloSchema = z.object({
      * onto one-shot tickets, auth/ws-tickets.ts). A frame is body, not URL, so it is logged nowhere. Until this
      * arrives the socket is anonymous and short-lived: the daemon closes it in seconds if it never does. */
     token: z.string(),
-    // The @intentic/host build the machine is running, surfaced per machine so an old binary is visible rather
+    // The @intentic/machine build the machine is running, surfaced per machine so an old binary is visible rather
     // than mysteriously missing a tool. What the machine IS (`describe`) is not here: it is pulled over the
     // typed link a moment later, so there is one definition of those facts rather than two.
     version: z.string(),

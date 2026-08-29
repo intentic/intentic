@@ -137,7 +137,7 @@ const SUBHEAD = `text-2xs font-semibold uppercase tracking-wide text-subtle`;
 const DOOR = `inline-flex items-center gap-1.5 rounded-md bg-content/5 px-2 py-0.5 text-2xs text-muted`;
 
 // Whether this computer's watcher is up but no longer making rounds. Both the badge and the detail block below
-// ask it, off the one rule the terminal uses (watcherStalled), so a row and `intentic-sync status` cannot
+// ask it, off the one rule the terminal uses (watcherStalled), so a row and `intentic-machine status` cannot
 // disagree about the same machine.
 const watcherHalted = (computer: Computer): boolean => computer.report !== undefined && watcherStalled(computer.report.watcher, now.value);
 
@@ -650,7 +650,7 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
                              quiet line rather than a warning, and it names the one command that fixes it instead
                              of sending anyone to the browser for a pairing token. -->
                             <p v-if="syncAgentBehind(row.computer, latest)" class="text-xs text-subtle">
-                                Run <span class="font-mono text-content">intentic-sync upgrade</span> on that computer to update its sync agent.
+                                Run <span class="font-mono text-content">intentic-machine upgrade</span> on that computer to update its agent.
                             </p>
                             <!-- The reading's own age, not its arrival's: a report is a snapshot of a computer that
                              may since have closed its lid, so it is presented as of when the machine took it. -->

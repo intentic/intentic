@@ -21,43 +21,48 @@
       "to": "_tools/tsconfig"
     },
     {
+      "dev": true,
+      "from": "_computers/local-agent",
+      "to": "_tools/testing"
+    },
+    {
+      "dev": true,
+      "from": "_computers/local-agent",
+      "to": "_tools/tsconfig"
+    },
+    {
       "dev": false,
-      "from": "_computers/host",
+      "from": "_computers/machine",
       "to": "_computers/browser"
     },
     {
       "dev": false,
-      "from": "_computers/host",
+      "from": "_computers/machine",
       "to": "_computers/desktop"
     },
     {
       "dev": false,
-      "from": "_computers/host",
+      "from": "_computers/machine",
       "to": "_computers/local-agent"
     },
     {
       "dev": false,
-      "from": "_computers/host",
+      "from": "_computers/machine",
       "to": "_sandbox/sandbox-contract"
     },
     {
+      "dev": false,
+      "from": "_computers/machine",
+      "to": "_tools/constants"
+    },
+    {
       "dev": true,
-      "from": "_computers/host",
+      "from": "_computers/machine",
       "to": "_tools/testing"
     },
     {
       "dev": true,
-      "from": "_computers/host",
-      "to": "_tools/tsconfig"
-    },
-    {
-      "dev": true,
-      "from": "_computers/local-agent",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_computers/local-agent",
+      "from": "_computers/machine",
       "to": "_tools/tsconfig"
     },
     {
@@ -1486,31 +1491,6 @@
       "to": "_tools/tsconfig"
     },
     {
-      "dev": false,
-      "from": "_sandbox/sync",
-      "to": "_computers/local-agent"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sync",
-      "to": "_sandbox/sandbox-contract"
-    },
-    {
-      "dev": false,
-      "from": "_sandbox/sync",
-      "to": "_tools/constants"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sync",
-      "to": "_tools/testing"
-    },
-    {
-      "dev": true,
-      "from": "_sandbox/sync",
-      "to": "_tools/tsconfig"
-    },
-    {
       "dev": true,
       "from": "_sandbox/webchat-widget",
       "to": "_sandbox/sandbox-contract"
@@ -1987,46 +1967,6 @@
     {
       "anchors": [
         {
-          "path": "_computers/host/src/app.ts",
-          "what": ": the machine agent's own server and its lifecycle."
-        },
-        {
-          "path": "_computers/host/src/policy.ts",
-          "what": ": what the sandbox is permitted to do on this machine; the security surface."
-        },
-        {
-          "path": "_computers/host/src/tools",
-          "what": ", the capabilities exposed: commands, files, screen."
-        },
-        {
-          "path": "_computers/host/src/connection.ts",
-          "what": ": staying attached to the sandbox."
-        },
-        {
-          "path": "_computers/host/src/audit.ts",
-          "what": ": what was done on this machine, recorded."
-        },
-        {
-          "path": "_computers/host/src/autostart.ts",
-          "what": ": installing as a background agent, per platform."
-        }
-      ],
-      "behind": 1,
-      "component": "computers",
-      "dir": "_computers/host",
-      "files": 29,
-      "hasTests": true,
-      "loc": 3509,
-      "name": "@intentic/host",
-      "oneLiner": "The small program on your own computer that lets your sandbox work there.",
-      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788007409000
-    },
-    {
-      "anchors": [
-        {
           "path": "_computers/local-agent/src/index.ts",
           "what": ": the public surface."
         },
@@ -2062,6 +2002,45 @@
       "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
       "stale": false,
       "updatedAt": 1788007409000
+    },
+    {
+      "anchors": [
+        {
+          "path": "_computers/machine/src/commands.ts",
+          "what": "the CLI surface: computer setup|uninstall, sync setup|pause|resume|uninstall, shared run|status|version|upgrade|uninstall."
+        },
+        {
+          "path": "_computers/machine/src/resident.ts",
+          "what": "the one loop, its pidfile, and reconcileResidency."
+        },
+        {
+          "path": "_computers/machine/src/status.ts",
+          "what": "both halves as one answer; --json is what the desktop app and tray read."
+        },
+        {
+          "path": "_computers/machine/src/computer/policy.ts",
+          "what": "what the sandbox is permitted to do here; the security surface."
+        },
+        {
+          "path": "_computers/machine/src/sync/mirror.ts",
+          "what": "the sync tick: ports reconcile, git bridge, revocation handling."
+        },
+        {
+          "path": "_computers/machine/src/sync/mutagen.ts",
+          "what": "driving the Mutagen binary, sessions and its daemon's autostart."
+        }
+      ],
+      "behind": 0,
+      "component": "computers",
+      "dir": "_computers/machine",
+      "files": 54,
+      "hasTests": true,
+      "loc": 9003,
+      "name": "@intentic/machine",
+      "oneLiner": "The one agent that lives on a user's own computer: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
+      "readmeRev": "",
+      "stale": false,
+      "updatedAt": 0
     },
     {
       "anchors": [
@@ -4266,50 +4245,6 @@
       "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306249000
-    },
-    {
-      "anchors": [
-        {
-          "path": "_sandbox/sync/src/mirror.ts",
-          "what": ": the sync session's lifecycle, and what it does when things go wrong."
-        },
-        {
-          "path": "_sandbox/sync/src/mutagen.ts",
-          "what": ": driving the Mutagen binary."
-        },
-        {
-          "path": "_sandbox/sync/src/tunnel.ts",
-          "what": ", the transport: a loopback port that IS the sandbox's sshd."
-        },
-        {
-          "path": "_sandbox/sync/src/ssh.ts",
-          "what": ": the ssh config that points Mutagen at it."
-        },
-        {
-          "path": "_sandbox/sync/src/git-bridge.ts",
-          "what": ": making git behave across the mirror."
-        },
-        {
-          "path": "_sandbox/sync/src/autostart.ts",
-          "what": ": installing as a background agent, per platform."
-        },
-        {
-          "path": "_sandbox/sync/src/commands.ts",
-          "what": ": the CLI surface a user actually types."
-        }
-      ],
-      "behind": 1,
-      "component": "sandbox",
-      "dir": "_sandbox/sync",
-      "files": 26,
-      "hasTests": true,
-      "loc": 5437,
-      "name": "@intentic/sync",
-      "oneLiner": "Keeps a folder on your own computer in step with a sandbox, both ways, so you can use your own editor.",
-      "readmeRev": "c25b5b36332e8beae08abbdb7bda02b920dc3a33",
-      "reason": "1 commit has touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788007409000
     },
     {
       "anchors": [

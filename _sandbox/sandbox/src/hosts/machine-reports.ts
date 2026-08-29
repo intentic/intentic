@@ -29,9 +29,10 @@ import { hostSummaries } from "./host.routes.js";
  *     grants a NESTED engine, so a sandbox can never see its siblings by itself. It adds the two things the
  *     volunteered report cannot carry: the machine's containers, and machines with no sync agent at all.
  *
- * The pulled half deliberately runs the SAME `intentic-sync status --json` the desktop app spawns, rather than a
- * second implementation of the same questions. One producer is what stops the terminal answer and the two
- * on-screen answers from drifting, the argument the desktop app already makes for spawning connect.sh. */
+ * The pulled half deliberately runs the SAME `intentic-machine status --json` the desktop app spawns, rather
+ * than a second implementation of the same questions (the machine report rides in that status as its `sync`
+ * half). One producer is what stops the terminal answer and the two on-screen answers from drifting, the
+ * argument the desktop app already makes for spawning connect.sh. */
 
 /* How old a served reading may be before the machine is asked again. NOT how long a reader waits: the answer
  * comes out of this map either way and the refresh runs behind it (see pullCached), so this is the machine's
@@ -106,7 +107,9 @@ export const reportFrom = (text: string): MachineReport | undefined => {
         if (parsed === undefined) {
             continue;
         }
-        const report = MachineReportSchema.safeParse(parsed);
+        // The machine report is the `sync` half of the agent's status envelope (the rest of the envelope — the
+        // computer links — is the daemon's own knowledge already, so only this half is read).
+        const report = MachineReportSchema.safeParse((parsed as { sync?: unknown }).sync);
         if (report.success) {
             return report.data;
         }
@@ -173,7 +176,7 @@ const pull = async (services: Services, id: string): Promise<PullResult> => {
     // One deadline over both calls: the reading is what has a budget, not either half of it.
     const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
     const [status, fleet] = await Promise.all([
-        callTool(services, id, "run_command", { command: "intentic-sync status --json", timeoutMs: COMMAND_TIMEOUT_MS }, signal),
+        callTool(services, id, "run_command", { command: "intentic-machine status --json", timeoutMs: COMMAND_TIMEOUT_MS }, signal),
         callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
     ]);
     if (status.refused) {

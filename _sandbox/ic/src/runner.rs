@@ -70,7 +70,12 @@ pub(crate) struct VerifiedOverlay {
     pub runtime_lines: String,
 }
 
-pub(crate) fn verified_overlay(content: &str, hash: &str, image: &str, slug: &str) -> Result<VerifiedOverlay> {
+pub(crate) fn verified_overlay(
+    content: &str,
+    hash: &str,
+    image: &str,
+    slug: &str,
+) -> Result<VerifiedOverlay> {
     let have = sha256_hex(content.as_bytes());
     if have != hash {
         bail!("the shipped overlay does not hash to what the parent's owner approved (expected {hash}, found {have}).\n       Re-create the runner from the parent sandbox, which ships the pair together.");
@@ -129,10 +134,18 @@ pub fn up(args: Up) -> Result<()> {
 
     // Read both shape files up front, so a missing path is a sentence naming it rather than a mid-flow stop.
     let overlay = overlay_file
-        .map(|path| std::fs::read_to_string(&path).map_err(|err| crate::util::Fail(format!("could not read the overlay file {path}: {err}"))))
+        .map(|path| {
+            std::fs::read_to_string(&path).map_err(|err| {
+                crate::util::Fail(format!("could not read the overlay file {path}: {err}"))
+            })
+        })
         .transpose()?;
     let definition = definition_file
-        .map(|path| std::fs::read_to_string(&path).map_err(|err| crate::util::Fail(format!("could not read the definition file {path}: {err}"))))
+        .map(|path| {
+            std::fs::read_to_string(&path).map_err(|err| {
+                crate::util::Fail(format!("could not read the definition file {path}: {err}"))
+            })
+        })
         .transpose()?;
 
     /* The parent's overlay, built BEFORE anything boots (the recreate flow's ordering: a failed build leaves
@@ -145,7 +158,10 @@ pub fn up(args: Up) -> Result<()> {
             let workdir = tempfile::tempdir()?;
             let overlay_path = workdir.path().join("overlay.Dockerfile");
             std::fs::write(&overlay_path, content)?;
-            println!("intentic: building {} from the parent's approved overlay…", verified.target);
+            println!(
+                "intentic: building {} from the parent's approved overlay…",
+                verified.target
+            );
             recreate::build_overlay(&verified.target, &overlay_path, false, &log);
             if !docker::image_exists(&verified.target) {
                 bail!(
@@ -153,7 +169,12 @@ pub fn up(args: Up) -> Result<()> {
                     log.path.display()
                 );
             }
-            (verified.target, verified.base, Some(hash.clone()), verified.runtime_lines)
+            (
+                verified.target,
+                verified.base,
+                Some(hash.clone()),
+                verified.runtime_lines,
+            )
         }
         _ => {
             sandbox::connect::ensure_image(&image, &log)?;
@@ -176,7 +197,9 @@ pub fn up(args: Up) -> Result<()> {
         ("RUNNER_PARENT_URL", parent_url.as_str()),
         ("RUNNER_PAIR_TOKEN", pair_token.as_str()),
     ]);
-    let definition_b64 = definition.as_deref().map(|content| base64(content.as_bytes()));
+    let definition_b64 = definition
+        .as_deref()
+        .map(|content| base64(content.as_bytes()));
     let request = RunRequest {
         image: &run_image,
         slug: &slug,
@@ -263,7 +286,12 @@ mod tests {
     /// the exact property `ic sandbox rebuild` holds, restated for an overlay that arrived over the wire.
     #[test]
     fn a_shipped_overlay_that_does_not_hash_to_its_pin_is_refused() {
-        let err = refusal(verified_overlay(OVERLAY, &"a".repeat(64), "img", "runner-x"));
+        let err = refusal(verified_overlay(
+            OVERLAY,
+            &"a".repeat(64),
+            "img",
+            "runner-x",
+        ));
         assert!(err.contains("does not hash"));
     }
 
@@ -276,7 +304,10 @@ mod tests {
         };
         assert_eq!(verified.base, "ghcr.io/intentic/sandbox:stable");
         // Same derivation as the rebuild flow: the first 12 hash chars tag the built image, per slug.
-        assert_eq!(verified.target, format!("intentic-sandbox-env-runner-x:{}", &hash[..12]));
+        assert_eq!(
+            verified.target,
+            format!("intentic-sandbox-env-runner-x:{}", &hash[..12])
+        );
         assert_eq!(verified.runtime_lines, "# intentic:runtime --gpus=all");
     }
 
@@ -285,11 +316,18 @@ mod tests {
     #[test]
     fn a_foreign_base_is_refused_and_an_explicit_image_match_is_allowed() {
         let foreign = "FROM evil.example/whatever:latest\nRUN true\n";
-        let err = refusal(verified_overlay(foreign, &hash_of(foreign), "img", "runner-x"));
+        let err = refusal(verified_overlay(
+            foreign,
+            &hash_of(foreign),
+            "img",
+            "runner-x",
+        ));
         assert!(err.contains("must start with FROM"));
 
         let pinned = "FROM my-registry/custom:1\nRUN true\n";
-        assert!(verified_overlay(pinned, &hash_of(pinned), "my-registry/custom:1", "runner-x").is_ok());
+        assert!(
+            verified_overlay(pinned, &hash_of(pinned), "my-registry/custom:1", "runner-x").is_ok()
+        );
     }
 
     #[test]

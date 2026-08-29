@@ -25,7 +25,7 @@ await screen.writeClipboard("some text");
 
 It knows nothing about agents, capabilities, permissions or sandboxes. It takes coordinates and text and makes a
 computer do something; *whether that is allowed* is a question asked before these methods are ever called. Its
-one consumer today is `@intentic/host`, which owns that question: and the split is what makes the policy
+one consumer today is `@intentic/machine`, which owns that question: and the split is what makes the policy
 testable, since a real click can only be verified by a human watching a screen.
 
 ## How it works, per platform

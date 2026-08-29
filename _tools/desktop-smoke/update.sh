@@ -182,7 +182,7 @@ fi
 
 # ── 4. and it still starts ────────────────────────────────────────────────────────────────────────────────────
 # The half that makes an update worth having at all. A swap that boots into nothing trades a machine that was
-# merely out of date for one with no working app — the outcome `intentic-sync upgrade` rolls back for, and the
+# merely out of date for one with no working app — the outcome `intentic-machine upgrade` rolls back for, and the
 # reason this is asserted rather than assumed. Installing relaunches the app itself (update.rs), so this waits
 # for the window to come back rather than starting anything.
 until_true 90 "the updated app is running" workspace_window || app_log
