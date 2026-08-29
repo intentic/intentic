@@ -166,6 +166,18 @@ const DIFF_OPEN_KEY = `ui-diff-open`;
 // settings above, not a property of the file, so it holds as they walk from README to README. Persists.
 const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 
+/* Whether a rendered markdown document is LOCKED against editing (MarkdownViewer.vue). On by default, and the
+ * reason it is a lock rather than a mode is the whole design of that surface: prose is what a markdown file
+ * looks like in both states, and the only thing this changes is whether clicking a paragraph opens its markdown
+ * and whether keystrokes land. A reader who never touches it is reading, exactly as before.
+ *
+ * Deliberately NOT `editMode` above, which markdown now opts out of. That switch means "open files in the code
+ * editor", and it is global because a person who is editing source is usually editing several files; this one
+ * means "let me type in this prose", and it is remembered for the same reason, so unlocking one README leaves
+ * the next one unlocked too. That is also the choice VS Code's own markdown editor makes: locked on first open,
+ * and the last choice becomes the default for the next document. Persists. */
+const MARKDOWN_LOCKED_KEY = `ui-markdown-locked`;
+
 /* Owns shell-layout state shared across areas: where the chat panel sits relative to the workspace (bound onto a
  * `data-chat-position` attribute whose CSS grid swaps off it, mirroring how useTheme drives `data-mode`), the chat
  * panel width, the workspace explorer sidebar width/collapse, and the workspace terminal panel open/height.
@@ -254,6 +266,7 @@ const hideFileComments = boolPref(HIDE_FILE_COMMENTS_KEY);
 const diffLayout = enumPref(DIFF_LAYOUT_KEY, [`split`, `unified`] as const, `split`);
 const diffOpen = enumPref(DIFF_OPEN_KEY, [`top`, `imports`, `biggest`] as const, `imports`);
 const markdownOutline = boolPref(MARKDOWN_OUTLINE_KEY, true);
+const markdownLocked = boolPref(MARKDOWN_LOCKED_KEY, true);
 
 const set = (value: ChatPosition): void => {
     position.value = value;
@@ -354,6 +367,10 @@ const toggleMarkdownOutline = (): void => {
     markdownOutline.value = !markdownOutline.value;
 };
 
+const setMarkdownLocked = (on: boolean): void => {
+    markdownLocked.value = on;
+};
+
 export function useLayout() {
     return {
         position,
@@ -372,6 +389,7 @@ export function useLayout() {
         diffLayout,
         diffOpen,
         markdownOutline,
+        markdownLocked,
         set,
         toggle,
         setChatHome,
@@ -394,5 +412,6 @@ export function useLayout() {
         setDiffLayout,
         setDiffOpen,
         toggleMarkdownOutline,
+        setMarkdownLocked,
     };
 }

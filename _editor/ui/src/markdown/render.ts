@@ -31,6 +31,26 @@ const marked = new Marked({
 });
 const CODE_PLACEHOLDER = /<pre data-md-code="(\d+)"><\/pre>/g;
 
+/* A top-level token, for the one caller that needs to know where a block SITS in the source rather than what it
+ * renders to (blocks.ts, behind the file viewer's click-a-paragraph-to-edit surface). Lexing is the first half
+ * of the same pass parsing runs, on the same configured instance, so the spans that caller reports and the HTML
+ * this file produces can never disagree about where one block ends and the next begins. Only `type` and `raw`
+ * are exposed: the rest of a token is marked's shape, and nothing outside this module should depend on it. */
+export interface MarkdownToken {
+    readonly type: string;
+    readonly raw: string;
+}
+
+// Undefined rather than a throw, on the same grounds as parseParts' catch below: a lexer edge case may cost the
+// feature built on this, never the surface that was rendering the document perfectly well without it.
+export const lexBlocks = (source: string): readonly MarkdownToken[] | undefined => {
+    try {
+        return marked.lexer(source);
+    } catch {
+        return undefined;
+    }
+};
+
 /* A surface's own pass over the sanitized DOM, before it is serialized for v-html. The app uses it to turn
  * file mentions into workspace links (markdownFileLinks), knowledge of routes and the workspace tree that
  * belongs to the app, not to the design system, and that an extension has no business inheriting.

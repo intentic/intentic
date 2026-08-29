@@ -5,6 +5,7 @@
  * unit tests, and the app imports it from modules that are too, hence a subpath (`@intentic/ui/markdown`)
  * that costs neither. The <Markdown> component, being a component, stays on the barrel. */
 
+export { blockAtOffset, type MarkdownBlock, type MarkdownBlocks, offsetOfLine, splitMarkdownBlocks } from "./blocks.js";
 export { type CodeBlock, codeBlockHtml, copyCodeFromEvent, escapeHtml } from "./code.js";
 export {
     type BarsFigure,
