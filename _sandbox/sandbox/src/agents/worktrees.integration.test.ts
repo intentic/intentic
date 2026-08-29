@@ -541,3 +541,37 @@ test("a rebase carries a config change the worktree never checks out", async () 
     );
     expect(existsSync(join(conversation.cwd, ".intentic", "config", "settings.json"))).toBe(false);
 });
+
+/* THE CONVERGENCE GUARD'S OWN TRAP, and why it reads the pattern file rather than the config flag.
+ *
+ * `info/sparse-checkout` is per-worktree, but `core.sparseCheckout` is repo config, SHARED by every worktree
+ * unless `extensions.worktreeConfig` is on — and it is not. A guard that read the flag was therefore satisfied
+ * by a SIBLING's work: the first worktree to converge set it repo-wide, and every worktree created after that
+ * read `true`, returned early, and never wrote a pattern of its own. Sparse checkout nominally on, no pattern,
+ * nothing excluded, the state dir fully live in `git status` — which is how one conversation's in-flight edit
+ * to a workspace extension ended up inside another conversation's land, under an unrelated subject.
+ *
+ * ONE worktree cannot catch this; the first one always passes. The second is the regression.
+ */
+test("a second conversation's worktree excludes the state dir too, though the first already set the shared flag", async () => {
+    const { work, worktrees } = await setup();
+    await mkdir(join(work, ".intentic", "config"), { recursive: true });
+    await writeFile(join(work, ".intentic", "config", "settings.json"), '{"model":"v1"}\n');
+    await sh(work, "add", "-A", "--force", ".intentic/config/settings.json");
+    await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config v1");
+
+    const first = await worktrees.ensure("c1", []);
+    const second = await worktrees.ensure("c2", []);
+
+    // The flag the old guard keyed off is repo-wide once the first worktree has converged. That is the trap the
+    // second worktree has to survive, so assert it is genuinely set rather than assuming it.
+    expect(await sh(second.cwd, "config", "--get", "core.sparseCheckout")).toBe("true");
+
+    for (const cwd of [first.cwd, second.cwd]) {
+        // Each worktree carries a pattern of its OWN: a sibling's file is not this worktree's exclusion.
+        expect(existsSync(join(cwd, ".intentic", "config", "settings.json"))).toBe(false);
+        expect(await sh(cwd, "ls-files", "-v", ".intentic/config/settings.json")).toMatch(/^S /);
+        // The half that actually bit: a land's `add -A` must find nothing of the shared tree to sweep up.
+        expect(await sh(cwd, "status", "--short")).toBe("");
+    }
+});

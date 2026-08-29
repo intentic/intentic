@@ -271,27 +271,41 @@ export const createAgentWorktrees = (
      * here costs the mount nothing.
      *
      * Root repo only: the state dir is the ROOT repo's content, and a nested repo's worktree has none.
-     * Converged rather than set once, because every worktree that predates this ran without it; the config
-     * read is the guard that keeps it a single cheap spawn on every turn after the first.
+     *
+     * Converged rather than set once, because every worktree that predates this ran without it. THE GUARD
+     * READS THE PATTERN FILE, NOT `core.sparseCheckout`, and that distinction is the whole of a second
+     * incident: `info/sparse-checkout` is per-worktree, but config is SHARED by every worktree of a repo
+     * unless `extensions.worktreeConfig` is on, and it is not. Keying convergence off the flag let the first
+     * worktree to converge answer for all of them — every worktree created afterwards read `true`, returned
+     * here, and never wrote a pattern of its own. Sparse checkout nominally on, no pattern, nothing excluded,
+     * seventeen of eighteen worktrees with the state dir fully live in `git status`; an agent's in-flight edit
+     * to a workspace extension was swept into a different conversation's land, on main, under a subject about
+     * something else. Reading the file costs the same single spawn and cannot be answered by a sibling.
      */
     const excludeSharedState = async (dir: string): Promise<void> => {
-        const already = await git(dir, ["config", "--get", "core.sparseCheckout"])
-            .then(({ stdout }) => stdout.trim() === "true")
-            .catch(() => false);
-        if (already) {
-            return;
-        }
-        const printed = (await git(dir, ["rev-parse", "--git-path", "info/sparse-checkout"])).stdout.trim();
-        const target = isAbsolute(printed) ? printed : join(dir, printed);
-        await mkdir(dirname(target), { recursive: true });
         // Everything at the root, then the one exclusion. `--no-cone` spelling: cone mode takes directories to
         // KEEP and cannot express "all of it except this".
-        await writeFile(target, `/*\n!/${STATE_DIR}/\n`);
-        await git(dir, ["config", "core.sparseCheckout", "true"]);
-        // Applies the pattern to the checkout that is already on disk: the state dir's files leave the worktree
-        // and their index entries take git's skip-worktree bit. Last, so a failure above leaves sparseCheckout
-        // off and the worktree in the state it was already in rather than half-applied.
-        await git(dir, ["read-tree", "-mu", "HEAD"]);
+        const pattern = `/*\n!/${STATE_DIR}/\n`;
+        const printed = (await git(dir, ["rev-parse", "--git-path", "info/sparse-checkout"])).stdout.trim();
+        const target = isAbsolute(printed) ? printed : join(dir, printed);
+        if ((await readFile(target, "utf8").catch(() => undefined)) === pattern) {
+            return;
+        }
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, pattern);
+        try {
+            await git(dir, ["config", "core.sparseCheckout", "true"]);
+            // Applies the pattern to the checkout that is already on disk: the state dir's files leave the
+            // worktree and their index entries take git's skip-worktree bit.
+            await git(dir, ["read-tree", "-mu", "HEAD"]);
+        } catch (error) {
+            /* The pattern file is now the convergence marker, so a half-applied state must not leave one
+             * behind: every later turn would read it, believe this worktree converged, and skip the retry
+             * forever. Take it back out and let the next turn start clean — the same property the old ordering
+             * got from writing the config flag last. */
+            await rm(target, { force: true });
+            throw error;
+        }
     };
 
     const createOne = async (id: string, repo: string, pinned?: string): Promise<{ repo: string; base: string } | undefined> => {
