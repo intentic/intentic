@@ -95,3 +95,67 @@ it(`starts typing when a pane takes the focus mid-answer`, () => {
     expect(said(clock).length).toBeGreaterThan(ANSWER.length);
     expect(said(clock).length).toBeLessThan(ANSWER.length * 2);
 });
+
+/* A REPLAY IS NOT AN ANSWER BEING WRITTEN, and the typewriter is only for the latter.
+ *
+ * Attaching to a live run replays it from the client's cursor before going live, and the head names the seq
+ * that boundary sits at. That boundary was published and then dropped on the floor here: every replayed frame
+ * went through the reveal, so opening an agent that had been working for an hour meant watching an hour of
+ * prose type itself out before reaching what the agent is doing NOW. It is history: it is put on screen whole,
+ * exactly as an unwatched transcript's is, and for a stricter version of the same reason (nobody watched it
+ * happen, so there is no pace to keep). */
+it(`settles replayed text whole, however closely the pane is being watched`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.push(delta(ANSWER), TURN, true);
+
+    paint();
+
+    expect(said(clock)).toBe(ANSWER);
+});
+
+/* …AND STARTS TYPING AGAIN AT THE BOUNDARY, in the same paint if that is where it falls. One attach routinely
+ * straddles it: the tail of the replay and the model's next word arrive together, and the reader should get
+ * the caught-up transcript at once and then watch it carry on being written. */
+it(`types again from the first live frame after a replay`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.push(delta(ANSWER), TURN, true);
+    paint();
+
+    clock.push(delta(ANSWER), TURN, false);
+    paint();
+
+    expect(said(clock).length).toBeGreaterThan(ANSWER.length);
+    expect(said(clock).length).toBeLessThan(ANSWER.length * 2);
+});
+
+/* THE RUN A ROW BELONGS TO, LEARNED A BEAT LATE, which is the send path's whole relationship with run ids: it
+ * opens the bubble the typing indicator needs before the daemon has named anything, and the ack names the run
+ * afterwards. Unstamped, that bubble was invisible to dropRun, so re-attaching could not take it back AND could
+ * not reach past it to the stamped rows above, which is how one prompt came to be drawn twice with an empty
+ * "thinking" bubble wedged between the copies. */
+it(`stamps the bubble a send opened once the ack names its run, so a re-attach can take it back`, () => {
+    const clock = new TranscriptClock(() => {});
+    clock.append({ role: `user`, text: `ship the parser` });
+    const bubble = clock.openBubble();
+
+    clock.dropRun(TURN.run);
+    expect(clock.messages.value).toHaveLength(2); // unstamped: the drop cannot see it
+
+    clock.claimRun(bubble, TURN.run);
+    clock.dropRun(TURN.run);
+
+    expect(clock.messages.value.map((message) => message.role)).toEqual([`user`]);
+});
+
+// The user's own row is deliberately NOT stamped: a replay never redraws it (reuseUserBubble keeps it, with the
+// attachment chips and checkpoint no replay can rebuild), so a stamp there would invite dropRun to take away
+// the one row nothing puts back.
+it(`leaves the user's own bubble unstamped, where no replay will redraw it`, () => {
+    const clock = new TranscriptClock(() => {});
+    const asked = clock.append({ role: `user`, text: `ship the parser` });
+    clock.claimRun(clock.openBubble(), TURN.run);
+
+    clock.dropRun(TURN.run);
+
+    expect(clock.reuseUserBubble(`ship the parser`, true)).toBe(asked);
+});

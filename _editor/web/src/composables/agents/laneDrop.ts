@@ -1,4 +1,4 @@
-import { awaitingUser, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "./agentStatus";
+import { awaitingUser, endingByHand, laneOf, type FleetLane, turnInFlight, unregistered, watching } from "./agentStatus";
 import type { FleetAgent } from "./useAgents";
 
 /* What dragging a card across the board actually DOES. The lanes are pure projections of the daemon's status
@@ -38,8 +38,8 @@ export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction
     if (target !== `finished` || laneOf(agent) === `finished`) {
         return undefined;
     }
-    // A turn already stopping has nothing to offer this gesture: the stop it would send has been sent.
-    if (agent.status === `stopping`) {
+    // A turn the user has already ended has nothing to offer this gesture: the stop it would send has been sent.
+    if (endingByHand(agent)) {
         return undefined;
     }
     if (agent.status === `running`) {
@@ -104,9 +104,11 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
         return `This agent hasn't run yet`;
     }
     // Ahead of every target, because it is the true answer for all of them, and because the discard line
-    // below would otherwise tell a user who has just stopped this turn to stop it.
-    if (agent.status === `stopping`) {
-        return `This turn is already stopping`;
+    // below would otherwise tell a user who has just stopped this turn to stop it. `dismissing` is the same
+    // sentence about the other ending a person chooses: its turn is unwinding too, so nothing here is theirs to
+    // press, and "Already finished" (which its lane would otherwise earn it) would be a beat early.
+    if (endingByHand(agent)) {
+        return `This turn is already ending`;
     }
     // Same placement, same reason: there is no turn here to stop and nothing to land, because the one that was
     // running is coming back to this worktree by itself.

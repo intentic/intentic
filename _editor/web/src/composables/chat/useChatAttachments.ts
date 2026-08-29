@@ -1,6 +1,7 @@
 import { errorMessage } from "@intentic/ui/async";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../pages/workspace/dropEntries";
+import { forgetPreview, rememberPreview } from "./attachmentPreviews";
 import { jsonBody } from "../sandbox/jsonBody";
 import { sandboxJson, sandboxUpload } from "../sandbox/sandboxClient";
 import type { PendingAttachment } from "./conversation";
@@ -38,6 +39,7 @@ export const useChatAttachments = (composer: {
         // reactive() explicitly: entries are mutated through this reference (progress ticks), not via the
         // array ref's proxy, so the raw object wouldn't trigger updates. The entry lands on the tab active at
         // attach time and this closure keeps pointing at it, so a mid-upload tab switch updates the right chip.
+        const previewUrl = file.type.startsWith(`image/`) ? URL.createObjectURL(file) : undefined;
         const entry = reactive<PendingAttachment>({
             id: uuid(),
             name: file.name,
@@ -45,8 +47,15 @@ export const useChatAttachments = (composer: {
             controller,
             status: `uploading`,
             progress: 0,
-            ...(file.type.startsWith(`image/`) ? { previewUrl: URL.createObjectURL(file) } : {}),
+            ...(previewUrl === undefined ? {} : { previewUrl }),
         });
+        /* …and the same URL filed under the path, which is how every bubble this file ends up in gets its thumb
+         * without asking the daemon for bytes this window is holding (attachmentPreviews). The message cannot
+         * carry it: a mid-turn message is drawn from the run's own frame log, where an attachment is a path and
+         * nothing else, so a pasted screenshot rendered as a grey `image.png` chip in the sender's own chat. */
+        if (previewUrl !== undefined) {
+            rememberPreview(entry.path, previewUrl);
+        }
         composer.attachments.value = [...composer.attachments.value, entry];
         sandboxUpload(`/workspace/upload?path=${encodeURIComponent(entry.path)}`, file, {
             signal: controller.signal,
@@ -70,6 +79,8 @@ export const useChatAttachments = (composer: {
         remove: (attachment: PendingAttachment): void => {
             attachment.controller?.abort();
             if (attachment.previewUrl !== undefined) {
+                // Both halves, or the cache goes on handing out a URL pointing at nothing.
+                forgetPreview(attachment.path);
                 URL.revokeObjectURL(attachment.previewUrl);
             }
             if (attachment.status === `done`) {
@@ -112,13 +123,11 @@ export const useChatAttachments = (composer: {
                 }
             });
         },
-        /* The staged chips as the message carries them: upload metadata plus the object URL, so the bubble it
-         * lands on shows the same thumbnail the chip did without re-reading the bytes. */
-        snapshot: (): ChatAttachment[] =>
-            composer.attachments.value.map(({ name, path, previewUrl }): ChatAttachment => ({
-                name,
-                path,
-                ...(previewUrl !== undefined ? { previewUrl } : {}),
-            })),
+        /* The staged chips as the message carries them: upload metadata, and nothing else. The thumbnail is NOT
+         * copied on, because a message is not where a thumbnail can live: the same message is re-drawn from the
+         * daemon's own record on every hydrate and from the run's frame log when it is sent mid-turn, and
+         * neither of those carries an object URL from this page. It is filed under the PATH instead
+         * (rememberPreview), where every one of those redraws finds it. */
+        snapshot: (): ChatAttachment[] => composer.attachments.value.map(({ name, path }): ChatAttachment => ({ name, path })),
     };
 };

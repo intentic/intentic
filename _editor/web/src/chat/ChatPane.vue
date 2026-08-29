@@ -1388,9 +1388,12 @@ watch(
                                         class="relative flex items-center gap-2 overflow-hidden rounded-lg border py-1.5 pl-2 pr-1 text-xs"
                                         :class="a.status === 'failed' ? 'border-danger' : 'border-line bg-card'"
                                     >
+                                        <!-- By path, like every other thumb in the app: staging a file files its
+                                             object URL under its path (attachmentPreviews), so this chip and the
+                                             bubble the message becomes are drawn from the same one answer. -->
                                         <ChatImageThumb
-                                            v-if="a.previewUrl ?? attachmentPreview(a.path)"
-                                            :src="a.previewUrl ?? attachmentPreview(a.path) ?? ''"
+                                            v-if="attachmentPreview(a.path)"
+                                            :src="attachmentPreview(a.path) ?? ''"
                                             :alt="a.name"
                                             size="h-9 w-9"
                                         />

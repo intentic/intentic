@@ -66,13 +66,33 @@ describe("laneOf", () => {
         expect(laneOf({ status: `failed`, attention: none })).toBe(`attention`);
     });
 
-    /* THE STOP, IN ITS TWO HALVES. `stopping` is the seconds between the press and the turn's last breath: the
-     * turn is still live and the card stays exactly where it is, so the stop costs one lane change rather than
-     * two. `stopped` then lands beside `interrupted`: an ending that came before the work was done, whose
-     * worktree only a message from the user carries forward. */
-    it("holds a stopping turn in active and files the stopped one under attention", () => {
-        expect(laneOf({ status: `stopping`, attention: none })).toBe(`active`);
+    /* THE STOP, IN ITS TWO HALVES, AND BOTH OF THEM IN ATTENTION. `stopping` is the seconds between the press
+     * and the turn's last breath, `stopped` is where it comes to rest, and they have always come to rest in the
+     * same lane: an ending that came before the work was done, whose worktree only a message from the user
+     * carries forward. So the card moves ON THE PRESS. Holding it in Active for the unwind bought nothing, both
+     * readings are one lane change, and it cost the press its visible result for as long as the provider took
+     * to let go, which on a turn holding a big tool call is seconds of a board disagreeing with the chat that
+     * just stopped it. */
+    it("files both halves of a stop under attention, from the press onwards", () => {
+        expect(laneOf({ status: `stopping`, attention: none })).toBe(`attention`);
         expect(laneOf({ status: `stopped`, attention: none })).toBe(`attention`);
+    });
+
+    /* THE OTHER ENDING A PERSON CHOOSES, and the reason the unwind needed two statuses rather than one. Waving
+     * a question away ends the turn too, but nothing is owed afterwards, so its card belongs with the finished
+     * work: same unwind, different destination. Published as one `stopping` value the daemon could not say
+     * which, so both had to sit still until finish() landed. */
+    it("files a dismissed card under finished, from the press onwards", () => {
+        expect(laneOf({ status: `dismissing`, attention: none })).toBe(`finished`);
+        expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
+    });
+
+    /* Both unwinds are still LIVE TURNS to every hands-off guard, whatever lane they are drawn in: the worktree
+     * under them is the turn's working state until the generator lets go. The lane and the guard answer two
+     * different questions, and this is the pair that proves they are not the same reading. */
+    it("keeps both endings in flight for the hands-off guards", () => {
+        expect(turnInFlight({ status: `stopping`, attention: none })).toBe(true);
+        expect(turnInFlight({ status: `dismissing`, attention: none })).toBe(true);
     });
 
     /* THE SAME ARGUMENT AT THE OTHER END OF A TURN. A turn the daemon is already re-running: a rotated token
@@ -235,8 +255,12 @@ describe("unfinishedMark", () => {
         // Not "failed" and not "error": nothing ran to fail, and there is no agent to have erred. What the chip
         // has to convey is that this card is not an agent at all.
         expect(unfinishedMark({ status: `failed`, attention: none })?.label).toBe(`Didn't start`);
-        // Still the active-lane mark: the turn IS still working, on its own way out.
-        expect(unfinishedMark({ status: `stopping`, attention: none })?.label).toBe(`Still working`);
+        // NOT "Still working", which is what this said while the unwind was drawn as an active card: the user
+        // pressed Stop, and a chip telling them their agent is working is the same contradiction on the panel
+        // that the board's lane used to show. It reads in the tense it is in, and settles to `Stopped`.
+        expect(unfinishedMark({ status: `stopping`, attention: none })?.label).toBe(`Stopping`);
+        // A dismissal has left this legend entirely: nothing is unfinished about a card the user waved away.
+        expect(unfinishedMark({ status: `dismissing`, attention: none })).toBeUndefined();
         // And on its way back in: the blocker is the daemon's to clear, so nothing about this chip is the
         // user's business beyond "not done yet".
         expect(unfinishedMark({ status: `resuming`, attention: none })?.label).toBe(`Still working`);
@@ -312,8 +336,6 @@ describe("watchLine", () => {
 
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not as "1800s".
     it("says a slow cadence in minutes", () => {
-        expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint).toContain(
-            `checked every 30m`,
-        );
+        expect(watchLine({ status: `idle`, attention: none, watches: [watch({ intervalSeconds: 1800 })] }, NOW)?.hint).toContain(`checked every 30m`);
     });
 });

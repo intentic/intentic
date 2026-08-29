@@ -77,78 +77,70 @@ export const watching = (agent: AgentStanding): boolean => (agent.watches?.lengt
 export const unregistered = (status: AgentStatus | ClientAgentStatus): boolean =>
     status === `draft` || status === `starting` || status === `failed` || status === `resumed`;
 
-export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } => {
+/* HOW EACH STANDING LOOKS AND READS, one entry per status and no fallthrough.
+ *
+ * A TABLE RATHER THAN AN IF-CHAIN, and the difference is not tidiness: the chain ended in a bare
+ * `return { label: 'Idle' }`, so every status it did not name got drawn as a finished agent. That is the exact
+ * failure a new wire status produces, one arrives, nobody edits this file, and the board quietly reports a
+ * working (or stopping, or parked) agent as idle. `satisfies` over the full union makes the omission a build
+ * error instead, which is the only way this stays true as the enum grows. */
+const STATUS_META = {
     // Not `pencil`, that's the card's rename affordance; the draft glyph is a not-yet-started marker.
-    if (status === `draft`) {
-        return { icon: `circle`, label: `Draft`, class: `text-subtle` };
-    }
+    draft: { icon: `circle`, label: `Draft`, class: `text-subtle` },
     // A conversation reopened from History. It says where it came from rather than how it ended, because how it
     // ended is not knowable here, the entry that would have said is gone, which is the whole reason this
     // standing exists. The glyph is the one the search footer files these under ("In earlier chats"), so the
     // row and the card it turns into wear the same mark.
-    if (status === `resumed`) {
-        return { icon: `history`, label: `Earlier chat`, class: `text-subtle` };
-    }
+    resumed: { icon: `history`, label: `Earlier chat`, class: `text-subtle` },
     // The send was refused, so there is no turn to have failed and nothing of the user's is at risk, warning
     // rather than the `error` danger, the same reading `interrupted` gets for the same reason. What separates
     // it from every state below is that this agent does not exist: it is a card for work that never started.
-    if (status === `failed`) {
-        return { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` };
-    }
+    failed: { icon: `exclamation-triangle`, label: `Didn't start`, class: `text-warning` },
     // The turn has gone and the daemon has not filed it yet. The running spinner and the running blue, because
     // that is what it is, work in flight, and the word is the whole of the difference: this card is drawn from
     // what THIS BROWSER knows, so nothing on it can be the registry's account of the agent yet.
-    if (status === `starting`) {
-        return { icon: `spinner`, spin: true, label: `Starting…`, class: `text-link` };
-    }
-    if (status === `running`) {
-        return { icon: `spinner`, spin: true, label: `Running`, class: `text-link` };
-    }
+    starting: { icon: `spinner`, spin: true, label: `Starting…`, class: `text-link` },
+    running: { icon: `spinner`, spin: true, label: `Running`, class: `text-link` },
     // The Stop landed and the turn is walking itself out. STILL, deliberately, a spinner here is the exact
     // thing the user complained about: it says "working on your request" for the seconds between the press and
     // the turn's last breath, which is precisely when they want to be told it is over. Muted for the same
     // reason: this state is the tail of something ending, not an event of its own.
-    if (status === `stopping`) {
-        return { icon: `stop`, label: `Stopping…`, class: `text-subtle` };
-    }
+    stopping: { icon: `stop`, label: `Stopping…`, class: `text-subtle` },
+    // The same window after the other ending a person chooses, waving away the question the turn was parked on.
+    // It wears the ending it is HEADING for, not the machinery of getting there: nothing is owed once the card
+    // is dismissed, so this reads as the finish it is about to become rather than as a second kind of halt.
+    dismissing: { icon: `check-circle`, label: `Finishing…`, class: `text-subtle` },
     // The turn stopped without ending, something underneath it broke and the daemon is already undoing it. The
     // running spinner and the running blue, deliberately: nothing failed that the user has to know about, the
     // work is still in progress, and the whole point of this state is that the card goes on saying so.
-    if (status === `resuming`) {
-        return { icon: `spinner`, spin: true, label: `Resuming…`, class: `text-link` };
-    }
-    if (status === `awaiting`) {
-        return { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` };
-    }
-    if (status === `landed`) {
-        return { icon: `check-circle`, label: `Landed`, class: `text-success` };
-    }
+    resuming: { icon: `spinner`, spin: true, label: `Resuming…`, class: `text-link` },
+    awaiting: { icon: `exclamation-circle`, label: `Needs you`, class: `text-primary-500` },
+    landed: { icon: `check-circle`, label: `Landed`, class: `text-success` },
     // Finished with auto-land off: the delta is safe on the branch, waiting for a deliberate Land. Link-blue,
     // not the attention hues, the user CHOSE to hold work for review, so a card in this state is an offer to
     // act, never a warning (see blocked()'s note on teaching people to ignore the word "needs you").
-    if (status === `ready`) {
-        return { icon: `download`, label: `Ready to land`, class: `text-link` };
-    }
-    if (status === `conflict`) {
-        return { icon: `exclamation-triangle`, label: `Conflict`, class: `text-warning` };
-    }
-    if (status === `error`) {
-        return { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` };
-    }
+    ready: { icon: `download`, label: `Ready to land`, class: `text-link` },
+    conflict: { icon: `exclamation-triangle`, label: `Conflict`, class: `text-warning` },
+    error: { icon: `exclamation-triangle`, label: `Error`, class: `text-danger` },
     // Warning, not danger: nothing FAILED here, the turn was cut off by its daemon dying (a rebuild, a crash),
     // which is a fact about the sandbox rather than about the work. The glyph is the one the Stop button wears,
     // because that is what happened to it.
-    if (status === `interrupted`) {
-        return { icon: `stop`, label: `Interrupted`, class: `text-warning` };
-    }
+    interrupted: { icon: `stop`, label: `Interrupted`, class: `text-warning` },
     // The same shape of ending, by the user's own hand, which is why it is quieter than `interrupted` and much
     // quieter than the `error` it used to be filed as. Nothing here is news to the person reading it: they are
     // the one who pressed Stop. The card's job now is only to say where the turn got to.
-    if (status === `stopped`) {
-        return { icon: `stop`, label: `Stopped`, class: `text-subtle` };
-    }
-    return { icon: `circle-fill`, label: `Idle`, class: `text-subtle` };
-};
+    stopped: { icon: `stop`, label: `Stopped`, class: `text-subtle` },
+    idle: { icon: `circle-fill`, label: `Idle`, class: `text-subtle` },
+} as const satisfies Record<AgentStatus | ClientAgentStatus, { icon: IconName; spin?: boolean; label: string; class: string }>;
+
+/* The `??` is unreachable by the types and deliberately kept anyway, because the two failures are not
+ * comparable: an unknown status drawn as `Idle` is one wrong word on one card, and an unknown status read off
+ * the end of the table is `undefined.icon` in a render, which takes the whole board down. The wire is not typed
+ * at runtime (a roster frame is cast, not parsed), so "a status this build has never heard of" is a thing a
+ * daemon one version ahead can genuinely send. `satisfies` above is what makes the omission a BUILD error for
+ * anyone editing this repo; this is what stops it being a blank screen for anyone running it. */
+export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon: IconName; spin?: boolean; label: string; class: string } =>
+    STATUS_META[status] ?? STATUS_META.idle;
 
 /* A TURN IS IN FLIGHT, running, unwinding after a Stop, or waiting out the blocker that killed it. The one
  * question every "hands off this agent" guard is really asking (its worktree is a live turn's working state, so
@@ -166,11 +158,29 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
  * to filing it, while every hands-off guard already refuses it one question earlier, because a card with no
  * registry entry has nothing for those verbs to address (`unregistered`).
  *
+ * `dismissing` belongs here for the GUARDS and nowhere else, and it is the one entry whose lane is decided
+ * above this predicate rather than by it (see laneOf). Its turn is unwinding exactly like a stopped one's, so
+ * its worktree is just as much a live turn's working state; where it comes to rest is a separate question, and
+ * the answer is Finished.
+ *
  * `awaiting` is deliberately not here. Its turn is live too, but it is live and PARKED, the guards that read
  * this either want it excluded (a parked turn is exactly what awaitingUser answers for) or answer it in their
  * own terms. */
 export const turnInFlight = (agent: AgentStanding): boolean =>
-    agent.status === `running` || agent.status === `starting` || agent.status === `stopping` || agent.status === `resuming`;
+    agent.status === `running` ||
+    agent.status === `starting` ||
+    agent.status === `stopping` ||
+    agent.status === `dismissing` ||
+    agent.status === `resuming`;
+
+/* A PERSON ALREADY ENDED THIS TURN and it is walking itself out, either way of ending it: Stop pressed, or the
+ * question it was parked on waved away. The two differ only in the lane they come to rest in (see laneOf), and
+ * every surface that asks "is there anything left for the user to press here" wants them treated alike, because
+ * for both the answer is no, the press has been made and the daemon is unwinding.
+ *
+ * Narrower than turnInFlight, which also covers turns nobody has ended, and it exists so the board's drop rules
+ * cannot come to mean one thing by Stop and another by a dismissal. */
+export const endingByHand = (agent: AgentStanding): boolean => agent.status === `stopping` || agent.status === `dismissing`;
 
 /* THE AGENT IS WRITING RIGHT NOW, the browser's copy of the daemon's `writing` guard (agents-registry.ts),
  * and the narrowest live reading on this file.
@@ -193,6 +203,13 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === `r
 // on their side (see awaitingUser, which excludes both), the lane is where the card goes to be picked up again
 // rather than lost among the landed ones.
 //
+// `stopping` IS THAT SAME CARD, said the moment the press lands instead of once the unwind is over. The two are
+// one ending in two halves and they have always come to rest in the same place, so treating the first half as
+// undecided bought nothing and cost the press its result: the card sat in Active wearing "Stopping…" for the
+// seconds the provider took to unwind, which on a turn holding a big tool call is a visible pause between
+// pressing Stop in the chat and the board agreeing that anything happened. It is the same lane either way, so
+// this is one move at the press rather than none now and one later.
+//
 // `failed` is the same kind of ending one step earlier: the turn was refused before it ran, so there is no
 // half-written worktree, only the words the user typed, waiting in the composer's queue for a send that works.
 // It is here rather than in Active because a card nobody can act on has no business sitting among the agents
@@ -206,6 +223,7 @@ export const blocked = (agent: AgentStanding): boolean =>
     agent.attention.conflict ||
     agent.status === `error` ||
     agent.status === `interrupted` ||
+    agent.status === `stopping` ||
     agent.status === `stopped` ||
     agent.status === `failed`;
 
@@ -257,7 +275,11 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
         return `Interrupted`;
     }
     // Same unfinished ending, one word of difference that matters: this one was the user's decision, so the chip
-    // reports it rather than reporting it AT them. No "by you", they know.
+    // reports it rather than reporting it AT them. No "by you", they know. `stopping` is the same card a beat
+    // earlier (see blocked), and says so in the tense it is actually in: the provider is still unwinding.
+    if (agent.status === `stopping`) {
+        return `Stopping`;
+    }
     if (agent.status === `stopped`) {
         return `Stopped`;
     }
@@ -275,11 +297,20 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (blocked(agent) || agent.status === `awaiting` || agent.status === `conflict`) {
         return `attention`;
     }
-    // `stopping` stays ACTIVE, where the card already is: the turn is still live (the daemon holds its worktree
-    // until the unwind finishes), and moving it now would spend a lane change on a state that lasts seconds,
-    // then spend another one the moment it settles. The card says "Stopping…" where it stands, and moves once.
-    // `resuming` is here for the same reason and is the case that proves it: a card that dropped into Finished
-    // for the seconds a credential takes to re-mint, and climbed back out, moved twice to say nothing at all.
+    /* A DISMISSAL IS FINISHED FROM THE PRESS, ahead of the in-flight reading below, and it is the other half of
+     * what `blocked` does with `stopping` one branch up. Both are unwinds of a turn a person ended, so both are
+     * "in flight" to every hands-off guard; where they REST is not the same question and not the same answer,
+     * and the daemon now says which is which rather than leaving both surfaces to wait and see.
+     *
+     * A card waved away is one the user is done with, so it goes where the finished work goes, immediately. It
+     * used to hold its place through the unwind and move on finish(), which was right about the destination and
+     * wrong about the timing: the press had no result until the turn's generator had walked itself out. */
+    if (agent.status === `dismissing`) {
+        return `finished`;
+    }
+    // `resuming` is the case that proves in-flight has to outrank the settled readings below: a card that
+    // dropped into Finished for the seconds a credential takes to re-mint, and climbed back out, moved twice to
+    // say nothing at all.
     if (turnInFlight(agent) || agent.status === `draft`) {
         return `active`;
     }
@@ -633,7 +664,10 @@ const everyOf = (seconds: number): string => (seconds < 120 ? `${seconds}s` : `$
  * that, and it is revealed by the very hover that raises this box), but to say what pressing it costs, which
  * is nothing but the wait. It goes last for the same reason it is short: the clamp eats the tail, and of the
  * four facts here this is the only one the reader can also get by looking half an inch to the right. */
-export const watchLine = (agent: AgentStanding, now: number): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
+export const watchLine = (
+    agent: AgentStanding,
+    now: number,
+): { readonly text: string; readonly countdown: string; readonly hint: string } | undefined => {
     const watches = agent.watches;
     if (watches === undefined || watches.length === 0) {
         return undefined;

@@ -2,9 +2,22 @@ import { ref, watch } from "vue";
 import { SandboxHttpError, sandboxBlob } from "../sandbox/sandboxClient";
 import { useEndpoint } from "../sandbox/useEndpoint";
 
-/* Image thumbnails for attachments that carry only a workspace path, a restored or cached transcript's
- * chips, whose send-time object URLs died with their page. The bytes still sit in the workspace
- * (.intentic/records/artifacts/attachments/…), so a thumb is re-minted from /workspace/raw on first render.
+/* THE THUMBNAIL FOR AN ATTACHED FILE, keyed by its workspace path and answered the same way for every bubble
+ * that names it: the composer's chip, the bubble the send draws, the bubble a MID-TURN message is drawn from
+ * (which comes back off the wire as a bare path, see the `steer` frame), a restored transcript's, a hover
+ * card's. One path, one answer, one place that owns it.
+ *
+ * IT IS ALSO WHERE THE UPLOAD PUTS ITS OWN COPY (rememberPreview). This window read those bytes off the user's
+ * clipboard to make the composer chip, so asking the daemon to send them back is a round trip to learn what it
+ * already knows — and, until it answers, a screenshot the user just pasted renders as a grey file chip in their
+ * own message. It used to ride the message instead, as a `previewUrl` field copied onto every ChatAttachment,
+ * which meant it survived exactly as long as the object it was copied onto: the moment a bubble came from
+ * anywhere but the composer (a steer frame, a hydrate, a reopened tab) the field was absent and the thumb was
+ * gone. Keyed by PATH it outlives all of that, for as long as the page does.
+ *
+ * The fetch below is what answers for every path this window did not upload itself: the bytes still sit in the
+ * workspace (.intentic/records/artifacts/attachments/…), so a thumb is re-minted from /workspace/raw on first
+ * render.
  *
  * Module-level cache: one fetch per path across every bubble and window that shows it, and the object URLs
  * live for the page (the same lifetime the composer's own previews get).
@@ -73,6 +86,25 @@ const load = (path: string, attempt = 0): void => {
             );
         },
     );
+};
+
+/* THE BYTES ARE ALREADY IN THIS WINDOW, filed under the path they were uploaded to. Called by the composer as
+ * it stages a file (useChatAttachments): it has just made an object URL to draw the chip with, and that same
+ * URL is the right answer for every bubble the message goes on to produce here.
+ *
+ * The path is claimed as `asked` too, so the endpoint watch below leaves it alone: there is nothing to fetch. */
+export const rememberPreview = (path: string, url: string): void => {
+    asked.add(path);
+    previews.value = { ...previews.value, [path]: url };
+};
+
+// The staged file was taken back off the composer and its object URL revoked with it, so the cache must not go
+// on handing out a URL that now points at nothing. Only ever a file that was never sent: a staged chip is the
+// one kind a user can remove.
+export const forgetPreview = (path: string): void => {
+    asked.delete(path);
+    const { [path]: _dropped, ...rest } = previews.value;
+    previews.value = rest;
 };
 
 // The preview URL for a workspace attachment: the cached object URL, kicking off the byte fetch on first ask.

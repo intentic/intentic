@@ -25,6 +25,16 @@ import { LoopStateSchema } from "./loops.js";
  * card jumped to a settled state out of nowhere. `stopping` is what the daemon knows the instant the abort
  * lands, published immediately so the press has a visible result; `stopped` is where the turn comes to rest.
  *
+ * `dismissing` IS THAT SAME WINDOW FOR THE OTHER ENDING A PERSON CHOOSES, waving away the question the turn was
+ * parked on, and it is a status of its own for one reason: the two endings come to rest in different places.
+ * A Stop leaves half-written work somebody has to pick up, so its card settles in Attention; a dismissal is
+ * "I am done with this", so its card settles in Finished. Published as one value, the unwind could not say
+ * which, so every surface had to park the card where it already was and move it once the turn had ACTUALLY
+ * finished, seconds later, and the daemon papered over the dismissal half by suppressing the broadcast that
+ * would have filed it under Active in the meantime — a bet on nothing else broadcasting inside that window,
+ * which a second agent's frame lost routinely. Said apart, the destination is known at the press: each card
+ * moves once, immediately, to the lane it is going to end up in, and no surface has to guess or suppress.
+ *
  * `stopped` is deliberately its own value rather than `interrupted` or `error`. Not `error`, which is what a
  * stopped turn used to report (every provider adapter surfaces the abort's unwind as an error frame), a card
  * accusing the user's own deliberate press of being a failure. Not `interrupted` either: that one means the
@@ -46,6 +56,7 @@ export const AgentStatusSchema = z.enum([
     "running",
     "awaiting",
     "stopping",
+    "dismissing",
     "stopped",
     "resuming",
     "ready",
@@ -179,7 +190,7 @@ export const AgentSummarySchema = z.object({
     // First prompt, sanitized to one bounded line.
     title: z.string().optional().describe("What to call it: the first prompt cut to one line, unless somebody renamed it."),
     status: AgentStatusSchema.describe(
-        "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; resuming means the sandbox is already putting right whatever killed the turn.",
+        "What it is doing. Stopping and stopped are the two halves of somebody pressing stop, because a cancel is not instant; dismissing is the same window for a question waved away, which ends the turn too but owes the user nothing; resuming means the sandbox is already putting right whatever killed the turn.",
     ),
     /* WHY THE LAST TURN FAILED, the sentence it died on, carried beside the `error` status because that word
      * on its own is not an answer. A session refused on its first request (an organization with Claude Code

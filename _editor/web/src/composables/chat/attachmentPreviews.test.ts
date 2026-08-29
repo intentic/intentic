@@ -19,7 +19,7 @@ class HttpError extends Error {
 vi.mock("../sandbox/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path), SandboxHttpError: HttpError }));
 vi.mock("../sandbox/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
-const { attachmentPreview } = await import("./attachmentPreviews");
+const { attachmentPreview, forgetPreview, rememberPreview } = await import("./attachmentPreviews");
 
 // The module caches per path for the life of the page, so each case needs a path of its own.
 let counter = 0;
@@ -126,4 +126,35 @@ it("gives up on a chain that never lands, without a chip that polls forever", as
 
     // The five backed-off tries after the first, and then silence.
     expect(blob).toHaveBeenCalledTimes(6);
+});
+
+/* THE BYTES THIS WINDOW UPLOADED ARE ALREADY HERE, so nothing is asked of the daemon for them. Staging a file
+ * makes an object URL to draw the composer chip with, and that same URL answers for every bubble the message
+ * goes on to produce here.
+ *
+ * THE REPORTED BUG this closes: the URL used to be copied onto the sent message and nowhere else, so it lived
+ * exactly as long as that object. A message sent MID-TURN is drawn from the run's own frame log, where an
+ * attachment is a path and a name, so a screenshot the user had just pasted came back as a grey `image.png`
+ * chip in their own chat, and the only way back to the picture was a round trip for bytes this page was
+ * holding. Filed under the path, every redraw finds it. */
+it("answers from the composer's own object URL, without asking the daemon at all", () => {
+    const path = freshPath();
+    rememberPreview(path, `blob:just-pasted`);
+
+    expect(attachmentPreview(path)).toBe(`blob:just-pasted`);
+    expect(blob).not.toHaveBeenCalled();
+});
+
+// …and the staged file taken back off the composer takes its URL with it: that URL is revoked on removal, so
+// leaving it here would hand later bubbles a thumb pointing at nothing.
+it("drops a staged file's URL when the chip is removed", async () => {
+    const path = freshPath();
+    rememberPreview(path, `blob:staged`);
+    forgetPreview(path);
+    blob.mockResolvedValue(new Blob([`x`]));
+
+    expect(attachmentPreview(path)).toBeUndefined();
+    await settle();
+
+    expect(attachmentPreview(path)).toBe(`blob:thumb`);
 });

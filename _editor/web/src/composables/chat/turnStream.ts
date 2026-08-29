@@ -40,7 +40,11 @@ export interface RunRenderer {
     // Runs once, at the first attach head. The send path returns the context it already prepared; the reattach
     // path synthesizes bubbles from the head, or returns undefined to stand down when a send won the race.
     ensureTurn(head: AttachHead): TurnContext | undefined;
-    frame(event: AgentEvent, turn: TurnContext): void;
+    /* `replay` is the frame's side of the boundary the head names, and the renderer is told because a replayed
+     * frame is HISTORY: it already happened, nobody watched it happen, and animating it is the difference
+     * between a reopened turn appearing and a reopened turn typing itself out at reading speed. See
+     * TranscriptClock for what is done with it. */
+    frame(event: AgentEvent, turn: TurnContext, replay: boolean): void;
 }
 
 /* Render a run by attaching to it, re-attaching from the seq cursor whenever the stream drops, until the
@@ -62,6 +66,16 @@ export const followRun = async (
     let attached = false;
     let retryMs = 500;
     let turn: TurnContext | undefined;
+    /* THE REPLAY/LIVE BOUNDARY, which the daemon has always published on the head (`seq` is the run's frame
+     * count at the moment this attach opened) and this loop used to drop on the floor.
+     *
+     * Everything at or below it already happened: the frames between the run's first and whatever this tab last
+     * saw, delivered as fast as the socket carries them. Everything above arrives as the model produces it.
+     * Rendered identically, a reopened turn replayed its whole answer through the typewriter, so opening an
+     * agent that had been working for an hour meant watching that hour get typed out instead of seeing where it
+     * had got to. Reset per attach, because each attach names its own: a reconnect mid-turn replays only the
+     * gap it missed, and that gap is history for exactly the same reason. */
+    let replayThrough = 0;
     // Consecutive re-attaches that returned no new frames and no `end`. A run that keeps answering empty is
     // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
     // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
@@ -78,6 +92,7 @@ export const followRun = async (
                 return attached;
             }
             run = parsed.run;
+            replayThrough = parsed.seq;
             turn ??= renderer.ensureTurn(parsed);
             if (turn === undefined) {
                 return false;
@@ -86,7 +101,7 @@ export const followRun = async (
         } else if (parsed.kind === `frame`) {
             after = parsed.seq;
             if (turn !== undefined) {
-                renderer.frame(parsed.event, turn);
+                renderer.frame(parsed.event, turn, parsed.seq <= replayThrough);
             }
         } else if (parsed.kind === `end`) {
             return attached;

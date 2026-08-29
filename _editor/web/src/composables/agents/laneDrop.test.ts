@@ -49,12 +49,16 @@ describe("dropActionFor", () => {
     });
 
     // While it is still going out, though, there is nothing to offer: the stop it would send has been sent,
-    // and the worktree is a live turn's until the unwind finishes.
-    it("offers nothing for a turn that is already stopping", () => {
-        expect(dropActionFor(agent({ status: `stopping` }), `finished`)).toBeUndefined();
-        expect(dropActionFor(agent({ status: `stopping` }), `discard`)).toBeUndefined();
-        expect(dropRejection(agent({ status: `stopping` }), `finished`)).toBe(`This turn is already stopping`);
-        expect(dropRejection(agent({ status: `stopping` }), `discard`)).toBe(`This turn is already stopping`);
+    // and the worktree is a live turn's until the unwind finishes. Both ways of ending a turn by hand answer
+    // the same, including the one whose card is already drawn in Finished: "Already finished" would be a beat
+    // early over a turn whose generator has not let go yet.
+    it("offers nothing for a turn the user has already ended, either way of ending it", () => {
+        for (const status of [`stopping`, `dismissing`] as const) {
+            expect(dropActionFor(agent({ status }), `finished`)).toBeUndefined();
+            expect(dropActionFor(agent({ status }), `discard`)).toBeUndefined();
+            expect(dropRejection(agent({ status }), `finished`)).toBe(`This turn is already ending`);
+            expect(dropRejection(agent({ status }), `discard`)).toBe(`This turn is already ending`);
+        }
     });
 
     it("hands a conflict back to the agent instead of re-running the land that just refused", () => {

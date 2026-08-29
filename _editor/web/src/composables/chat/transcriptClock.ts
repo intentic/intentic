@@ -106,7 +106,15 @@ export class TranscriptClock {
      *, hundreds over an answer, and a REPLAY delivers a whole run's log as fast as the socket can carry it,
      * while the screen can only show 60 a second. Applied on arrival, every one of those paid a full
      * transcript rebuild plus a Vue render to draw a state nobody ever saw. */
-    private readonly inbox: { readonly event: AgentEvent; readonly turn: TurnContext }[] = [];
+    private readonly inbox: { readonly event: AgentEvent; readonly turn: TurnContext; readonly replay: boolean }[] = [];
+
+    /* THE BATCH JUST FOLDED WAS HISTORY, not an answer being written, so its text is put on screen whole rather
+     * than typed (see `tick`). Held across ticks rather than passed through the fold, because the two are not
+     * the same span: a replay arrives as fast as the socket carries it and the reveal it would otherwise feed
+     * runs for as long as the text takes to type, several paints AFTER the last replayed frame folded.
+     * Cleared by the first live frame, which is the model writing again and the one thing the typewriter is
+     * for. */
+    private replaying = false;
 
     /* `applied` runs the effects a folded frame raised, in arrival order, the conversation's half of a frame,
      * and the reason the fold hands them back instead of applying them: what an effect DOES is state this has
@@ -115,9 +123,11 @@ export class TranscriptClock {
 
     // One frame in: buffered for the next tick rather than applied on the spot, so a burst costs one render
     // instead of one apiece (see `inbox`). Nothing is decided here, the ordering between a frame's transition
-    // and its effects is `tick`'s, and it has to stay exact.
-    push(event: AgentEvent, turn: TurnContext): void {
-        this.inbox.push({ event, turn });
+    // and its effects is `tick`'s, and it has to stay exact. `replay` says which side of the attach's
+    // replay/live boundary the frame came from (turnStream), and is carried per frame because one batch
+    // routinely straddles it: the tail of a replay and the first live frame arrive in the same paint.
+    push(event: AgentEvent, turn: TurnContext, replay = false): void {
+        this.inbox.push({ event, turn, replay });
         this.schedule();
     }
 
@@ -152,6 +162,13 @@ export class TranscriptClock {
         const batch = this.inbox.splice(0, this.inbox.length);
         const applied: { readonly event: AgentEvent; readonly turn: TurnContext; readonly effects: readonly TurnEffect[] }[] = [];
         let state = from;
+        // Whatever the last frame of this batch was, the transcript now IS: a batch that ended on history is
+        // being caught up, one that ended on a live frame is being written. A batch straddling the boundary
+        // therefore settles the replayed part and starts typing from the live one, which is the behaviour a
+        // reader wants at exactly the moment they open a running agent.
+        if (batch.length > 0) {
+            this.replaying = batch.at(-1)?.replay === true;
+        }
         for (const { event, turn } of batch) {
             // Every row this frame draws is stamped with the run it came from (TurnState.run), so a later attach
             // to the same run can take them back out rather than draw them twice. Cleared in runApplied, once
@@ -208,9 +225,16 @@ export class TranscriptClock {
         const from = performance.now();
         const { state, applied } = this.foldInbox(this.state.value);
         const folded = performance.now();
-        // Reveal against the state the fold just produced, so the tick's single write carries both jobs, a
-        // slice at a time where someone is reading it, the whole buffer where nobody is (see `watched`).
-        const next = state.pending === undefined ? state : this.watched.value ? revealPending(state) : flushPending(state);
+        /* Reveal against the state the fold just produced, so the tick's single write carries both jobs, a
+         * slice at a time where someone is reading it, the whole buffer where nobody is (see `watched`).
+         *
+         * …and the whole buffer while REPLAYING, for a reason `watched` does not cover: the typewriter's job is
+         * to pace prose at the speed it is being written, and replayed prose was written minutes or hours ago.
+         * Typed out anyway, opening a long-running agent replayed its entire answer at reading speed before
+         * showing where it had actually got to, which is the "everything streams again instead of just being
+         * there" that made reopening a busy chat feel slower the longer it had been working. */
+        const settleWhole = !this.watched.value || this.replaying;
+        const next = state.pending === undefined ? state : settleWhole ? flushPending(state) : revealPending(state);
         this.state.value = next;
         if (applied.length > 0) {
             recordPerf(`chat.frame`, folded - from, { frames: applied.length, messages: next.messages.length });
@@ -300,15 +324,45 @@ export class TranscriptClock {
         }));
     }
 
-    // Open the turn's first bubble: a fresh empty assistant message the frames stream into, so the typing
-    // indicator shows the moment the turn starts rather than on the first delta.
-    // `run` on the reattach path, where the head has already named it: this bubble holds the run's first prose
-    // but is opened OUTSIDE the fold that stamps the rest, so without it the one row a re-attach most needs to
-    // reclaim is the one row it cannot see. The send path has no run to give, the daemon names it in the ack,
-    // after the bubble the typing indicator needs is already on screen.
-    openBubble(run?: string): void {
+    /* Open the turn's first bubble: a fresh empty assistant message the frames stream into, so the typing
+     * indicator shows the moment the turn starts rather than on the first delta.
+     *
+     * `run` on the reattach path, where the head has already named it: this bubble holds the run's first prose
+     * but is opened OUTSIDE the fold that stamps the rest, so without it the one row a re-attach most needs to
+     * reclaim is the one row it cannot see. The SEND path has no run to give, the daemon names it in the ack,
+     * after the bubble the typing indicator needs is already on screen, so it takes the id back and stamps it
+     * the moment the ack lands (claimRun). Returned for exactly that. */
+    openBubble(run?: string): number {
         const id = this.append({ role: `assistant`, text: ``, thinking: ``, ...(run === undefined ? {} : { run }) });
         this.state.value = { ...this.state.value, bubbleId: id };
+        return id;
+    }
+
+    /* THE RUN A ROW BELONGS TO, LEARNED A BEAT LATE, which is the send path's whole relationship with run ids:
+     * it draws the bubble first, because the typing indicator is the point of drawing it, and the daemon names
+     * the run in the ack that comes back after.
+     *
+     * Without this that bubble stayed unstamped for its whole life, and `dropRun` is stamp-based: attaching to
+     * the same run again could not take it back, so it sat between the prompt and the replay as an empty
+     * "thinking" row belonging to nothing. Worse, it BLOCKED the drop, which walks back from the end and stops
+     * at the first row that is not this run's, so every stamped row above it survived the reclaim too. What
+     * caught the duplicate then was reuseUserBubble's text match, and a text match cannot be relied on: the
+     * moment the transcript's last user row is a mid-turn steer rather than the prompt, the match fails and the
+     * replay draws the prompt a SECOND time, under the orphaned bubble. That is the "same message twice with a
+     * spinner wedged between them" this fixes, and it is fixed by making the send leave the transcript in the
+     * exact shape a reattach does rather than by teaching the matcher another special case.
+     *
+     * Stamps the bubble ONLY, never the user's own row: that one is not redrawn by a replay (reuseUserBubble
+     * keeps it, with the attachment chips and checkpoint a replay has no way to rebuild), so a stamp there
+     * would invite dropRun to take away the one row nothing will put back.
+     *
+     * By id rather than through `bubbleId`, because the ack is awaited: frames of this very run may already
+     * have moved the open bubble on by the time it lands. */
+    claimRun(id: number, run: string): void {
+        this.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => (message.id === id && message.run === undefined ? { ...message, run } : message)),
+        }));
     }
 
     /* TAKE BACK WHAT THIS RUN ALREADY DREW HERE, before attaching to it again.

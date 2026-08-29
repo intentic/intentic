@@ -636,10 +636,13 @@ describe("agents registry", () => {
      * question away says they are done with this one, so nothing is owed and the card settles with the
      * finished ones: whatever the turn wrote stays on its branch for a later message.
      *
-     * The card also has to move ONCE. Releasing the question leaves a live turn with nothing parked on it,
-     * which reads as a working agent, so a publish here would file the agent under Active for the blink
-     * before the unwind lands: the two-step the browser used to do, only faster. */
-    it("settles a dismissed turn where a clean one ends, and holds its place until it gets there", async () => {
+     * The card also has to move ONCE, and `dismissing` is what lets it. Releasing the question leaves a live
+     * turn with nothing parked on it, which under one shared `stopping` value read as a working agent, so this
+     * publish was skipped outright: the card held its place and finish() moved it, seconds later. That skip was
+     * a bet that nothing else would broadcast inside the window, and the roster goes out in full on every
+     * card-visible change in the fleet, so one other agent's frame published the in-between anyway. Named, the
+     * ending carries its own destination and the frame can go out at the press. */
+    it("publishes a dismissal at the press, under the ending it is heading for", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());
         await registry.init();
@@ -648,14 +651,17 @@ describe("agents registry", () => {
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
         registry.stopping("c1", "dismissed");
-        expect(frames.at(-1)).toBe("awaiting"); // the subscribe snapshot — nothing published on the way out
+        expect(frames.at(-1)).toBe("dismissing"); // published on the press, and never as `running`
         // The card cannot be answered any more, and the turn is still the conversation's live one.
         expect(registry.get("c1")?.attention.question).toBe(false);
         expect(registry.running("c1")).toBe(true);
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("idle");
         expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
-        expect(frames.at(-1)).toBe("idle"); // one move: Attention straight to Finished
+        // `dismissing` and `idle` are one lane apiece (laneOf files both under Finished), so the card the user
+        // waved away never moves: it is where they left it from the press onwards.
+        expect(frames.at(-1)).toBe("idle");
+        expect(frames).not.toContain("running");
         unsubscribe();
     });
 

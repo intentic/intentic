@@ -506,7 +506,7 @@ export class Conversation {
     // What a followed run writes into. The turn a stream renders under is the one varying part, so each call
     // adds its own `ensureTurn`.
     private readonly sink = {
-        frame: (event: AgentEvent, turn: TurnContext): void => this.transcript.push(event, turn),
+        frame: (event: AgentEvent, turn: TurnContext, replay: boolean): void => this.transcript.push(event, turn, replay),
     };
 
     // The one unsent "switched" divider notice, upserted/removed as the user toggles provider/account and made
@@ -961,13 +961,14 @@ export class Conversation {
         /* The prompt's OWN files come back with its words, a message is what was attached as much as what was
          * typed, and an edit that silently dropped the screenshot would re-ask the question without the half of
          * it that made it answerable. They are already on disk (the send that placed them uploaded them), so
-         * they are re-staged as finished chips rather than re-uploaded. `previewUrl` rides along where the
-         * bubble still has one; a tab restored from the record has none, and the chip falls back to its name. */
+         * they are re-staged as finished chips rather than re-uploaded. No `previewUrl`: this chip did not mint
+         * one, so it must not own one either (removing it would revoke a URL the bubbles still on screen are
+         * drawn from). The thumb comes from the path, like every other redraw of these bytes, and a chip whose
+         * path this page has never fetched falls back to its name while it loads. */
         this.attachments.value = (message.attachments ?? []).map((attachment): PendingAttachment => ({
             id: uuid(),
             name: attachment.name,
             path: attachment.path,
-            previewUrl: attachment.previewUrl,
             status: `done`,
             progress: 100,
         }));
@@ -1197,7 +1198,8 @@ export class Conversation {
         // Streaming context for the turn: the current text bubble, a fresh empty assistant message (so the
         // typing indicator shows immediately; a plan card clears it so the post-decision continuation streams
         // into a new bubble below the card), plus the provider/account attribution for the session frame.
-        this.transcript.openBubble();
+        // Its id is kept because the run it belongs to is not named until the ack, see claimRun below.
+        const openedBubbleId = this.transcript.openBubble();
         // Everything but the run, which the daemon only names in the ack below, the head that carries it is
         // what completes this into the context the frames are rendered under.
         const turn: Omit<TurnContext, "run"> = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
@@ -1269,6 +1271,9 @@ export class Conversation {
             this.pendingForkOf.value = undefined;
             const { run } = (await response.json()) as { run: string };
             this.turnAccepted = true;
+            // The bubble drawn before the daemon had named anything now belongs to a run, and says so, which is
+            // what lets a later attach to this same run take it back instead of drawing its answer underneath.
+            this.transcript.claimRun(openedBubbleId, run);
             await followRun(this.conversationId, run, { ...this.sink, ensureTurn: (head) => ({ ...turn, run: head.run }) }, controller);
         } catch (err) {
             // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.

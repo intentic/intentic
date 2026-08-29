@@ -192,16 +192,19 @@ it(`draws a picture whole, sized by the room the card has left`, async () => {
     card.hide();
 });
 
-// The send-time object URL wins where the page still has one: the same picture the sent bubble is showing,
-// without a second trip to the daemon for bytes this browser already holds.
-it(`prefers an attachment's own preview url over refetching it`, async () => {
+/* THE THUMB COMES FROM THE PATH, and from nowhere else. It used to be read off the message first
+ * (`attachment.previewUrl`, an object URL the composer copied on at send time) with the path as a fallback,
+ * which meant this card showed a picture for a bubble the composer had drawn and a bare chip for the same
+ * message anywhere else: the daemon's record and the run's frame log both carry a path and a name and no
+ * object URL. One lookup, so every surface showing these bytes agrees. */
+it(`draws an attachment's thumb from its path`, async () => {
     const { card } = await mount();
     card.show(anchorEvent(), {
         title: `Look at this`,
-        messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png`, previewUrl: `blob:local-object-url` }] }],
+        messages: [{ attachments: [{ name: `shot.png`, path: `a/shot.png` }] }],
     });
     await nextTick();
-    expect(document.body.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:local-object-url`);
+    expect(document.body.querySelector(`img`)?.getAttribute(`src`)).toBe(`blob:a/shot.png`);
     card.hide();
 });
 

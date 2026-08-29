@@ -211,13 +211,18 @@ export const mapTool = (tools: readonly ChatTool[], id: string, fn: (tool: ChatT
     return changed ? next : tools;
 };
 
-// A file the user attached to a turn, already uploaded to the workspace before send. `previewUrl` is an
-// object URL for image thumbnails, client-session only, gone on reload (restored history shows text).
+/* A file the user attached to a turn, already uploaded to the workspace before send.
+ *
+ * NO THUMBNAIL RIDES HERE, deliberately. It used to (`previewUrl`, an object URL copied on at send time), and
+ * it could not work: this row is rebuilt from the daemon's record on every hydrate and from the run's own frame
+ * log when the message goes out mid-turn, and in both of those an attachment is a name and a path. A field
+ * only the composer ever filled in was therefore absent everywhere except the one bubble the composer drew, so
+ * a pasted screenshot turned into a grey file chip the moment anything redrew the message. The thumbnail is
+ * keyed by PATH instead, in attachmentPreviews, which every redraw can ask. */
 export interface ChatAttachment {
     readonly name: string;
     // Workspace-relative upload destination (.intentic/records/artifacts/attachments/<uuid>/<name>), sent on the turn.
     readonly path: string;
-    readonly previewUrl?: string;
 }
 
 // End-of-turn accounting from the SDK's result message.

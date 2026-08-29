@@ -771,14 +771,14 @@ const toggleExpanded = (): void => {
     }
 };
 
-// The chip row with thumbs resolved: the send-time object URL while this window still holds it, else one
-// re-minted from the workspace bytes for a restored/cached bubble (attachmentPreview: reactive, so the name
-// chip flips to a thumb when the bytes land).
+// The chip row with thumbs resolved, by PATH and only by path: the object URL this window minted when the file
+// was staged if it was staged here, else one re-minted from the workspace bytes for a restored, replayed or
+// cached bubble (attachmentPreview: reactive, so the name chip flips to a thumb when the bytes land).
 const attachmentThumbs = computed(() =>
     (props.message.attachments ?? []).map((attachment) => ({
         name: attachment.name,
         path: attachment.path,
-        previewUrl: attachment.previewUrl ?? attachmentPreview(attachment.path),
+        previewUrl: attachmentPreview(attachment.path),
     })),
 );
 

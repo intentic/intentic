@@ -168,7 +168,7 @@ const messages = computed(() => {
                 label: message.label,
                 text: text === undefined || text === `` || text === title ? undefined : text,
                 images: (message.attachments ?? [])
-                    .map((attachment) => ({ src: attachment.previewUrl ?? attachmentPreview(attachment.path), alt: attachment.name }))
+                    .map((attachment) => ({ src: attachmentPreview(attachment.path), alt: attachment.name }))
                     .filter((image): image is { src: string; alt: string } => image.src !== undefined),
             };
         })

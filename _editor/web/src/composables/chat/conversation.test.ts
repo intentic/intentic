@@ -2614,6 +2614,30 @@ describe(`Conversation`, () => {
         expect(conversation.streaming.value).toBe(false);
     });
 
+    /* THE SEND'S OWN ROWS BELONG TO A RUN TOO, and until the ack lands they cannot say which. This is the pair
+     * that makes re-attaching to a run this window STARTED idempotent, the way it already is for one it merely
+     * found: the bubble opened for the typing indicator is stamped the moment the daemon names the run, so the
+     * replay's dropRun can take it back before drawing the answer again.
+     *
+     * Unstamped, that row was invisible to the drop AND blocked it: dropRun walks back from the end and stops at
+     * the first row that is not this run's, so an empty "thinking" bubble sitting between the prompt and the
+     * replayed answer kept every stamped row above it from being reclaimed. What caught the duplicate then was
+     * reuseUserBubble's text match alone, one guard doing the work of two. */
+    it(`stamps the bubble its own send opened with the run the ack names`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
+
+        await conversation.send(`refactor the parser`, settings);
+
+        // The answer's rows carry the run, so a second attach to it can take them back (TranscriptClock.dropRun)
+        // before the replay draws them again...
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, run: `r1` });
+        // ...and the user's own row does not, because no replay redraws that one: reuseUserBubble keeps it, with
+        // the attachment chips and checkpoint a replay has no way to rebuild.
+        expect(conversation.messages.value[0]?.role).toBe(`user`);
+        expect(conversation.messages.value[0]?.run).toBeUndefined();
+    });
+
     /* The transcript-loss bug: reattach appends the running turn's prompt bubble to whatever the transcript
      * holds. A reload that lands mid-turn used to attach before the history was in place, so the chat came back
      * showing only the message being answered, and the settle then persisted that stub over the local mirror.

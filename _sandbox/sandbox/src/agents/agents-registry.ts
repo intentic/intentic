@@ -1,4 +1,12 @@
-import { type AgentEvent, type AgentSummary, type AgentTurn, deriveTitle, type LandedMessageDraft, planParts } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    type AgentStatus,
+    type AgentSummary,
+    type AgentTurn,
+    deriveTitle,
+    type LandedMessageDraft,
+    planParts,
+} from "@intentic/sandbox-contract";
 import { isFailureSentence } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
@@ -9,7 +17,7 @@ import { recordConversationPrompt, recordPrompt } from "../sessions/transcript-s
 import { type AgentsStore, type AgentTitleSource, isIsolated, landedMessageOf, type PersistedAgent } from "./agents-store.js";
 import type { LandOutcome } from "./land.js";
 import type { LandedPresences } from "./landed-presence.js";
-import type { LandStandings } from "./standing.js";
+import type { LandStanding, LandStandings } from "./standing.js";
 
 // The runtime half of the fleet registry: holds the authoritative in-memory entry list (loaded once from the
 // store, write-through on persisted mutations) plus per-conversation turn state rebuilt from AgentEvent frames
@@ -140,6 +148,43 @@ const freshRuntime = (): RuntimeState => ({
     pendingToolUses: 0,
     pendingSubagents: 0,
 });
+
+/* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how the
+ * last one ENDED, then where the work stands. The `idle` rung is why it is the only persisted value that
+ * yields, it is the one that means "the turn ended cleanly", i.e. that the entry has nothing more to say and
+ * the question passes to git. `error` and `interrupted` outrank precisely because nothing else remembers them:
+ * a turn that died is not made fine by a branch that happens to be empty.
+ *
+ * Within the live rung, an ending the user chose outranks a park: a turn aborted while holding a question is on
+ * its way out, and publishing it as `awaiting` would keep asking the user to answer a card the abort has
+ * already settled. WHICH ending they chose is published too, and that is the whole of `dismissing`: both
+ * flavours are the same unwind and they come to rest in different lanes, so a single value forced every board
+ * to hold the card where it was until finish() landed seconds later (see AgentStatusSchema). Said apart, the
+ * destination is known at the press and each card moves exactly once.
+ *
+ * An armed resume outranks every settled reading below it for the same reason a stop does: the entry describes
+ * a turn that has stopped, and this one has stopped without ending.
+ *
+ * A pure function of the four things it reads, outside the registry closure: this is the rule every surface's
+ * lane machine is downstream of, so it is worth being able to state it, and test it, without standing up a
+ * registry to ask. */
+const statusOf = (
+    state: RuntimeState | undefined,
+    parked: readonly string[],
+    entryStatus: PersistedAgent["status"],
+    landing: LandStanding,
+): AgentStatus => {
+    if (state?.running === true) {
+        if (state.stopping !== undefined) {
+            return state.stopping === "dismissed" ? "dismissing" : "stopping";
+        }
+        return parked.length > 0 ? "awaiting" : "running";
+    }
+    if (state?.resuming === true) {
+        return "resuming";
+    }
+    return entryStatus === "idle" ? landing : entryStatus;
+};
 
 // The registry input of any conversation turn, the fields begin() records onto the entry. Placement is kept
 // here rather than inferred from the provider: isolated conversations own a branch; workspace conversations do
@@ -408,31 +453,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         const state = runtime.get(entry.id);
         // A turn holding an unanswered card is AWAITING, however much else it has in flight beside it.
         const parked = state === undefined ? [] : [...state.pauses.values()];
-        /* THE STATUS PROJECTION, in precedence order: the live turn, then the one that is coming BACK, then how
-         * the last one ENDED, then where the work stands. The `idle` rung is why it is the only persisted value
-         * that yields, it is the one that means "the turn ended cleanly", i.e. that the entry has nothing more
-         * to say and the question passes to git. `error` and `interrupted` outrank precisely because nothing
-         * else remembers them: a turn that died is not made fine by a branch that happens to be empty.
-         *
-         * Within the live rung, an ending the user chose outranks a park: a turn aborted while holding a
-         * question is on its way out, and publishing it as `awaiting` would keep asking the user to answer a
-         * card the abort has already settled.
-         *
-         * An armed resume outranks every settled reading below it for the same reason `stopping` outranks
-         * `running`: the entry describes a turn that has stopped, and this one has stopped without ending. */
+        // See statusOf: the precedence rule lives up there, as a pure function of what it reads.
         const landing = entry.branch === undefined ? "idle" : standings.of(entry.id);
-        const status =
-            state?.running === true
-                ? state.stopping !== undefined
-                    ? "stopping"
-                    : parked.length > 0
-                      ? "awaiting"
-                      : "running"
-                : state?.resuming === true
-                  ? "resuming"
-                  : entry.status === "idle"
-                    ? landing
-                    : entry.status;
+        const status = statusOf(state, parked, entry.status, landing);
         const base = (entry.repos.find((repo) => repo.repo === "root") ?? entry.repos[0])?.base.slice(0, 7);
         // Live totals: persisted totals plus the running turn's not-yet-flushed usage.
         const costUsd = entry.costUsd + (state?.pendingCostUsd ?? 0);
@@ -1171,15 +1194,16 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             state.stopping = ending;
             /* The abort settles every card this turn was parked on (agent-requests.ts), including the ones
              * whose `resolved` frame will never make it out of the dying stream. Cleared here rather than at
-             * finish so the card stops asking for an answer it can no longer take the moment the ending lands.
-             *
-             * Which is also why clearing them is not enough on its own for a dismissal, and why the publish
-             * below is the Stop's alone: a released card on a live turn reads as `running`, so re-broadcasting
-             * here would file the dismissed agent under Active for the blink before finish() lands. */
+             * finish so the card stops asking for an answer it can no longer take the moment the ending lands. */
             state.pauses.clear();
-            if (ending === "stopped") {
-                broadcast();
-            }
+            /* PUBLISHED FOR BOTH ENDINGS, because the roster now says WHICH one (`stopping` vs `dismissing`,
+             * see statusOf) and each names the lane its card is going to rest in. Publishing a dismissal used to
+             * be skipped precisely because it could not: with one value for both, a released card on a live turn
+             * read as work in progress, so the frame would have filed the agent under Active for the blink
+             * before finish() landed. That skip was never a fix, only a bet that nothing ELSE would broadcast
+             * inside the same window, and the roster goes out in full on every card-visible change anywhere in
+             * the fleet: one other agent's frame lost the bet and published the in-between anyway. */
+            broadcast();
         },
         finish: async (id, now) => {
             const entry = entryOf(id);
