@@ -230,7 +230,6 @@ catalog:
   "@ast-grep/lang-rust": 0.0.7
   "@ast-grep/lang-java": 0.0.7
   astro: 7.1.6
-  astro-indexnow: 2.3.10
   astro-opengraph-images: 1.17.4
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.

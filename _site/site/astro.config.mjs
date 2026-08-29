@@ -10,15 +10,12 @@ import { productHref, productPages } from "@intentic-dev/site-content/product";
 import { referenceBook, referenceHref, referencePages } from "@intentic-dev/site-content/reference";
 import { ORG_NAME, SITE_URL } from "@intentic-dev/site-content/site";
 import tailwindcss from "@tailwindcss/vite";
-import indexNow from "astro-indexnow";
 import astroOpenGraphImages, { getImagePath } from "astro-opengraph-images";
 import { defineConfig } from "astro/config";
 import { createReadStream, existsSync } from "node:fs";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 import { ogCard, ogFonts } from "./scripts/og-template.mjs";
 import { sourceFirstWorkspace } from "./scripts/source-first.mjs";
-
-const isIndexNowDisabled = process.env.INDEXNOW_ENABLED === "0";
 
 // Absent when the Inter TTFs are not checked out; the OG integration is then left out entirely and BaseLayout
 // falls back to the static logo card, which is the same bargain the old in-house integration made.
@@ -209,14 +206,6 @@ export default defineConfig({
                     blurb: page.blurb,
                 })),
             ),
-        }),
-        // Submission runs at build:done, which on a deploy box is BEFORE the upload, so the first build after
-        // the key file changes can be refused (403) while the old file is still live. astro-indexnow retries
-        // 429/5xx only and leaves its cache untouched on failure, so that case self-heals on the next build
-        // rather than being waited out. CI never deploys and sets INDEXNOW_ENABLED=0.
-        indexNow({
-            key: "31005b25581392e405272cfb8ee63e9a",
-            enabled: !isIndexNowDisabled,
         }),
     ],
 });

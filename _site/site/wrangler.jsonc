@@ -2,6 +2,10 @@
     "name": "intentic-dev",
     "compatibility_date": "2026-03-26",
     "main": "./worker.ts",
+    // IndexNow runs after wrangler deploy so the key file and changed pages are live before Bing is pinged.
+    "build": {
+        "command": "astro build && wrangler deploy && node scripts/submit-indexnow.mjs"
+    },
     "assets": {
         "directory": "./dist",
         "not_found_handling": "404-page",
