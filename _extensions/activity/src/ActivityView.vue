@@ -117,17 +117,14 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
             </template>
         </FilterBar>
 
-        <!-- Bounded, so the feed scrolls ITSELF instead of growing until the hub page scrolls it: the hub is a
-             page-scrolling surface (its sections are usually forms), and a log that pushes the section index off
-             screen is a log you have to scroll back up out of. Same idiom, and the same viewport units, as the
-             log viewer one section over. -->
-        <ActivityTimeline
-            class="max-h-panel"
-            :episodes="visible"
-            :source="selected"
-            :window="window"
-            :truncated="truncated"
-            :is-loading="isLoading"
-        />
+        <!-- UNBOUNDED, so the feed scrolls WITH THE PAGE like every other section of this hub. It used to be
+             clamped to 60dvh with a scroller of its own, on the reasoning that a long log would push the hub's
+             section index off screen: it doesn't, the index is `sticky` in this layout and stays reachable, and
+             the clamp bought that at the price of a scrollbar inside a card inside a page, the one thing the
+             hub picked page-scrolling to avoid. Two scroll surfaces in one view is also the worse bargain for
+             the reader: a wheel over the feed and a wheel two pixels outside it did different things, and the
+             feed's own scrollbar was invisible until the pointer was already inside it. The day signposts still
+             stick, to the page now rather than to a box (see ActivityTimeline). -->
+        <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
     </div>
 </template>

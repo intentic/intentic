@@ -36,7 +36,14 @@
      "are you sure?" off screen.
 
      `grow` is the real variation between callers: a panel filling a flex row (a timeline beside a rail) takes
-     `flex-1`; one sitting under a list (the log viewer) is sized by its content. -->
+     `flex-1`; one sitting under a list (the log viewer) is sized by its content.
+
+     `scroll: false` IS THE FRAME WITHOUT THE SCROLLER, for a body that is sized by its content on a
+     page-scrolling surface (the activity feed in the sandbox hub) or that scrolls itself (an editor, a log
+     tail). It clips with `overflow-clip` rather than `overflow-hidden`, and the difference is load-bearing:
+     `hidden` makes this box a scroll container, so a `sticky` day header inside it resolves against a box that
+     never scrolls and never sticks to anything. `clip` clips the corners just the same without becoming one,
+     which leaves the page as the scrollport the header sticks to. -->
 <script setup lang="ts">
 const { grow = false, scroll = true } = defineProps<{
     title?: string;
@@ -52,7 +59,10 @@ const { grow = false, scroll = true } = defineProps<{
     <!-- A @container, because whether the header's title and actions fit on one line is a fact about the PANEL:
          these sit in a workspace pane the reader can drag down to a third of the window, where a viewport query
          says "wide" and hands a 300px header two competing halves. -->
-    <section class="@container flex min-h-0 flex-col overflow-hidden rounded-lg border border-line-subtle bg-card" :class="grow ? `flex-1` : ``">
+    <section
+        class="@container flex min-h-0 flex-col rounded-lg border border-line-subtle bg-card"
+        :class="[grow ? `flex-1` : ``, scroll ? `overflow-hidden` : `overflow-clip`]"
+    >
         <header
             v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"
             class="flex shrink-0 flex-col gap-2 border-b border-line-subtle px-4 py-2.5 @xl:flex-row @xl:items-start @xl:justify-between @xl:gap-3"
