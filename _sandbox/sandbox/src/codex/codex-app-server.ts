@@ -261,8 +261,8 @@ const normalizeItem = (value: unknown): CodexItem | undefined => {
         }
         // Annotated because the `kind` guard below narrows a `string` to the three literals, and an object
         // literal with no contextual type widens it straight back, the element type has to come from here.
-        const changes = rawChanges.map((value, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
-            const change = object(value, `fileChange.changes[${index}]`);
+        const changes = rawChanges.map((entry, index): { readonly path: string; readonly kind: "add" | "delete" | "update" } => {
+            const change = object(entry, `fileChange.changes[${index}]`);
             const kind = string(object(change["kind"], `fileChange.changes[${index}].kind`), "type", `fileChange.changes[${index}].kind`);
             if (kind !== "add" && kind !== "delete" && kind !== "update") {
                 throw new Error(`Codex app-server sent invalid fileChange.changes[${index}].kind`);
@@ -598,8 +598,8 @@ const todoEvent = (value: unknown, turnId: string, turnIds: ReadonlySet<string>)
     if (!Array.isArray(plan)) {
         throw new Error("Codex app-server sent invalid turn/plan/updated params.plan");
     }
-    const items = plan.map((value, index) => {
-        const step = object(value, `turn/plan/updated params.plan[${index}]`);
+    const items = plan.map((entry, index) => {
+        const step = object(entry, `turn/plan/updated params.plan[${index}]`);
         return { text: string(step, "step", `turn/plan/updated params.plan[${index}]`), completed: step["status"] === "completed" };
     });
     return { type: "item.updated", item: { id: `plan-${turnId}`, type: "todo_list", items } };

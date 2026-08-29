@@ -33,9 +33,19 @@ const capture = () => {
     const views: ViewRegistration[] = [];
     const documents: DocumentProviderRegistration[] = [];
     const api = {
-        views: { register: (view: ViewRegistration) => (views.push(view), { dispose: () => {} }) },
+        views: {
+            register: (view: ViewRegistration) => {
+                views.push(view);
+                return { dispose: () => {} };
+            },
+        },
         viewers: { register: () => ({ dispose: () => {} }) },
-        documents: { register: (provider: DocumentProviderRegistration) => (documents.push(provider), { dispose: () => {} }) },
+        documents: {
+            register: (provider: DocumentProviderRegistration) => {
+                documents.push(provider);
+                return { dispose: () => {} };
+            },
+        },
         commands: { register: () => ({ dispose: () => {} }) },
     } as unknown as IntenticApi;
     return { api, views, documents };

@@ -141,16 +141,16 @@ const proseIn = (events: readonly AgentEvent[]): string =>
         .map((event) => (event as Extract<AgentEvent, { kind: "delta" }>).text)
         .join("");
 
-
 describe.skipIf(!tier.runs)(tier.title, () => {
     /* Asked for and unable to run is a failure, not a skip: this tier's whole purpose is to be the thing that
      * cannot be absent when a release is cut. The sentence names the pack, because that is the fix. */
     beforeAll(async () => {
         const binary = await codexBinary();
-        expect(
-            binary,
-            "the codex conformance tier was asked for but no codex binary resolves: install the codex pack (packs/codex.Dockerfile), or unset INTENTIC_E2E_PROVIDERS to stand the tier down deliberately",
-        ).toBeDefined();
+        if (binary === undefined) {
+            throw new Error(
+                "the codex conformance tier was asked for but no codex binary resolves: install the codex pack (packs/codex.Dockerfile), or unset INTENTIC_E2E_PROVIDERS to stand the tier down deliberately",
+            );
+        }
     });
 
     describe.each(MODELS)("$id ($surface)", ({ id: MODEL }) => {
@@ -197,7 +197,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             const outputs = requests.flatMap((request) => [...toolOutputs(request).values()]);
             expect(outputs.join("\n"), "the command's own output must come back to the model").toContain(marker);
             expect(await readFile(join(cwd, "proof.txt"), "utf8"), "the command must have touched the real filesystem").toContain(marker);
-            expect(events.some((event) => event.kind === "tool_call"), "the daemon must render it as a tool card").toBe(true);
+            expect(
+                events.some((event) => event.kind === "tool_call"),
+                "the daemon must render it as a tool card",
+            ).toBe(true);
         });
 
         /* `instructions: "replace"` MADE CHECKABLE, and the single most valuable assertion in this file. The
@@ -248,7 +251,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
             const unattended = await runTurn(MODEL, [{ text: "ok" }], { unattended: true });
             expect(unattended.requests.length).toBeGreaterThan(0);
-            expect(hasTool(unattended.requests[0]!, "request_user_input"), "an unattended turn must not be offered a way to park on a card").toBe(false);
+            expect(hasTool(unattended.requests[0]!, "request_user_input"), "an unattended turn must not be offered a way to park on a card").toBe(
+                false,
+            );
         });
 
         /* THE MODEL THE USER PICKED IS THE MODEL THAT IS SPENT. The adapter interface's own header records why
@@ -310,7 +315,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
          * is worth pinning rather than papering over, because it is what a user sees, and a release that starts
          * reporting these as something else changes what the fleet board shows. */
         test("a model-side refusal surfaces as an error frame naming the status, and the turn still ends", async () => {
-            const { events } = await runTurn(MODEL, [{ failWith: { status: 429, body: { error: { message: "conformance rate limit", type: "rate_limit_error" } } } }]);
+            const { events } = await runTurn(MODEL, [
+                { failWith: { status: 429, body: { error: { message: "conformance rate limit", type: "rate_limit_error" } } } },
+            ]);
             const errors = errorsIn(events);
             expect(errors.length).toBeGreaterThan(0);
             expect(errors.join("\n")).toContain("429");

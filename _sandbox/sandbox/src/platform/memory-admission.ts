@@ -190,6 +190,7 @@ export const waitForMemoryHeadroom = async (
         // The common case pays one reading and reports no wait: a box with room never brushes the interval.
         return { admitted: true, waitedMs: 0 };
     }
+    // oxlint-disable-next-line no-unmodified-loop-condition -- `signal.aborted` is flipped by the AbortController, not by this loop; the rule cannot see the external writer.
     while (!verdict.admit && Date.now() - startedAt < deadlineMs && signal?.aborted !== true) {
         await sleep(intervalMs, signal);
         verdict = admitTurn(await read(), true);

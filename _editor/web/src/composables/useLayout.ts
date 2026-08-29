@@ -166,7 +166,6 @@ const DIFF_OPEN_KEY = `ui-diff-open`;
 // settings above, not a property of the file, so it holds as they walk from README to README. Persists.
 const MARKDOWN_OUTLINE_KEY = `ui-markdown-outline`;
 
-
 /* Owns shell-layout state shared across areas: where the chat panel sits relative to the workspace (bound onto a
  * `data-chat-position` attribute whose CSS grid swaps off it, mirroring how useTheme drives `data-mode`), the chat
  * panel width, the workspace explorer sidebar width/collapse, and the workspace terminal panel open/height.
@@ -222,7 +221,7 @@ const widthPref = (key: string, clamp: (px: number) => number, fallback: () => n
             const parsed = raw === null ? Number.NaN : Number.parseInt(raw, 10);
             return Number.isFinite(parsed) ? clamp(parsed) : fallback();
         },
-        write: (value) => String(value),
+        write: String,
     });
 
 const terminalOpen = ref<boolean>(false);
@@ -354,7 +353,6 @@ const setDiffOpen = (value: DiffOpen): void => {
 const toggleMarkdownOutline = (): void => {
     markdownOutline.value = !markdownOutline.value;
 };
-
 
 export function useLayout() {
     return {

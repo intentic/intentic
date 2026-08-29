@@ -331,7 +331,7 @@ const lockfile = readFileSync(join(root, "pnpm-lock.yaml"), "utf8").split("\n");
 const recorded = new Map();
 const installed = [];
 let inImporters = false;
-let at, block, entry;
+let currentImporter, section, entry;
 for (const line of lockfile) {
     // A column-0 key ends the region as surely as it starts it; blank lines are neither and are left alone.
     if (/^\S/.test(line)) {
@@ -346,13 +346,13 @@ for (const line of lockfile) {
     if (key) {
         const name = unquote(key[1]);
         if (level.of === "importer") {
-            at = name;
-            recorded.set(at, new Map());
+            currentImporter = name;
+            recorded.set(currentImporter, new Map());
         } else if (level.of === "block") {
-            block = name;
+            section = name;
             // `?.` here and below: a level arriving without its parent means the shape moved, and the empty
             // `recorded` that leaves is reported as drift by the size check, which a stack trace would not be.
-            recorded.get(at)?.set(block, new Map());
+            recorded.get(currentImporter)?.set(section, new Map());
         } else {
             entry = name;
         }
@@ -360,7 +360,7 @@ for (const line of lockfile) {
     }
     const specifier = SPECIFIER.exec(line);
     if (specifier) {
-        recorded.get(at)?.get(block)?.set(entry, unquote(specifier[1]));
+        recorded.get(currentImporter)?.get(section)?.set(entry, unquote(specifier[1]));
     }
     const version = VERSION.exec(line);
     if (version) {
@@ -375,13 +375,13 @@ for (const line of lockfile) {
  * is the whole reason this is a resolution and not a string compare. Same flat shape, same scanner: `catalog:`
  * at column 0 is the default catalog's entries, `catalogs:` is a level of named ones above them. */
 const catalogs = new Map([["default", new Map()]]);
-let named;
+let catalogName;
 for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split("\n")) {
     if (/^\S/.test(line)) {
-        named = line.startsWith("catalog:") ? "default" : line.startsWith("catalogs:") ? "" : undefined;
+        catalogName = line.startsWith("catalog:") ? "default" : line.startsWith("catalogs:") ? "" : undefined;
         continue;
     }
-    if (named === undefined || /^\s*(#|$)/.test(line)) {
+    if (catalogName === undefined || /^\s*(#|$)/.test(line)) {
         continue;
     }
     const mapping = /^ {2}(\S.*?):[ \t]*(.*?)[ \t]*$/.exec(line) ?? /^ {4}(\S.*?):[ \t]*(.*?)[ \t]*$/.exec(line);
@@ -389,12 +389,12 @@ for (const line of readFileSync(join(root, "pnpm-workspace.yaml"), "utf8").split
         continue;
     }
     // A 2-space key with no value inside `catalogs:` names the catalog the 4-space entries below it belong to.
-    if (named === "" || (mapping[2] === "" && /^ {2}\S/.test(line))) {
-        named = unquote(mapping[1]);
-        catalogs.set(named, new Map());
+    if (catalogName === "" || (mapping[2] === "" && /^ {2}\S/.test(line))) {
+        catalogName = unquote(mapping[1]);
+        catalogs.set(catalogName, new Map());
         continue;
     }
-    catalogs.get(named).set(unquote(mapping[1]), unquote(mapping[2]));
+    catalogs.get(catalogName).set(unquote(mapping[1]), unquote(mapping[2]));
 }
 
 /* What a package.json declares, flattened to `name -> { specifier, required }`.

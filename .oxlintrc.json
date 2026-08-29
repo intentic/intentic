@@ -1,8 +1,8 @@
 {
     // THE LANDABLE STANDARD. Everything in this file is green on main and `pnpm lint` gates it.
     //
-    // There is a second, stricter config next door — _tools/oxlint/agent.oxlintrc.json — which extends this one
-    // and is applied ONLY to files an agent has just written (see .claude/hooks/oxlint-edit.sh). That split is
+    // There is a second, stricter config next door — .oxlintrc.agent.json — which extends this one
+    // and is applied ONLY to files an agent has just written (see .claude/hooks/oxlint-edit.mjs). That split is
     // deliberate: a standard the repo cannot currently meet is a standard agents learn to disable, so the rules
     // that still have a legacy backlog live on the authoring side of the line and ratchet inward from there,
     // instead of sitting here red.
@@ -94,6 +94,62 @@
         // without showing the agent what it changed, so a fix that can alter a value is the one kind this
         // setup must not carry.
         "unicorn/prefer-dom-node-append": "off",
+
+        // ── Off on the merits, after measuring what they would actually change ─────────────────────────
+        // Every one of these was sampled at its own call sites before being switched off. The test each had
+        // to pass is not "is the rule reasonable in the abstract" but "is the code it flags here worse than
+        // the code it would produce".
+        //
+        // Fires on EVERY .sort(), including `[...byKey.values()].sort(...)` where the array was spread into
+        // existence one expression earlier and is nobody else's. Its premise — that sort mutates a shared
+        // array — is false there, and `toSorted()` just allocates a second array to throw the first away.
+        "unicorn/no-array-sort": "off", // 16
+        // Path-insensitive. It counts the two arms of `port === 0 ? reject(...) : resolve(...)` as two
+        // resolutions of the same promise, which is a ternary: exactly one arm runs. Every site here is an
+        // error path plus a success path, and settling twice is a no-op by spec anyway.
+        "promise/no-multiple-resolved": "off", // 25
+        // Breaks table-driven tests, which is most of the suites here: iterate a table, branch on the shape
+        // of each row, assert the invariant that row is supposed to have. Satisfying it means duplicating
+        // the loop per branch or flattening the table into expected-value pairs — strictly worse tests.
+        "vitest/no-conditional-expect": "off", // 33
+        // Aimed at `[...acc, x]` accumulation, which really is quadratic. It does not fire on that here: it
+        // fires on `automations.map((a) => ({ ...a, enabled: false }))` and `[...someMap.values()]` — an
+        // immutable update and an iterator being materialised. Its own help then suggests `Object.assign` or
+        // "direct property assignment", i.e. mutate the input. The rule's remedy is the worse pattern.
+        "oxc/no-map-spread": "off", // 15
+        // The callback-bridging pair, off for the same reason prefer-await-to-callbacks above is: the sites
+        // are `handleEntry(...).then(() => next(), fail)` inside a tar-stream `on("entry")` handler, which is
+        // the only correct way to drive a callback API from a promise. There is no await to prefer.
+        "promise/no-callback-in-promise": "off", // 8
+        "promise/no-promise-in-callback": "off", // 3
+
+        // Fires on the code that DEFENDS against the thing it names. All three sites are the guard and its
+        // tests: `href.startsWith("javascript:")` in the markdown sanitiser, and two tests asserting that
+        // `javascript:alert(1)` is rejected. A rule that cannot be satisfied without deleting the defence.
+        "no-script-url": "off", // 3
+        // Same shape: both sites are `/[\u0000-\u001f\u007f]/u.test(...)` inside _tools/registry-scan, whose
+        // job IS to find control characters in registry entries.
+        "no-control-regex": "off", // 2
+        // Two of its four sites are long prose wrapped across lines, and one is a deliberate split —
+        // `"intentic:" + "runtime"` exists so the literal directive never appears in a file that asserts packs
+        // do not carry it. Joining them is what the rule wants and is worse in every case here.
+        "no-useless-concat": "off", // 4
+        // Every site is `JSON.parse(JSON.stringify(x))` used ON PURPOSE for its JSON semantics, not as a deep
+        // copy: one is literally named `wire()` and models what survives the wire. structuredClone preserves
+        // Dates, undefined and Maps — exactly the things these call sites are trying to drop.
+        "unicorn/prefer-structured-clone": "off", // 3
+
+        // "Title must be a string" — fired on `test(name, ...)` and `describe.skipIf(...)(tier.title, ...)`,
+        // i.e. on every parameterised suite in the repo. Requiring a literal outlaws table-driven tests, which
+        // is how most of these suites are written.
+        "vitest/valid-title": "off", // 8
+        // 100% false positives, and both in files that are not tests: it pattern-matches the word "it" followed
+        // by a parenthesis in ordinary English. `// it (transcript-search.ts), a mid-turn message ...` is prose.
+        "vitest/no-commented-out-tests": "off", // 2
+        // Aimed at `.then(() => p.then(...))`. What it actually flags here is `await rename(p).catch(() => undefined)`
+        // — one promise, one handler, the concise form of "try this and ignore failure". The remedy is a
+        // try/catch block around a single call, which is longer and says less.
+        "promise/no-nesting": "off", // 9
 
         // ── Debug residue and agent leftovers ────────────────────────────────────────────────────────────
         // console.warn/error are real product behaviour; console.log is something left behind.
@@ -278,49 +334,45 @@
         // prefer-readonly-parameter-types wants deep-readonly signatures across the whole codebase.
         "typescript/strict-boolean-expressions": "off",
         "typescript/prefer-readonly-parameter-types": "off",
-        // ── BACKLOG: enforced on new code, not yet true of main ─────────────────────────────────────────
-        // These are part of the standard — _tools/oxlint/agent.oxlintrc.json turns every one of them back on,
-        // and the edit hook applies that config to any file an agent touches. They are off HERE, and only
-        // here, because main does not satisfy them yet and a red `pnpm lint` teaches agents to ignore lint.
-        // The number after each rule is how many violations main currently carries. Fix them and delete the
-        // line; the count is the work, and the list only ever shrinks.
-        // Total: 272 violations across 36 rules, measured at oxlint 1.76.0.
-        "typescript/consistent-type-imports": "off", // 47
-        "vitest/no-conditional-expect": "off", // 33
-        "promise/no-multiple-resolved": "off", // 23
-        "no-console": "off", // 23
-        "no-shadow": "off", // 17
-        "oxc/no-map-spread": "off", // 15
-        "unicorn/no-array-sort": "off", // 14
-        "vitest/expect-expect": "off", // 10
-        "promise/no-callback-in-promise": "off", // 8
-        "promise/no-nesting": "off", // 8
-        "no-sequences": "off", // 8
-        "prefer-const": "off", // 6
-        "vitest/valid-title": "off", // 6
-        "import/first": "off", // 6
-        "unicorn/prefer-native-coercion-functions": "off", // 4
-        "no-unsafe-optional-chaining": "off", // 4
-        "no-useless-concat": "off", // 4
-        "promise/no-promise-in-callback": "off", // 3
-        "prefer-regex-literals": "off", // 3
-        "unicorn/prefer-structured-clone": "off", // 3
-        "no-use-before-define": "off", // 3
-        "vitest/no-standalone-expect": "off", // 3
-        "typescript/no-explicit-any": "off", // 3
-        "vitest/no-commented-out-tests": "off", // 2
-        "no-script-url": "off", // 2
-        "unicorn/error-message": "off", // 2
-        "no-new-func": "off", // 2
-        "no-control-regex": "off", // 2
-        "unicorn/no-useless-spread": "off", // 1
-        "no-unmodified-loop-condition": "off", // 1
-        "require-yield": "off", // 1
-        "unicorn/no-useless-length-check": "off", // 1
-        "import/no-named-as-default": "off", // 1
-        "unicorn/prefer-array-index-of": "off", // 1
-        "no-unassigned-vars": "off", // 1
-        "typescript/no-import-type-side-effects": "off" // 1
+        // ── Was the backlog, now simply the standard ──────────────────────────────────────────────────
+        // These 21 rules were listed here as violated-by-main, with counts, and enforced only on files an
+        // agent touched. The count reached zero, so they are ordinary rules now and the second config that
+        // carried them is gone. Anything added here in future that main does not yet satisfy belongs in the
+        // same shape: off, with its count, and a note saying who enforces it in the meantime.
+        // Kept for the half that pays: `import { type X }` → `import type { X }`, which it autofixes. Its
+        // `disallowTypeAnnotations` half is off — that bans `typeof import("node:child_process")`, which is
+        // vitest's own documented idiom for typing `importOriginal<>()` inside a vi.mock factory, and has no
+        // top-level-import equivalent because the whole point is to name a module's type without importing it.
+        "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
+        "no-console": ["error", { "allow": ["warn", "error"] }],
+        "no-shadow": "error",
+        "vitest/expect-expect": [
+            "error",
+            {
+                // The default list is just `expect`, so a suite that asserts through a shared helper reads as
+                // assertion-free. `expectOrpcCode(promise, code)` is how every _platform/api route test states
+                // its expectation, and eight suites were being reported for using it.
+                "assertFunctionNames": ["expect", "expectTypeOf", "assert", "expectOrpcCode"]
+            }
+        ],
+        "no-sequences": "error",
+        "prefer-const": ["error", { "destructuring": "all" }],
+        "import/first": "error",
+        "unicorn/prefer-native-coercion-functions": "error",
+        "no-unsafe-optional-chaining": "error",
+        "prefer-regex-literals": "error",
+        "vitest/no-standalone-expect": "error",
+        "typescript/no-explicit-any": "error",
+        "unicorn/error-message": "error",
+        "no-new-func": "error",
+        "unicorn/no-useless-spread": "error",
+        "no-unmodified-loop-condition": "error",
+        "require-yield": "error",
+        "unicorn/no-useless-length-check": "error",
+        "import/no-named-as-default": "error",
+        "unicorn/prefer-array-index-of": "error",
+        "no-unassigned-vars": "error",
+        "typescript/no-import-type-side-effects": "error"
     },
     "env": {
         "node": true,
@@ -346,16 +398,6 @@
     ],
     "overrides": [
         {
-            "files": ["**/*.vue"],
-            "rules": {
-                // Part of the backlog above, and off for the same reason: 3 sites in `<script setup>` call a
-                // `const` arrow declared further down. Benign at runtime — the call happens inside a handler,
-                // long after setup has run — but the rule is right that reading it is harder than it needs to
-                // be. agent.oxlintrc.json turns it back on for any .vue an agent touches.
-                "no-use-before-define": "off"
-            }
-        },
-        {
             // Tooling whose output IS stdout: CLIs, build scripts, benchmarks, e2e harnesses. console.log is
             // the product here, not a leftover.
             "files": [
@@ -369,7 +411,17 @@
                 "_search/iq-bench/**",
                 "_sandbox/gate/**",
                 "_sandbox/gate-action/**",
-                "_deploy/cli/**"
+                "_deploy/cli/**",
+                "_deploy/engine/**",
+                "_site/demo/**",
+                "_tools/fake-upstream/**",
+                "_tools/fake-zrok/**",
+                "_platform/example-provider/**",
+                "_sandbox/connector-runtime/**",
+                "_sandbox/acp-bridge/**",
+                "_sandbox/sandbox/src/extensions/backend/**",
+                "_editor/web/src/composables/perf.ts",
+                "_editor/web/src/composables/chat/focusTrace.ts"
             ],
             "rules": {
                 "no-console": "off"
@@ -388,7 +440,11 @@
                 "typescript/no-unsafe-member-access": "off",
                 "typescript/no-unsafe-call": "off",
                 "typescript/no-unsafe-return": "off",
-                "typescript/unbound-method": "off"
+                "typescript/unbound-method": "off",
+                // A test may construct the degenerate input on purpose: `new Error("")` is the argument under
+                // test, and `new Function(src)` is being used as a parser to assert generated code is valid.
+                "unicorn/error-message": "off",
+                "no-new-func": "off"
             }
         },
         {

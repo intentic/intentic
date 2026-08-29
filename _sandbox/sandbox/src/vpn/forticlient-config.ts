@@ -125,7 +125,7 @@ export const parseForticlientConfig = (xml: string): ForticlientConnection[] => 
         const label = tagText(block, "name");
         // The endpoint and mode live in <ike_settings>; narrowing to it keeps <ipsec_settings>'s own
         // proposals/networks from being read as phase-1 fields.
-        const ike = new RegExp(`<ike_settings\\s*>([\\s\\S]*?)</ike_settings>`, "i").exec(block)?.[1] ?? block;
+        const ike = /<ike_settings\s*>([\s\S]*?)<\/ike_settings>/i.exec(block)?.[1] ?? block;
         const server = tagText(ike, "server");
         if (label === undefined || label === "" || server === undefined || server === "") {
             return;
@@ -133,14 +133,14 @@ export const parseForticlientConfig = (xml: string): ForticlientConnection[] => 
         const { host, port } = splitServer(server, 500);
         // The XAuth username is nested in <xauth>; reading it from the whole block would risk picking up an
         // unrelated <username>.
-        const xauth = new RegExp(`<xauth\\s*>([\\s\\S]*?)</xauth>`, "i").exec(ike)?.[1] ?? "";
+        const xauth = /<xauth\s*>([\s\S]*?)<\/xauth>/i.exec(ike)?.[1] ?? "";
         const username = plainText(xauth, "username");
         const localId = plainText(ike, "localid");
         const xauthEnabled = tagText(xauth, "enabled") === "1";
         // PFS and the DH group come from <ipsec_settings> (phase 2), NOT <ike_settings>: phase 2 is what the
         // gateway binds, and <ike_settings> often lists several groups ("5;14;") which say nothing about which
         // one quick mode must use.
-        const phase2 = new RegExp(`<ipsec_settings\\s*>([\\s\\S]*?)</ipsec_settings>`, "i").exec(block)?.[1] ?? "";
+        const phase2 = /<ipsec_settings\s*>([\s\S]*?)<\/ipsec_settings>/i.exec(block)?.[1] ?? "";
         const dhGroup = tagText(phase2, "dhgroup");
         connections.push({
             id: slugId(label, index),

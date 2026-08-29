@@ -101,10 +101,11 @@ const proseIn = (events: readonly AgentEvent[]): string =>
 
 describe.skipIf(!tier.runs)(tier.title, () => {
     beforeAll(async () => {
-        expect(
-            await onPath("opencode"),
-            "the opencode conformance tier was asked for but no opencode binary is on PATH: install the opencode pack (packs/opencode.Dockerfile), or unset INTENTIC_E2E_PROVIDERS to stand the tier down deliberately",
-        ).toBe(true);
+        if (!(await onPath("opencode"))) {
+            throw new Error(
+                "the opencode conformance tier was asked for but no opencode binary is on PATH: install the opencode pack (packs/opencode.Dockerfile), or unset INTENTIC_E2E_PROVIDERS to stand the tier down deliberately",
+            );
+        }
 
         workspace = await mkdtemp(join(tmpdir(), "opencode-wire-"));
         model = await startFakeModel({
@@ -176,7 +177,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
      * the setting is off. */
     test("an appended system prompt reaches the backend", async () => {
         const off = await runTurn(SCENARIOS.appendOff);
-        expect(JSON.stringify(off.requests), "the sentinel must be absent without the setting, or this proves nothing").not.toContain(APPEND_SENTINEL);
+        expect(JSON.stringify(off.requests), "the sentinel must be absent without the setting, or this proves nothing").not.toContain(
+            APPEND_SENTINEL,
+        );
 
         const on = await runTurn(SCENARIOS.appendOn, { systemAppend: APPEND_SENTINEL });
         expect(JSON.stringify(on.requests), "the owner's instructions must reach the model").toContain(APPEND_SENTINEL);
@@ -188,13 +191,9 @@ describe.skipIf(!tier.runs)(tier.title, () => {
      *
      * The budget is a HANG BOUND rather than an expectation: the pass takes seconds, and anything approaching
      * this number means the watchdog answered instead of the error path, which is the regression. */
-    test(
-        "a model-side refusal ends the turn with an error frame rather than the inactivity watchdog",
-        async () => {
-            const { events } = await runTurn(SCENARIOS.refusal);
-            expect(errorsIn(events).length, "a refused call must surface as a frame").toBeGreaterThan(0);
-            expect(events.at(-1)?.kind).toBe("done");
-        },
-        90_000,
-    );
+    test("a model-side refusal ends the turn with an error frame rather than the inactivity watchdog", async () => {
+        const { events } = await runTurn(SCENARIOS.refusal);
+        expect(errorsIn(events).length, "a refused call must surface as a frame").toBeGreaterThan(0);
+        expect(events.at(-1)?.kind).toBe("done");
+    }, 90_000);
 });

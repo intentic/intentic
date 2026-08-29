@@ -799,8 +799,8 @@ const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void>
         openLog.value = slug;
         logLines.value = { ...logLines.value, [slug]: [] };
         busy.value = { slug, verb };
-        const text = await sandboxLogs(slug, LOG_TAIL_LINES).catch((error: unknown) => String(error));
-        logLines.value = { ...logLines.value, [slug]: text.split(/\r?\n/).filter((line) => line !== ``) };
+        const text = await sandboxLogs(slug, LOG_TAIL_LINES).catch(String);
+        logLines.value = { ...logLines.value, [slug]: text.split(/\r?\n/).filter(Boolean) };
         busy.value = undefined;
         return;
     }

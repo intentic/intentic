@@ -796,6 +796,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
      * XDG_DATA_HOME) is the credential root so xAI OAuth tokens persist across restarts. Gemini brings no
      * credential of its own here — the translator holds Google's, exactly as for a routed turn; an unbaked
      * translator (the dev profile) leaves the config absent and the loop serves Grok alone. */
+    // oxlint-disable-next-line prefer-const -- openCode's config closure below reads `gemini` before this is assigned, which is what the definite-assignment `!` is for. There is no initialiser to merge into.
     let gemini!: GeminiSlice;
     const openCode = createOpenCodeService(authRoot, {
         // Where a non-isolated conversation runs, and so the one directory whose permission watcher is

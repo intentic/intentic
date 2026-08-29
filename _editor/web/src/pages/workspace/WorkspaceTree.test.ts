@@ -217,8 +217,8 @@ describe(`the ignored-entry toggle`, () => {
  * documented directory that only reveals its page under the mouse is indistinguishable from an undocumented one,
  * and that is exactly what made per-package documentation invisible in a fifty-five package monorepo. */
 describe(`a row's icons at rest`, () => {
-    const ACTIONS = (dir: string): readonly RowAction[] =>
-        dir === `src`
+    const ACTIONS = (name: string): readonly RowAction[] =>
+        name === `src`
             ? [
                   { id: `document:acme.docs:architecture`, icon: `question-circle`, tooltip: `What src is`, standing: true, run: () => {} },
                   { id: `health`, icon: `wave-pulse`, tooltip: `Open codebase health`, standing: false, run: () => {} },

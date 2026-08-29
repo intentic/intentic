@@ -590,7 +590,13 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         let found: RgResult;
         let note: string | undefined;
         try {
-            found = await rgSearch({ ...rgBase, ...ceiling, pattern: request.query, ...modifiers, ...(request.options.literal ? { literal: true } : {}) });
+            found = await rgSearch({
+                ...rgBase,
+                ...ceiling,
+                pattern: request.query,
+                ...modifiers,
+                ...(request.options.literal ? { literal: true } : {}),
+            });
         } catch (error) {
             if (request.options.literal || !(error instanceof Error) || !error.message.includes("regex parse error")) {
                 throw error;
@@ -728,9 +734,21 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // the graph to the scope the asker happened to be looking at would silently shorten the answer.
         const every = new Set(context.db.all("SELECT path FROM files").map((row) => row["path"] as string));
         const graph = buildImportGraph(context.db, every, fileHeads(context.db));
-        const seeds = request.query === "" ? await changedFiles(context.root, entries) : request.query.split(",").map((path) => path.trim()).filter((path) => path !== "");
+        const seeds =
+            request.query === ""
+                ? await changedFiles(context.root, entries)
+                : request.query
+                      .split(",")
+                      .map((path) => path.trim())
+                      .filter((path) => path !== "");
         if (seeds.length === 0) {
-            return { groups: [], unit: "files", style: "paths", showTags: false, hint: "no uncommitted change in the sweep, name one or more paths to ask about them instead: iq impact src/app.ts" };
+            return {
+                groups: [],
+                unit: "files",
+                style: "paths",
+                showTags: false,
+                hint: "no uncommitted change in the sweep, name one or more paths to ask about them instead: iq impact src/app.ts",
+            };
         }
         const result = impactOf(graph, seeds, IMPACT_DEFAULTS);
         const untested = seeds.filter((seed) => graph.idByPath.has(seed) && classOf(seed) !== "tests" && testsCovering(graph, seed).length === 0);
@@ -742,8 +760,8 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
         // Everything the walk could not answer is said out loud. A short list that looks complete is the exact
         // failure this verb exists to avoid, but saying it must not itself cost the budget the verb is here to
         // save, so the named paths are capped and the remainder is counted rather than spelled out.
-        const some = (paths: readonly string[]): string =>
-            paths.length <= NOTE_PATHS ? paths.join(", ") : `${paths.slice(0, NOTE_PATHS).join(", ")} +${paths.length - NOTE_PATHS} more`;
+        const some = (list: readonly string[]): string =>
+            list.length <= NOTE_PATHS ? list.join(", ") : `${list.slice(0, NOTE_PATHS).join(", ")} +${list.length - NOTE_PATHS} more`;
         const notes = [
             `${seeds.length} changed file${seeds.length === 1 ? "" : "s"}`,
             ...(result.truncated > 0 ? [`${result.truncated} more reachable, not shown`] : []),
@@ -756,7 +774,9 @@ const runVerb = async (context: DispatchContext, request: QueryRequest, entries:
             style: "paths",
             showTags: false,
             headerNote: `one hop each way over the import graph, ${notes.join(" · ")}`,
-            ...(groups.length === 0 ? { hint: "nothing in the index imports these files or is imported by them, a leaf change, or the imports did not resolve" } : {}),
+            ...(groups.length === 0
+                ? { hint: "nothing in the index imports these files or is imported by them, a leaf change, or the imports did not resolve" }
+                : {}),
         };
     }
 

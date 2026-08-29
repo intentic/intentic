@@ -19,8 +19,8 @@ import type { CapabilitySummary, PanelSummary } from "@intentic-app/api-contract
  * that is what the browser actually receives, so a required field added to the schema fails here at compile
  * time instead of at `PanelsListSchema.parse` inside the running app. */
 
-const repo = (repo: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSummary => ({
-    repo,
+const repo = (name: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSummary => ({
+    repo: name,
     hasPanel: false,
     running: false,
     healthy: false,

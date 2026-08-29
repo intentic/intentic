@@ -469,8 +469,11 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
      * the other one back, which is the property that keeps a panel starting from feeling as slow as the
      * chattiest thing in the sandbox, and would make a single-frame assertion flaky against the sampler running
      * beside it. What must hold is that everything published arrives. */
-    const awaitDomains = async (wanted: readonly string[]): Promise<void> => {
+    // Returns what it actually saw arrive, so the caller can assert on it rather than on the absence of a
+    // throw: a test whose only failure mode is an exception says nothing about what it proved.
+    const awaitDomains = async (wanted: readonly string[]): Promise<readonly string[]> => {
         const outstanding = new Set(wanted);
+        const delivered: string[] = [];
         while (outstanding.size > 0) {
             const { value, done } = await frames.next();
             if (done === true) {
@@ -478,10 +481,13 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
             }
             if (value.kind === "runtimeChanged") {
                 for (const domain of value.domains) {
-                    outstanding.delete(domain);
+                    if (outstanding.delete(domain)) {
+                        delivered.push(domain);
+                    }
                 }
             }
         }
+        return delivered;
     };
 
     /* Wait for the stream to be LIVE before publishing anything. The route sends its hello frame before it
@@ -500,7 +506,7 @@ test("events: every runtime domain that moves reaches the browser's stream", asy
 
     // The announced half: a subsystem doing the thing and saying so on the way past.
     publishRuntimeChange("panels", "terminals");
-    await awaitDomains(["panels", "terminals"]);
+    expect([...(await awaitDomains(["panels", "terminals"]))].sort()).toEqual(["panels", "terminals"]);
 
     controller.abort();
 });

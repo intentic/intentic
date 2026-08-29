@@ -14,7 +14,12 @@ import { describe, expect, it } from "vitest";
 const activateAndCaptureViewers = (): ViewerRegistration[] => {
     const registered: ViewerRegistration[] = [];
     const api = {
-        viewers: { register: (viewer: ViewerRegistration) => (registered.push(viewer), { dispose: () => {} }) },
+        viewers: {
+            register: (viewer: ViewerRegistration) => {
+                registered.push(viewer);
+                return { dispose: () => {} };
+            },
+        },
     } as unknown as IntenticApi;
     viewers.activate(api, { extensionId: `test`, subscriptions: [] });
     return registered;

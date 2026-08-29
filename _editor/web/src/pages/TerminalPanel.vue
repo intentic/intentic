@@ -590,6 +590,7 @@ const cycleTab = (delta: number): void => {
     if (names.length < 2) {
         return;
     }
+    // oxlint-disable-next-line unicorn/prefer-array-index-of -- activeName.value is `string | undefined`, which indexOf will not accept.
     const index = names.findIndex((name) => name === activeName.value);
     const next = names[(index + delta + names.length) % names.length];
     if (next !== undefined) {

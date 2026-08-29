@@ -809,15 +809,15 @@ export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
  * writes the same session-wide rule it would have written live. */
 const RESTORED_GRANT_TTL_MS = 10 * 60_000;
 const restoredGrants = new Map<string, { tool: string; always: boolean; grantedAt: number }>();
-export const grantRestoredPermission = (conversationId: string, tool: string, always: boolean, now: number = Date.now()): void => {
-    restoredGrants.set(conversationId, { tool, always, grantedAt: now });
+export const grantRestoredPermission = (conversationId: string, toolName: string, always: boolean, now: number = Date.now()): void => {
+    restoredGrants.set(conversationId, { tool: toolName, always, grantedAt: now });
 };
-const consumeRestoredGrant = (conversationId: string | undefined, tool: string, now: number = Date.now()): { always: boolean } | undefined => {
+const consumeRestoredGrant = (conversationId: string | undefined, toolName: string, now: number = Date.now()): { always: boolean } | undefined => {
     if (conversationId === undefined) {
         return undefined;
     }
     const grant = restoredGrants.get(conversationId);
-    if (grant === undefined || grant.tool !== tool || now - grant.grantedAt > RESTORED_GRANT_TTL_MS) {
+    if (grant === undefined || grant.tool !== toolName || now - grant.grantedAt > RESTORED_GRANT_TTL_MS) {
         return undefined;
     }
     restoredGrants.delete(conversationId);

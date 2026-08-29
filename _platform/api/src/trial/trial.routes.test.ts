@@ -459,7 +459,7 @@ describe("the free-trial key pool", () => {
         vi.useFakeTimers();
         try {
             const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
-                const auth = (init?.headers as Record<string, string>)[`authorization`];
+                const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
                 return auth === `Bearer k1` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
             const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
@@ -478,7 +478,7 @@ describe("the free-trial key pool", () => {
     it("fails over on a rejected key and quarantines it for later calls", async () => {
         const auths: (string | undefined)[] = [];
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-            const auth = (init?.headers as Record<string, string>)[`authorization`];
+            const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, { status: auth === `Bearer k1` ? 401 : 200 });
         });
@@ -613,7 +613,7 @@ describe("the free-trial key pool", () => {
         let at = Date.parse(`2026-08-16T00:00:00.000Z`);
         const auths: (string | undefined)[] = [];
         const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-            const auth = (init?.headers as Record<string, string>)[`authorization`];
+            const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, auth === `Bearer k1` ? { status: 429, headers: { "retry-after": `120` } } : { status: 200 });
         });
@@ -632,5 +632,6 @@ describe("the free-trial key pool", () => {
     });
 });
 
-// Referenced so the Prisma import matches app.test.ts's (createApp's error mapping narrows on it).
-expect(Prisma).toBeDefined();
+it(`the Prisma import stays referenced, so createApp's error mapping narrows on the same class app.test.ts uses`, () => {
+    expect(Prisma).toBeDefined();
+});

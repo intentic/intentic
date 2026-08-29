@@ -14,9 +14,7 @@ beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), "iq-lexical-"));
     await writeFile(
         join(root, "lines.md"),
-        ["own its own sandbox", "Ownership — own the machine, hardware you install", "ownership is the trust foundation"].join(
-            "\n",
-        ),
+        ["own its own sandbox", "Ownership — own the machine, hardware you install", "ownership is the trust foundation"].join("\n"),
     );
 });
 afterAll(() => rm(root, { recursive: true, force: true }));
@@ -135,17 +133,18 @@ describe("the prune list", () => {
 describe("the scan ceiling", () => {
     let tree: string;
     // Three files of 40 matching lines each, so a 50-hit ceiling has to land INSIDE the second one.
-    const allowed = new Set(["a.md", "b.md", "c.md"]);
+    const ceilingFiles = new Set(["a.md", "b.md", "c.md"]);
 
     beforeAll(async () => {
         tree = await mkdtemp(join(tmpdir(), "iq-ceiling-"));
-        for (const name of allowed) {
+        for (const name of ceilingFiles) {
             await writeFile(join(tree, name), Array.from({ length: 40 }, (_, index) => `needle ${index}`).join("\n"));
         }
     });
     afterAll(() => rm(tree, { recursive: true, force: true }));
 
-    const scan = (ceiling: { maxHits?: number; maxFiles?: number }) => rgSearch({ root: tree, pattern: "needle", literal: true, allowed, ...ceiling });
+    const scan = (ceiling: { maxHits?: number; maxFiles?: number }) =>
+        rgSearch({ root: tree, pattern: "needle", literal: true, allowed: ceilingFiles, ...ceiling });
 
     test("an uncapped scan reads everything and says its total is exact", async () => {
         const result = await scan({});
@@ -186,12 +185,12 @@ describe("the scan ceiling", () => {
      * faster rather than merely smaller. These are the sweep's own entries, so the list can never admit what
      * `allowed` would not. */
     test("an explicit path list is the only thing walked", async () => {
-        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed, paths: ["b.md"] });
+        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed: ceilingFiles, paths: ["b.md"] });
         expect([...new Set(result.hits.map((hit) => hit.path))]).toEqual(["b.md"]);
     });
 
     test("an empty path list is answered without a scan, not read as the whole tree", async () => {
-        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed, paths: [] });
+        const result = await rgSearch({ root: tree, pattern: "needle", literal: true, allowed: ceilingFiles, paths: [] });
         expect(result.hits).toEqual([]);
         expect(result.ceiling).toBe(false);
     });

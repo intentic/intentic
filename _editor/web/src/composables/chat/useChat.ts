@@ -1267,11 +1267,11 @@ const pollNativeOnce = async (target: AgentProvider, deadline: number): Promise<
         return;
     }
     try {
-        const connected = await refreshAccounts(target, false);
+        const connectedAccounts = await refreshAccounts(target, false);
         if (nativeConnectFlow.value !== flow) {
             return;
         }
-        if (connected.length > 0) {
+        if (connectedAccounts.length > 0) {
             cancelConnect();
             error.value = null;
             // The account just connected, load its model catalog now so the picker is populated immediately,

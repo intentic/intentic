@@ -596,6 +596,7 @@ test("the queue survives a run that fails: the next fire still gets its turn", a
     const record = (await services.automations.get("busy")) as AutomationRecord;
     const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();
+    // oxlint-disable-next-line require-yield -- WakeFn is a generator contract; this fixture exists to throw before it ever yields.
     const throwingWake: WakeFn = async function* (_services, input) {
         prompts.push(input.prompt);
         started.resolve();

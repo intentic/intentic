@@ -60,6 +60,7 @@ void runConnectorGateway<WhatsAppConnectorConfig, WhatsAppConnection>({
             open: async (id, config) => {
                 // The connection reference the message callback closes over, assigned as soon as open() returns;
                 // baileys delivers nothing before the socket finishes opening, so the gap is unobservable.
+                // oxlint-disable-next-line prefer-const -- the message callback passed into openWhatsAppConnection closes over this binding, so it has to exist before the call that assigns it.
                 let connection: WhatsAppConnection | undefined;
                 connection = await openWhatsAppConnection({
                     capabilityId: id,

@@ -940,7 +940,6 @@ describe(`retryPayout`, () => {
     });
 
     it(`pays a pending payout through the shared settle path under its own idempotency key`, async () => {
-        let idempotencyKey: string | undefined;
         const result = await retryPayout(
             deps(
                 { id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `pending` },
@@ -950,7 +949,6 @@ describe(`retryPayout`, () => {
             `p1`,
         );
         expect(result).toEqual({ paid: true, message: `Paid: $25.00 transferred.` });
-        void idempotencyKey;
     });
 
     it(`a transfer that fails again stays pending and says so`, async () => {

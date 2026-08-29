@@ -8,6 +8,12 @@ import { grabExcerpts } from "./rank/grab.js";
 import { matchSessions } from "./rank/match.js";
 import { openRecallDb, type RecallDb } from "./store/db.js";
 import { projectsDirOf } from "./transcript/slug.js";
+import type { IngestStats } from "./ingest/ingest.js";
+import type { TopicFile, TopicOptions } from "./rank/files.js";
+import type { GrabOptions, TurnExcerpt } from "./rank/grab.js";
+import type { MatchOptions, SessionMatch } from "./rank/match.js";
+import type { ForkPoint } from "./fork/fork-point.js";
+import type { ForkResult } from "./fork/fork.js";
 
 export type { ForkPoint } from "./fork/fork-point.js";
 export type { ForkResult } from "./fork/fork.js";
@@ -18,13 +24,6 @@ export type { TopicFile, TopicOptions } from "./rank/files.js";
 export { readLines } from "./transcript/line-reader.js";
 export { parseLine, typedPromptOf } from "./transcript/lines.js";
 export { projectsDirOf } from "./transcript/slug.js";
-
-import type { IngestStats } from "./ingest/ingest.js";
-import type { TopicFile, TopicOptions } from "./rank/files.js";
-import type { GrabOptions, TurnExcerpt } from "./rank/grab.js";
-import type { MatchOptions, SessionMatch } from "./rank/match.js";
-import type { ForkPoint } from "./fork/fork-point.js";
-import type { ForkResult } from "./fork/fork.js";
 
 export interface RecallOptions {
     readonly root: string;

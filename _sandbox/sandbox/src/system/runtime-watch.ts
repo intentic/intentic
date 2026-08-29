@@ -85,6 +85,7 @@ const flush = (): void => {
     const now = Date.now();
     const ready: RuntimeDomain[] = [];
     let soonest: number | undefined;
+    // oxlint-disable-next-line unicorn/no-useless-spread -- the loop body deletes from `pending`; the spread is the snapshot that makes iterating-while-removing obviously safe.
     for (const domain of [...pending]) {
         const allowedAt = nextAllowedAt.get(domain) ?? 0;
         if (allowedAt > now) {

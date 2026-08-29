@@ -1,7 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { AgentEvent, AgentHarness, AgentProvider, SubagentKind, SubagentSession, SubagentStatus, SubagentVerification } from "@intentic/sandbox-contract";
+import type {
+    AgentEvent,
+    AgentHarness,
+    AgentProvider,
+    SubagentKind,
+    SubagentSession,
+    SubagentStatus,
+    SubagentVerification,
+} from "@intentic/sandbox-contract";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { turnRunOf } from "./turn-runs.js";
@@ -791,6 +799,7 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
             [...records.values()].filter(
                 (record) => record.conversationId === conversationId && (options.target === undefined || record.id === options.target),
             );
+        // oxlint-disable-next-line prefer-const -- assigned in a later branch and cleared in another; the declaration cannot be merged with either.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const settle = (result: SubagentWaitOutcome): void => {
             waiters.delete(evaluate);

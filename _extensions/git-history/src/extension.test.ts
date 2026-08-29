@@ -26,10 +26,18 @@ const capture = (repos: readonly RepoFacts[]) => {
     const open = vi.fn();
     const api = {
         documents: {
-            register: (provider: DocumentProviderRegistration) => (documents.push(provider), { dispose: () => {} }),
+            register: (provider: DocumentProviderRegistration) => {
+                documents.push(provider);
+                return { dispose: () => {} };
+            },
             open,
         },
-        commands: { register: (command: string, handler: () => unknown) => (commands.set(command, handler), { dispose: () => {} }) },
+        commands: {
+            register: (command: string, handler: () => unknown) => {
+                commands.set(command, handler);
+                return { dispose: () => {} };
+            },
+        },
         workspace: { repos: () => repos },
     } as unknown as IntenticApi;
     activate(api, { extensionId: `intentic.git-history`, subscriptions: [] });
@@ -61,7 +69,13 @@ describe(`ext-git-history`, () => {
         const repos: RepoFacts[] = [];
         const documents: DocumentProviderRegistration[] = [];
         const api = {
-            documents: { register: (p: DocumentProviderRegistration) => (documents.push(p), { dispose: () => {} }), open: vi.fn() },
+            documents: {
+                register: (p: DocumentProviderRegistration) => {
+                    documents.push(p);
+                    return { dispose: () => {} };
+                },
+                open: vi.fn(),
+            },
             commands: { register: () => ({ dispose: () => {} }) },
             workspace: { repos: () => repos },
         } as unknown as IntenticApi;

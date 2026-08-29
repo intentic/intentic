@@ -142,7 +142,10 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     await git(main, ["worktree", "add", join(root, "linked"), "other"]);
 
     const batches: string[][] = [];
-    const watch = createRefWatch(root, (listener) => (listener(["linked"]), () => undefined));
+    const watch = createRefWatch(root, (listener) => {
+        listener(["linked"]);
+        return () => undefined;
+    });
     closers.push(watch.close);
     watch.subscribe((repos) => batches.push(repos));
 
@@ -161,6 +164,7 @@ test("a checkout inside a linked worktree is reported, HEAD being per-worktree",
     await git(linked, ["checkout", "--detach"]);
 
     await waitFor(() => batches.some((batch) => batch.includes("linked")));
+    expect(batches.flat()).toContain("linked");
 });
 
 /* HOW MANY BATCHES A BURST BECOMES IS NOT ASKED HERE, and that is the point of the case rather than a gap in

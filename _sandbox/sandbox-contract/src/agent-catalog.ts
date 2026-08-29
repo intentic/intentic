@@ -1,5 +1,5 @@
 import { type AgentHarness, type AgentProvider, NATIVE_PROVIDERS, type NativeProvider, type PermissionMode } from "./schemas/agent.js";
-import { type Model, type ModelBadge } from "./schemas/provider-oauth.js";
+import type { Model, ModelBadge } from "./schemas/provider-oauth.js";
 
 /* The provider / harness / model catalog every picker shares (the chat menu, the automations dialog), pure
  * data keyed by the wire vocabulary in schemas/agent.ts, so the surfaces can't drift. Live state stays with the

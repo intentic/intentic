@@ -452,7 +452,12 @@ describe(`code block copy`, () => {
         const outThere: string[] = [];
         Object.defineProperty(other.navigator, `clipboard`, {
             configurable: true,
-            value: { writeText: (text: string): Promise<void> => (outThere.push(text), Promise.resolve()) },
+            value: {
+                writeText: (text: string): Promise<void> => {
+                    outThere.push(text);
+                    return Promise.resolve();
+                },
+            },
         });
         const container = other.document.createElement(`div`);
         container.innerHTML = renderMarkdown("```ts\nexport const elsewhere = 7;\n```");

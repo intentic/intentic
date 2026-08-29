@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
+// oxlint-disable-next-line import/no-named-as-default -- baileys exports the socket factory as BOTH its default and a same-named named export; the default is the documented import.
 import makeWASocket, { DisconnectReason, downloadMediaMessage, jidNormalizedUser, useMultiFileAuthState } from "baileys";
 import type { ListenerPairing } from "@intentic/sandbox-contract";
 import type { Logger } from "@intentic/connector-runtime";

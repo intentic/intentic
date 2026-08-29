@@ -1,5 +1,5 @@
 {
-    // THE AUTHORING STANDARD PLUS anti-slop. Separate from agent.oxlintrc.json for one reason only: it needs
+    // THE ROOT STANDARD PLUS anti-slop. Separate from .oxlintrc.json for one reason only: it needs
     // `@oxlint/plugins` in the tree, and that dependency is not installed yet. Everything else about it is the
     // same standard.
     //
@@ -8,14 +8,14 @@
     //      the JS plugin ABI is explicitly not semver-stable, and a mismatched pair fails at config-load time)
     //   2. root package.json devDependencies:  "@oxlint/plugins": "catalog:"
     //   3. pnpm install
-    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of agent.oxlintrc.json
+    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of .oxlintrc.json
     //
     // Until step 4 the rules below are vendored, configured and unrun. Measure them before wiring the hook to
     // them: `pnpm lint:slop` over the repo says how big the backlog is, and the answer decides whether these
     // land as errors or as the next ratchet entry.
-    "$schema": "../../node_modules/oxlint/configuration_schema.json",
-    "extends": ["./agent.oxlintrc.json"],
-    "jsPlugins": [{ "name": "anti-slop", "specifier": "./anti-slop/index.ts" }],
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "extends": ["./.oxlintrc.json"],
+    "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }],
     "rules": {
         // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
         // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has

@@ -67,7 +67,7 @@ export const turnDefaults = {
     thinking: definePreference<boolean>({
         key: `ui-chat-thinking`,
         read: (raw) => raw !== `false`,
-        write: (thinking) => String(thinking),
+        write: String,
     }),
 };
 

@@ -599,10 +599,10 @@ const composerLeft = async (page: Page, fallback: number): Promise<number> => {
  * would hold every shot open to the full window on its own. */
 const contentBottom = async (page: Page, from: number, to: number): Promise<number> =>
     page.evaluate(
-        ({ from, to }) => {
+        ({ from: leftEdge, to: rightEdge }) => {
             const height = window.innerHeight;
             const rail = document.querySelector(`.icon-rail`)?.getBoundingClientRect();
-            const left = rail === undefined ? from : Math.max(from, rail.right);
+            const left = rail === undefined ? leftEdge : Math.max(leftEdge, rail.right);
             let bottom = 0;
             for (const element of document.querySelectorAll("body *")) {
                 const style = getComputedStyle(element);
@@ -610,7 +610,7 @@ const contentBottom = async (page: Page, from: number, to: number): Promise<numb
                     continue;
                 }
                 const box = element.getBoundingClientRect();
-                if (box.width < 8 || box.height < 8 || box.left >= to || box.right <= left) {
+                if (box.width < 8 || box.height < 8 || box.left >= rightEdge || box.right <= left) {
                     continue;
                 }
                 if (box.height > height * 0.9) {

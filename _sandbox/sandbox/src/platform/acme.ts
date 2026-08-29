@@ -136,6 +136,7 @@ export const obtainCertificate = async (options: AcmeOptions): Promise<{ certifi
     // Every POST spends a nonce and every response mints the next one, so the pool is a single value passed
     // hand to hand. Seeded from newNonce and refilled from any response that carries a Replay-Nonce.
     let nonce = (await doFetch(directory.newNonce, { method: "HEAD" })).headers.get("replay-nonce") ?? "";
+    // oxlint-disable-next-line prefer-const -- read by the signing closure above before the account response assigns it.
     let kid: string | undefined;
 
     /* One signed request. ACME's JWS is the flattened JSON serialization with the URL bound into the protected

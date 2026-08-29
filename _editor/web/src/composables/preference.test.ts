@@ -99,7 +99,7 @@ describe(`a change made in another window`, () => {
         const width = definePreference<number>({
             key: `ui-width`,
             read: (raw) => Math.min(400, Number.parseInt(raw ?? `400`, 10)),
-            write: (value) => String(value),
+            write: String,
         });
 
         receivePreferenceChange({ key: `ui-width`, raw: `2000` });

@@ -236,7 +236,7 @@ const fakePrisma = (seed?: Partial<Stored>) => {
             // The grouped lifetime counts behind creator-services.ts countsOf, which the public catalog reads.
             groupBy: vi.fn(async ({ where }: { where: { serviceId: { in: string[] } } }) => {
                 const tally = new Map<string, number>();
-                for (const run of stored.serviceRuns.filter((run) => where.serviceId.in.includes(run.serviceId))) {
+                for (const run of stored.serviceRuns.filter((candidate) => where.serviceId.in.includes(candidate.serviceId))) {
                     const key = `${run.serviceId}\u0000${run.status}`;
                     tally.set(key, (tally.get(key) ?? 0) + 1);
                 }

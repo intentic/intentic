@@ -104,11 +104,11 @@ export function useAutomations() {
         onSuccess: invalidate,
     });
     const setEnabled = useMutation({
-        mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+        mutationFn: ({ id, enabled: next }: { id: string; enabled: boolean }) =>
             api.sandbox.json(`/automations/${encodeURIComponent(id)}/enabled`, {
                 method: `POST`,
                 headers: { "content-type": `application/json` },
-                body: JSON.stringify({ enabled }),
+                body: JSON.stringify({ enabled: next }),
             }),
         onSuccess: invalidate,
     });
