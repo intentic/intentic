@@ -58,7 +58,7 @@ Notes that decide whether the PR survives review:
 
 | List | Stars | Gate | Unlocks |
 | --- | --- | --- | --- |
-| [hesreallyhim/awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | 51.9k | 14 days since first commit **or** 100 stars | **2026-08-18** |
+| [hesreallyhim/awesome-claude-code](https://github.com/hesreallyhim/awesome-claude-code) | 51.9k | 14 days since first commit **or** 100 stars | **Submitted 2026-08-28**; validation passed |
 | [kyrolabs/awesome-ade](https://github.com/kyrolabs/awesome-ade) | 3 | ~50 stars, demonstrated traction | at 50 stars |
 | [e2b-dev/awesome-ai-agents](https://github.com/e2b-dev/awesome-ai-agents) | 29.3k | none stated; 904-item backlog | now, expect months |
 | [awesome-selfhosted/awesome-selfhosted](https://github.com/awesome-selfhosted/awesome-selfhosted) | 311k | first released > 4 months ago | **2026-12-05** |
@@ -174,8 +174,9 @@ moved.
 | bradAGI/awesome-cli-coding-agents | [#253](https://github.com/bradAGI/awesome-cli-coding-agents/pull/253) | Session managers, sorted by stars | **live** (2026-08-28 poll): maintainer first closed it as "too new", reversed after a stats correction and added the entry himself; the PR reads closed-unmerged but the README carries intentic |
 | RoggeOhta/awesome-codex-cli | [#186](https://github.com/RoggeOhta/awesome-codex-cli/pull/186) | GUI & Desktop Apps | open, clean |
 | andyrewlee/awesome-agent-orchestrators | [#148](https://github.com/andyrewlee/awesome-agent-orchestrators/pull/148) | Parallel Coding Agents: Desktop & Web, alphabetical | **merged** (2026-08-28 poll), entry live |
+| hesreallyhim/awesome-claude-code | [#2666](https://github.com/hesreallyhim/awesome-claude-code/issues/2666) | Alternative Clients | open, `validation-passed` (submitted 2026-08-28) |
 
-**The last row is the best-fitting list on this page, and it was found late.** Its taxonomy is ours exactly:
+**The andyrewlee row is the best-fitting list on this page, and it was found late.** Its taxonomy is ours exactly:
 the Desktop & Web section is browser and mobile agent workspaces with diff review, Garcon and IM.codes sit two
 lines from our entry, and unlike the bigger lists it actually merges: 89 merged PRs against 33 open, last push
 two days before we submitted. Ranked by fit times liveness it beats every Tier 1 entry above, which is the
@@ -219,7 +220,6 @@ Codex list a legitimate target rather than a stretch.
   optional; the guide does not). Also a judgement risk: the app is deliberately a thin shell around the
   hosted SPA, and the Apps criteria say "original and not too simple". Decide, then it is a five-minute PR.
 - **e2b-dev/awesome-ai-agents**: submissions go through a Google Form, not a PR.
-- **awesome-claude-code**: opens 2026-08-18, web issue form only.
 - **kyrolabs/awesome-ade**: ~50 stars.
 - **awesome-selfhosted**: 2026-12-05, YAML above. Filed early on 2026-08-10 and withdrawn the same minute
   ([#2883](https://github.com/awesome-selfhosted/awesome-selfhosted-data/pull/2883)), so the file is written and
@@ -245,12 +245,11 @@ Codex list a legitimate target rather than a stretch.
    web form in a signed-in browser. Ten days late against the 08-18 unlock. The validation bot passed all
    checks within minutes ("ready for a maintainer to review"); approval is now the maintainer's discretion.
 
-### awesome-claude-code: the submission, ready to paste on 2026-08-18
+### awesome-claude-code: submitted 2026-08-28
 
-Submit at [the issue form](https://github.com/hesreallyhim/awesome-claude-code/issues/new?template=recommend-resource.yml).
-Web UI only: the CONTRIBUTING explicitly rejects `gh`, and opening a PR instead risks an interaction ban.
-**Do not submit before 2026-08-18**: the gate is 14 days since the first commit on the default branch (repo
-created 2026-08-04) *or* 100 stars, we have 8, and an early submission is auto-closed by a bot.
+Submitted through the required web issue form as
+[#2666](https://github.com/hesreallyhim/awesome-claude-code/issues/2666). The bot applied
+`validation-passed`; the values below are retained as the submission record.
 
 | Field | Value |
 | --- | --- |

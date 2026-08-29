@@ -51,12 +51,13 @@ Ordered by what a listing is worth, not by how easy it is. "Gate" is what stops 
 
 | Target | Why it ranks here | Gate | Status |
 | --- | --- | --- | --- |
-| [SaaSHub](https://www.saashub.com) | Ranks for "X alternatives" queries and cross-links from every competitor's page | None for submission | **Submitted 2026-08-10**, in the free approval queue (up to 32 days) |
+| [SaaSHub](https://www.saashub.com) | Ranks for "X alternatives" queries and cross-links from every competitor's page | Domain-email verification | **Live by 2026-08-29**; appears on AI Developer Tools, AI Coding and Devin alternatives pages |
 | [GitHub Marketplace](https://github.com/marketplace?type=actions) | Not a listing but a working piece of the product where CI users browse: the `intentic/gate-action` action (built in `_sandbox/gate-action`, synced by `action-publish.yml`), every workflow that adopts it carries the name in a public repo | Public `intentic/gate-action` repo + `GATE_ACTION_TOKEN` secret + first release; then the one-time Marketplace publish in the UI (developer agreement, categories: Continuous integration / Code review) | Built, awaiting owner setup |
 | [AlternativeTo](https://alternativeto.net) | The highest-authority alternatives site; owns the "alternative to Cursor / Claude Code" result | Account **and** a browser that clears its Cloudflare check: automation is blocked outright | Blocked |
 | [OpenAlternative](https://openalternative.co) | Open-source-only directory that already has "AI Agent Platforms", plus Claude Code, Codex and Cursor alternative pages: exact-fit taxonomy | Account (email magic link, Google or GitHub) | Blocked |
 | [Hacker News](https://news.ycombinator.com) (Show HN) | The largest single traffic event available, and a permanently indexed page | Account; one shot, so timing matters | **Held by owner 2026-08-12**: draft below, do not post |
-| [Dev Hunt](https://devhunt.org) | Dev-tools-only launchpad, weekly leaderboard | Account | Blocked |
+| [OpenSourceAlternative.to](https://opensourcealternative.to) | Open-source alternatives directory with a Claude Code alternatives page | Free review queue is 6+ months; expedited review is $29 | **Submitted 2026-08-29**, under review as a Claude Code alternative |
+| [Dev Hunt](https://devhunt.org) | Dev-tools-only launchpad, weekly leaderboard | Account and $49 for every launch week | Owner decision |
 | [StackShare](https://stackshare.io) | Tool profile that developers cite in stack decisions | Account; rate-limits automation | Blocked |
 | [Crunchbase](https://www.crunchbase.com) | Entity record: what disambiguates the name from "Intent" | Account | Blocked |
 | [Uneed](https://www.uneed.best) · [Peerlist](https://peerlist.io) | Small launch platforms, quick, cumulative | Account | Blocked |
@@ -118,12 +119,18 @@ First comment, posted immediately after submitting:
 
 - **SaaSHub**, submitted with the free tier: name, the 152-char tagline, categories *AI Developer Tools · AI
   Coding · Self-hosted*, competitors *Cursor · Claude Code · Devin by Cognition*, and filed as an alternative on
-  the *8080.AI*, *Augment Code* and *Windsurf Editor* pages. Awaiting approval; claiming the listing and
-  uploading the logo both need an account.
+  the *8080.AI*, *Augment Code* and *Windsurf Editor* pages. The listing was live by 2026-08-29 and also appears
+  on the Devin alternatives page; claiming it and uploading the logo still need an account.
+
+## Done 2026-08-29
+
+- **OpenSourceAlternative.to**, submitted to the free waitlist as an open-source, self-hosted alternative to
+  Claude Code. The public submission page is [under review](https://opensourcealternative.to/project/intentic);
+  the site quotes 6+ months for free review, and no paid expedited review was purchased.
 
 ## What unblocks the rest
 
 Every remaining target needs one thing: a signed-in browser belonging to the listing identity
 (radarsuspam@gmail.com). Sites that offer "Continue with Google": OpenAlternative, StackShare, Crunchbase,
 Peerlist: fall in one pass once that browser exists; AlternativeTo, Dev Hunt and Hacker News each need their
-own account created in it.
+own account created in it. Dev Hunt additionally needs an explicit decision to spend $49 on a launch week.
