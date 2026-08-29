@@ -65,12 +65,7 @@ const sizeLabel = (bytes: number): string => {
 
 <template>
     <Card class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            icon="box"
-            title="Move this sandbox"
-        />
+        <Row flush :heading="2" icon="box" title="Move this sandbox" />
 
         <template v-if="canOperate">
             <!-- THE ONE DECISION THIS CARD ASKS FOR, on the card's own surface. It used to sit in its own boxed
@@ -91,9 +86,15 @@ const sizeLabel = (bytes: number): string => {
                  `--ui-card-padding`), and the row inside is 100% of THAT. The row keeps the padding, so the
                  words stay lined up with everything else on the card while the tint runs edge to edge. -->
             <div class="-mx-5 border-t border-line-subtle">
+                <!-- `density="compact"`, which is what stops this reading as a SECOND card title. At the
+                     comfortable tier a row's title is `font-semibold` at the body size, a hair off the
+                     masthead's own `text-lg font-semibold`, so a lock, a bold phrase and a control sitting
+                     directly under "Move this sandbox" scanned as the heading of a card of its own. It is one
+                     option on this card, and the compact tier is the app's word for that. -->
                 <Row
                     flush
                     as="label"
+                    density="compact"
                     :icon="withSecrets ? `unlock` : `lock`"
                     :tone="withSecrets ? `warning` : `default`"
                     title="Include secrets"
@@ -144,7 +145,7 @@ const sizeLabel = (bytes: number): string => {
              is the app's toolbar action: no chrome until the pointer is on it, the tone arriving with the
              hover. Neither needs a label because the row is one file and these are the only two things anyone
              does to a file; the tooltip carries the word. -->
-        <RowGroup v-if="exports.length > 0">
+        <RowGroup v-if="exports.length > 0" flat label="Exports" :count="exports.length">
             <Row v-for="entry in exports" :key="entry.name" density="compact">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
@@ -198,13 +199,15 @@ const sizeLabel = (bytes: number): string => {
                     {{ report.restored.repos.length }} repos ({{ report.restored.repos.join(`, `) }}).
                 </p>
             </div>
-            <div v-if="report.needsAction.length > 0" class="flex flex-col gap-2 rounded-lg border border-line p-3">
-                <p class="text-xs font-medium text-content">Finish the move</p>
-                <div v-for="action in report.needsAction" :key="action.subject" class="text-2xs">
-                    <p class="font-medium text-content">{{ action.subject }}</p>
-                    <p class="text-subtle">{{ action.detail }}</p>
-                </div>
-            </div>
+            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the move">
+                <Row
+                    v-for="action in report.needsAction"
+                    :key="action.subject"
+                    density="compact"
+                    :title="action.subject"
+                    :description="action.detail"
+                />
+            </RowGroup>
             <p v-if="report.refused.length > 0" class="text-2xs text-warning">
                 {{ report.refused.length }} entries were refused: the bundle carried paths this sandbox does not accept (identity files, or paths
                 outside the workspace).

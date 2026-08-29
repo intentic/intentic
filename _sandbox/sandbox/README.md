@@ -258,8 +258,12 @@ reports the profile.
   identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
   **definition** is the declarable half of the same thing as a `sandbox.toml`: the workspace itself by remote,
   repositories by remote, connections by shape, secret NAMES, agent settings, the overlay as source — derived
-  from the live manifests on every export (never stored), applied preview-first through the same native write
-  paths the UI uses, and diffable against the running sandbox for drift. `[workspace]` is what makes the
+  from the live manifests on every export (and never read back from a file), applied preview-first through the
+  same native write paths the UI uses, and diffable against the running sandbox for drift. One copy of that
+  derivation lives at the workspace root as `sandbox.toml` (`definition-file.ts`), written on boot and on a
+  five-minute patrol, skipped when the bytes are unchanged, and carrying a managed header no other copy gets:
+  it is what lets the agent inside the sandbox read what the sandbox is, and what gives `git log` an answer for
+  when a capability appeared. `[workspace]` is what makes the
   sandbox's own way of working travel: `/work` is itself a repo (the `root` scope), tracking exactly the
   owner's authored content, so publishing it turns notes, skills, personas, automations, designs and drafts
   from bundle-only bytes into one reference. The bundle manifest embeds the definition (one schema, two doors),

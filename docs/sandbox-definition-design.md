@@ -90,9 +90,17 @@ closing newline is real content; a value without one uses an escaped basic strin
 
 Nothing here invented a posture; each rule is lifted from a neighbour that already argued it:
 
-- **Derived, never stored** (the environment card's rule): there is no definition file the daemon keeps in
-  sync. Every export walks the live manifests, so it cannot be stale, and drift becomes `definitionDiff`, a
-  pure comparison.
+- **Derived, never read back** (the environment card's rule): no definition file is ever an input. Every
+  export walks the live manifests, so what the product answers with cannot be stale, and drift becomes
+  `definitionDiff`, a pure comparison.
+
+  The daemon does keep a `sandbox.toml` at the workspace root (`portability/definition-file.ts`), and it is a
+  copy in the strict sense: written from the derivation, never consulted by it. Delete the file and the
+  sandbox is unchanged. It exists because a derivation reachable only through an owner-only HTTP route left
+  out the two readers who most wanted it, the agent working inside the sandbox, and `git log`. The emitter is
+  deterministic precisely so the document can be committed and diffed; until this file, nothing was
+  committing one. A converge compares before it writes, so an unchanged sandbox costs no write, and the
+  header marks that copy managed, which no other copy is.
 - **Preview-first, re-derived at apply** (the migration surface's rule): `plan` holds the parsed document in
   memory under a token and renders a checklist; `apply` re-derives the items from the held bytes and honors
   ticked ids against that, never against the wire plan the browser rendered.

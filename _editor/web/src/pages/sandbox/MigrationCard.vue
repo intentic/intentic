@@ -144,12 +144,7 @@ const cancel = (): Promise<void> =>
 
 <template>
     <Card class="flex flex-col gap-4">
-        <Row
-            flush
-            :heading="2"
-            icon="upload"
-            title="Arrive from another assistant"
-        />
+        <Row flush :heading="2" icon="upload" title="Arrive from another assistant" />
 
         <template v-if="canOperate">
             <template v-if="plan === undefined">
@@ -162,7 +157,7 @@ const cancel = (): Promise<void> =>
                      heard of their computers and no reason to think reading one was possible at all. A row
                      saying \"asleep, wake it and check again\" is not a dead-end offer; it is the difference
                      between a feature that is missing and one that is waiting. -->
-                <RowGroup v-if="hosts.length > 0">
+                <RowGroup v-if="hosts.length > 0" flat label="Your computers">
                     <Row
                         v-for="host in hosts"
                         :key="host.id"
@@ -259,7 +254,7 @@ const cancel = (): Promise<void> =>
                     <StatusBadge variant="info" :label="plan.source === `hermes` ? `Hermes` : `OpenClaw`" />
                     <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you import.</p>
                 </div>
-                <RowGroup>
+                <RowGroup flat label="What would come in">
                     <Row v-for="item in orderedItems" :key="item.id" as="label" density="compact" class="cursor-pointer">
                         <template #title
                             ><span class="text-xs">{{ item.label }}</span></template
@@ -282,6 +277,7 @@ const cancel = (): Promise<void> =>
                     <Row
                         flush
                         as="label"
+                        density="compact"
                         :icon="withSecrets ? `unlock` : `lock`"
                         :tone="withSecrets ? `warning` : `default`"
                         title="Move secret values too"
@@ -294,16 +290,21 @@ const cancel = (): Promise<void> =>
                     </Row>
                 </div>
 
-                <div v-if="plan.needsAction.length > 0" class="flex flex-col gap-2 rounded-lg border border-line p-3">
-                    <p class="text-xs font-medium text-content">Won't move by itself</p>
-                    <div v-for="action in plan.needsAction" :key="action.subject" class="text-2xs">
-                        <p class="font-medium text-content">{{ action.subject }}</p>
-                        <p class="text-subtle">{{ action.detail }}</p>
-                    </div>
-                </div>
+                <RowGroup v-if="plan.needsAction.length > 0" flat label="Won't move by itself">
+                    <Row
+                        v-for="action in plan.needsAction"
+                        :key="action.subject"
+                        density="compact"
+                        :title="action.subject"
+                        :description="action.detail"
+                    />
+                </RowGroup>
 
                 <details v-if="plan.refused.length > 0" class="text-2xs text-subtle">
-                    <summary class="cursor-pointer">{{ plan.refused.length }} things stay behind on purpose</summary>
+                    <summary class="cursor-pointer">
+                        {{ plan.refused.length }} thing{{ plan.refused.length === 1 ? `` : `s` }} stay{{ plan.refused.length === 1 ? `s` : `` }}
+                        behind on purpose
+                    </summary>
                     <ul class="mt-1 flex list-disc flex-col gap-0.5 pl-4">
                         <li v-for="line in plan.refused" :key="line">{{ line }}</li>
                     </ul>
@@ -329,20 +330,19 @@ const cancel = (): Promise<void> =>
                 <StatusBadge variant="success" label="Imported" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }} landed.</p>
             </div>
-            <div v-if="report.failed.length > 0" class="flex flex-col gap-2 rounded-lg border border-line p-3">
-                <p class="text-xs font-medium text-danger">Didn't land</p>
-                <div v-for="failure in report.failed" :key="failure.id" class="text-2xs">
-                    <p class="font-medium text-content">{{ failure.label }}</p>
-                    <p class="text-subtle">{{ failure.error }}</p>
-                </div>
-            </div>
-            <div v-if="report.needsAction.length > 0" class="flex flex-col gap-2 rounded-lg border border-line p-3">
-                <p class="text-xs font-medium text-content">Finish the move</p>
-                <div v-for="action in report.needsAction" :key="action.subject" class="text-2xs">
-                    <p class="font-medium text-content">{{ action.subject }}</p>
-                    <p class="text-subtle">{{ action.detail }}</p>
-                </div>
-            </div>
+            <RowGroup v-if="report.failed.length > 0" flat>
+                <template #label><span :class="ui.sectionLabel(`text-danger`)">Didn't land</span></template>
+                <Row v-for="failure in report.failed" :key="failure.id" density="compact" :title="failure.label" :description="failure.error" />
+            </RowGroup>
+            <RowGroup v-if="report.needsAction.length > 0" flat label="Finish the move">
+                <Row
+                    v-for="action in report.needsAction"
+                    :key="action.subject"
+                    density="compact"
+                    :title="action.subject"
+                    :description="action.detail"
+                />
+            </RowGroup>
         </template>
 
         <NoticeStack :of="[planError, applyError]" />

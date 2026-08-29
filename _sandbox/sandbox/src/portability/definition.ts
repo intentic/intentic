@@ -326,11 +326,25 @@ const tomlBlock = (value: string): string => {
     return `'''\n${value}'''`;
 };
 
-export const emitDefinitionToml = (definition: SandboxDefinition, omitted: readonly DefinitionAction[] = []): string => {
+/* `managed` marks the COPY the daemon keeps at the workspace root (definition-file.ts), and only that copy. A
+ * downloaded sandbox.toml is the reader's file: they commit it, hand-edit it, apply it somewhere else, and
+ * telling them their edits will be overwritten would be false of every copy but one. */
+export const emitDefinitionToml = (
+    definition: SandboxDefinition,
+    omitted: readonly DefinitionAction[] = [],
+    { managed = false }: { readonly managed?: boolean } = {},
+): string => {
     const lines: string[] = [
         "# Intentic sandbox definition: the declarable shape of a sandbox, safe to publish.",
         "# Apply it to an empty sandbox from the Environment tab. Secret NAMES travel, values never do;",
         "# the overlay below lands as a proposal for the target owner's approval, it never builds unreviewed.",
+        ...(managed
+            ? [
+                  "#",
+                  "# Managed by the sandbox: derived from this sandbox's own manifests and rewritten whenever they",
+                  "# change, so edits here are overwritten. Copy it elsewhere to keep one of your own.",
+              ]
+            : []),
         `schemaVersion = ${definition.schemaVersion}`,
     ];
     if (definition.name !== undefined) {
