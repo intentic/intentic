@@ -12,7 +12,7 @@ weighs against everything else in its context; a failing rule is a fact it has t
 |---|---|---|
 | `/.oxlintrc.json` | the whole standard — 258 rules, green on main | `pnpm lint`, editors, the stop gate |
 | `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
-| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — **not live**, needs a dependency |
+| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — declared, awaiting first install |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
 
 The root config is what main satisfies. The agent config is what code written from here on is held to: it
@@ -43,8 +43,12 @@ Three different things get called "complexity" and they do not agree:
   737 functions over 10, 299 over 15, 142 over 20 (oxlint's default), 31 over 40. The worst is `runTurn` in
   `agent.routes.ts` at 188. The `modified` variant barely differs (29 vs 31 at a cap of 40), which is how you
   know this is real branching rather than flat `switch` dispatch being punished.
-- **Cognitive** — configured in `.oxlintrc.plugins.json`, not yet running. The better metric of the three: it
-  charges nothing for flat structure, compounds for depth, and names the lines that cost the most.
+- **Cognitive** — `complexity/complexity` in `.oxlintrc.plugins.json`, via `oxlint-plugin-complexity`. The best
+  metric of the three: it charges nothing for flat structure, compounds for depth, and names the lines that
+  cost the most, which is what makes the diagnostic actionable rather than a number to argue with. The packages
+  are in the manifest; it runs as soon as the install behind it lands. **The 15 cognitive threshold is
+  SonarSource's default and has never been measured against this repo** — treat the first `pnpm lint:plugins`
+  run as the measurement, not the verdict, exactly as the cyclomatic numbers above were arrived at.
 
 **The first two pull against each other, and it matters.** Flattening `if (a) { if (b) {` into `if (a && b) {`
 removes a level of depth and ADDS a branch point, so satisfying `max-depth` by merging conditions makes

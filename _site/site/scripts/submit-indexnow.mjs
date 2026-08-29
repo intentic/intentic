@@ -10,7 +10,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 const BATCH_SIZE = 10_000;
@@ -18,7 +17,7 @@ const KEY = process.env.INDEXNOW_KEY ?? "9a4a1feb8dbf739faffa0b6c035b521b";
 const SITE = (process.env.INDEXNOW_SITE ?? "https://intentic.dev").replace(/\/$/, "");
 const HOST = new URL(SITE).host;
 const KEY_URL = `${SITE}/${KEY}.txt`;
-const CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".astro-indexnow-cache.json");
+const CACHE = path.join(import.meta.dirname, "..", ".astro-indexnow-cache.json");
 
 const RETRY_ATTEMPTS = 5;
 const RETRY_BASE_MS = 2000;
@@ -62,7 +61,10 @@ function walkHtml(outDir, onPage) {
             if (entry.isDirectory()) {
                 walk(full);
             } else if (entry.isFile() && entry.name === "index.html") {
-                const relative = path.relative(outDir, full).replace(/index\.html$/, "").replace(/\\/g, "/");
+                const relative = path
+                    .relative(outDir, full)
+                    .replace(/index\.html$/, "")
+                    .replace(/\\/g, "/");
                 onPage(full, relative);
             }
         }
@@ -122,7 +124,7 @@ async function submitBatch(urls) {
     return false;
 }
 
-export async function submitIndexNow({ outDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist") } = {}) {
+export async function submitIndexNow({ outDir = path.join(import.meta.dirname, "..", "dist") } = {}) {
     if (process.env.INDEXNOW_ENABLED === "0") {
         console.info("[indexnow] disabled");
         return;
@@ -172,7 +174,7 @@ export async function submitIndexNow({ outDir = path.join(path.dirname(fileURLTo
     console.info("[indexnow] submission complete");
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (process.argv[1] && import.meta.filename === path.resolve(process.argv[1])) {
     submitIndexNow().catch((error) => {
         console.error(error);
         process.exit(1);

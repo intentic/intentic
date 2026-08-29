@@ -80,6 +80,12 @@ overrides:
   # breaks are deep-Map merging plus two type renames, neither of which either consumer touches — both merge
   # plain option objects.
   deepmerge-ts: 8.0.1
+  # Oxlint's JS plugin ABI is explicitly NOT semver-stable — the docs say so — so every copy of
+  # @oxlint/plugins in the tree has to be the one `oxlint` itself was built against, or the config fails to
+  # load before a single file is linted. oxlint-plugin-complexity asks for ^1.73.0, which floats to 1.80 on its
+  # own; this holds it at the catalog pin instead.
+  # ponytail: bump together with oxlint.
+  "@oxlint/plugins": 1.76.0
 
 minimumReleaseAgeExclude:
   - knip@6.29.0
@@ -103,6 +109,9 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.233'
   - '@anthropic-ai/claude-agent-sdk@0.3.233'
   - mammoth@1.12.2
+  - '@oxlint/plugins@1.76.0'
+  - oxc-parser@0.147.0
+  - oxlint-plugin-complexity@2.1.8
 
 allowBuilds:
   "@ast-grep/lang-go": true
@@ -189,6 +198,8 @@ catalog:
   "@orpc/openapi": 1.14.13
   "@orpc/openapi-client": 1.14.13
   "@orpc/server": 1.14.13
+  # The plugin API the vendored anti-slop rules compile against, pinned to `oxlint` — see the override above.
+  "@oxlint/plugins": 1.76.0
   "@playwright/mcp": 0.0.79
   "@playwright/test": 1.62.1
   "@primeuix/themes": 2.0.3
@@ -281,6 +292,11 @@ catalog:
   monaco-editor-core: 0.55.1
   node-pty: 1.1.0
   oxlint: 1.76.0
+  # Cyclomatic AND cognitive complexity as one rule. Cognitive is the metric worth having: it charges nothing
+  # for flat dispatch, compounds for nesting, and names the lines that cost the most, which is what makes the
+  # diagnostic actionable rather than a number to argue with. Its own peers (oxc-parser, estree-walker, diff)
+  # are auto-installed.
+  oxlint-plugin-complexity: 2.1.8
   # webq's HTML parser. parse5 rather than jsdom for the sandbox-image path: webq is baked into the daemon's
   # deployed tree, and parse5 is the spec-compliant parser alone (one dependency, no DOM emulation layer) —
   # the traversal webq needs is fifty lines of its own helpers.
