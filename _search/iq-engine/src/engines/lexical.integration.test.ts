@@ -60,7 +60,17 @@ test("word matches whole words only", async () => {
 
 test("literal takes a regex metacharacter as itself", async () => {
     expect(await search("you install", { literal: true })).toHaveLength(1);
-    expect(await search("you .wn", {})).toHaveLength(2);
+    /* THE SAME PATTERN BOTH WAYS, which is the contrast this test is named for and now asserts in both
+     * directions rather than one. As a regex the `.` is any character and finds the line; as a literal it is a
+     * full stop, and no line carries one.
+     *
+     * It reads the corpus for its metacharacter rather than assuming a phrase, because that is exactly how this
+     * broke: the fixture used to say "hardware you own" and the pattern was `you .wn`, and the commit that
+     * rewrote the lines updated the literal assertion above and left this one expecting two matches for a
+     * phrase no line contained any more. Asserting the literal side too means the next corpus edit takes both
+     * halves with it or fails loudly. */
+    expect(await search("you .nstall", {})).toHaveLength(1);
+    expect(await search("you .nstall", { literal: true })).toHaveLength(0);
 });
 
 test("a file with more matches than the cap reports the cap AND that it is one", async () => {

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { LEAF_CRT, LEAF_KEY } from "@intentic-app/localhost-https/paths";
 import { expect, test } from "vitest";
-import { answers, detectScheme } from "./port-probe.js";
+import { answers, cachedScheme, detectScheme } from "./port-probe.js";
 
 /* Against real sockets, because the bug this replaced was entirely about what a real socket does: the old probe
  * was `fetch("http://127.0.0.1:<port>/")`, which a TLS listener refuses at the socket and which rejects a
@@ -69,4 +69,31 @@ test("a socket that accepts and never answers times out instead of hanging the p
     const port = await serve(silent);
     expect(await detectScheme(port)).toBeUndefined();
     silent.close();
+});
+
+/* The polled/gesture split, asserted from both sides in one test because it is the whole point of there being
+ * two functions: a route the browser refetches every few seconds may reuse an answer, and the forward gesture,
+ * which re-probes precisely because a server restarted on the same port may have flipped scheme, may not. */
+test("cachedScheme reuses an answer where detectScheme still goes and looks", async () => {
+    const server = http.createServer((_request, response) => response.end("ok"));
+    const port = await serve(server);
+    expect(await cachedScheme(port)).toBe("http");
+    // Closed, so any fresh dial is refused: an answer after this can only have come from the cache.
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    expect(await cachedScheme(port)).toBe("http");
+    expect(await detectScheme(port)).toBeUndefined();
+});
+
+// The half that matters more than either TTL: one render asks about the same port from several components, and
+// without sharing each opens its own socket and waits out its own timeout.
+test("concurrent reads of one port share a single probe rather than dialing once each", async () => {
+    let connections = 0;
+    const server = http.createServer((_request, response) => response.end("ok"));
+    server.on("connection", () => {
+        connections += 1;
+    });
+    const port = await serve(server);
+    expect(await Promise.all([cachedScheme(port), cachedScheme(port), cachedScheme(port)])).toEqual(["http", "http", "http"]);
+    expect(connections).toBe(1);
+    server.close();
 });

@@ -122,6 +122,32 @@ const repoRemotes = async (root: string, git: GitRunner): Promise<RepoRemote[]> 
     return found.flat();
 };
 
+/* HOW LONG A SCAN'S ANSWER STANDS, and why this read is memoised at all.
+ *
+ * Everything below is a WORKSPACE scan: a repo walk, a `git remote -v` per repo, a depth-2 directory walk, and
+ * the head of each compose file. It runs unconditionally on every GET /capabilities, and that route is polled by
+ * every connected browser for as long as the Capabilities view (or the setup guide) is on screen, so the same
+ * walk was being paid hundreds of times an hour to answer a question whose inputs move at human speed: somebody
+ * clones a repo, adds a compose file, connects a card.
+ *
+ * WHAT THE FINGERPRINT COVERS is the half that must never go stale. The result depends on `active` ONLY through
+ * `wanted` (the still-unconnected cards) and on `dismissed` directly, so both ride the key: connecting a card or
+ * declining a recommendation changes the fingerprint and the next read is a fresh scan, with no window in which
+ * the panel could show a card the owner just connected. That is the case a bare timer would have got wrong.
+ *
+ * THE TTL COVERS ONLY THE WORKSPACE, the input no fingerprint can see: a repo cloned or a compose file written
+ * since the last scan. Ten seconds is chosen against what that costs when it is wrong, which is that a newly
+ * cloned GitHub repo takes up to ten seconds to suggest connecting GitHub. Nothing here is load-bearing enough
+ * to want a file watcher for; a recommendation is advisory by construction. */
+const RECOMMENDATIONS_TTL_MS = 10_000;
+
+interface MemoisedRecommendations {
+    readonly at: number;
+    readonly fingerprint: string;
+    readonly result: readonly CapabilityRecommendation[];
+}
+let memo: MemoisedRecommendations | undefined;
+
 /* THE ORDER RECOMMENDATIONS ARE MADE IN, which is also the order the guided setup walks them: the connectors
  * first, because they cost a token and nothing else, and docker last, because it costs a restart of the sandbox
  * the user is sitting in. Putting the disruptive one first would make the whole set feel like it costs that. */
@@ -134,6 +160,14 @@ export const capabilityRecommendations = async (
     const wanted = ["github", "gitlab", "komodo", "docker"].filter((card) => !isConnected(active, card));
     if (wanted.length === 0) {
         return [];
+    }
+    /* Built AFTER `wanted`, which costs nothing (it reads the list already in hand) and is what makes the key
+     * exact rather than approximate. Dismissals are sorted so two equal sets cannot produce two keys; ` `
+     * separates the pair's halves because it is the one character neither a card name nor a file path holds. */
+    const fingerprint = JSON.stringify([root, wanted, dismissed.map((entry) => `${entry.card} ${entry.evidence}`).toSorted()]);
+    const now = Date.now();
+    if (memo !== undefined && memo.fingerprint === fingerprint && now - memo.at < RECOMMENDATIONS_TTL_MS) {
+        return [...memo.result];
     }
     const recommendations: CapabilityRecommendation[] = [];
     // Remotes cost a git spawn per repo, so they are only read when a card that depends on them is still open.
@@ -181,7 +215,11 @@ export const capabilityRecommendations = async (
     }
     // Dropped last, against the evidence as it stands NOW: a card declined for a remote that has since moved is
     // being asked about a different thing, and asking again is the point.
-    return recommendations.filter(
+    const result = recommendations.filter(
         (recommendation) => !dismissed.some((entry) => entry.card === recommendation.card && entry.evidence === recommendation.evidence),
     );
+    // Stamped with the time the scan STARTED, not the time it finished: the TTL bounds how stale the workspace
+    // reading may be, and that staleness begins when the directories were read.
+    memo = { at: now, fingerprint, result };
+    return [...result];
 };

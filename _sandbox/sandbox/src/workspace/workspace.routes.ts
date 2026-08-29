@@ -6,7 +6,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { repoGitDir } from "../history/history.js";
-import { detectScheme } from "../ports/port-probe.js";
+import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 import { classifyWorkspace } from "./classify.js";
@@ -316,7 +316,9 @@ export const createWorkspaceRoutes = (services: Services) => {
                     // An app preview's port IS the one the daemon assigned (buildAppSpec mirrors it into the
                     // app's own var), so the probe only has to settle which scheme answers on it, a Vite
                     // serving https on a dev cert is up, and used to read as down.
-                    const healthy = port !== undefined && (await detectScheme(port)) !== undefined;
+                    // Cached, because this is a POLLED read: the tree is refetched constantly and an app whose
+                    // dev server is not up yet costs the probe's full three-second timeout every single time.
+                    const healthy = port !== undefined && (await cachedScheme(port)) !== undefined;
                     const url = previewUrl(appPanelKey(repo, app), zone, sandboxId);
                     // `kind` and `previewUrl` are both optional on the wire, an app whose type nothing
                     // identified, and a loopback sandbox with no preview host, each just omit theirs.

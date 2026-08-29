@@ -140,3 +140,55 @@ test("a declined recommendation comes back when the evidence behind it changes",
     const dismissed = [{ card: "docker", evidence: "old/compose.yml" }];
     expect((await capabilityRecommendations(root, [], dismissed, noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
 });
+
+/* THE MEMO, which exists because this whole scan (a repo walk, a `git remote -v` per repo, a depth-2 directory
+ * walk) used to run on every GET /capabilities, and that route is polled for as long as the view is on screen.
+ * What these hold is the line it draws: the WORKSPACE may be up to a TTL stale, the owner's own actions may
+ * never be, because both of those ride the key rather than the clock. */
+
+// The scan reaches git once per repo, so counting the runner counts the scans.
+const countingRemotes = (urls: readonly string[]): { git: GitRunner; scans: () => number } => {
+    let calls = 0;
+    return {
+        git: async () => {
+            calls += 1;
+            return { stdout: urls.map((url) => `origin\t${url} (fetch)`).join("\n"), stderr: "" };
+        },
+        scans: () => calls,
+    };
+};
+
+test("a repeat read with the same inputs does not walk the workspace again", async () => {
+    const root = await workspace({ "api/.git": "gitdir: elsewhere" });
+    const { git, scans } = countingRemotes(["git@github.com:acme/api.git"]);
+    const first = await capabilityRecommendations(root, [], [], git);
+    expect(first.map((entry) => entry.card)).toEqual(["github"]);
+    expect(await capabilityRecommendations(root, [], [], git)).toEqual(first);
+    expect(await capabilityRecommendations(root, [], [], git)).toEqual(first);
+    expect(scans()).toBe(1);
+});
+
+// The case a bare timer would have got wrong: the card the owner just connected must not keep being suggested
+// for the rest of the TTL. `active` reaches the key through `wanted`, so connecting one changes it.
+test("connecting a card is never served from the memo", async () => {
+    const root = await workspace({ "api/.git": "gitdir: elsewhere" });
+    const { git } = countingRemotes(["git@github.com:acme/api.git"]);
+    expect((await capabilityRecommendations(root, [], [], git)).map((entry) => entry.card)).toEqual(["github"]);
+    expect(await capabilityRecommendations(root, [github], [], git)).toEqual([]);
+});
+
+// And the same for declining one, which reaches the key directly.
+test("declining a recommendation is never served from the memo", async () => {
+    const root = await workspace({ "intentic/docker-compose.yml": "" });
+    expect((await capabilityRecommendations(root, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
+    const dismissed = [{ card: "docker", evidence: "intentic/docker-compose.yml" }];
+    expect(await capabilityRecommendations(root, [], dismissed, noRemotes)).toEqual([]);
+});
+
+// Two workspaces are two answers: the root is in the key, so one sandbox's scan can never be served to another.
+test("a different workspace root is a different answer", async () => {
+    const withCompose = await workspace({ "intentic/docker-compose.yml": "" });
+    const without = await workspace({ "intentic/README.md": "" });
+    expect((await capabilityRecommendations(withCompose, [], [], noRemotes)).map((entry) => entry.card)).toEqual(["docker"]);
+    expect(await capabilityRecommendations(without, [], [], noRemotes)).toEqual([]);
+});

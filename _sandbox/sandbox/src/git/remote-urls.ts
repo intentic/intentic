@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
 
 /* WHERE A REPO'S CODE ACTUALLY LIVES, the remote urls it carries, and the host + project each one names.
@@ -36,8 +38,50 @@ export const parseRemote = (url: string): { host: string; project: string } | un
  * account" for a workspace whose github remote was connected the whole time.
  *
  * One spawn: `git remote -v` prints `name<TAB>url (fetch)` and `(push)` lines per remote (more when a pushurl is
- * configured). The (fetch) url is what `git remote get-url` answers with, and the only one to read. */
+ * configured). The (fetch) url is what `git remote get-url` answers with, and the only one to read.
+ *
+ * CACHED ON `.git/config`'s MTIME, because that one spawn was ~20% of every git subprocess this daemon runs.
+ *
+ * Both callers are per-repo and both sit on POLLED routes: the capability scan runs on every GET /capabilities
+ * and the CI mapping on every pipelines read, so a workspace of seven repos paid seven spawns per poll, forever,
+ * to re-read a file that changes when somebody adds a remote. Measured against the daemon's own perf summary,
+ * `git.run` is the highest-frequency op it has (388,471 spawns), and over half of each call's cost is not git at
+ * all but the spawn queue and the IPC hop back (`git.run.wait`), so the spawn NOT made is worth much more than
+ * the milliseconds git itself would have spent.
+ *
+ * The mtime is the whole validity rule and it is deliberately coarse: a remote can only appear, change or go by
+ * a config write, so any write invalidates, and an unrelated one (a `branch.*.merge` after --set-upstream-to)
+ * merely costs the spawn it would have cost anyway. Over-invalidating is free here; under-invalidating would
+ * make the CI view point at a host the repo has left, so nothing cleverer than "did the file change" is worth
+ * the risk.
+ *
+ * A dir whose `.git/config` does not stat is NOT cached at all, which is the case that keeps this honest: in a
+ * linked worktree `.git` is a FILE naming a gitdir elsewhere, so there is no local config to watch and a cache
+ * keyed on the pointer's mtime would go stale silently. Neither caller reads a worktree today; bypassing rather
+ * than guessing is what keeps that from becoming a bug when one does. The map is keyed by dir and both callers
+ * iterate discovered repos, so it is bounded by the workspace's repo count. */
+interface CachedRemotes {
+    readonly mtimeMs: number;
+    readonly urls: readonly string[];
+}
+const remoteCache = new Map<string, CachedRemotes>();
+
+// The mtime this dir's remotes are valid against, or undefined when there is no local config to watch (see
+// above). Never throws: an unreadable repo is an ordinary state here and answers "do not cache".
+const configMtime = async (dir: string): Promise<number | undefined> => {
+    const stats = await stat(join(dir, ".git", "config")).catch(() => undefined);
+    return stats?.isFile() === true ? stats.mtimeMs : undefined;
+};
+
 export const remoteUrlsOf = async (dir: string, git: GitRunner): Promise<string[]> => {
+    const mtimeMs = await configMtime(dir);
+    if (mtimeMs !== undefined) {
+        const hit = remoteCache.get(dir);
+        if (hit !== undefined && hit.mtimeMs === mtimeMs) {
+            // Copied out: the caller gets an array it may sort or splice without editing the cached answer.
+            return [...hit.urls];
+        }
+    }
     const listed = await git(dir, ["remote", "-v"]).catch(() => undefined);
     if (listed === undefined) {
         return [];
@@ -51,7 +95,14 @@ export const remoteUrlsOf = async (dir: string, git: GitRunner): Promise<string[
     }
     const origin = fetchUrls.get("origin");
     const rest = [...fetchUrls].filter(([name]) => name !== "origin").map(([, url]) => url);
-    return origin === undefined ? rest : [origin, ...rest];
+    const urls = origin === undefined ? rest : [origin, ...rest];
+    if (mtimeMs !== undefined) {
+        /* Stored against the mtime read BEFORE the spawn, which is the safe direction and worth stating. A write
+         * that lands between the two is recorded under the older stamp, so the next call's stat disagrees and
+         * simply re-reads: the race costs one extra spawn and can never serve the pre-write answer as current. */
+        remoteCache.set(dir, { mtimeMs, urls });
+    }
+    return [...urls];
 };
 
 // WHERE THIS REPO IS, as one answer: the first remote that names a host and a project, in the order above (so

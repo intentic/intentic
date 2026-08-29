@@ -43,11 +43,11 @@ export const ciProjects = async (
     if (await hasGitEntry(services.workspace.root)) {
         repos.unshift("root");
     }
-    const projects: CiProject[] = [];
-    for (const repo of repos) {
+    /* One repo's mapping, or nothing. First remote that lands on a connected account wins, so a repo keeps its
+     * pipelines as long as ONE of its remotes is connected; `origin` leading the order decides it when several
+     * are. */
+    const projectFor = async (repo: string): Promise<CiProject[]> => {
         const dir = repo === "root" ? services.workspace.root : join(services.workspace.root, repo);
-        // First remote that lands on a connected account wins, so a repo keeps its pipelines as long as ONE of
-        // its remotes is connected; `origin` leading the order decides it when several are.
         for (const url of await remoteUrlsOf(dir, git)) {
             const remote = parseRemote(url);
             if (remote === undefined) {
@@ -55,10 +55,16 @@ export const ciProjects = async (
             }
             const account = accounts.find((candidate) => candidate.host === remote.host);
             if (account !== undefined) {
-                projects.push({ repo, project: remote.project, account });
-                break;
+                return [{ repo, project: remote.project, account }];
             }
         }
-    }
-    return projects;
+        return [];
+    };
+    /* CONCURRENTLY, because each repo's read is independent and this sits on a polled route. The sequential loop
+     * this replaces made the mapping's latency the SUM of one git spawn per repo (the capability scan next door
+     * has always fanned its identical read out with Promise.all), so a seven-repo workspace serialised seven
+     * spawns behind each other for an answer no repo's part of depends on. `flat()` over the per-repo arrays
+     * keeps the result in discovery order, which is the order the loop produced and the view expects. */
+    const found = await Promise.all(repos.map(projectFor));
+    return found.flat();
 };

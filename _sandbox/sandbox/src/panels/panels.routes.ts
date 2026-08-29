@@ -10,7 +10,7 @@ import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { resolvePanelUpstream } from "./panel-upstream.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";
-import { detectScheme } from "../ports/port-probe.js";
+import { cachedScheme } from "../ports/port-probe.js";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { panelSession } from "../processes/managed-processes.js";
 
@@ -52,6 +52,20 @@ const detectServers = async (
     listeners: readonly ListeningPort[],
     panel: { readonly port: number; readonly session: string } | undefined,
 ): Promise<{ port: number; url: string; dir?: string; session?: string }[]> => {
+    /* GATING THIS ON "IS THE PORT IN THE SCAN" WAS TRIED AND BACKED OUT, which is worth recording so the next
+     * reader does not spend the afternoon re-deriving it. The idea was that a probe against a port the scan
+     * never saw is guaranteed to fail, so it could be skipped. It is wrong twice.
+     *
+     * It breaks the case this candidate EXISTS for: the scan is one procfs walk, and when it comes back short
+     * (or empty, which an unreadable /proc makes it) the daemon still knows it started this panel on this port,
+     * which is the fact the synthesized candidate carries. Gating on the scan would make every running panel go
+     * dark whenever the scan had a bad moment, trading a robust answer for a faster wrong one.
+     *
+     * And it does not even buy the latency: a port with NOTHING listening refuses the TCP connect immediately,
+     * so the dead case was already fast. The three-second case is a port that ACCEPTS and then does not speak
+     * HTTP (a WebSocket-only server, or one still coming up), and such a port is in the scan, so the gate would
+     * have skipped exactly the probes that were already cheap. `cachedScheme` below is what actually addresses
+     * the slow one. */
     const candidates =
         panel === undefined || listeners.some((listener) => listener.port === panel.port)
             ? listeners
@@ -60,7 +74,7 @@ const detectServers = async (
         candidates
             .toSorted((a, b) => a.port - b.port)
             .map(async (listener) => {
-                const scheme = await detectScheme(listener.port, listener.host);
+                const scheme = await cachedScheme(listener.port, listener.host);
                 if (scheme === undefined) {
                     return undefined;
                 }
