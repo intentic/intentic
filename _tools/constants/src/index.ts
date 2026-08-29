@@ -81,6 +81,54 @@ export const PLATFORM_HOSTING_LOCATION = "";
  * this, so the two are commented as a matched pair, like the Google client id above them. */
 export const PLATFORM_WEB_ORIGIN = "https://app.intentic.dev";
 
+/* The public site's origin: the marketing pages, and the host every install one-liner fetches its script from
+ * (`curl -fsSL https://intentic.dev/connect | sh`). Here rather than only in the site's own content package
+ * because the APP writes that URL into commands it hands out, and the site worker is what answers them. */
+export const PLATFORM_SITE_ORIGIN = "https://intentic.dev";
+
+/* THE INSTALL SCRIPTS, AND THE VANITY PATHS THAT SERVE THEM — one table for what was three.
+ *
+ * The scripts are tracked site assets (the monorepo has no public git mirror to raw-fetch from), so three
+ * places had to agree on the same fifteen rows and none of them imported the others: the site worker mapped
+ * path → filename to serve them, the app's scriptCommand.ts mapped key → URL to write one-liners and key →
+ * repo path to run the working-tree copy in dev, and the site's own prose typed the URLs out by hand. A
+ * script renamed in one is a `curl` of a 404 in another, and the 404 is the site's HTML error page piped
+ * into `sh`.
+ *
+ * `path` is what the worker routes and what a one-liner fetches; `file` is the asset under
+ * INSTALL_SCRIPTS_DIR. They are not derivable from each other in either direction: two vanity paths
+ * (/rebuild and /update) deliberately serve the ONE recreate script, its mode riding the argument shape the
+ * platform's cards already hand out, and the extensionless POSIX paths (/connect) serve a .sh file. */
+export const INSTALL_SCRIPTS_DIR = "_site/site/public/scripts";
+
+export const INSTALL_SCRIPTS = {
+    sh: { path: "/connect", file: "connect.sh" },
+    ps1: { path: "/connect.ps1", file: "connect.ps1" },
+    // "computer", not "host": /connect-host enrolls a deploy TARGET, while /computer connects the machine the
+    // user is sitting at, and the card they are copied from calls it a computer.
+    hostSh: { path: "/connect-host", file: "connect-host.sh" },
+    hostPs1: { path: "/connect-host.ps1", file: "connect-host.ps1" },
+    cleanupHost: { path: "/cleanup-host", file: "cleanup-host.sh" },
+    desktopSh: { path: "/sync", file: "sync.sh" },
+    desktopPs1: { path: "/sync.ps1", file: "sync.ps1" },
+    computerSh: { path: "/computer", file: "computer.sh" },
+    computerPs1: { path: "/computer.ps1", file: "computer.ps1" },
+    rebuild: { path: "/rebuild", file: "recreate.sh" },
+    rebuildPs1: { path: "/rebuild.ps1", file: "recreate.ps1" },
+    update: { path: "/update", file: "recreate.sh" },
+    updatePs1: { path: "/update.ps1", file: "recreate.ps1" },
+    cleanup: { path: "/cleanup", file: "cleanup.sh" },
+    cleanupPs1: { path: "/cleanup.ps1", file: "cleanup.ps1" },
+} as const satisfies Record<string, { path: string; file: string }>;
+
+export type InstallScript = keyof typeof INSTALL_SCRIPTS;
+
+/** The public URL a one-liner fetches — what a reader can also open to read the script before running it. */
+export const installScriptUrl = (key: InstallScript): string => `${PLATFORM_SITE_ORIGIN}${INSTALL_SCRIPTS[key].path}`;
+
+/** The script's path in the checkout, for the local-dev delivery that runs the working tree instead of the published copy. */
+export const installScriptPath = (key: InstallScript): string => `${INSTALL_SCRIPTS_DIR}/${INSTALL_SCRIPTS[key].file}`;
+
 /* THE FOUR FIXED IN-CONTAINER PORTS: the daemon (oRPC + preview proxy front), the app dev-server preview
  * origin, the loopback listener, and the bundled translator. The daemon binds them, the CLI/platform route
  * Cloudflare ingress to them, and the state-resolver emits them into the workspace node, one source so

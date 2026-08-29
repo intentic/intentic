@@ -10,7 +10,7 @@ The ports, paths and image references the daemon, the CLIs and the desktop app a
 ## Key files
 
 - [src/index.ts](src/index.ts), the constants themselves: ports, the fixed directory layouts, legal and origin
-  values. Isomorphic, imported by browser code, so nothing here may touch `node:fs`.
+  values, and the install-script table. Isomorphic, imported by browser code, so nothing here may touch `node:fs`.
 - [src/node.mjs](src/node.mjs): `repoRoot()` and `packageRoot()`, behind the `@intentic/constants/node`
   subpath. Node-only, and hand-written JavaScript rather than compiled TypeScript.
 
@@ -29,6 +29,12 @@ by nothing. Walking up to a marker has no such coupling, so a file can move anyw
 
 - If a constant is used by exactly one package, it belongs in that package. This is for the ones that cross a
   boundary.
+- `INSTALL_SCRIPTS` is the vanity path → asset table for `intentic.dev/connect` and its siblings, and it crosses
+  the widest boundary in here: the **app** writes those URLs into the one-liners it hands out, the **site
+  worker** is what answers them, and the **site's own pages** link to them so a reader can check a script before
+  running it. Three hand-synced lists in three packages meant a renamed script served the site's 404 page into
+  somebody's `sh`. Use `installScriptUrl()` / `installScriptPath()` rather than joining the parts: two vanity
+  paths (`/rebuild`, `/update`) deliberately serve one script, so neither half is derivable from the other.
 - `src/node.mjs` is plain JavaScript with a hand-written `.d.mts` **on purpose**. Its earliest callers run before
   anything is built (the prepass is what performs the build, and the byte and path checks run ahead of it) so a
   helper importable only from `dist/` is one they cannot import at all, which is how a second copy of the walk

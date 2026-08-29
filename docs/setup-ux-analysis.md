@@ -279,3 +279,37 @@ installer-first default to Windows and leave Linux on the command: one condition
 Dropped on reflection: mounting with no rung preselected, because it hides each choice's
 consequences until after the pick, which is the wizard problem the one page layout exists
 to avoid.
+
+## Where the rejected copy went, 2026-08-29
+
+Three recommendations above were ruled out on 2026-08-20 for being explanatory copy that
+goes unread or reads as over-explaining: the stakes line (1), the trust strip (4), and the
+demo escape (10). That judgement stands **for this page**, and it was the right call about
+the wrong location. Each of the three answers a question a reader has *before* they are
+signed in, and `/setup` is on the far side of a Google prompt: by the time anybody reads
+it they have already committed, which is exactly why explanation there is noise.
+
+So the split is by reader, not by page. The public site now carries
+**[/where-it-runs/](../_site/site/src/pages/where-it-runs.astro)**: the same three rungs
+with the whole trade stated at the length the decision deserves — what each costs, what it
+asks of you, what the install creates, what removes it, with both scripts linked as plain
+text — plus the two exits (the demo, the desktop app) for a reader who is not ready to
+install anything. It is static, signed-out, and free to be as long as it needs to be,
+because nothing on it is standing between anybody and a workspace.
+
+`/setup` did not grow a word. It gained one query parameter: **`?machine=hosted|mine|cloud`**,
+which the site's rung cards link through, so a choice made after reading three paragraphs
+opens the app already on that rung instead of asking again. It outranks the device default
+(a phone that arrives on `?machine=mine` is somebody reading about the desktop they are
+sitting at) and is validated against the rungs this platform actually offers, so a stale or
+self-hosted link falls back to the ordinary default rather than to a step that cannot unlock.
+
+The page is deliberately **not in the top bar**, for the reason `nav.ts` already gives about
+`/download`: a permanent tab beside "Create your workspace" offers two openings where there
+is one. It sits where the hesitation actually lands — under the home page's install command,
+on the download page, in the quickstart's preamble, and in the footer's Resources column.
+
+What is still worth measuring (tier 3 above is unchanged): whether arrivals through
+`?machine=` convert better than cold arrivals at `/setup`, per rung. If they do, the
+argument for moving more of the decision off the app screen gets stronger; if they do not,
+this page is cheap to leave standing as the answer to a search rather than a funnel step.

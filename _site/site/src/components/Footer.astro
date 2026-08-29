@@ -79,6 +79,11 @@ const columns: { label: string; links: { href: string; label: string; external?:
             // installer against a browser needs to know. This is also the sitewide home of the download
             // page now that it has left the top bar (see nav.ts for why it left).
             { href: "/download/", label: "Download the app" },
+            // …and the question BEFORE both of those: which machine any of this runs on. It sits with them
+            // rather than in Docs because it is a decision, not a reference, and it is out of the top bar for
+            // the reason the download page is (nav.ts): a permanent tab beside "Create your workspace" offers
+            // two openings where there is one.
+            { href: "/where-it-runs/", label: "Where it runs" },
             { href: "/changelog/", label: "Changelog" },
             { href: "/about/", label: "About the creator" },
             { href: githubUrl, label: "GitHub", external: true },

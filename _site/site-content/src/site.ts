@@ -1,5 +1,11 @@
-export const SITE_URL = "https://intentic.dev";
-export const APP_URL = "https://app.intentic.dev";
+import { PLATFORM_SITE_ORIGIN, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+
+/* The two origins, from the one table that also holds them for the app and the sandbox. They are literals
+ * there rather than here because the APP writes both into things it hands out — the install one-liners fetch
+ * SITE_URL/connect, and a daemon's CORS is scoped to APP_URL — so the site is one of three readers, not the
+ * owner. Re-exported under the site's own names because every page here says SITE_URL. */
+export const SITE_URL = PLATFORM_SITE_ORIGIN;
+export const APP_URL = PLATFORM_WEB_ORIGIN;
 // The platform API. The site is static, so the one page that shows live numbers, the pool ledger, reads
 // them from here in the browser. That endpoint is public and unauthenticated by design; a number anybody is
 // asked to trust should not need a login to check.

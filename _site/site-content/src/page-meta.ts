@@ -64,6 +64,16 @@ export const pageMeta: Record<string, PageMeta> = {
             "Run an intentic sandbox on your computer without using a terminal. The desktop app installs Docker if needed, starts the sandbox and handles updates.",
         datePublished: "2026-08-02",
     },
+    /* The rung decision, made before the sign-in. Its description names the three answers rather than the
+     * question, because the search it has to win is somebody asking whether this thing runs on their own
+     * machine or on ours — a doubt they form before they will click "Create your workspace", and the one the
+     * app's own setup screen cannot answer, being on the far side of a Google prompt. */
+    "/where-it-runs/": {
+        title: "Where your intentic workspace runs",
+        description:
+            "Run your coding agents on our servers, on your own computer, or on a server in your own cloud account. What each costs, what it asks of you, and what the install does.",
+        datePublished: "2026-08-29",
+    },
     /* What shipped, in the words of the people it shipped for. Its ENTRIES come from the published GitHub
      * Releases at build time (site/src/lib/changelog.ts): only the framing is authored here, exactly like the
      * gallery below. The description says "what changed" rather than naming versions: the page is read by

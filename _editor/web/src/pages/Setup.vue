@@ -542,6 +542,22 @@ const ladderOptions = computed<readonly MachineOption[]>(() => [
  * read there is nothing honest to draw at all. */
 const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
 
+/* A RUNG CHOSEN BEFORE THIS PAGE, off `?machine=`: the contract the public site's /where-it-runs cards link
+ * through. That page is where a stranger can be told what each rung costs and asks of them at the length the
+ * decision deserves, which is a length this page has repeatedly and correctly refused to grow to. Somebody
+ * who has just read three paragraphs about running it on their own computer and clicked the button under
+ * them has MADE the choice; re-asking it here is the page telling them their click meant nothing.
+ *
+ * Validated against `ladderOptions` rather than against the three literals, so a rung this platform does not
+ * offer (no address mint, no hosted allowance) is ignored and the ordinary default stands. A stale link from
+ * a cached page then costs nothing: the reader lands on a working picker, never on a step that cannot unlock.
+ * Read once, on arrival: it is where the reader came FROM, not a control, so a lane switch here must not be
+ * undone by it and it is deliberately not watched. */
+const requestedMachine = (): MachineOption[`value`] | undefined => {
+    const asked = route.query[`machine`];
+    return ladderOptions.value.find((option) => option.value === asked)?.value;
+};
+
 /* WHICH ADDRESS THE CARD IS REPORTING, one of four, and they are mutually exclusive: a hosted machine
  * announces its own, a platform that mints none says so, the default is the intentic domain, and the last is
  * the reader's own Cloudflare zone (the only one that is a FORM rather than a fact, which is why it is the one
@@ -1438,6 +1454,11 @@ const arrive = async (): Promise<void> => {
     if (hostedOffered.value && !hostedSpent.value && (mobile.value || !commandOffered.value)) {
         machine.value = `hosted`;
     }
+    /* …and a rung the reader picked on the site outranks both defaults, including the phone one. The device
+     * default is a GUESS at what this reader can finish; an explicit click is not a guess. A phone that
+     * arrives on `?machine=mine` is somebody reading on their phone about the desktop they are sitting at,
+     * and the handoff (SetupHandoff) is exactly the step that case already has. */
+    machine.value = requestedMachine() ?? machine.value;
     const requested = route.query[`sandbox`];
     const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
     const unfinished = rows.some((entry) => entry.lastSeenAt !== null)

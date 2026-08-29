@@ -1,0 +1,202 @@
+---
+import { installScriptUrl } from "@intentic/constants";
+import { APP_URL, DEMO_PATH } from "@intentic-dev/site-content/site";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+
+/* THE DECISION, TAKEN BEFORE THE SIGN-IN.
+ *
+ * The app's /setup screen asks one real question — where does the sandbox run — and it is an infrastructure
+ * question with pricing attached, put to somebody who has not seen the product yet. That screen is right to
+ * stay a picker and one caption: it is read by people who have already committed, and every attempt to
+ * explain the choice ON it has correctly been rejected as copy that goes unread or reads as over-explaining.
+ *
+ * The explaining has to happen somewhere, though, and this is the somewhere. A page with no session, no code
+ * to mint and no spinner can afford the paragraphs, and its reader is exactly the person the app's version
+ * cannot serve: still deciding, not signed in, and one back button from gone. So this page carries the whole
+ * trade — what each rung costs, what it asks of you, what it does to your machine and what removes it — and
+ * hands the ANSWER to /setup through `?machine=`, which opens on the rung chosen here rather than asking
+ * again (Setup.vue's `requestedMachine`).
+ *
+ * WHAT IT MUST NOT DO IS SELL A RUNG. The product's identity is agents on hardware you own; the hosted rung
+ * is a convenience with a real cost behind it. So the three cards are the same size, in the ladder's own
+ * order, and none of them is preselected, tagged or tinted. The ordering is instant-and-small → your own
+ * hardware → a machine you rent, which is the app's, so a reader who sees both surfaces sees one product.
+ *
+ * NOT IN THE BAR, deliberately, and for the reason nav.ts already gives about /download: a permanent tab
+ * beside "Create your workspace" offers two openings where there is one, and most people who take it are
+ * first-timers clicking the most concrete-sounding word. It lives where the hesitation actually lands — the
+ * home page's install command, the download page, and the quickstart — the same three places the app is
+ * offered from. */
+
+const connectUrl = installScriptUrl(`sh`);
+const cleanupUrl = installScriptUrl(`cleanup`);
+
+/* Each rung says the four things a reader needs and cannot look up: whose machine it is, what it costs, what
+ * it asks of them, and what they get. `asks` is the honest one — the step that comes next, in the words of
+ * the person who has to do it, because that step is what they are really choosing between. */
+const rungs = [
+    {
+        machine: "hosted",
+        title: "Start instantly",
+        cost: "Free · 40 hours a month, more with membership",
+        whose: "Our servers",
+        asks: "One click. No install, nothing to run, no account anywhere else.",
+        body: "We start a machine for you and hand your workspace back in seconds. It is the fastest way to see what the product is, and the only rung that asks nothing of a computer you own.",
+        limits: "The hours are awake hours: a workspace nobody is working in is not spending them. When you want more power or no ceiling, switch to either rung below and keep the same workspace.",
+        cta: "Start instantly",
+    },
+    {
+        machine: "mine",
+        title: "My own computer",
+        cost: "Free · no hour limit, no ceiling",
+        whose: "Your laptop or desktop",
+        asks: "An installer on Windows and Linux, or one pasted command anywhere else.",
+        body: "Your CPUs, your RAM, your GPU, your files. Agents work at the speed of the machine you already paid for, and nothing is metered because nothing of ours is running.",
+        limits: "It needs Docker; the installer and the command both offer to install it if it is missing. Your computer has to be awake for your agents to work.",
+        cta: "Set up on my computer",
+    },
+    {
+        machine: "cloud",
+        title: "My cloud account",
+        cost: "From free · 12 GB on Oracle's always-free tier",
+        whose: "A server in your own cloud account",
+        asks: "An API key from Oracle, Hetzner or DigitalOcean, pasted once.",
+        body: "A machine that is awake when your laptop is shut, billed by your provider rather than by us, on an account that stays yours if you stop using intentic.",
+        limits: "This is the longest first step of the three: creating an API key on your provider is a few minutes of their console. Pick it when you want an always-on machine you own the bill for.",
+        cta: "Use my cloud account",
+    },
+] as const;
+
+/* WHAT THE COMMAND DOES, as consequences rather than components. "Starts your sandbox in Docker, opens a
+ * Cloudflare tunnel" is accurate and settles nothing for the reader who is hesitating: each term raises a
+ * question instead of answering one. Fear of a piped install is fear of unbounded consequences, so these
+ * are bounds, and the script is linked beside them because the cheapest way to be believed is to be
+ * checkable. */
+const consequences = [
+    {
+        title: "It installs Docker, if you do not have it",
+        body: "That is the only thing it needs administrator rights for, and it asks first. With Docker already installed, the command runs without sudo at all.",
+    },
+    {
+        title: "It starts one container, and three named volumes",
+        body: "Your files, your history and the container's own storage. Nothing else on your machine is touched, moved or read.",
+    },
+    {
+        title: "It opens one outbound connection",
+        body: "Your sandbox reaches out to us; nothing reaches in. No port on your machine is opened to the internet, and no inbound firewall rule is added.",
+    },
+    {
+        title: "One command removes all of it",
+        body: "The container, the volumes and the connection. Nothing is left behind on your machine, and nothing survives that you did not put somewhere else.",
+    },
+] as const;
+---
+
+<BaseLayout breadcrumbs={[{ name: "Where it runs", path: "/where-it-runs/" }]}>
+    <Nav />
+    <main class="flex-1">
+        <section class="below-bar mx-auto max-w-5xl px-6 pb-14">
+            <h1 class="display text-4xl font-semibold max-sm:text-3xl">Where your workspace runs</h1>
+            <p class="mt-4 max-w-copy text-lg text-muted">
+                Your agents work inside a <strong class="text-content">sandbox</strong>: a private machine with your code on it. You choose
+                which machine that is. Here is the whole trade, before you sign in to anything.
+            </p>
+            <p class="mt-3 max-w-copy text-sm text-subtle">
+                You are not locked into the answer. Switching later keeps your workspace, its address and its name, and a machine you stop
+                using is handed back.
+            </p>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            {/* Three equal columns, in the app's own rung order, none of them preselected or tagged. A reader
+                picking where their code lives should be choosing between three descriptions, not agreeing
+                with a recommendation. */}
+            <div class="grid items-stretch gap-4 lg:grid-cols-3">
+                {
+                    rungs.map((rung) => (
+                        <div class="flex flex-col gap-4 border border-line bg-surface p-6">
+                            <div>
+                                <h2 class="text-lg font-semibold text-content">{rung.title}</h2>
+                                <p class="mt-1 text-xs text-subtle">{rung.whose}</p>
+                                <p class="mt-3 text-sm font-medium text-link">{rung.cost}</p>
+                            </div>
+                            <p class="text-sm text-muted">{rung.body}</p>
+                            <div class="border-t border-line pt-4">
+                                <p class="text-xs font-semibold tracking-wide text-content uppercase">What it asks of you</p>
+                                <p class="mt-2 text-sm text-muted">{rung.asks}</p>
+                            </div>
+                            <p class="text-xs text-subtle">{rung.limits}</p>
+                            {/* The whole point of the page: the click carries the answer, so /setup opens on
+                                this rung instead of asking the question a second time. */}
+                            <a class="btn btn-primary btn-sm mt-auto" href={`${APP_URL}/setup?machine=${rung.machine}`}>
+                                {rung.cta}
+                            </a>
+                        </div>
+                    ))
+                }
+            </div>
+            <p class="mt-4 max-w-copy text-xs text-subtle">
+                Every button above goes to the same place: a Google sign-in, then the setup screen opened on the rung you picked. No card,
+                and nothing starts running until you act on that screen.
+            </p>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-16">
+            <div class="border border-line bg-surface p-6">
+                <h2 class="text-lg font-semibold text-content">What the install actually does</h2>
+                <p class="mt-2 max-w-copy text-sm text-muted">
+                    Both rungs that use a machine of yours run the same script. On Windows and Linux the desktop app runs it for you; anywhere
+                    else it is one line you paste. Either way, this is all of it.
+                </p>
+                <div class="mt-6 grid gap-x-10 gap-y-5 sm:grid-cols-2">
+                    {
+                        consequences.map((item) => (
+                            <div>
+                                <h3 class="text-sm font-semibold text-content">{item.title}</h3>
+                                <p class="mt-1 max-w-copy text-sm text-muted">{item.body}</p>
+                            </div>
+                        ))
+                    }
+                </div>
+
+                {/* THE SCRIPT AND ITS UNDO, side by side and both real URLs. The script is served as plain
+                    text, so "read it" is a link and not an invitation to go find a repository. */}
+                <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line pt-4 text-sm">
+                    <a href={connectUrl} class="text-link hover:underline">Read the install script</a>
+                    <a href={cleanupUrl} class="text-link hover:underline">Read the removal script</a>
+                    <a href="/docs/docker/" class="text-link hover:underline">Everything it creates, named</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- The two exits for a reader who is not ready to install anything. Neither is a rung, so neither is
+             in the picker: one is the product running in a browser tab, the other is the same setup without a
+             terminal in it. -->
+        <section class="mx-auto max-w-5xl px-6 pb-24">
+            <div class="grid gap-6 sm:grid-cols-2">
+                <div class="flex flex-col gap-2">
+                    <h2 class="text-base font-semibold text-content">Not ready to install anything?</h2>
+                    <p class="max-w-copy text-sm text-muted">
+                        <a href={DEMO_PATH} class="text-link hover:underline">Look around a sample workspace</a>: the real app, running against
+                        a recorded fixture. Nothing to sign in to and nothing to run.
+                    </p>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <h2 class="text-base font-semibold text-content">Rather not use a terminal?</h2>
+                    <p class="max-w-copy text-sm text-muted">
+                        <a href="/download/" class="text-link hover:underline">The desktop app</a> does the "my own computer" rung with a
+                        button instead of a command. It runs the same script, on Windows and Linux. On a Mac, the command is still the path.
+                    </p>
+                </div>
+            </div>
+            <p class="mt-8 text-sm text-subtle">
+                Want the commands themselves, all four install routes side by side? <a href="/docs/quickstart/" class="text-link hover:underline"
+                    >The quickstart</a
+                > has them, with what each one creates.
+            </p>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

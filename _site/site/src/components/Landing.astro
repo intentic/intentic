@@ -458,6 +458,13 @@ const machineStep = content.connect.steps.at(-1)!;
                                 <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
                             </div>
                             <p class="command-note">{content.connect.commandNote}</p>
+                            {/* The other two rungs, one line under the command that assumes one of them. The
+                                link is last so it is read as a check on the command rather than as a
+                                competing offer. */}
+                            <p class="command-note">
+                                {content.connect.commandChoice.lead}{" "}
+                                <a href="/where-it-runs/" class="text-link hover:underline">{content.connect.commandChoice.cta}</a>
+                            </p>
                         </div>
                     </div>
 

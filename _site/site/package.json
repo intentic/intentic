@@ -16,6 +16,7 @@
         "@astrojs/sitemap": "catalog:",
         "@intentic-dev/astro-integrations": "workspace:*",
         "@intentic-dev/site-content": "workspace:*",
+        "@intentic/constants": "workspace:*",
         "@intentic/registry": "workspace:*",
         "@intentic/sandbox-openapi": "workspace:*",
         "@tailwindcss/vite": "catalog:",
@@ -27,7 +28,6 @@
     "devDependencies": {
         "@astrojs/check": "catalog:",
         "@intentic-dev/demo": "workspace:*",
-        "@intentic/constants": "workspace:*",
         "typescript": "catalog:",
         "vite": "catalog:",
         "wrangler": "catalog:"

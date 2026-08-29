@@ -125,6 +125,12 @@ export interface LandingContent {
     connect: LandingSectionIntro & {
         steps: LandingFact[];
         commandNote: string;
+        /* The other two machines, as a LINK rather than a fork. The band shows one command on one machine —
+         * the reader's own — because that is the machine the product is about and the one the argument above
+         * was made for. Opening a three-way infrastructure decision here would put the page's hardest
+         * question one paragraph before the FAQ, in front of a reader who has just been convinced. Whoever
+         * is not sure this is their machine follows the line; everyone else reads past it. */
+        commandChoice: { lead: string; cta: string };
         desktop: { lead: string; cta: string; note: string };
     };
     finalCta: { heading: string; sub: string };
@@ -365,6 +371,10 @@ export const landingContent: LandingContent = {
             },
         ],
         commandNote: "It sets up your workspace on your own computer. Nothing is deployed anywhere and no ports are opened.",
+        // Named as a comparison, not as an alternative: "run it somewhere else" invites the reader to leave
+        // the command they are looking at, while "one of three" tells them the command is a choice they are
+        // allowed to check. The link goes to the page that states all three trades in full.
+        commandChoice: { lead: "This is one of three machines it can run on.", cta: "Compare them" },
         desktop: {
             lead: "Rather not touch a terminal?",
             cta: "Get the app for Windows or Linux",

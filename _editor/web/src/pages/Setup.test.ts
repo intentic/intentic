@@ -14,9 +14,13 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 // module scope, environment.ts reads window.env and throws without it.
 
 const push = vi.fn();
+// The URL the page was opened with. Empty unless a test sets it: the query carries where the reader came
+// FROM (`?sandbox=` resumes one, `?machine=` names a rung already chosen on the public site), so it is an
+// arrival fact and every test that does not set it describes a cold, linkless visit.
+const query = ref<Record<string, string>>({});
 vi.mock(import(`vue-router`), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ query: {} }) as never,
+    useRoute: () => ({ get query() { return query.value; } }) as never,
     useRouter: () => ({ push, replace: vi.fn() }) as never,
     // "Back to workspace" is a link now, and the real one resolves its href out of a router this bare mount
     // never installs.
@@ -188,6 +192,7 @@ const afterThePicker = (text: string): boolean =>
 const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.dev`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
 
 beforeEach(() => {
+    query.value = {};
     mobileDevice.value = false;
     desktopInstaller.mockReset().mockReturnValue(undefined);
     setupCode.mockReset().mockImplementation(() => new Promise<Minted>(() => {}));
@@ -384,6 +389,43 @@ it(`defaults a phone to the hosted rung when one is offered`, async () => {
     expect(buttonLabelled(`Start my machine`)).toBeDefined();
     // No credential ask on a phone's first frame: the cloud rung is one tap away, never the opener.
     expect(el.textContent).not.toContain(`Private key`);
+});
+
+/* A RUNG ALREADY CHOSEN, off `?machine=`: the public site's /where-it-runs cards link through it. That page
+ * has the room to say what each rung costs and asks of you, which this one does not and should not; the
+ * price of the split is that a click there has to survive the trip. Landing back on the default rung would
+ * make the reader choose twice and teach them the first choice was decoration. */
+it(`opens on the rung the reader chose before arriving`, async () => {
+    query.value = { machine: `cloud` };
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs.find((card) => card.textContent?.includes(`My cloud account`))?.getAttribute(`aria-checked`)).toBe(`true`);
+    expect(rungs.find((card) => card.textContent?.includes(`Start instantly`))?.getAttribute(`aria-checked`)).toBe(`false`);
+});
+
+// …and it outranks the DEVICE default, which is only ever a guess at what this reader can finish. A phone on
+// `?machine=mine` is somebody reading on their phone about the desktop they are sitting at, and handing the
+// command to that machine is a step this page already has.
+it(`lets a chosen rung override the phone default`, async () => {
+    query.value = { machine: `mine` };
+    mobileDevice.value = true;
+    hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
+    const el = await mount();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs.find((card) => card.textContent?.includes(`My own computer`))?.getAttribute(`aria-checked`)).toBe(`true`);
+});
+
+/* A LINK FOR A RUNG THIS PLATFORM DOES NOT OFFER IS IGNORED, not honoured into a dead step. The site is
+ * cached and its cards are the same HTML for every platform; a self-hoster who mints no addresses would
+ * otherwise land arrivals on a command lane that can never unlock, from a link they cannot edit. */
+it(`ignores a rung the platform is not offering`, async () => {
+    query.value = { machine: `hosted` };
+    hostedOffer.mockResolvedValue({ enabled: false, remaining: 0 });
+    const el = await mount();
+    const rungs = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)];
+    expect(rungs.some((card) => card.textContent?.includes(`Start instantly`))).toBe(false);
+    expect(rungs.find((card) => card.textContent?.includes(`My own computer`))?.getAttribute(`aria-checked`)).toBe(`true`);
 });
 
 /* THE HOSTNAME IS NOT THE FIRST THING A STRANGER READS. It used to be the second line of the card that opens

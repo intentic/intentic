@@ -1,34 +1,18 @@
+import { INSTALL_SCRIPTS } from "@intentic/constants";
 import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
 
-// Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
-// redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
-// worker serves them as text/plain so `curl … | sh` gets the raw script. run_worker_first (wrangler.jsonc) sends
-// EVERY request here first, otherwise Cloudflare's asset layer answers browser navigations to /connect with the
-// 404 page before the worker runs. Non-vanity paths fall through to env.ASSETS.fetch(): the built asset, or the
-// 404 page for a real miss.
-const SCRIPTS: Record<string, string> = {
-    "/connect": "connect.sh",
-    "/connect.ps1": "connect.ps1",
-    "/connect-host": "connect-host.sh",
-    "/connect-host.ps1": "connect-host.ps1",
-    "/cleanup-host": "cleanup-host.sh",
-    "/sync": "sync.sh",
-    "/sync.ps1": "sync.ps1",
-    // "computer", not "host": /connect-host above enrolls a deploy TARGET, while these connect the machine the
-    // user is sitting at, and the card they are copied from calls it a computer.
-    "/computer": "computer.sh",
-    "/computer.ps1": "computer.ps1",
-    "/cleanup": "cleanup.sh",
-    "/cleanup.ps1": "cleanup.ps1",
-    // Both vanity paths serve the ONE recreate script, the mode rides the argument shape the platform's
-    // cards already hand out (<slug> <sha256> = rebuild, <slug> = update), so every pasted one-liner keeps
-    // working across the merge. The .ps1 siblings are the same two modes for a Windows host, where the mode
-    // rides named parameters instead (-Slug, plus -Hash for a rebuild).
-    "/rebuild": "recreate.sh",
-    "/update": "recreate.sh",
-    "/rebuild.ps1": "recreate.ps1",
-    "/update.ps1": "recreate.ps1",
-};
+/* Vanity install-script URLs: https://intentic.dev/connect etc. The monorepo has no public git mirror to
+ * redirect to, so the connect scripts live in this package's public/scripts/ (tracked site assets) and the
+ * worker serves them as text/plain so `curl … | sh` gets the raw script. run_worker_first (wrangler.jsonc) sends
+ * EVERY request here first, otherwise Cloudflare's asset layer answers browser navigations to /connect with the
+ * 404 page before the worker runs. Non-vanity paths fall through to env.ASSETS.fetch(): the built asset, or the
+ * 404 page for a real miss.
+ *
+ * The table is @intentic/constants' (INSTALL_SCRIPTS), because the app WRITES these URLs into the one-liners
+ * it hands out and this worker is what answers them. Two hand-synced lists in two packages meant a renamed
+ * script served the 404 page into somebody's `sh`. Both vanity paths for the recreate script survive the
+ * merge there: the mode rides the argument shape the platform's cards already hand out. */
+const SCRIPTS: Record<string, string> = Object.fromEntries(Object.values(INSTALL_SCRIPTS).map((script) => [script.path, script.file]));
 
 /* Paths that moved, kept alive as 301s. The site's menu labels and its URLs used to disagree: "Features" over
  * /product/, "Run" over /product/orchestrate/. The labels were the accurate half, so the paths moved to match
