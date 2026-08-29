@@ -145,15 +145,15 @@ async function* runPiTurn(
                     answerExtensionUi(proc, event);
                     continue;
                 }
-                if (event.type === "agent_settled") {
-                    const usage = mapper.usage();
-                    if (usage !== undefined) {
-                        yield usage;
-                    }
-                    return settled(false);
+                if (event.type !== "agent_settled") {
+                    yield* mapper.map(event);
+                    continue;
                 }
-                yield* mapper.map(event);
-                continue;
+                const usage = mapper.usage();
+                if (usage !== undefined) {
+                    yield usage;
+                }
+                return settled(false);
             }
             if (state.exited) {
                 if (request.signal.aborted) {

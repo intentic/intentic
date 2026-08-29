@@ -71,6 +71,16 @@ const callTool = async (hub: HostHub, id: string, name: string, args: Record<str
     return text;
 };
 
+// Queue a directory for the level below, unless there is no level below: a directory at the reader's floor is
+// recorded as skipped instead, so the plan names what it did not look at rather than quietly stopping there.
+const queueDirectory = (next: { abs: string; rel: string }[], skipped: Set<string>, abs: string, rel: string, atFloor: boolean): void => {
+    if (atFloor) {
+        skipped.add(`${rel}/ (nested deeper than this reader goes)`);
+        return;
+    }
+    next.push({ abs, rel });
+};
+
 const listDir = async (hub: HostHub, id: string, path: string, seq: number): Promise<DirEntry[]> => {
     const parsed: unknown = JSON.parse(await callTool(hub, id, "list_dir", { path }, seq));
     return Array.isArray(parsed) ? (parsed as DirEntry[]) : [];
@@ -119,11 +129,7 @@ export const scanHost = async (hub: HostHub, id: string, home: string, source: S
                     continue;
                 }
                 if (entry.kind === "directory") {
-                    if (depth === MAX_DEPTH) {
-                        skipped.add(`${rel}/ (nested deeper than this reader goes)`);
-                        continue;
-                    }
-                    next.push({ abs: `${dir.abs}${separator}${entry.name}`, rel });
+                    queueDirectory(next, skipped, `${dir.abs}${separator}${entry.name}`, rel, depth === MAX_DEPTH);
                     continue;
                 }
                 if (entry.kind !== "file") {

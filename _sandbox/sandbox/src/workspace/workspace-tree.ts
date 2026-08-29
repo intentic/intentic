@@ -156,35 +156,30 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
                 const path = toRelPath(base, abs);
                 const ignored = scope.isIgnored(entry.name, path, entry.isDir);
                 const link = entry.link === undefined ? {} : { link: entry.link };
-                if (entry.isDir) {
-                    const draft: Draft = { name: entry.name, path, type: "dir", ...(ignored ? { ignored: true } : {}), ...link };
-                    children.push(draft);
-                    // Ignored dirs are never descended; neither are the daemon's own (auth/, sessions/, browser/,
-                    // the root .git, isLockedWorkspacePath), whose every file the file API refuses anyway: the
-                    // explorer draws them as one locked row, so listing what is inside would spend the walk's
-                    // budget, thousands of entries, in the browser-profile case, on rows nobody can open. Nor
-                    // is a link that leaves the workspace or loops back on itself (descendable). The rest queue
-                    // for the next level and stay unlisted (no `children`) if the budget runs out first, either
-                    // way the client lazy-loads them.
-                    if (!ignored && !isLockedWorkspacePath(path) && descendable(entry, job.real)) {
-                        next.push({ abs, real: entry.real, rel: path, parentScope: scope, owner: draft });
-                    }
+                if (!entry.isDir) {
+                    const stats = await stat(abs).catch(() => undefined);
+                    children.push({
+                        name: entry.name,
+                        path,
+                        type: "file",
+                        ...(stats !== undefined ? { size: stats.size } : {}),
+                        ...(ignored ? { ignored: true } : {}),
+                        ...link,
+                    });
                     continue;
                 }
-                let size: number | undefined;
-                try {
-                    size = (await stat(abs)).size;
-                } catch {
-                    size = undefined;
+                const draft: Draft = { name: entry.name, path, type: "dir", ...(ignored ? { ignored: true } : {}), ...link };
+                children.push(draft);
+                // Ignored dirs are never descended; neither are the daemon's own (auth/, sessions/, browser/,
+                // the root .git, isLockedWorkspacePath), whose every file the file API refuses anyway: the
+                // explorer draws them as one locked row, so listing what is inside would spend the walk's
+                // budget, thousands of entries, in the browser-profile case, on rows nobody can open. Nor
+                // is a link that leaves the workspace or loops back on itself (descendable). The rest queue
+                // for the next level and stay unlisted (no `children`) if the budget runs out first, either
+                // way the client lazy-loads them.
+                if (!ignored && !isLockedWorkspacePath(path) && descendable(entry, job.real)) {
+                    next.push({ abs, real: entry.real, rel: path, parentScope: scope, owner: draft });
                 }
-                children.push({
-                    name: entry.name,
-                    path,
-                    type: "file",
-                    ...(size !== undefined ? { size } : {}),
-                    ...(ignored ? { ignored: true } : {}),
-                    ...link,
-                });
             }
             if (job.owner === undefined) {
                 tree.push(...children);

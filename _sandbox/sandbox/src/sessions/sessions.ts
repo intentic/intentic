@@ -300,37 +300,38 @@ export const restoredSessionMessages = (
             // (workspace-relative, the shape the client uploads and fetches previews by; the turn resolved
             // them against the main root even for worktree turns, so `dir`, always the root here, is the
             // right base). An attachment-only message strips to empty text but still redraws its chips.
-            if (text.length > 0) {
-                // Words of their own, so whatever the agent was still writing into is finished and closed above
-                // them. (A tool_result-only message never reaches here, which is the point.)
-                flush();
-                const unwrapped = unwrapStoredPrompt(text);
-                /* A turn the daemon re-ran after an interruption stores the original prompt behind a note saying
-                 * why (RESUME_NOTES), read exactly as the daemon's own record reads it (turn-transcript.ts): a
-                 * re-run of words this transcript already holds becomes the muted line explaining the gap, in
-                 * place of a second copy of the message; a restored card's answer keeps its words and carries the
-                 * explanation as a note. */
-                const resume = unwrapped.resume;
-                if (resume?.kind === "notice") {
-                    out.push({ role: "notice", text: resume.text });
-                    continue;
+            if (text.length === 0) {
+                continue;
+            }
+            // Words of their own, so whatever the agent was still writing into is finished and closed above
+            // them. (A tool_result-only message never reaches here, which is the point.)
+            flush();
+            const unwrapped = unwrapStoredPrompt(text);
+            /* A turn the daemon re-ran after an interruption stores the original prompt behind a note saying
+             * why (RESUME_NOTES), read exactly as the daemon's own record reads it (turn-transcript.ts): a
+             * re-run of words this transcript already holds becomes the muted line explaining the gap, in
+             * place of a second copy of the message; a restored card's answer keeps its words and carries the
+             * explanation as a note. */
+            const resume = unwrapped.resume;
+            if (resume?.kind === "notice") {
+                out.push({ role: "notice", text: resume.text });
+                continue;
+            }
+            const stripped = stripAttachmentNote(unwrapped.text);
+            const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
+            // …and the preamble that was just stripped, kept on the message it was added to. Removing it from
+            // the user's words is only half of being honest about it; carrying it is the other half, and it
+            // reads the same here as on the daemon's own record.
+            const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
+            const added = notes.length > 0 ? { notes } : {};
+            const runtime = parseRuntimeHistory(stripped.text);
+            if (runtime !== undefined) {
+                out.push(...runtime.history);
+                if (runtime.prompt.length > 0 || attachments.length > 0) {
+                    out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}), ...added });
                 }
-                const stripped = stripAttachmentNote(unwrapped.text);
-                const attachments = stripped.attachments.map((path) => (path.startsWith(`${dir}/`) ? path.slice(dir.length + 1) : path));
-                // …and the preamble that was just stripped, kept on the message it was added to. Removing it from
-                // the user's words is only half of being honest about it; carrying it is the other half, and it
-                // reads the same here as on the daemon's own record.
-                const notes = [...unwrapped.notes, ...(resume?.kind === "note" ? [resume.note] : [])];
-                const added = notes.length > 0 ? { notes } : {};
-                const runtime = parseRuntimeHistory(stripped.text);
-                if (runtime !== undefined) {
-                    out.push(...runtime.history);
-                    if (runtime.prompt.length > 0 || attachments.length > 0) {
-                        out.push({ role: "user", text: runtime.prompt, ...(attachments.length > 0 ? { attachments } : {}), ...added });
-                    }
-                } else if (stripped.text.length > 0 || attachments.length > 0) {
-                    out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}), ...added });
-                }
+            } else if (stripped.text.length > 0 || attachments.length > 0) {
+                out.push({ role: "user", text: stripped.text, ...(attachments.length > 0 ? { attachments } : {}), ...added });
             }
             continue;
         }

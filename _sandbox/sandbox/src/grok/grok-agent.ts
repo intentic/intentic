@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import type { Event, FilePartInput } from "@opencode-ai/sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import type { Event, FilePartInput, ToolPart } from "@opencode-ai/sdk";
+import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
 import { whenAborted } from "../abort.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
@@ -354,6 +354,72 @@ interface TurnCapture {
     errored?: boolean;
 }
 
+// What a call's settled input says it is about, as the two optional fields its card carries. Read in one place
+// because the opening frame and an already-finished call want exactly the same pair.
+const toolCallDetails = (input: unknown, cwd: string): { target?: string; locations?: ToolCallLocation[] } => {
+    const target = toolTarget(input);
+    const locations = toolLocations(input, cwd);
+    return { ...(target !== undefined ? { target } : {}), ...(locations !== undefined ? { locations } : {}) };
+};
+
+// completed | error. An edit/write completion derives its diff from the (now-final) input, the
+// authoritative content; otherwise the tool's text output/error is. A call first seen here (the
+// stream skipped running) arrives as one whole tool_call carrying its final status.
+const finishedToolCall = (
+    part: ToolPart,
+    name: string,
+    state: Extract<ToolPart["state"], { status: "completed" | "error" }>,
+    cwd: string,
+    first: boolean,
+): AgentEvent => {
+    const failed = state.status === "error";
+    const diff = failed ? undefined : editDiffContent(name, state.input, cwd);
+    const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
+    const status = failed ? ("failed" as const) : ("completed" as const);
+    return first
+        ? {
+              kind: "tool_call",
+              id: part.callID,
+              name,
+              category: toolCategoryOf(name),
+              status,
+              ...toolCallDetails(state.input, cwd),
+              content,
+          }
+        : { kind: "tool_call_update", id: part.callID, status, content };
+};
+
+// What one tool part has to say, kept out of streamTurn's event walk so its branches read at one level. `started`
+// is the caller's set of callIDs that have already opened a card: a call announces itself once and then rides
+// updates, and this is what tells the two apart across parts.
+async function* toolPartFrames(part: ToolPart, cwd: string, started: Set<string>): AsyncGenerator<AgentEvent> {
+    const name = displayNameOf(part.tool);
+    const state = part.state;
+    // `pending` is skipped: OpenCode is still streaming the input args, so a target/locations read
+    // now could be partial. The first useful state is `running` (input settled).
+    if (state.status === "pending") {
+        return;
+    }
+    const first = !started.has(part.callID);
+    if (first) {
+        started.add(part.callID);
+    }
+    if (state.status === "running") {
+        if (first) {
+            yield {
+                kind: "tool_call",
+                id: part.callID,
+                name,
+                category: toolCategoryOf(name),
+                status: "in_progress",
+                ...toolCallDetails(state.input, cwd),
+            };
+        }
+        return;
+    }
+    yield finishedToolCall(part, name, state, cwd, first);
+}
+
 // Normalize one Grok turn's OpenCode Event stream onto AgentEvents, RETURNING what the turn captured, the plan
 // phase reads it off the `yield*` (as runPlanEmulation reads PlanPhaseResult off the phase), an ordinary turn
 // discards it. `holdText` is the plan phase's one behavioural difference: text is accumulated rather than
@@ -393,14 +459,16 @@ async function* streamTurn(
             // is skipped; unknown (role not yet seen) is treated as assistant so early assistant text isn't dropped.
             if (part.type === "text" && roleOf.get(part.messageID) !== "user") {
                 const prev = emitted.get(part.id) ?? 0;
-                if (part.text.length > prev) {
-                    const slice = part.text.slice(prev);
-                    emitted.set(part.id, part.text.length);
-                    if (holdText) {
-                        capture.planText = (capture.planText ?? "") + slice;
-                    } else {
-                        yield { kind: "delta", text: slice };
-                    }
+                // A snapshot that repeats what was already emitted carries no new suffix, so there is nothing to say.
+                if (part.text.length <= prev) {
+                    continue;
+                }
+                const slice = part.text.slice(prev);
+                emitted.set(part.id, part.text.length);
+                if (holdText) {
+                    capture.planText = (capture.planText ?? "") + slice;
+                } else {
+                    yield { kind: "delta", text: slice };
                 }
             } else if (part.type === "reasoning") {
                 const prev = emitted.get(part.id) ?? 0;
@@ -409,55 +477,7 @@ async function* streamTurn(
                     emitted.set(part.id, part.text.length);
                 }
             } else if (part.type === "tool" && part.tool !== "todowrite") {
-                const name = displayNameOf(part.tool);
-                const state = part.state;
-                // `pending` is skipped: OpenCode is still streaming the input args, so a target/locations read
-                // now could be partial. The first useful state is `running` (input settled).
-                if (state.status === "pending") {
-                    continue;
-                }
-                const first = !started.has(part.callID);
-                if (first) {
-                    started.add(part.callID);
-                }
-                if (state.status === "running") {
-                    if (first) {
-                        const target = toolTarget(state.input);
-                        const locations = toolLocations(state.input, cwd);
-                        yield {
-                            kind: "tool_call",
-                            id: part.callID,
-                            name,
-                            category: toolCategoryOf(name),
-                            status: "in_progress",
-                            ...(target !== undefined ? { target } : {}),
-                            ...(locations !== undefined ? { locations } : {}),
-                        };
-                    }
-                    continue;
-                }
-                // completed | error. An edit/write completion derives its diff from the (now-final) input, the
-                // authoritative content; otherwise the tool's text output/error is. A call first seen here (the
-                // stream skipped running) arrives as one whole tool_call carrying its final status.
-                const failed = state.status === "error";
-                const diff = failed ? undefined : editDiffContent(name, state.input, cwd);
-                const content = [diff ?? { type: "text" as const, text: failed ? state.error : state.output }];
-                if (first) {
-                    const target = toolTarget(state.input);
-                    const locations = toolLocations(state.input, cwd);
-                    yield {
-                        kind: "tool_call",
-                        id: part.callID,
-                        name,
-                        category: toolCategoryOf(name),
-                        status: failed ? "failed" : "completed",
-                        ...(target !== undefined ? { target } : {}),
-                        ...(locations !== undefined ? { locations } : {}),
-                        content,
-                    };
-                } else {
-                    yield { kind: "tool_call_update", id: part.callID, status: failed ? "failed" : "completed", content };
-                }
+                yield* toolPartFrames(part, cwd, started);
             }
         } else if (event.type === "todo.updated") {
             yield {

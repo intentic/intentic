@@ -356,6 +356,27 @@ const soleRoutedOwner = (browser: CodexBrowserContext | undefined): string | und
     return owners.size === 1 ? [...owners][0] : undefined;
 };
 
+// A browser call, tied to the profile whose session it drives, so the pages this turn opens belong to that
+// account. `web` names its own profile; the routed server's calls carry the account in arguments the item does
+// not echo, so they attach only when the turn holds a single profile anyway. Anything that cannot be named down
+// to a profile, a port and a session has nothing to attach and is left alone.
+const attachBrowserSession = (
+    item: Extract<CodexItem, { type: "mcp_tool_call" }>,
+    threadId: string | undefined,
+    browser: CodexBrowserContext | undefined,
+): void => {
+    if (browser === undefined || !item.tool.startsWith("browser_")) {
+        return;
+    }
+    const profile = item.server === ROUTED_BROWSER_SERVER ? soleRoutedOwner(browser) : item.server;
+    const port = profile === undefined ? undefined : browser.ports[profile];
+    const sessionId = threadId ?? browser.sessionId;
+    if (profile === undefined || port === undefined || sessionId === undefined) {
+        return;
+    }
+    openBrowserSession({ sessionId, server: profile, port, passkeyStore: browser.passkeys[profile], owner: browser.owner });
+};
+
 // What one Codex turn's stream is normalized AGAINST: where the turn works, where its generated images land, and
 // the two things a question card needs, the signal that settles the card if the turn dies first, and the
 // conversation a dismissal ends. `holdMessages` is the plan phase's one behavioural difference (see streamTurn).
@@ -444,13 +465,15 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                 if (!holdMessages) {
                     yield { kind: "delta", text: item.text };
                     yield { kind: "text_end" };
-                } else {
-                    if (capture.heldMessage !== undefined) {
-                        yield { kind: "delta", text: capture.heldMessage };
-                        yield { kind: "text_end" };
-                    }
-                    capture.heldMessage = item.text;
+                    continue;
                 }
+                // Held one-deep: the message that was being held is flushed the moment a newer one arrives, so
+                // narration still streams and only the last message is left held as the plan.
+                if (capture.heldMessage !== undefined) {
+                    yield { kind: "delta", text: capture.heldMessage };
+                    yield { kind: "text_end" };
+                }
+                capture.heldMessage = item.text;
             } else if (item.type === "reasoning") {
                 if (event.type === "item.completed") {
                     yield { kind: "thinking", text: item.text };
@@ -494,20 +517,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
             } else if (item.type === "mcp_tool_call") {
                 const name = `${item.server}.${item.tool}`;
                 if (event.type === "item.started") {
-                    // `web` names its own profile; the routed server's calls carry the account in arguments this
-                    // item does not echo, so they attach only when the turn holds a single profile anyway.
-                    const profile = item.server === ROUTED_BROWSER_SERVER ? soleRoutedOwner(browser) : item.server;
-                    const port = profile === undefined ? undefined : browser?.ports[profile];
-                    const sessionId = capture.threadId ?? browser?.sessionId;
-                    if (profile !== undefined && port !== undefined && sessionId !== undefined && item.tool.startsWith("browser_")) {
-                        openBrowserSession({
-                            sessionId,
-                            server: profile,
-                            port,
-                            passkeyStore: browser?.passkeys[profile],
-                            owner: browser?.owner,
-                        });
-                    }
+                    attachBrowserSession(item, capture.threadId, browser);
                     yield { kind: "tool_call", id: item.id, name, category: toolCategoryOf(name), status: "in_progress" };
                 } else if (event.type === "item.completed") {
                     yield {
@@ -536,27 +546,26 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                         status: "in_progress",
                         ...(item.revised_prompt !== undefined ? { target: item.revised_prompt } : {}),
                     };
-                } else if (event.type === "item.completed") {
-                    if (item.status !== "completed") {
-                        yield {
-                            kind: "tool_call_update",
-                            id: item.id,
-                            status: "failed",
-                            content: [{ type: "text", text: "Image generation failed" }],
-                        };
-                        continue;
-                    }
-                    try {
-                        const path = await persistCodexImageArtifact({ ...imageArtifacts, image: item });
-                        yield { kind: "tool_call_update", id: item.id, status: "completed", content: [{ type: "image", path }] };
-                    } catch (error) {
-                        yield {
-                            kind: "tool_call_update",
-                            id: item.id,
-                            status: "failed",
-                            content: [{ type: "text", text: error instanceof Error ? error.message : "Could not save generated image" }],
-                        };
-                    }
+                    continue;
+                }
+                // Nothing to say while it is running; the card is settled by the completion below.
+                if (event.type !== "item.completed") {
+                    continue;
+                }
+                if (item.status !== "completed") {
+                    yield { kind: "tool_call_update", id: item.id, status: "failed", content: [{ type: "text", text: "Image generation failed" }] };
+                    continue;
+                }
+                try {
+                    const path = await persistCodexImageArtifact({ ...imageArtifacts, image: item });
+                    yield { kind: "tool_call_update", id: item.id, status: "completed", content: [{ type: "image", path }] };
+                } catch (error) {
+                    yield {
+                        kind: "tool_call_update",
+                        id: item.id,
+                        status: "failed",
+                        content: [{ type: "text", text: error instanceof Error ? error.message : "Could not save generated image" }],
+                    };
                 }
             } else if (item.type === "context_compaction" && event.type === "item.completed") {
                 yield { kind: "compact", trigger: "auto" };

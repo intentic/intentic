@@ -394,11 +394,12 @@ const harvest = (text, path, name) => {
     const named = [];
     if (path.endsWith("capability-secrets.json")) {
         for (const [id, entry] of Object.entries(JSON.parse(text))) {
-            if (entry !== null && typeof entry === "object") {
-                for (const [field, value] of Object.entries(entry)) {
-                    if (typeof value === "string") {
-                        named.push([name(id, field), value]);
-                    }
+            if (entry === null || typeof entry !== "object") {
+                continue;
+            }
+            for (const [field, value] of Object.entries(entry)) {
+                if (typeof value === "string") {
+                    named.push([name(id, field), value]);
                 }
             }
         }

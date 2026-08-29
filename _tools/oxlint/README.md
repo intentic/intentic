@@ -10,14 +10,16 @@ weighs against everything else in its context; a failing rule is a fact it has t
 
 | | what it is | run by |
 |---|---|---|
-| `/.oxlintrc.json` | the whole standard — 256 rules, green on main | `pnpm lint`, editors, the stop gate, the edit hook |
-| `/.oxlintrc.anti-slop.json` | the above plus the 15 anti-slop rules | `pnpm lint:slop` — **not live**, needs a dependency |
+| `/.oxlintrc.json` | the whole standard — 258 rules, green on main | `pnpm lint`, editors, the stop gate |
+| `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
+| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — **not live**, needs a dependency |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
 
-There was briefly a second, stricter config holding rules main did not satisfy, applied only to files an agent
-touched. That backlog reached zero, so it is gone: main meets its own standard and there is one config again.
-If a future rule lands that main violates, it goes back in the same shape — off in the root config, with its
-count, and a note naming who enforces it in the meantime.
+The root config is what main satisfies. The agent config is what code written from here on is held to: it
+currently carries one rule, cyclomatic `complexity: 10`, which 737 existing functions across 517 files exceed —
+too many to gate on and far too many to exempt by path. The edit hook applies it to files an agent touches and
+reports only what an edit made WORSE, so the ratchet turns one way without anyone having to schedule the
+refactor first.
 
 ## How it reaches the agent
 
@@ -30,6 +32,25 @@ count, and a note naming who enforces it in the meantime.
 3. **Never blocks on its own failure.** Missing binary, parse error, git failure: exit 0.
 
 `pnpm lint` also runs in the stop gate, so a turn cannot end on a red linter.
+
+## Complexity
+
+Three different things get called "complexity" and they do not agree:
+
+- **Nesting** — `max-depth: 4`, `max-nested-callbacks: 4`, both live in the root config. This is the part a
+  reader actually feels, and it was 41 sites away, so it is enforced everywhere.
+- **Cyclomatic** — `complexity: 10` in the agent config, on new code only. Measured across this repo:
+  737 functions over 10, 299 over 15, 142 over 20 (oxlint's default), 31 over 40. The worst is `runTurn` in
+  `agent.routes.ts` at 188. The `modified` variant barely differs (29 vs 31 at a cap of 40), which is how you
+  know this is real branching rather than flat `switch` dispatch being punished.
+- **Cognitive** — configured in `.oxlintrc.plugins.json`, not yet running. The better metric of the three: it
+  charges nothing for flat structure, compounds for depth, and names the lines that cost the most.
+
+**The first two pull against each other, and it matters.** Flattening `if (a) { if (b) {` into `if (a && b) {`
+removes a level of depth and ADDS a branch point, so satisfying `max-depth` by merging conditions makes
+cyclomatic complexity worse — measured, while doing exactly that: `runTurn` went 188 → 194. Extraction into a
+named helper is the move that improves both, and it is what most of the 41 nesting fixes became. If you are
+choosing between the two techniques, that is the tiebreak.
 
 ## Why rules are enumerated, not categorised
 

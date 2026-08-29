@@ -84,39 +84,41 @@ export async function* tailIntenticEvents(
             if (size < offset) {
                 return; // a newer apply reset the file: end so the client reconnects to the new run's start.
             }
-            if (size > offset) {
-                const length = size - offset;
-                const chunk = Buffer.allocUnsafe(length);
-                const { bytesRead } = await handle.read(chunk, 0, length, offset);
-                offset += bytesRead;
-                buffer += chunk.toString("utf8", 0, bytesRead);
-                let index = buffer.indexOf("\n");
-                while (index !== -1) {
-                    const line = parseIntenticLine(buffer.slice(0, index));
-                    buffer = buffer.slice(index + 1);
-                    if (line !== undefined) {
-                        yield line;
-                        if (isTerminal(line)) {
-                            return; // the whole run finished (success or failure): nothing more will be written.
-                        }
-                    }
-                    index = buffer.indexOf("\n");
+            if (size === offset) {
+                // No new bytes: if the tmux job is gone it died without an {kind:"exit"} line (SIGKILL), close;
+                // otherwise emit a heartbeat (keeps the held-open stream/tunnel alive) and poll again.
+                if (!isRunning()) {
+                    return;
                 }
-                continue; // drain everything currently available before deciding to wait or close.
+                yield { kind: "heartbeat" };
+                // Poll interval, woken immediately on abort. node's timers/promises setTimeout adds then removes
+                // its own abort listener per call, so a long-lived tail can't accumulate listeners on the signal
+                // the way a hand-rolled addEventListener (fired once, never removed) would.
+                try {
+                    await sleep(1000, undefined, { signal: abort });
+                } catch {
+                    return; // aborted mid-wait: stop tailing (same outcome as the while (!abort.aborted) guard)
+                }
+                continue;
             }
-            // No new bytes: if the tmux job is gone it died without an {kind:"exit"} line (SIGKILL), close;
-            // otherwise emit a heartbeat (keeps the held-open stream/tunnel alive) and poll again.
-            if (!isRunning()) {
-                return;
-            }
-            yield { kind: "heartbeat" };
-            // Poll interval, woken immediately on abort. node's timers/promises setTimeout adds then removes its
-            // own abort listener per call, so a long-lived tail can't accumulate listeners on the signal the way
-            // a hand-rolled addEventListener (fired once, never removed) would.
-            try {
-                await sleep(1000, undefined, { signal: abort });
-            } catch {
-                return; // aborted mid-wait: stop tailing (same outcome as the while (!abort.aborted) guard)
+            const length = size - offset;
+            const chunk = Buffer.allocUnsafe(length);
+            const { bytesRead } = await handle.read(chunk, 0, length, offset);
+            offset += bytesRead;
+            buffer += chunk.toString("utf8", 0, bytesRead);
+            // Drain everything currently available before deciding to wait or close.
+            let index = buffer.indexOf("\n");
+            while (index !== -1) {
+                const line = parseIntenticLine(buffer.slice(0, index));
+                buffer = buffer.slice(index + 1);
+                index = buffer.indexOf("\n");
+                if (line === undefined) {
+                    continue;
+                }
+                yield line;
+                if (isTerminal(line)) {
+                    return; // the whole run finished (success or failure): nothing more will be written.
+                }
             }
         }
     } finally {

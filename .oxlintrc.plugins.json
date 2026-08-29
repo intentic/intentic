@@ -1,22 +1,32 @@
 {
-    // THE ROOT STANDARD PLUS anti-slop. Separate from .oxlintrc.json for one reason only: it needs
-    // `@oxlint/plugins` in the tree, and that dependency is not installed yet. Everything else about it is the
-    // same standard.
+    // THE STANDARD PLUS THE JS-PLUGIN RULES. Separate from .oxlintrc.agent.json for one reason only: these
+    // rules are JavaScript plugins, and loading one needs `@oxlint/plugins` in the tree.
     //
     // NOT YET LIVE. To turn it on:
     //   1. pnpm-workspace.yaml catalog:  "@oxlint/plugins": 1.76.0   (must match the `oxlint` pin exactly —
     //      the JS plugin ABI is explicitly not semver-stable, and a mismatched pair fails at config-load time)
-    //   2. root package.json devDependencies:  "@oxlint/plugins": "catalog:"
+    //      and  oxlint-plugin-complexity: 2.1.8
+    //   2. root package.json devDependencies:  both of the above, as "catalog:"
     //   3. pnpm install
-    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of .oxlintrc.json
+    //   4. point CONFIG in .claude/hooks/oxlint-edit.mjs at this file instead of .oxlintrc.agent.json
     //
     // Until step 4 the rules below are vendored, configured and unrun. Measure them before wiring the hook to
     // them: `pnpm lint:slop` over the repo says how big the backlog is, and the answer decides whether these
     // land as errors or as the next ratchet entry.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "extends": ["./.oxlintrc.json"],
-    "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }],
+    "extends": ["./.oxlintrc.agent.json"],
+    "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
     "rules": {
+        // COGNITIVE complexity, which is the metric that actually matches how hard a function is to read.
+        // Cyclomatic counts every branch equally, so a flat 30-case dispatch scores the same as five levels of
+        // nested ifs; cognitive charges nothing for flat structure and compounds for depth. It also names the
+        // lines that cost the most, which is what makes the diagnostic something an agent can act on rather
+        // than a number to argue with.
+        //
+        // `cyclomatic` is set to the same 10 the root ratchet uses so the two cannot disagree. 15 for cognitive
+        // is the SonarSource default; it has NOT been measured against this repo yet, because the plugin has
+        // never run here — treat the first run as the measurement, not as a verdict.
+        "complexity/complexity": ["error", { "cyclomatic": 10, "cognitive": 15 }],
         // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
         // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has
         // thrown away the evidence that it is correct — the shape a model reaches for when it does not know

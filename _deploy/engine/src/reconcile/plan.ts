@@ -3,9 +3,23 @@ import { linearize, refKey } from "@intentic/graph";
 import type { ResourceType } from "@intentic/resources";
 import { OUTPUTS } from "@intentic/resources";
 import { resolveInputs } from "../resolve-inputs.js";
-import { createStore, PENDING } from "../store.js";
+import { createStore, type OutputStore, PENDING } from "../store.js";
 import type { EngineConfig, PlanOutcome, Step } from "../types.js";
 import { decideDiff, makeContext, narratedRead, requireProvider } from "./reconcile.js";
+
+// A prefix output ("appWebhook:") names no key of its own, one exists per consumer, so the only keys worth
+// seeding are the ones the graph actually asks for: seed PENDING for every actual $ref in the graph that
+// matches, found by walking each node's inputs with JSON.stringify's replacer.
+const seedPendingRefs = (graph: DesiredStateGraph, store: OutputStore, prefix: string): void => {
+    for (const refNode of Object.values(graph.resources)) {
+        JSON.stringify(refNode.inputs, (_k, v) => {
+            if (typeof v === "object" && v !== null && "$ref" in v && typeof v.$ref === "string" && v.$ref.startsWith(prefix)) {
+                store.set(v.$ref as string, PENDING);
+            }
+            return v;
+        });
+    }
+};
 
 // Dry run: read actual state and decide create/update/noop per node WITHOUT mutating. Existing resources
 // seed the store from their real observed outputs; pending creates seed PENDING, so a dependent's lenient
@@ -42,16 +56,7 @@ export const plan = async (graph: DesiredStateGraph, config: EngineConfig): Prom
             emit({ kind: "node", phase: "plan", state: "done", id, type, action: "create" });
             for (const name of OUTPUTS[type]) {
                 if (name.endsWith(":")) {
-                    // Prefix pattern: seed PENDING for every actual $ref in the graph that matches.
-                    const prefix = `${id}.${name}`;
-                    for (const refNode of Object.values(graph.resources)) {
-                        JSON.stringify(refNode.inputs, (_k, v) => {
-                            if (typeof v === "object" && v !== null && "$ref" in v && typeof v.$ref === "string" && v.$ref.startsWith(prefix)) {
-                                store.set(v.$ref as string, PENDING);
-                            }
-                            return v;
-                        });
-                    }
+                    seedPendingRefs(graph, store, `${id}.${name}`);
                 } else {
                     store.set(refKey(id, name), PENDING);
                 }

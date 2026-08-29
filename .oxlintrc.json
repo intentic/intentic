@@ -184,6 +184,17 @@
 
         // ── Core correctness and intent ──────────────────────────────────────────────────────────────────
         "eqeqeq": ["error", "always", { "null": "ignore" }],
+        // NESTING, which is the part of "complex" a reader actually feels. Cyclomatic complexity counts every
+        // branch the same, so a flat thirty-case dispatch scores worse than five levels of nested ifs; depth is
+        // the thing that makes a function hard to hold in your head, and it is cheap to keep low.
+        //
+        // 41 sites had to be flattened to turn this on, by early-return guards where the block was the last
+        // thing in its loop and by extracting named helpers where it was not. Worth knowing before you raise
+        // it: the two metrics PULL AGAINST EACH OTHER. Merging `if (a) { if (b) {` into `if (a && b) {` removes
+        // a level and ADDS a branch point, so flattening by condition-merging makes cyclomatic complexity
+        // worse. Extraction is the move that improves both, and it is what most of those 41 became.
+        "max-depth": ["error", 4],
+        "max-nested-callbacks": ["error", 4],
         // Brace-less `if` is where a later single-line edit silently lands outside the branch — a failure mode
         // that costs an agent nothing to avoid and a reviewer real time to spot.
         "curly": "error",

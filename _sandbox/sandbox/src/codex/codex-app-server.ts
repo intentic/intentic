@@ -693,6 +693,25 @@ const commandApprovalFrom = (raw: unknown, turnIds: ReadonlySet<string>): { read
     return { command, ...(typeof reason === "string" && reason.trim() !== "" ? { reason } : {}) };
 };
 
+// One command approval request, answered: the card when there is a command for the rulebook to judge, and the
+// standing yes when there is not. The reply travels on the frame, so the turn stays parked until a person picks.
+async function* commandApprovalFrames(
+    notification: Extract<AppServerMessage, { kind: "request" }>,
+    turnIds: ReadonlySet<string>,
+): AsyncGenerator<CodexEvent> {
+    const approval = commandApprovalFrom(notification.params, turnIds);
+    if (approval === undefined) {
+        notification.respond({ decision: "accept" });
+        return;
+    }
+    yield {
+        type: "command_approval.requested",
+        command: approval.command,
+        ...(approval.reason !== undefined ? { reason: approval.reason } : {}),
+        respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
+    };
+}
+
 const questionsFrom = (raw: unknown, turnIds: ReadonlySet<string>): readonly CodexQuestion[] | undefined => {
     const params = object(raw, "item/tool/requestUserInput params");
     if (!turnIds.has(string(params, "turnId", "item/tool/requestUserInput params"))) {
@@ -827,17 +846,7 @@ export const createCodexAppServerRunner = (connect: CodexAppServerConnector = st
                      * the same rule the question card follows, for the same reason (a superseded turn can still
                      * be completing while the steered one runs). */
                     if (notification.method === COMMAND_APPROVAL_REQUEST) {
-                        const approval = commandApprovalFrom(notification.params, turnIds);
-                        if (approval === undefined) {
-                            notification.respond({ decision: "accept" });
-                            continue;
-                        }
-                        yield {
-                            type: "command_approval.requested",
-                            command: approval.command,
-                            ...(approval.reason !== undefined ? { reason: approval.reason } : {}),
-                            respond: (allow) => notification.respond({ decision: allow ? "accept" : "decline" }),
-                        };
+                        yield* commandApprovalFrames(notification, turnIds);
                         continue;
                     }
                     if (notification.method === FILE_CHANGE_APPROVAL_REQUEST) {

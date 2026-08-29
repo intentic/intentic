@@ -250,44 +250,49 @@ const visibleRows = computed<(Row | MoreRow)[]>(() => {
     const walk = (nodes: readonly WorkspaceTreeEntry[], depth: number): (Row | MoreRow)[] => {
         const out: (Row | MoreRow)[] = [];
         for (const { entry, nested } of level(nodes)) {
-            if (entry.type === `dir`) {
-                if (needle === ``) {
+            // Files are the short cases, so they leave first and the directory walk below reads straight down.
+            if (entry.type !== `dir`) {
+                if (nested !== undefined) {
                     const isExpanded = open.has(entry.path);
-                    // A barren branch is ONE row: the single-child descent collapses into it, and expanding it
-                    // continues from the chain's tail: three rows of debris become one legible line whose shape
-                    // says exactly what happened. Skipped while filtering, like nesting: a filter flattens.
-                    if (isBarren(entry.path)) {
-                        const { names, tail } = chainOf(entry);
-                        out.push({ entry, depth, isExpanded, barren: true, chainTail: tail, ...(names.length > 1 ? { chain: names } : {}) });
-                        if (isExpanded) {
-                            out.push(...walk(childrenOf(tail), depth + 1));
-                        }
-                        continue;
-                    }
-                    out.push({ entry, depth, isExpanded });
+                    out.push({ entry, depth, isExpanded, nest: true });
                     if (isExpanded) {
-                        out.push(...walk(childrenOf(entry), depth + 1));
-                        const cut = lazyHidden.value.get(entry.path) ?? 0;
-                        if (cut > 0) {
-                            out.push({ more: cut, depth: depth + 1, key: `${entry.path}#more` });
-                        }
+                        out.push(...nested.map((child): Row => ({ entry: child, depth: depth + 1, isExpanded: false })));
                     }
-                } else {
-                    const childRows = walk(childrenOf(entry), depth + 1);
-                    if (!entry.name.toLowerCase().includes(needle) && childRows.length === 0) {
-                        continue;
-                    }
-                    out.push({ entry, depth, isExpanded: true });
-                    out.push(...childRows);
+                } else if (needle === `` || entry.name.toLowerCase().includes(needle)) {
+                    out.push({ entry, depth, isExpanded: false });
                 }
-            } else if (nested !== undefined) {
-                const isExpanded = open.has(entry.path);
-                out.push({ entry, depth, isExpanded, nest: true });
+                continue;
+            }
+            // Filtering: a dir earns its row by matching itself or by holding a match, and it is always open,
+            // so what the filter found is on screen rather than behind a chevron.
+            if (needle !== ``) {
+                const childRows = walk(childrenOf(entry), depth + 1);
+                if (!entry.name.toLowerCase().includes(needle) && childRows.length === 0) {
+                    continue;
+                }
+                out.push({ entry, depth, isExpanded: true });
+                out.push(...childRows);
+                continue;
+            }
+            const isExpanded = open.has(entry.path);
+            // A barren branch is ONE row: the single-child descent collapses into it, and expanding it
+            // continues from the chain's tail: three rows of debris become one legible line whose shape
+            // says exactly what happened. Skipped while filtering, like nesting: a filter flattens.
+            if (isBarren(entry.path)) {
+                const { names, tail } = chainOf(entry);
+                out.push({ entry, depth, isExpanded, barren: true, chainTail: tail, ...(names.length > 1 ? { chain: names } : {}) });
                 if (isExpanded) {
-                    out.push(...nested.map((child): Row => ({ entry: child, depth: depth + 1, isExpanded: false })));
+                    out.push(...walk(childrenOf(tail), depth + 1));
                 }
-            } else if (needle === `` || entry.name.toLowerCase().includes(needle)) {
-                out.push({ entry, depth, isExpanded: false });
+                continue;
+            }
+            out.push({ entry, depth, isExpanded });
+            if (isExpanded) {
+                out.push(...walk(childrenOf(entry), depth + 1));
+                const cut = lazyHidden.value.get(entry.path) ?? 0;
+                if (cut > 0) {
+                    out.push({ more: cut, depth: depth + 1, key: `${entry.path}#more` });
+                }
             }
         }
         return out;

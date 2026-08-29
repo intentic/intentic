@@ -180,6 +180,15 @@ const bump = (counts: Record<string, number>, key: string, by = 1): void => {
     counts[key] = (counts[key] ?? 0) + by;
 };
 
+/* Landing just under the 120s default Bash timeout is the tell that the agent is budgeting around the harness
+ * rather than waiting on anything. Counted two ways because the original figure does not say which it meant,
+ * and they no longer agree: by the sleep the agent WROTE, and by how long the call actually SAT (a `sleep 60`
+ * behind a slow command reaches the same place without being hand-tuned to it). */
+const justUnderBashTimeout = (sleptSeconds: number, durationMs: number): { byArgument: number; byDuration: number } => ({
+    byArgument: sleptSeconds >= 105 && sleptSeconds < 120 ? 1 : 0,
+    byDuration: durationMs >= 105_000 && durationMs < 120_000 ? 1 : 0,
+});
+
 // A Read's byte window, so a re-read can be told from a read of somewhere else in the same file. Claude Code's
 // own default cap when the model names neither bound.
 const DEFAULT_READ_LIMIT = 2000;
@@ -327,17 +336,9 @@ export const guidanceStats = (root: string) => {
                 if (slept?.[1] !== undefined) {
                     sleeps += 1;
                     sleepMs += call.durationMs ?? 0;
-                    /* Landing just under the 120s default Bash timeout is the tell that the agent is budgeting
-                     * around the harness rather than waiting on anything. Counted two ways because the original
-                     * figure does not say which it meant, and they no longer agree: by the sleep the agent
-                     * WROTE, and by how long the call actually SAT (a `sleep 60` behind a slow command reaches
-                     * the same place without being hand-tuned to it). */
-                    if (Number(slept[1]) >= 105 && Number(slept[1]) < 120) {
-                        sleptJustUnderByArgument += 1;
-                    }
-                    if ((call.durationMs ?? 0) >= 105_000 && (call.durationMs ?? 0) < 120_000) {
-                        sleptJustUnderByDuration += 1;
-                    }
+                    const justUnder = justUnderBashTimeout(Number(slept[1]), call.durationMs ?? 0);
+                    sleptJustUnderByArgument += justUnder.byArgument;
+                    sleptJustUnderByDuration += justUnder.byDuration;
                 }
             }
 

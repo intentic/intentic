@@ -66,6 +66,33 @@ export const followRun = async (
     // done with nothing left to stream (or never terminates its stream), so give up after a few rounds
     // rather than tight-looping the daemon at network speed. Reset the moment real progress arrives.
     let idleRounds = 0;
+    /* Apply one attach frame to the cursor state above. Returns undefined while the stream should keep being
+     * drained, otherwise the value followRun itself answers with: this attach is over. A closure rather than a
+     * free function because `run`, `after`, `attached` and `turn` ARE the loop's state, not arguments. */
+    const applyFrame = (parsed: AttachFrame): boolean | undefined => {
+        if (parsed.kind === `attached`) {
+            // A head naming a different run than the cursor's means a newer turn started while
+            // this tab was disconnected, that turn belongs at a different transcript position
+            // (after ITS user message), so this stream settles rather than misrendering it here.
+            if (run !== undefined && parsed.run !== run) {
+                return attached;
+            }
+            run = parsed.run;
+            turn ??= renderer.ensureTurn(parsed);
+            if (turn === undefined) {
+                return false;
+            }
+            attached = true;
+        } else if (parsed.kind === `frame`) {
+            after = parsed.seq;
+            if (turn !== undefined) {
+                renderer.frame(parsed.event, turn);
+            }
+        } else if (parsed.kind === `end`) {
+            return attached;
+        }
+        return undefined;
+    };
     for (;;) {
         if (controller.signal.aborted) {
             return attached;
@@ -125,26 +152,9 @@ export const followRun = async (
                 if (parsed === undefined || typeof parsed !== `object`) {
                     continue;
                 }
-                if (parsed.kind === `attached`) {
-                    // A head naming a different run than the cursor's means a newer turn started while
-                    // this tab was disconnected, that turn belongs at a different transcript position
-                    // (after ITS user message), so this stream settles rather than misrendering it here.
-                    if (run !== undefined && parsed.run !== run) {
-                        return attached;
-                    }
-                    run = parsed.run;
-                    turn ??= renderer.ensureTurn(parsed);
-                    if (turn === undefined) {
-                        return false;
-                    }
-                    attached = true;
-                } else if (parsed.kind === `frame`) {
-                    after = parsed.seq;
-                    if (turn !== undefined) {
-                        renderer.frame(parsed.event, turn);
-                    }
-                } else if (parsed.kind === `end`) {
-                    return attached;
+                const ended = applyFrame(parsed);
+                if (ended !== undefined) {
+                    return ended;
                 }
             }
         } catch {

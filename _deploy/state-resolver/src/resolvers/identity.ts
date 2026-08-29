@@ -36,6 +36,21 @@ const strongerForgejoRole = (a: ForgejoRole, b: ForgejoRole): ForgejoRole => (fo
 const komodoLevel: Readonly<Record<KomodoRole, "Read" | "Execute" | "Write">> = { read: "Read", execute: "Execute", admin: "Write" };
 const komodoLevelRank: Readonly<Record<"Read" | "Execute" | "Write", number>> = { Read: 1, Execute: 2, Write: 3 };
 
+// Raise one user's Komodo level on each of an app's deployments to what this team grants, keeping whichever
+// level is already stronger: the same dedup as above, applied where a user is reached through two teams.
+const raiseKomodoGrants = (
+    grantsForUser: Map<string, "Read" | "Execute" | "Write">,
+    deployments: readonly string[],
+    level: "Read" | "Execute" | "Write",
+): void => {
+    for (const deployment of deployments) {
+        const existing = grantsForUser.get(deployment);
+        if (existing === undefined || komodoLevelRank[level] > komodoLevelRank[existing]) {
+            grantsForUser.set(deployment, level);
+        }
+    }
+};
+
 interface RepoGrant {
     readonly owner: string;
     readonly name: string;
@@ -94,12 +109,7 @@ export const resolveIdentities = (intent: IntentSet, platform: PlatformRefs, hos
             const level = komodoLevel[teamById.get(grant.team)?.komodo ?? "read"];
             for (const member of teamMembers(grant.team)) {
                 const grantsForUser = userGrants.get(member) ?? new Map<string, "Read" | "Execute" | "Write">();
-                for (const deployment of deployments) {
-                    const existing = grantsForUser.get(deployment);
-                    if (existing === undefined || komodoLevelRank[level] > komodoLevelRank[existing]) {
-                        grantsForUser.set(deployment, level);
-                    }
-                }
+                raiseKomodoGrants(grantsForUser, deployments, level);
                 userGrants.set(member, grantsForUser);
             }
         }

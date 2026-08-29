@@ -389,6 +389,73 @@ const SESSION_RETRY_EVERY_TICKS = 60;
  * process.exit() and never touch the autostart: it RETURNS when the last pairing is gone, and what that means
  * for the process (exit, or keep serving the computer half's links) is the caller's decision, made with facts
  * this half cannot see. */
+/* Revocation is definitive, and it is ONE pairing's: one rejected sync token is a blip, REVOKED_POLLS in a row
+ * is an enrollment this machine no longer has. Counting them here rather than acting on the first is what stops
+ * a dead pairing being polled forever and resurrected at every login. Answers whether the pairing was dropped,
+ * which is the caller's cue to stop serving it this tick. */
+const absorbRejectedPoll = async (
+    mutagen: string,
+    pairing: Pairing,
+    rejectedPolls: Map<string, number>,
+    repos: Map<string, readonly string[]>,
+    sessionsPending: Set<string>,
+    log: Log,
+): Promise<boolean> => {
+    const rejected = (rejectedPolls.get(pairing.sandboxId) ?? 0) + 1;
+    rejectedPolls.set(pairing.sandboxId, rejected);
+    if (rejected < REVOKED_POLLS) {
+        return false;
+    }
+    log(`${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row: this machine's enrollment was revoked.`);
+    rejectedPolls.delete(pairing.sandboxId);
+    repos.delete(pairing.sandboxId);
+    sessionsPending.delete(pairing.sandboxId);
+    await dropRevokedPairing(mutagen, pairing.sandboxId, log);
+    return true;
+};
+
+/* An unreachable sandbox, counted the same way: past the pause threshold its Mutagen sessions are stopped, so a
+ * tunnel that is not coming back stops costing permanent reconnect and rescan load. Answers whether THIS pass is
+ * what paused them, which is what keeps the git bridge below from immediately undoing the pause. */
+const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreachablePolls: Map<string, number>, log: Log): Promise<boolean> => {
+    const failed = (unreachablePolls.get(pairing.sandboxId) ?? 0) + 1;
+    unreachablePolls.set(pairing.sandboxId, failed);
+    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(failed) || !pauseUnreachableSync(mutagen, pairing)) {
+        return false;
+    }
+    await setFileSyncAutoPaused(pairing.sandboxId, true);
+    log(
+        `  ${pairing.sandboxId}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
+    );
+    return true;
+};
+
+/** The four per-pairing tallies the failure handler reads and prunes, passed as one bag rather than five
+ *  positional maps. */
+interface PairingTracking {
+    readonly rejectedPolls: Map<string, number>;
+    readonly unreachablePolls: Map<string, number>;
+    readonly repos: Map<string, readonly string[]>;
+    readonly sessionsPending: Set<string>;
+}
+
+/* What a failed pass does to the pairing that failed, in one answer the loop can act on: `drop` means it is
+ * gone and this tick should move to the next one, `paused` means its file sync was just stopped and the
+ * ssh-heavy git bridge below must not immediately undo that. */
+const absorbPairingFailure = async (
+    error: unknown,
+    mutagen: string,
+    pairing: Pairing,
+    tracking: PairingTracking,
+    log: Log,
+): Promise<{ readonly drop: boolean; readonly paused: boolean }> => {
+    if (error instanceof SyncAuthError) {
+        const drop = await absorbRejectedPoll(mutagen, pairing, tracking.rejectedPolls, tracking.repos, tracking.sessionsPending, log);
+        return { drop, paused: false };
+    }
+    return { drop: false, paused: await absorbUnreachablePoll(mutagen, pairing, tracking.unreachablePolls, log) };
+};
+
 export const runMirrorWatch = async (log: Log): Promise<void> => {
     const mutagen = await ensureMutagen();
     // Nothing paired: terminal, and said once, the loop runs at every login, and one that treated this as a bad
@@ -445,6 +512,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     const rejectedPolls = new Map<string, number>();
     const unreachablePolls = new Map<string, number>();
     const repos = new Map<string, readonly string[]>();
+    const tracking = { rejectedPolls, unreachablePolls, repos, sessionsPending };
     // Sandboxes whose daemon has no machine-report route, retired from reporting for this watcher's lifetime, so
     // an older sandbox costs one request rather than one every REPORT_EVERY_TICKS forever.
     const reportUnsupported = new Set<string>();
@@ -456,122 +524,104 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             log(`  tick skipped: the sync state didn't read (${error instanceof Error ? error.message : String(error)})`);
             return undefined;
         });
-        if (state !== undefined) {
-            if (state.pairings.length === 0) {
-                // Nothing left to sync: stop this half for good rather than polling an empty list at every
-                // login. A pairing that was revoked mid-loop lands here on the next tick. The caller decides
-                // what the process does about it.
-                await tunnels.stopAll();
-                log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
-                return;
-            }
-            // Before the port reconcile, because that reconcile and the git bridge under it both ride this
-            // transport: a pairing added since the last tick needs its listener up before anything asks it to
-            // carry an ssh connection.
-            await guard(log, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(state.pairings)));
-            // A sandbox whose file sync could not be created, asleep, mid-rebuild, a transport still coming up,
-            // gets another go now that its transport has just been reconciled above. Nothing to do in the common
-            // case: the set is empty and this costs a subtraction.
-            if (sessionsPending.size > 0 && tick % SESSION_RETRY_EVERY_TICKS === 0) {
-                for (const pairing of state.pairings.filter((held) => sessionsPending.has(held.sandboxId))) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as at startup
-                    const ready = await guard(
-                        log,
-                        `${pairing.sandboxId}: preparing its file sync`,
-                        async () => await ensureSyncSession(mutagen, pairing, log),
-                    );
-                    if (ready) {
-                        sessionsPending.delete(pairing.sandboxId);
-                        log(`  ${pairing.sandboxId}: file sync is running again`);
-                    }
+        // Nothing parsed this tick — a `setup` caught mid-write. Wait out the interval and try again rather
+        // than spinning, and leave the heartbeat where it was: a watcher that cannot read its own pairings is
+        // not serving them, and going quiet until it can is what a reader should see.
+        if (state === undefined) {
+            await sleep(POLL_MS);
+            continue;
+        }
+        if (state.pairings.length === 0) {
+            // Nothing left to sync: stop this half for good rather than polling an empty list at every
+            // login. A pairing that was revoked mid-loop lands here on the next tick. The caller decides
+            // what the process does about it.
+            await tunnels.stopAll();
+            log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
+            return;
+        }
+        // Before the port reconcile, because that reconcile and the git bridge under it both ride this
+        // transport: a pairing added since the last tick needs its listener up before anything asks it to
+        // carry an ssh connection.
+        await guard(log, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(state.pairings)));
+        // A sandbox whose file sync could not be created, asleep, mid-rebuild, a transport still coming up,
+        // gets another go now that its transport has just been reconciled above. Nothing to do in the common
+        // case: the set is empty and this costs a subtraction.
+        if (sessionsPending.size > 0 && tick % SESSION_RETRY_EVERY_TICKS === 0) {
+            for (const pairing of state.pairings.filter((held) => sessionsPending.has(held.sandboxId))) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one session at a time, as at startup
+                const ready = await guard(
+                    log,
+                    `${pairing.sandboxId}: preparing its file sync`,
+                    async () => await ensureSyncSession(mutagen, pairing, log),
+                );
+                if (ready) {
+                    sessionsPending.delete(pairing.sandboxId);
+                    log(`  ${pairing.sandboxId}: file sync is running again`);
                 }
             }
-            // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
-            const claimedBy = new Map<number, string>();
-            for (const pairing of state.pairings) {
-                let pausedThisPass = false;
-                try {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time keeps the log readable and the tunnels unhammered
-                    const mirrored = await servePairing(mutagen, pairing, claimedBy, log);
-                    rejectedPolls.delete(pairing.sandboxId);
-                    unreachablePolls.delete(pairing.sandboxId);
-                    if (resumeAutoPausedSync(mutagen, pairing)) {
-                        // oxlint-disable-next-line eslint/no-await-in-loop -- targeted state mutation for the pairing that just recovered
-                        await setFileSyncAutoPaused(pairing.sandboxId, false);
-                        sessionsPending.delete(pairing.sandboxId);
-                        log(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
-                    }
-                    for (const port of mirrored) {
-                        claimedBy.set(port.port, pairing.sandboxId);
-                    }
-                } catch (error) {
-                    // Revocation is definitive, and it is ONE pairing's: after REVOKED_POLLS consecutive
-                    // rejections drop that sandbox and keep serving the rest, instead of polling a dead
-                    // enrollment forever (and resurrecting it at every login).
-                    if (error instanceof SyncAuthError) {
-                        const rejected = (rejectedPolls.get(pairing.sandboxId) ?? 0) + 1;
-                        rejectedPolls.set(pairing.sandboxId, rejected);
-                        if (rejected >= REVOKED_POLLS) {
-                            log(
-                                `${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row: this machine's enrollment was revoked.`,
-                            );
-                            rejectedPolls.delete(pairing.sandboxId);
-                            repos.delete(pairing.sandboxId);
-                            sessionsPending.delete(pairing.sandboxId);
-                            // oxlint-disable-next-line eslint/no-await-in-loop -- teardown of the pairing being abandoned, before the next one is served
-                            await dropRevokedPairing(mutagen, pairing.sandboxId, log);
-                            continue;
-                        }
-                    } else {
-                        const failed = (unreachablePolls.get(pairing.sandboxId) ?? 0) + 1;
-                        unreachablePolls.set(pairing.sandboxId, failed);
-                        if (pairing.fileSyncAutoPaused !== true && shouldAutoPauseFileSync(failed) && pauseUnreachableSync(mutagen, pairing)) {
-                            // oxlint-disable-next-line eslint/no-await-in-loop -- one persistent marker for the pairing whose sessions were just paused
-                            await setFileSyncAutoPaused(pairing.sandboxId, true);
-                            pausedThisPass = true;
-                            log(
-                                `  ${pairing.sandboxId}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
-                            );
-                        }
-                    }
-                    // A transient tunnel blip must not kill the loop, log and try again next tick.
-                    log(`  ${pairing.sandboxId}: reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
+        const claimedBy = new Map<number, string>();
+        for (const pairing of state.pairings) {
+            let pausedThisPass = false;
+            try {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time keeps the log readable and the tunnels unhammered
+                const mirrored = await servePairing(mutagen, pairing, claimedBy, log);
+                rejectedPolls.delete(pairing.sandboxId);
+                unreachablePolls.delete(pairing.sandboxId);
+                if (resumeAutoPausedSync(mutagen, pairing)) {
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- targeted state mutation for the pairing that just recovered
+                    await setFileSyncAutoPaused(pairing.sandboxId, false);
+                    sessionsPending.delete(pairing.sandboxId);
+                    log(`  ${pairing.sandboxId}: reachable again; resumed its automatically paused file sync`);
                 }
-                // An auto-paused pairing still gets the cheap HTTPS liveness probe above; do not immediately
-                // defeat the pause with the SSH-heavy git bridge below.
-                if (pairing.fileSyncAutoPaused === true || pausedThisPass) {
+                for (const port of mirrored) {
+                    claimedBy.set(port.port, pairing.sandboxId);
+                }
+            } catch (error) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's failure is absorbed before the next is served
+                const outcome = await absorbPairingFailure(error, mutagen, pairing, tracking, log);
+                if (outcome.drop) {
                     continue;
                 }
-                // The bridge gets its OWN catch. It rides ssh; the ports read above rides https, through
-                // Cloudflare, which 502s a sandbox's /ports often enough to matter while the tunnel underneath is
-                // perfectly healthy. Sharing one catch meant every such 502 silently cost a whole bridge pass,
-                // and because the cadence counted ticks rather than retrying, the next attempt came a full period
-                // later, not a tick later, which is what turned a sub-minute lag into the occasional two-minute one.
-                try {
-                    const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : repos.get(pairing.sandboxId);
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's bridge at a time, as above
-                    const listed = await runGitBridge(realBridgeExec, pairing, log, known);
-                    if (listed === undefined) {
-                        repos.delete(pairing.sandboxId);
-                    } else {
-                        repos.set(pairing.sandboxId, listed);
-                    }
-                } catch (error) {
-                    log(`  ${pairing.sandboxId}: git bridge skipped: ${error instanceof Error ? error.message : String(error)}`);
+                pausedThisPass = outcome.paused;
+                // A transient tunnel blip must not kill the loop, log and try again next tick.
+                log(`  ${pairing.sandboxId}: reconcile skipped: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            // An auto-paused pairing still gets the cheap HTTPS liveness probe above; do not immediately
+            // defeat the pause with the SSH-heavy git bridge below.
+            if (pairing.fileSyncAutoPaused === true || pausedThisPass) {
+                continue;
+            }
+            // The bridge gets its OWN catch. It rides ssh; the ports read above rides https, through
+            // Cloudflare, which 502s a sandbox's /ports often enough to matter while the tunnel underneath is
+            // perfectly healthy. Sharing one catch meant every such 502 silently cost a whole bridge pass,
+            // and because the cadence counted ticks rather than retrying, the next attempt came a full period
+            // later, not a tick later, which is what turned a sub-minute lag into the occasional two-minute one.
+            try {
+                const known = tick % REPO_LIST_EVERY_TICKS === 0 ? undefined : repos.get(pairing.sandboxId);
+                // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's bridge at a time, as above
+                const listed = await runGitBridge(realBridgeExec, pairing, log, known);
+                if (listed === undefined) {
+                    repos.delete(pairing.sandboxId);
+                } else {
+                    repos.set(pairing.sandboxId, listed);
                 }
+            } catch (error) {
+                log(`  ${pairing.sandboxId}: git bridge skipped: ${error instanceof Error ? error.message : String(error)}`);
             }
-            // After the pairings, not during: servePairing has just persisted this tick's mirrored/skipped ports,
-            // and the report is built by re-reading that state, so reporting last is what makes it report NOW
-            // rather than the previous pass.
-            if (tick % REPORT_EVERY_TICKS === 0) {
-                await guard(log, "posting this machine's reports", async () => await postReports(state.pairings, mutagen, reportUnsupported, log));
-            }
-            /* HERE, at the bottom of the pass, and INSIDE the branch that did the work: the stamp's whole meaning
-             * is that everything above it ran. A tick skipped because the state would not parse leaves the stamp
-             * where it was, a watcher that cannot read its own pairings is not serving them, and going quiet
-             * until it can is exactly what a reader should see. */
-            await beat();
         }
+        // After the pairings, not during: servePairing has just persisted this tick's mirrored/skipped ports,
+        // and the report is built by re-reading that state, so reporting last is what makes it report NOW
+        // rather than the previous pass.
+        if (tick % REPORT_EVERY_TICKS === 0) {
+            await guard(log, "posting this machine's reports", async () => await postReports(state.pairings, mutagen, reportUnsupported, log));
+        }
+        /* HERE, at the bottom of the pass, and INSIDE the branch that did the work: the stamp's whole meaning
+         * is that everything above it ran. A tick skipped because the state would not parse leaves the stamp
+         * where it was, a watcher that cannot read its own pairings is not serving them, and going quiet
+         * until it can is exactly what a reader should see. */
+        await beat();
         await sleep(POLL_MS);
     }
 };

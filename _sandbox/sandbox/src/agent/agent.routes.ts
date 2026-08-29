@@ -202,7 +202,10 @@ async function* runConversationTurn(
     const requestedRunner = input.placement?.kind === "runner" ? input.placement.id : undefined;
     const runnerId = existing === undefined ? requestedRunner : existing.runner;
     if (existing === undefined && runnerId !== undefined && !(await services.runners.enrolled(runnerId))) {
-        yield { kind: "error", message: `No runner named "${runnerId}" is paired with this sandbox — pair one first, or leave placement out to run here.` };
+        yield {
+            kind: "error",
+            message: `No runner named "${runnerId}" is paired with this sandbox — pair one first, or leave placement out to run here.`,
+        };
         yield { kind: "done" };
         return;
     }
@@ -756,6 +759,26 @@ const sessionToResume = async (services: Services, input: AgentTurn, effectiveCw
     return held ? sessionId : undefined;
 };
 
+/* The provider spoke, so it settles whatever it last REFUSED, on the account that just proved it wrong.
+ * Content on the wire is the only evidence that exists for the refusal kinds no poll can answer: an
+ * entitlement refusal survives every reading that could contradict it (the token authenticates and the pools
+ * publish all the way through it), so without this an admin re-enabling a seat would leave the alarm standing
+ * for the full week the store keeps it. Fire-and-forget on the same contract as the writes at settle. */
+const settleRefusals = (services: Services, provider: string, account: string | undefined): void => {
+    void services.providerRefusals
+        .clear(provider, account)
+        .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: settle failed"));
+    // And the seat itself: an account that answers is an account that may serve turns again, so an admin
+    // re-enabling Claude Code puts it back in the rotation with no reconnect. A routed turn names no account,
+    // and CLIProxyAPI's own auth files are not seats this store knows.
+    if (account === undefined) {
+        return;
+    }
+    void services.claudeSeats
+        .clear(account)
+        .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
+};
+
 // One agent turn's body, on the main tree (`worktree` undefined) or inside an isolated conversation's
 // worktree, the cwd override is the single binding point every provider adapter, the tmux Bash path, and the
 // SDK session store follow.
@@ -1251,22 +1274,8 @@ async function* runTurn(
                 if (!providerAnswered) {
                     providerAnswered = true;
                     recordProviderSuccess(provider);
-                    /* And it settles whatever this provider last REFUSED, on the account that just proved it
-                     * wrong. Content on the wire is the only evidence that exists for the refusal kinds no poll
-                     * can answer: an entitlement refusal survives every reading that could contradict it (the
-                     * token authenticates and the pools publish all the way through it), so without this an
-                     * admin re-enabling a seat would leave the alarm standing for the full week the store keeps
-                     * it. Fire-and-forget on the same contract as the writes at settle. */
-                    void services.providerRefusals
-                        .clear(provider, resolvedAccount)
-                        .catch((error: unknown) => services.logger.warn({ err: error }, "provider refusal: settle failed"));
-                    // And the seat itself: an account that answers is an account that may serve turns again, so
-                    // an admin re-enabling Claude Code puts it back in the rotation with no reconnect.
-                    if (resolvedAccount !== undefined) {
-                        void services.claudeSeats
-                            .clear(resolvedAccount)
-                            .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not clear the entitlement mark"));
-                    }
+                    // And it settles the refusals this turn just disproved, both the provider's and the seat's.
+                    settleRefusals(services, provider, resolvedAccount);
                 }
             }
             if (event.kind === "delta") {
@@ -1281,11 +1290,12 @@ async function* runTurn(
                 // A compound Bash call may both search and open a file. Count its search against the state at
                 // call entry, then independently close orientation after it; making these branches exclusive
                 // hid most real file reads (`cat`/`sed`/`head`/`tail`) and inflated openingSearches.
-                if (isSearchCall(event)) {
+                const searched = isSearchCall(event);
+                if (searched) {
                     searchCalls += 1;
-                    if (!reachedTheWork && searchPrecedesFileWork(event)) {
-                        openingSearches += 1;
-                    }
+                }
+                if (searched && !reachedTheWork && searchPrecedesFileWork(event)) {
+                    openingSearches += 1;
                 }
                 if (isFileWorkCall(event)) {
                     reachedTheWork = true;
@@ -1407,38 +1417,35 @@ async function* runTurn(
                  * armed or merely on offer behind the setting. Past the attempt budget nothing more will fire, so
                  * the frame goes out bare, a promise of a retry that will never come is worse than the red line
                  * it replaced. */
-                if (event.code === "provider-outage" && input.conversationId !== undefined) {
-                    const outage = recordProviderFailure(provider);
-                    if (outage.attempt < OUTAGE_MAX_ATTEMPTS) {
-                        outageHit = true;
-                        // THIS conversation's posture, not the sandbox's alone, the same question the resume
-                        // pass asks a few seconds later, asked through the same reader so the two can never
-                        // disagree. A chat armed on its own says "scheduled" while the board around it, still
-                        // on an off default, is honestly told a resume is merely "available".
-                        const armed = await outageResumeArmed(services, input.conversationId);
-                        yield {
-                            ...event,
-                            autoResume: armed ? "scheduled" : "available",
-                            outage: {
-                                retryAt: Math.round(outage.retryAt / 1000),
-                                attempt: outage.attempt + 1,
-                                maxAttempts: OUTAGE_MAX_ATTEMPTS,
-                            },
-                        };
-                        continue;
-                    }
+                const outage = event.code === "provider-outage" && input.conversationId !== undefined ? recordProviderFailure(provider) : undefined;
+                if (outage !== undefined && outage.attempt < OUTAGE_MAX_ATTEMPTS && input.conversationId !== undefined) {
+                    outageHit = true;
+                    // THIS conversation's posture, not the sandbox's alone, the same question the resume
+                    // pass asks a few seconds later, asked through the same reader so the two can never
+                    // disagree. A chat armed on its own says "scheduled" while the board around it, still
+                    // on an off default, is honestly told a resume is merely "available".
+                    const armed = await outageResumeArmed(services, input.conversationId);
+                    yield {
+                        ...event,
+                        autoResume: armed ? "scheduled" : "available",
+                        outage: {
+                            retryAt: Math.round(outage.retryAt / 1000),
+                            attempt: outage.attempt + 1,
+                            maxAttempts: OUTAGE_MAX_ATTEMPTS,
+                        },
+                    };
+                    continue;
                 }
                 /* The credential was refused mid-turn. Say on the frame whether the daemon is going to re-mint
                  * and re-run this turn, because that is the difference between a notice and a red line and the
                  * client cannot work it out: the recording happens in the finally below, after this frame is
                  * long gone. Same condition, named once (see resumeArmed), a frame promising a renewal that the
                  * finally then declines to arm leaves a spinner turning over a turn that is never coming back. */
-                if (event.code === "claude-token-refused") {
-                    authRefused = true;
-                    if (resumeArmed) {
-                        yield { ...event, autoResume: "scheduled" };
-                        continue;
-                    }
+                const tokenRefused = event.code === "claude-token-refused";
+                authRefused ||= tokenRefused;
+                if (tokenRefused && resumeArmed) {
+                    yield { ...event, autoResume: "scheduled" };
+                    continue;
                 }
                 /* THE SEAT, NOT THE CREDENTIAL. This account signs in perfectly and its organization has Claude
                  * Code switched off, so there is nothing to re-mint and nothing to wait for, the only remedy is
@@ -1450,31 +1457,36 @@ async function* runTurn(
                         .refuse(resolvedAccount, event.message)
                         .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not record the entitlement refusal"));
                 }
-                if (event.code === "rate_limit") {
-                    // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
-                    // shapes still resolve through the preceding rate_limit_event or the persisted account
-                    // snapshot, one precedence, whatever the rate-limit source.
-                    const resetsAt = limitReset ?? event.resetsAt ?? (await accountLimitReset(services.accountUsage, resolvedAccount));
-                    /* THE TURN IS BEING HELD, said on the frame, because the client's whole answer to this
-                     * failure hangs off it: a held turn makes Continue a re-run of this turn, and an unheld one
-                     * leaves it what it always was, a new message saying "carry on". The frame goes out while the
-                     * turn is still unwinding, well before the finally records anything, so the condition is
-                     * named once here and read twice, exactly as `resumeArmed` is one branch up: a frame
-                     * promising a re-run the finally then declines to arm is a press that does nothing.
-                     *
-                     * `ran` is read at frame time on purpose. Content arriving AFTER this would mean the harness
-                     * got past the limit, which clears the hold entirely (see the reset beside `outageHit`), so
-                     * there is no case where the finally's answer differs from this one on a turn still held. */
+                // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
+                // shapes still resolve through the preceding rate_limit_event or the persisted account
+                // snapshot, one precedence, whatever the rate-limit source.
+                const rateLimited = event.code === "rate_limit";
+                const resetsAt = rateLimited
+                    ? (limitReset ?? event.resetsAt ?? (await accountLimitReset(services.accountUsage, resolvedAccount)))
+                    : undefined;
+                /* THE TURN IS BEING HELD, said on the frame, because the client's whole answer to this
+                 * failure hangs off it: a held turn makes Continue a re-run of this turn, and an unheld one
+                 * leaves it what it always was, a new message saying "carry on". The frame goes out while the
+                 * turn is still unwinding, well before the finally records anything, so the condition is
+                 * named once here and read twice, exactly as `resumeArmed` is one branch up: a frame
+                 * promising a re-run the finally then declines to arm is a press that does nothing.
+                 *
+                 * `ran` is read at frame time on purpose. Content arriving AFTER this would mean the harness
+                 * got past the limit, which clears the hold entirely (see the reset beside `outageHit`), so
+                 * there is no case where the finally's answer differs from this one on a turn still held. */
+                if (rateLimited) {
                     limitHit = input.conversationId !== undefined;
-                    const held = limitHit ? { held: { ran: providerAnswered } } : {};
-                    if (resetsAt !== undefined) {
-                        yield { ...event, ...held, resetsAt };
-                        continue;
-                    }
-                    if (limitHit) {
-                        yield { ...event, ...held };
-                        continue;
-                    }
+                }
+                // A limit frame is worth dressing for either reason on its own, an instant to count down to or a
+                // turn being held for the press; a limit with neither says nothing more than the bare frame does,
+                // and falls through to it.
+                if (rateLimited && (resetsAt !== undefined || limitHit)) {
+                    yield {
+                        ...event,
+                        ...(limitHit ? { held: { ran: providerAnswered } } : {}),
+                        ...(resetsAt !== undefined ? { resetsAt } : {}),
+                    };
+                    continue;
                 }
             }
             yield event;

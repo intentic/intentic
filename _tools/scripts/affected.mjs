@@ -75,6 +75,18 @@ note(usable ? `base ${base} → head ${head}: ${changed.length} changed paths` :
 const packages = new Map(); // name -> { name, dir, deps: Set<string> }
 const byDir = []; // [dir, name], longest dir first
 const WORKSPACE_DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+// The `workspace:` edges one manifest declares, across every dependency field.
+const workspaceDeps = (pkg) => {
+    const deps = new Set();
+    for (const field of WORKSPACE_DEP_FIELDS) {
+        for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+            if (typeof spec === "string" && spec.startsWith("workspace:")) {
+                deps.add(name);
+            }
+        }
+    }
+    return deps;
+};
 (function walk(dir, depth) {
     if (depth > 4) {
         return;
@@ -87,15 +99,7 @@ const WORKSPACE_DEP_FIELDS = ["dependencies", "devDependencies", "peerDependenci
         const manifest = join(root, child, "package.json");
         if (existsSync(manifest)) {
             const pkg = JSON.parse(readFileSync(manifest, "utf8"));
-            const deps = new Set();
-            for (const field of WORKSPACE_DEP_FIELDS) {
-                for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
-                    if (typeof spec === "string" && spec.startsWith("workspace:")) {
-                        deps.add(name);
-                    }
-                }
-            }
-            packages.set(pkg.name, { name: pkg.name, dir: child, deps });
+            packages.set(pkg.name, { name: pkg.name, dir: child, deps: workspaceDeps(pkg) });
             byDir.push([child, pkg.name]);
         }
         walk(child, depth + 1);

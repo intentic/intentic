@@ -536,21 +536,18 @@ interface Row {
 }
 const rowKey = (row: Row): string => JSON.stringify([row.repo, row.side, row.path]);
 
+// One side's rows, flattened out of the module buckets that draw them: the buckets are a heading structure,
+// and a range selection drags across them as if they weren't there.
+const rowsOn = (repo: string, side: GitDiffSide): readonly Row[] =>
+    viewOf(repo, side).buckets.flatMap((bucket) => bucket.rows.map((change) => ({ repo, side, path: change.path })));
+
 // Every row in render order, so shift-click resolves a range the way a flat list does: across sections and
 // across repos. A collapsed repo contributes nothing: you cannot range through rows you cannot see. Read
 // through `viewOf` rather than off the sections, because module grouping REORDERS a side (a loose file
 // between two of a package's) and a range that measured against the other order would select rows the user
 // never dragged over.
 const visibleRows = computed<readonly Row[]>(() =>
-    scannable.value.flatMap((repo) =>
-        collapsed.value.has(repo.repo)
-            ? []
-            : sidesOf(repo).flatMap((section) =>
-                  viewOf(repo.repo, section.side).buckets.flatMap((bucket) =>
-                      bucket.rows.map((change) => ({ repo: repo.repo, side: section.side, path: change.path })),
-                  ),
-              ),
-    ),
+    scannable.value.flatMap((repo) => (collapsed.value.has(repo.repo) ? [] : sidesOf(repo).flatMap((section) => rowsOn(repo.repo, section.side)))),
 );
 
 const selected = ref<ReadonlySet<string>>(new Set());

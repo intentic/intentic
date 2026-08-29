@@ -63,6 +63,29 @@ export interface LandedPresences {
     readonly metrics: () => Readonly<Record<string, number>>;
 }
 
+/* One landing's two numbers: how many paths it put in the main tree, and how many of those are still there. A
+ * path is still there on either of the two honest endings the header names, the working tree is dirty for it,
+ * or history has taken it. `applied` is what narrows the agent's own work to what this patch actually carried. */
+const tallyLanding = (
+    own: readonly string[],
+    applied: ReadonlySet<string>,
+    committed: ReadonlySet<string>,
+    uncommitted: ReadonlySet<string>,
+): { readonly count: number; readonly here: number } => {
+    let count = 0;
+    let here = 0;
+    for (const path of own) {
+        if (!applied.has(path)) {
+            continue;
+        }
+        count += 1;
+        if (committed.has(path) || uncommitted.has(path)) {
+            here += 1;
+        }
+    }
+    return { count, here };
+};
+
 export const createLandedPresences = (
     worktrees: AgentWorktrees,
     logger: Logger,
@@ -193,17 +216,7 @@ export const createLandedPresences = (
                         const own = await pathsBetween(dir, `own ${repo} ${anchor} ${landedTip}`, anchor, landedTip);
                         const committed = await expiry.committedSince(dir, repo, landedHead, head);
                         const uncommitted = await dirtyIn(repo, dir);
-                        let count = 0;
-                        let here = 0;
-                        for (const path of own) {
-                            if (!applied.has(path)) {
-                                continue;
-                            }
-                            count += 1;
-                            if (committed.has(path) || uncommitted.has(path)) {
-                                here += 1;
-                            }
-                        }
+                        const { count, here } = tallyLanding(own, applied, committed, uncommitted);
                         landed += count;
                         present += here;
                         /* Every path committed is the absorbed condition, and it is deliberately NOT acted on

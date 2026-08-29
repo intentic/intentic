@@ -794,6 +794,19 @@ const permissionsOf = (text) => {
     return blocks;
 };
 
+// The scopes a called workflow asks for beyond what its caller hands it, as [scope, asked, held]. Empty when
+// the call sits inside its grant.
+const beyondGrant = (wanted, granted) => {
+    const over = [];
+    for (const [scope, level] of Object.entries(wanted)) {
+        const held = granted[scope] ?? "none";
+        if ((RANK[level] ?? 0) > (RANK[held] ?? 0)) {
+            over.push([scope, level, held]);
+        }
+    }
+    return over;
+};
+
 const overreach = [];
 for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml"))) {
     const text = readFileSync(join(WORKFLOWS, file), "utf8");
@@ -808,14 +821,11 @@ for (const file of readdirSync(WORKFLOWS).filter((name) => name.endsWith(".yml")
         const calledBlocks = permissionsOf(calledText);
         for (const called of jobsOf(calledText).values()) {
             const wanted = calledBlocks.get(called.name) ?? calledBlocks.get("") ?? {};
-            for (const [scope, level] of Object.entries(wanted)) {
-                const held = granted[scope] ?? "none";
-                if ((RANK[level] ?? 0) > (RANK[held] ?? 0)) {
-                    overreach.push(
-                        `${call[1]}: job \`${called.name}\` asks for \`${scope}: ${level}\`, but .github/workflows/${file} job ` +
-                            `\`${job.name}\` grants it \`${scope}: ${held}\`, add \`${scope}: ${level}\` to that call's \`permissions\``,
-                    );
-                }
+            for (const [scope, level, held] of beyondGrant(wanted, granted)) {
+                overreach.push(
+                    `${call[1]}: job \`${called.name}\` asks for \`${scope}: ${level}\`, but .github/workflows/${file} job ` +
+                        `\`${job.name}\` grants it \`${scope}: ${held}\`, add \`${scope}: ${level}\` to that call's \`permissions\``,
+                );
             }
         }
     }
