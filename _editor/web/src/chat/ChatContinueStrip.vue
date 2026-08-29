@@ -108,7 +108,7 @@ const autoContinueLine = computed(() =>
 <template>
     <div
         v-if="visible"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ line }}</span>
@@ -169,7 +169,7 @@ const autoContinueLine = computed(() =>
          because a switch with no off is a trap. -->
     <div
         v-if="autoContinueStrip"
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-overlay/60 px-3 py-2 text-2xs text-muted"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line-strong bg-card px-3 py-2 text-2xs text-muted"
     >
         <Icon name="repeat" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
