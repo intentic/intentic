@@ -6,7 +6,7 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
 ~/.intentic/<name>/          agentHome(name)      — state dir + config.json
         config.json          writeSecretFile()    — 0700 dir, 0600 file
         <agent>.log          spawnDetached()      — the loop's output has nowhere else to go
-        <agent>.pid          livePid()            — find the loop again from another process
+        <agent>.pid          livePid()            — find the loop again, pid + the boot it belongs to
 
 HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation
 ~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent
@@ -60,7 +60,7 @@ foreground loop would park a black console window on the desktop from login unti
 desktop session, which supervise what they start, get the **foreground** one. `launchAgent` is optional: an
 agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never reads.
 
-**`detached.ts`**: `spawnDetached`, `livePid`, `isProcessAlive`. The loop is spawned `detached` on **every**
+**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. The loop is spawned `detached` on **every**
 platform: on POSIX for its own session, on Windows because without it the loop is torn down the moment its
 parent exits: measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie
 there for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
@@ -72,6 +72,23 @@ every spawn inside a loop (git and ssh in sync's bridge, docker and PowerShell i
 `spawnDetached` also answers only once the loop has **survived** a short settle window, and throws naming its log
 otherwise. A pid proves the OS created a process; every caller turns it straight into a sentence promising the
 user their machine is now doing something.
+
+A pidfile lives beside the config, so it **outlives the boot that wrote it**, while the number in it means
+nothing outside that boot's process table: pids restart low and are handed out in roughly the same order every
+time, so a loop's own pid from yesterday is somebody else's transient process this morning. So `pidFileBody`
+writes the pid *and* a stamp naming the boot, and `livePid` ignores any record from a different one without
+probing it. On Linux the stamp is `/proc/sys/kernel/random/boot_id`, exact and unmoved by the clock; elsewhere
+it is the boot's epoch by subtraction from the uptime, which libuv takes from `GetTickCount64` on Windows and
+`kern.boottime` on macOS — both keep counting across sleep, so a laptop that suspends goes on answering the same
+boot. That derived form is compared with a two-minute tolerance, because it is anchored to `Date.now()` and a
+stepped clock would otherwise read as a new boot; a false *mismatch* is the expensive direction, since it lets a
+second loop start on top of a live one.
+
+The cost of not doing this was measured: a machine bugchecked in standby, nothing removed the sync watcher's
+pidfile, and on the next boot the watcher probed the pid it used to hold, found an unrelated early-boot process
+wearing it, and refused to start. Refusing is deliberate and so exits 0 — a supervisor must not restart a
+watcher into refusing again every `RestartSec` — which is precisely why `Restart=on-failure` never fired and
+desktop file sync stayed off until somebody went looking.
 
 **`ui.ts`**: `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
 `ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the

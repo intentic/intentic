@@ -4,6 +4,7 @@ import {
     createUi,
     livePid,
     type Log,
+    pidFileBody,
     type PlanStep,
     registerAutostart,
     spawnDetached,
@@ -193,7 +194,7 @@ const run = buildCommand<RunFlags>({
             return;
         }
         const links = await readLinks();
-        await writeSecretFile(runPidPath, baseDir, String(process.pid));
+        await writeSecretFile(runPidPath, baseDir, await pidFileBody());
         // host.log is long-lived, so bare lines in it are useless, every line is stamped.
         const log: Log = (message) => void this.process.stdout.write(`[${new Date().toISOString()}] ${message}\n`);
         /* ONE SOCKET PER SANDBOX, IN ONE PROCESS. Each connection is an ordinary outbound websocket with its own

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { uptime } from "node:os";
 import { setTimeout } from "node:timers/promises";
 import type { CliLauncher } from "./launcher.js";
 
@@ -8,8 +9,8 @@ import type { CliLauncher } from "./launcher.js";
  * processes through a pidfile.
  *
  * The pidfile is how a later `status`, `--stop` or `uninstall` reaches a loop no shell owns any more. A stale
- * one (the loop crashed, the machine lost power) reads as "not running" rather than as a lie, which is why the
- * pid is probed rather than trusted. */
+ * one (the loop crashed, the machine lost power) must read as "not running" rather than as a lie, which is why
+ * the pid is probed rather than trusted, and why the pid alone is not what is written (`bootToken`). */
 
 // Signal 0 tests for the process without touching it: ESRCH means it is gone, EPERM means it exists and belongs
 // to another user, which still counts as alive. Exported for the bounded waits that watch one pid exit, where
@@ -23,11 +24,65 @@ export const isProcessAlive = (pid: number): boolean => {
     }
 };
 
-// The pid in the file, if there is one and it is still running. Undefined covers every other case, no file, a
-// half-written one, a pid that has since exited, because they all mean the same thing to every caller.
+/* WHAT A PID CANNOT SAY ON ITS OWN, AND THE OUTAGE THAT PROVED IT.
+ *
+ * A pidfile lives in `~/.intentic/<name>`, so it outlives the boot that wrote it. Probing the number in it
+ * answers "is SOMETHING running under this pid", never "is the loop that wrote this still running", and across a
+ * reboot those are different questions: pids restart low and are handed out in roughly the same order every
+ * time, so the number a loop held at boot N is, at the same moment of boot N+1, held by whatever unrelated
+ * early-boot process reached it first.
+ *
+ * FIELD FAILURE, 2026-08-29. The machine bugchecked in standby (a display driver, nothing to do with us), so
+ * nothing ran the shutdown path that removes the pidfile. It still said 232. On the next boot the sync watcher's
+ * own systemd unit came up as pid 216, probed 232, found a transient early-boot process wearing it, and refused
+ * to start: "a mirror watcher is already running (pid 232)". Refusing is a CHOICE, so it exits 0 on purpose (a
+ * supervisor must not restart a watcher into refusing again every RestartSec, see mirror.ts `signalExitCode`),
+ * which means `Restart=on-failure` never fired. Pid 232 was gone within seconds. The refusal lasted until a
+ * person went looking, and desktop file sync was off for the whole of it.
+ *
+ * So the pidfile records the BOOT it was written in, and a record from any other boot is stale by construction:
+ * the pid in it describes a process table that no longer exists, and is never probed. */
+const bootToken = async (): Promise<string> => {
+    /* Linux (and WSL) publishes a fresh UUID per boot. Exact, free to read, and immune to the clock moving,
+     * which matters on the machines this bit: a WSL guest resuming behind a host that slept spends its first
+     * minutes being stepped by the hypervisor's time sync. */
+    const bootId = (await readFile("/proc/sys/kernel/random/boot_id", "utf8").catch(() => "")).trim();
+    /* Elsewhere the boot is named by WHEN it started, which is the same fact by subtraction. libuv's uptime is
+     * `GetTickCount64` on Windows and `kern.boottime` on macOS, and both keep counting across sleep, so a laptop
+     * that suspends and resumes goes on answering the same boot rather than looking like a new one. */
+    return bootId === "" ? `at:${Math.round(Date.now() - uptime() * 1000)}` : `id:${bootId}`;
+};
+
+/* How far two DERIVED boot stamps may sit apart and still be one boot. Only the `at:` form needs a tolerance:
+ * it is anchored to `Date.now()`, so stepping the clock (an NTP correction, a VM resuming on a stale RTC) moves
+ * it while the uptime keeps counting. A false MISMATCH is the expensive direction, it would let a second loop
+ * start on top of a live one, and two of those do real damage rather than merely wasting a process. Two minutes
+ * is far above any correction a running machine takes in one step and far below what a real reboot costs. `id:`
+ * stamps are exact and compared exactly. */
+const SAME_BOOT_MS = 120_000;
+
+const sameBoot = (written: string, current: string): boolean => {
+    if (!written.startsWith("at:") || !current.startsWith("at:")) {
+        return written === current;
+    }
+    return Math.abs(Number(written.slice(3)) - Number(current.slice(3))) <= SAME_BOOT_MS;
+};
+
+/* What every writer puts in its pidfile: the process, and the boot it belongs to. One producer so `livePid` has
+ * one shape to parse. The pid is a parameter only so a test can write a record for a stand-in process it
+ * spawned; every real caller writes its own. */
+export const pidFileBody = async (pid: number = process.pid): Promise<string> => `${pid} ${await bootToken()}`;
+
+// The pid in the file, if the file was written by THIS boot and that pid is still running. Undefined covers
+// every other case, no file, a half-written one, one left behind by an earlier boot, a pid that has since
+// exited, because they all mean the same thing to every caller: there is no loop to reach.
 export const livePid = async (pidPath: string): Promise<number | undefined> => {
-    const pid = Number((await readFile(pidPath, "utf8").catch(() => "")).trim());
+    const [written = "", stamp = ""] = (await readFile(pidPath, "utf8").catch(() => "")).trim().split(/\s+/);
+    const pid = Number(written);
     if (!Number.isInteger(pid) || pid <= 0) {
+        return undefined;
+    }
+    if (!sameBoot(stamp, await bootToken())) {
         return undefined;
     }
     return isProcessAlive(pid) ? pid : undefined;

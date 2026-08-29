@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
-import { type CliLauncher, isProcessAlive, livePid, type Log, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
+import { type CliLauncher, isProcessAlive, livePid, type Log, pidFileBody, spawnDetached, unregisterAutostart, writeSecretFile } from "@intentic/local-agent";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import { MIRROR_AUTOSTART } from "./autostart.js";
 import {
@@ -417,7 +417,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         log(`a mirror watcher is already running (pid ${holder}): leaving it alone. Stop it with \`intentic-sync mirror --stop\` first.`);
         return;
     }
-    await writeSecretFile(mirrorPidPath, baseDir, String(process.pid));
+    await writeSecretFile(mirrorPidPath, baseDir, await pidFileBody());
     // Stop polling on signal, but leave the forwards up. Mutagen's daemon holds them, so a watcher restart
     // never drops the user's connections. Only `--stop`/`uninstall` tear the forwards down.
     process.on("SIGTERM", watcherShutdown);

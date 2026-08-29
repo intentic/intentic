@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pidFileBody } from "@intentic/local-agent";
 import type { PortSummary } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MirroredPort } from "./config.js";
@@ -187,9 +188,15 @@ describe("reconcileForwards (minimal-touch)", () => {
 
 describe("readLiveWatcherPid", () => {
     it("returns our own pid as alive and rejects a non-numeric pidfile", async () => {
-        await writeFile(mirrorPidPath, String(process.pid));
+        await writeFile(mirrorPidPath, await pidFileBody());
         await expect(readLiveWatcherPid()).resolves.toBe(process.pid);
         await writeFile(mirrorPidPath, "not-a-pid");
+        await expect(readLiveWatcherPid()).resolves.toBeUndefined();
+    });
+
+    // A record with no boot stamp is not one of ours, so it describes nothing this boot can reach.
+    it("rejects a pidfile carrying a bare pid", async () => {
+        await writeFile(mirrorPidPath, String(process.pid));
         await expect(readLiveWatcherPid()).resolves.toBeUndefined();
     });
 });
@@ -205,8 +212,9 @@ describe("runMirrorWatch single-holder guard", () => {
         if (pid === undefined) {
             throw new Error("the stand-in watcher didn't start");
         }
+        const held = await pidFileBody(pid);
         try {
-            await writeFile(mirrorPidPath, String(pid));
+            await writeFile(mirrorPidPath, held);
             const said: string[] = [];
 
             // Returning here is what proves the guard runs FIRST: everything past it calls ensureMutagen(), which
@@ -215,7 +223,31 @@ describe("runMirrorWatch single-holder guard", () => {
 
             expect(said.join("\n")).toContain(`already running (pid ${pid})`);
             // The incumbent keeps the pidfile: a refusing watcher must not stamp its own pid over it.
-            expect((await readFile(mirrorPidPath, "utf8")).trim()).toBe(String(pid));
+            expect((await readFile(mirrorPidPath, "utf8")).trim()).toBe(held);
+        } finally {
+            other.kill("SIGKILL");
+        }
+    });
+
+    /* THE OUTAGE THIS GUARD CAUSED, once, by believing a number. A pidfile outlives the boot that wrote it, and
+     * pids restart low and in roughly the same order every boot, so the watcher's own pid from yesterday is
+     * somebody else's transient process this morning. On 2026-08-29 a machine bugchecked in standby with the
+     * pidfile saying 232; the watcher came back as pid 216, probed 232, found an unrelated early-boot process
+     * wearing it, refused, and exited 0 (a refusal is deliberate, so a supervisor must not restart it into
+     * refusing again) — which meant `Restart=on-failure` never fired and file sync stayed off for hours.
+     *
+     * The stand-in here is genuinely ALIVE, exactly as pid 232 was. Only the boot stamp says the record is not
+     * about it. */
+    it("starts when the pidfile is from an earlier boot, however alive that pid happens to be now", async () => {
+        const other = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { detached: true, stdio: "ignore" });
+        const pid = other.pid;
+        if (pid === undefined) {
+            throw new Error("the stand-in watcher didn't start");
+        }
+        try {
+            await writeFile(mirrorPidPath, `${pid} id:0f9a1c3e-0000-4000-8000-000000000000`);
+
+            expect(await readLiveWatcherPid()).toBeUndefined();
         } finally {
             other.kill("SIGKILL");
         }
@@ -261,7 +293,7 @@ describe("stopWatcher", () => {
         // Wait for its handler to be INSTALLED. Signalling a node process still booting kills it outright, which
         // silently turns this into a test of an instantly-dying watcher: one that passes either way.
         await new Promise((ready) => watcher.stdout?.once("data", ready));
-        await writeFile(mirrorPidPath, String(pid));
+        await writeFile(mirrorPidPath, await pidFileBody(pid));
 
         await expect(stopWatcher()).resolves.toBe(pid);
 
