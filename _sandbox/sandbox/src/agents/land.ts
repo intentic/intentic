@@ -43,8 +43,9 @@ export interface LandOutcome extends LandResult {
     readonly changed: boolean;
     readonly repos: PersistedAgent["repos"];
     readonly diff: { files: number; insertions: number; deletions: number };
-    /* DID THIS LAND ACTUALLY JUDGE THE DELTA: false for `measure`, and that single bit is what stops a land
-     * that touches nothing from retiring the verdict of one that did.
+    /* DID THIS LAND ACTUALLY JUDGE THE DELTA: false for `measure` unless it was re-judging a stored refusal
+     * (see `rejudging` below), and that single bit is what stops a land that touches nothing from retiring the
+     * verdict of one that did.
      *
      * `measure` runs at the end of every turn nobody let finish (agent.routes.ts settleLandBooks): a dismissed
      * question, the user's own Stop. It preserves the worktree's remainder, refreshes the diffstat and marks
@@ -357,6 +358,28 @@ export const landAgent = async (
     git: GitRunner = defaultGit,
 ): Promise<LandOutcome> => {
     const conflicts: LandConflict[] = [];
+    /* A STORED REFUSAL IS RE-JUDGED, even by a `measure`, and this is the only thing a measure does that it
+     * would not do for an agent nothing refuses.
+     *
+     * "Only a verdict may replace a verdict" (see LandOutcome.adjudicated) is right, and on its own it strands
+     * every conflict a sandbox with auto-land held ever records. That is the DEFAULT posture: with no
+     * `agent.finished` rule the landing verdict is hold, so every turn ends in `measure`, `measure` reaches no
+     * conflict gate, and the stored refusal outlives whatever fixed it. The loop that produces is the one the
+     * button is named for: "Have the agent resolve it" starts a turn, the agent rebases the branch until the
+     * delta applies, the turn ends in `measure`, the old verdict survives untouched, and the card returns to
+     * Attention asking for the same resolve it just got. Nothing the agent can do inside that turn ends it.
+     *
+     * So a measure that finds a stored refusal asks the conflict gate again. It is `git apply --check` and
+     * `git diff` only, which write nothing, so measure's promise — the main tree is not mine to touch — is
+     * kept exactly. What changes is that the answer counts: `adjudicated` goes true and the fresh verdict
+     * REPLACES the old one, clearing it when the delta now applies.
+     *
+     * EVERY repo is re-judged, not only the ones that carried a conflict, because the verdict replaces the
+     * stored report wholesale: judging a subset and reporting it as the whole would retire a refusal in a
+     * repository this pass never looked at.
+     *
+     * Only agents already marked conflicted pay for it, which is the population it exists for. */
+    const rejudging = mode === "measure" && (entry.conflicts?.length ?? 0) > 0;
     // Only a `measure` land sets this: an outstanding delta it deliberately left on the branch (see LandModeSchema).
     let held = false;
     // Only a `merge` land fills this: the paths now sitting in the workspace with conflict markers on them.
@@ -470,6 +493,23 @@ export const landAgent = async (
                         next = await advanced();
                         return;
                     }
+                    /* The re-judgement (see `rejudging`). A delta that applies now carries no verdict at all,
+                     * which is what retires the stored one; anything still blocked is reported exactly as the
+                     * conflict gate below reports it, because it IS that gate, asked without applying. `held`
+                     * is set either way and the return suppresses it wherever a conflict was found, so the
+                     * outcome reads the same as a real land's for the same tree. */
+                    if (rejudging && !(await applies(main, patchPath, "forward", git))) {
+                        const report = await classifyDelta(main, from, tip, patchDir, repo, git);
+                        if (report.blocked.length > 0) {
+                            const mainBranch = await mainBranchOf(main, git);
+                            conflicts.push({
+                                repo,
+                                paths: report.blocked,
+                                clean: report.clean.length,
+                                ...(mainBranch !== undefined ? { mainBranch } : {}),
+                            });
+                        }
+                    }
                     held = true;
                     return;
                 }
@@ -539,8 +579,9 @@ export const landAgent = async (
         repos,
         diff,
         // `measure` never reaches the conflict gate, so it has no verdict to offer and must not retire the
-        // last one: see the field's own note above.
-        adjudicated: mode !== "measure",
+        // last one: see the field's own note above. Unless it was re-judging, which is the gate, asked without
+        // applying, and therefore a verdict like any other.
+        adjudicated: mode !== "measure" || rejudging,
         ...(conflicts.length > 0 ? { conflicts } : {}),
         ...(resolving.length > 0 ? { resolving } : {}),
         ...(held && conflicts.length === 0 ? { held: true } : {}),

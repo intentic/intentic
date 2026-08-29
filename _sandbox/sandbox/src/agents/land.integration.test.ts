@@ -530,6 +530,64 @@ test("measure with nothing to measure stays changed:false, like any other no-op 
     expect(result.held).toBeUndefined();
 });
 
+/* --- re-judging a stored refusal ---------------------------------------------------------------------------
+ *
+ * The dead end these three close: with auto-land held (no `agent.finished` rule, which is a fresh sandbox's
+ * posture) EVERY turn ends in `measure`, and a `measure` that offers no verdict can never retire one. So a
+ * conflict the agent then went and FIXED outlived its cause forever, and "Have the agent resolve it" started a
+ * turn that could not end the state it was pressed to end. */
+
+test("measure re-judges a stored refusal, so a resolved conflict stops outliving its cause", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+    const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(refused.conflicts).toHaveLength(1);
+
+    // The cause goes away, which is what a resolve turn does. The only pass that runs at the end of that turn
+    // is this one.
+    await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
+    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { conflicts: refused.conflicts }), "measure");
+
+    // A verdict, so recordLanded may replace the stored one, and an empty verdict, so it clears.
+    expect(settled.adjudicated).toBe(true);
+    expect(settled.conflicts).toBeUndefined();
+    // Still HELD: re-judging says what the tree makes of the delta, it does not land it.
+    expect(settled).toMatchObject({ landed: false, held: true });
+    expect(await sh(work, "status", "--porcelain")).toBe("");
+});
+
+test("a re-judged refusal that still stands is reported again, not quietly retired", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
+    const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { conflicts: refused.conflicts }), "measure");
+
+    expect(settled.adjudicated).toBe(true);
+    expect(settled.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
+    // A conflict is the louder fact, exactly as a real land reports it for the same tree.
+    expect(settled.held).toBeUndefined();
+    // And measure's own promise is kept whichever way it judges: the gate is `apply --check`, which writes nothing.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
+    // The user's own edit, and nothing else: `sh` trims, so the porcelain's leading status column arrives bare.
+    expect(await sh(work, "status", "--porcelain")).toBe("M app.ts");
+});
+
+test("an agent nothing refuses is not re-judged, so an ordinary measure still offers no verdict", async () => {
+    const { worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "measure");
+
+    // The invariant the re-judgement must not cost: a measure with nothing to answer for reaches no gate, so
+    // it has no verdict and cannot retire the next one.
+    expect(result.adjudicated).toBe(false);
+    expect(result).toMatchObject({ landed: false, held: true });
+    expect(result.conflicts).toBeUndefined();
+});
+
 test("deletes and renames land; a conflicted land keeps landedTip so recovery applies the same delta", async () => {
     const { work, worktrees, conversation } = await setup();
     await sh(conversation.cwd, "mv", "app.ts", "renamed.ts");
