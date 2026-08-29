@@ -10,6 +10,12 @@ export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // The two bases a user can READ and fork, "custom" is excluded because there is nothing to fetch: it is
 // whatever they have already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
+// How far the dependency-freshness check may go, see the settings field of the same name for why the middle
+// state exists. Declared out here because the daemon branches on it in three places (whether to wire the hook,
+// whether to consult the successor list, what the notice may say) and the browser branches on it to draw the
+// row: a bare inline enum would have each of those spelling the literals for itself.
+export const DependencyFreshnessSchema = z.enum(["off", "versions", "full"]);
+export type DependencyFreshness = z.infer<typeof DependencyFreshnessSchema>;
 /* ---- rules: "at this moment, if this is true, do this" ------------------------------------------------------
  *
  * The one table behind every standing instruction the owner gives the sandbox about its own work. It replaces
@@ -245,6 +251,10 @@ export const SkillRemoveSchema = z.object({
 //                        (docx/pdf/images/audio → .intentic/local/cache/derived/) the moment it lands, via
 //                        the baked fileq CLI, so reasoning-time reads are pre-derived. The CLI itself is
 //                        always available; this gates only the eager watcher-driven derivation.
+//   dependencyFreshness, whether a version the agent is about to pin is checked against the package's own
+//                        registry before it lands, and what the check is allowed to say: "off" (no hook is
+//                        wired at all), "versions" (registry-derivable facts only), "full" (also names a
+//                        maintained successor, where one is known and the registry corroborates it).
 //   outputCleaners   , the Bash output-cleaner spec (agent-output-filter): "off" = filter disabled,
 //                        "" = all cleaners on (default), else an iq-style allow-list / default-minus
 //                        spec ("git,pnpm" = only those; "-cap" = all except). Threaded to the filter via env.
@@ -379,6 +389,38 @@ export const SandboxSettingsSchema = z.object({
         .default(false)
         .describe(
             "Keep an up-to-date markdown rendering of every document, image and audio file in the workspace, made in the background as files land, so the agent reads a pre-derived text instead of paying to parse the file mid-task. Costs background CPU on a document-heavy workspace, so it is a switch rather than a default.",
+        ),
+    /* IS THE VERSION ABOUT TO BE PINNED THE ONE THE REGISTRY ACTUALLY HAS?
+     *
+     * A model writes a version from memory, and memory has a publication date. Across this workspace's own
+     * session history the failure is small, steady, and never self-correcting: of the version literals an
+     * agent typed into a manifest or an install command, more than half were already behind the newest
+     * release at the moment they were typed, and a third were written without any registry ever being asked.
+     * Nothing downstream catches it either — a stale pin installs cleanly, type-checks, and passes the suite,
+     * so every gate this sandbox already has says yes to it.
+     *
+     * THREE STATES, and the middle one is the whole feature. The two halves of "this dependency choice is
+     * behind" are different KINDS of claim:
+     *   versions, a measurement. The registry publishes what the newest release is and when; comparing is
+     *              arithmetic, it works for any package, and there is nothing to keep current.
+     *   full    , a measurement plus an opinion. Naming `date-fns` as what to reach for instead of `moment`
+     *              is a judgement somebody made, and judgements rot. An owner is entitled to take the facts
+     *              and decline the opinions, which is exactly what the two settings are.
+     * The successor list never asserts staleness on its own: an entry surfaces only where the registry
+     * corroborates it (deprecated, or nothing published in eighteen months), so the curation supplies the
+     * NAME of the replacement and the measurement supplies the reason. That split is what stops it decaying
+     * into a list of last year's preferences.
+     *
+     * IT INFORMS, IT NEVER BLOCKS, and that is not timidity. Matching a version the workspace already pins is
+     * the common case and it is CORRECT: a new package inside a monorepo should take the catalog's
+     * `typescript`, not the newest one on the registry. A gate that refused would fight legitimate work
+     * several times for every mistake it caught, so the fact rides back as context and the model decides.
+     *
+     * Off by default like every other flag here, and off means genuinely nothing: no hook is wired, and the
+     * sandbox makes no network call it would not otherwise have made. */
+    dependencyFreshness: DependencyFreshnessSchema.default("off")
+        .describe(
+            "Whether a version the agent is about to pin is checked against the package's own registry first. Facts only, or facts plus the name of a maintained replacement where the registry agrees the current choice has been abandoned. It tells the agent and lets it decide rather than refusing, because matching a version your project already uses is usually the right answer and a gate would fight it.",
         ),
     outputCleaners: z
         .string()

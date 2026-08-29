@@ -9,6 +9,7 @@ import AgentChangelog from "./agent/AgentChangelog.vue";
 import AgentChecks from "./agent/AgentChecks.vue";
 import AgentCodeSearch from "./agent/AgentCodeSearch.vue";
 import AgentCommandOutput from "./agent/AgentCommandOutput.vue";
+import AgentDependencies from "./agent/AgentDependencies.vue";
 import AgentFinishedWork from "./agent/AgentFinishedWork.vue";
 import AgentInstructions from "./agent/AgentInstructions.vue";
 import AgentMemory from "./agent/AgentMemory.vue";
@@ -136,6 +137,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
              job it may hand to other agents, and who picks the turn up when it breaks. -->
         <template v-else-if="section === `running`">
             <AgentCodeSearch />
+            <AgentDependencies />
             <AgentCommandOutput />
             <AgentSubagents />
             <AgentRecovery />

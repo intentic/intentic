@@ -34,6 +34,7 @@ vi.mock(`./agent/AgentSkills.vue`, () => stub(`Skills`));
 vi.mock(`./agent/AgentRules.vue`, () => stub(`Rules`));
 vi.mock(`./agent/AgentMemory.vue`, () => stub(`Memory`));
 vi.mock(`./agent/AgentCodeSearch.vue`, () => stub(`Code search`));
+vi.mock(`./agent/AgentDependencies.vue`, () => stub(`Dependencies`));
 vi.mock(`./agent/AgentCommandOutput.vue`, () => stub(`Command output`));
 vi.mock(`./agent/AgentSubagents.vue`, () => stub(`Subagents`));
 vi.mock(`./agent/AgentRecovery.vue`, () => stub(`When a turn breaks`));
@@ -41,7 +42,7 @@ vi.mock(`./agent/AgentChecks.vue`, () => stub(`Checks`));
 vi.mock(`./agent/AgentFinishedWork.vue`, () => stub(`Finished work`));
 vi.mock(`./agent/AgentChangelog.vue`, () => stub(`Changelog`));
 
-// The thirteen names above, for the test that every one of them lands in exactly one category.
+// The fourteen names above, for the test that every one of them lands in exactly one category.
 const EVERY_GROUP = [
     `AI account`,
     `Models`,
@@ -50,6 +51,7 @@ const EVERY_GROUP = [
     `Rules`,
     `Memory`,
     `Code search`,
+    `Dependencies`,
     `Command output`,
     `Subagents`,
     `When a turn breaks`,

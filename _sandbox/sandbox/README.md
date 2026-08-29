@@ -295,6 +295,16 @@ reports the profile.
   dpkg's own log for apt, an mtime sweep for everything else); and an install that recurs across sessions, is
   corroborated by drift, and has a mechanical template is auto-drafted into the owner's proposal (`auto-drafts.ts`).
   Rejection tombstones the tool in the ledger so the machine never re-proposes what the owner already declined.
+- [src/dependencies](src/dependencies): whether the version an agent is about to pin is the one its registry
+  actually has. [src/agent/agent-freshness.ts](src/agent/agent-freshness.ts) reads the pins out of an install
+  command or a manifest edit and hands the difference back as context, never as a refusal — matching a version the
+  workspace already pins is the commonest reason to write something other than the newest, and it is a good one.
+  `registry-freshness.ts` does the asking under two separate clocks: the caller waits a fraction of a second, the
+  fetch itself gets much longer and is not cancelled when the caller gives up, so a cold lookup lands in the cache
+  and the PostToolUse pass reports it a beat later instead of it being lost. `successors.ts` is the curated half
+  and the only opinion in the feature: it supplies the NAME of a replacement, while whether the incumbent is
+  actually finished stays a registry measurement, so an entry that stops being true stops being said. Off by
+  default (`dependencyFreshness`); off wires no hook and contacts nothing.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts): the update lifecycle for git-installed
   extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
   official-registry admission check (an unaudited sha never becomes an install or update offer),

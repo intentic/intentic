@@ -13,6 +13,9 @@ import {
     envSuffix,
 } from "@intentic/sandbox-contract";
 import { admitTurn, readMemoryHeadroom } from "../platform/memory-admission.js";
+import { createFreshnessResolver } from "../dependencies/registry-freshness.js";
+import { createWorkspacePins } from "../dependencies/workspace-pins.js";
+import { statePath } from "../workspace/state-paths.js";
 import { accountsServer } from "../browser/accounts-tools.js";
 import { secretsServer } from "../browser/secrets-tools.js";
 import type { SecretAccess } from "./agent-secrets.js";
@@ -555,6 +558,20 @@ const honoured = (
         workspaceRoot: services.workspace.root,
         dependencyIssue: (command) => services.dependencies.issueAt(dependencyDirForCommand(dependencyDir, services.workspace.root, command)),
         dependencyInstallAllowed,
+        /* The registry check on a version about to be pinned. Bound HERE, like the dependency answer above
+         * it, because this is the last point that still knows the workspace root: the resolver's between-turn
+         * cache lives beside the other derived state, and below this a persona's start folder or an isolated
+         * worktree has already overwritten the root it would be keyed to.
+         *
+         * A resolver is built even when the setting is off. It holds no connection and opens nothing until it
+         * is asked, and the hook that would ask it is not wired at all in that case (agent.ts), so the cost of
+         * building one unconditionally is an object, while the cost of branching here would be a second place
+         * that has to agree with agent.ts about what "off" means. */
+        dependencyFreshness: settings.dependencyFreshness,
+        freshnessResolver: createFreshnessResolver({ cacheDir: statePath(services.workspace.root, ".intentic/local/cache/", "freshness") }),
+        // Lazy: the tree is walked on the first pin a turn actually sees, and never on a turn that touches no
+        // manifest, so building this eagerly here costs nothing.
+        workspacePins: createWorkspacePins(services.workspace.root),
         ...(startPath !== undefined ? { cwd: startPath } : {}),
         ...(scope !== undefined ? { personaScope: scope } : {}),
         ...(shellEnv !== undefined && Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),

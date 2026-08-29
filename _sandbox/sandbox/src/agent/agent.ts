@@ -21,6 +21,7 @@ import {
     type AskQuestion,
     type CardDocument,
     type CommandClass,
+    type DependencyFreshness,
     documentOf,
     type PermissionMode,
     type Rule,
@@ -38,6 +39,9 @@ import type { ChildSupervisor } from "../children/children.js";
 import { browserArtifactHooks } from "../browser/browser-artifacts.js";
 import { browserSessionHooks } from "../browser/browser-sessions.js";
 import { depsNoticeHooks } from "./agent-deps.js";
+import type { FreshnessResolver } from "../dependencies/registry-freshness.js";
+import type { WorkspacePins } from "../dependencies/workspace-pins.js";
+import { freshnessHooks } from "./agent-freshness.js";
 import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
@@ -102,6 +106,15 @@ export interface AgentRequest {
     // whole workspace and excuse one project's error with another project's missing package.
     readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
     readonly dependencyInstallAllowed?: boolean;
+    /* How far the version-freshness check may go, and what asks the registry (agent-freshness.ts). Two
+     * fields rather than one because the RESOLVER is a turn-scoped object with a cache in it, bound while
+     * planning where the workspace root is known, while the MODE is the owner's setting and is what decides
+     * whether any hook is wired at all. Absent mode ⇒ off, which wires nothing and costs nothing. */
+    readonly dependencyFreshness?: DependencyFreshness;
+    readonly freshnessResolver?: FreshnessResolver;
+    // What this workspace already pins, so a new package taking the catalog's version is not reported as
+    // stale. Bound while planning, for the same reason as the resolver: the workspace root is still known.
+    readonly workspacePins?: WorkspacePins;
     // Every image-scoped install this turn attempts, classified, for the runtime-install ledger behind the
     // environment drift sweep (environment/runtime-installs.ts). Silent: nothing about it reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
@@ -645,6 +658,12 @@ const baseOptions = (
              * the model saw it, this makes the answer the same for all of them (agent/agent-redaction.ts). */
             request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
             installSteeringHooks(request.dependencyInstallAllowed === true, request.onImageInstall),
+            /* The version about to be pinned, checked against the registry that publishes it
+             * (agent-freshness.ts). Sits next to the install steering because they read the same commands and
+             * answer different halves of one question: that one is about WHERE an install lands, this one is
+             * about whether the version in it is the version the registry actually has. Mode "off" or no
+             * resolver ⇒ no hook is wired and nothing is fetched. */
+            freshnessHooks(request.dependencyFreshness, request.freshnessResolver, request.workspacePins),
             // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
             // the owner's action rules BEFORE they run, and hooks fire even under bypassPermissions, which is what
             // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).
