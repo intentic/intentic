@@ -10,11 +10,12 @@
 # THE TAG IS THE VERSION AND THE TREE IS NOT. Every first-party package.json stays at 0.0.0 in git, so the
 # checkout of a tag is an UNSTAMPED tree: set-versions.sh stamps it here before anything is built, and the
 # extension's build derives its manifest version from the stamped package version (scripts/stamp-manifest.mjs).
-# The store refuses an upload whose version is not strictly greater than the published one, so an unstamped
-# build would upload 0.0.0 once and then be unable to upload anything ever again.
+# The store refuses an upload whose version is not strictly greater than the published one. An unstamped local
+# build deliberately maps the workspace's invalid all-zero sentinel to 0.0.0.1; only a tag-stamped build may
+# enter this automated release path.
 #
-# INERT UNTIL THE LISTING EXISTS. The four CHROME_WEBSTORE_* values are the store's OAuth client, a refresh
-# token for the publisher account, and the item id the first manual upload creates. Without them the publish
+# INERT UNTIL THE LISTING EXISTS. The five CHROME_WEBSTORE_* values are the store's OAuth client, a refresh
+# token for the publisher account, and the publisher/item ids from the dashboard. Without them the publish
 # step SKIPS loudly (a warning annotation on the run) rather than failing: an unlisted extension must not take
 # a release red. _computers/webext/PUBLISHING.md is the one-time setup, and STORE-LISTING.md is what goes in
 # the listing form.
@@ -25,17 +26,9 @@
 name: webstore publish
 
 # Run it by hand from a tag the same way the release job does: Actions ▸ webstore publish ▸ Run workflow, with
-# the tag selected as the ref. `target` is the audience — `trustedTesters` while the listing is new.
+# the tag selected as the ref. V2 preserves the listing's dashboard visibility; it cannot widen the audience.
 on:
   workflow_dispatch:
-    inputs:
-      target:
-        description: "Who the version goes to once review clears"
-        type: choice
-        default: default
-        options:
-          - default
-          - trustedTesters
 
 permissions:
   contents: read
@@ -86,5 +79,6 @@ jobs:
           CHROME_WEBSTORE_CLIENT_ID: ${{ secrets.CHROME_WEBSTORE_CLIENT_ID }}
           CHROME_WEBSTORE_CLIENT_SECRET: ${{ secrets.CHROME_WEBSTORE_CLIENT_SECRET }}
           CHROME_WEBSTORE_REFRESH_TOKEN: ${{ secrets.CHROME_WEBSTORE_REFRESH_TOKEN }}
+          CHROME_WEBSTORE_PUBLISHER_ID: ${{ vars.CHROME_WEBSTORE_PUBLISHER_ID }}
           CHROME_WEBSTORE_ITEM_ID: ${{ vars.CHROME_WEBSTORE_ITEM_ID }}
-        run: node _tools/scripts/publish-webstore.mjs "${GITHUB_REF_NAME#v}" "${{ inputs.target || 'default' }}"
+        run: node _tools/scripts/publish-webstore.mjs "${GITHUB_REF_NAME#v}"

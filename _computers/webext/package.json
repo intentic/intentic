@@ -17,6 +17,7 @@
         "test:watch": "vitest",
         "package": "node scripts/pack.mjs",
         "icons": "node scripts/render-icons.mjs",
+        "store-assets": "node scripts/render-store-assets.mjs",
         "preview": "node scripts/preview.mjs"
     },
     "dependencies": {

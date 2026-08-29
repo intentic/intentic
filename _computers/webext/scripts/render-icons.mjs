@@ -76,9 +76,15 @@ if (petals.length !== all.length - 2) {
     process.exit(1);
 }
 
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${PETALS_BOX}" fill="${EMBER}">\n  ${petals.join("\n  ")}\n</svg>`;
 for (const size of SIZES) {
-    const png = new Resvg(svg, { fitTo: { mode: "width", value: size }, background: "rgba(0,0,0,0)" }).render().asPng();
+    // An explicit square viewport is the important half. `fitTo: width` preserved the crop's portrait aspect
+    // ratio and quietly wrote 16x18 through 128x147 files under square names; Chrome then distorted them and
+    // the store had no valid 128x128 icon. This is the same square viewport the site and desktop ladders use.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${PETALS_BOX}" fill="${EMBER}">\n  ${petals.join("\n  ")}\n</svg>`;
+    const png = new Resvg(svg, { background: "rgba(0,0,0,0)" }).render().asPng();
+    if (png.readUInt32BE(16) !== size || png.readUInt32BE(20) !== size) {
+        throw new Error(`icon-${size}.png did not render at ${size}x${size}`);
+    }
     writeFileSync(join(icons, `icon-${size}.png`), png);
     console.log(`icon-${size}.png: ${png.length} bytes`);
 }

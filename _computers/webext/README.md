@@ -29,9 +29,12 @@ while nobody is at the keyboard. What it can never be is **you** — your passke
 your employer's SSO, your bank's device fingerprint. Those sites are not a matter of having the right cookie;
 they are a matter of being the browser the account was enrolled on.
 
-So this borrows that browser rather than copying anything out of it. The person is sitting in front of it,
-which is the other half of the design: every action draws a line in the corner of the tab it happened in, and
-anything that looks like paying, deleting or submitting a credential asks them first, in the page.
+So this borrows that browser without copying its profile or sign-ins as part of normal use. Content from a site
+the person allows is sent to the sandbox so the agent can understand and operate that page. A site's session
+cookies leave only through the separate hand-over action, behind an off-by-default switch and an in-page
+confirmation. The person is sitting in front of it, which is the other half of the design: every action draws
+a line in the corner of the tab it happened in, and anything that looks like paying, deleting or submitting a
+credential asks them first, in the page.
 
 ## The three gates, and only one of them is ours
 
@@ -88,21 +91,23 @@ pnpm --filter @intentic/webext build      # → dist/, loadable as an unpacked e
 pnpm --filter @intentic/webext test
 pnpm --filter @intentic/webext package    # → dist.zip, what the store takes
 pnpm --filter @intentic/webext icons      # re-render static/icons/ from the shared lotus
+pnpm --filter @intentic/webext store-assets # re-render the required 440×280 listing tile
 ```
 
 Then in Chrome: **Extensions → Developer mode → Load unpacked → `_computers/webext/dist`**. Pair it with the
 code from a `webext` capability's card (**Connect**), or open the card in the same browser and the extension
 picks the code up on its own.
 
-A locally built extension reports version **0.0.0**, and that is correct rather than broken: the version lives
-on the git tag, not in the tree (`_tools/scripts/packages.sh`), and `scripts/stamp-manifest.mjs` derives the
-manifest's number from the stamped package version in CI. Do not hand-publish a zip — the store refuses any
-upload that is not strictly newer, so a hand-built one burns a version the pipeline then cannot use.
+A locally built extension reports version **0.0.0.1**: Chrome rejects the workspace's all-zero sentinel, and
+this deliberately low valid version is what creates the listing on its first manual upload. Release versions
+live on git tags (`_tools/scripts/packages.sh`), and `scripts/stamp-manifest.mjs` derives the manifest number
+from the stamped package in CI. After that first upload, do not hand-publish another zip — every store version
+must be strictly newer, and the release pipeline owns the sequence.
 
 ## Publishing
 
 Every release publishes itself: `.github/workflows/webstore-publish.yml` builds this package at the tag,
-packs it, uploads it and submits it for review. It skips loudly while the four `CHROME_WEBSTORE_*` values are
+packs it, uploads it and submits it for review. It skips loudly while the five `CHROME_WEBSTORE_*` values are
 unset, which is the state until the listing has been created by hand once.
 
 - [PUBLISHING.md](PUBLISHING.md): the one-time setup — developer account, first upload, OAuth credentials.
@@ -118,3 +123,4 @@ unset, which is the state until the listing has been created by hand once.
 - [static/manifest.json](static/manifest.json): four permissions, one optional host pattern, one content script.
 - [scripts/pack.mjs](scripts/pack.mjs): dist/ as one zip, written by hand because the CI image has no `zip`.
 - [scripts/render-icons.mjs](scripts/render-icons.mjs): the four PNGs, read out of the site's lotus rather than redrawn.
+- [scripts/render-store-assets.mjs](scripts/render-store-assets.mjs): the mandatory promotional tile, from that same lotus.

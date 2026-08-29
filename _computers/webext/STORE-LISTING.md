@@ -36,8 +36,9 @@ it. This extension lets that agent work in THIS browser: the one you are already
 
 That is the whole point of it. Your sandbox has its own browser, and it is the right tool for most jobs — it
 runs while nobody is at the keyboard. What it can never be is you: your passkey, your work SSO, your bank's
-device check, the sites that refuse a datacentre address. This borrows your browser instead of trying to
-impersonate it, and it copies nothing out.
+device check, the sites that refuse a datacentre address. This borrows your browser instead of copying its
+profile or sign-ins. Page content from sites you allow still goes to your sandbox and the AI model you chose;
+the sign-in itself moves only when you use the separate hand-over action and confirm it.
 
 You are there while it works. Every action draws a line in the corner of the tab it happened in, and anything
 that looks like paying, deleting or submitting a password asks you first, on the page.
@@ -86,16 +87,24 @@ explicitly allows, so an AI agent can carry out tasks the user asked for while t
 | `host permissions` (`*://*/*`, optional) | Requested per site at runtime, never at install. The user chooses each site in the extension's popup and revokes it in Chrome's settings. |
 | Content script on `*://*.intentic.dev/*` | Receives a pairing code the user's own sandbox page offers, so the user does not have to copy and paste it. It reads nothing else on those pages. |
 
-**Data usage disclosures** — tick these, and nothing else:
+**Data usage disclosures** — the connector reads arbitrary user-approved pages, so disclose the sensitive
+categories that page content may contain rather than pretending every allowed page is public prose:
 
-- *Personally identifiable information*: **no**
-- *Health information*: no · *Financial and payment information*: no · *Location*: no
-- *Authentication information*: **yes** — "Only when the user explicitly hands one site's sign-in to their own
-  sandbox. It is sent to a server the user paired and controls; the developer never receives it."
-- *Personal communications*: no · *Web history*: no
-- *Website content*: **yes** — "Page content from sites the user explicitly allowed, sent to the user's own
-  sandbox so their agent can act on it."
-- *User activity*: no
+- *Personally identifiable information*: **yes** — allowed pages may contain names, email addresses, account
+  numbers or other identifiers; page content goes to the user's sandbox and configured AI provider.
+- *Health information*: **yes** — only when the user allows and asks the agent to work on a page containing it.
+- *Financial and payment information*: **yes** — same boundary; the extension can work on banking, billing or
+  purchase pages the user explicitly allowed.
+- *Location*: **yes** — allowed page content can contain an address or current/entered location.
+- *Authentication information*: **yes** — only when the user explicitly hands one site's cookies to their own
+  sandbox, behind an off-by-default switch and an in-page confirmation every time.
+- *Personal communications*: **yes** — reading an allowed mail, chat or ticket page sends that content to the
+  user's sandbox and configured AI provider.
+- *Web history*: **yes** — the current URL/title and the URLs/titles of allowed tabs are sent so the agent can
+  identify and work in the requested page; unallowed tabs remain unnamed.
+- *Website content*: **yes** — text, element labels and optional screenshots from explicitly allowed pages.
+- *User activity*: **yes** — a local rolling log records the agent's page actions and the popup displays it;
+  typed text is represented only by its length and password values are excluded.
 - Certifications: **not sold to third parties**, **used only for the single purpose above**, **not used for
   creditworthiness or lending**.
 
@@ -123,7 +132,7 @@ https://intentic.dev/docs/your-browser
 | Store icon | 128×128 PNG | `static/icons/icon-128.png` — the product's own lotus, rendered from the shared lotus in `_site/site/src/components/ornaments.ts` (`pnpm --filter @intentic/webext icons`) |
 | Screenshot 1 | 1280×800 | `assets/store/popup-1280x800.png` — the popup, paired, three sites allowed, one request waiting |
 | Screenshot 2 | 1280×800 | Optional but worth it: a real page mid-action with the banner up. Only a live session can produce that one |
-| Small promo tile | 440×280 | Optional; only needed if the item is ever featured |
+| Small promo tile | 440×280 | **Required and ready:** `assets/store/promo-440x280.png`, regenerated with `pnpm --filter @intentic/webext store-assets` |
 
 The first screenshot is generated from this repository, so it can be retaken whenever the popup changes:
 
@@ -139,7 +148,8 @@ primary buttons were found before anybody installed it.
 
 ## Distribution
 
-**Public**, or **Unlisted** for the first weeks. Unlisted is reviewed exactly the same way, and a rejection
-costs nothing publicly — which is worth having the first time an item with a `cookies` permission goes in.
+**Public**, **Unlisted**, or **Trusted testers** for the first weeks. The V2 publisher preserves this dashboard
+setting; it cannot widen the audience. After changing visibility, publish once in the dashboard before handing
+updates back to the API.
 
 Publishing after the first submission is automatic: see [PUBLISHING.md](PUBLISHING.md).

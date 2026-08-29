@@ -43,8 +43,10 @@ const switches = [
         datacentre address. Those are not a matter of having the right cookie; they are a matter of being the browser the account was enrolled on.
     </p>
     <p>
-        So this borrows that browser rather than impersonating it. Nothing is copied out unless you explicitly hand it over, and you are sitting
-        in front of the thing while it happens.
+        So this borrows that browser rather than impersonating it, without copying its profile or sign-ins as part of normal use. Content from a
+        site you allow is sent to the sandbox so the agent can understand and operate that page. A site's session cookies leave only through the
+        separate hand-over action, behind an off-by-default switch and an in-page confirmation, and you are sitting in front of the thing while it
+        happens.
     </p>
 
     <h2>Connecting one</h2>
