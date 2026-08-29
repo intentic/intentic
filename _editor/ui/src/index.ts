@@ -78,7 +78,7 @@ export { default as Icon } from "./components/Icon.vue";
 // SVG preview, and both sides of a binary diff. In the kit rather than in either caller so zoom, pan and the
 // transparency checkerboard behave identically wherever an image appears.
 export { default as ImageView } from "./components/ImageView.vue";
-export { isRenderableImage } from "./components/imageView.js";
+export { type ImageViewState, isRenderableImage } from "./components/imageView.js";
 export { default as InfoDialog } from "./components/InfoDialog.vue";
 export { default as InfoHint } from "./components/InfoHint.vue";
 export { default as InfoTable } from "./components/InfoTable.vue";

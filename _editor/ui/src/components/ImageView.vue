@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import type { ImageViewState } from "./imageView.js";
 
 /* THE ONE SURFACE THAT SHOWS A PICTURE: the file viewer's images, the SVG preview and both sides of a binary
  * diff all render through here, so zoom, pan and the transparency checkerboard behave identically wherever an
@@ -22,7 +23,17 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
  * The picture is drawn at its natural size and moved by a transform, not laid out inside a scroller: one
  * compositor property carries both zoom and pan, so a wheel gesture never reflows the pane. */
 
-const { src } = defineProps<{ src: string }>();
+const { src, view } = defineProps<{ src: string; view?: ImageViewState }>();
+/* THE VIEW, WHEN SOMETHING ELSE OWNS IT. Optional: on its own this component keeps its magnification to
+ * itself, which is right for the one image in a file tab. Two panes comparing two versions of one picture are
+ * the exception (BinaryDiffView), and there a private view is the bug: whatever the reviewer zooms into on the
+ * left has to appear on the right or there is nothing to compare. Bound both ways, the parent holds one state
+ * and hands it to both panes.
+ *
+ * Only DELIBERATE moves are published, never the ones this pane made on its own behalf, which is what keeps
+ * two bound panes from talking each other into a corner: an incoming view is applied without being echoed, and
+ * a re-fit forced by a pane resize is not a gesture. */
+const emit = defineEmits<{ "update:view": [ImageViewState] }>();
 
 // Zoom range, and the ladder the +/− controls and the keyboard step through: stops rather than a fixed
 // multiplier, so the magnifications worth landing on exactly (½, 1:1, 2×) are always hit and never stepped past.
@@ -69,7 +80,10 @@ const clampScale = (value: number): number => Math.min(MAX_SCALE, Math.max(MIN_S
 // The single writer of the view: clamps the scale, then keeps the image reachable, centred on any axis where it
 // is smaller than the pane, and flush to the edges on any axis where it is bigger, so it can never be flung into
 // the void and lost.
-const place = (nextScale: number, x: number, y: number): void => {
+//
+// `publish` marks a move the reviewer asked for, the only kind a bound sibling should follow. Everything this
+// pane does for its own reasons (adopting the shared view, re-fitting after a resize) passes false.
+const place = (nextScale: number, x: number, y: number, publish = true): void => {
     const size = natural.value;
     if (size === undefined) {
         return;
@@ -82,11 +96,19 @@ const place = (nextScale: number, x: number, y: number): void => {
         x: w <= box.value.w ? (box.value.w - w) / 2 : Math.min(0, Math.max(box.value.w - w, x)),
         y: h <= box.value.h ? (box.value.h - h) / 2 : Math.min(0, Math.max(box.value.h - h, y)),
     };
+    if (publish && view !== undefined) {
+        emit(`update:view`, { fit: false, scale: value, x: offset.value.x, y: offset.value.y });
+    }
 };
 
-const fit = (): void => {
-    place(fitScale.value, 0, 0);
+// Fitting is published as "fit", not as the number it worked out to: a sibling pane holding a differently sized
+// version of the picture has its own whole-picture scale, and copying this one's would crop or shrink it.
+const fit = (publish = true): void => {
+    place(fitScale.value, 0, 0, false);
     fitted.value = true;
+    if (publish && view !== undefined && !view.fit) {
+        emit(`update:view`, { fit: true });
+    }
 };
 
 // Zoom keeping the image point under (clientX, clientY) pinned there: the reason a magnifier feels like one.
@@ -224,10 +246,17 @@ const onKeyDown = (event: KeyboardEvent): void => {
     event.preventDefault();
 };
 
+// A picture that lands while a bound sibling is already zoomed in joins it there rather than starting whole:
+// the second side of a diff arriving late must not undo where the reviewer has just looked.
 const onLoad = (event: Event): void => {
     const image = event.target as HTMLImageElement;
     natural.value = { w: image.naturalWidth, h: image.naturalHeight };
-    fit();
+    if (view === undefined || view.fit) {
+        fit(false);
+        return;
+    }
+    fitted.value = false;
+    place(view.scale, view.x, view.y, false);
 };
 
 // A new file in the same pane starts over: otherwise the next image inherits the last one's magnification.
@@ -241,6 +270,28 @@ watch(
     },
 );
 
+// The other pane moved. Applied, never echoed (see `place`), so two bound panes settle in one hop instead of
+// answering each other's answer.
+watch(
+    () => view,
+    (next) => {
+        if (next === undefined || natural.value === undefined) {
+            return;
+        }
+        if (next.fit) {
+            if (!fitted.value) {
+                fit(false);
+            }
+            return;
+        }
+        if (scale.value === next.scale && offset.value.x === next.x && offset.value.y === next.y) {
+            return;
+        }
+        fitted.value = false;
+        place(next.scale, next.x, next.y, false);
+    },
+);
+
 let observer: ResizeObserver | undefined;
 onBeforeUnmount(() => observer?.disconnect());
 watch(viewport, (element) => {
@@ -251,11 +302,12 @@ watch(viewport, (element) => {
     observer = new ResizeObserver(() => {
         box.value = { w: element.clientWidth, h: element.clientHeight };
         // A fitted image re-fits; a deliberately zoomed one keeps its scale and is only pulled back into reach.
+        // Neither is published: a pane changing size is the window's doing, not the reviewer's.
         if (fitted.value) {
-            fit();
+            fit(false);
             return;
         }
-        place(scale.value, offset.value.x, offset.value.y);
+        place(scale.value, offset.value.x, offset.value.y, false);
     });
     observer.observe(element);
 });
@@ -341,7 +393,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                     :disabled="fitted"
                     v-tooltip.top="'Fit to the pane (0)'"
                     @mousedown.prevent
-                    @click="fit"
+                    @click="fit()"
                 >
                     Fit
                 </button>

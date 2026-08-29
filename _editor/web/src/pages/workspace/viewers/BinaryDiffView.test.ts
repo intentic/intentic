@@ -16,16 +16,26 @@ vi.hoisted(() => {
     globalThis.URL.revokeObjectURL = () => {};
     // Each pane's ImageView watches its own size to keep a fitted image fitted; jsdom ships no ResizeObserver,
     // and it never lays anything out to report anyway. A no-op leaves the render, which is what is asserted.
+    // jsdom decodes nothing either, so the caption's dimensions are stubbed from the byte length: each side
+    // then reports its OWN size, which is what the assertions are about.
+    globalThis.createImageBitmap = ((blob: Blob) =>
+        Promise.resolve({ width: blob.size * 10, height: blob.size, close: () => {} })) as unknown as typeof createImageBitmap;
 });
 
 // The daemon fetch, stubbed at the seam the viewer uses: the test is about rendering bytes, not about auth.
+// `same` hands both sides one identical body, the shape a reviewer reads as "it shows me the same picture
+// twice" and the one case this viewer must name out loud rather than leave to the eye.
 const fetched: string[] = [];
 vi.mock("../../../composables/sandbox/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
-        return path.includes(`missing`)
-            ? Promise.reject(new Error(`Request failed (404).`))
-            : Promise.resolve(new Blob([new Uint8Array(path.includes(`before`) ? [1, 2, 3] : [4, 5, 6, 7])]));
+        if (path.includes(`missing`)) {
+            return Promise.reject(new Error(`Request failed (404).`));
+        }
+        if (path.includes(`same`)) {
+            return Promise.resolve(new Blob([new Uint8Array([9, 9, 9])]));
+        }
+        return Promise.resolve(new Blob([new Uint8Array(path.includes(`before`) ? [1, 2, 3] : [4, 5, 6, 7])]));
     },
 }));
 
@@ -49,6 +59,13 @@ const settle = async (): Promise<void> => {
     await nextTick();
     await nextTick();
     await nextTick();
+};
+
+// …and the answers that come AFTER the picture is on screen (its decoded size, and whether the two sides are
+// one file) run their own chains of promises behind it. A turn of the macrotask queue drains all of them.
+const settleComparison = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await settle();
 };
 
 beforeEach(() => {
@@ -105,6 +122,39 @@ describe(`BinaryDiffView`, () => {
         expect(element.textContent).toContain(`Request failed (404).`);
         // The half that DID load still renders: one dead side must not blank the comparison.
         expect(element.querySelectorAll(`img`)).toHaveLength(1);
+    });
+
+    /* The report this pair of tests exists for: "it always displays the same picture in both". Two captures of
+     * one screen ARE two pictures, but fitted into half a pane they read as one, and the caption's only fact,
+     * a size rounded to two figures, agreed with that reading. So each side states the size of the PICTURE,
+     * and the after side states what the file gained or lost. */
+    it(`states each side's dimensions and what the file gained or lost`, async () => {
+        const element = mount({
+            path: `shots/board.png`,
+            before: `/diff/raw?source=working&which=before`,
+            after: `/diff/raw?source=working&which=after`,
+        });
+        await settleComparison();
+
+        // 3 bytes → 30 × 3, 4 bytes → 40 × 4 (the decode stub), so the two sides cannot be confused.
+        expect(element.textContent).toContain(`30 × 3`);
+        expect(element.textContent).toContain(`40 × 4`);
+        // One byte gained, stated as a delta, because "3 B" beside "4 B" is where the rounding hid the change.
+        expect(element.textContent).toContain(`+1 B`);
+        expect(element.textContent).not.toContain(`same file`);
+    });
+
+    it(`says so outright when both sides really are one picture`, async () => {
+        const element = mount({
+            path: `shots/board.png`,
+            before: `/diff/raw?source=working&same&which=before`,
+            after: `/diff/raw?source=working&same&which=after`,
+        });
+        await settleComparison();
+
+        expect(element.textContent).toContain(`Both sides are the same file: identical bytes.`);
+        // Still two panes: the verdict is a statement about them, not a replacement for them.
+        expect(element.querySelectorAll(`img`)).toHaveLength(2);
     });
 
     it(`says so plainly when the daemon reported a binary change with no bytes on either end`, async () => {

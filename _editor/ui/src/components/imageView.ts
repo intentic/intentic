@@ -13,3 +13,14 @@ export const isRenderableImage = (path: string): boolean => {
     const dot = name.lastIndexOf(".");
     return dot > 0 && RENDERABLE_IMAGE_EXTS.has(name.slice(dot + 1));
 };
+
+/* WHAT AN IMAGE VIEW IS SHOWING, when more than one pane has to show the same thing: the two sides of a binary
+ * diff. Passed in and emitted back out (`view` / `update:view`), so the parent owns one state and both panes
+ * follow it, rather than each keeping a private magnification nothing can line up.
+ *
+ * `fit` is a state of its own rather than a computed scale, because "the whole picture" means a different
+ * number in each pane the moment the two images differ in size, which is exactly the case this exists for: a
+ * 2560px capture and a 2644px one both fit, at 27.1% and 27.0%, and each pane must be free to use its own.
+ * Every other view is an explicit magnification and corner, and those DO transfer: comparing two screenshots
+ * means looking at the same square inch of each. */
+export type ImageViewState = { readonly fit: true } | { readonly fit: false; readonly scale: number; readonly x: number; readonly y: number };
