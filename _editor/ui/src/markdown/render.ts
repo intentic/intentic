@@ -39,6 +39,11 @@ const CODE_PLACEHOLDER = /<pre data-md-code="(\d+)"><\/pre>/g;
 export interface MarkdownToken {
     readonly type: string;
     readonly raw: string;
+    /* What this token is made of, when it is made of anything: a `strong`'s children are the tokens of the text
+     * between its `**`s. Their `raw`s concatenate to a contiguous run of the parent's, which is what lets a
+     * caller work out where the parent's own MARKERS are, by subtraction rather than by re-deriving the
+     * delimiter rules the lexer just applied. */
+    readonly tokens?: readonly MarkdownToken[];
 }
 
 // Undefined rather than a throw, on the same grounds as parseParts' catch below: a lexer edge case may cost the
@@ -46,6 +51,18 @@ export interface MarkdownToken {
 export const lexBlocks = (source: string): readonly MarkdownToken[] | undefined => {
     try {
         return marked.lexer(source);
+    } catch {
+        return undefined;
+    }
+};
+
+/* The same, one level down: the inline tokens of a run of text, for the surface that draws markdown as EDITABLE
+ * SOURCE and therefore has to know which characters are markup and which are the words. Needed separately from
+ * the block lexer because that one re-indents the source of a nested construct, so a caller that must account
+ * for every original character asks per line instead. Lossless, and guarded the same way. */
+export const lexInline = (source: string): readonly MarkdownToken[] | undefined => {
+    try {
+        return marked.Lexer.lexInline(source);
     } catch {
         return undefined;
     }

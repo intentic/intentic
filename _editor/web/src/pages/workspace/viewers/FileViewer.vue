@@ -362,20 +362,21 @@ const { mobile } = useDevice();
 const canEdit = computed(
     () => workspaceAgent.value === undefined && (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null,
 );
-/* MARKDOWN OPTS OUT OF THE GLOBAL EDIT SWITCH, and this is the whole of that decision.
- *
- * `editMode` means "open files in the code editor", and it is global because someone editing source is usually
- * editing several files. A markdown file has a second honest form, the rendered one, and it is the form people
- * read; sending it to the code editor threw that away along with its outline and its figures, and the only way
- * back was a preference that also moved every other file. So it keeps its prose surface in both states and
- * carries its own lock there (MarkdownViewer), and the switch below is left to the files it was written for. */
+/* MARKDOWN ANSWERS THE SAME EDIT SWITCH AS EVERY OTHER FILE, and only differs in what it opens INTO: the
+ * rendered document becomes typeable (MarkdownViewer), where a `.ts` file opens in the code editor. One button,
+ * one meaning, everywhere; the surface behind it is the file type's business. */
 const markdownHere = computed(() => open.value.kind === `markdown`);
 // Global edit mode (useLayout), gated per file by canEdit so a viewer's file (and every binary) stays in its
 // viewer, including one whose file is text, like an .svg: an extension viewer renders, it does not edit.
 const editingThis = computed(() => !mobile.value && editMode.value && canEdit.value && !markdownHere.value);
-// Whether the markdown surface may be written at all. Its lock is the READER's; this is the host's permission,
-// and the two are separate for the same reason canEdit is separate from editMode everywhere else.
+// Whether the markdown surface may be written at all: the HOST's permission, which is what `canEdit` is
+// everywhere else. Whether the reader is actually editing is `editMode`, read on the surface itself.
 const markdownEditable = computed(() => !mobile.value && canEdit.value && markdownHere.value);
+// Either text surface, being edited. What the Save/Preview pair in the toolbar is about.
+const editingText = computed(() => editingThis.value || (markdownEditable.value && editMode.value));
+// Save through whichever surface is showing: each has to settle its own buffer first (the markdown one folds in
+// what is on screen; the code one normalizes), so the toolbar asks rather than writing the text behind its back.
+const saveNow = (): void => (markdownHere.value ? markdownView.value?.save() : editorView.value?.save());
 // Reading the code alone is offered where there is code to isolate: a text file on the editor surface, being
 // READ. Editing shows the file whole: the buffer that gets saved is never the stripped one.
 const canHideComments = computed(() => open.value.kind === `code` && text.value !== null && !editingThis.value);
@@ -443,25 +444,12 @@ const onEditorSave = (value: string): void =>
                 <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes: Ctrl+S to save'">
                     <Icon name="circle-fill" class="text-[0.4rem]" />
                 </span>
-                <!-- Markdown has no Edit/Preview pair to offer: it is always its rendered self, and the lock
-                     that lets you type in it lives on that surface. Only Save belongs up here, where every
-                     other file's does. -->
-                <button
-                    v-if="markdownEditable"
-                    type="button"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
-                    :disabled="!dirtyThis"
-                    @click="markdownView?.save()"
-                    v-tooltip.bottom="'Save (Ctrl+S)'"
-                >
-                    <Icon name="save" class="text-[0.7rem]" /> Save
-                </button>
-                <template v-else-if="editingThis">
+                <template v-if="editingText">
                     <button
                         type="button"
                         class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
                         :disabled="!dirtyThis"
-                        @click="editorView?.save()"
+                        @click="saveNow()"
                         v-tooltip.bottom="'Save (Ctrl+S)'"
                     >
                         <Icon name="save" class="text-[0.7rem]" /> Save

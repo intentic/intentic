@@ -28,9 +28,12 @@ export {
 } from "./figures.js";
 export {
     createStreamingMarkdown,
+    lexBlocks,
+    lexInline,
     type MarkdownDecorator,
     type MarkdownPart,
     markdownParseCount,
+    type MarkdownToken,
     renderMarkdown,
     renderMarkdownParts,
     type RenderedMarkdown,

@@ -107,7 +107,6 @@ export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
 export { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, sandboxVerbPrompt, VERB_LABEL } from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
-export { default as MarkdownParts, type ProsePart, type ProseSlotPart } from "./components/MarkdownParts.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
 // because a view holding a diagram outside prose (a stored architecture note, a generated report) should not
 // have to wrap it in a markdown document to get one.

@@ -1,0 +1,180 @@
+/* THE EDITING SKIN for the markdown document surface (MarkdownDocumentSurface.vue).
+ *
+ * The DOM this styles holds every character of the file, markup included (markdownSourceDom.ts). Everything here
+ * exists to make that read as a document rather than as source, and to make revealing the markup cost NOTHING in
+ * layout: the whole point of the surface is that clicking a paragraph does not move it.
+ *
+ * Prose typography is not repeated here. The surface carries `md-prose`, so headings, lists, quotes and code
+ * blocks are styled by prose.css exactly as they are when the document is being read. That is deliberate and it
+ * is the reason edit mode and preview mode look the same: there is only one set of type rules. */
+
+.md-editing {
+    outline: none;
+    /* A caret needs somewhere to land at the very end of the last block. */
+    min-height: 100%;
+}
+
+/* WHITESPACE COLLAPSES HERE, LIKE THE PROSE THIS IS, and it has to be said out loud because an editable surface
+ * is where a browser assumes the opposite. Under `pre-wrap` (which is what a `plaintext-only` host is given, and
+ * close to what an editable one expects) a paragraph hard-wrapped in the source breaks at the SOURCE's column
+ * rather than at the reading column, which is the one thing the rendered document never does, and every blank
+ * line between two blocks draws an actual blank line: the document came out at nearly twice its height.
+ *
+ * The newlines a writer types are put in by hand instead (see `startBlock`), which is also what lets Enter mean
+ * "a new paragraph" rather than "one newline, which markdown renders as a space". Only the blocks shown verbatim
+ * opt back in, below. */
+.md-editing,
+.md-editing :is(p, h1, h2, h3, h4, h5, h6, li, blockquote, div, span, strong, em, code, a, del) {
+    white-space: normal;
+}
+
+/* --- the markup ---------------------------------------------------------------------------------------------
+ *
+ * Hidden while a block is at rest and shown while the caret is in it. Hidden with `display: none` rather than
+ * with a colour, because markup that is merely faint is still markup taking up room: the words would sit two
+ * characters right of where the reader saw them a moment ago. */
+.md-editing .md-marker {
+    display: none;
+}
+
+.md-editing .md-block-active .md-marker {
+    display: inline;
+    color: var(--color-subtle);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    font-weight: 400;
+    white-space: pre;
+}
+
+/* --- the gutter ---------------------------------------------------------------------------------------------
+ *
+ * The markup that OPENS a line (`## `, `- `, `> `, and the indentation in front of a nested bullet) hangs to the
+ * left of the text instead of sitting in it. This is the rule that makes the surface hold still: a heading's
+ * hashes appear beside the heading, in the margin the centred column already leaves, and the heading itself does
+ * not move by so much as a pixel. Straight out of VS Code's markdown editor, which puts it this way: "source
+ * markers occupy the gutter so toggling them never shifts content". */
+.md-editing :is(h1, h2, h3, h4, h5, h6, li, .md-src-quote > div) {
+    position: relative;
+}
+
+.md-editing .md-block-active .md-marker-gutter {
+    position: absolute;
+    right: 100%;
+    top: 0;
+    /* The marker box is the line box it belongs to, so the glyphs sit on the text's own baseline rather than
+     * floating above it at their own smaller line height. */
+    height: 1lh;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.35em;
+    text-align: right;
+    pointer-events: none;
+}
+
+/* An empty gutter marker is a continuation line's absent indentation; it must not claim a box. */
+.md-editing .md-marker-gutter:empty {
+    display: none;
+}
+
+/* A list item showing its own `- ` must not also show the browser's bullet: two markers for one thing, a
+ * character apart. The bullet goes, the source takes its place, and because both sit in the gutter the item's
+ * text stays exactly where it was. */
+.md-editing .md-block-active li {
+    list-style: none;
+}
+
+/* A TASK ITEM, at rest, is a checkbox: that is what the rendered document shows, and a list of `[ ]`s is the one
+ * place raw markdown reads worse than the thing it stands for. The glyph is drawn in the gutter, exactly where
+ * the `- [ ] ` it replaces will appear when the caret arrives, so nothing moves between the two. Not a real
+ * `<input>`: this document is text the caret walks through, and a control in the middle of it is a hole. */
+.md-editing li[data-task] {
+    list-style: none;
+}
+
+.md-editing li[data-task]::before {
+    content: "☐";
+    position: absolute;
+    right: 100%;
+    top: 0;
+    height: 1lh;
+    display: inline-flex;
+    align-items: center;
+    padding-right: 0.4em;
+    color: var(--color-subtle);
+}
+
+.md-editing li[data-task="1"]::before {
+    content: "☑";
+    color: var(--color-link);
+}
+
+/* ...and it steps aside for the source it stands for, so the two are never both in the gutter at once. */
+.md-editing .md-block-active li[data-task]::before {
+    content: none;
+}
+
+/* --- blocks the surface shows as source ---------------------------------------------------------------------
+ *
+ * A fenced block, a table, raw HTML: constructs whose markup IS their content, shown verbatim. A code block
+ * already looks like this when rendered, so only its fences appear; a table becomes its pipes, which is the only
+ * honest way to edit one as markdown. */
+.md-editing .md-src-verbatim {
+    white-space: pre-wrap;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    tab-size: 4;
+}
+
+.md-editing .md-src-quote > div {
+    /* A quoted line is a line, not a paragraph: no margins between them. */
+    margin: 0;
+}
+
+/* --- being in a block ----------------------------------------------------------------------------------------
+ *
+ * The faintest possible statement of "this is the one you are typing in". No border and no box: an outline would
+ * draw a rectangle the document does not have, and the reader is already being told by the caret. A wash the
+ * width of the reading column, bled slightly past it so the text is not sitting against an edge. */
+.md-editing .md-block-active {
+    background: color-mix(in srgb, var(--color-content) 3.5%, transparent);
+    border-radius: 3px;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-content) 3.5%, transparent);
+}
+
+/* An empty paragraph has no text to size the wash against, so it would paint as a stray grey bar. It still needs
+ * a line's height, or the blank line Enter just made would be a caret with nowhere to stand. */
+.md-editing .md-block-active:is(p):empty {
+    background: transparent;
+    box-shadow: none;
+}
+
+.md-editing p:empty {
+    min-height: 1lh;
+}
+
+/* A SPACE AT THE END OF A LINE IS STILL A CHARACTER, and this is what stops the browser deciding otherwise.
+ * Collapsible whitespace that ends a line is not rendered, and a `contenteditable` treats what it does not
+ * render as spare: typing "a b" one key at a time lost the space, because for one keystroke it was trailing.
+ * A zero-width box after the text means there is always something behind the space, so it is never trailing and
+ * never dropped. Generated content, so it is not in `textContent` and cannot reach the file. */
+.md-editing .md-block-active::after {
+    content: "\200b";
+}
+
+/* The same protection one level in. A list's line endings are real characters living at the end of each item,
+ * and each of them is trailing whitespace in its own line box, so without something behind it the browser is
+ * free to drop it and weld two items into one. */
+.md-editing .md-block-active li::after,
+.md-editing .md-block-active .md-src-quote > div::after {
+    content: "\200b";
+}
+
+/* --- links, while editing ------------------------------------------------------------------------------------
+ *
+ * Styled as links so the document still reads like itself, but inert: the target is right there in the source
+ * the caret is standing in, and a click here places the caret. Following one is what preview mode is for. */
+.md-editing a {
+    cursor: text;
+    text-decoration: none;
+}

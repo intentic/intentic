@@ -15,15 +15,20 @@
      without any renders EXACTLY as it always did: one element, one v-html, byte-identical DOM. That is not an
      optimisation, it is the safety property: `.md-prose > :first-child` is a direct-child rule, so quietly
      wrapping every chat bubble's prose in a run div would have shifted the spacing on every surface in the app.
+     Attribute fallthrough is explicit (`inheritAttrs: false` + `v-bind="$attrs"`) because the two shapes are two
+     template roots, and the documented `style="--prose-*"` contract has to hold for both.
 
-     Mounting those parts is <MarkdownParts>, which is this component minus the parse. The split is for the one
-     surface that has a part of its own to add (the file viewer's pretty-editing mode, which swaps the paragraph
-     under the caret for a source editor): it builds its own part list and mounts it through the same shell,
-     rather than growing a second prose surface that would drift from this one. -->
+     THIS IS THE READING SURFACE, and there is a separate writing one. The workspace file viewer's edit mode
+     builds its own DOM from the document's source, so that the text it holds IS the file and a caret in it is a
+     position in that file (viewers/markdownSourceDom.ts). The two agree because they are styled by the same
+     prose.css and emit the same tags; nothing here needs to know about it. -->
 <script setup lang="ts">
 import { computed } from "vue";
+import { copyCodeFromEvent } from "../markdown/code.js";
 import { type MarkdownDecorator, renderMarkdownParts } from "../markdown/render.js";
-import MarkdownParts from "./MarkdownParts.vue";
+import MarkdownFigure from "./MarkdownFigure.vue";
+
+defineOptions({ inheritAttrs: false });
 
 const { source, decorate } = defineProps<{
     // Markdown text. Treated as untrusted: the pipeline sanitizes before this is bound.
@@ -35,8 +40,20 @@ const { source, decorate } = defineProps<{
 // Prose runs and figures, in reading order (see renderMarkdownParts). Every run goes through the same engine
 // with the same decorator, so file links and code blocks behave identically either side of a figure.
 const parts = computed(() => renderMarkdownParts(source, decorate));
+
+// The whole document as one string when it holds no figures: the shape every existing surface renders in.
+const plain = computed(() => {
+    const only = parts.value.length === 1 ? parts.value[0] : undefined;
+    return only?.kind === `html` ? only.html : undefined;
+});
 </script>
 
 <template>
-    <MarkdownParts :parts="parts" />
+    <div v-if="plain !== undefined" v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent" v-html="plain"></div>
+    <div v-else v-bind="$attrs" class="md-prose" @click="copyCodeFromEvent" @pointerdown="copyCodeFromEvent">
+        <template v-for="(part, index) in parts" :key="index">
+            <div v-if="part.kind === `html`" class="md-run" v-html="part.html"></div>
+            <MarkdownFigure v-else :figure="part.figure" />
+        </template>
+    </div>
 </template>
