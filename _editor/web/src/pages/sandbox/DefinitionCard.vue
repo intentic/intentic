@@ -161,11 +161,6 @@ const cancel = (): Promise<void> =>
         <Row flush :heading="2" icon="file-edit" title="Sandbox definition" />
 
         <template v-if="canOperate">
-            <p class="text-2xs text-subtle">
-                This sandbox as a shareable <span class="font-mono">sandbox.toml</span>: repositories, connections, secret names, overlay source.
-                Secret values stay here, and the overlay needs the target owner's approval before it builds.
-            </p>
-
             <!-- THE WORKSPACE REPO, as the one record it is: which repository, on which branch, and the two
                  things anyone does with a repository once it exists. It was a paragraph in a boxed inset,
                  which got both halves wrong. The box drew a second card inside the first for a border that

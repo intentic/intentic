@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { EnvironmentSchema } from "@intentic-app/api-contract";
-import { Button, Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge } from "@intentic/ui";
+import { Button, Card, Code, Notice, type NoticeModel, Row, SegmentedControl, StatusBadge, ui } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
@@ -87,9 +87,9 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
                 <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
                 <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
                 <StatusBadge v-else variant="warning" label="Awaiting review" dot />
-                <Button size="small" severity="secondary" :text="true" aria-label="Refresh" @click="load">
-                    <template #icon><Icon name="refresh" /></template>
-                </Button>
+                <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="load">
+                    <Icon name="refresh" class="text-sm" :spin="query.isFetching" />
+                </button>
             </template>
         </Row>
 
