@@ -36,15 +36,11 @@ import { enrollHost } from "./inventory/enroll-host.js";
 import { createRouter } from "./router.js";
 import {
     clearAllEnrollments,
-    consumePairing,
     enrollSyncKey,
     isKeyEnrolled,
     isValidAuthorizedKey,
-    isValidPairing,
     machineReports,
-    mintPairing,
     mirrorMachines,
-    pairingMode,
     recordMachineReport,
     revokeEnrollmentByToken,
     type SyncMode,
@@ -1467,7 +1463,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/system/sync/pair", async (c) => {
         const requested = c.req.query("mode") === "mirror" ? "mirror" : "sync";
         const mode: SyncMode = (await canOperate(c)) ? requested : "mirror";
-        return c.json({ ...mintPairing(mode), mode });
+        return c.json({ ...services.syncPairings.mint(mode), mode });
     });
 
     /* The user's own computers (hosts/). Same trust root as desktop sync, the owner mints a single-use pairing
@@ -1695,7 +1691,11 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/system/authorized-key", async (c) => {
         // Authorized either by a valid pairing token (the agent's path) or the owner's Google token (fallback).
         const pair = c.req.header("x-intentic-pair") ?? undefined;
-        const viaPair = pair !== undefined && isValidPairing(pair);
+        // Read once, here: the mode this pairing grants is the one that authorized the request, and peeking
+        // for it again after the awaits below would let a token that expired mid-request enroll under a
+        // different mode than the one it was let in on.
+        const paired = pair === undefined ? undefined : services.syncPairings.peek(pair);
+        const viaPair = paired !== undefined;
         if (!viaPair) {
             const denied = await ownerDenied(c);
             if (denied !== undefined) {
@@ -1709,7 +1709,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         // The mode comes from the pairing (minted per the requester's role), never from the agent, so a member's
         // pairing can only ever enroll "mirror". The owner-Google fallback path defaults to full "sync".
-        const mode: SyncMode = viaPair ? (pairingMode(pair) ?? "mirror") : "sync";
+        const mode: SyncMode = paired ?? "sync";
         // A "sync" enroll is single-holder: if a different machine holds it and this isn't a takeover, 423 Locked
         // (before consuming the token, so a retry with --takeover reuses the same pairing). Mirror enrolls never lock.
         const takeover = c.req.header("x-intentic-sync-takeover") === "1";
@@ -1719,7 +1719,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         // Burn the pairing token only on success, so a transient failure leaves it usable for a retry.
         if (pair !== undefined) {
-            await consumePairing(services.config.historyRoot, pair);
+            await services.syncPairings.consume(pair);
         }
         /* No address travels back any more, because there is no longer one to choose: the agent reaches sshd
          * through THIS daemon (platform/sync-ssh.ts), at the public URL it is already talking to. That is what

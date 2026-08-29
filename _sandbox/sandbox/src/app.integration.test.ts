@@ -17,7 +17,6 @@ import { createAuthConnections } from "./auth/connections.js";
 import { createLogger } from "./logger.js";
 
 import { createBootTracker } from "./platform/boot.js";
-import { mintPairing } from "./platform/sync.js";
 
 import type { AgentTool } from "./agent/agent-tools.js";
 
@@ -344,21 +343,20 @@ test("bearer middleware maps a ForbiddenError to 403 (wrong account) and any oth
 test("the enrollment-minted sync token reads /ports, files its own machine report, and nothing else", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-token-home-"));
     // Bearer auth rejects everything, so a 200 proves the sync-token branch authorized the read.
-    const app = createApp(
-        services({
-            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
-            config: {
-                ...testConfig,
-                connectToken: "token",
-                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
-            },
-            scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }],
-        }),
-    );
+    const svc = services({
+        auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
+        config: {
+            ...testConfig,
+            connectToken: "token",
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+            sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+        },
+        scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true }],
+    });
+    const app = createApp(svc);
     const enrolled = await app.request("/system/authorized-key", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+        headers: { "content-type": "application/json", "x-intentic-pair": svc.syncPairings.mint("mirror").token },
         body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
     });
     expect(enrolled.status).toBe(200);

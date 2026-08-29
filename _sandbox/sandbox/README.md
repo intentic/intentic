@@ -378,8 +378,10 @@ reports the profile.
   `browser` capability's Chromium profile by launching that profile headless — never a tool result, because a
   tool result is something the model reads.
 - [src/runners](src/runners), this sandbox's own execution containers on other machines — both halves, since
-  a runner IS this daemon in another posture. Parent half: enrollment on /history, live sockets in memory
-  (the hosts pair retold), a per-repo git door (stock smart HTTP off the real git dirs), and the turn
+  a runner IS this daemon in another posture. Parent half: enrollment on /history (the pairing-and-enrollment
+  mechanic is one module, `store/enrollment.ts`, shared with hosts, webext and desktop sync — what is left
+  here is which id a pairing enrolls and which computer holds the container), live sockets in memory
+  (the hosts hub retold), a per-repo git door (stock smart HTTP off the real git dirs), and the turn
   dispatch the remote arm of agent.routes drives, plus the credential doors: per-turn access tokens and
   mid-turn re-mints resolved by the same code local turns use, and the translator re-served behind the
   runner's own bearer, so a remote turn spends THIS sandbox's model providers and no refresh token or auth

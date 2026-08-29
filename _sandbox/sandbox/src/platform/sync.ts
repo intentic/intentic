@@ -19,95 +19,22 @@ import type { MachineReport } from "@intentic/sandbox-contract";
 
 export type SyncMode = "sync" | "mirror";
 
-// One-time pairing tokens, in memory (ephemeral: a daemon restart just means the user clicks Enable again). Each
-// carries the mode it may enroll, the browser card mints it per the requester's role, and the enroll trusts the
-// pairing's mode, not anything the agent claims.
-const PAIR_TTL_MS = 10 * 60 * 1000;
-const pairings = new Map<string, { expiresAt: number; mode: SyncMode }>();
-
-export const mintPairing = (mode: SyncMode): { token: string; expiresIn: number } => {
-    const token = randomBytes(32).toString("base64url");
-    pairings.set(token, { expiresAt: Date.now() + PAIR_TTL_MS, mode });
-    return { token, expiresIn: Math.floor(PAIR_TTL_MS / 1000) };
-};
-
-/* Seed a pre-agreed pairing: the platform-minted setup-time token connect.{sh,ps1} passes via container env
- * (SYNC_PAIR_TOKEN), so the connect script's sync agent can enroll without a browser mint. It's the OWNER's
- * setup-time token, so it seeds the full "sync" mode.
+/* THE PAIRING HALF IS store/enrollment.ts's, shared with the three doors that enroll the same way, and held on
+ * `services.syncPairings` because that is where the history root is known. It used to be a module-global map
+ * with a hand-rolled burn file beside it, which is how this door was still writing /history with a bare
+ * `writeFile` — the truncate-then-fill that json-file.ts exists to rule out — long after every other store had
+ * moved onto that substrate.
  *
- * SPENT ONCE, SPENT FOR GOOD. A browser-minted pairing dies with the daemon, but this one lives in the
- * container's environment, which is immortal by comparison: it is in the compose file, in `docker inspect`, in
- * whatever shell history ran the installer, and it is replayed verbatim into every rebuilt container. Re-arming
- * it on each boot therefore turned a setup-time token into a permanent key for /system/authorized-key, a route
- * exempt from the bearer middleware, whose reward is an SSH key in the container. One leak of the env, and
- * every future restart reopened the same ten-minute window.
+ * What travels on a sync pairing is the MODE it may enroll, because the two uses have different multiplicity
+ * (above) and the mint is the last point at which the requester's role is known: the browser card mints per
+ * role, and the enroll trusts the pairing's mode rather than anything the agent claims. The setup-time token
+ * connect.{sh,ps1} passes in the container env is ARMED rather than minted (main.ts) — it is the owner's, so it
+ * arms the full "sync" mode, and it is replayable, which is the entire reason this door has a burn file.
  *
- * So the redemption is recorded on /history (which outlives the container, like the enrollments themselves) and
- * a consumed token never arms again. Re-running setup is unaffected: /setup/claim mints a FRESH token per
- * claim, so the ordinary "run the installer again" path seeds a digest nobody has burned. What no longer works
- * is replaying an already-redeemed token, which is exactly the capability that was worth removing. */
-export const seedPairing = async (historyRoot: string, token: string): Promise<void> => {
-    if (await isSeedConsumed(historyRoot, token)) {
-        return;
-    }
-    pairings.set(token, { expiresAt: Date.now() + PAIR_TTL_MS, mode: "sync" });
-    seeded.add(token);
-};
-
-// The setup-time tokens armed this boot, so consumePairing knows which redemptions are worth persisting. A
-// browser-minted pairing is not in here: it is already unreplayable, because nothing outside memory holds it.
-const seeded = new Set<string>();
-
-const seedConsumedPath = (historyRoot: string): string => join(historyRoot, "sync-pair-consumed.json");
-
-const readConsumed = async (historyRoot: string): Promise<string[]> => {
-    try {
-        const parsed = JSON.parse(await readFile(seedConsumedPath(historyRoot), "utf8")) as { digests?: unknown };
-        return Array.isArray(parsed.digests) ? parsed.digests.filter((digest): digest is string => typeof digest === "string") : [];
-    } catch {
-        return [];
-    }
-};
-
-// Digests, never the tokens: this file records that something was spent, and needs to hold nothing that could
-// spend anything.
-const isSeedConsumed = async (historyRoot: string, token: string): Promise<boolean> => (await readConsumed(historyRoot)).includes(digestOf(token));
-
-const recordSeedConsumed = async (historyRoot: string, token: string): Promise<void> => {
-    const digests = await readConsumed(historyRoot);
-    const digest = digestOf(token);
-    if (digests.includes(digest)) {
-        return;
-    }
-    await mkdir(historyRoot, { recursive: true });
-    await writeFile(seedConsumedPath(historyRoot), JSON.stringify({ digests: [...digests, digest] }), { mode: 0o600 });
-};
-
-// Valid = known + unexpired (prunes on expiry). Peek only, the caller consumes it after a successful enroll,
-// so a failed enroll leaves the token usable for a retry.
-export const isValidPairing = (token: string): boolean => pairingMode(token) !== undefined;
-
-// The mode a pairing grants, or undefined when unknown/expired (prunes on expiry).
-export const pairingMode = (token: string): SyncMode | undefined => {
-    const pairing = pairings.get(token);
-    if (pairing === undefined) {
-        return undefined;
-    }
-    if (pairing.expiresAt < Date.now()) {
-        pairings.delete(token);
-        return undefined;
-    }
-    return pairing.mode;
-};
-
-// Redeem a pairing. A browser-minted one just leaves memory; a SEEDED one (the setup-time SYNC_PAIR_TOKEN) is
-// also written to the /history burn list, so the copy still sitting in the container's env is inert from here on.
-export const consumePairing = async (historyRoot: string, token: string): Promise<void> => {
-    pairings.delete(token);
-    if (seeded.delete(token)) {
-        await recordSeedConsumed(historyRoot, token);
-    }
-};
+ * Unlike the other three, this enroll peeks and consumes SEPARATELY rather than redeeming in one call: landing
+ * a key is fallible (the single-holder lock can refuse it), and a refusal has to leave the token usable for the
+ * retry that carries --takeover. */
+export const syncPairBurnPath = (historyRoot: string): string => join(historyRoot, "sync-pair-consumed.json");
 
 // The enrollment store, source of truth for every desktop machine's key + sync token + mode. It lives on the
 // /history volume: outside /work (so the agent can never read the tokens) AND outside the container's own

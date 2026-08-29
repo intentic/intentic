@@ -1,18 +1,15 @@
-import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { z } from "zod";
-import { tokenEquals } from "../auth/auth.js";
-import { jsonFile } from "../store/json-file.js";
+import { enrollments, pairings } from "../store/enrollment.js";
 
 /* The credential half of a `host` capability, the user's own computer, enrolled once and then holding a
  * long-lived socket to this daemon (hosts/host-hub.ts is the live half).
  *
- * The shape is the desktop-sync pairing (platform/sync.ts) narrowed to one machine: the owner mints a
- * single-use, short-lived pairing token in the browser, the one-liner carries it, and the @intentic/machine agent
- * redeems it exactly once for a durable per-machine token. Nothing about the machine's identity is asserted by
- * the machine, the pairing already names WHICH capability it enrolls, so a redeemed token can only ever become
- * the computer the owner was looking at when they clicked Connect.
+ * The mechanic is store/enrollment.ts, which four doors share; what is here is what is true of THIS door. The
+ * owner mints a single-use, short-lived pairing in the browser and the one-liner carries it, or the setup
+ * flow arms one it was given in the container's env, and the @intentic/machine agent redeems either exactly
+ * once for a durable per-machine token. Nothing about the machine's identity is asserted by the machine: the
+ * pairing already names WHICH capability it enrolls, so a redeemed token can only ever become the computer
+ * the owner was looking at when they clicked Connect.
  *
  * WHERE THIS LIVES IS THE POINT. On /history, not /work/.intentic: this token is a key to somebody's actual
  * laptop, and /work is the one directory the agent reads and writes all day. The bridge-token store made the
@@ -22,36 +19,14 @@ import { jsonFile } from "../store/json-file.js";
  * rebuild, exactly like sync's, the machine keeps working instead of silently going dark until someone
  * re-pairs it. */
 
-const StoredHostsSchema = z.object({
-    hosts: z.array(
-        z.object({
-            // The capability id, the machine's name. One enrollment per machine, so a re-enroll rotates.
-            id: z.string(),
-            hash: z.string(),
-            enrolledAt: z.number(),
-        }),
-    ),
-});
-type StoredHosts = z.infer<typeof StoredHostsSchema>;
-
-// Long enough to walk to the machine, open a terminal and paste; short enough that a one-liner left in a chat
-// log is inert by the time anyone reads it. The sync pairing's window, for the same reasons.
-const PAIR_TTL_MS = 10 * 60 * 1000;
-
 export interface HostsStore {
     // Bind a pairing to one capability id. Single-use, expiring; the raw token is shown once, in the browser.
     readonly mintPairing: (id: string) => { token: string; expiresIn: number };
     /* Arm a pre-agreed pairing: the platform-minted setup-time token the connect flow passes in the container's
      * env, so the machine that just installed this sandbox can enroll itself without anyone opening a browser.
      * Answers false when the token has already been spent, which is the ordinary case on every boot after the
-     * first.
-     *
-     * SPENT ONCE, SPENT FOR GOOD, the desktop-sync seed's rule, and it matters more here. A browser-minted
-     * pairing dies with the daemon, but this one lives in the container's environment, which is immortal by
-     * comparison: it is in `docker inspect`, in whatever shell ran the installer, and it is replayed verbatim
-     * into every rebuilt container. Re-arming it each boot would turn a setup-time token into a permanent key
-     * for an enrollment route that is exempt from the bearer middleware, and whose reward is a socket onto
-     * somebody's laptop. The burn is recorded on /history, which outlives the container. */
+     * first. That burn is the whole reason a seeded pairing is marked replayable, and store/enrollment.ts says
+     * why at length. */
     readonly seedPairing: (id: string, token: string) => Promise<boolean>;
     // Redeem a pairing: the machine gets its durable token, and the pairing is spent whether or not the machine
     // ever connects. Undefined ⇒ unknown or expired, which the route answers as 401.
@@ -72,88 +47,22 @@ export const hostEnrollmentsPath = (historyRoot: string): string => join(history
 // spent, and needs to hold nothing that could spend anything.
 export const hostSeedBurnPath = (historyRoot: string): string => join(historyRoot, "host-pair-consumed.json");
 
-const BurnedSchema = z.object({ digests: z.array(z.string()) });
-
 export const fileHostsStore = (historyRoot: string): HostsStore => {
-    const file = jsonFile<StoredHosts>(hostEnrollmentsPath(historyRoot), {
-        parse: (raw) => StoredHostsSchema.safeParse(raw).data,
-        fallback: () => ({ hosts: [] }),
-        mode: 0o600,
-    });
-    const burned = jsonFile<z.infer<typeof BurnedSchema>>(hostSeedBurnPath(historyRoot), {
-        parse: (raw) => BurnedSchema.safeParse(raw).data,
-        fallback: () => ({ digests: [] }),
-        mode: 0o600,
-    });
-    // In memory, like sync's: a pairing outliving a daemon restart buys nothing (the browser mints another in
-    // one click) and would mean persisting a live credential to protect.
-    const pairings = new Map<string, { id: string; expiresAt: number }>();
-    // Which of the live pairings came from the container's env, so `enroll` knows whose redemption is worth
-    // persisting. A browser-minted one is already unreplayable, nothing outside this map ever held it.
-    const seeded = new Set<string>();
+    // A pairing carries the capability id it enrolls, and nothing else: this door has one thing to remember.
+    const pending = pairings<string>(hostSeedBurnPath(historyRoot));
+    const records = enrollments({ path: hostEnrollmentsPath(historyRoot), key: "hosts", prefix: "iht_", extra: {} });
 
     return {
-        seedPairing: async (id, token) => {
-            if (token === "" || (await burned.read()).digests.includes(sha256Hex(token))) {
-                return false;
-            }
-            pairings.set(token, { id, expiresAt: Date.now() + PAIR_TTL_MS });
-            seeded.add(token);
-            return true;
-        },
-        mintPairing: (id) => {
-            const token = randomBytes(32).toString("base64url");
-            pairings.set(token, { id, expiresAt: Date.now() + PAIR_TTL_MS });
-            for (const [key, pairing] of pairings) {
-                if (pairing.expiresAt < Date.now()) {
-                    pairings.delete(key);
-                }
-            }
-            return { token, expiresIn: Math.floor(PAIR_TTL_MS / 1000) };
-        },
+        // Minted in the browser, so it dies with this daemon and there is nothing to burn.
+        mintPairing: (id) => pending.mint(id),
+        seedPairing: (id, token) => pending.arm(token, id),
         enroll: async (pairToken) => {
-            const pairing = pairings.get(pairToken);
-            if (pairing === undefined || pairing.expiresAt < Date.now()) {
-                pairings.delete(pairToken);
-                return undefined;
-            }
-            pairings.delete(pairToken);
-            // A setup-time token is burned on /history the moment it works, so the copy still sitting in the
-            // container's environment is inert from here on, including across the rebuild that replays it.
-            if (seeded.delete(pairToken)) {
-                const digest = sha256Hex(pairToken);
-                await burned.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
-            }
-            const hostToken = `iht_${randomBytes(32).toString("base64url")}`;
-            const entry = { id: pairing.id, hash: sha256Hex(hostToken), enrolledAt: Date.now() };
-            // Re-enrolling a machine ROTATES it: the old token stops verifying the moment the new one lands, so
-            // re-running the installer on a machine that already had one is a clean replacement, not a second key.
-            await file.update((stored) => ({ hosts: [...stored.hosts.filter((host) => host.id !== entry.id), entry] }));
-            return { id: pairing.id, hostToken };
+            const id = await pending.redeem(pairToken);
+            return id === undefined ? undefined : { id, hostToken: await records.issue(id, {}) };
         },
-        verify: async (presented) => {
-            if (presented === "") {
-                return undefined;
-            }
-            const hash = sha256Hex(presented);
-            // Fixed-length hex digests, so the comparison is timing-safe whatever the presented token's length.
-            return (await file.read()).hosts.find((host) => tokenEquals(host.hash, hash))?.id;
-        },
-        enrolled: async (id) => (await file.read()).hosts.some((host) => host.id === id),
-        rename: async (from, to) => {
-            // The token digest is untouched, so the machine's own key keeps verifying, it simply comes back
-            // under the new name. Re-pairing would mean walking to that computer to run the installer again,
-            // which is a strange price for changing what a row is called.
-            await file.update((stored) => ({ hosts: stored.hosts.map((host) => (host.id === from ? { ...host, id: to } : host)) }));
-        },
-        revoke: async (id) => {
-            let revoked = false;
-            await file.update((stored) => {
-                const next = stored.hosts.filter((host) => host.id !== id);
-                revoked = next.length !== stored.hosts.length;
-                return revoked ? { hosts: next } : stored;
-            });
-            return revoked;
-        },
+        verify: records.verify,
+        enrolled: records.enrolled,
+        rename: records.rename,
+        revoke: records.revoke,
     };
 };

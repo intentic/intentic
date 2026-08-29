@@ -46,6 +46,8 @@ import { createTerminalRunner } from "./terminal/terminal-run.js";
 import type { SecretUse } from "./secrets/secret-uses.js";
 
 import { unstubbed } from "@intentic/testing";
+import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
+import { pairings } from "./store/enrollment.js";
 import { noIsolation, testConfig } from "./testing.js";
 import { workspacePaths } from "./workspace/workspace.js";
 
@@ -316,6 +318,12 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
     );
     const workspace = workspacePaths(WORKSPACE_ROOT);
+    /* Real, like the registry above and for the same reason: a suite that enrolls a machine mints its pairing
+     * through this table and the route redeems it through the same one, so a stand-in would only be a second
+     * implementation of single-use to keep in step. It follows whatever config the test supplied, because a
+     * pairing table is per-history-root state like every store beside it. Nothing here writes to that root —
+     * only a REPLAYABLE pairing touches the burn file, and only the setup-time env token is one. */
+    const syncPairings = pairings<SyncMode>(syncPairBurnPath((rest.config ?? testConfig).historyRoot));
     // The phrase index these suites search through: the production schema and the production SQL, on nothing.
     const testSaid = openSearchIndex(IN_MEMORY);
     /* Completed by `unstubbed`, not spelled out. What follows is only what these suites RELY on; every other
@@ -340,6 +348,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // with no public address to probe, which is exactly the loopback/test shape.
         reach: createReachReporter(testConfig, createLogger(testConfig)),
         workspace,
+        syncPairings,
         /* The ledger as an empty memory shell: /environment folds it into every payload, so an unstubbed member
          * would throw on the first ordinary read of any environment route. NOT the file store on a temp path —
          * this module is a fixture prepass reads through, and opening a temp tree in this closure would

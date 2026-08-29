@@ -1,47 +1,22 @@
-import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
-import { tokenEquals } from "../auth/auth.js";
-import { jsonFile } from "../store/json-file.js";
+import { enrollments, pairings } from "../store/enrollment.js";
 
 /* The credential half of a RUNNER, this sandbox's own execution container on another machine (runner-hub.ts
- * is the live half; docs/remote-runners-plan.md, workspace root, is the design). The hosts-store pattern
- * narrowed: the parent mints a single-use pairing, `ic runner up` (or the Fly provisioner) carries it into
- * the runner's container env, and the runner redeems it exactly once over /system/runners/enroll for the
- * durable token its every reconnect presents.
+ * is the live half; docs/remote-runners-plan.md, workspace root, is the design). The shared mechanic
+ * (store/enrollment.ts) with the hosts door's two pairing sources collapsed to one: the parent mints, `ic
+ * runner up` (or the Fly provisioner) carries the token into the runner's container env, and the runner
+ * redeems it exactly once over /system/runners/enroll for the durable token its every reconnect presents.
  *
- * EVERY redeemed pairing is burned on /history, not only seeded ones, which is simpler than the hosts store's
- * split and strictly as safe: a runner's pairing always lives in a container's environment, immortal by
- * comparison with the daemon (visible in `docker inspect`, replayed verbatim into every rebuilt container),
- * so the moment it works the digest is recorded and the env copy is inert.
+ * EVERY pairing here is minted replayable, which is what used to read as a stricter rule than the hosts
+ * store's and is the same rule meeting a different population: a runner's pairing ALWAYS ends up in a
+ * container's environment, immortal by comparison with this daemon (visible in `docker inspect`, replayed
+ * verbatim into every rebuilt container), so the moment one works its digest is burned and the env copy is
+ * inert from then on.
  *
  * On /history for the hosts store's reason inverted: this token is not a key to somebody's laptop, but it IS
  * what lets a socket claim to be the container this sandbox dispatches work and provider credentials to, so
  * it sits where no tool the agent has can read it, as digests even there. */
-
-const StoredRunnersSchema = z.object({
-    runners: z.array(
-        z.object({
-            // The runner's id, one enrollment per runner, so a re-pair rotates.
-            id: z.string(),
-            hash: z.string(),
-            enrolledAt: z.number(),
-            /* WHICH CONNECTED COMPUTER HOLDS IT, when this sandbox is the one that asked for it (the Computers
-             * view's create flow, hosts/machine-reports.ts). It is the only way back to the machine that can
-             * stop or remove this container, and the runner itself cannot supply it: from inside, a container
-             * knows its own hostname and nothing about the capability its host is filed under. Absent for a
-             * runner somebody started by hand with `ic runner up`, which is not a lesser runner, only one this
-             * sandbox cannot offer machine buttons for. */
-            host: z.string().optional(),
-        }),
-    ),
-});
-type StoredRunners = z.infer<typeof StoredRunnersSchema>;
-
-// Long enough for a container to be created and boot to its enroll call; short enough that a pairing left in
-// a chat log is inert by the time anyone reads it. The hosts pairing's window, for the same reasons.
-const PAIR_TTL_MS = 10 * 60 * 1000;
 
 export interface RunnerRecord {
     readonly id: string;
@@ -69,70 +44,34 @@ export const runnerEnrollmentsPath = (historyRoot: string): string => join(histo
 // hold nothing that could spend anything.
 export const runnerPairBurnPath = (historyRoot: string): string => join(historyRoot, "runner-pair-consumed.json");
 
-const BurnedSchema = z.object({ digests: z.array(z.string()) });
-
 export const fileRunnersStore = (historyRoot: string): RunnersStore => {
-    const file = jsonFile<StoredRunners>(runnerEnrollmentsPath(historyRoot), {
-        parse: (raw) => StoredRunnersSchema.safeParse(raw).data,
-        fallback: () => ({ runners: [] }),
-        mode: 0o600,
+    const pending = pairings<RunnerRecord>(runnerPairBurnPath(historyRoot));
+    /* WHICH CONNECTED COMPUTER HOLDS IT, when this sandbox is the one that asked for it (the Computers view's
+     * create flow, hosts/machine-reports.ts). It is the only way back to the machine that can stop or remove
+     * this container, and the runner itself cannot supply it: from inside, a container knows its own hostname
+     * and nothing about the capability its host is filed under. Absent for a runner somebody started by hand
+     * with `ic runner up`, which is not a lesser runner, only one this sandbox cannot offer machine buttons
+     * for — so it rides the PAIRING, which is the last point at which anyone still knows. */
+    const records = enrollments({
+        path: runnerEnrollmentsPath(historyRoot),
+        key: "runners",
+        prefix: "irt_",
+        extra: { host: z.string().optional() },
     });
-    const burned = jsonFile<z.infer<typeof BurnedSchema>>(runnerPairBurnPath(historyRoot), {
-        parse: (raw) => BurnedSchema.safeParse(raw).data,
-        fallback: () => ({ digests: [] }),
-        mode: 0o600,
-    });
-    // In memory, the hosts store's stance: a pairing outliving a daemon restart buys nothing (the flow that
-    // wants one mints another) and would mean persisting a live credential to protect.
-    const pairings = new Map<string, { id: string; host?: string; expiresAt: number }>();
 
     return {
-        mintPairing: (id, host) => {
-            const token = randomBytes(32).toString("base64url");
-            pairings.set(token, { id, ...(host !== undefined ? { host } : {}), expiresAt: Date.now() + PAIR_TTL_MS });
-            for (const [key, pairing] of pairings) {
-                if (pairing.expiresAt < Date.now()) {
-                    pairings.delete(key);
-                }
-            }
-            return { token, expiresIn: Math.floor(PAIR_TTL_MS / 1000) };
-        },
+        mintPairing: (id, host) => pending.mint({ id, ...(host === undefined ? {} : { host }) }, { replayable: true }),
         enroll: async (pairToken) => {
-            const pairing = pairings.get(pairToken);
-            if (pairing === undefined || pairing.expiresAt < Date.now()) {
-                pairings.delete(pairToken);
+            const pairing = await pending.redeem(pairToken);
+            if (pairing === undefined) {
                 return undefined;
             }
-            const digest = sha256Hex(pairToken);
-            if ((await burned.read()).digests.includes(digest)) {
-                return undefined;
-            }
-            pairings.delete(pairToken);
-            await burned.update((stored) => (stored.digests.includes(digest) ? stored : { digests: [...stored.digests, digest] }));
-            const runnerToken = `irt_${randomBytes(32).toString("base64url")}`;
-            const entry = { id: pairing.id, hash: sha256Hex(runnerToken), enrolledAt: Date.now(), ...(pairing.host !== undefined ? { host: pairing.host } : {}) };
-            // Re-pairing a runner ROTATES it: the old token stops verifying the moment the new one lands.
-            await file.update((stored) => ({ runners: [...stored.runners.filter((runner) => runner.id !== entry.id), entry] }));
+            const runnerToken = await records.issue(pairing.id, pairing.host === undefined ? {} : { host: pairing.host });
             return { id: pairing.id, runnerToken };
         },
-        verify: async (presented) => {
-            if (presented === "") {
-                return undefined;
-            }
-            const hash = sha256Hex(presented);
-            // Fixed-length hex digests, so the comparison is timing-safe whatever the presented token's length.
-            return (await file.read()).runners.find((runner) => tokenEquals(runner.hash, hash))?.id;
-        },
-        enrolled: async (id) => (await file.read()).runners.some((runner) => runner.id === id),
-        list: async () => (await file.read()).runners.map((runner) => ({ id: runner.id, ...(runner.host !== undefined ? { host: runner.host } : {}) })),
-        revoke: async (id) => {
-            let revoked = false;
-            await file.update((stored) => {
-                const next = stored.runners.filter((runner) => runner.id !== id);
-                revoked = next.length !== stored.runners.length;
-                return revoked ? { runners: next } : stored;
-            });
-            return revoked;
-        },
+        verify: records.verify,
+        enrolled: records.enrolled,
+        list: records.list,
+        revoke: records.revoke,
     };
 };

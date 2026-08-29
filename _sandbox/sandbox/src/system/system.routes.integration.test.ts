@@ -10,7 +10,6 @@ import { createApp } from "../app.js";
 import { createLogger } from "../logger.js";
 
 import { createBootTracker } from "../platform/boot.js";
-import { mintPairing } from "../platform/sync.js";
 
 import { testConfig } from "../testing.js";
 
@@ -300,7 +299,8 @@ test("events: the hello names the daemon's build and where its boot is, then str
 });
 
 test("POST /system/authorized-key authorizes via the pairing token alone (no bearer)", async () => {
-    const app = createApp(services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    const svc = services({ auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } });
+    const app = createApp(svc);
     // Empty body: a valid pairing must get past auth and fail on key validation (400), never on auth (401):
     // the regression was the global bearer middleware 401ing before the route's own pairing check ran.
     const post = (headers: Record<string, string> = {}) =>
@@ -309,7 +309,7 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
             headers: { "content-type": "application/json", ...headers },
             body: JSON.stringify({}),
         });
-    expect((await post({ "x-intentic-pair": mintPairing("sync").token })).status).toBe(400);
+    expect((await post({ "x-intentic-pair": svc.syncPairings.mint("sync").token })).status).toBe(400);
     expect((await post()).status).toBe(401);
     expect((await post({ "x-intentic-pair": "bogus" })).status).toBe(401);
 });
@@ -320,21 +320,20 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
  * like any other and the card reads `available`. */
 test("a sandbox on intentic's own fabric enrolls for sync like every other one", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-zrok-home-"));
-    const app = createApp(
-        services({
-            config: {
-                ...testConfig,
-                connectToken: "token",
-                historyRoot: mkdtempSync(join(tmpdir(), "sync-zrok-history-")),
-                zrok: { token: "acct", api: "https://zrok2.example.com", namespace: "ns" },
-                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
-            },
-        }),
-    );
+    const svc = services({
+        config: {
+            ...testConfig,
+            connectToken: "token",
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-zrok-history-")),
+            zrok: { token: "acct", api: "https://zrok2.example.com", namespace: "ns" },
+            sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+        },
+    });
+    const app = createApp(svc);
     expect(await (await app.request("/system/sync")).json()).toMatchObject({ available: true });
     const enrolled = await app.request("/system/authorized-key", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token },
+        headers: { "content-type": "application/json", "x-intentic-pair": svc.syncPairings.mint("sync").token },
         body: JSON.stringify({ key: "ssh-ed25519 AAAAA laptop" }),
     });
     expect(enrolled.status).toBe(200);
@@ -349,21 +348,20 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
     // temp dirs so neither lands on the real /history nor in the real home.
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-enroll-home-"));
     // connectToken + publicUrl make syncSshHostname resolve, so enrollment gets past the tunnel-configured check.
-    const app = createApp(
-        services({
-            config: {
-                ...testConfig,
-                connectToken: "token",
-                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
-            },
-        }),
-    );
+    const svc = services({
+        config: {
+            ...testConfig,
+            connectToken: "token",
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+            sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+        },
+    });
+    const app = createApp(svc);
     // A fresh single-use SYNC pairing per call (the owner's file-sync path); the key's comment is the machine label.
     const enroll = (key: string, extra: Record<string, string> = {}) =>
         app.request("/system/authorized-key", {
             method: "POST",
-            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("sync").token, ...extra },
+            headers: { "content-type": "application/json", "x-intentic-pair": svc.syncPairings.mint("sync").token, ...extra },
             body: JSON.stringify({ key }),
         });
     const KEY_A = "ssh-ed25519 AAAAA machine-a";
@@ -383,20 +381,19 @@ test("POST /system/authorized-key is single-holder: a rival machine needs takeov
 
 test("POST /system/authorized-key: a MIRROR pairing lets many machines enroll: no single-holder lock", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-mirror-multi-"));
-    const app = createApp(
-        services({
-            config: {
-                ...testConfig,
-                connectToken: "token",
-                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
-            },
-        }),
-    );
+    const svc = services({
+        config: {
+            ...testConfig,
+            connectToken: "token",
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+            sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+        },
+    });
+    const app = createApp(svc);
     const enrollMirror = (key: string) =>
         app.request("/system/authorized-key", {
             method: "POST",
-            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            headers: { "content-type": "application/json", "x-intentic-pair": svc.syncPairings.mint("mirror").token },
             body: JSON.stringify({ key }),
         });
     // Three collaborators mirror the same sandbox concurrently: every enroll succeeds, none locks.
@@ -433,20 +430,19 @@ test("POST /system/sync/pair: the operating tier may mint sync, lower roles are 
 
 test("DELETE /system/authorized-key: a sync token self-revokes just its own enrollment", async () => {
     process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-revoke-"));
-    const app = createApp(
-        services({
-            config: {
-                ...testConfig,
-                connectToken: "token",
-                historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
-                sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
-            },
-        }),
-    );
+    const svc = services({
+        config: {
+            ...testConfig,
+            connectToken: "token",
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
+            sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
+        },
+    });
+    const app = createApp(svc);
     const enroll = (key: string) =>
         app.request("/system/authorized-key", {
             method: "POST",
-            headers: { "content-type": "application/json", "x-intentic-pair": mintPairing("mirror").token },
+            headers: { "content-type": "application/json", "x-intentic-pair": svc.syncPairings.mint("mirror").token },
             body: JSON.stringify({ key }),
         });
     const tokenA = ((await (await enroll("ssh-ed25519 AAA laptop-a")).json()) as { syncToken: string }).syncToken;

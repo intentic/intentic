@@ -72,7 +72,7 @@ import { startWorkloadPriorityGovernor } from "./platform/workload-priority.js";
 import { onTurnSettled, turnRunMetrics } from "./agent/turn-runs.js";
 import { browserSessionMetrics } from "./browser/browser-sessions.js";
 import { readLocalCertificate, startLocalCertificateRenewal } from "./platform/local-cert.js";
-import { restoreAuthorizedKeys, seedPairing } from "./platform/sync.js";
+import { restoreAuthorizedKeys } from "./platform/sync.js";
 import { seedSetupHost } from "./hosts/host-seed.js";
 import { runnerModeRequested, startRunnerMode } from "./runners/runner-mode.js";
 import { seedStarterSite } from "./scaffold/starter-site.js";
@@ -308,12 +308,12 @@ const main = async (): Promise<void> => {
 
     // Setup-time desktop sync: arm the platform-minted pairing token so the connect script can enroll its agent.
     // No-op once that token has been redeemed, the burn is recorded on /history, so the copy living in the
-    // container's env cannot be replayed by a restart (see seedPairing). Detached: the connect script's agent
+    // container's env cannot be replayed by a restart (store/enrollment.ts says why). Detached: the connect script's agent
     // retries its enroll, so nothing here needs to hold the boot.
     if (config.syncPairToken !== "") {
-        void seedPairing(config.historyRoot, config.syncPairToken).catch((error: unknown) =>
-            logger.warn({ err: error }, "setup pairing not armed, enable desktop sync from the browser instead"),
-        );
+        void services.syncPairings
+            .arm(config.syncPairToken, "sync")
+            .catch((error: unknown) => logger.warn({ err: error }, "setup pairing not armed, enable desktop sync from the browser instead"));
     }
 
     /* Setup-time CONNECTED COMPUTER: create the card for the machine that ran the installer and arm its pairing,

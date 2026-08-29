@@ -93,6 +93,8 @@ import { fileWebExtStore, type WebExtStore } from "./webext/webext-store.js";
 import { createRunnerHub, type RunnerHub } from "./runners/runner-hub.js";
 import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { fileRunnersStore, type RunnersStore } from "./runners/runners-store.js";
+import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
+import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
 import type { Config } from "./env.config.js";
@@ -327,9 +329,15 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
     // This sandbox's RUNNERS, its own execution containers on other machines (docs/remote-runners-plan.md,
-    // workspace root): the hosts pair retold, enrollment on /history and the live sockets in memory.
+    // workspace root): enrollment on /history (store/enrollment.ts's mechanic, shared with hosts and webext
+    // above) and the live sockets in memory, which is the hosts hub retold.
     readonly runners: RunnersStore;
     readonly runnerHub: RunnerHub;
+    /* The fourth door that enrolls this way, and the odd one out: desktop sync's pairing (platform/sync.ts).
+     * Only the PAIRING is here — its enrollment half is keyed by SSH key rather than by a capability id, has a
+     * single-holder lock and derives authorized_keys, so it stays where those rules are. A field rather than
+     * the module-global it was, because a pairing table is per-history-root state like every store beside it. */
+    readonly syncPairings: Pairings<SyncMode>;
     /* Set only when THIS daemon is a runner (startRunnerMode): the parent sandbox as a credential source,
      * consulted first by resolveHarnessCredentials so a dispatched turn spends the ORIGIN's model providers.
      * A mutable slot rather than a field, because runner identity is read off /history after the boot chain,
@@ -1227,6 +1235,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         webextHub: createWebExtHub(logger),
         runners: fileRunnersStore(config.historyRoot),
         runnerHub: createRunnerHub(logger),
+        syncPairings: pairings<SyncMode>(syncPairBurnPath(config.historyRoot)),
         runnerParent: {},
         info,
         tools: internalTools(config.intenticAgentTools),
