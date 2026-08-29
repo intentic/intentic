@@ -629,6 +629,25 @@
     background: color-mix(in srgb, var(--color-primary-500) 24%, transparent);
     color: var(--color-primary-500);
 }
+/* A GHOST CONTROL THAT IS A TOGGLE, and therefore has to look pressable in the state where it is doing
+   nothing. Plain `.composer-ghost` paints nothing at rest and only fills on :hover, which is right for a
+   control that always does something when pressed (the model pill, the mode menu) and wrong for a switch: the
+   off state rendered as bare muted text, indistinguishable from the caption beside it, and on touch there is
+   no hover to correct the impression. Off is precisely the state that has to invite the press.
+
+   A hairline, not a fill: the resting chip has to read as a control without competing with the one that is
+   ON, which keeps `.composer-active`'s wash. The active border rides the brand rather than the line token so
+   a filled chip doesn't wear a grey ring. */
+.composer-toggle {
+    border: 1px solid var(--color-line);
+    transition:
+        background-color 0.15s,
+        border-color 0.15s,
+        color 0.15s;
+}
+.composer-toggle.composer-active {
+    border-color: color-mix(in srgb, var(--color-primary-500) 32%, transparent);
+}
 /* The composer wearing the AGENT's voice (ChatPane's voiceAgent): the whole box changes standing, not just a
    pill, because being in this mode by accident is the one mistake worth paint — the words typed here land in
    the transcript as the agent's own. Border over background alone so the state survives focus (focus-within

@@ -157,7 +157,10 @@ const footerVisible = computed(
                  session behind it, and a rule alone was not enough to say so on a tall picker. `bg-canvas` is
                  the app's own ground (textured wherever the skin textures it), so the footer reads as the
                  surface the list is standing on rather than more list. -->
-            <div v-if="footerVisible" class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+            <div
+                v-if="footerVisible"
+                class="scrollbar-thin flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2"
+            >
                 <!-- WHO SERVES THE NEXT TURN: the account list and the harness axis, shared verbatim with the
                      shell's own picker (PickerAccounts). Bound to the conversation here: each row writes
                      straight through and the panel stays open, because these are settings of the session you
@@ -172,46 +175,71 @@ const footerVisible = computed(
                     @navigate="emit(`selected`)"
                 />
 
-                <!-- Codex reasoning is always on (no toggle); extended thinking is a Claude knob. -->
-                <div v-if="provider === `claude`" class="flex items-center justify-between gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-muted">Extended thinking</span>
-                    <button
-                        type="button"
-                        class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
-                        :class="{ 'composer-active': thinking }"
-                        @click="conversation.setThinking(!thinking)"
-                        :aria-pressed="thinking"
-                        aria-label="Toggle extended thinking"
-                    >
-                        <Icon name="bolt" class="text-2xs" />
-                        <span>{{ thinking ? "On" : "Off" }}</span>
-                    </button>
-                </div>
+                <!-- CLAUDE'S TWO PER-SESSION KNOBS, ON ONE LINE. Codex reasoning is always on (no toggle);
+                     extended thinking is a Claude knob, and fast speed is offered only where all three
+                     conditions hold (fastAllowed: the Claude Code loop, a first-party route, a model whose
+                     catalog row publishes the `fast` badge), so it appears and disappears with the model rather
+                     than sitting greyed out with an explanation nobody reads.
 
-                <!-- FAST SPEED. Offered only where all three conditions hold (fastAllowed: the Claude Code loop, a
-                     first-party route, a model whose catalog row publishes the `fast` badge), so it appears and
-                     disappears with the model rather than sitting greyed out with an explanation nobody reads. The
-                     toggle stands on its own: a standing caption under a switch is read once and skipped from then
-                     on, and the only line worth the space is the conditional one below it, which reports what the
-                     harness actually did rather than restating what the switch is. -->
-                <div v-if="fastOffered" class="flex flex-col gap-1">
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-muted">Fast speed</span>
+                     SELF-LABELLING CHIPS, NOT LABEL-LEFT/CONTROL-RIGHT. That grammar (which the harness row
+                     and the limitations row still use, correctly) earns its column when the label is long and
+                     the control is small. Here it was the reverse: two words on the left, a wide chip on the
+                     right, and more than half the row width was the gap between them — twice, for two bits of
+                     state, in a panel whose reason for existing is the model list above. The chip's own label
+                     is the name, so the row costs one line instead of two and the 8px of vertical rhythm
+                     between them goes back to the list.
+
+                     WHAT THE OLD ROWS SPENT ON ONE BIT: a bolt icon, the word On/Off, and the active tint —
+                     three channels, and the bolt was the same glyph on both rows and the same in both states,
+                     so it distinguished nothing and made the pair read as one control seen twice. The dot is
+                     what replaces all of it: filled or hollow is a SHAPE difference, so the state survives
+                     without the word and without relying on the tint alone, which colour-blind readers would
+                     have been left with once "Off" was gone. Fixed width either way, so a chip does not
+                     resize under the thumb that just pressed it.
+
+                     Labels carry sentence case on purpose. The uppercase/tracked dress these wore is this
+                     footer's SECTION HEADER costume (the provider header over the account list wears it, so
+                     does "Harness"), and worn by leaf controls too it flattened four structural ranks into one
+                     stack of look-alike headings. -->
+                <div v-if="provider === `claude`" class="flex flex-col gap-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
                         <button
                             type="button"
-                            class="composer-ghost h-7 gap-1 px-2.5 text-2xs font-medium max-md:h-10"
+                            class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
+                            :class="{ 'composer-active': thinking }"
+                            @click="conversation.setThinking(!thinking)"
+                            :aria-pressed="thinking"
+                        >
+                            <span
+                                class="h-1.5 w-1.5 shrink-0 rounded-full border border-current"
+                                :class="{ 'bg-current': thinking }"
+                                aria-hidden="true"
+                            ></span>
+                            <span>Extended thinking</span>
+                        </button>
+                        <button
+                            v-if="fastOffered"
+                            type="button"
+                            class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
                             :class="{ 'composer-active': fast }"
                             @click="conversation.setFast(!fast)"
                             :aria-pressed="fast"
-                            aria-label="Toggle fast speed"
                         >
-                            <Icon name="bolt" class="text-2xs" />
-                            <span>{{ fast ? "On" : "Off" }}</span>
+                            <span
+                                class="h-1.5 w-1.5 shrink-0 rounded-full border border-current"
+                                :class="{ 'bg-current': fast }"
+                                aria-hidden="true"
+                            ></span>
+                            <span>Fast speed</span>
                         </button>
                     </div>
                     <!-- What the harness actually did with the ask. Only ever shown when it DIFFERS from what was
                          asked for: agreeing with the toggle is what the toggle already says, and a notice under a
-                         working control trains people to ignore notices. -->
+                         working control trains people to ignore notices.
+
+                         It sits under the ROW rather than under a chip, which costs it nothing: every sentence it
+                         can carry names fast speed itself (FAST_MODE_REASONS), so it does not borrow its subject
+                         from a label above it the way a caption would. -->
                     <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>
 
