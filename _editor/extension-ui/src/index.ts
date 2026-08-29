@@ -74,8 +74,8 @@ export {
     type ChangeStatus,
     ui,
     Code,
-    /* <CodeField> ships beside <Code> because shipping the reader WITHOUT the writer is what made the memory
-     * extension put a bare grey <textarea> next to a coloured block of the very same file: the kit had no way
+    /* <CodeField> ships beside <Code> because shipping the reader WITHOUT the writer is what made a note pane
+     * put a bare grey <textarea> next to a coloured block of the very same file: the kit had no way
      * to say "this text, in its own colours, with a caret in it". */
     CodeField,
     ConfirmDialog,
@@ -116,14 +116,15 @@ export {
     Modal,
     type NavGroup,
     NavRail,
-    /* <NoteEditor> and `useNoteDraft` ship because TWO extensions are a pane that reads a markdown file, lets
-     * somebody correct it and lets them delete it, knowledge and memory, and they had built the same thing
-     * twice: the same Copy/Edit/Delete cluster, the same Cancel/Save pair, the same in-place confirmation, the
-     * same draft-or-file binding, the same read-and-write-on-one-surface rule. They had already drifted in the
-     * ways a second copy does: one cleared its confirmation when a write failed and the other did not, and
-     * NEITHER caught a failing write, so the error strip filled in from the mutation while the click handler's
-     * promise rejected into the console. The component is the chrome and the composable is the lifecycle,
-     * separately, because what a note LOOKS like past the frame is exactly where the two panes differ. */
+    /* <NoteEditor> and `useNoteDraft` ship because "a pane that reads a markdown file, lets somebody correct it
+     * and lets them delete it" is a shape an extension arrives at over and over, and the first two that did
+     * built the same thing twice: the same Copy/Edit/Delete cluster, the same Cancel/Save pair, the same
+     * in-place confirmation, the same draft-or-file binding, the same read-and-write-on-one-surface rule. They
+     * had already drifted in the ways a second copy does: one cleared its confirmation when a write failed and
+     * the other did not, and NEITHER caught a failing write, so the error strip filled in from the mutation
+     * while the click handler's promise rejected into the console. The component is the chrome and the
+     * composable is the lifecycle, separately, because what a note LOOKS like past the frame is exactly where
+     * two panes differ. */
     NoteEditor,
     type NoteDraft,
     type NoteDraftOptions,

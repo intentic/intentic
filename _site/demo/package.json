@@ -12,7 +12,6 @@
         "@intentic-app/api-contract": "workspace:*",
         "@intentic-app/web": "workspace:*",
         "@intentic/ext-knowledge": "workspace:*",
-        "@intentic/ext-memory": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*"
     },
     "devDependencies": {

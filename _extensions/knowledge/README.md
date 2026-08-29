@@ -53,16 +53,15 @@ express a typed graph, so this reads the one it was already expressing.
 - [src/KnowledgeView.vue](src/KnowledgeView.vue), the section: search, the list, the note, the health strip.
 - [src/KnowledgePane.vue](src/KnowledgePane.vue), one note: read, map, source, and what it is connected to. The
   frame around it (the action cluster, the delete confirmation, the read-and-write surface) is the kit's
-  `<NoteEditor>`, shared with Memory.
+  `<NoteEditor>`.
 - [plugin/skills/knowledge/SKILL.md](plugin/skills/knowledge/SKILL.md): when the agent reads the knowledge base and
   when it writes to it.
 
 ## How it fits
 
-A **section of the sandbox hub, beside Memory**: reached from the sandbox chip, not from a rail tile. Memory
-is what the agent has decided to remember about its work; this is what is known about the world that work
-happens in. Neither has anything to announce, so neither can badge, and a permanent unlabelled rail icon that
-never lights up spends a scarce seat to say nothing.
+A **section of the sandbox hub**: reached from the sandbox chip, not from a rail tile. This is what is known
+about the world the work happens in, as opposed to the work itself. It has nothing to announce, so it can never
+badge, and a permanent unlabelled rail icon that never lights up spends a scarce seat to say nothing.
 
 The half that gets used constantly is the CLI, not the panel: the agent looks the knowledge base up before answering
 questions about the owner's world, and writes to it when it learns something durable. The panel is where the

@@ -5,17 +5,17 @@
      the one surface the file is both READ and WRITTEN on. What it does not own is the note: the body, the
      badges, the meta line and any extra control are the caller's, because that is where two notes differ.
 
-     SOURCE AND EDIT ARE ONE SURFACE (<CodeField>, `readonly` or not): the memory pane's rule, and its reason.
-     They used to be two there: a coloured block to read the markdown in and a bare grey <textarea> to change it
-     in. So the file changed typeface, colour, leading and size at the moment you picked up the pen, and the
+     SOURCE AND EDIT ARE ONE SURFACE (<CodeField>, `readonly` or not), and that is the rule the panes that came
+     before got wrong. They were two: a coloured block to read the markdown in and a bare grey <textarea> to
+     change it in. So the file changed typeface, colour, leading and size at the moment you picked up the pen, and the
      textarea's `h-full min-h-64` in a panel with no height to be full OF also shrank it to seven visible lines.
      One surface cannot drift from itself. Hoisting it here is what keeps that true for the next pane as well.
 
      THE CONFIRMATION RIDES #strips rather than the body, so a long note cannot scroll the question away from the
      answer, and it is in place rather than in a <ConfirmDialog> because the sentence names the note you are
-     looking at. `verb` is the whole of what differs between callers: "Delete" for a knowledge note, whose
-     neighbours are left linking to something nobody has written, "Forget" for a memory note, which the agent
-     stops recalling, and it spells the button, the tooltip and the accessible name from one word. -->
+     looking at. `verb` is the whole of what differs between callers, and it spells the button, the tooltip and
+     the accessible name from one word: "Delete" for a knowledge note, whose neighbours are left linking to
+     something nobody has written, and whatever the removal actually means to the next pane that reuses it. -->
 <script setup lang="ts">
 import Button from "./Button.vue";
 import { ui } from "../lib/ui.js";

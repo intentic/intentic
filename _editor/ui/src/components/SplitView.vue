@@ -1,5 +1,5 @@
 <!-- THE INDEX-AND-BODY SCREEN: a title, a column of things to choose from, and the chosen one beside it. Five
-     screens are this shape (settings, sandbox, memory, documentation, activity) and there were FOUR
+     screens are this shape (settings, sandbox, knowledge, documentation, activity) and there were FOUR
      implementations of it: four rail widths (13/14/16/19rem), three gaps, three page treatments and four
      different answers to what happens on a phone. The one that had solved it properly, <HubLayout>, lived in
      the web app where no extension could import it: the same fault that had every extension hand-rolling a row
@@ -31,7 +31,7 @@
         The caller supplies that control through #compact, because a hub wants a tab strip and a filter wants a
         picker, and those are genuinely different controls for genuinely different jobs.
 
-      · `swap`: the rail SELECTS a document (a memory note, a package page). Going into one is the point, so a
+      · `swap`: the rail SELECTS a document (a knowledge note, a package page). Going into one is the point, so a
         folded split shows the list, then the document, with a way back. `detailOpen` says which, and #detail is
         responsible for offering the way back (it is the pane's own header that has room for it).
 

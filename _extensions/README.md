@@ -105,7 +105,6 @@ tile came to read `21` over a workspace that had two.
 | `knowledge` | UI view + backend + agent CLI + plugin | The owner's knowledge base: a workspace folder of markdown notes that is also a typed graph, `type:` makes a note a thing, a `[[link]]` in a header field is a named relationship. Search, the note, what links to it, and the map around it; its own vocabulary keeps the words consistent without ever refusing a capture. Ships the `kb` CLI (`contributes.bin`, built from the same engine its backend serves) and the `knowledge` skill (`contributes.agent`). |
 | `logs` | UI view | Workspace log tail. |
 | `maintenance` | UI view | The chore book against this workspace: what routine upkeep each repository is owed (outdated deps, advisories, dead code, duplication, undocumented packages, tangled files, periodic surveys), the daemon-measured evidence behind each verdict, and an isolated fleet turn per chore. |
-| `memory` | UI view + backend | The agent's persistent memory notes: review, edit, delete. The first extracted feature backend, its routes, file layer and wire contract live here (`src/contract.ts`, `src/server/`), not in the daemon core. |
 | `pipelines` | UI view | CI runs: status, rerun/cancel, agent-driven fixes. |
 | `preview` | UI view | Per-repo dev-server preview panels. |
 | `viewers` | UI viewers | **Every file format the app can show that isn't source code**: images, SVG (picture + source), PDF, audio/video (a streaming player over `/workspace/media`), docx, xlsx, via `contributes.viewers`. The core resolves a path to text or to opaque bytes and stops there; switch this off and those files fall back to a download. |
@@ -183,16 +182,16 @@ composed per agent turn, so they apply from the next one; an `environment` fragm
 image rebuild.
 
 The split is no longer a UI veneer: the backend host gives an extension a server half of its own, and
-`memory` is the first feature whose backend lives entirely in its package: own contract, own routes, no
-daemon-core feature code. `deployments` followed, and the rest (activity, logs, drafts…) migrate the same way,
-each migration deleting its core routes.
+`deployments` and `knowledge` are the features whose backends live entirely in their packages: own contract,
+own routes, no daemon-core feature code. The rest (activity, logs, drafts…) migrate the same way, each
+migration deleting its core routes.
 
 ## Which way a feature moves: substrate or feature
 
 Not everything migrates out, and getting this backwards is expensive in both directions. The test is whether
 **other things plug into it**:
 
-- **A feature** is a surface over its own data that nobody else extends: `memory`, `deployments`, `knowledge`,
+- **A feature** is a surface over its own data that nobody else extends: `deployments`, `knowledge`,
   `acceptance`, `documentation`. Its routes, schemas and translation belong in its package, and the core is
   better off not knowing it exists. These migrate OUT.
 - **A substrate** is something other packs fire into or contribute to: the automations trigger bus, the batch

@@ -30,7 +30,7 @@ export const formatTokens = (tokens: number): string =>
  *
  * Splits on every separator a person's name, an email address, a repository and a `publisher.name` all use, so
  * the two letters are word-initials wherever there are words to take them from: "John Doe" → JD,
- * "ada.lovelace@example.com" → AL, "git-history" → GH. One word keeps its first two glyphs ("memory" → ME)
+ * "ada.lovelace@example.com" → AL, "git-history" → GH. One word keeps its first two glyphs ("maintenance" → MA)
  * rather than doubling a letter. Undefined for a name with nothing in it, which is how a caller knows to draw
  * its neutral glyph instead of an empty plate.
  *
@@ -137,7 +137,7 @@ export const timeAgo = (at: number, { now = Date.now(), days = false }: { now?: 
  *
  * `timeAgo` past a day falls back to the absolute local timestamp ("Jul 27, 2026, 21:06:40"), three times the
  * width of a list row's whole meta line, and two wrapped lines on a phone. For anything MEASURED IN DAYS AND
- * WEEKS rather than in minutes, a knowledge note, a memory note, that fallback is the common case here and
+ * WEEKS rather than in minutes, a knowledge note, a chore report, that fallback is the common case here and
  * not the rare one, so it would set the width of every row it appeared in.
  *
  * Every caller pairs this with the exact moment in a `title`, so nothing is lost; the age simply stops setting

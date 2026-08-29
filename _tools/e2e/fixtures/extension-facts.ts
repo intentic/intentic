@@ -122,13 +122,12 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
     { id: `documentation-repo`, key: `platform`, surface: `directory`, why: `every repo gets a Docs panel` },
 
     /* ── sandbox-surface extensions (tabs on the Sandbox hub) ──
-     * Memory, Activity and Knowledge are here rather than above because they are not rail views: each is a
-     * section of the sandbox hub (their extension.ts files carry the argument, and RAIL_GROUPS' comment carries
-     * the rule they failed). The inventory said `rail` for the first two long after they moved. */
+     * Activity and Knowledge are here rather than above because they are not rail views: each is a section of
+     * the sandbox hub (their extension.ts files carry the argument, and RAIL_GROUPS' comment carries the rule
+     * they failed). The inventory said `rail` for the first one long after it moved. */
     { id: `activity`, key: `activity`, surface: `sandbox`, why: `always on` },
     { id: `knowledge`, key: `knowledge`, surface: `sandbox`, why: `always on` },
     { id: `logs`, key: `logs`, surface: `sandbox`, why: `always on` },
-    { id: `memory`, key: `memory`, surface: `sandbox`, why: `always on` },
     { id: `ports`, key: `ports`, surface: `sandbox`, why: `always on` },
     { id: `public`, key: `public`, surface: `sandbox`, why: `always on` },
 ];

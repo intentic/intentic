@@ -233,7 +233,7 @@
     text-decoration: underline;
 }
 /* A document the prose named, resolved to somewhere INSIDE the app: a workspace file (markdownFileLinks) or a
-   sibling memory note (the memory view's decorator). The dotted rule is the affordance — such a reference reads
+   sibling knowledge note (the knowledge view's decorator). The dotted rule is the affordance — such a reference reads
    as "opens here" before it is hovered, and stays distinguishable from an outbound link, which is undecorated
    until hover. `cursor` is set explicitly because a decorator may drop the href, and an anchor without one is
    not a pointer target. Written one level more specific than the rule above so it wins the text-decoration

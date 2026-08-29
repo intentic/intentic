@@ -10,7 +10,6 @@ import type {
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
-import * as memory from "@intentic/ext-memory";
 import { describe, expect, it } from "vitest";
 
 /* Exercises each compiled-in extension package the way loadBuiltins does: activate() against a minimal fake
@@ -164,15 +163,5 @@ describe(`ext-activity`, () => {
         expect(view.surface).toBe(`sandbox`);
         expect(view.detect(noRepos, [])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
         expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
-    });
-});
-
-describe(`ext-memory`, () => {
-    it(`registers an always-present Memory section on the sandbox hub`, () => {
-        const view = activateAndCapture(memory);
-        expect(view.id).toBe(`memory`);
-        // Same reasoning as logs and activity: the agent's notebook has nothing to announce.
-        expect(view.surface).toBe(`sandbox`);
-        expect(view.detect(noRepos, [])).toEqual([{ key: `memory`, title: `Memory`, icon: `sparkles` }]);
     });
 });

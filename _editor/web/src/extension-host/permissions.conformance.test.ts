@@ -127,8 +127,8 @@ const scanTypedCalls = (text: string): Call[] =>
         return route === undefined ? { method: "UNKNOWN", path: `<no contract route named ${name}>` } : { method: route.method, path: route.path };
     });
 
-/* SCREAMING_CASE string constants defined anywhere in the extension's src: `const MEMORY_BASE =
- * "/x/intentic.memory"`. An extension calling its OWN backend interpolates its namespace prefix from one
+/* SCREAMING_CASE string constants defined anywhere in the extension's src: `const KNOWLEDGE_BASE =
+ * "/x/intentic.knowledge"`. An extension calling its OWN backend interpolates its namespace prefix from one
  * (contract.ts keeps it a literal for exactly this scanner), and resolving it is what lets the own-namespace
  * exemption below match on the real prefix instead of a wildcard that would excuse anything. Gathered across
  * files, unlike the per-file helpers: the constant lives in the contract module, the calls in the data layer. */
@@ -253,7 +253,7 @@ test("the scanner finds calls in every extension that declares sandbox routes", 
 });
 
 // Callers with at least one call OUTSIDE their own namespace: an extension that only talks to its own
-// backend (memory) has nothing left to declare, and an empty test.each is a vitest error, not a pass.
+// backend has nothing left to declare, and an empty test.each is a vitest error, not a pass.
 const declaringCallers = callers.filter((name) => declarableCallsOf(name).length > 0);
 
 describe.each(declaringCallers)("%s declares every sandbox route it calls", (name) => {

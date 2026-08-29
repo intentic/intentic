@@ -100,8 +100,8 @@ describe(`staleQueryKeys`, () => {
         // The two lists are unioned flat, not layered: a narrow extension entry under a broad core entry that
         // invalidates nothing must still fire. Without this, every path beneath one of the daemon's
         // machine-state prefixes would be unreachable to extensions.
-        const nested: readonly FileContribution[] = [{ path: `${STATE_DIR}/records/sessions/claude/projects/p/memory/`, invalidates: [`memory`] }];
-        expect(staleQueryKeys([`.intentic/records/sessions/claude/projects/p/memory/note.md`], nested)).toEqual([`memory`]);
+        const nested: readonly FileContribution[] = [{ path: `${STATE_DIR}/records/sessions/claude/plans/`, invalidates: [`plans`] }];
+        expect(staleQueryKeys([`.intentic/records/sessions/claude/plans/a-plan.md`], nested)).toEqual([`plans`]);
         // …and a sibling under the same core prefix stays ignored.
         expect(staleQueryKeys([`.intentic/records/sessions/claude/projects/p/session.jsonl`], nested)).toEqual([]);
     });

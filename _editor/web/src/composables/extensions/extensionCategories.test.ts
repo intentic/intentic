@@ -17,11 +17,11 @@ const shape = (sections: ExtensionSection[]): [string, string[]][] =>
 describe(`sectionsOf`, () => {
     it(`renders the sections in their editorial order, not the order the rows arrive in`, () => {
         expect(
-            shape(sectionsOf([entry(`logs`, `sandbox`), entry(`memory`, `knowledge`), entry(`viewers`, `workspace`), entry(`activity`, `work`)])),
+            shape(sectionsOf([entry(`logs`, `sandbox`), entry(`knowledge`, `knowledge`), entry(`viewers`, `workspace`), entry(`activity`, `work`)])),
         ).toEqual([
             [`Work & delivery`, [`activity`]],
             [`Workspace`, [`viewers`]],
-            [`Knowledge`, [`memory`]],
+            [`Knowledge`, [`knowledge`]],
             [`The sandbox`, [`logs`]],
         ]);
     });
@@ -33,7 +33,7 @@ describe(`sectionsOf`, () => {
     });
 
     it(`omits a section with no rows, so a filter takes the heading with it`, () => {
-        expect(shape(sectionsOf([entry(`memory`, `knowledge`)]))).toEqual([[`Knowledge`, [`memory`]]]);
+        expect(shape(sectionsOf([entry(`knowledge`, `knowledge`)]))).toEqual([[`Knowledge`, [`knowledge`]]]);
     });
 
     it(`lists an extension that declares nothing rather than dropping it: an unrendered row cannot be switched off`, () => {
@@ -41,14 +41,14 @@ describe(`sectionsOf`, () => {
     });
 
     it(`lands a third-party section this build has never heard of in Other, and installs it all the same`, () => {
-        expect(shape(sectionsOf([entry(`incidents`, `observability`), entry(`memory`, `knowledge`)]))).toEqual([
-            [`Knowledge`, [`memory`]],
+        expect(shape(sectionsOf([entry(`incidents`, `observability`), entry(`knowledge`, `knowledge`)]))).toEqual([
+            [`Knowledge`, [`knowledge`]],
             [`Other`, [`incidents`]],
         ]);
     });
 
     it(`captions only the section whose heading doesn't say why a row is in it`, () => {
-        expect(sectionsOf([entry(`memory`, `knowledge`), entry(`mystery`)]).map((section) => section.caption)).toEqual([
+        expect(sectionsOf([entry(`knowledge`, `knowledge`), entry(`mystery`)]).map((section) => section.caption)).toEqual([
             undefined,
             undefined,
         ]);

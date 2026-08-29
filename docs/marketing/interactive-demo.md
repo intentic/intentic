@@ -99,7 +99,6 @@ Per surface, the routes it actually calls and what the fixture answers with:
 | Browsers | `GET /system/browsers` + the `/system/browser-view` WebSocket | the checkout agent's Chromium: the pricing page, the Stripe session it created, and the API docs it read. See below |
 | Pipelines | `GET /ci/runs`, `POST /ci/runs/jobs`, `/ci/seen` | 7 runs over two repos on two hosts (`web` on GitHub, `api` on GitLab): one still going, one broken, and one job broken twice so the "failing repeatedly" analysis has something true to say |
 | Automations | `GET /automations`, `/automations/pending` | one of each trigger the union has: a nightly chore, a Discord listener, a Front Desk held for approval, a land-triggered doc check, a disabled CI webhook, each with the run history that makes a row honest |
-| Memory | `GET /memory`, `/memory/file` (+ PUT/DELETE) | four notes about acme-shop, editable and forgettable: the fixture is the store, so the red pen works |
 
 ## How full it opens: the three modes
 
@@ -200,7 +199,7 @@ Three classes, decided per mutation:
 
 - **Real, in memory**: rename, archive, drag between lanes, tab switches, open a file, open a diff, filter,
   the model picker, **landing**, **dropping a folder in**, extension switches, automation edits and approvals,
-  memory edits, marking the pipelines board read, sending a message (advances the script). The fixture is
+  knowledge edits, marking the pipelines board read, sending a message (advances the script). The fixture is
   mutable state; the UI is honest.
 - **Inert with an invitation**: push, secrets writes, capability install, sandbox create, firing an automation,
   rerunning or cancelling someone else's pipeline. The handler answers a refusal the app already renders, and

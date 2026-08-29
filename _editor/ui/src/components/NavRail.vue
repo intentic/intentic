@@ -1,5 +1,5 @@
 <!-- THE INDEX COLUMN: a filter, some pinned rows, grouped selectable rows, a footnote. The activity source
-     rail, the memory index and the documentation contents were three implementations of this, and they
+     rail, the knowledge index and the documentation contents were three implementations of this, and they
      disagreed on every part a reader can see: three selection tints (two `bg-overlay`, one primary-at-13%
      against the app's canonical 15%), two scrollbars, two group-heading treatments, and three filter fields.
 

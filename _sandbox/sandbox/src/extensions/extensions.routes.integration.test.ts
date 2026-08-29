@@ -173,7 +173,6 @@ test("the extension list carries every first-party extension, compiled-in UI one
          * automations, workflows and maintenance (each the only window onto something running anyway) and
          * viewers (without which every image, PDF and video in the workspace falls back to a download). */
         "intentic.maintenance",
-        "intentic.memory",
         "intentic.pi-agent",
         "intentic.pipelines",
         "intentic.preview",

@@ -476,20 +476,15 @@ const STATE_FILES = [
         portability: "secret",
         note: "Sign the agent's AI accounts in again on the Agent tab, then re-enter each connection's credential on Capabilities and each extension's secret settings on Extensions, both arrived listed but unauthenticated.",
     },
-    /* Agent session transcripts, rewritten on every streamed token.
-     *
-     * The memory notes under it (`projects/<slug>/memory/**`) ARE user-facing and the /memory view polls them
-     * every 30s, which is the one place in this table where a poll survives a real change feed being available.
-     * It stays a poll deliberately: the watcher's exclusion is a DESCENT filter, so reaching those notes means
-     * letting it walk `.intentic/records/sessions/claude` → `projects` → every project slug. Measured on the live
-     * workspace that is +119 watched directories against ~593 today (a fifth more), with 314 continuously-
-     * rewritten transcripts inside the newly-watched set, to make ONE memory directory live. Notes change at
-     * agent-turn cadence, so the poll costs a request a minute and the alternative costs a permanent 20% on the
-     * watcher. */
+    /* Agent session transcripts, rewritten on every streamed token: nothing renders them off disk, so nothing
+     * under here is watched. The exclusion is a DESCENT filter, which is what makes it cheap: the watcher never
+     * walks `projects` and its per-slug subtrees at all. Measured on the live workspace, descending would add
+     * +119 watched directories against ~593 (a fifth more), with 314 continuously-rewritten transcripts inside
+     * the newly-watched set. If a surface here ever needs to be live, weigh that 20% against a poll first. */
     {
         path: ".intentic/records/sessions/claude/",
         invalidates: [],
-        why: "Agent session transcripts, see the note above on why the memory notes under it stay polled.",
+        why: "Agent session transcripts; nothing derives from watching them, and descending into them would cost a fifth of the watcher.",
         portability: "carry",
     },
     {

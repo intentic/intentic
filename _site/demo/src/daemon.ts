@@ -22,7 +22,6 @@ import {
     type WorkflowRun,
 } from "@intentic/sandbox-contract";
 import { KNOWLEDGE_BASE } from "@intentic/ext-knowledge";
-import { MEMORY_BASE } from "@intentic/ext-memory";
 import { BROWSER_SESSIONS } from "./browser";
 import { automationApprovals, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoLoops } from "./fixture/loops";
@@ -39,7 +38,6 @@ import {
     knowledgeSearch,
     saveKnowledgeNote,
 } from "./fixture/knowledge";
-import { deleteMemoryFile, memoryFile, memoryList, saveMemoryFile } from "./fixture/memory";
 import { demoRegistry } from "./fixture/registry";
 import {
     demoCapabilities,
@@ -493,19 +491,10 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`POST`, `/loops/designs`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
     [`DELETE`, `/loops/designs/{id}`, () => refuse(`This is the demo workspace: saved loops are read-only here.`)],
 
-    /* Memory: what the agent carries between sessions, readable and, the point of the surface, editable. The
-     * red pen writes into the fixture, so an edit and a forget both hold until the tab is reloaded.
-     *
-     * Served under the memory extension's OWN namespace, because that is where its backend half lives now and
-     * therefore what its panel calls; the paths come from the extension rather than being spelled out here, so
-     * the next move of that boundary lands as a compile error instead of an empty panel. */
-    [`GET`, `${MEMORY_BASE}/memory`, () => json({ files: memoryList(Date.now()) })],
-    [`GET`, `${MEMORY_BASE}/memory/file`, ({ url }) => memoryRead(url)],
-    [`PUT`, `${MEMORY_BASE}/memory/file`, memoryWrite],
-    [`DELETE`, `${MEMORY_BASE}/memory/file`, memoryForget],
-
     /* Knowledge: the notes about things around the code, people, projects, decisions, words, and the graph they
-     * already form. Served under the extension's own namespace, like memory above.
+     * already form. Served under the extension's OWN namespace, because that is where its backend half lives
+     * and therefore what its panel calls; the paths come from the extension rather than being spelled out here,
+     * so the next move of that boundary lands as a compile error instead of an empty panel.
      *
      * The answers are computed by the extension's OWN engine over the fixture's raw markdown (fixture/knowledge.ts),
      * not hand-authored: backlinks, the neighbourhood map and the drift report are the real ones, so a visitor
@@ -706,22 +695,6 @@ function workspaceDelete({ request }: RouteContext): Promise<Response> {
 
 function choresLedger({ request }: RouteContext): Promise<Response> {
     return request.json().then((body) => okAfter(() => writeLedger(Date.now(), ChoreLedgerWriteSchema.parse(body))));
-}
-
-const memoryRead = (url: URL): Response => {
-    const file = memoryFile(Date.now(), url.searchParams.get(`project`) ?? ``, url.searchParams.get(`name`) ?? ``);
-    return file === undefined ? refuse(`No such memory note.`, 404) : json(file);
-};
-
-function memoryWrite({ request }: RouteContext): Promise<Response> {
-    return request.json().then((body) => {
-        const { name, content } = body as { name?: string; content?: string };
-        return okAfter(() => saveMemoryFile(Date.now(), name ?? ``, content ?? ``));
-    });
-}
-
-function memoryForget({ request }: RouteContext): Promise<Response> {
-    return request.json().then((body) => okAfter(() => deleteMemoryFile(Date.now(), (body as { name?: string }).name ?? ``)));
 }
 
 const knowledgeRead = (url: URL): Response => {

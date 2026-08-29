@@ -432,11 +432,6 @@ COPY _extensions/knowledge/skills /opt/extensions/knowledge/skills
 COPY --from=trees extensions/knowledge/dist/server.js /opt/extensions/knowledge/dist/
 COPY --from=trees --chmod=755 extensions/knowledge/dist/bin /opt/extensions/knowledge/dist/bin
 COPY _extensions/maintenance/intentic-extension.json /opt/extensions/maintenance/
-COPY _extensions/memory/intentic-extension.json /opt/extensions/memory/
-# …except memory, whose BACKEND half ships as a prebuilt server bundle the daemon's backend host loads
-# (manifest `server`) — the first extracted feature backend; its UI stays compiled into the web bundle. From the
-# trees context for the same reason as deployments above.
-COPY --from=trees extensions/memory/dist /opt/extensions/memory/dist
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/

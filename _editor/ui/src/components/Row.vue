@@ -173,7 +173,7 @@ const onHeadlineClick = (event: MouseEvent): void => {
 };
 
 /* A ROW YOU PICK FROM IS MUTED UNTIL YOU REACH FOR IT. All four selectable lists in the app had this rule and
- * all four spelled it themselves: the source rail, the memory index, the documentation contents and the log
+ * all four spelled it themselves: the source rail, the knowledge index, the documentation contents and the log
  * file list, so a list of forty names reads as one quiet block with exactly one name lit, rather than forty
  * equally loud ones distinguished by a background wash alone.
  *

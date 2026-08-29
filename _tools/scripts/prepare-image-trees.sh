@@ -37,10 +37,10 @@ TREES="
 @intentic/ext-whatsapp:$out/extensions/whatsapp
 @intentic/ext-google-workspace:$out/extensions/google-workspace
 "
-# The extensions whose dist the image needs: the two feature backends the daemon's backend host loads (manifest
+# The extensions whose dist the image needs: the feature backend the daemon's backend host loads (manifest
 # `server`), and knowledge, which ships both a backend and the `kb` CLI built from the same TypeScript so the
 # agent and the panel cannot disagree about what the vault says.
-BUNDLES="memory deployments knowledge"
+BUNDLES="deployments knowledge"
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

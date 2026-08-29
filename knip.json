@@ -90,9 +90,6 @@
         "_extensions/deployments": {
             "entry": ["src/server/server.ts", "src/**/*.test.ts"]
         },
-        "_extensions/memory": {
-            "entry": ["src/server/server.ts", "src/**/*.test.ts"]
-        },
         "_extensions/knowledge": {
             "entry": ["src/server/server.ts", "src/cli/kb.ts", "src/cli/obsidian.ts", "src/**/*.test.ts"]
         },

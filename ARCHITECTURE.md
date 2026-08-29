@@ -539,7 +539,7 @@ First-party extensions live in `_extensions/` and reach the product by one of **
 `GET /extensions`, which is what the Sandbox hub's Extensions tab renders and what the on/off switch acts on.
 
 - **Compiled into the web bundle**: the UI extensions (`acceptance`, `activity`, `automations`, `logs`,
-  `memory`, `pipelines`, `preview`, `repo-apps`, `viewers`), statically imported and keyed by manifest id
+  `pipelines`, `preview`, `repo-apps`, `viewers`), statically imported and keyed by manifest id
   ([extension-host/builtins.ts](_editor/web/src/extension-host/builtins.ts)). They ship no `entry` over the
   wire (the bundle IS the SPA) but their manifest is baked into the image beside the daemon-side ones, so
   the daemon lists them and the loader's only question per extension is where its code comes from. The two
@@ -611,7 +611,7 @@ exactly as in the web loader, and the row rides `GET /extensions` (`backend` on 
 Each backend owns a **route namespace**: the daemon proxies `/x/<id>/*` to the host, through its ordinary
 auth and role floors, minus the caller's credentials: and the host dispatches with the prefix stripped, so
 an extension's handler sees the same paths its own contract declares. Both halves of an extension import that
-contract from the extension's own package (ext-memory's [contract.ts](_extensions/memory/src/contract.ts)),
+contract from the extension's own package (ext-knowledge's [contract.ts](_extensions/knowledge/src/contract.ts)),
 which keeps the compiled-together guarantee at the right grain while the CORE contract shrinks by every
 feature that moves out. An extension's UI calls its own namespace with **no `permissions.sandbox` entry**
 (its backend is its own code from the same approved checkout); any other namespace conforms like a core
@@ -620,7 +620,7 @@ minted per-extension token (the `x-intentic-extension` grant in [grants.ts](_san
 deliberately NOT the all-routes panel token. Workspace files it touches directly with `node:fs` under
 `api.workspaceRoot`: full trust means no file service in between.
 
-The first extracted features are **memory** and **deployments**: each one's routes, translation layer and
+The extracted features are **deployments** and **knowledge**: each one's routes, translation layer and
 schemas live entirely in its `_extensions/` package (UI halves compiled into the web bundle as before;
 backends baked as `dist/server.js`), and the daemon core carries neither feature at all. Deployments also
 exercises the two kernel calls a real feature backend needs: `GET /capabilities/{id}/connection`, a
@@ -629,8 +629,8 @@ grant can read it: and `POST /agent` for its one-click fix turns.
 
 **But not everything moves out, and the direction is decided by one question: does anything else plug into it?**
 
-A **feature** is a surface over its own data that nobody else extends: memory, deployments, knowledge,
-acceptance, documentation. Its routes, schemas and translation belong in its package and the daemon is better
+A **feature** is a surface over its own data that nobody else extends: deployments, knowledge, acceptance,
+documentation. Its routes, schemas and translation belong in its package and the daemon is better
 off not knowing it exists. Those migrate out one by one, each migration deleting its core routes.
 
 A **substrate** is something other extensions fire into or contribute to: the automations trigger bus, the
