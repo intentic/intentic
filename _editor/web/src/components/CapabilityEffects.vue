@@ -75,6 +75,15 @@ const describe = (effect: CapabilityEffect): EffectRow => {
                 label: `Lets the agent ${effect.grants.join(`, `)} on your ${effect.platform === `windows` ? `Windows` : `Linux`} computer`,
                 warn: true,
             };
+        case "own-browser":
+            // Warned like `machine`, and bounded in the same sentence that grants it: the sites are the
+            // person's own decision, made in their browser, which is the half a reader has to be told about
+            // before they agree to the half stated here.
+            return {
+                icon: `globe`,
+                label: `Lets the agent ${effect.grants.join(`, `)} in your ${effect.platform === `edge` ? `Edge` : `Chrome`}, on the sites you allow it in the extension`,
+                warn: true,
+            };
         case "endpoint":
             // Named, not warned: pointing turns at a server is the POINT of this capability, and it is as often
             // the private choice (a model on your own hardware) as the exposing one. The row states the

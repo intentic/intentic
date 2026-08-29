@@ -352,6 +352,14 @@ reports the profile.
   alternative is a page that waits on a round trip to every one of somebody's laptops before it can paint, and
   a reading carries its own `capturedAt` for the view to age it by. Only a machine this daemon has never once
   read is waited for, and only up to `PULL_TIMEOUT_MS`.
+- [src/webext](src/webext), the user's own BROWSERS, through the extension installed in one: the same three
+  pieces as `hosts` (enrollment on /history, live sockets in memory, an MCP bridge the agent's tools point at)
+  with two differences that are the whole feature. The bridge is NOT a pure pipe — every tool result that could
+  carry page text is sealed in the outside-content envelope on the way back, because a browser answers with
+  websites and an old or tampered extension must not be able to skip that. And `session-import.ts` is the one
+  door a credential comes IN through: a site's cookies, handed over by the owner's click, written into a
+  `browser` capability's Chromium profile by launching that profile headless — never a tool result, because a
+  tool result is something the model reads.
 - [src/runners](src/runners), this sandbox's own execution containers on other machines — both halves, since
   a runner IS this daemon in another posture. Parent half: enrollment on /history, live sockets in memory
   (the hosts pair retold), a per-repo git door (stock smart HTTP off the real git dirs), and the turn

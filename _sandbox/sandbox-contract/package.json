@@ -83,6 +83,17 @@
                 "@intentic/src": "./src/session-names.ts",
                 "default": "./dist/session-names.js"
             }
+        },
+        "./webext-links": {
+            "types": "./dist/webext-links.d.ts",
+            "import": {
+                "@intentic/src": "./src/webext-links.ts",
+                "default": "./dist/webext-links.js"
+            },
+            "require": {
+                "@intentic/src": "./src/webext-links.ts",
+                "default": "./dist/webext-links.js"
+            }
         }
     },
     "scripts": {

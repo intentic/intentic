@@ -3,6 +3,7 @@ import { type AgentAdapter, attemptProbe, healthReady, healthUnavailable, health
 import { withAttachments } from "../agent/attachment-note.js";
 import type { TurnContext, TurnPlan } from "../agent/turn-plan.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
+import { webextToolsOf } from "../capabilities/webext-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import type { Services } from "../composition.js";
 
@@ -26,7 +27,9 @@ export const planAcpTurn = async (
         return { ok: false, message: `Unknown agent provider "${provider}", add it as an Agent capability first.` };
     }
     const acpConfig = capability.config;
-    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
+    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken),
+        ...webextToolsOf(granted, services.config.sandbox.port, services.webextBridgeToken),
+    ];
     return {
         ok: true,
         run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),

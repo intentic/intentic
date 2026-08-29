@@ -37,6 +37,7 @@
                 "_extensions/acp-agents",
                 "_extensions/activity",
                 "_extensions/automations",
+                "_extensions/browsers",
                 "_extensions/computers",
                 "_extensions/connectors",
                 "_extensions/deployments",
@@ -64,7 +65,7 @@
             "id": "computers",
             "name": "Your computer",
             "oneLiner": "How an agent reaches your own machine \u2014 with your permission, within your switches.",
-            "packages": ["_computers/browser", "_computers/desktop", "_computers/host", "_computers/local-agent"]
+            "packages": ["_computers/browser", "_computers/desktop", "_computers/host", "_computers/local-agent", "_computers/webext"]
         },
         {
             "accent": "4",

@@ -1,0 +1,57 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "browsers",
+    "version": "1.0.0",
+    "category": "connections",
+    "logo": "googlechrome",
+    "engines": { "intentic": "^2.0.0" },
+    "contributes": {
+        "capabilities": [
+            {
+                "id": "chrome",
+                "kind": "webext",
+                "install": "https://chromewebstore.google.com/detail/intentic",
+                "catalog": {
+                    "name": "Your Chrome",
+                    "logo": "googlechrome",
+                    "description": "Your own browser, on the sites you allow, while you watch.",
+                    "category": "machines",
+                    "hint": "For the sites the sandbox's own browser can't reach: your passkeys, your work SSO, your bank. Nothing is copied out of your browser; the agent works in it, and you can see every click.",
+                    "guide": {
+                        "steps": [
+                            "Add the browser here, then click `Connect` on its card for a one-time code.",
+                            "Install the Intentic extension in that browser (Chrome, Edge, Brave or Opera) and paste the code into it.",
+                            "Allow it on one site to start with: the extension asks the browser for that site, and the browser enforces it.",
+                            "It can only touch sites you allowed, and only while that browser is open. Pause or revoke it from the extension at any time."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/chrome/SKILL.md"
+            },
+            {
+                "id": "edge",
+                "kind": "webext",
+                "install": "https://microsoftedge.microsoft.com/addons/detail/intentic",
+                "catalog": {
+                    "name": "Your Edge",
+                    "logo": "microsoftedge",
+                    "description": "Your own Edge, on the sites you allow, while you watch.",
+                    "category": "machines",
+                    "hint": "The same connector as Chrome — Edge is Chromium, and the extension is the same one. Worth its own card when Edge is where the work accounts are signed in.",
+                    "guide": {
+                        "steps": [
+                            "Add the browser here, then click `Connect` on its card for a one-time code.",
+                            "Install the Intentic extension in Edge and paste the code into it.",
+                            "Allow it on one site to start with: the extension asks the browser for that site, and the browser enforces it.",
+                            "It can only touch sites you allowed, and only while that browser is open. Pause or revoke it from the extension at any time."
+                        ]
+                    }
+                },
+                "fields": [],
+                "skill": "skills/chrome/SKILL.md"
+            }
+        ]
+    }
+}

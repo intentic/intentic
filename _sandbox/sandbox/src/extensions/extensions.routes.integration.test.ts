@@ -155,6 +155,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.acp-agents",
         "intentic.activity",
         "intentic.automations",
+        "intentic.browsers",
         "intentic.computers",
         "intentic.connectors",
         "intentic.deployments",

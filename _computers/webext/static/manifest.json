@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "Intentic — your agent, in your browser",
+    "version": "0.1.0",
+    "description": "Let your intentic sandbox work in this browser, on the sites you allow, while you watch it happen.",
+    "minimum_chrome_version": "116",
+    "permissions": ["storage", "scripting", "alarms", "cookies"],
+    "optional_host_permissions": ["*://*/*"],
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Intentic"
+    },
+    "content_scripts": [
+        {
+            "matches": ["*://*.intentic.dev/*"],
+            "js": ["pair-bridge.js"],
+            "run_at": "document_idle"
+        }
+    ]
+}

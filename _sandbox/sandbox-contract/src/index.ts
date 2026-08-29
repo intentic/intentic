@@ -59,6 +59,9 @@ export { historyContract } from "./contracts/history.contract.js";
 /* Deliberately NOT part of `sandboxContract` below: that map is the daemon's own HTTP surface, and this one is
  * spoken the other way round, over a connected computer's WebSocket, with the MACHINE implementing it. */
 export { hostContract } from "./contracts/host.contract.js";
+// The same inversion again, one layer in: spoken over the socket a BROWSER EXTENSION opened, with the
+// extension implementing it (contracts/webext.contract.ts).
+export { webextContract } from "./contracts/webext.contract.js";
 // Same inversion, other direction of trust: spoken over a RUNNER's WebSocket, with the runner implementing it.
 export { runnerContract } from "./contracts/runner.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
@@ -109,6 +112,8 @@ export * from "./conversation-ids.js";
 export * from "./documents.js";
 export * from "./fast-tier.js";
 export * from "./host-protocol.js";
+export * from "./webext-protocol.js";
+export * from "./webext-links.js";
 export * from "./runner-protocol.js";
 export * from "./listener-protocol.js";
 export * from "./hostnames.js";

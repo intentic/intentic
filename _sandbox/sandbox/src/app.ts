@@ -71,6 +71,7 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
+import { createWebExtConnectRoute, createWebExtMcpRoute, createWebExtSessionRoute, webextSummaries } from "./webext/webext.routes.js";
 import { createRunnerConnectRoute, runnerSummaries } from "./runners/runner.routes.js";
 import {
     createRunnerCredentialRefreshRoute,
@@ -187,6 +188,14 @@ const gatePath = /^\/workflows\/[^/]+\/gate$/;
 const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
 const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
 
+/* A connected BROWSER's three doors, exempt for the same reason: an extension has no Google identity to
+ * present. `connect` authenticates in its first frame, `enroll` redeems a one-time pairing, and `session`
+ * carries the extension's own durable token as a bearer, which the route verifies itself (webext.routes.ts).
+ * The MCP bridge is the agent's door and carries the per-boot bridge token. */
+const webextPublicPath = (path: string): boolean =>
+    path === "/system/webext/connect" || path === "/system/webext/enroll" || path === "/system/webext/session";
+const webextMcpPath = /^\/mcp\/webext\/[^/]+$/;
+
 // A RUNNER's doors, the same exemption for the same reason: the caller is a container on another machine
 // with no Google identity to present, authenticated by its pairing (enroll), its first frame (connect), or
 // its durable token as a bearer the git routes verify themselves (runner-git.routes.ts). See runners/ and
@@ -249,6 +258,9 @@ const READY_EXEMPT = new Set([
     // A connected computer reconnects on its own backoff, which a booting daemon would otherwise park just long
     // enough to look like an outage on the card. Its socket needs nothing the boot chain builds.
     "/system/hosts/connect",
+    // A connected browser's, for the same reason — and with more at stake in the parking: an MV3 service worker
+    // is killed after ~30s of silence, so a socket held open waiting for a boot step is a socket Chrome shuts.
+    "/system/webext/connect",
     // A runner's socket, for the same reason.
     "/system/runners/connect",
 ]);
@@ -435,7 +447,9 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 gatePath.test(c.req.path) ||
                 hostPublicPath(c.req.path) ||
                 runnerPublicPath(c.req.path) ||
-                hostMcpPath.test(c.req.path)
+                hostMcpPath.test(c.req.path) ||
+                webextPublicPath(c.req.path) ||
+                webextMcpPath.test(c.req.path)
             ) {
                 return next();
             }
@@ -1496,6 +1510,46 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     });
     // The machine's own socket, and the agent's door onto it. Both before the oRPC catch-all, like the terminal.
     app.get("/system/hosts/connect", createHostConnectRoute(services));
+
+    /* The user's own BROWSERS (webext/): the hosts block retold for the extension installed in one. Same trust
+     * root — the owner mints a single-use pairing bound to ONE capability, and the code it produces can only
+     * ever connect the browser they were looking at when they clicked Connect. Owner-only to mint: handing a
+     * member the keys to the owner's signed-in browser is not a collaboration feature. */
+    app.post("/system/webext/pair", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.query("id") ?? "";
+        const capability = (await services.capabilities.list()).find((entry) => entry.id === id && entry.kind === "webext");
+        if (capability === undefined) {
+            return c.json({ error: "no connected-browser capability with that id" }, 404);
+        }
+        return c.json(services.webexts.mintPairing(id));
+    });
+    // Redeemed by the extension, authorized by the pairing alone (exempt from the bearer middleware), so
+    // nobody signs into Google inside the extension itself.
+    app.post("/system/webext/enroll", async (c) => {
+        const enrolled = await services.webexts.enroll(c.req.header("x-intentic-pair") ?? "");
+        if (enrolled === undefined) {
+            return c.json({ error: "that code has expired, click Connect again in your sandbox for a fresh one." }, 401);
+        }
+        return c.json(enrolled);
+    });
+    app.get("/system/webext", async (c) => c.json({ browsers: await webextSummaries(services) }));
+    app.delete("/system/webext/:id", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const id = c.req.param("id") ?? "";
+        services.webextHub.disconnect(id, "this browser's access was revoked");
+        return (await services.webexts.revoke(id)) ? c.json({ ok: true }) : c.json({ error: "no such browser" }, 404);
+    });
+    app.get("/system/webext/connect", createWebExtConnectRoute(services));
+    // A handed-over site session. Authenticated by the extension's own enrollment token, and deliberately not
+    // an answer on the socket: see webext-protocol.ts.
+    app.post("/system/webext/session", createWebExtSessionRoute(services));
     /* This sandbox's RUNNERS (runners/, docs/remote-runners-plan.md at the workspace root): the hosts block
      * retold for a container this sandbox provisions on another machine. Pairing is owner-minted and bound to
      * one runner id; enrollment is authorized by the pairing alone (the runner has no Google identity, only
@@ -1564,6 +1618,10 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/mcp/hosts/:id", hostMcp);
     app.get("/mcp/hosts/:id", hostMcp);
     app.delete("/mcp/hosts/:id", hostMcp);
+    const webextMcp = createWebExtMcpRoute(services);
+    app.post("/mcp/webext/:id", webextMcp);
+    app.get("/mcp/webext/:id", webextMcp);
+    app.delete("/mcp/webext/:id", webextMcp);
     /* Control tokens, owner-minted (the sync-pair trust model, made durable + revocable), raw value returned
      * exactly once. What each scope reaches is auth/control-tokens.ts. Plain routes before the oRPC catch-all,
      * like the pair block.

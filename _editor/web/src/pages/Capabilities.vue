@@ -32,6 +32,7 @@ import BrowserProfileDialog from "../components/BrowserProfileDialog.vue";
 import CapabilityFieldRow from "../components/CapabilityFieldRow.vue";
 import ForticlientImport from "../components/ForticlientImport.vue";
 import HostConnectDialog from "../components/HostConnectDialog.vue";
+import WebExtConnectDialog from "../components/WebExtConnectDialog.vue";
 import PluginRegistryBrowse from "../components/PluginRegistryBrowse.vue";
 import CapabilityConnections, { type CapabilityConnection, type CapabilityConnectionGroup } from "../components/CapabilityConnections.vue";
 import CapabilityContext from "../components/CapabilityContext.vue";
@@ -78,6 +79,7 @@ import { useRegistry } from "../composables/extensions/useRegistry";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../composables/terminal/useBackgroundProcesses";
 import { useTerminalPanel } from "../composables/terminal/useTerminalPanel";
 import { useHostConnect } from "../composables/sandbox/useHostConnect";
+import { useWebExtConnect } from "../composables/sandbox/useWebExtConnect";
 import { useVpn } from "../composables/sandbox/useVpn";
 
 /* The rail's "+" → the /capabilities page. Capabilities give the agent tools (GitHub, MCP servers, SSH hosts,
@@ -622,6 +624,49 @@ const openConnect = (instance: CapabilitySummary): void => {
     connectPermissions.value = hostGrants(instance);
     connectVisible.value = true;
 };
+
+/* Connecting a browser of the user's own (webext-kind): the same shape one layer in — the far end is a browser
+ * that may not even be this one, so the flow is a code they paste into the extension rather than a command.
+ * `install` comes off the card itself, since where an extension is installed from is the one thing a browser
+ * family genuinely differs in. */
+const {
+    browserFor,
+    revoke: revokeBrowser,
+    refresh: refreshBrowsers,
+    start: startBrowsers,
+    stop: stopBrowsers,
+} = useWebExtConnect();
+const browserConnectVisible = ref(false);
+const browserConnectId = ref(``);
+const browserInstall = ref(``);
+const browserPermissions = ref(``);
+// What the switches on this card add up to, read from the same effects the card renders (hostGrants' rule), so
+// the dialog's sentence and the disclosure panel above it can never claim different permissions.
+const browserGrants = (instance: CapabilitySummary): string => {
+    const browser = instanceEffects(instance).find((effect) => effect.kind === `own-browser`);
+    const grants = browser === undefined ? [] : browser.grants;
+    return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
+};
+const openBrowserConnect = (instance: CapabilitySummary): void => {
+    const contribution = contributionFor(instance.kind, instance.config);
+    browserConnectId.value = instance.id;
+    // Off the card that declared this browser family: where an extension is installed from is the one thing
+    // the families genuinely differ in, so it is data in their manifest rather than a link in this page.
+    browserInstall.value = contribution?.kind === `webext` ? contribution.install : ``;
+    browserPermissions.value = browserGrants(instance);
+    browserConnectVisible.value = true;
+};
+// Which of the two dialogs a row's Connect means. The row draws one button for both kinds; the page knows which.
+const openPairing = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): void =>
+    entry.kind === `webext` ? openBrowserConnect(instance) : openConnect(instance);
+const removePairedAccess = async (entry: CapabilityCatalogEntry, id: string): Promise<void> => {
+    await (entry.kind === `webext` ? revokeBrowser(id) : revokeHost(id));
+    void refetch();
+};
+const onBrowserExtConnected = (): void => {
+    void refreshBrowsers();
+    void refetch();
+};
 // A machine coming online flips the capability pending → active; refresh so the card follows it.
 const onHostConnected = (): void => {
     void refreshHosts();
@@ -635,6 +680,8 @@ const removeHostAccess = async (id: string): Promise<void> => {
 // waiting for a dialog to be opened. The steady polling only runs while a pairing is live (see the composable).
 onMounted(startHosts);
 onBeforeUnmount(stopHosts);
+onMounted(startBrowsers);
+onBeforeUnmount(stopBrowsers);
 
 const canSubmit = computed(
     () =>
@@ -708,7 +755,7 @@ const startAudit = (): void => {
 const vpnAddress = (id: string): string | undefined => vpnFacts(id, vpnLinks.value);
 // A connection's state, with the machine roster's answer folded in where there is one.
 const rowState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary): ConnectionState =>
-    connectionState(entry.kind, instance, hostFor(instance.id)?.online);
+    connectionState(entry.kind, instance, (entry.kind === `webext` ? browserFor(instance.id) : hostFor(instance.id))?.online);
 
 /* One row per live connection, carrying its category so the list groups the way the catalog does and a haystack
  * so the filter over it searches the things a row actually shows. That haystack is the reason the bar keeps
@@ -787,6 +834,14 @@ const cardRowFacts = (instance: CapabilitySummary): string => {
     }
     if (selected.value?.kind === `host`) {
         return hostFor(instance.id)?.facts?.os ?? connectionFacts(instance);
+    }
+    // A browser says which browser it is and how many sites it may work on: the second number is the one a
+    // reader of this row actually wants, and no stored config can answer either.
+    if (selected.value?.kind === `webext`) {
+        const facts = browserFor(instance.id)?.facts;
+        return facts === undefined
+            ? connectionFacts(instance)
+            : `${facts.browser} · ${facts.grants.length} site${facts.grants.length === 1 ? `` : `s`} allowed`;
     }
     return connectionFacts(instance);
 };
@@ -1034,6 +1089,11 @@ const handOff = (entry: CapabilityCatalogEntry, added: CapabilitySummary): void 
     // fresh pairing is not what wakes it: the same distinction the row's button draws when it says Reconnect.
     if (entry.kind === `host` && hostFor(added.id)?.lastSeen === undefined) {
         openConnect(added);
+        return;
+    }
+    // A browser that has never checked in is waiting on the code, exactly as a machine waits on its one-liner.
+    if (entry.kind === `webext` && browserFor(added.id)?.lastSeen === undefined) {
+        openBrowserConnect(added);
         return;
     }
     // An identity's sign-in is the ONE login the owner does by hand: open the window right away, exactly like
@@ -1308,11 +1368,12 @@ const submitLabel = computed(() => {
                                     :entry="selected"
                                     :instance="instance"
                                     :host="hostFor(instance.id)"
+                                    :browser="browserFor(instance.id)"
                                     :state="rowState(selected, instance)"
                                     :facts="cardRowFacts(instance)"
                                     :editing="editing?.id === instance.id"
-                                    @connect="openConnect(instance)"
-                                    @revoke="removeHostAccess(instance.id)"
+                                    @connect="openPairing(selected, instance)"
+                                    @revoke="removePairedAccess(selected, instance.id)"
                                     @browse="openBrowser(instance.id, instance.id, `browse`)"
                                     @login="openBrowser(instance.id, instance.id)"
                                     @agent-login="startAgentLogin(instance.id)"
@@ -1857,6 +1918,15 @@ const submitLabel = computed(() => {
                 :platform="connectPlatform"
                 :permissions="connectPermissions"
                 @connected="onHostConnected"
+            />
+
+            <!-- The one-time code that connects a browser of the user's own (webext-kind capabilities). -->
+            <WebExtConnectDialog
+                v-model:visible="browserConnectVisible"
+                :id="browserConnectId"
+                :install="browserInstall"
+                :permissions="browserPermissions"
+                @connected="onBrowserExtConnected"
             />
         </template>
     </SplitView>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Intentic</title>
+        <style>
+            /* Deliberately plain. A popup is 360 pixels of somebody's attention, opened when they want to know
+               one of three things: is it connected, what can it touch, and how do I stop it. Anything that
+               competes with those answers is in the way. */
+            :root {
+                color-scheme: light dark;
+                --line: color-mix(in srgb, currentColor 15%, transparent);
+                --quiet: color-mix(in srgb, currentColor 60%, transparent);
+            }
+            body {
+                width: 340px;
+                margin: 0;
+                padding: 14px;
+                font: 13px/1.45 system-ui, sans-serif;
+            }
+            h1 {
+                font-size: 13px;
+                margin: 0 0 10px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: var(--quiet);
+            }
+            .row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                padding: 7px 0;
+                border-top: 1px solid var(--line);
+            }
+            .row:first-of-type {
+                border-top: 0;
+            }
+            .dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #999;
+                flex: none;
+            }
+            .dot.on {
+                background: #21a179;
+            }
+            .dot.off {
+                background: #d1495b;
+            }
+            .site {
+                font-family: ui-monospace, monospace;
+                font-size: 12px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            button {
+                font: inherit;
+                padding: 4px 9px;
+                border-radius: 6px;
+                border: 1px solid var(--line);
+                background: transparent;
+                color: inherit;
+                cursor: pointer;
+            }
+            button.primary {
+                background: currentColor;
+                filter: invert(1) hue-rotate(180deg);
+            }
+            input {
+                font: inherit;
+                width: 100%;
+                box-sizing: border-box;
+                padding: 6px 8px;
+                border-radius: 6px;
+                border: 1px solid var(--line);
+                background: transparent;
+                color: inherit;
+            }
+            .muted {
+                color: var(--quiet);
+            }
+            .log {
+                max-height: 132px;
+                overflow: auto;
+                font-family: ui-monospace, monospace;
+                font-size: 11px;
+                color: var(--quiet);
+            }
+            section {
+                margin-bottom: 14px;
+            }
+        </style>
+    </head>
+    <body>
+        <section id="status"></section>
+        <section id="pending"></section>
+        <section id="sites"></section>
+        <section id="activity"></section>
+        <script src="popup.js"></script>
+    </body>
+</html>

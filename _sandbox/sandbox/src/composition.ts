@@ -88,6 +88,8 @@ import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/pro
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
+import { createWebExtHub, type WebExtHub } from "./webext/webext-hub.js";
+import { fileWebExtStore, type WebExtStore } from "./webext/webext-store.js";
 import { createRunnerHub, type RunnerHub } from "./runners/runner-hub.js";
 import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { fileRunnersStore, type RunnersStore } from "./runners/runners-store.js";
@@ -318,6 +320,12 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly hosts: HostsStore;
     // … and who is actually holding a socket right now, with the JSON-RPC correlation over it.
     readonly hostHub: HostHub;
+    // The same pair one layer in, for the user's own BROWSERS (webext/): the extension's enrollment, and which
+    // browsers are holding a socket. A separate bridge token from the machines' for the ordinary reason two
+    // per-boot secrets are separate — one leaking must not open the other's door.
+    readonly webextBridgeToken: string;
+    readonly webexts: WebExtStore;
+    readonly webextHub: WebExtHub;
     // This sandbox's RUNNERS, its own execution containers on other machines (docs/remote-runners-plan.md,
     // workspace root): the hosts pair retold, enrollment on /history and the live sockets in memory.
     readonly runners: RunnersStore;
@@ -1214,6 +1222,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         hostBridgeToken: randomBytes(32).toString("hex"),
         hosts: fileHostsStore(config.historyRoot),
         hostHub: createHostHub(logger),
+        webextBridgeToken: randomBytes(32).toString("hex"),
+        webexts: fileWebExtStore(config.historyRoot),
+        webextHub: createWebExtHub(logger),
         runners: fileRunnersStore(config.historyRoot),
         runnerHub: createRunnerHub(logger),
         runnerParent: {},

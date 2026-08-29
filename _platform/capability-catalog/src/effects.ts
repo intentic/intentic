@@ -61,6 +61,11 @@ export type CapabilityEffect =
     // spells out the grant rather than naming a mechanism. `grants` is the scopes ticked on the card, in the
     // machine's own words; the machine's agent enforces exactly these and refuses the rest.
     | { readonly kind: "machine"; readonly platform: string; readonly grants: readonly string[] }
+    /* THE SAME REACH, ONE LAYER IN: the person's own BROWSER, through the extension in it. Its own member
+     * rather than a `machine` with a different platform string, because what a reader needs to be told differs
+     * in the part that matters — a machine's grant is the whole machine, and this one is bounded to sites they
+     * allow one at a time, in the browser, which is the sentence that makes it agreeable at all. */
+    | { readonly kind: "own-browser"; readonly platform: string; readonly grants: readonly string[] }
     // Sends this sandbox's turns to a model API the user configured. Its own member rather than a variant of an
     // existing one because nothing else in this union describes where a conversation GOES, and that is the whole
     // consequence of adding an endpoint: no file is written, no process runs, no image changes, the prompts,
@@ -244,6 +249,17 @@ const KIND_EFFECTS: Record<CapabilityKind, (input: CapabilityEffectInput) => rea
             ...(input.config["sandboxes"] === "on" ? ["start and stop its sandboxes"] : []),
         ];
         return [{ kind: "machine", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
+    },
+    webext: (input) => {
+        // Reading is the floor (a browser you cannot read is not connected to anything); the rest are the
+        // card's toggles. Unset ⇒ the schema's defaults, which is what the form posts before it is touched.
+        const grants = [
+            ...(input.config["read"] === "off" ? [] : ["read the pages you allow"]),
+            ...(input.config["act"] === "off" ? [] : ["click and type on them"]),
+            ...(input.config["screenshot"] === "on" ? ["take screenshots"] : []),
+            ...(input.config["cookies"] === "on" ? ["hand a site's session to this sandbox"] : []),
+        ];
+        return [{ kind: "own-browser", platform: String(input.config["platform"] ?? ""), grants }, { kind: "skill", name: input.id }, { kind: "mcp" }];
     },
     endpoint: (input) => {
         // The destination is the effect; a key is the ordinary second one. Deliberately no `image` or `process`

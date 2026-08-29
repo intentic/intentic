@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { browserCandidates } from "./launch.js";
-import { refIndex, renderPage, SNAPSHOT_SCRIPT, toPageState } from "./snapshot.js";
+import { refIndex, renderPage, toPageState } from "./page.js";
+import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 
 /* The parts of browser control that can be tested without a browser: how a page is rendered for the agent, how
  * references are read back, and which binaries would be looked for. The CDP calls themselves end in a real

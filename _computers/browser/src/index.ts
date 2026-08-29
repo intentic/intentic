@@ -1,11 +1,13 @@
 import { attach, type CdpSession, listTargets, newTab } from "./cdp.js";
 import { DEFAULT_PORT, ensureBrowser } from "./launch.js";
-import { type RawSnapshot, refIndex, SNAPSHOT_SCRIPT, toPageState } from "./snapshot.js";
-import { type Browser, BrowserError, type PageState } from "./types.js";
+import { type PageState, type RawSnapshot, refIndex, toPageState } from "./page.js";
+import { SNAPSHOT_SCRIPT } from "./snapshot.js";
+import { type Browser, BrowserError } from "./types.js";
 
 export { DEFAULT_PORT, browserCandidates, ensureBrowser, profileDir } from "./launch.js";
-export { renderPage, refIndex, toPageState, SNAPSHOT_SCRIPT, type RawSnapshot } from "./snapshot.js";
-export { BrowserError, type Browser, type PageElement, type PageState } from "./types.js";
+export { SNAPSHOT_SCRIPT } from "./snapshot.js";
+export { renderPage, refIndex, toPageState, type RawSnapshot, type PageElement, type PageState } from "./page.js";
+export { BrowserError, type Browser } from "./types.js";
 
 /* The browser, as one object a caller holds.
  *

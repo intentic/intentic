@@ -133,6 +133,15 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
             },
         },
     ],
+    // A connected browser, like a connected computer: every field is a permission and none is a credential, so
+    // the echo must be total or a switch would be vaulted and the entry unreadable afterwards.
+    webext: [
+        {
+            id: "my-chrome",
+            kind: "webext",
+            config: { platform: "chrome", read: "on", act: "on", screenshot: "on", cookies: "on", confirm: "always" },
+        },
+    ],
     agent: [{ id: "codex", kind: "agent", config: { command: "codex", name: "Codex", env: "KEY=value", loginCommand: "codex login" } }],
     endpoint: [
         { id: "ollama", kind: "endpoint", config: { baseUrl: "https://x.example.com", protocol: "openai", apiKey: "sk-x", headers: "X-A: b" } },

@@ -291,6 +291,20 @@ export const CapabilityContributionSchema = z
             kind: z.literal("host"),
             skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent that machine's shell."),
         }),
+        /* A BROWSER FAMILY the user can connect their own copy of, through the extension they install in it.
+         * The `host` arm one layer in: the enrollment, the socket, the tool surface and the per-site grants are
+         * core (and, for the grants, the browser's own), so a card supplies exactly two things a family differs
+         * in — where its extension is installed from, and how its skill pack words the difference.
+         *
+         * `install` is a URL rather than a store id because the families do not share a store: Chrome, Edge and
+         * Firefox each have their own, and a self-hosted build is a zip on a page. The card renders it as the
+         * link in the connect dialog, so an unlisted family is one manifest entry away from working. */
+        z.object({
+            ...contributionBase,
+            kind: z.literal("webext"),
+            install: z.url().describe("Where this browser's extension is installed from: its store listing, or a page offering the build."),
+            skill: z.string().min(1).describe("Checkout-relative SKILL.md teaching the agent to drive this browser."),
+        }),
         /* A PRESET over a core kind: no payload at all, just a named card whose `fields` carry the defaults. What an
          * ACP agent needs is a command, so "OpenCode" is entirely a name, a logo and a filled-in form, which is
          * exactly what a catalog row is. */
@@ -324,7 +338,7 @@ export type SkillContribution = Extract<CapabilityContribution, { skill: string 
  * Here, beside the schema, because it is a fact about the contribution shape, the daemon, the catalog and the
  * web all need it, and three copies of it is three chances for a card's instances to go missing. `satisfies`
  * rather than a lookup table so a new arm above is a compile error until this answers for it. */
-const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", agent: undefined } satisfies Record<
+const DISCRIMINATOR = { cli: "provider", browser: "platform", host: "platform", webext: "platform", agent: undefined } satisfies Record<
     CapabilityContribution["kind"],
     string | undefined
 >;
@@ -333,6 +347,6 @@ export const contributionDiscriminator = (kind: string): string | undefined => D
 export const capabilitiesPoint = {
     name: "capabilities",
     description:
-        'Capability cards this pack adds to the "+" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these four kinds.',
+        'Capability cards this pack adds to the "+" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, a browser family the owner connects their own copy of, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these five kinds.',
     schema: z.array(CapabilityContributionSchema),
 } as const satisfies ContributionPoint;

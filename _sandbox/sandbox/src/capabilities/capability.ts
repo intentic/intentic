@@ -12,6 +12,8 @@ import type { EndpointCatalog } from "../endpoints/endpoint-catalog.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import type { HostHub } from "../hosts/host-hub.js";
 import type { HostsStore } from "../hosts/hosts-store.js";
+import type { WebExtHub } from "../webext/webext-hub.js";
+import type { WebExtStore } from "../webext/webext-store.js";
 import type { ResolvedContribution } from "./contributions.js";
 import type { CapabilitiesStore } from "./capabilities-store.js";
 
@@ -45,6 +47,12 @@ export interface CapabilityCtx {
     // thing this kind's status can usefully say.
     readonly hosts: HostsStore;
     readonly hostHub: HostHub;
+    // The same pair for the user's own browsers, passed whole for the same two reasons: the hub IS the
+    // handler's subject (a switch edited on the card has to reach a live browser while the owner is still
+    // looking at it), and the store's enrollment state is the difference between "added" and "actually paired",
+    // which is the only thing this kind's status can usefully say.
+    readonly webexts: WebExtStore;
+    readonly webextHub: WebExtHub;
     // What a configured model API actually serves, the endpoint kind's apply AND status are both this probe, and
     // it is the same catalog the picker and the translator reconciler read, so a card can never claim a model
     // list the turn path would disagree with.
@@ -164,6 +172,8 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         capabilities: services.capabilities,
         hosts: services.hosts,
         hostHub: services.hostHub,
+        webexts: services.webexts,
+        webextHub: services.webextHub,
         endpointModels: services.endpointModels,
         syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,

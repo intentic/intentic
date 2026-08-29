@@ -34,6 +34,7 @@ import { personaScopeOf } from "../personas/persona-scope.js";
 import { jsExecutionPlanOf } from "../execution/js-runtime.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { hostToolsOf } from "../capabilities/host-tools.js";
+import { webextToolsOf } from "../capabilities/webext-tools.js";
 import { mcpToolsOf } from "../capabilities/mcp-tools.js";
 import { pluginDirsOf } from "../capabilities/plugin-dirs.js";
 import type { Services } from "../composition.js";
@@ -623,7 +624,9 @@ export const planHarnessTurn = async (
     const { oauthToken, refreshOauthToken, endpoint, allowance, trial } = resolved.credentials;
     // Internal (intent-declared, from env) tools first, then external mcp-kind capabilities, a same-named
     // external tool overrides, matching mcpServersOf's last-wins merge.
-    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken)];
+    const tools = [...services.tools, ...mcpToolsOf(granted), ...hostToolsOf(granted, services.config.sandbox.port, services.hostBridgeToken),
+        ...webextToolsOf(granted, services.config.sandbox.port, services.webextBridgeToken),
+    ];
     const {
         hashlineEdits,
         iqSearch,

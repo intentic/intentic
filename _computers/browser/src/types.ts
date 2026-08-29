@@ -1,3 +1,5 @@
+import type { PageState } from "./page.js";
+
 /* Driving a browser at the level of what is ON the page, rather than where it is on screen.
  *
  * The whole reason this package exists beside @intentic/desktop: a browser can be operated by clicking pixels,
@@ -7,24 +9,6 @@
  *
  * Nothing here knows about agents, scopes or sandboxes. It opens pages and reads and clicks them; whether that
  * is allowed was decided before any of it was called. */
-
-// One thing on the page the agent can act on. `ref` is opaque and only valid until the next snapshot, the page
-// may have re-rendered, and a stale reference must fail rather than click whatever now occupies that slot.
-export interface PageElement {
-    readonly ref: string;
-    // What it IS, in the words a person uses: link, button, textbox, checkbox, heading.
-    readonly role: string;
-    // What it SAYS, its accessible name: the label, the placeholder, the alt text, or its own text.
-    readonly name: string;
-    // What it currently HOLDS, for anything with a value. Absent for the rest.
-    readonly value?: string | undefined;
-}
-
-export interface PageState {
-    readonly url: string;
-    readonly title: string;
-    readonly elements: readonly PageElement[];
-}
 
 export interface Browser {
     /* Make sure a browser is running and, when given a URL, showing it. Returns the page as it then stands, so

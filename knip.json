@@ -99,6 +99,12 @@
         "_search/iq-engine": {
             "entry": ["src/index.ts", "scripts/*.mjs", "src/**/*.test.ts"]
         },
+        // The browser extension has no library entry point, so the `_computers/*` default (src/index.ts) would
+        // read every file in it as unreachable. Its three real roots — the service worker, the content script,
+        // the popup — are already found in its build script, so what is left to declare is the suite.
+        "_computers/webext": {
+            "entry": ["src/**/*.test.ts"]
+        },
         "_computers/*": {
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },

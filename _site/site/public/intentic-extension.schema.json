@@ -1159,6 +1159,192 @@
                                     },
                                     "kind": {
                                         "type": "string",
+                                        "const": "webext"
+                                    },
+                                    "install": {
+                                        "type": "string",
+                                        "format": "uri",
+                                        "description": "Where this browser's extension is installed from: its store listing, or a page offering the build."
+                                    },
+                                    "skill": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Checkout-relative SKILL.md teaching the agent to drive this browser."
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "catalog",
+                                    "fields",
+                                    "kind",
+                                    "install",
+                                    "skill"
+                                ],
+                                "additionalProperties": false
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "pattern": "^[a-z0-9][a-z0-9-]*$"
+                                    },
+                                    "catalog": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "art": {
+                                                "description": "This extension's own mark, as a complete SVG document inline: the tier an author controls fully. Give it a viewBox and let it fill its own square edge to edge; it is drawn as the tile, not as a glyph on a plate. Kept as readable SVG text (not base64) so a registry reviewer can see what they are publishing, drawn inert so it cannot script the page, and capped at 4 KB. Anything that does not parse as SVG falls back to `logo`, then `icon`, then initials.",
+                                                "type": "string",
+                                                "maxLength": 4096
+                                            },
+                                            "logo": {
+                                                "description": "A simple-icons slug, fetched from a CDN: right for standing in for somebody else's product. Add a \"/<hex>\" suffix to force a colour for a mark that vanishes against the surface it lands on. Unreachable in an offline sandbox, so it falls back to `icon`, then to initials.",
+                                                "type": "string"
+                                            },
+                                            "icon": {
+                                                "description": "A name from the host's own icon set, drawn when no simple-icons slug fits. It ships in the image, follows the theme and costs no request: what actually carries a first-party extension. An unknown name falls back to initials rather than to a hole.",
+                                                "type": "string"
+                                            },
+                                            "description": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "ONE LINE: aim for 60 characters or fewer. The grid clamps it at two lines in a narrow pane, so a paragraph here is a paragraph the reader gets truncated. Everything longer belongs in `hint`."
+                                            },
+                                            "category": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "hint": {
+                                                "description": "The paragraph, shown under the add form and searched from the catalog, so the words that identify this card to someone hunting for it (\"webauthn\", \"socket mode\") belong here even when the tile cannot show them.",
+                                                "type": "string"
+                                            },
+                                            "guide": {
+                                                "description": "The walkthrough the install dialog renders for getting the credential this card asks for.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "url": {
+                                                        "type": "string"
+                                                    },
+                                                    "urlFromField": {
+                                                        "type": "string"
+                                                    },
+                                                    "path": {
+                                                        "type": "string"
+                                                    },
+                                                    "linkLabel": {
+                                                        "type": "string"
+                                                    },
+                                                    "scopes": {
+                                                        "type": "string"
+                                                    },
+                                                    "steps": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                },
+                                                "additionalProperties": false
+                                            }
+                                        },
+                                        "required": [
+                                            "name",
+                                            "description",
+                                            "category"
+                                        ],
+                                        "additionalProperties": false
+                                    },
+                                    "fields": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "key": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "label": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "placeholder": {
+                                                    "type": "string"
+                                                },
+                                                "secret": {
+                                                    "description": "Mask it, and never echo it back.",
+                                                    "type": "boolean"
+                                                },
+                                                "optional": {
+                                                    "type": "boolean"
+                                                },
+                                                "multiline": {
+                                                    "type": "boolean"
+                                                },
+                                                "advanced": {
+                                                    "description": "Fold this field behind the form's Advanced disclosure: for answers whose default is right for nearly everyone. The disclosure opens by itself while any advanced field holds a non-default value, so an edit never hides live settings.",
+                                                    "type": "boolean"
+                                                },
+                                                "boolean": {
+                                                    "description": "Render it as a switch, carrying \"on\"/\"off\". For an opt-in EXTRA rather than a decision: a two-option picker says the same thing but presents a choice the user must make to proceed, sized like the required fields around it. A switch always holds a value, so a field like this never blocks a submit.",
+                                                    "type": "boolean"
+                                                },
+                                                "hint": {
+                                                    "description": "A line under this control, for what the label alone cannot say: a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+                                                    "type": "string"
+                                                },
+                                                "rebuild": {
+                                                    "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
+                                                    "type": "boolean"
+                                                },
+                                                "default": {
+                                                    "type": "string"
+                                                },
+                                                "options": {
+                                                    "description": "Turns the field into a select.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "value": {
+                                                                "type": "string"
+                                                            },
+                                                            "label": {
+                                                                "type": "string"
+                                                            }
+                                                        },
+                                                        "required": [
+                                                            "value",
+                                                            "label"
+                                                        ],
+                                                        "additionalProperties": false
+                                                    }
+                                                },
+                                                "when": {
+                                                    "description": "Only show this field while a condition over the answers already given holds: `auth == 'key'`, `provider in ['ipsec', 'fortinet']`, `!advanced`. Supports `&&`, `||`, `!`, comparisons and `in`.",
+                                                    "type": "string"
+                                                },
+                                                "value": {
+                                                    "description": "A fixed value baked into the config rather than asked for: how a card pins its discriminator (platform=\"reddit\", provider=\"stripe\"). Renders as nothing.",
+                                                    "type": "string"
+                                                },
+                                                "totp": {
+                                                    "description": "This field holds a TOTP seed, the base32 key or otpauth:// URI a service shows when enrolling an authenticator app. Declare it with `secret: true`. Unlike an ordinary secret it never enters the agent's environment: the daemon mints the six-digit codes on demand and only those cross.",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "label"
+                                            ],
+                                            "additionalProperties": false
+                                        }
+                                    },
+                                    "kind": {
+                                        "type": "string",
                                         "const": "agent"
                                     }
                                 },
@@ -1172,7 +1358,7 @@
                             }
                         ]
                     },
-                    "description": "Capability cards this pack adds to the \"+\" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these four kinds."
+                    "description": "Capability cards this pack adds to the \"+\" grid: a connected CLI tool, a site the agent acts on as the owner through the shared browser, an operating system pack, a browser family the owner connects their own copy of, or a preset over a core kind. The card and its form are data here; the machinery that acts on them is core, which is why a card may only name one of these five kinds."
                 },
                 "listener": {
                     "type": "object",

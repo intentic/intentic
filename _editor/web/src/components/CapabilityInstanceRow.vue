@@ -22,7 +22,7 @@
 <script setup lang="ts">
 import type { CapabilitySummary } from "@intentic-app/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic-app/capability-catalog";
-import type { HostSummary } from "@intentic/sandbox-contract";
+import type { HostSummary, WebExtSummary } from "@intentic/sandbox-contract";
 import { Button, ContextMenu, CopyButton, type IconName, Row, StatusBadge, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref } from "vue";
@@ -34,6 +34,8 @@ const props = defineProps<{
     instance: CapabilitySummary;
     /** The roster's answer for a host-kind connection: whether it has ever paired, and whether it is up now. */
     host?: HostSummary | undefined;
+    /** The same, for a webext-kind one: the browser this extension is installed in. */
+    browser?: WebExtSummary | undefined;
     /** The state in the reader's words: read from the same place the Connected inventory reads it. */
     state: ConnectionState;
     /** What this connection says about itself: a tunnel's address, a machine's OS, a database's host. */
@@ -44,10 +46,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{ connect: []; revoke: []; browse: []; login: []; agentLogin: []; edit: []; rename: []; remove: [] }>();
 
-// A computer is connected by running a command ON IT. One that has never checked in is waiting on that
-// one-liner; one that HAS is merely asleep, and a fresh pairing is not what wakes it, so the button says which.
+/* A computer is connected by running a command ON IT; a browser, by pasting a code INTO IT. Either way the
+ * connection is made at the far end, so one that has never checked in is waiting on that step, and one that HAS
+ * is merely asleep (a closed lid, a quit browser) — which a fresh pairing does not wake. The button says which.
+ *
+ * The two kinds share these predicates rather than each having their own, because everything the row does with
+ * them is identical; what differs is the icon and the dialog, and the page owns the dialog. */
 const isHost = computed(() => props.entry.kind === `host`);
-const paired = computed(() => Boolean(props.host?.lastSeen));
+const isBrowser = computed(() => props.entry.kind === `webext`);
+const pairs = computed(() => isHost.value || isBrowser.value);
+const paired = computed(() => Boolean(props.host?.lastSeen ?? props.browser?.lastSeen));
 
 // A browser capability connects via a live login window, not a form. Once it IS signed in, the same window is
 // also the way to USE the account: check a message, clear a captcha, change a setting the agent shouldn't.
@@ -82,8 +90,8 @@ const pairingCode = computed(() => props.instance.status.code);
  * Undefined is a perfectly good answer: an MCP server or a connected database has nothing to press, and an
  * empty right-hand side is what lets the name and the address have the width. */
 const primary = computed<{ label: string; icon: IconName; run: () => void } | undefined>(() => {
-    if (isHost.value) {
-        return { label: paired.value ? `Reconnect` : `Connect`, icon: `desktop`, run: () => emit(`connect`) };
+    if (pairs.value) {
+        return { label: paired.value ? `Reconnect` : `Connect`, icon: isBrowser.value ? `globe` : `desktop`, run: () => emit(`connect`) };
     }
     if (signsIn.value) {
         return connected.value
@@ -117,7 +125,7 @@ const items = computed<MenuItem[]>(() => {
     }
     // Revoke cuts this machine off without removing the capability, so the card keeps its name and permissions
     // and Connect re-pairs it. Removing the capability does both, which is a different intent.
-    if (isHost.value && paired.value) {
+    if (pairs.value && paired.value) {
         kindActions.push({ label: `Revoke access`, icon: `sign-out`, command: () => emit(`revoke`) });
     }
     // A VPN is dialled from the Status card, which owns the whole flow (progress, the gateway's own error text,

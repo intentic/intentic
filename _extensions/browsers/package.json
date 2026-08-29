@@ -1,0 +1,8 @@
+{
+    "name": "@intentic/ext-browsers",
+    "version": "1.0.0",
+    "description": "The browser families a user can connect their own copy of (Chrome, Edge) as a pure-data intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module"
+}

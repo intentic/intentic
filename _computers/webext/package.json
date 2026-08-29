@@ -1,0 +1,33 @@
+{
+    "name": "@intentic/webext",
+    "version": "0.0.0",
+    "description": "The browser extension that lets an intentic sandbox work in the user's own signed-in browser, one outbound WebSocket, an MCP tool surface, and per-site grants enforced by the browser",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_computers/webext"
+    },
+    "scripts": {
+        "build": "esbuild src/background/main.ts --bundle --format=esm --target=chrome116 --minify --outfile=dist/background.js --log-level=warning && esbuild src/content/pair-bridge.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/pair-bridge.js --log-level=warning && esbuild src/popup/popup.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/popup.js --log-level=warning && cp -R static/. dist/",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/browser": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@orpc/server": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@typescript/native-preview": "catalog:",
+        "esbuild": "catalog:",
+        "jsdom": "catalog:",
+        "vitest": "catalog:"
+    }
+}

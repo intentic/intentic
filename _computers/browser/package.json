@@ -17,6 +17,17 @@
         "registry": "https://registry.npmjs.org/"
     },
     "exports": {
+        "./page": {
+            "types": "./dist/page.d.ts",
+            "import": {
+                "@intentic/src": "./src/page.ts",
+                "default": "./dist/page.js"
+            },
+            "require": {
+                "@intentic/src": "./src/page.ts",
+                "default": "./dist/page.js"
+            }
+        },
         ".": {
             "types": "./dist/index.d.ts",
             "import": {
