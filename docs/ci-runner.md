@@ -201,6 +201,87 @@ from the releases API above clears it, and nothing here passes `--disableupdate`
 running keeps clearing it on its own. Pinning an older tarball, or turning self-update off, is what would break
 the pipeline.
 
+### Staying up, on a host where the fleet lives in WSL
+
+The Linux fleet runs inside a WSL2 distribution on the same Windows box that carries the Windows runner. That
+is one sentence of hosting detail and **two** ways for six runners to be offline with nothing reporting an
+error, both of which this host hit.
+
+**1. WSL2 starts no distribution at boot.** A distro runs because something invoked `wsl.exe`, and stops when
+the host reboots or when anything issues `wsl --shutdown` — which Docker Desktop does to the whole utility VM
+on its own restarts and updates. `systemctl enable` is answered at the distro's boot; nothing was causing one.
+Measured: the host rebooted at **04:29 on 26 August** and signed itself back in a minute later, so the Windows
+runner's logon task had that runner back at 04:30. The distro was not started again until somebody went looking
+on the **29th** — six runners offline for three and a half days, eight pipelines queued against
+`[self-hosted, intentic]`, while the GitHub-hosted jobs in those same runs (codeql, scorecard) all went green.
+
+**2. `vmIdleTimeout` defaults to 60000 ms**, and the WSL documentation says exactly what that is: the number of
+milliseconds a VM may be idle before it is shut down. So even once the distro is running, WSL powers the VM off
+about a minute after the last `wsl.exe` client goes away, taking systemd and all six listeners with it. **The
+fleet's uptime was therefore never a property of the machine** — it was a property of somebody having a shell
+open. Measured directly, polling GitHub's runner list every 30 seconds and touching nothing: `online=6`,
+`offline=6`, `online=6`. From inside the distro nothing has gone wrong, and the journal shows only a clean
+shutdown, so there is no error to find anywhere.
+
+The second one is why the fix is a **setting** and not only a watchdog. A three-minute reconcile against a
+sixty-second timeout leaves the fleet down most of the time; `vmIdleTimeout=-1` removes the cause. WSL reads
+`.wslconfig` only when the VM starts, so the setting is inert until the next `wsl --shutdown`.
+
+```powershell
+# On the Windows host, from an ordinary PowerShell (no administrator needed). Idempotent; this is also the
+# repair. -Restart is what makes a newly-written vmIdleTimeout take effect, and it refuses while a job is
+# executing.
+./_tools/scripts/setup-wsl-fleet.ps1 -Restart
+```
+
+It writes `vmIdleTimeout=-1` into `%USERPROFILE%\.wslconfig` (leaving the operator's memory, swap and
+networking settings alone), and registers an `Intentic CI Fleet` scheduled task with the same two triggers
+`setup-windows-runner.ps1` uses and for the same reasons: **at logon** for the reboot, and **every three
+minutes** for everything that takes the fleet down without anybody logging out. The action is a reconciler — it
+probes, fixes what is not the way it should be, and exits — so the healthy pass is a few seconds and changes
+nothing.
+
+**Docker comes up first, and that order is load-bearing in both directions.** The container jobs need the host
+daemon, so a fleet that comes up without it takes work it cannot do: the first pipeline after the recovery above
+died in 90 seconds on `docker: command not found`, on a commit that was fine. And Docker Desktop **starts by
+restarting the WSL VM**, so bringing it up second kills the runners mid-job and strands their sessions on
+GitHub's side (`A session for this runner already exists`, and the runner shows as `offline` while GitHub still
+believes it is `busy`). The reconciler waits for `docker version` to answer before it touches the distro, every
+pass. The script also turns on Docker Desktop's own `AutoStart`, so the engine is already coming up at logon
+rather than up to three minutes later.
+
+**And "Docker Desktop is running" is not "the engine works".** `wsl --shutdown` — which a WSL update does on
+its own, and which the `-Restart` above does deliberately — takes the `docker-desktop` distro out from under
+it. Its Windows processes stay alive — the app is still on screen — and every request to the engine answers
+`500 Internal Server Error` from then on; **Docker Desktop does not notice and does not heal**. So the readiness probe is `docker version`
+and never the process list, and a Docker Desktop that is up but has not answered after a 90-second grace gets
+**restarted**, not waited on. A reconciler that treats "processes exist" as "it is coming up" waits out its
+deadline every pass, fixes nothing, and leaves a watchdog running over the top of a dead fleet reporting that
+all is well — which is this whole file's failure mode, one layer down.
+
+Measured against a deliberately wedged engine (`wsl -t docker-desktop`, app left running): the pass noticed at
+`+3m14s` rather than the nominal 90 seconds — a wedged engine takes about ten seconds to return each `500`, so
+the probe loop overshoots its own grace — restarted Docker Desktop, and had the engine back **25 seconds
+later**, with the fleet never leaving `online=6` because the distro was never involved.
+
+**The units carry no `Restart=`, so this is also what heals a runner that merely exited.** `svc.sh` generates a
+unit with none, and `runsvc.sh` stops the service on a zero exit — a graceful stop, most self-update handoffs —
+so systemd brings nothing back. That is the same gap the Windows runner's repeating trigger closes, closed the
+same way: ask every few minutes, start what is not active.
+
+**Every pass writes a line, including the ones that change nothing** (`%LOCALAPPDATA%\intentic\ci-fleet\fleet.log`).
+A watchdog that only logs when it acts makes a healthy machine and a watchdog that stopped running look
+identical, and "nothing was reporting an error" is the whole of the incident above.
+
+**What this does not fix: an unattended reboot still waits for a sign-in.** The task is a logon task, and this
+host has no automatic logon set. Windows signs the account back in after its own update restarts — which is what
+happened on the 26th, and why the Windows runner returned — but a power cut does not. `-AutoLogon` in
+`setup-windows-runner.ps1` is the switch that closes it, at the cost of a password in the registry in
+cleartext; it is off deliberately.
+
+A host that runs the fleet on bare Linux rather than in WSL needs none of this: `systemctl enable` is then
+answered at the machine's own boot, and only the `Restart=` gap remains.
+
 ### The two labels, and why every runner gets both
 
 `runs-on` is an AND over labels, and the workflows use exactly two sets:

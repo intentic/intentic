@@ -33,6 +33,7 @@ rules:
             - release.yml
             - rollback.yml
             - verify.yml
+            - webstore-publish.yml
 
     # `secrets: inherit` on ci.yml's three verify calls and its release call.
     #
