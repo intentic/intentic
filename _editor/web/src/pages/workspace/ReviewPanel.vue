@@ -64,13 +64,22 @@ import ModuleLabel from "../../components/ModuleLabel.vue";
  * Clicking a file opens the diff of THAT ROW's side; discard restores the worktree from HEAD. The History panel
  * stays the safety timeline.
  *
- * Two rules earn the panel its quiet, and both replace something that shouted:
+ * Three rules earn the panel its quiet, and each replaces something that shouted:
  *   - SYNC STATE IS THE SYNC CONTROL. Ahead/behind ride the repo row as pills that ARE pull and push, so a
  *     repo in sync spends no pixels saying so. This replaces a full-width bar under every repo that mostly
  *     rendered a zero and three icons.
  *   - A FAILURE RENDERS WHERE IT HAPPENED. Errors are keyed by repo (or the commit box) in useChanges and drawn
  *     against the row that caused them, naming the verb. The one shared red line this replaces sat at the top
- *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause. */
+ *     of the panel naming neither, so a failed fetch read as a stray sentence with no visible cause.
+ *   - ONE BLOCK PER JOB, AND A BLOCK IS ITS OWN PROGRESS. Above the list sit at most two bordered blocks: the
+ *     commit box (record work) and the outgoing block (send it). A push in flight is a STATE of the outgoing
+ *     block rather than a strip under it, so the button that was clicked is the thing that reports, and the
+ *     block's own bottom border doubles as the check's progress bar. What this replaces was the state a user
+ *     sent this panel back to be redrawn: three full-width borders in ninety pixels, "↑15 / Push" greyed out
+ *     above "Checking · 2s / Stop", above a repo row printing the same ↑15 a third time. One intent, drawn as
+ *     three unrelated rows, each describing something else.
+ *     The corollary is that nothing here draws a control it cannot honour: no dead Push beside its own
+ *     progress, no bin on a repo with nothing to discard, no disclosure chevron over an empty repo. */
 
 const changes = useChanges();
 // The push, from the click to the answer: started here, but owned above this panel so that leaving the view
@@ -1000,28 +1009,82 @@ const syncSummary = computed<string>(() => {
  * verdict needs is raised ABOVE the router (shell/PushNotice.vue), because by then the user is usually somewhere
  * else, which is the whole permission this design grants them. */
 
-// What the strip says while something is in flight, and after. One line, because the panel is ~270px wide and
-// the amount of it that can be spent on a status is one line.
+/* --- THE WAIT, DRAWN TO SCALE ---------------------------------------------------------------------------------
+ * How far through the suite is, against how long it usually takes: usePushFlow remembers the last run that
+ * reached a verdict, per sandbox, and until now that memory was spent on a tooltip nobody hovers.
+ *
+ * It is the fact that turns waiting into a decision. An elapsed clock alone reads identically at "2s of 40" and
+ * at "2s of ten minutes", so "can I go and do something else" was the one question the readout could not answer,
+ * and the answer people found instead was to sit and watch it count.
+ *
+ * CAPPED SHORT OF FULL, because a bar parked at 100% while the thing runs on is the oldest lie in the genre.
+ * Past the remembered duration the fill stops and the LINE takes the reporting over ("taking longer"), which is
+ * the same news said honestly, at the moment it starts to matter.
+ *
+ * Undefined is INDETERMINATE, not idle: the first run in a workspace has nothing to measure against, and the bar
+ * says "working, length unknown" rather than inventing a scale for it. */
+const CHECK_FILL_CAP = 0.92;
+const checkElapsed = computed(() => now.value - pushFlow.since.value);
+const checkOverrun = computed(() => pushFlow.typicalMs.value !== undefined && checkElapsed.value > pushFlow.typicalMs.value);
+const checkFill = computed<number | undefined>(() => {
+    const typical = pushFlow.typicalMs.value;
+    return pushFlow.stage.value !== `checking` || typical === undefined || typical <= 0
+        ? undefined
+        : Math.min(checkElapsed.value / typical, CHECK_FILL_CAP);
+});
+
+// What the block says while something is in flight, and for a moment after. One line, because the panel is
+// ~270px wide and the amount of it that can be spent on a status is one line: the SCALE rides it too, since a
+// clock with nothing to measure against is exactly what sent people off to watch the terminal instead.
 const stageLine = computed<string | undefined>(() => {
-    const push = pushFlow.pending.value;
+    const elapsed = formatElapsed(pushFlow.since.value, now.value);
     if (pushFlow.stage.value === `checking`) {
-        return `Checking · ${formatElapsed(pushFlow.since.value, now.value)}`;
+        const typical = pushFlow.typicalMs.value;
+        if (typical === undefined) {
+            return `Checking · ${elapsed}`;
+        }
+        return checkOverrun.value ? `Checking · ${elapsed} · taking longer` : `Checking · ${elapsed} of ~${formatElapsed(0, typical)}`;
     }
     if (pushFlow.stage.value === `pushing`) {
-        return `${push?.verb ?? `Push`}ing · ${formatElapsed(pushFlow.since.value, now.value)}`;
+        return `${pushFlow.pending.value?.verb ?? `Push`}ing · ${elapsed}`;
     }
     const sent = pushFlow.pushed.value;
     return sent === undefined ? undefined : `Pushed ${sent.what}`;
 });
 
-// The command, and how long this suite usually takes: the two facts that turn "it is running" into "I can go
-// and do something else". They ride the tooltip rather than the line: in this width the elapsed clock is what
-// has to be legible at a glance, and these are read once.
-const stageHint = computed<string>(() => {
-    const typical = pushFlow.typicalMs.value;
-    const usually = typical === undefined ? `` : ` · usually about ${formatElapsed(0, typical)}`;
-    return pushFlow.stage.value === `checking` ? `${pushFlow.command.value}${usually}` : `Sending your commits to their upstreams`;
+// The one fact the line has no room for: the command being run. How long the suite usually takes is no longer
+// hidden in here, it is on the line and in the bar, where it can be seen without a pointer. Undefined once
+// nothing is in flight: the note that outlives a push is already a whole sentence about what went.
+const stageHint = computed<string | undefined>(() => {
+    if (pushFlow.stage.value === `checking`) {
+        return pushFlow.command.value === `` ? undefined : pushFlow.command.value;
+    }
+    return pushFlow.stage.value === `pushing` ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined;
 });
+
+/* --- ONE BLOCK FOR WHAT IS LEAVING THIS MACHINE ---------------------------------------------------------------
+ * The offer and the run are ONE control in two states, not two rows. They used to be two, stacked, each with a
+ * full-width border of its own: "↑15 · Push" above "Checking · 2s · Stop", which is a single intent ("send these
+ * commits") drawn as two unrelated strips, the top one greyed out because the bottom one was busy. Three
+ * dividers and two rows to say one thing, and the count said twice over: the bar's ↑15 and the repo row's own
+ * ↑15 pill, forty pixels apart.
+ *
+ * So the flow TAKES THE BUTTON'S PLACE: the control that was clicked is the control that reports, which is also
+ * what retires the disabled-button state entirely, there is no dead Push sitting beside its own progress.
+ *
+ * The COMMIT BOX still outranks the offer, for the reason it always did: a tree with work to record has a more
+ * urgent primary action than a push, and the offer is VSCode's post-commit button, which only exists once there
+ * is nothing left to commit. But the flow outranks both, because it is the only thing here that is HAPPENING
+ * rather than being offered, and it is what the user is waiting on. */
+const outgoing = computed<"flow" | "offer" | undefined>(() =>
+    stageLine.value !== undefined ? `flow` : changes.count.value === 0 && syncMeta.value !== undefined ? `offer` : undefined,
+);
+// Whether that block is already this repo's own push control. One syncable repo means the block's verb IS the
+// row's pill: same commits, same action, one line apart, and the row would be spending its width restating a
+// number the block states in words. With several repos in play the block is an aggregate and each row keeps its
+// own pill, which is the case the pills exist for.
+const barCovers = (repo: RepoChanges): boolean =>
+    outgoing.value !== undefined && changes.count.value === 0 && syncRepos.value.length === 1 && syncRepos.value[0]!.repo === repo.repo;
 
 // One click, every repo that has remote work: git can't span remotes, so the composable fans it out into one
 // real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
@@ -1275,71 +1338,88 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             </div>
         </div>
 
-        <!-- Once there is nothing left to commit, the commit box hands the primary slot to the sync the repos
-             actually need: VSCode's post-commit button. Same place, same weight, so the commits you just made
-             are one labelled click from their remote instead of a muted pill you had to spot on a repo row. Every
-             sync failure renders on its own repo row below (each is filed per repo), so this bar carries only the
-             action and a one-line readout of what it will do. -->
-        <div v-else-if="syncMeta !== undefined" class="flex shrink-0 items-center gap-1 border-b border-line p-2">
-            <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
-            <Button size="small" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value || pushFlow.running.value" @click="doSync">
-                <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
-            </Button>
-        </div>
-
-        <!-- THE RUN, IN PLACE: what replaced the dialog that used to own the wait.
-             It is a STRIP OF ITS OWN rather than a state of the bar above, because the bar above is the primary
-             slot and the commit box takes it back the moment there is anything to commit: a status that lived
-             there would vanish the first time the user did what this whole design invites them to do, which is
-             carry on working while the suite runs. It says the stage and the clock, and offers only what is
-             worth offering mid-run: stop the suite, go and watch it. No verdict, because a verdict that needs
-             answering is raised above the router where the user can be found (shell/PushNotice.vue), and no
-             output, because the output is the terminal's (composables/terminal/useTerminalPanel.ts). -->
-        <!-- THE HINT IS A LINE ON A PHONE AND A HOVER ON A DESKTOP, which is the same decision the two form
-             factors have room for. `stageHint` is the command and how long the suite usually takes — the two
-             facts that turn "it is running" into "I can go and do something else" — and a hover paragraph
-             never reaches a touch device (tooltip.ts, rule 7). It rode the tooltip because the desktop panel
-             is ~270px wide and the elapsed clock is what has to stay legible in it; on a phone this panel IS
-             the screen, so the width objection does not apply and the sentence simply goes under the line it
-             qualifies. Tooltip suppressed there rather than left alongside: a box that cannot open is not
-             harmless, it is the thing that made this unreachable in the first place. -->
+        <!-- WHAT IS LEAVING THIS MACHINE: one block, two states, and never both at once.
+             AT REST it is the sync the repos need, in the slot the commit box hands back once there is nothing
+             left to record (VSCode's post-commit button): same place, same weight, so the commits you just made
+             are one labelled click from their remote instead of a muted pill on a repo row nobody reads as a
+             button. IN FLIGHT the run takes that button's place, because the control that was clicked is the
+             control that should report: it says the stage, the clock and the scale, and offers the only two
+             things worth offering mid-run (stop the suite, go and watch it).
+             No verdict here, because a verdict that needs answering is raised above the router where the user
+             can actually be found (shell/PushNotice.vue), and no output, because the output is the terminal's
+             (composables/terminal/useTerminalPanel.ts). Every sync failure renders on its own repo row below,
+             each filed per repo, so this block carries no errors either.
+             THE HINT IS A LINE ON A PHONE AND A HOVER ON A DESKTOP, the same decision the two form factors have
+             room for: a hover paragraph never reaches a touch device (tooltip.ts, rule 7), and on a phone this
+             panel IS the screen, so the width objection that put the command in a tooltip does not apply. -->
         <div
-            v-if="stageLine !== undefined"
-            class="flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5"
-            v-tooltip.right="mobile ? undefined : stageHint"
+            v-if="outgoing !== undefined"
+            class="relative flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5"
+            v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
         >
-            <Icon
-                :name="pushFlow.running.value ? `spinner` : `check-circle`"
-                :spin="pushFlow.running.value"
-                class="shrink-0 text-2xs"
-                :class="pushFlow.running.value ? `text-link` : `text-success`"
-            />
-            <span class="flex min-w-0 flex-1 flex-col">
-                <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
-                <span v-if="mobile" class="truncate whitespace-nowrap text-2xs text-subtle">{{ stageHint }}</span>
-            </span>
-            <!-- Drawn only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
-                 invisible shell, and a button that opens an empty panel is worse than none. -->
-            <button
-                v-if="pushFlow.running.value && pushFlow.terminal.value !== undefined"
-                type="button"
-                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
-                @click="pushFlow.showTerminal"
-                v-tooltip.top="'Watch it run'"
-                aria-label="Watch the checks run"
-            >
-                <Icon name="terminal" class="text-2xs" />
-            </button>
-            <!-- Stopping the suite is not cancelling the push: the run settles as stopped and the push is still
-                 waiting on an answer, which is then asked for in the notice like any other red outcome. -->
-            <button
-                v-if="pushFlow.stage.value === `checking`"
-                type="button"
-                class="shrink-0 rounded px-1 py-0.5 text-2xs text-muted transition-colors hover:text-content"
-                @click="pushFlow.stopChecks"
-            >
-                Stop
-            </button>
+            <template v-if="outgoing === `flow`">
+                <Icon
+                    :name="pushFlow.running.value ? `spinner` : `check-circle`"
+                    :spin="pushFlow.running.value"
+                    class="shrink-0 text-2xs"
+                    :class="pushFlow.running.value ? `text-link` : `text-success`"
+                />
+                <span class="flex min-w-0 flex-1 flex-col">
+                    <!-- The line lifts to full contrast on the one reading that is news: a suite past the
+                         duration it taught this panel to expect. Everything else here is a wait going normally,
+                         and a wait going normally is muted text. -->
+                    <span class="truncate whitespace-nowrap text-2xs" :class="checkOverrun ? `text-content` : `text-muted`">{{ stageLine }}</span>
+                    <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
+                </span>
+                <!-- Drawn only where there IS a terminal: a sandbox without the tmux wrapper ran the suite in an
+                     invisible shell, and a button that opens an empty panel is worse than none. -->
+                <button
+                    v-if="pushFlow.running.value && pushFlow.terminal.value !== undefined"
+                    type="button"
+                    :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                    @click="pushFlow.showTerminal"
+                    v-tooltip.top="'Watch it run'"
+                    aria-label="Watch the checks run"
+                >
+                    <Icon name="terminal" class="text-2xs" />
+                </button>
+                <!-- Stopping the suite is not cancelling the push: the run settles as stopped and the push is
+                     still waiting on an answer, which is then asked for in the notice like any other red
+                     outcome, hence the tooltip. It wears this panel's secondary-button shape (Publish, Abort)
+                     rather than the bare muted word it used to be: sitting at the end of a status line at the
+                     same weight as the status, nothing about it said it could be pressed. -->
+                <button
+                    v-if="pushFlow.stage.value === `checking`"
+                    type="button"
+                    class="shrink-0 whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-8"
+                    @click="pushFlow.stopChecks"
+                    v-tooltip.top="'Stop the checks. The push stays waiting on your answer'"
+                >
+                    Stop
+                </button>
+            </template>
+            <template v-else>
+                <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
+                <!-- No `running` in the disabled test any more: the flow takes this whole block over while it
+                     runs, so there is no longer a dead Push standing next to its own progress. -->
+                <Button size="small" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value" @click="doSync">
+                    <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
+                </Button>
+            </template>
+
+            <!-- THE DIVIDER IS THE PROGRESS BAR. The complaint this redesign answers was borders: rows of
+                 chrome separating rows of status. This one border earns itself twice, as the edge of the block
+                 and as how far through the check is, so the wait is drawn in pixels the panel was spending
+                 anyway. Determinate against the remembered duration, a pulse when there is no duration to
+                 remember yet, and it stops short of the end rather than claiming to be finished (checkFill). -->
+            <div v-if="pushFlow.stage.value === `checking`" class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
+                <div
+                    v-if="checkFill !== undefined"
+                    class="h-full bg-link transition-[width] duration-1000 ease-linear"
+                    :style="{ width: `${Math.round(checkFill * 100)}%` }"
+                ></div>
+                <div v-else class="h-full w-full animate-pulse bg-link/40"></div>
+            </div>
         </div>
 
         <!-- WHOSE WORK IS IN MY TREE: one line, only when an agent actually landed something. Each entry is a
@@ -1409,11 +1489,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
         <div class="scrollbar-thin min-h-0 flex-1 overflow-auto py-1">
             <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading changes…</p>
-            <!-- "No changes" only when there is genuinely nothing to say: a repo that failed to scan, or one
-                 merely out of sync with its remote, has its own row below, and claiming an all-clear over
-                 either would be the same silence this reports instead. -->
-            <p v-else-if="changes.count.value === 0 && scannable.length === 0 && unscannable.length === 0" class="px-3 py-2 text-2xs text-subtle">
-                No uncommitted changes. Edits by you or the agent show up here to review, commit, or discard.
+            <!-- A CLEAN TREE SAYS SO. It used to say it only when there were no repos at all, on the grounds
+                 that a repo row is itself something to look at, and the result was the state in the screenshot
+                 that started this redesign: a panel showing one collapsed repo and then two thirds of a column
+                 of nothing, with no sentence anywhere claiming that the nothing was the answer rather than a
+                 list still loading. The rows below are about the REPOS (their branch, their sync state); this
+                 is about the TREE, which is what the panel is named after and what the reader came to check.
+                 The onboarding half stays for a workspace with no repos, where it is the only text on screen. -->
+            <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">
+                No uncommitted changes.<template v-if="scannable.length === 0 && unscannable.length === 0">
+                    Edits by you or the agent show up here to review, commit, or discard.</template
+                >
             </p>
 
             <!-- Repos git refused to scan. Same row rhythm as a real group: the repo still gets its name on a
@@ -1449,51 +1535,70 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      clicking "↓2" pulls those two commits, so a repo that is in sync costs exactly this row
                      and no more, where it used to cost this row plus a full-width bar mostly reading zero. -->
                 <div class="flex items-center gap-1 pr-1 transition-colors hover:bg-overlay">
+                    <!-- NO CHEVRON ON A REPO WITH NOTHING IN IT. A disclosure triangle is a promise that
+                         something is under there, and on a clean repo it was a promise the row could not keep:
+                         the screenshot this redesign started from is a chevron over an empty column, which
+                         reads as a list still loading rather than as an answer. The slot is HELD at the same
+                         width, so a clean repo's name still lines up with a dirty one's. -->
                     <button
                         type="button"
                         class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2 text-left max-md:min-h-11"
+                        :disabled="repoCount(group) === 0"
                         @click="toggleGroup(group.repo)"
                     >
-                        <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
+                        <Icon
+                            v-if="repoCount(group) > 0"
+                            class="shrink-0 text-2xs text-subtle"
+                            :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'"
+                        />
+                        <span v-else class="w-2.5 shrink-0"></span>
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
                         <span v-if="group.branch !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ group.branch }}</span>
                     </button>
 
-                    <button
-                        v-if="behind(group) > 0"
-                        type="button"
-                        :class="SYNC_PILL"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.pullRepo(group.repo)"
-                        v-tooltip.top="pullHint(group)"
-                        :aria-label="`Pull ${group.repo}`"
-                    >
-                        <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
-                    </button>
-                    <!-- Publish keeps its word where the pills stay numeric: a branch with no upstream is a
-                         one-off state most people meet rarely, and "↑3" would not tell them the push also has
-                         to CREATE the branch on the remote. -->
-                    <button
-                        v-if="unpublished(group)"
-                        type="button"
-                        class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                        :disabled="changes.actionBusy.value || pushFlow.running.value"
-                        @click="askPushRepo(group)"
-                        v-tooltip.top="'Push and start tracking this branch on the remote'"
-                    >
-                        <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
-                    </button>
-                    <button
-                        v-else-if="ahead(group) > 0"
-                        type="button"
-                        :class="SYNC_PILL"
-                        :disabled="changes.actionBusy.value || pushFlow.running.value"
-                        @click="askPushRepo(group)"
-                        v-tooltip.top="pushHint(group)"
-                        :aria-label="`Push ${group.repo}`"
-                    >
-                        <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
-                    </button>
+                    <!-- THE SYNC PILLS, UNLESS THE BLOCK ABOVE IS ALREADY THIS REPO'S PUSH BUTTON. With one
+                         syncable repo the two are the same commits and the same verb one line apart, which is
+                         how the panel came to print "↑15" twice in ninety pixels. The block wins that tie: it
+                         says the count AND the word, it is where the run reports, and it is in the primary
+                         slot. With several repos the block is an aggregate and every row keeps its own pill,
+                         which is the case the pills were built for. -->
+                    <template v-if="!barCovers(group)">
+                        <button
+                            v-if="behind(group) > 0"
+                            type="button"
+                            :class="SYNC_PILL"
+                            :disabled="changes.actionBusy.value"
+                            @click="changes.pullRepo(group.repo)"
+                            v-tooltip.top="pullHint(group)"
+                            :aria-label="`Pull ${group.repo}`"
+                        >
+                            <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
+                        </button>
+                        <!-- Publish keeps its word where the pills stay numeric: a branch with no upstream is a
+                             one-off state most people meet rarely, and "↑3" would not tell them the push also
+                             has to CREATE the branch on the remote. -->
+                        <button
+                            v-if="unpublished(group)"
+                            type="button"
+                            class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                            :disabled="changes.actionBusy.value || pushFlow.running.value"
+                            @click="askPushRepo(group)"
+                            v-tooltip.top="'Push and start tracking this branch on the remote'"
+                        >
+                            <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
+                        </button>
+                        <button
+                            v-else-if="ahead(group) > 0"
+                            type="button"
+                            :class="SYNC_PILL"
+                            :disabled="changes.actionBusy.value || pushFlow.running.value"
+                            @click="askPushRepo(group)"
+                            v-tooltip.top="pushHint(group)"
+                            :aria-label="`Push ${group.repo}`"
+                        >
+                            <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
+                        </button>
+                    </template>
 
                     <span v-if="repoCount(group) > 0" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
                         repoCount(group)
@@ -1510,10 +1615,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     >
                         <Icon name="sync" class="text-2xs" />
                     </button>
+                    <!-- Not drawn at all on a clean repo, where it used to sit dimmed. On a narrow viewport the
+                         row actions have no hover to hide behind (ROW_ACTION keeps them visible under `md`), so
+                         a permanently dead bin was on screen for every repo with nothing to discard. -->
                     <button
+                        v-if="repoCount(group) > 0"
                         type="button"
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
-                        :disabled="changes.actionBusy.value || repoCount(group) === 0"
+                        :disabled="changes.actionBusy.value"
                         @click="askDiscardRepo(group)"
                         v-tooltip.top="'Discard all changes in this repo'"
                         aria-label="Discard all changes in this repo"
