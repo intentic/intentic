@@ -452,7 +452,7 @@ const startHint = computed<string | undefined>(() => {
                     :title="`${target.label} preview`"
                     :sandbox="frameSandbox(target.kind)"
                     class="h-full min-h-0 flex-1 bg-white"
-                    :class="fit === `phone` ? `max-w-[390px] border-x border-line` : ``"
+                    :class="fit === `phone` ? `max-w-phone border-x border-line` : ``"
                 ></iframe>
             </div>
 

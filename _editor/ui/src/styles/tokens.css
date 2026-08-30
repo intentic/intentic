@@ -72,6 +72,13 @@
        embedded browser), where the useful width is however much screen there is and a cap just letterboxes it. */
     --container-modal-full: calc(100vw - 3rem);
 
+    /* THE PHONE VIEWPORT, as the preview reproduces it. Not a layout choice like the three scales above — it is
+       a DEVICE FACT the app measures itself against, which is exactly why it wants a name: written inline it
+       reads as somebody's opinion about how wide a panel should be, and the next person rounds it to a scale
+       step. 390px is the CSS viewport of the current iPhone class. It lives here rather than in the preview
+       because anything else that has to render "as a phone would" must agree with it by construction. */
+    --container-phone: 390px;
+
     /* THE PANEL CEILING, named — for the same reason and out of the same spread (`max-h-[45dvh]`, `[55dvh]`,
      * `[60dvh]`, `[60vh]`, `[72dvh]`). A list inside a dialog or a popped-out pane has to stop somewhere short
      * of the viewport; `dvh` rather than `vh` so a phone's disappearing address bar does not clip the last row. */
@@ -95,6 +102,26 @@
     /* Spacing base — the unit Tailwind multiplies for p-*, gap-*, m-*, etc.
      * Nudge this to make the whole UI more or less dense in one place. */
     --spacing: 0.25rem;
+
+    /* HOW ILLEGIBLE A HIDDEN VALUE IS. The masking strength for a secret the user has not chosen to reveal —
+     * a token because it is a POLICY, not a look: every field that hides something owes the same answer, and
+     * the answer is security-visible. Tailwind's own scale starts at `blur-xs` (4px), which is past the point
+     * where a long token's word shapes stop being guessable; 3px is where this app draws that line. Anyone
+     * tempted to snap it to the nearest step is making that call for every masked field at once, which is the
+     * conversation this name exists to force. */
+    --blur-mask: 3px;
+
+    /* THE HAIRLINE. A ring finer than the 1px every border on this surface draws, for the mark that has to read
+     * as an aside rather than as a control. Why it must be a PAINTED ring rather than a border, and what the
+     * padding gives back to pay for one, is at the only call site — ChatToolRun.vue — because that part is
+     * about the element; this is only the weight.
+     *
+     * SPELLED AT THE CALL SITE AS `ring-(length:--ring-hairline)`, which is ugly and is the honest option.
+     * Tailwind 4 has no `--ring-*` width namespace, so `ring-hairline` cannot be made to exist by naming a
+     * token; the alternative is a hand-written `.ring-hairline` that restates the four `--tw-*` private
+     * variables Tailwind's own ring expands to, and those are internals that change under a major without
+     * telling us. This way the number lives here, once, and the expansion stays Tailwind's problem. */
+    --ring-hairline: 0.5px;
 
     /* Radius scale. */
     /* Chart and table legend swatches — smaller than xs so a colour chip reads square without a full corner. */

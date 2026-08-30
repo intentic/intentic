@@ -45,17 +45,11 @@ const compound = (stem: string): boolean => stem.length >= 6 && (/-/.test(stem) 
 const component = (stem: string, leaf: string): boolean => /\.(?:vue|tsx)$/.test(leaf) && stem.length >= 4 && /^[A-Z][a-z]/.test(stem);
 
 // Names for files outside this tree: they resolve to nothing and always will. Most are the chore analyzer's
-// examples of components in a USER's repository (chores/stack.ts reduces two of them to one stem, which is the
-// point it is making); the last is an example argument in a documented command line.
-const NOT_OURS = new Set([
-    "BaseButton.vue",
-    "ButtonV2.tsx",
-    "Checkout.vue",
-    "one-file.ts",
-    "AppShell.vue",
-    "ErrorBoundary.tsx",
-    "page.tsx",
-]);
+// examples of components in a USER's repository: chores/stack.ts reduces two of them to one stem, and holds
+// `page.tsx` up as the framework-chosen entry name that must NOT become a family, which are the two points it
+// is making. `one-file.ts` is the odd one out, an example argument in a documented command line — named here
+// rather than called "the last", because it stopped being last the moment the three new names were appended.
+const NOT_OURS = new Set(["BaseButton.vue", "ButtonV2.tsx", "Checkout.vue", "one-file.ts", "AppShell.vue", "ErrorBoundary.tsx", "page.tsx"]);
 
 // The one file that has to QUOTE dead names in order to explain itself: its header is evidence, not a pointer.
 const SELF = "_sandbox/sandbox/src/comment-refs.test.ts";

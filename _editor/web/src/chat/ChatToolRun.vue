@@ -66,7 +66,7 @@ const hint = computed(() => {
                  padding takes back the pixel the border used to occupy at each edge (2 + 1/4 and 3/4 against
                  the old 2 and 1/2). The pill is the size it has always been; only its edge got finer. -->
             <span
-                class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-[0.5px] transition-colors"
+                class="chat-run-mark flex shrink-0 items-center gap-1 rounded-full px-2.25 py-0.75 text-2xs tabular-nums ring-(length:--ring-hairline) transition-colors"
                 :class="[
                     run.failed
                         ? 'text-danger ring-danger/40'

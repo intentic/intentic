@@ -186,6 +186,11 @@
     --color-canvas: #0c0907;
     --color-card: #15100b;
     --color-overlay: #1f1710;
+    /* One step BELOW the canvas, and the only thing under it: the footer, which has to read as the ground the
+       page is standing on rather than as one more band of it. Named for the same reason as the three above —
+       a colour spelled into a class is a colour this palette cannot reach, so a warmer or cooler ground would
+       have moved everything here and left the footer behind. */
+    --color-ground: #090706;
 
     /* ── Rules, in three weights ─────────────────────────
      * Everything structural is one of these, and all three are gold at an alpha rather than a grey: a
