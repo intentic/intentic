@@ -400,8 +400,13 @@
      * The cost is that an opaque `bg-canvas` pane covering the route element occludes the temple, which is
      * correct: a code editor is not the floor of the window, and this skin's whole horizon design is that the
      * temple is simply hidden by whatever the app puts in front of it. */
+    /* `:not(.entry)` is the sign-in and setup screens opting out, and it has to be written here because they
+       cannot win this rule any other way: it is drawn with an id, so no amount of class specificity in
+       `styles/entry.css` reaches it. Those two pages carry the marketing site's OWN plate — the same
+       photograph, at its own scale, composed against — and this skin's horizon under it is a second temple
+       standing behind the first. */
     [data-skin="sanctum"] body,
-    [data-skin="sanctum"] #app > :first-child {
+    [data-skin="sanctum"] #app > :first-child:not(.entry) {
         background-image:
             radial-gradient(135% 105% at 50% 36%, transparent 42%, oklch(9% 0.004 78 / 0.42) 100%),
             var(--sanctum-horizon),

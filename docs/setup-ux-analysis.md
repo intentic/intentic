@@ -313,3 +313,65 @@ What is still worth measuring (tier 3 above is unchanged): whether arrivals thro
 `?machine=` convert better than cold arrivals at `/setup`, per rung. If they do, the
 argument for moving more of the decision off the app screen gets stronger; if they do not,
 this page is cheap to leave standing as the answer to a search rather than a funnel step.
+
+## The material, 2026-08-30
+
+Everything above this section is about what the page **says**. This one is about what it is
+**made of**, which had never been looked at and turned out to be the loudest thing wrong with
+it: read straight after `/login`, the two screens were visibly from different companies.
+
+`/login` is built out of the marketing site's own vocabulary — the carved temple plate, Playfair
+cut in stone with an ember full stop, gold hairlines, a turned corner in each elbow, the lotus
+finial, a cast-bronze plaque for the one thing you press. `/setup` was the app's ordinary
+chrome the moment you arrived: a flat canvas with no ground at all, a 16px medium `h1` of the
+weight a settings tab gets, three cards whose chosen one was marked by a one-pixel border the
+same weight as the two it beat, and a primary button that is a 10% tint of the accent inside a
+20% rule — which on a near-black page is also the description of the card behind it and the
+field beside it. The eye finds differences of *lightness* first, so on the one screen whose
+entire job is to get somebody to press something, nothing looked pressable.
+
+What shipped:
+
+- **The material moved out of `Login.vue` into [`styles/entry.css`](../_editor/web/src/styles/entry.css)**,
+  scoped to `.entry`, and both screens wear it. The door keeps its own composition (centred on
+  the art's empty middle, one control); the setup page is laid out like one of the site's
+  article pages, left down the column the work is in. Nothing is duplicated, which is what
+  makes it safe for the next entry screen to join them.
+- **The page has a ground.** The same plaque, cropped to a band across the top and dissolved
+  into canvas by a veil before the picker starts — the site's own `PageBackdrop` argument. The
+  masthead stands on carving; every line anybody has to *work* on sits on flat opaque canvas,
+  because a caption over a photograph reads at a different contrast in every line.
+- **A masthead instead of a heading.** The mark, an eyebrow, the carved headline, a lede. The
+  eyebrow is "Your sandbox is waiting", which is verbatim the second of the three beats the
+  sign-in screen's progress rail names — so the screen a visitor lands on announces itself as
+  the station they were just shown rather than as a new subject.
+- **Choosing a rung turns its corners.** The chosen plate lifts, its rule goes to full gold,
+  the four elbows are drawn and the mark beside its name lights ember. A turned corner is how
+  every frame on intentic.dev says *this one is a thing*, so the selection signal is one the
+  reader has never had to be taught, and it does not depend on telling two hairlines apart.
+- **The run card is the page's one framed object**, with the lotus astride its top rail — the
+  panel every rung leads to and every press happens on. The reference column keeps the plain
+  plate: reference material is not a decision, and an elbow at each corner would claim it was.
+- **The committing button is cast bronze**, the site's own primary, and it is the only
+  light-on-dark object on the screen. Secondary is the plain stone cartouche; `text`, `danger`,
+  `warn` and `success` are left exactly as the design system draws them, because a destructive
+  button repainted in the house metal is a destructive button nobody reads as one.
+
+Two mechanical notes worth keeping, because each cost a wrong turn:
+
+- **`.entry` restates `--color-*`, never `--role-*`.** `--color-card: var(--role-card)` is
+  declared in `@theme`, i.e. on `:root`, and a custom property's `var()` references are
+  substituted on the element that *declares* it — children inherit an already-resolved value.
+  Re-pointing a role token from a descendant therefore changes nothing at all. A skin gets away
+  with it only because it sits on `<html>`. The same trap is why the two PrimeVue components
+  these screens use (the button tiers and the checkbox) have to be named explicitly: their
+  `--p-*` tokens resolved against the app's palette long before `.entry` existed.
+- **The radius scale is deliberately left alone.** Squaring `--radius-*` here would square the
+  app's utilities and leave every PrimeVue control rounded, which is half a decision and worse
+  than either whole one. The square corner is drawn where these screens draw a frame *by hand*;
+  nested controls keep their own rounding, exactly as the door already composes Google's rounded
+  button inside its square socket.
+
+Not changed, and not by accident: not a word of copy, not one control, not one lane, not one
+default. The decisions recorded above all still hold — this is the same page, in the stone the
+page before it is cut from.

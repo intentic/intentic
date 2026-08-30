@@ -27,11 +27,23 @@
 @import "./chat/chat.css";
 
 /* SKINS — whole-interface looks, each scoped to a `data-skin` attribute on <html> and therefore inert until one
- * is selected in Appearance. Last on purpose: a skin restates the design system's own tokens (the surface ramp,
+ * is selected in Appearance. Late on purpose: a skin restates the design system's own tokens (the surface ramp,
  * the role tokens, the radius scale) at equal specificity, so source order is what lets it win. Everything about
  * the feature, including how to remove it, is in ./skins/README.md. */
 @import "./skins/hud.css";
 @import "./skins/sanctum.css";
+
+/* THE ENTRY SCREENS' OWN MATERIAL — the site's metals, ground, frame kit and two button plaques, scoped to
+ * `.entry` and therefore inert everywhere but `/login` and `/setup`. Its header carries the whole argument,
+ * including why it names `--color-*` rather than `--role-*`.
+ *
+ * LAST, AFTER THE SKINS, and that is the same source-order argument one line further along. A skin's rules are
+ * `[data-skin=…] .p-button…` — an attribute plus a class, which weighs exactly what `.entry .p-button…` weighs
+ * — so whichever sheet is read second wins the tie. These two screens are the ONE place a selected skin must
+ * not reach: they are dressed as the marketing site the visitor just came from, not as the workspace they have
+ * not seen yet, and a reader arriving on them has picked no skin anyway. (Specificity cannot settle the skins'
+ * route-element backdrop, which is written with an id; both skins exclude `.entry` from it by name instead.) */
+@import "./styles/entry.css";
 
 /* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,
  * so Tailwind won't auto-detect it). */

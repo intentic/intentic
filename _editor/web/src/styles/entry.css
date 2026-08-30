@@ -1,0 +1,595 @@
+/* ══ THE VESTIBULE — THE MATERIAL THE APP'S ENTRY SCREENS ARE BUILT OUT OF ═══════════════════════════════
+ *
+ * A visitor reaches these screens from intentic.dev, and for as long as there was only ONE of them the site's
+ * vocabulary lived inside that one file. `pages/Login.vue`'s header said what it was doing and why: the
+ * marketing page is a photographed temple wall with engraved display type and gold rules, so the door is too.
+ * Then `/setup` — the screen *behind* that door, the one every new account meets second — was still the app's
+ * ordinary chrome: flat cards on a flat canvas, a 16px heading, no ground, and nothing on it lit. Two screens,
+ * thirty seconds apart, from two different companies.
+ *
+ * So the recipes moved here, where both can have them, and neither owns them. What is in this file is the
+ * MATERIAL: the metals, the ink, the faces, the ground, the frame kit, the ornaments and the two button
+ * plaques. What is NOT in it is COMPOSITION — where a column sits, what is centred, which panel takes the
+ * finial. That stays in each screen, because it is the thing they legitimately differ on: the door is centred
+ * on the art's empty middle and has one control; the vestibule is a working page with a picker, a command and
+ * a reference column, and is laid out like one of the site's own article pages.
+ *
+ * EVERYTHING HERE IS PORTED FROM `_site/site/src/styles/global.css`, and when a recipe moves there it moves
+ * here. It is deliberately written out rather than pulled from the app's tokens: those follow the accent the
+ * user picked in the workspace, and the page a visitor is standing on when they meet these screens is one
+ * fixed set of colours. Structure is GOLD; the ember is SPENT, never spread — a full stop on a headline beat,
+ * the mark on the rung you have chosen, a ticked box.
+ *
+ * ── HOW IT REACHES THE APP'S OWN COMPONENTS ─────────────────────────────────────────────────────────────
+ * `.entry` restates the design system's ROLE TOKENS in the site's values, which is the same move a skin makes
+ * (`skins/README.md`) and it is what makes this affordable. Every `bg-card`, `border-line`, `text-muted` and
+ * `text-link` inside — in this app's markup and in every component it nests, <Notice>, <Code>, <Checkbox>,
+ * <SegmentedControl>, the seven setup satellites — resolves to gold-on-warm-black without one of them being
+ * edited. A screen that had to hand-paint its children would be a screen nobody could add to.
+ *
+ * It restates `--color-*` and NOT `--role-*`, and that distinction is load-bearing. `--color-card: var(--role-card)`
+ * is declared in `@theme`, i.e. on `:root`, and a custom property's var() references are substituted at
+ * computed-value time ON THE ELEMENT THAT DECLARES IT. Children inherit the already-resolved value, so
+ * re-pointing `--role-card` on a descendant changes nothing at all. A skin gets away with it because it sits
+ * on <html>, which IS `:root`. This does not, so it names the tokens the utilities actually read.
+ *
+ * The RADIUS SCALE is deliberately left alone for the same reason in reverse: PrimeVue's `--p-*` tokens are
+ * emitted on `:root` too and resolve there, so squaring `--radius-*` here would square the app's utilities and
+ * leave every PrimeVue control rounded — half a decision, which is worse than either whole one. The site's
+ * square corner is drawn where these screens draw a frame BY HAND (the door's gate, the vestibule's run card,
+ * a chosen rung) and nested controls keep their own rounding, which is exactly how the door already composes:
+ * Google's rounded button, in a square socket, inside a square frame.
+ *
+ * ── AND IT IS ALWAYS DARK ───────────────────────────────────────────────────────────────────────────────
+ * Whatever scheme the app is in. Everything the visitor has seen up to this point is, the materials below are
+ * built for a near-black ground, and this is the last stretch before the app's own look takes over. */
+
+/* ── THE METALS, THE GROUND AND THE INK ─────────────────────────────────────────────────────────────────── */
+.entry {
+    --gold: #c9a05c;
+    --gold-bright: #e5c489;
+    --ember: #e07b27;
+    --canvas: #0c0907;
+    --plate: #14100b;
+    --rule: rgba(201, 160, 92, 0.16);
+    --rule-strong: rgba(201, 160, 92, 0.3);
+    --rule-bright: rgba(201, 160, 92, 0.5);
+    --ink: #efe3cd;
+    --ink-muted: #b7a68d;
+    --ink-subtle: #9c8b73;
+    --face-display: "Playfair Display", Georgia, "Times New Roman", serif;
+    --face-mark: "Baloo 2", "Trebuchet MS", ui-rounded, sans-serif;
+    --face-read: "Mukta", ui-sans-serif, system-ui, sans-serif;
+    --corner-size: 1.7rem;
+
+    /* The design system's roles, in the site's own values — see the header for why these are the `--color-*`
+       names and not the `--role-*` ones behind them. */
+    --color-canvas: var(--canvas);
+    --color-card: var(--plate);
+    --color-overlay: #1f1710;
+    --color-line: var(--rule);
+    --color-line-strong: var(--rule-strong);
+    --color-line-subtle: rgba(201, 160, 92, 0.08);
+    --color-content: var(--ink);
+    --color-muted: var(--ink-muted);
+    --color-subtle: var(--ink-subtle);
+    /* A link is gold, not the picked accent: on this ground the accent is the one colour being saved for the
+       thing you press, and spending it on every inline "use a different address" would leave the plaque
+       nothing to be brighter than. */
+    --color-link: var(--gold-bright);
+    /* The statuses, warmed a step toward the page so a green tick does not arrive from another design. The
+       first three are the site's own, and they keep their HUES — a warning that stops being amber is not a
+       warning, and this is the same reason the button tiers below leave `danger`/`warn`/`success` alone.
+       `info` is the exception, and it is deliberately GOLD (hue 75, a hair off `--gold`'s 78) rather than the
+       app's blue. It is not a compromise: across both of these screens `info` paints nothing but SPINNERS and
+       the mark on the step that is currently running — never a tinted box, never a notice — so its whole job
+       here is "something is happening right now", and the page's own metal is what that should be lit in. A
+       blue would be the one object on the screen from another design. If a `tone="info"` NOTICE ever lands on
+       an entry screen, this is the line to revisit: as a filled box it would be gold on gold, and it would
+       stop reading as a status at all. */
+    --color-success: oklch(72% 0.12 148);
+    --color-warning: oklch(78% 0.14 82);
+    --color-danger: oklch(68% 0.17 30);
+    --color-info: oklch(76% 0.09 75);
+    /* THE ONE PLACE THE EMBER IS SPENT ON A CONTROL: a ticked box, a filled radio. Everything else PrimeVue
+       paints solid from this token is either not on these screens or is a button, and the buttons below are
+       metal rather than accent. */
+    --color-primary-fill: var(--ember);
+    --color-primary-fill-hover: #ef8f3c;
+    --color-fill-content: #1a0f06;
+
+    position: relative;
+    min-height: 100dvh;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--face-read);
+    color-scheme: dark;
+    /* The plate below sits at `z-index: -1`; without a stacking context here it would sink behind the page. */
+    isolation: isolate;
+}
+
+/* THE SKIN STOPS HERE. These screens match the marketing site, not the workspace chrome, so a selected skin's
+   heading face, stone ink and cut shadow must not leak in — they are a different palette from the landing
+   hero, and the reader has not chosen one yet anyway. */
+.entry :is(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--face-mark);
+    color: unset;
+    text-shadow: none;
+}
+
+/* Keyboard focus in the page's own metal. The default ring is a blue-white box, which on this ground is the
+   one thing here from another design — and the visitor arriving by keyboard is the one who most needs to see
+   where they are. */
+.entry :focus-visible {
+    outline: 2px solid var(--gold-bright);
+    outline-offset: 3px;
+}
+
+/* ── THE PLATE ──────────────────────────────────────────────────────────────────────────────────────────
+ * The art is a framed plaque: a carved border, a figure standing in each outer third, an empty middle. The box
+ * is pinned to the art's own ratio so `cover` is an exact fit and neither figure is ever cropped; what runs
+ * out on a tall window is the BOTTOM, and the gradient below dissolves that edge into the canvas rather than
+ * letting a carved rule stop against flat black.
+ *
+ * `--plate-reach` is how far down the page the picture is allowed to go. The door lets it fill the screen,
+ * because the door is composed against it. A working page caps it to a band at the top: the picture is the
+ * lintel over the masthead, and everything a reader has to WORK on sits on plain canvas below, where the
+ * contrast of a caption is the same at the top of a card and the bottom of it. */
+.entry-plate {
+    --plate-reach: 100%;
+
+    position: absolute;
+    inset: 0 0 auto;
+    height: var(--plate-reach);
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--canvas);
+}
+.entry-plate-img {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    aspect-ratio: 16 / 9;
+    background-image: url("/assets/angkor/temple-900.avif");
+    background-position: 50% 0%;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+@media (min-width: 60rem) {
+    .entry-plate-img {
+        background-image: url("/assets/angkor/temple-1600.avif");
+    }
+}
+.entry-plate-img::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 38%;
+    background: linear-gradient(180deg, transparent 0%, rgba(12, 9, 7, 0.55) 52%, var(--canvas) 100%);
+}
+/* The scrim is a WELL, not a ramp, and the symmetry of the art is why: a gradient run left to right darkens
+   one figure and leaves the other lit, which reads as a lighting fault. Sunk in the middle it follows the copy
+   and leaves both figures alone. Four layers, one paint: the well, a floor that holds down the ember glow
+   along the art's lower edge, a vignette off the corners, and a flat wash of canvas over all of it. */
+.entry-plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(58% 46% at 50% 34%, rgba(9, 6, 4, 0.78) 0%, rgba(9, 6, 4, 0.62) 42%, rgba(9, 6, 4, 0.3) 72%, transparent 100%),
+        linear-gradient(0deg, rgba(9, 6, 4, 0.78) 0%, rgba(9, 6, 4, 0.46) 20%, rgba(9, 6, 4, 0.14) 40%, transparent 60%),
+        radial-gradient(128% 108% at 50% 40%, transparent 44%, rgba(9, 6, 4, 0.55) 100%), rgba(12, 9, 7, 0.14);
+}
+
+/* THE VEIL — the site's own (`.page-backdrop-veil` in global.css), and it exists for the same reason there.
+ * The home page's hero is COMPOSED against this art; a page that is a masthead over a column of work is not,
+ * and every line of that work would otherwise land on a devata. So the picture is kept where it is doing
+ * structural work — the band the masthead stands in — and dissolved into canvas below it. Two lengths, both
+ * passed in by the screen that renders it, because only that screen knows how deep its own masthead is. */
+.entry-veil {
+    --veil-clear: 8rem;
+    --veil-hold: 22rem;
+
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        transparent 0,
+        transparent var(--veil-clear),
+        rgba(12, 9, 7, 0.72) calc(var(--veil-clear) + (var(--veil-hold) - var(--veil-clear)) * 0.55),
+        var(--canvas) var(--veil-hold),
+        var(--canvas) 100%
+    );
+}
+
+/* ── THE BAND OPENER ────────────────────────────────────────────────────────────────────────────────────
+ * An eyebrow, and the site's full stop worn as a mask so a caller sets the metal by setting a text colour —
+ * which is what lets the same diamond be gold beside a greeting and ember beside the step you are standing on. */
+.entry-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+.entry-lozenge {
+    display: inline-block;
+    flex: none;
+    width: 0.55rem;
+    height: 0.55rem;
+    background-color: currentColor;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M6 .8 11.2 6 6 11.2.8 6z' stroke='%23000' stroke-width='1.1'/%3E%3Cpath d='M6 3.6 8.4 6 6 8.4 3.6 6z' fill='%23000' opacity='.55'/%3E%3C/svg%3E");
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+}
+
+/* ── CARVED STONE, NOT POLISHED METAL ───────────────────────────────────────────────────────────────────
+ * …and the difference is texture rather than colour. Three layers are clipped to the glyphs at once: a coarse
+ * fractal cloud for the blotching a weathered surface has, a fine one for grain, and a narrow warm ramp under
+ * both. They composite with `overlay` and `soft-light`, so the noise moves the ramp's own colour lighter and
+ * darker rather than laying grey over it — a stone is one material lit unevenly, not two materials stacked.
+ *
+ * DESCENDERS ARE STRUCTURAL HERE. The letters are painted as a background clipped to their shape, and a
+ * background stops at the padding box, so anything a glyph reaches below it is simply not painted and the tail
+ * of a "g" or "y" vanishes. The clearance is bought with padding and taken straight back out with a matching
+ * negative margin: the painted box grows by the depth of a descender while the laid-out box does not move, and
+ * it holds at any leading. The pair must stay together — never set a bottom margin on a `.entry-display`. */
+.entry-display {
+    font-family: var(--face-display);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.24;
+    --descender: 0.2em;
+    padding-block-end: var(--descender);
+    margin-block-end: calc(-1 * var(--descender));
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='70' height='70'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncG type='linear' slope='0.78' intercept='0.11'/%3E%3CfeFuncB type='linear' slope='0.78' intercept='0.11'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='70' height='70' filter='url(%23g)'/%3E%3C/svg%3E"),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='s' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.04' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncG type='linear' slope='0.55' intercept='0.225'/%3E%3CfeFuncB type='linear' slope='0.55' intercept='0.225'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23s)'/%3E%3C/svg%3E"),
+        linear-gradient(176deg, #cbb08d 0%, #bda07d 24%, #ab8c6c 52%, #97795c 78%, #86694f 100%);
+    background-size:
+        70px 70px,
+        200px 200px,
+        100% 100%;
+    background-blend-mode: soft-light, overlay, normal;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    /* The bevel, and it has to be `filter` rather than `text-shadow`: the fill here IS a background, and a
+       background is painted BEFORE a text shadow, so a light shadow offset up-left would lay a flat pale copy
+       of the glyph over the texture it is meant to be lighting. Chained drop-shadows composite behind the
+       finished element instead — two pale edges for the lit face of the cut, a hard black one for its depth,
+       then two soft ones for the shadow the letter throws on the wall. */
+    filter: drop-shadow(0 -1px 0 rgba(247, 234, 208, 0.8)) drop-shadow(-1px -1px 0 rgba(247, 234, 208, 0.38)) drop-shadow(0 2px 0 rgba(0, 0, 0, 0.92))
+        drop-shadow(0 4px 5px rgba(0, 0, 0, 0.62)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.45));
+}
+/* Its own span, so it escapes the clipped gradient above. */
+.entry-stop {
+    color: var(--ember);
+    font-family: var(--face-display);
+    margin-left: 0.06em;
+    filter: drop-shadow(0 0 14px rgba(224, 123, 39, 0.55));
+}
+
+/* ── THE FRAME ──────────────────────────────────────────────────────────────────────────────────────────
+ * A double rule with a turned corner in each elbow, and — where a caller asks for one — a lotus finial astride
+ * the top rail. Opaque rather than tinted glass: small print sitting over a photograph reads at a different
+ * contrast in every line. */
+.entry-frame {
+    position: relative;
+    border: 1px solid var(--rule-strong);
+    background: var(--plate);
+    box-shadow: 0 24px 60px -18px rgba(0, 0, 0, 0.85);
+}
+.entry-frame::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 1px solid var(--rule);
+    pointer-events: none;
+}
+
+/* THE PLAIN PLATE — the site's `.card`, which is the frame at content scale: one rule, one warm panel, and no
+   ornament at all. What a surface gets when it holds reference material rather than a decision. Opaque, for
+   the reason the frame is: small print over a photograph reads at a different contrast in every line. */
+.entry-card {
+    position: relative;
+    border: 1px solid var(--rule);
+    background: var(--plate);
+}
+
+/* The corners keep their drawn weight at any frame size, which is why they are elements and not a stretched
+   border-image. One shape, rotated three times. */
+.entry-corner {
+    position: absolute;
+    width: var(--corner-size);
+    height: var(--corner-size);
+    background-color: var(--gold);
+    opacity: 0.95;
+    pointer-events: none;
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44' fill='none'%3E%3Cg stroke='%23000' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M43 1H13.5A12.5 12.5 0 0 0 1 13.5V43'/%3E%3Cpath d='M43 7H16a9 9 0 0 0-9 9v27' opacity='.55'/%3E%3Cpath d='M25 1c0 3.9-3.1 7-7 7'/%3E%3Cpath d='M1 25c3.9 0 7-3.1 7-7'/%3E%3C/g%3E%3Cpath d='M12.5 8.6 16.4 12.5 12.5 16.4 8.6 12.5z' stroke='%23000' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+    mask-size: contain;
+    mask-repeat: no-repeat;
+}
+.entry-corner-tl {
+    top: -1px;
+    left: -1px;
+}
+.entry-corner-tr {
+    top: -1px;
+    right: -1px;
+    transform: scaleX(-1);
+}
+.entry-corner-bl {
+    bottom: -1px;
+    left: -1px;
+    transform: scaleY(-1);
+}
+.entry-corner-br {
+    right: -1px;
+    bottom: -1px;
+    transform: scale(-1);
+}
+
+/* The finial carries no plate of its own: a filled box behind it reads as a sticker punched through the wall
+   the frame stands on. What separates it from the rail is a glow of its own colour, which the rail passes
+   behind without being cut. */
+.entry-finial {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 1.5rem;
+    transform: translate(-50%, -52%);
+    filter: drop-shadow(0 0 6px rgba(12, 9, 7, 0.95)) drop-shadow(0 0 16px rgba(224, 123, 39, 0.35));
+    pointer-events: none;
+}
+
+/* ── THE TWO PLAQUES ════════════════════════════════════════════════════════════════════════════════════
+ *
+ * A cartouche is an octagon: two concentric rules with a 45-degree notch taken out of all four corners, like a
+ * chamfer off a stone slab. `clip-path` cuts the shape out of everything the element paints, and
+ * `border-image` draws the rules — a nine-slice, because the corner is the one part of the frame that must NOT
+ * stretch, so a wide button and a narrow one get the same notch. The chamfer is set in two places that have to
+ * agree: the artwork's geometry and `--cut`. The diagonals are drawn heavier than the straight runs on
+ * purpose: a corner tile is 13 source units painted into 13px while the artwork is authored on a 40 unit grid,
+ * and a 45-degree stroke loses far more to that resampling than a horizontal one, so the outline visibly
+ * changed colour wherever it turned.
+ *
+ * THIS IS WHERE THE DESIGN SYSTEM'S BUTTON TIERS ARE MET RATHER THAN REPLACED. `primeng.css` gives the app
+ * four ranks; on these two screens the top two are METAL — the committing action is CAST BRONZE and the one
+ * standing beside it is the plain stone cartouche — and `text` / `danger` / `warn` / `success` are left
+ * exactly as the app draws them. That is not a courtesy: a destructive button repainted in the house metal is
+ * a destructive button nobody reads as one, and `skins/README.md` has the same warning for the same reason.
+ *
+ * A DARK PRIMARY ON A DARK WINDOW IS NOT A PRIMARY, which is the whole argument for the bronze. The app's
+ * accent tier is a 10% tint of the accent inside a 20% border — right on the workspace's neutral chrome, and
+ * on THIS ground it is a dark box inside a warm rule, which is also the description of the card behind it, the
+ * field beside it and every other edge on the page. The eye finds differences of LIGHTNESS before anything
+ * else, so the one thing a visitor has to press would be the quietest object on the screen. Bronze, it is the
+ * only light-on-dark thing here.
+ *
+ * Layered below `utilities` (`@layer components`) so a call site's own class still wins, and matched at TWO
+ * classes so it beats the design system's one-class tier rules without an `!important` anywhere. Note that
+ * every tier below repaints its own `box-shadow` in its hover rule: `:where()` contributes no specificity, so
+ * the app's generic `:enabled:hover` is three simple selectors deep and would otherwise wipe the plate's bevel
+ * the moment a pointer arrived (the same trap `skins/README.md` names).
+ *
+ * Two more details in the selectors, both of which cost a bug somewhere if they are dropped. The hover is
+ * `:not(:disabled):hover`, not the `:enabled:hover` the design system writes: `:enabled` matches form controls
+ * only, and the loudest button in this whole flow — "Download for Windows" — is an `<a href>` wearing
+ * `.p-button`, so an `:enabled` hover simply never fires on it. And the exclusion lists are `primeng.css`'s
+ * own MINUS `info` and `contrast`, two severities this app uses at no call site at all; if one ever appears,
+ * add it to every list here rather than to one, or it gets a plaque's geometry with no plate in it. */
+@layer components {
+    .entry .p-button:where(:not(.p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
+        /* The clip must land just OUTSIDE the outer rule, never on it: the frame's diagonal sits at x+y≈7.3 in
+           the artwork's units, which map 1:1 to px here. */
+        --cut: 7.3px;
+
+        position: relative;
+        gap: 0.55rem;
+        padding: 0.7rem 1.5rem;
+        font-family: var(--face-read);
+        font-size: 0.9375rem;
+        font-weight: 500;
+        letter-spacing: 0.015em;
+        line-height: 1.35;
+        border: 1px solid transparent;
+        border-image-slice: 13;
+        border-image-width: 13px;
+        border-image-repeat: stretch;
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        /* A stacking context, so the sheen below can sit at `z-index: -1`: inside one, a negative layer paints
+           after the element's own background and border but BEFORE its inline content, which is where a wash
+           belongs — over the frame, under the label. */
+        z-index: 0;
+    }
+    /* The compact cartouche. The notch shrinks with it: 15 units into 11px is 0.733px per unit, so the same
+       7.3-unit diagonal lands at 5.4px. Without this a `size="small"` button keeps a chamfer sized for a
+       control half again as tall, and the corner eats the label. */
+    .entry .p-button.p-button-sm:where(:not(.p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
+        --cut: 5.4px;
+        padding: 0.4rem 0.9rem;
+        font-size: 0.8125rem;
+        border-image-slice: 15;
+        border-image-width: 11px;
+    }
+    /* An icon inside a control is a FLEX ITEM, not a letter: `block` so it stops sitting on the text baseline
+       with a descender's worth of space under it, and no shrinking, so a long label cannot squash it. */
+    .entry .p-button svg {
+        display: block;
+        flex: none;
+    }
+
+    /* ── THE STONE CARTOUCHE — the rank that stands BESIDE a committing action. Cut from the wall's own rock:
+       a warm dark plate inside a gold rule, with the frame lighting up as a second complete image faded in
+       over the first. It has to be a cross-fade rather than a new `border-image-source`, because the browser
+       cannot interpolate between two images and would repaint the frame on the first hovered frame — the lit
+       state snaps in rather than arriving. */
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
+        color: var(--ink);
+        background: rgba(20, 14, 10, 0.72);
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.5)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.24)' stroke-width='2.24'/%3E%3C/svg%3E");
+        transition: color 0.22s ease;
+    }
+    /* The lit frame, stacked and faded in. Inherits `--cut`, so its notch can never drift from the one the
+       button is clipped to. `inset: -1px` because the frame is painted in the border box. */
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link))::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border: 1px solid transparent;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(222,188,126,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(222,188,126,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
+        border-image-slice: 13;
+        border-image-width: 13px;
+        border-image-repeat: stretch;
+        clip-path: inherit;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+        z-index: -1;
+    }
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):not(:disabled):hover,
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):focus-visible {
+        color: #fff6e6;
+        background: rgba(70, 50, 30, 0.55);
+        border-color: transparent;
+    }
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):not(:disabled):hover::before,
+    .entry .p-button-secondary:where(:not(.p-button-text, .p-button-link)):focus-visible::before {
+        opacity: 1;
+    }
+
+    /* ── CAST BRONZE — the committing action, and the only light-on-dark object on these screens.
+       Gold rather than ember, because ember is the page's one spent colour and filling a plaque with it would
+       leave the accents nothing to be brighter than. Three layers make it metal rather than a swatch, front to
+       back: a specular sweep raking across the plate at the angle the page's own light comes from, a brushed
+       grain (generated, because a repeating gradient off-axis staircases at button size and beats into moiré),
+       and the body. The label is CUT INTO the plate — a warm near-black with one pale hairline above each
+       letter, 11:1 on the metal — and it does not lighten on hover, because metal that brightens does not turn
+       its engraving pale. */
+    .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)) {
+        font-weight: 600;
+        color: #21140a;
+        text-shadow: 0 1px 0 rgba(255, 248, 232, 0.42);
+        background-color: #d9b169;
+        background-image:
+            linear-gradient(100deg, transparent 26%, rgba(255, 250, 236, 0.42) 44%, rgba(255, 250, 236, 0.08) 55%, transparent 68%),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='64'%3E%3Cfilter id='b' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.006 0.9' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.23 0 0 0 0 0.07 0.5 0 0 0 -0.16'/%3E%3C/filter%3E%3Crect width='320' height='64' filter='url(%23b)'/%3E%3C/svg%3E"),
+            linear-gradient(180deg, #f2d69f 0%, #ddb571 40%, #c99a4f 74%, #b3823c 100%);
+        /* Stretched to the button rather than tiled: turbulence has no seam, so a repeat would show its joins,
+           and one field scaled to the plate is how a piece is brushed after it is cut. */
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(255,239,203,0.92)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(120,80,32,0.45)' stroke-width='2.24'/%3E%3C/svg%3E");
+        /* A lit hairline along the top edge and a shade along the foot is the whole of a bevel at this size.
+           The outer pair lifts the plaque off the wall: a warm halo the near-black page has nothing else like,
+           and a short drop under it so the object has somewhere to sit. */
+        box-shadow:
+            inset 0 1px 0 rgba(255, 252, 242, 0.8),
+            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
+            inset 0 0 16px rgba(140, 94, 36, 0.25),
+            0 0 30px rgba(226, 168, 78, 0.3),
+            0 6px 18px -6px rgba(0, 0, 0, 0.75);
+    }
+    /* Under the pointer the plate catches more of the same light rather than changing colour: one warm sheen,
+       one opacity, so the lift arrives as a single movement. */
+    .entry .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success))::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255, 250, 236, 0.42) 0%, rgba(255, 244, 220, 0.12) 55%, transparent 100%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.22s ease;
+        z-index: -1;
+    }
+    .entry
+        .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover,
+    .entry
+        .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):focus-visible {
+        color: #21140a;
+        background-color: #d9b169;
+        border-color: transparent;
+        box-shadow:
+            inset 0 1px 0 rgba(255, 252, 242, 0.8),
+            inset 0 -1px 0 rgba(88, 56, 18, 0.5),
+            inset 0 0 16px rgba(140, 94, 36, 0.25),
+            0 0 38px rgba(226, 168, 78, 0.42),
+            0 8px 22px -6px rgba(0, 0, 0, 0.78);
+    }
+    .entry
+        .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover::after,
+    .entry
+        .p-button:where(:not(.p-button-secondary, .p-button-text, .p-button-outlined, .p-button-link, .p-button-danger, .p-button-warn, .p-button-success)):focus-visible::after {
+        opacity: 1;
+    }
+    /* A plaque nobody may press is a plaque with the light off it — not a faded one. `disabled:opacity` alone
+       leaves a bronze bar still reading as the brightest thing on the card, and dimming only the FILL leaves
+       it in a cream-bright frame, which is the same claim made by the edge instead of the face. The rule goes
+       back to plain gold with the body, so the whole object is unlit at once. */
+    .entry .p-button:disabled {
+        background-image: none;
+        background-color: rgba(30, 22, 15, 0.8);
+        color: var(--ink-subtle);
+        text-shadow: none;
+        box-shadow: none;
+        opacity: 1;
+        border-image-source: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6.7 0.6H33.3M39.4 6.7V33.3M33.3 39.4H6.7M0.6 33.3V6.7' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='1.2'/%3E%3Cpath d='M33.3 0.6L39.4 6.7M39.4 33.3L33.3 39.4M6.7 39.4L0.6 33.3M0.6 6.7L6.7 0.6' fill='none' stroke='rgba(201,160,92,0.34)' stroke-width='2.34'/%3E%3Cpath d='M8.6 4.5H31.4M35.5 8.6V31.4M31.4 35.5H8.6M4.5 31.4V8.6' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='1.15'/%3E%3Cpath d='M31.4 4.5L35.5 8.6M35.5 31.4L31.4 35.5M8.6 35.5L4.5 31.4M4.5 8.6L8.6 4.5' fill='none' stroke='rgba(201,160,92,0.16)' stroke-width='2.24'/%3E%3C/svg%3E");
+    }
+
+    /* ── THE QUIET TIER — no chrome at all until a pointer arrives: an escape hatch, a Cancel, the way back.
+       It is named here for a reason worth knowing, and the same reason is why the checkbox below is named
+       too: PrimeVue's components paint from `--p-*` tokens, `theme.ts` points those at the app's `--color-*`
+       ones, and BOTH are declared on `:root`. A custom property's var() references are substituted where the
+       property is DECLARED, so `--p-button-text-secondary-color` has already resolved to the app's neutral by
+       the time anything inherits it — re-pointing `--color-muted` on `.entry` cannot reach back into it. Every
+       PrimeVue component these screens actually use therefore has to be named, and there are exactly two. */
+    .entry .p-button-text:where(:not(.p-button-danger, .p-button-warn, .p-button-success)) {
+        color: var(--ink-muted);
+        background: transparent;
+        border-color: transparent;
+    }
+    .entry .p-button-text:where(:not(.p-button-danger, .p-button-warn, .p-button-success)):not(:disabled):hover {
+        color: var(--ink);
+        background: rgba(201, 160, 92, 0.09);
+        border-color: transparent;
+    }
+
+    /* ── THE TICKED BOX — the third and last place the ember is spent on this page. A slot cut into the plate
+       while it is empty (the recess the sign-in screen cuts for Google's button, at control size), and the
+       one lit thing on its row once it is not. */
+    .entry .p-checkbox-box {
+        background: #0b0805;
+        border-color: var(--rule-strong);
+    }
+    .entry .p-checkbox:not(.p-disabled):hover .p-checkbox-box {
+        border-color: var(--gold);
+    }
+    .entry .p-checkbox-checked .p-checkbox-box {
+        background: var(--ember);
+        border-color: var(--ember);
+    }
+    .entry .p-checkbox-icon {
+        color: #1a0f06;
+    }
+}

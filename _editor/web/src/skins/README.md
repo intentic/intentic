@@ -122,6 +122,14 @@ One attribute on `<html>`: `data-skin="hud"` or `data-skin="sanctum"`. Every rul
 to it, so an app with no skin selected is not a skin turned down: it is the skin's rules never matching. `none`
 writes no attribute at all.
 
+**Two routes are outside all of this, on purpose.** `/login` and `/setup` are built out of the marketing site's
+own material — see [`../styles/entry.css`](../styles/entry.css) — because a visitor meets them within a minute
+of leaving intentic.dev and has picked no skin yet. That sheet is imported **after** both skins in
+`styles.css`: a skin's rules are `[data-skin=…] .p-button…` (an attribute plus a class), which weighs exactly
+what `.entry .p-button…` weighs, so source order is what settles the tie — the same argument that puts the
+skins after the design system, one step further along. The one thing specificity cannot settle is the
+route-element backdrop above, which both skins exclude by name.
+
 Each stylesheet overrides three tiers and then names a handful of components:
 
 | Tier                  | What it repaints                                                                            |
@@ -179,8 +187,12 @@ Three selectors are worth copying rather than re-deriving, because each was a bu
 
 - a grouped-list slab is `section > .bg-card.divide-y`, **not** `section > .bg-card`: the workspace's file-tab
   strip is also a card-painted direct child of a `<section>`, and it wore a full panel frame across a bar of tabs;
-- the route element is `#app > :first-child`, **not** `#app > *`: `#app` also holds a screen-reader live region
-  and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app;
+- the route element is `#app > :first-child:not(.entry)`, **not** `#app > *`: `#app` also holds a screen-reader
+  live region and a fixed toast layer, and a backdrop painted on the toast layer floats above the whole app.
+  The `:not(.entry)` is the two entry screens opting out — `/login` and `/setup` are dressed as the marketing
+  site the visitor just came from (`styles/entry.css`), and they carry the site's own carved plate, so a skin's
+  horizon under it is a second temple standing behind the first. It has to be written **here**, because the
+  backdrop is drawn with an id and no amount of class specificity in that sheet could reach it;
 - a button-tier rule must exclude `.p-button-danger`, `.p-button-warn` and `.p-button-success` explicitly, or a
   `components`-layer tone silently repaints the destructive button in the skin's own metal.
 

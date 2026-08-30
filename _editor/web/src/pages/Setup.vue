@@ -48,6 +48,7 @@ import { autoSandboxName } from "./setupName";
 import { setupReportView } from "./setupReport";
 import { hostedWaitView } from "./hostedWait";
 import AppBrand from "../components/AppBrand.vue";
+import { useSiteFaces } from "../composables/useSiteFaces";
 
 /* The setup gate's destination (outside the workspace shell). Setup asks for no identity decisions: the
  * sandbox is created on arrival under a name this page picks (autoCreate + setupName.ts), and that name stays
@@ -102,6 +103,27 @@ const route = useRoute();
 // of the controls that carry them.
 const { mobile } = useDevice();
 const { user } = useAuth();
+
+/* THIS SCREEN IS THE SECOND HALF OF THE DOOR, AND IT IS DRESSED LIKE ONE.
+ *
+ * `/login` is built out of the marketing site's own material — the temple plate, the carved display type, the
+ * gold hairlines, the turned corner, the cast-bronze plaque — precisely so that pressing "Create your
+ * workspace" does not feel like arriving at a different company. This page is what a visitor meets thirty
+ * seconds later, and for a long time it was the app's ordinary chrome the moment they got here: flat cards on
+ * a flat canvas, a 16px heading, no ground, and a picker whose chosen rung was marked by a one-pixel border
+ * that was the same weight as the two it beat. Nothing on it looked pressable, which on the one screen whose
+ * entire job is to get somebody to press something is not a cosmetic complaint.
+ *
+ * So it wears the same stone. The material is `styles/entry.css`, shared with the door rather than copied from
+ * it; what belongs to this page is where things sit, which rung reads as chosen, and which panel earns the
+ * ornament. Three rules govern that, and they are the site's own:
+ *   · STRUCTURE IS GOLD. Every rule, every frame, every mark.
+ *   · THE EMBER IS SPENT, NEVER SPREAD: the full stop on the headline, the mark on the rung you have chosen,
+ *     a ticked box. Three places on the page, and no more.
+ *   · AN ORNAMENT EARNS ITS KEEP ON A PANEL BIG ENOUGH TO CARRY IT. The turned corners are drawn twice — on
+ *     the run card, and on the rung you are standing on — and the lotus finial exactly once.
+ * The faces are fetched by the route, not by the app, for the reason `useSiteFaces` gives. */
+useSiteFaces();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 
 // The sandbox this page is setting up (holds its connection token). Null only while the auto-create below is in
@@ -566,11 +588,20 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
     machine.value === `hosted` ? `hosted` : addressless.value ? `none` : mode.value === `intentic` ? `intentic` : `own`,
 );
 
-// The quiet label on the address row: the hostname is supporting information, never the card's heading.
-const factLabel = `shrink-0 text-sm text-muted`;
+/* The quiet label on the address row: the hostname is supporting information, never the card's heading. It is
+ * set as the page's band opener rather than as body copy — small, spaced and gold — because on a carved
+ * surface a caption in the reading face at the reading colour is indistinguishable from a sentence, and this
+ * one is a field name. */
+const factLabel = `fact-label shrink-0`;
 
-// A stable value slot keeps every address state—text, spinner, or failure—on the same baseline.
-const factSlot = `flex min-h-8 min-w-0 items-center rounded-md border border-transparent px-2 text-sm text-content`;
+/* A stable value slot keeps every address state—text, spinner, or failure—on the same baseline.
+ *
+ * The MONO is added by the two branches that print a real hostname and by neither of the others, which is a
+ * distinction worth keeping: a hostname is the one string on this card somebody may have to compare character
+ * by character, and "Assigned when your machine starts" set in a terminal face is a sentence pretending to be
+ * a value. */
+const factSlot = `flex min-h-8 min-w-0 items-center text-sm text-content`;
+const factHost = `${factSlot} fact-host font-mono`;
 
 // There is one lane now: every sandbox's address is derived from its own connect token, so nothing has to be
 // chosen before a code can be minted. `targetKey` survives as the mint's dedupe/stale-response key.
@@ -1690,8 +1721,20 @@ watch(commandReady, (ready) => {
 
 <template>
     <!-- dvh, not vh: a phone's collapsing browser chrome makes 100vh taller than the screen, which parks the
-         last step under the address bar on first paint. -->
-    <div class="scrollbar-thin min-h-dvh w-full overflow-auto bg-canvas text-content">
+         last step under the address bar on first paint. (`.entry` carries the min-height, the ground and the
+         ink — see styles/entry.css.) -->
+    <div class="entry vestibule scrollbar-thin w-full overflow-auto">
+        <!-- THE LINTEL. The same carved plaque the sign-in screen stands on, cropped to a band across the top
+             and dissolved into the canvas by the veil before the working column starts. The door lets the art
+             fill the screen because the door is COMPOSED against it: one control, on the axis the two figures
+             leave empty. This page is a picker, a command and a reference column, and every line of that would
+             otherwise land on a devata — so the picture is kept where it is doing structural work, behind the
+             masthead, and is depth rather than subject below it. -->
+        <div class="entry-plate" aria-hidden="true">
+            <div class="entry-plate-img"></div>
+            <div class="entry-veil"></div>
+        </div>
+
         <!-- The page widens at xl to make room for a second column: see the aside below the steps. Below that
              it is the single centred column it has always been, and max-w-3xl still governs the steps
              themselves, so the command never gets narrower than it is today at any width. 74rem is that
@@ -1700,56 +1743,57 @@ watch(commandReady, (ready) => {
         <div
             class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[74rem]"
         >
-            <!-- Wraps rather than shrinks: the three items share one line at desktop widths, and on a phone the
-                 escape hatch takes the first line on its own (`order-first w-full`) so the title keeps the full
-                 width instead of collapsing to "Set up / your / workspace" beside a button pushed off-screen. -->
-            <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <!-- Escape hatch for a returning user: they have a workspace that already works, so /'s
-                     requireSetup guard lets them back into it. Hidden for a new user, who'd only bounce back:
-                     which is what `length > 0` was for, and what it stopped doing the moment this page created
-                     a row of its own: naming a sandbox made "Back to workspace" appear beside the very first
-                     step, offering a finished workspace to someone who has not run anything yet. -->
-                <Button
-                    v-if="otherWorkspace"
-                    :as="RouterLink"
-                    to="/"
-                    label="Back to workspace"
-                    severity="secondary"
-                    :text="true"
-                    class="order-first -ml-3 w-full justify-start md:order-last md:ml-auto md:w-auto md:shrink-0"
-                >
-                    <template #icon><Icon name="arrow-left" /></template>
-                </Button>
-                <!-- The site's mark, unboxed. A gradient tile and drop shadow put an app-icon treatment around
-                     a drawing that already carries the brand, and Sanctum's material language is deliberately
-                     flat wherever words sit. -->
-                <AppBrand shape="mark" class="shrink-0 text-2xl md:text-3xl" />
-                <!-- `contents` on a phone: the h1 becomes the logo's row-mate and the subtitle a full-width row
-                     of its own, so the promise gets the whole width instead of a 200px column. From md up the
-                     wrapper is a normal block again and the two stack beside the logo as before. -->
-                <div class="contents md:block md:min-w-0 md:flex-1">
-                    <!-- Medium, not semibold, and every heading under it follows: at a screen's worth of dark
-                         surfaces this page was set almost entirely in bold: page title, three step headings, the
-                         panel's, and a hierarchy in which everything is emphasised has none. Size and colour
-                         carry it now; weight only marks the step you are being asked to read.
-                         FOUR SIZES ON THE WHOLE PAGE, and they are the theme's own: this title, a card heading
-                         (StepSection's, at the body size), `text-sm` for the things that are VALUES: the two
-                         facts, a rung's name, the panel's heading, anything sitting in or beside a field, since
-                         `ui.input` is that size, and `text-xs` for every word that is prose. `text-2xs` is
-                         gone from this flow entirely: an 11px caption under 12px body is not a tier anybody
-                         reads as one, it is the same sentence looking accidentally smaller, and this page had it
-                         in nine places. A 24px title over an 11px line was the widest ramp in the app for the
-                         screen with the least on it. -->
-                    <h1 class="min-w-0 flex-1 text-lg font-medium md:text-xl">Set up your workspace</h1>
-                    <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
-                         work the attach lane doesn't do. -->
-                    <p class="w-full text-sm text-muted">
-                        <template v-if="lane === `attach`"
-                            >Point intentic at the sandbox you're already running. One address, and you're in.</template
-                        >
-                        <template v-else>Pick where it runs. You'll be working in it in a minute or two.</template>
-                    </p>
+            <!-- THE MASTHEAD, laid out the way the site lays out every page but its home page: the mark, then
+                 an eyebrow, a carved heading and a line of lede, LEFT-ALIGNED down the column the work is in.
+                 The door is centred because its art has an empty middle to be centred on; a centred masthead
+                 over an asymmetric working page is a heading belonging to nothing underneath it.
+                 It used to be a 16px medium h1 beside a 24px mark, which is the heading a settings tab gets —
+                 on the screen a stranger meets second, over the only real decision the product asks them to
+                 make. Playfair at display size, cut into stone, is what the page before this one promised. -->
+            <header class="masthead">
+                <div class="mast-top">
+                    <AppBrand class="mast-brand" />
+                    <!-- Escape hatch for a returning user: they have a workspace that already works, so /'s
+                         requireSetup guard lets them back into it. Hidden for a new user, who'd only bounce
+                         back: which is what `length > 0` was for, and what it stopped doing the moment this
+                         page created a row of its own: naming a sandbox made "Back to workspace" appear beside
+                         the very first step, offering a finished workspace to someone who has not run anything
+                         yet. Quiet, and quiet is the whole point: it is the one control on the page that must
+                         not compete with the plaque below it. -->
+                    <Button
+                        v-if="otherWorkspace"
+                        :as="RouterLink"
+                        to="/"
+                        label="Back to workspace"
+                        severity="secondary"
+                        :text="true"
+                        class="mast-back shrink-0"
+                    >
+                        <template #icon><Icon name="arrow-left" /></template>
+                    </Button>
                 </div>
+
+                <!-- THE STATION THE READER IS STANDING ON, in the words they were shown it in. The sign-in
+                     screen's rail names three beats and this is the second of them, verbatim, so the page a
+                     visitor lands on announces itself as somewhere they have already been told about rather
+                     than as a new subject. True in both lanes: attach exists precisely because the sandbox is
+                     already up and waiting. -->
+                <p class="entry-eyebrow mast-eyebrow">
+                    <span class="entry-lozenge"></span>
+                    <span>Your sandbox is waiting</span>
+                </p>
+
+                <!-- One beat, one ember stop. The door spends two on its headline because a headline is all it
+                     has; here the page's work starts four inches below, and a second carved sentence would be
+                     the loudest thing on a screen whose loudest thing has to be a rung. -->
+                <h1 class="mast-headline"><span class="entry-display">Set up your workspace</span><span class="entry-stop">.</span></h1>
+
+                <!-- The promise has to match the lane: "a few minutes" and "use intentic's domain" describe
+                     work the attach lane doesn't do. -->
+                <p class="mast-lede">
+                    <template v-if="lane === `attach`">Point intentic at the sandbox you're already running. One address, and you're in.</template>
+                    <template v-else>Pick where it runs. You'll be working in it in a minute or two.</template>
+                </p>
             </header>
 
             <!-- Two columns from xl: the steps, and a docked reference panel that stops covering them. Below xl
@@ -1762,7 +1806,15 @@ watch(commandReady, (ready) => {
                          it and no heading is a form nobody knows the purpose of, and it takes an icon rather
                          than a number, since it is the whole flow and a "1" would promise a step 2 that is never
                          coming. -->
-                    <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox">
+                    <StepSection v-if="lane === `attach`" icon="link" title="Connect your sandbox" class="entry-frame rounded-none work-card">
+                        <!-- The turned corners ride in the body slot: they are absolutely positioned, so they
+                             leave the flow the moment they are painted, and the card they hang off is
+                             `.entry-frame`, which is what makes it their containing block. This lane IS the
+                             whole flow when the page picks it, so it earns the ornament the run card gets. -->
+                        <span class="entry-corner entry-corner-tl"></span>
+                        <span class="entry-corner entry-corner-tr"></span>
+                        <span class="entry-corner entry-corner-bl"></span>
+                        <span class="entry-corner entry-corner-br"></span>
                         <!-- WHY YOU ARE HERE, when the page chose this lane rather than the reader. Arriving on
                              "give us your domain" with no explanation reads as a step missing; one sentence
                              naming what this platform does turns it into the flow it actually is. -->
@@ -1971,11 +2023,21 @@ watch(commandReady, (ready) => {
                         <!-- One column per rung, so two rungs are two halves rather than two thirds of a row
                              with a hole where the third would be. -->
                         <div
-                            class="grid gap-2"
+                            class="grid gap-3"
                             :class="ladderOptions.length === 2 ? `sm:grid-cols-2` : `sm:grid-cols-3`"
                             role="radiogroup"
                             aria-label="Where the sandbox runs"
                         >
+                            <!-- CHOOSING A RUNG TURNS ITS CORNERS, and that is the page's one structural
+                                 selection signal. It used to be `border-link bg-overlay`: a one-pixel rule in
+                                 the link colour, on a row where the two rungs NOT chosen were also a one-pixel
+                                 rule on a plate. Three cards differing by the tint of a hairline is a decision
+                                 the reader has to hunt for on the screen where the decision is the whole
+                                 point — and the site already owns the answer, because a turned corner is how
+                                 every frame on intentic.dev says "this one is a thing". Chosen, the plate
+                                 lifts, the rule goes to full gold, the four elbows are drawn and the mark
+                                 under the title lights ember. Nothing about it is a colour a reader has to
+                                 have been taught. -->
                             <button
                                 v-for="option in ladderOptions"
                                 :key="option.value"
@@ -1983,14 +2045,14 @@ watch(commandReady, (ready) => {
                                 role="radio"
                                 :aria-checked="machine === option.value"
                                 :disabled="hostedBusy || (option.value === `hosted` && hostedSpent)"
-                                class="flex cursor-pointer flex-col items-start gap-1 rounded-xl border px-3.5 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                                :class="
-                                    machine === option.value
-                                        ? `border-link bg-overlay`
-                                        : `border-line bg-card hover:border-line-strong hover:bg-overlay/40`
-                                "
+                                class="rung"
+                                :class="machine === option.value ? `rung-on` : ``"
                                 v-action="() => chooseMachine(option.value)"
                             >
+                                <span class="entry-corner entry-corner-tl"></span>
+                                <span class="entry-corner entry-corner-tr"></span>
+                                <span class="entry-corner entry-corner-bl"></span>
+                                <span class="entry-corner entry-corner-br"></span>
                                 <!-- A PICTURE, NOT A GLYPH (SetupRungArt carries the reasoning). This row used
                                      to be a 16px icon beside the title, after a stacked 2xl glyph was pulled
                                      for spending a third of the card on a bolt that only said "instantly"
@@ -2017,8 +2079,19 @@ watch(commandReady, (ready) => {
                                         <Icon name="spinner" spin class="text-xl text-link" />
                                     </span>
                                 </span>
-                                <span class="min-w-0 text-sm font-medium text-content">{{ option.title }}</span>
-                                <span class="text-xs text-muted">{{ option.meta }}</span>
+                                <!-- The mark beside the name is the site's full stop, and it is the second of
+                                     the page's three ember spends: quiet gold on a rung you have not taken,
+                                     lit on the one you have. It sits on the title's line rather than above it
+                                     so the name reads as a station on the row instead of a card that happens
+                                     to be adjacent — the same knot the door's progress rail is strung on. -->
+                                <span class="rung-name">
+                                    <span class="entry-lozenge"></span>
+                                    <span class="min-w-0">{{ option.title }}</span>
+                                </span>
+                                <!-- The cost, in the metal. It is the one line on a rung a reader is
+                                     comparing ACROSS the row rather than reading down, so it is the one line
+                                     given a colour of its own. -->
+                                <span class="rung-cost">{{ option.meta }}</span>
                                 <!-- Three or four words: what this rung asks of you, or where it puts the
                                      machine. The sentences that used to sit here are under the row now, for
                                      the rung that was actually chosen. -->
@@ -2030,7 +2103,17 @@ watch(commandReady, (ready) => {
                         </div>
                     </div>
 
-                    <section v-if="created && lane === `provision`" class="ui-card flex flex-col gap-4 p-4 md:p-5">
+                    <!-- THE ONE FRAMED OBJECT ON THE PAGE, and the only place the lotus finial is drawn here.
+                         This is the panel every rung leads to and the panel every press happens on, and it is
+                         big enough to carry the ornament: an elbow at each corner and the mark astride the top
+                         rail, exactly as the sign-in gate wears them. Everything above it is a choice; this is
+                         the consequence, and it should look like the thing you have arrived at. -->
+                    <section v-if="created && lane === `provision`" class="entry-frame work-card run-card flex flex-col gap-4">
+                        <span class="entry-corner entry-corner-tl"></span>
+                        <span class="entry-corner entry-corner-tr"></span>
+                        <span class="entry-corner entry-corner-bl"></span>
+                        <span class="entry-corner entry-corner-br"></span>
+                        <span class="entry-finial" aria-hidden="true"><AppBrand shape="mark" /></span>
                         <!-- WHERE THIS MACHINE WILL ANSWER: the rung's consequence, reported by the card the rung
                              chose. It spent a release as the second line of the sandbox card, which put a hex
                              hostname above the only decision on the page and made a stranger skip it to reach the
@@ -2047,7 +2130,12 @@ watch(commandReady, (ready) => {
                                  offered) so the escape hatch beside it is reachable in all of them. It used to
                                  hang off the success branch alone, which left a reader whose mint had just
                                  errored with no way to choose a different address at all. -->
-                            <div v-if="addressFact !== `own`" class="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
+                            <!-- STACKED ON A PHONE, side by side from `sm`. A `max-content` label column spends
+                                 about 80px of a 250px row on the word ADDRESS, and what is left cannot hold a
+                                 hostname — the value ran off the card and was clipped at 320px. Above the
+                                 value instead, the address gets the whole width, which is also the only place
+                                 on this card where a string may have to be read character by character. -->
+                            <div v-if="addressFact !== `own`" class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-facts sm:items-center">
                                 <span :class="factLabel">Address</span>
                                 <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                     <!-- A hosted sandbox's address is the daemon's own announce: no mint, no
@@ -2060,7 +2148,7 @@ watch(commandReady, (ready) => {
                                          the button is pressed is the same lie the addressless platform used to
                                          tell. -->
                                     <template v-if="addressFact === `hosted`">
-                                        <span v-if="hostedHost" :class="`${factSlot} break-words`">{{ hostedHost }}</span>
+                                        <span v-if="hostedHost" :class="factHost">{{ hostedHost }}</span>
                                         <span v-else-if="hostedRow !== null" :class="`${factSlot} gap-2 text-xs text-muted`">
                                             <Icon name="spinner" spin /> Assigned as your machine starts…
                                         </span>
@@ -2076,7 +2164,7 @@ watch(commandReady, (ready) => {
                                         <!-- `.title`: this is a NoticeModel, and interpolating the object itself
                                              put its JSON on the card. -->
                                         <span v-if="setupError" :class="`${factSlot} text-xs text-danger`">{{ setupError.title }}</span>
-                                        <span v-else-if="setup" :class="`${factSlot} break-words`">{{ setup.hostname }}</span>
+                                        <span v-else-if="setup" :class="factHost">{{ setup.hostname }}</span>
                                         <span v-else :class="`${factSlot} gap-2 text-xs text-muted`">
                                             <Icon name="spinner" spin /> Preparing your intentic domain…
                                         </span>
@@ -2287,7 +2375,7 @@ watch(commandReady, (ready) => {
                             <!-- The theme's own "a place for something rather than a thing" surface
                                  (`ui-card-dashed`), not a hand-drawn dashed rectangle: one waiting-room look,
                                  dressed by whichever skin is on. -->
-                            <div v-else class="ui-card ui-card-dashed flex items-start gap-2 p-3 text-xs text-muted">
+                            <div v-else class="ui-card ui-card-dashed flex items-start gap-2 rounded-none p-3 text-xs text-muted">
                                 <Icon name="lock" class="mt-0.5 shrink-0" />
                                 <span>{{ lockedReason }}</span>
                             </div>
@@ -2673,7 +2761,9 @@ watch(commandReady, (ready) => {
                     v-if="created && lane === `provision` && machine !== `hosted`"
                     class="hidden flex-col gap-3 xl:sticky xl:top-8 xl:flex xl:w-88 xl:shrink-0"
                 >
-                    <div class="ui-card flex flex-col gap-3 p-4">
+                    <!-- The plain plate: one rule, one panel, no ornament. Reference material is not a
+                         decision, and an elbow at each corner of it would be the page claiming otherwise. -->
+                    <div class="entry-card flex flex-col gap-3 p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" :downloads="!appFirst" />
                         <!-- Sync belongs with what the command DOES, not with the reader's path to running it:
                              it is on by default, and the only thing anyone needs from it here is to see that it
@@ -2702,3 +2792,202 @@ watch(commandReady, (ready) => {
         </div>
     </div>
 </template>
+
+<style scoped>
+/* THE MATERIAL IS IN `styles/entry.css`, shared with the sign-in screen: the metals, the ink, the faces, the
+ * plate, the eyebrow, the carved display type, the frame kit, the plain plate and the two button plaques.
+ * Everything below is this page's own COMPOSITION — how deep the art comes down, how the masthead is set, and
+ * the two objects only this page has: a rung, and the framed card every rung leads to. */
+
+/* ── THE GROUND ────────────────────────────────────────────────────────────────────────────────────
+ * How far the picture reaches, and where the veil closes over it. Both track the art rather than being
+ * chosen: the plaque is laid across the full width at its own 16:9, so its height is `56.25vw` and any
+ * length expressed as a share of the viewport width stays in the same place on it at every size. The clamps
+ * are the two ends where that stops being true — a phone, where the art is 220px tall and a fixed 26rem veil
+ * would be closing over canvas that was never painted, and a very wide monitor, where the art is 1000px tall
+ * and the masthead would be floating in the middle of a temple. */
+.vestibule .entry-plate {
+    --plate-reach: clamp(16rem, 40vw, 34rem);
+}
+.vestibule .entry-veil {
+    /* Clear: what the masthead stands on, untouched. Hold: where the canvas is fully closed, which is above
+       the picker at every width — the decision is read on flat ground, never on carving.
+       The lower ends of both clamps are the phone, and they are the numbers that matter: the art there is
+       only about 220px tall, so a veil that starts at a share of the width begins dissolving a picture that
+       has barely started. Held open to 5rem and closed by 13rem, the whole band the masthead stands on is
+       carving and the picker still lands on canvas. */
+    --veil-clear: clamp(5rem, 11vw, 9rem);
+    --veil-hold: clamp(13rem, 34vw, 26rem);
+}
+
+/* ── THE MASTHEAD ──────────────────────────────────────────────────────────────────────────────────
+ * Left down the column the work is in, which is how the site sets every page but its home page. */
+.masthead {
+    padding-bottom: clamp(0.75rem, 2vw, 1.5rem);
+}
+.mast-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: clamp(1.5rem, 5vw, 2.75rem);
+}
+.mast-brand {
+    font-size: 1.125rem;
+}
+/* The one control that must not read as an action: it is the way BACK, on a page about going forward. The
+   design system's quiet tier already draws it that way; this only pulls it in line with the mark opposite. */
+.mast-back {
+    font-size: 0.8125rem;
+}
+.mast-eyebrow {
+    margin-bottom: 0.9rem;
+}
+.mast-headline {
+    /* Between the door's headline and the site's page heroes: this one shares its screen with a decision, so
+       it stops a size short of a hero and a size above anything else here. */
+    font-family: var(--face-display);
+    font-size: clamp(1.75rem, 4.6vw, 2.75rem);
+    font-weight: 600;
+    line-height: 1.24;
+    text-wrap: balance;
+}
+.mast-lede {
+    margin-top: 1rem;
+    /* Counted in characters rather than rem, the way the site counts its reading columns: a rem cap is a fixed
+       pixel width, and the same box holds two and a half times the line length at caption size that it holds
+       at lede size. Comfortable reading is 45–75 characters, and both lanes' sentences fit on two lines here. */
+    max-width: 56ch;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    color: #c2a077;
+    text-wrap: pretty;
+}
+
+/* ── THE FRAMED CARDS ──────────────────────────────────────────────────────────────────────────────
+ * `.entry-frame` draws the double rule and the plate; the padding is here because it is the one part that is
+ * responsive, and because it has to clear an ornament. The elbows reach `--corner-size` in from each corner,
+ * so a body inset shallower than that puts a paragraph under a gold curl. */
+.work-card {
+    padding: 1.6rem 1.35rem 1.35rem;
+}
+/* The finial sits astride the top rail, half above it and half below, so the card it stands on owes it a
+   little more headroom than the ornament at the corners needs — and a little more air ABOVE the rail, or the
+   mark lands in the seam between this card and the rung row and reads as belonging to neither. */
+.run-card {
+    margin-top: 0.5rem;
+    padding-top: 1.9rem;
+}
+
+/* The field name on the address row: the page's band opener at label size. Small, spaced and gold, because on
+   a carved surface a caption in the reading face at the reading colour is indistinguishable from a sentence,
+   and this one names a value rather than saying anything. */
+.fact-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+/* `anywhere`, not `break-word`, and the difference is the whole fix. A provisioned hostname is ONE token with
+   no spaces in it — `sandbox-be2f03ea61c1.sbx.intentic.dev` — and `overflow-wrap: break-word` breaks a long
+   word only after trying to place it whole on a line of its own, which on a 320px phone still overran the card
+   and clipped the tail. `anywhere` lets the break land mid-token, and it is the right trade here precisely
+   because this is a machine address rather than prose: a reader compares it character by character, so seeing
+   all of it on two lines beats seeing three quarters of it on one. */
+.fact-host {
+    overflow-wrap: anywhere;
+}
+@media (min-width: 48rem) {
+    .work-card {
+        padding: 1.9rem 1.75rem 1.75rem;
+    }
+    .run-card {
+        padding-top: 2.25rem;
+    }
+}
+
+/* ── A RUNG ────────────────────────────────────────────────────────────────────────────────────────
+ * Three plaques on a shelf, and the one you have taken is the one with its corners turned. */
+.rung {
+    /* Smaller than a frame's, because these are cards rather than panels: the ornament has to read as an
+       elbow on a 200px box, not as a bracket around it. */
+    --corner-size: 1.25rem;
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+    padding: 1rem 1.1rem 1.1rem;
+    text-align: left;
+    cursor: pointer;
+    border: 1px solid var(--rule);
+    background: var(--plate);
+    transition:
+        border-color 0.22s ease,
+        background-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.22s ease;
+}
+.rung:hover:not(:disabled) {
+    border-color: var(--rule-strong);
+    background: #191309;
+}
+.rung:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+/* Drawn only on the rung that was chosen. They are in the markup on all three so the box never resizes and
+   the row cannot shift by a pixel when the choice moves; what changes is whether they are painted. */
+.rung .entry-corner {
+    opacity: 0;
+    transition: opacity 0.22s ease;
+}
+.rung-on .entry-corner {
+    opacity: 0.95;
+}
+.rung-on {
+    border-color: var(--gold);
+    background: #1c150c;
+    /* A second hairline just outside the first is what gives the chosen plate its weight without changing its
+       geometry: a 2px border would move the content 1px and the row would twitch as the choice moves. The
+       drop under it is what lifts it off the shelf the other two are still lying on. */
+    box-shadow:
+        0 0 0 1px rgba(201, 160, 92, 0.22),
+        0 18px 40px -24px rgba(0, 0, 0, 0.9);
+    transform: translateY(-1px);
+}
+.rung-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+    font-family: var(--face-mark);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--ink);
+}
+.rung-name .entry-lozenge {
+    width: 0.5rem;
+    height: 0.5rem;
+    color: var(--ink-subtle);
+    transition: color 0.22s ease;
+}
+/* The second of the page's three ember spends. It is a mark, not a fill: the glow is what a lit thing does on
+   a near-black ground, and it is the whole difference between "chosen" and "one of three". */
+.rung-on .rung-name {
+    color: var(--gold-bright);
+}
+.rung-on .rung-name .entry-lozenge {
+    color: var(--ember);
+    filter: drop-shadow(0 0 5px rgba(224, 123, 39, 0.9)) drop-shadow(0 0 12px rgba(224, 123, 39, 0.55));
+}
+.rung-cost {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--gold);
+}
+</style>

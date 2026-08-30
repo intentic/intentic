@@ -138,8 +138,11 @@
      * `background-attachment: fixed` is what makes the pair read as ONE backdrop
      * rather than two: both are anchored to the viewport, so the grid lines and the glow line up across every
      * panel edge in the window and stay put while a column scrolls. */
+    /* `:not(.entry)` is the sign-in and setup screens opting out. They carry the marketing site's own carved
+       plate, and this backdrop is drawn with an id, so no amount of class specificity in `styles/entry.css`
+       could turn it off from there — it has to be excluded by name here. */
     [data-skin="hud"] body,
-    [data-skin="hud"] #app > :first-child {
+    [data-skin="hud"] #app > :first-child:not(.entry) {
         background-image:
             radial-gradient(115% 80% at 6% -14%, var(--hud-glow-faint), transparent 56%),
             radial-gradient(95% 70% at 104% 112%, color-mix(in oklab, var(--color-primary-500) 20%, transparent), transparent 52%),
