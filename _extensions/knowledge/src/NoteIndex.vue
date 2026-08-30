@@ -2,7 +2,6 @@
 import { Icon, type NavGroup, NavRail, Row, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, nextTick, watch } from "vue";
 import type { SearchHit } from "./contract";
-import { dotOfType } from "./knowledgeNote";
 
 /* WHICH NOTE: the search's answers, as the thing you pick from.
  *
@@ -29,10 +28,7 @@ import { dotOfType } from "./knowledgeNote";
  * hand-roll had. Measured on a real knowledge base that turned 52px of row height into a column of slabs where
  * the name was the smallest thing on each row, and the kind was already said twice (a dot and the word
  * "decision"). The hub section menu beside this pane is title-only rows at the same density; this index now
- * matches it, and the note's own header carries kind, path and date when somebody opens one.
- *
- * THE KIND STAYS AS A DOT (see dotOfType), the same colour its badge paints in the pane. Recognition is what a
- * kind is for in a list; reading it is what the pane is for. */
+ * matches it, and the note's own header carries kind, path and date when somebody opens one. */
 
 const { hits, selected, isLoading } = defineProps<{
     hits: readonly SearchHit[];
@@ -55,7 +51,7 @@ const outline = useLoadingReveal(
 );
 
 /* WHY A NOTE IS IN THE ANSWER, for the two hits that cannot show it. `title` and `type` matched on something
- * the reader is already looking at (the name, and the kind dot beside it), and `field` and `body` bring the
+ * the reader is already looking at (the name), and `field` and `body` bring the
  * matching words themselves as a snippet, which says it better than any label could. An alias and a tag are
  * the pair whose matching text appears NOWHERE on the row, and they are exactly the hits that otherwise read
  * as the search having returned something at random.
@@ -68,19 +64,15 @@ const REASON: Record<string, string> = { alias: `matched an alias`, tag: `matche
 interface NoteRow {
     readonly path: string;
     readonly title: string;
-    readonly type: string | undefined;
     // Present only when the search found something the title cannot say: a snippet, or why an alias/tag hit.
     readonly detail: string | undefined;
-    readonly dot: string;
 }
 
 const rows = computed<NoteRow[]>(() =>
     hits.map((hit) => ({
         path: hit.path,
         title: hit.title,
-        type: hit.type,
         detail: hit.snippet ?? REASON[hit.matched],
-        dot: dotOfType(hit.type),
     })),
 );
 
@@ -128,25 +120,6 @@ watch(
                 :selected="row.path === selected"
                 @click="emit(`pick`, row.path)"
             >
-                <!-- WHAT KIND OF THING THIS IS, at 6px. Drawn even for a note with no kind (neutral), because
-                     the alternative is every untyped row starting its title 16px left of its neighbours', and a
-                     ragged left edge costs a scanning column more than a grey dot does.
-
-                     IT CARRIES THE WORD FOR ANYONE NOT READING THE COLOUR. The pill it replaced was text, so a
-                     screen reader heard the kind on every row; a coloured dot that is only decorative would
-                     have taken that away — and on an alias or a tag hit, where the line below is explaining the
-                     match instead, there is nothing else on the row that says it. The neutral dot on an untyped
-                     note has no word to give and stays decoration. -->
-                <template #lead>
-                    <span
-                        class="size-1.5 shrink-0 rounded-full"
-                        :class="row.dot"
-                        :role="row.type === undefined ? undefined : `img`"
-                        :aria-label="row.type"
-                        :aria-hidden="row.type === undefined ? `true` : undefined"
-                        :title="row.type"
-                    ></span>
-                </template>
                 <template #title>
                     <span class="block truncate">{{ row.title }}</span>
                 </template>
