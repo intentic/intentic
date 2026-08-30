@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentPath, runUpgrade, type UpgradeExec, upgradeMessage } from "./upgrade.js";
+import { agentPath, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 
 /* A scripted UpgradeExec that records what happened in order. The ORDER is the whole subject of these tests: an
  * upgrade is a sequence of steps chosen so that everything reversible happens before the one thing that is not,
@@ -7,6 +7,9 @@ import { agentPath, runUpgrade, type UpgradeExec, upgradeMessage } from "./upgra
 const scripted = (overrides: Partial<UpgradeExec> & { readonly downloaded?: string | undefined } = {}) => {
     const steps: string[] = [];
     const exec: UpgradeExec = {
+        // Unresolvable by default, which is the shape every test below was written against: nothing is skipped
+        // on the strength of a tag, the download happens, and what it downloaded is what decides.
+        published: async () => await Promise.resolve(undefined),
         fetchTo: async (_url, dest) => {
             steps.push(`fetch→${dest}`);
             return await Promise.resolve();
@@ -40,10 +43,23 @@ const scripted = (overrides: Partial<UpgradeExec> & { readonly downloaded?: stri
 
 const URL = "https://example.test/intentic-machine-linux-amd64";
 
+// Every test drives the same command, and only three things about it ever differ: the scripted exec, the
+// version this machine is on, and whether it was forced. The asset is a FUNCTION because the real caller pins
+// the URL to the version it resolved (assetUrl), and this one ignores that argument on purpose: what the tests
+// are about is the order of the steps, not the address they fetch from.
+const upgrade = async (exec: UpgradeExec, installed: string, force = false): Promise<UpgradeOutcome> =>
+    await runUpgrade(
+        exec,
+        () => URL,
+        installed,
+        force,
+        () => undefined,
+    );
+
 describe("runUpgrade", () => {
     it("verifies the download before anything on this machine is touched", async () => {
         const { steps, exec } = scripted();
-        const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
+        const outcome = await upgrade(exec, "1.0.0");
         expect(outcome).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
         // The probe comes after the fetch and before the watcher is stopped, so a bad download costs nothing.
         expect(steps.indexOf(`probe ${agentPath}.new`)).toBeLessThan(steps.indexOf("stop"));
@@ -54,7 +70,7 @@ describe("runUpgrade", () => {
     // architecture all download perfectly well; none of them is an agent, and the machine already has one.
     it("keeps the working agent when what downloaded doesn't run", async () => {
         const { steps, exec } = scripted({ downloaded: undefined });
-        const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
+        const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind).toBe("failed");
         expect(steps).not.toContain("stop");
         expect(steps.some((step) => step.startsWith(`swap ${agentPath}.new`))).toBe(false);
@@ -63,7 +79,7 @@ describe("runUpgrade", () => {
 
     it("leaves everything alone, and the watcher running, when the machine is already current", async () => {
         const { steps, exec } = scripted({ downloaded: "1.0.0" });
-        expect(await runUpgrade(exec, URL, "1.0.0", false, () => undefined)).toEqual({ kind: "current", version: "1.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
         // Nothing restarts. A command that bounces the watcher even when there is nothing to do is a command
         // people learn not to run.
         expect(steps).not.toContain("stop");
@@ -74,7 +90,7 @@ describe("runUpgrade", () => {
         const { steps, exec } = scripted({
             fetchTo: () => Promise.reject(new Error("getaddrinfo ENOTFOUND")),
         });
-        const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
+        const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind).toBe("failed");
         expect(upgradeMessage(outcome)).toContain("nothing was changed");
         expect(steps).not.toContain("stop");
@@ -85,7 +101,7 @@ describe("runUpgrade", () => {
      * sync at all, which is the outcome that would make the whole command not worth running. */
     it("restores the previous agent and restarts it when the new one won't stay up", async () => {
         const { steps, exec } = scripted({ watcherAlive: () => Promise.resolve(false) });
-        const outcome = await runUpgrade(exec, URL, "1.0.0", false, () => undefined);
+        const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind).toBe("failed");
         expect(upgradeMessage(outcome)).toContain("1.0.0 was restored and is running again");
         expect(steps).toContain(`swap ${agentPath}.previous→${agentPath}`);
@@ -99,8 +115,56 @@ describe("runUpgrade", () => {
     // process somebody turned off, and with nothing to start, there is nothing to verify or roll back either.
     it("doesn't start a watcher that wasn't running before", async () => {
         const { steps, exec } = scripted({ stopWatcher: () => Promise.resolve(undefined) });
-        expect(await runUpgrade(exec, URL, "1.0.0", false, () => undefined)).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "upgraded", from: "1.0.0", to: "2.0.0" });
         expect(steps).not.toContain("start");
+    });
+});
+
+/* WHAT THE RELEASE CHANNEL SAYS, ASKED BEFORE ~95 MB MOVES. Until this existed, `upgrade` on a machine that was
+ * already current downloaded the whole agent, ran it, compared two strings and printed "nothing to do" — a
+ * two-minute answer to a question a HEAD request answers in a moment, which is what made the command feel like
+ * something to avoid rather than something to run. */
+describe("runUpgrade asks what is published first", () => {
+    it("downloads nothing when the published version is the one already installed", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.0.0") });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "current", version: "1.0.0" });
+        expect(steps).toEqual([]);
+    });
+
+    // Same rule as the probe's, so the shortcut can never disagree with the decision it is shortening: a channel
+    // that has moved BACKWARDS of this machine is not something to download either.
+    it("downloads nothing when the published version is older than the installed one", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.4.0") });
+        expect(await upgrade(exec, "1.5.0")).toEqual({ kind: "current", version: "1.5.0" });
+        expect(steps).toEqual([]);
+    });
+
+    // A build from source is the one case the shortcut must NOT take: 0.0.0 loses to every release numerically,
+    // and whether to replace it is `--force`'s question, decided further down on what actually downloaded.
+    it("still downloads over a build made from source", async () => {
+        const { steps, exec } = scripted({ published: () => Promise.resolve("1.4.0"), downloaded: "1.4.0" });
+        await upgrade(exec, "0.0.0", true);
+        expect(steps[0]).toBe(`fetch→${agentPath}.new-1.4.0`);
+    });
+
+    /* The part file is named for the release it holds, and that is the whole reason a dropped transfer can be
+     * continued at all: bytes from two different releases can never end up in one file. A run that cannot name
+     * the release cannot promise that, so it throws its part away instead. */
+    it("keeps what arrived when it knows which release those bytes are", async () => {
+        const { steps, exec } = scripted({
+            published: () => Promise.resolve("2.0.0"),
+            fetchTo: () => Promise.reject(new Error("socket hang up")),
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome.kind).toBe("failed");
+        expect(upgradeMessage(outcome)).toContain("continues from it");
+        expect(steps).not.toContain(`discard ${agentPath}.new-2.0.0`);
+    });
+
+    it("throws away what arrived when it cannot", async () => {
+        const { steps, exec } = scripted({ fetchTo: () => Promise.reject(new Error("socket hang up")) });
+        expect((await upgrade(exec, "1.0.0")).kind).toBe("failed");
+        expect(steps).toContain(`discard ${agentPath}.new`);
     });
 });
 
@@ -110,7 +174,7 @@ describe("runUpgrade", () => {
 describe("runUpgrade never moves a machine backwards", () => {
     it("declines a published agent older than the one installed", async () => {
         const { steps, exec } = scripted({ downloaded: "1.0.0" });
-        expect(await runUpgrade(exec, URL, "1.5.0", false, () => undefined)).toEqual({ kind: "current", version: "1.5.0" });
+        expect(await upgrade(exec, "1.5.0")).toEqual({ kind: "current", version: "1.5.0" });
         expect(steps).not.toContain("stop");
     });
 
@@ -118,7 +182,7 @@ describe("runUpgrade never moves a machine backwards", () => {
     // above cannot see it, and the first upgrade on a developer's own machine would silently undo their build.
     it("leaves a build made from source alone, and says how to replace it on purpose", async () => {
         const { steps, exec } = scripted({ downloaded: "1.183.0" });
-        const outcome = await runUpgrade(exec, URL, "0.0.0", false, () => undefined);
+        const outcome = await upgrade(exec, "0.0.0");
         expect(outcome.kind).toBe("current");
         expect(upgradeMessage(outcome)).toContain("--force");
         expect(steps).not.toContain("stop");
@@ -126,7 +190,7 @@ describe("runUpgrade never moves a machine backwards", () => {
 
     it("replaces a build made from source when asked to", async () => {
         const { steps, exec } = scripted({ downloaded: "1.183.0" });
-        expect(await runUpgrade(exec, URL, "0.0.0", true, () => undefined)).toEqual({ kind: "upgraded", from: "0.0.0", to: "1.183.0" });
+        expect(await upgrade(exec, "0.0.0", true)).toEqual({ kind: "upgraded", from: "0.0.0", to: "1.183.0" });
         expect(steps).toContain("stop");
     });
 });
@@ -136,7 +200,7 @@ describe("runUpgrade never moves a machine backwards", () => {
  * was right and the reason was wrong, which is the pair that sends someone debugging their network. */
 it(`recognises a published agent too old to state its version, and says so`, async () => {
     const { steps, exec } = scripted({ probe: () => ({ kind: "no-version-command" }) });
-    const outcome = await runUpgrade(exec, URL, "0.0.0", false, () => undefined);
+    const outcome = await upgrade(exec, "0.0.0");
     expect(outcome.kind).toBe("current");
     expect(upgradeMessage(outcome)).toContain("predates");
     expect(upgradeMessage(outcome)).not.toContain("doesn't run as an agent");
@@ -147,6 +211,6 @@ it(`recognises a published agent too old to state its version, and says so`, asy
 // installing bytes whose version nothing can establish.
 it(`won't install an unidentifiable agent even when forced`, async () => {
     const { steps, exec } = scripted({ probe: () => ({ kind: "no-version-command" }) });
-    expect((await runUpgrade(exec, URL, "0.0.0", true, () => undefined)).kind).toBe("current");
+    expect((await upgrade(exec, "0.0.0", true)).kind).toBe("current");
     expect(steps).not.toContain("stop");
 });

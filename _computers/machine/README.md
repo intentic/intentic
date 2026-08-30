@@ -45,6 +45,7 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall`, `sync setup|pause|resume|uninstall`, shared `run|status|version|upgrade|uninstall`.
+- [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/computer/policy.ts](src/computer/policy.ts) — what the sandbox is permitted to do here; the security surface.
@@ -54,8 +55,17 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 ## How it fits
 
 Runs on the user's machine, not in the sandbox. Installed by `computer.{sh,ps1}` / `sync.{sh,ps1}` (both cards
-download the same binary into `~/.intentic/machine/bin`, plus `intentic-launch.exe` on Windows), shipped as a
-bun-compiled binary per platform, self-updated by `upgrade`. The install-and-stay-alive plumbing is
+put the same binary in `~/.intentic/machine/bin`, plus `intentic-launch.exe` on Windows), shipped as a
+bun-compiled binary per platform, self-updated by `upgrade`.
+
+Those four installers, and `upgrade`, all decide the same way and it is worth knowing before reading any of
+them: **ask the installed agent its `version`, ask GitHub what `releases/latest` currently points at, and move
+bytes only when the two differ.** Re-running a card's command is still how a machine is upgraded — it just no
+longer pays ~95 MB for an upgrade there is none of. What does download is pinned to the resolved tag, resumes
+a part file left by an interrupted run, shows progress, and is asked its own version before it is allowed to
+become the agent. The copies are held to each other by [src/installers.test.ts](src/installers.test.ts).
+
+The install-and-stay-alive plumbing is
 [`@intentic/local-agent`](../local-agent)'s; the windowless Windows logon start is
 [`_computers/win-launcher`](../win-launcher)'s.
 

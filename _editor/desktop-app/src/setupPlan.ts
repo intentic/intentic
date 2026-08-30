@@ -75,7 +75,11 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
          * "less than a minute left" before the download had started, so the last thing a first install showed
          * was a full bar not moving — the exact "is it stuck?" this plan exists to answer, arriving at the one
          * moment the user is most ready to believe the install had finished and something else had gone wrong.
-         * Sized against `pulling-image` (240) by what each actually transfers. */
+         * Sized against `pulling-image` (240) by what each actually transfers.
+         *
+         * Still sized for the download, because a first install is what this plan draws: the installers now
+         * skip it entirely when the machine already has the published agent, so on a RE-RUN this step lands in
+         * about a second and the bar simply arrives early — which is the harmless direction. */
         { phase: `connecting-machine`, label: `Connect this computer`, weight: 75 },
     ];
 };

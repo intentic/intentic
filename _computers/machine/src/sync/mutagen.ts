@@ -1,6 +1,8 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { once } from "node:events";
+import { createWriteStream, type WriteStream } from "node:fs";
+import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import {
     type CliLauncher,
@@ -438,13 +440,106 @@ const installedVersion = (binary: string, versionArgs: string[]): string | undef
     return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
-export const download = async (url: string, dest: string): Promise<void> => {
-    const response = await fetch(url);
-    if (!response.ok) {
+/* WHAT A DOWNLOAD MAY DO BEYOND ARRIVING. Both are off by default, because both need something of the caller:
+ * resuming needs a destination name that can only ever mean ONE set of bytes (the agent's staged file carries
+ * the version it is downloading; the Mutagen tarball's name does not, so it does not ask for this), and
+ * progress needs somewhere for it to be shown. */
+interface DownloadOptions {
+    /** Continue whatever is already at `dest` instead of starting again. */
+    readonly resume?: boolean;
+    /** Bytes so far and the total when the other end states one, called per chunk. */
+    readonly onProgress?: (received: number, total: number) => void;
+}
+
+/* ONE FILE, STREAMED TO DISK. It used to be `writeFile(dest, await response.arrayBuffer())`, which holds the
+ * WHOLE body in memory before a byte reaches the disk: fine for a tarball, and this same function is what the
+ * agent's own `upgrade` uses to fetch a ~95 MB binary, on machines that were sometimes doing nothing else well.
+ * It also meant a transfer that dropped at 90% had achieved nothing at all.
+ *
+ * The shape is the one downloadWeights already uses for model files (localmodel.ts): ask for a range when
+ * there is something to continue, believe only a 206 about it, and write with backpressure rather than
+ * queueing every chunk in memory behind a slow disk. A failure mid-flight LEAVES the part file — that is what
+ * the next attempt continues from, and why `resume` is the caller's decision rather than this one's. */
+// What is already at a path, and zero for anything that cannot be asked — a name that is free, a directory,
+// a permission. Every one of those means "nothing to continue", which is the safe answer in all of them.
+const fileSize = async (path: string): Promise<number> => {
+    try {
+        return (await stat(path)).size;
+    } catch {
+        return 0;
+    }
+};
+
+/* WHERE THE NEXT BYTE COMES FROM, asked with what is already on disk — and the three answers that are not
+ * simply "here is the file":
+ *
+ *   416  the range starts past the end: what is there is already the whole asset (a transfer that finished
+ *        into a rename that never happened), or it is not this asset at all. Both are answered by the
+ *        caller's own check of what it now has, and neither is this function's to guess at.
+ *   206  the range was honoured, so the body continues the file rather than being it.
+ *   200  the range was IGNORED (or none was asked for), so the body is the whole thing and the part file has
+ *        to be truncated: appending to it would make a file that is neither. */
+const openDownload = async (
+    url: string,
+    have: number,
+): Promise<{ readonly body: ReadableStream<Uint8Array>; readonly total: number; readonly appending: boolean } | undefined> => {
+    const response = await fetch(url, have > 0 ? { headers: { range: `bytes=${have}-` } } : {});
+    if (response.status === 416 && have > 0) {
+        return undefined;
+    }
+    if (!response.ok || response.body === null) {
         throw new Error(`download failed (${response.status}): ${url}`);
     }
-    await mkdir(binDir, { recursive: true });
-    await writeFile(dest, new Uint8Array(await response.arrayBuffer()));
+    const appending = response.status === 206;
+    // A 206 without a length leaves the total UNKNOWN, which is zero here and never `have`: a total that
+    // happened to equal what is on disk would report a half-finished download as complete.
+    const length = Number(response.headers.get("content-length") ?? 0);
+    return { body: response.body, total: length > 0 ? (appending ? have + length : length) : 0, appending };
+};
+
+// The transfer itself: one read at a time, written with backpressure instead of queued in memory behind a slow
+// disk. Its own function so the decisions above stay readable, and because this is the part whose failure must
+// leave the part file exactly where it is.
+const drainInto = async (
+    file: WriteStream,
+    body: ReadableStream<Uint8Array>,
+    from: number,
+    total: number,
+    onProgress: DownloadOptions["onProgress"],
+): Promise<void> => {
+    const reader = body.getReader();
+    let received = from;
+    try {
+        for (;;) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one read at a time IS the transfer
+            const chunk = await reader.read();
+            if (chunk.done) {
+                break;
+            }
+            received += chunk.value.byteLength;
+            onProgress?.(received, total);
+            if (!file.write(chunk.value)) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- backpressure: waiting here is the point
+                await once(file, "drain");
+            }
+        }
+        file.end();
+        await once(file, "close");
+    } catch (error) {
+        file.destroy();
+        throw error;
+    }
+};
+
+export const download = async (url: string, dest: string, options: DownloadOptions = {}): Promise<void> => {
+    await mkdir(dirname(dest), { recursive: true });
+    const have = options.resume === true ? await fileSize(dest) : 0;
+    const stream = await openDownload(url, have);
+    if (stream === undefined) {
+        return;
+    }
+    const file = createWriteStream(dest, stream.appending ? { flags: "a" } : {});
+    await drainInto(file, stream.body, stream.appending ? have : 0, stream.total, options.onProgress);
 };
 
 // Put whatever `write` produces at `binary` in place of what is there now. Windows refuses to unlink or

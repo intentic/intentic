@@ -103,8 +103,8 @@ const upgrade = buildCommand<UpgradeFlags>({
     },
     async func(this: CommandContext, flags: UpgradeFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const exec = realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp);
-        out(upgradeMessage(await runUpgrade(exec, assetUrl(), MACHINE_VERSION, flags.force, out)));
+        const exec = realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp, out);
+        out(upgradeMessage(await runUpgrade(exec, assetUrl, MACHINE_VERSION, flags.force, out)));
     },
 });
 

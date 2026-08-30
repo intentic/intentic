@@ -41,7 +41,9 @@ are the contract; everything here is the machinery that keeps them true.
   `publish-github.sh`, read back by the daemon's update card and the site's changelog. Prepass invariant 5
   keeps the three spellings in step.
 - **Download links**: `releases/latest/download/*` and the site's links follow the GitHub "latest" flag,
-  which only promotion moves.
+  which only promotion moves. The agent installers resolve that same flag first — `releases/latest` redirects
+  to `…/tag/vX.Y.Z` — and then fetch `releases/download/v<tag>/*`, so a part file can only ever be resumed
+  against the release it started from. Both URL shapes are load-bearing, and the redirect is what joins them.
 
 ## What is deliberately outside the circle
 
