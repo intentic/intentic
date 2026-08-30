@@ -55,10 +55,11 @@ describe(`listZoneNames`, () => {
 
 describe(`reapOrphanDnsRecords`, () => {
     const zone = `example.com`;
-    /* The zone as a churned deployment leaves it: tunnel CNAMEs from before the hub (all residue now, nothing
-     * has created one since), a per-sandbox loopback A in each of the two spellings the platform has used, the
+    /* The zone as a churned deployment leaves it: a tunnel CNAME for a sandbox that still exists and one for a
+     * sandbox that does not, a per-sandbox loopback A in each of the two spellings the platform has used, the
      * ACME TXT of a live sandbox and of a deleted one, the wildcard every loopback name now resolves under,
-     * and the operator's own records. */
+     * and the operator's own records. The first two are the pair that matters: they are indistinguishable by
+     * content and opposite in meaning. */
     const records = [
         {
             id: `r-tunnel-a`,
@@ -88,7 +89,7 @@ describe(`reapOrphanDnsRecords`, () => {
             { match: (method) => method === `DELETE`, respond: () => ok({}) },
         ]);
 
-    it(`collects every tunnel CNAME and per-sandbox loopback record; never the wildcard or a live order`, async () => {
+    it(`never touches a record belonging to a sandbox that still exists`, async () => {
         const calls = stubRecords();
         const result = await reapOrphanDnsRecords({
             apiToken: `api`,
@@ -98,12 +99,49 @@ describe(`reapOrphanDnsRecords`, () => {
             log: () => {},
             onError: () => {},
         });
-        expect(result).toEqual({ total: 9, orphaned: 5, reaped: 5, failed: 0 });
+        /* THE ASSERTION THIS FILE EXISTS FOR, and it is about `r-tunnel-a`: a live sandbox's tunnel CNAME.
+         * Deleting those was an outage. The reasoning that licensed it was "the fabric moved to the zrok hub,
+         * so nothing mints these any more" — true of new sandboxes, silent about the ones created before it,
+         * which are reachable through exactly these records and nothing else. A dozen each (daemon, ssh, the
+         * port-slot pool), so the sweep took whole sandboxes off the internet and left their owners on a
+         * loopback address with no public name at all.
+         *
+         * "Nothing creates them" is not "nothing depends on them". Only the second licenses a delete, and the
+         * name carries the sandbox id, so the second is answerable without asking Cloudflare anything. */
         const deleted = calls.filter((call) => call.method === `DELETE`).map((call) => call.url.split(`/dns_records/`)[1]);
-        /* A LIVE sandbox's loopback A goes too, and that is the point rather than an oversight: the wildcard
-         * answers for it, so no sandbox needs one and every one left is quota nobody is using. The two that
-         * stay are the two that would break something, the wildcard itself and an ACME order in flight. */
-        expect(deleted.toSorted()).toEqual([`r-acme-gone`, `r-local-live`, `r-local-old`, `r-tunnel-a`, `r-tunnel-b`]);
+        expect(deleted.toSorted()).toEqual([`r-acme-gone`, `r-local-live`, `r-local-old`, `r-tunnel-b`]);
+        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 4, failed: 0 });
+    });
+
+    it(`leaves a record it cannot attribute to any sandbox alone`, async () => {
+        // A tunnel CNAME whose name carries no sandbox id was not minted by this platform under a sandbox, so
+        // nothing here knows whether anyone is using it. Unknown is not the same as unused.
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/zones?name=`), respond: () => ok([{ id: `z1` }]) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/dns_records?per_page=`),
+                respond: () =>
+                    ok([
+                        {
+                            id: `r-hand-made`,
+                            type: `CNAME`,
+                            name: `staging.example.com`,
+                            content: `33333333-3333-4333-8333-333333333333.cfargotunnel.com`,
+                        },
+                    ]),
+            },
+            { match: (method) => method === `DELETE`, respond: () => ok({}) },
+        ]);
+        const result = await reapOrphanDnsRecords({
+            apiToken: `api`,
+            zone,
+            liveSandboxIds: new Set(),
+            dryRun: false,
+            log: () => {},
+            onError: () => {},
+        });
+        expect(result.orphaned).toBe(0);
+        expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
     });
 
     it(`asks Cloudflare for nothing but DNS: the sweep must survive a DNS-only token`, async () => {
@@ -128,8 +166,8 @@ describe(`reapOrphanDnsRecords`, () => {
             log: (record) => seen.push(record.name),
             onError: () => {},
         });
-        expect(result).toEqual({ total: 9, orphaned: 5, reaped: 0, failed: 0 });
-        expect(seen).toHaveLength(5);
+        expect(result).toEqual({ total: 9, orphaned: 4, reaped: 0, failed: 0 });
+        expect(seen).toHaveLength(4);
         expect(calls.some((call) => call.method === `DELETE`)).toBe(false);
     });
 });

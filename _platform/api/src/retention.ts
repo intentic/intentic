@@ -70,7 +70,7 @@ const runRetention = async (prisma: PrismaClient): Promise<{ sessions: number; v
 };
 
 export const startRetention = (prisma: PrismaClient, config: Config, logger: Logger): void => {
-    const { apiToken, zone, reapDryRun } = config.intenticCloudflare;
+    const { apiToken, zone, reap, reapDryRun } = config.intenticCloudflare;
     const sweep = async (): Promise<void> => {
         // A failed sweep must not crash the API; the next daily run retries.
         try {
@@ -83,11 +83,25 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         if (apiToken === `` || zone === ``) {
             return;
         }
-        /* The record sweep: every per-sandbox loopback A record (one wildcard answers for all of them now),
-         * the ACME TXT of any sandbox that no longer exists, and any CNAME left pointing at a Cloudflare
-         * tunnel from before the migration. Nothing creates any of those any more, so this is a shrinking
-         * cleanup rather than a standing defence against the per-zone quota, but the `total` it logs is still
-         * the number to watch: a full zone stops loopback certificates being issued at all. */
+        /* THE RECORD SWEEP, AND WHY IT DOES NOT DELETE UNLESS SOMEBODY SAID SO.
+         *
+         * What it collects: the per-sandbox loopback A records one wildcard now answers for, the ACME TXT of a
+         * sandbox that no longer exists, and the tunnel CNAMEs of one that no longer exists. The `total` it
+         * logs is the number to watch either way, because a full zone stops loopback certificates being
+         * issued at all, for every sandbox at once.
+         *
+         * The verdicts are made against THIS DEPLOYMENT'S DATABASE, and nothing checks that this deployment is
+         * the one whose sandboxes live in that zone. The advisory lock does not help: it is taken on this
+         * platform's own postgres (jobs-lock.ts), so two deployments sharing one Cloudflare token do not see
+         * each other at all. A developer running the API locally with the production token in their env
+         * therefore swept the production zone against an empty local database, on the first tick after boot,
+         * and every sandbox in it looked like an orphan.
+         *
+         * So deleting is opt-in and the default is to LOOK: the sweep runs, reports what it would collect and
+         * what the zone's record count is, and touches nothing. A deployment that genuinely owns its zone sets
+         * INTENTIC_CLOUDFLARE_REAP=true and gets the collection back. Nobody has to remember to turn a
+         * destructive default off on a laptop. */
+        const deleting = reap && !reapDryRun;
         try {
             const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
             const liveSandboxIds = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
@@ -95,11 +109,11 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
                 apiToken,
                 zone,
                 liveSandboxIds,
-                dryRun: reapDryRun,
-                log: (record) => logger.info({ ...record, dryRun: reapDryRun }, `orphan DNS record`),
+                dryRun: !deleting,
+                log: (record) => logger.info({ ...record, deleting }, `orphan DNS record`),
                 onError: (record, error) => logger.error({ ...record, err: error }, `orphan DNS record delete failed`),
             });
-            logger.info(records, `DNS record sweep completed`);
+            logger.info({ ...records, deleting, sandboxes: liveSandboxIds.size }, `DNS record sweep completed`);
         } catch (error) {
             logger.error({ err: error }, `DNS record sweep failed`);
         }

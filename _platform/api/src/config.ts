@@ -85,8 +85,17 @@ export const configSchema = z.object({
         .object({
             apiToken: z.string().default(``).meta({ secret: true }), // INTENTIC_CLOUDFLARE_API_TOKEN
             zone: z.string().default(`intentic.dev`), // INTENTIC_CLOUDFLARE_ZONE
-            // Log the record sweep's candidates without deleting, run a new deployment's first sweep with
-            // this on, confirm the list, then turn it off. INTENTIC_CLOUDFLARE_REAP_DRY_RUN.
+            /* MAY THIS DEPLOYMENT DELETE RECORDS IN THAT ZONE? Off by default, and the default is the whole
+             * point. The sweep decides what is an orphan by asking THIS deployment's database, and a zone is
+             * shared by every deployment holding the token: a developer running the API locally with the
+             * production credentials in their env swept the production zone against an empty local database
+             * and deleted the tunnel records of live sandboxes. Nothing in the code could have known the
+             * difference, so the operator says. Unset ⇒ the sweep still runs and still reports (the record
+             * count is the number that matters for quota) and simply never deletes.
+             * INTENTIC_CLOUDFLARE_REAP. */
+            reap: z.stringbool().default(false),
+            // Report the candidates without deleting even where reaping is ON: a new deployment's first sweep
+            // runs with this, the operator confirms the list, then it comes off. INTENTIC_CLOUDFLARE_REAP_DRY_RUN.
             reapDryRun: z.stringbool().default(false),
         })
         .prefault({}),

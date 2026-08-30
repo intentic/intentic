@@ -11,8 +11,15 @@ import { z } from "zod";
  *     zone, and one transient ACME challenge per order.
  *
  * The tunnel fabric is the zrok hub (sandbox/zrok.ts). Provisioning, teardown, ingress, per-route CNAMEs, the
- * connector token and the tunnel reaper all lived here and are gone: nothing creates a Cloudflare tunnel, and
- * the only trace left is a sweep that reclaims the records the old machinery minted (reapOrphanDnsRecords).
+ * connector token and the tunnel reaper all lived here and are gone: nothing creates a Cloudflare tunnel here
+ * any more.
+ *
+ * WHICH IS NOT THE SAME AS NOTHING NEEDING ONE. Sandboxes created before that migration are still reachable
+ * only through the records it left: `sandbox-<id>` and its siblings, a dozen per sandbox, pointing at a
+ * cfargotunnel target. They have no zrok identity to fall back on. So the sweep below treats those records as
+ * a live sandbox's property, not as residue, and the difference between the two questions — "does anything
+ * still CREATE this?" and "does anything still DEPEND on it?" — is the difference between a tidy zone and
+ * sandboxes with no public address.
  *
  * Deliberately standalone: the platform must not depend on the sandbox's @intentic/providers, the secret-free
  * architecture keeps platform and sandbox code apart. */
@@ -109,14 +116,18 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
          * workspaces freezing, which names neither DNS nor a quota.
          *
          * Nothing per-sandbox is minted here any more (one wildcard, one transient challenge), so a zone that
-         * fills now is carrying records from before that: the `sandbox-*`/`ssh-*` CNAMEs of the retired
-         * Cloudflare tunnels and the `local-<id>` A records the wildcard replaced. reapOrphanDnsRecords
-         * collects both. Left as Cloudflare's own words this reads as an intentic bug ("POST
-         * /zones/44823fc.../dns_records failed (HTTP 400): 81045 Record quota exceeded") and the person who can
-         * actually fix it is never told what to do. */
+         * fills now is carrying records from before that. Some of them are genuinely dead and the sweep
+         * collects them; the rest belong to sandboxes still using them. Left as Cloudflare's own words this
+         * reads as an intentic bug ("POST /zones/44823fc.../dns_records failed (HTTP 400): 81045 Record quota
+         * exceeded") and the person who can actually fix it is never told what to do. */
         if (codes.includes(81045)) {
+            /* WHAT NOT TO SAY HERE, learned expensively. This used to name `sandbox-*`/`ssh-*` as "the usual
+             * culprit" and invite the operator to delete them in the dashboard. Those are the records a
+             * pre-zrok sandbox is REACHABLE through — a dozen per sandbox, daemon, ssh and the port-slot pool
+             * — so the advice took working sandboxes off the internet. A quota message may say what is safe to
+             * remove or it may say nothing; it may not guess. */
             throw new CloudflareApiError(
-                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota). Nothing intentic mints now is per-sandbox, so the zone is holding residue: sandbox-*/ssh-* CNAMEs from the retired Cloudflare tunnels and local-* A records the wildcard replaced. The daily sweep collects both; deleting them in the Cloudflare dashboard is the immediate fix, or move the zone to a plan with a higher limit.`,
+                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the zrok migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
                 codes,
             );
         }
@@ -249,17 +260,35 @@ const RECORD_PAGE = 100;
 const MAX_RECORD_PAGES = 200;
 const zoneRecordSchema = z.object({ id: z.string(), type: z.string(), name: z.string(), content: z.string() });
 
+/* WHICH SANDBOX A TUNNEL RECORD BELONGS TO, or undefined when the name does not say.
+ *
+ * Every tunnel name this platform ever minted is one label ending in the sandbox's 12-hex id: `sandbox-<id>`,
+ * `ssh-<id>`, `<slot>-<id>`, `preview-<panel>-<id>`, `public-<slot>-<id>`. So ownership is legible from the
+ * NAME alone, with no API call and no token scope, which is what lets the sweep answer "is anyone still using
+ * this?" about a record whose content it cannot otherwise attribute. */
+const recordSandboxId = (record: z.infer<typeof zoneRecordSchema>): string | undefined => /^[^.]*-([0-9a-f]{12})\./.exec(record.name)?.[1];
+
 /* Whether one record in intentic's zone belongs to nothing. Pure, and separated from the sweep that deletes,
  * because "what is garbage" is the part that has to be RIGHT: a false positive here deletes a name a live
- * sandbox is reachable under, and the sweep runs unattended every day. */
-const danglingTunnelCname = (record: z.infer<typeof zoneRecordSchema>): boolean =>
-    /* Any CNAME onto a Cloudflare tunnel, with no check of whether that tunnel still exists. It used to ask,
-     * which meant listing the account's tunnels, which needs a scope this token no longer has: the fabric moved
-     * to the zrok hub and the token was narrowed to DNS. The listing then threw, the throw took the WHOLE sweep
-     * with it, and the zone filled up with nobody collecting it, which is how a per-record quota ended up
-     * freezing workspaces. There is nothing to ask now: this platform stopped creating tunnel records, so every
-     * one of these is residue by definition. */
-    record.type === `CNAME` && /^[0-9a-f-]{36}\.cfargotunnel\.com$/.test(record.content);
+ * sandbox is reachable under, and the sweep runs unattended every day.
+ *
+ * A CNAME onto a Cloudflare tunnel, whose SANDBOX no longer exists. The liveness check is the whole rule and
+ * removing it was an outage: the reasoning was that the fabric had moved to the zrok hub so nothing mints
+ * these any more, which is true of new sandboxes and says nothing about old ones. Every sandbox created before
+ * that migration is still reachable through exactly these records — a dozen of them each, the daemon, ssh, and
+ * the port-slot pool — and deleting them took working sandboxes off the internet, leaving their owners on the
+ * plain-HTTP loopback with no public address at all.
+ *
+ * "Nothing creates them any more" is not the same claim as "nothing depends on them", and only the second one
+ * licenses a delete. */
+const danglingTunnelCname = (record: z.infer<typeof zoneRecordSchema>, context: Reapable): boolean => {
+    if (record.type !== `CNAME` || !/^[0-9a-f-]{36}\.cfargotunnel\.com$/.test(record.content)) {
+        return false;
+    }
+    const owner = recordSandboxId(record);
+    // A name carrying no id is one this platform did not mint under a sandbox: not ours to collect.
+    return owner !== undefined && !context.liveSandboxIds.has(owner);
+};
 
 interface Reapable {
     readonly zone: string;
@@ -297,7 +326,7 @@ const orphanLoopbackRecord = (record: z.infer<typeof zoneRecordSchema>, context:
 
 // Garbage is either kind, and both are scoped to intentic's own zone before anything else is asked.
 const orphanRecord = (record: z.infer<typeof zoneRecordSchema>, context: Reapable): boolean =>
-    record.name.endsWith(`.${context.zone}`) && (danglingTunnelCname(record) || orphanLoopbackRecord(record, context));
+    record.name.endsWith(`.${context.zone}`) && (danglingTunnelCname(record, context) || orphanLoopbackRecord(record, context));
 
 export const reapOrphanDnsRecords = async (args: {
     apiToken: string;
