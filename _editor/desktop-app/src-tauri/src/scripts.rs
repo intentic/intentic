@@ -795,23 +795,27 @@ mod tests {
      * connected", then `intentic-host status` answering `The term 'intentic-host' is not recognized`. The
      * install had worked perfectly and every instruction it printed was wrong.
      *
-     * So a script that downloads a binary calls Add-IntenticPath, and the copies of it stay identical — same
-     * reasoning as the ic download above, and the same reason it has to be a test: these files are handed to
-     * `irm | iex` one at a time and can never import anything. The function itself is the delicate part (a
-     * user's PATH is not ours to corrupt), which is what makes five hand-kept copies worth holding down. */
+     * So a script that downloads a binary the USER runs by name calls Add-IntenticPath, and the copies stay
+     * identical — same reasoning as the ic download above, and the same reason it has to be a test: these
+     * files are handed to `irm | iex` one at a time and can never import anything. The function itself is the
+     * delicate part (a user's PATH is not ours to corrupt), which is what makes three hand-kept copies worth
+     * holding down. Only three: the two AGENT installers (computer.ps1, sync.ps1) are bootstrap shims now,
+     * and the agent's own `setup` repairs PATH on every run (_computers/machine/src/install.ts) — the same
+     * promise, kept from one tested place instead of two more copies of this block. */
     #[test]
     fn every_downloading_installer_puts_its_binary_on_path() {
         let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
         for (path, text) in powershell_scripts() {
-            // Downloads a binary => owes the user a working command name. cleanup.ps1 downloads nothing.
-            if !text.contains("Invoke-WebRequest") {
+            // Downloads the ic CLI => owes the user a working command name. cleanup.ps1 downloads nothing,
+            // and the two agent installers delegate PATH to the agent's own setup.
+            if ic_fetch_block(&text).is_none() {
                 continue;
             }
             let block = add_to_path_block(&text).unwrap_or_else(|| {
                 panic!(
                     "{} downloads a binary but never defines Add-IntenticPath — the folder it installs into \
                      stays off the user's PATH, so every command this script's own output names is one the \
-                     shell cannot find. Copy the function from computer.ps1 verbatim.",
+                     shell cannot find. Copy the function from connect.ps1 verbatim.",
                     path.display(),
                 )
             });
@@ -823,8 +827,8 @@ mod tests {
             blocks.push((path, block));
         }
         assert!(
-            blocks.len() == 5,
-            "expected computer/sync/connect/connect-host/recreate to carry this, found {}",
+            blocks.len() == 3,
+            "expected connect/connect-host/recreate to carry this, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];
@@ -841,66 +845,29 @@ mod tests {
         }
     }
 
-    /* THE WINDOWLESS LAUNCHER, WHICH ONLY THE TWO AGENT INSTALLERS FETCH.
+    /* THE WINDOWLESS LAUNCHER IS THE AGENT'S OWN JOB NOW, AND NO SCRIPT'S.
      *
-     * `computer.ps1` and `sync.ps1` install a resident agent that has to come back after a reboot, and on
-     * Windows that means a `HKCU\…\Run` value. Explorer starts one in the interactive session, where a
-     * CONSOLE-subsystem program — which both agents and Mutagen's daemon are — is handed a console window: a
-     * black terminal on the desktop at every boot, measured at 1-2 seconds each. `intentic-launch.exe` is the
-     * GUI-subsystem stub that makes the entry silent, and the agent uses it ONLY if it is sitting next to the
-     * binary, so an installer that forgets to fetch it takes the flashing window back with nobody noticing
-     * until the next reboot.
+     * A resident agent on Windows comes back after a reboot through a `HKCU\…\Run` value, and Explorer hands
+     * a CONSOLE-subsystem program a console window when it starts one: a black terminal on the desktop at
+     * every boot, measured at 1-2 seconds each. `intentic-launch.exe` is the GUI-subsystem stub that makes
+     * the entry silent, and the agent uses it ONLY if it is sitting next to the binary.
      *
-     * The other three scripts (connect, connect-host, recreate) install `ic`, which is a command a person runs
-     * rather than a resident agent, so they neither need this nor carry it. */
+     * The two agent installers used to fetch it, in two hand-identical copies this test held together. The
+     * agent's `setup` and `upgrade` fetch and refresh it themselves now (_computers/machine/src/install.ts),
+     * which is strictly better: a machine that never re-runs a card's command still gets a fixed stub with
+     * its next agent update. What is left to hold is the boundary: a script that grows its own launcher fetch
+     * is a second copy of that decision on its way back into shell, where fixes stop reaching machines. */
     #[test]
-    fn both_agent_installers_fetch_the_windowless_launcher() {
-        let mut blocks: Vec<(std::path::PathBuf, String)> = Vec::new();
+    fn no_script_fetches_the_windowless_launcher() {
         for (path, text) in powershell_scripts() {
-            let name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            let agent_installer = name == "computer.ps1" || name == "sync.ps1";
-            let block = launcher_fetch_block(&text);
-            assert_eq!(
-                agent_installer,
-                block.is_some(),
-                "{}: an installer that puts a resident agent on a Windows machine fetches intentic-launch.exe \
-                 (and nothing else does). Without it the agent's logon entry starts a console program \
-                 directly, which puts a terminal window on the user's desktop at every boot.",
+            assert!(
+                !text.contains("intentic-launch"),
+                "{} fetches or names intentic-launch.exe — the agent keeps its own launcher stub fresh \
+                 (setup and upgrade, _computers/machine/src/install.ts). A script copy is the drift this \
+                 test exists to prevent.",
                 path.display(),
             );
-            if let Some(block) = block {
-                assert!(
-                    text.contains("Get-IntenticLauncher -BinDir"),
-                    "{} defines Get-IntenticLauncher and never calls it.",
-                    path.display(),
-                );
-                blocks.push((path, block));
-            }
         }
-        let (first_path, first) = &blocks[0];
-        for (path, block) in &blocks[1..] {
-            assert_eq!(
-                block,
-                first,
-                "{} and {} fetch the launcher stub differently. These files cannot share code, so the copies \
-                 have to be identical — fix the one that drifted rather than relaxing this test.",
-                path.display(),
-                first_path.display(),
-            );
-        }
-    }
-
-    /// The `Get-IntenticLauncher` function, up to the brace that closes it. None for a script that has no such
-    /// function. The prose above each copy names that agent's own commands, so only the body is compared.
-    fn launcher_fetch_block(text: &str) -> Option<String> {
-        let start = text.find("function Get-IntenticLauncher {")?;
-        let rest = &text[start..];
-        let end = rest.find("\n}\n").map(|at| at + 3).unwrap_or(rest.len());
-        Some(rest[..end].to_string())
     }
 
     /// The `Add-IntenticPath` function, up to the brace that closes it. None for a script that has no such

@@ -4,24 +4,21 @@ import { INSTALL_SCRIPTS, INSTALL_SCRIPTS_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { describe, expect, it } from "vitest";
 
-/* THE FOUR INSTALLERS THAT PUT THIS AGENT ON A MACHINE, HELD TO EACH OTHER.
+/* THE FOUR INSTALLERS THAT PUT THIS AGENT ON A MACHINE, HELD TO WHAT LITTLE THEY STILL DO.
  *
- * `computer.sh`, `sync.sh`, `computer.ps1` and `sync.ps1` are each handed to `curl | sh` or `irm | iex` as one
- * standalone string: there is no import, no dot-sourcing, no shared file, so the block that decides whether to
- * download this agent — and how — genuinely has to exist twice per dialect.
+ * `computer.sh`, `sync.sh`, `computer.ps1` and `sync.ps1` are bootstrap shims: they download a FIRST agent
+ * onto a machine that has none, and exec `setup`. Every decision they used to make — installed-vs-published,
+ * PATH, the Windows launcher — runs from `setup` itself now (install.ts), so those rules are held by
+ * install.test.ts and the compiler rather than by string-matching shell.
  *
- * What lives in that block is the part that goes quietly wrong in a copy: the version comparison that decides
- * whether ~95 MB moves at all, the tag-pinned URL that makes resuming safe, the check that what landed is an
- * agent rather than a captive portal's login page, and the rule about which failures may keep a partial file.
- * A copy that drifts does not fail loudly — it just re-downloads 95 MB on every run again, on one card and not
- * the other, which is exactly the bug this block was written to end.
- *
- * The blocks are delimited by their own marker comments, in both dialects, so the check is the same rule for
- * shell and PowerShell rather than two extraction rules that can each be right about the wrong thing.
- */
+ * What still has to exist twice per dialect (each file is handed to `curl | sh` or `irm | iex` as one
+ * standalone string — no import, no dot-sourcing) is the bootstrap block, and what still goes quietly wrong
+ * in a copy is the same short list as before: the tag-pinned URL that makes resuming safe, the resume itself,
+ * and the probe that separates an agent from a captive portal's login page. The blocks are delimited by their
+ * own marker comments, in both dialects, so the check is one rule for shell and PowerShell. */
 
-const START = `# ---- the agent binary (identical in`;
-const END = `# ---- end of the agent binary block ----`;
+const START = `# ---- bootstrap the agent binary (identical in`;
+const END = `# ---- end of the agent binary bootstrap ----`;
 
 const script = (key: keyof typeof INSTALL_SCRIPTS): { readonly path: string; readonly text: string } => {
     const path = join(repoRoot(import.meta.url), INSTALL_SCRIPTS_DIR, INSTALL_SCRIPTS[key].file);
@@ -29,7 +26,7 @@ const script = (key: keyof typeof INSTALL_SCRIPTS): { readonly path: string; rea
 };
 
 /** The marked block, or undefined when the script carries none — which is itself a failure for these four. */
-const agentBlock = (text: string): string | undefined => {
+const bootstrapBlock = (text: string): string | undefined => {
     const start = text.indexOf(START);
     const end = text.indexOf(END);
     if (start === -1 || end === -1 || end < start) {
@@ -46,27 +43,42 @@ const PAIRS = [
 describe.each(PAIRS)(`the $dialect installers`, (pair) => {
     const both = [script(pair.computer), script(pair.sync)];
 
-    it(`fetch the agent by one block, byte for byte the same in both`, () => {
+    it(`bootstrap the agent by one block, byte for byte the same in both`, () => {
         for (const one of both) {
-            expect(agentBlock(one.text), `${one.path} carries no agent-binary block (its markers are missing or reordered)`).toEqual(
+            expect(bootstrapBlock(one.text), `${one.path} carries no bootstrap block (its markers are missing or reordered)`).toEqual(
                 expect.any(String),
             );
         }
         const [computer, sync] = both;
         expect(
-            agentBlock(sync?.text ?? ``),
-            `${sync?.path} and ${computer?.path} install the agent differently. These files cannot share code, so the copies have to be identical — fix the one that drifted rather than relaxing this test.`,
-        ).toBe(agentBlock(computer?.text ?? ``));
+            bootstrapBlock(sync?.text ?? ``),
+            `${sync?.path} and ${computer?.path} bootstrap the agent differently. These files cannot share code, so the copies have to be identical — fix the one that drifted rather than relaxing this test.`,
+        ).toBe(bootstrapBlock(computer?.text ?? ``));
     });
 
-    /* The property the block exists for, stated as a property rather than as a diff: an installer that asks
-     * neither question is one that downloads ~95 MB every time it runs, which is where all four started. */
-    it(`decide by comparing the installed version against the published one`, () => {
+    /* The three properties a first download owes the machine, stated as properties rather than as a diff: it
+     * resumes rather than restarts (95 MB on a flaky connection), it pins to the tag it resolved (so a resume
+     * can never splice two releases), and it runs what landed before installing it (the only proof a file is
+     * an agent rather than a captive portal's answer). */
+    it(`download resumably, pinned to the resolved tag, and probe before installing`, () => {
         for (const { path, text } of both) {
-            const block = agentBlock(text) ?? ``;
-            expect(block, `${path} never asks the installed agent what version it is`).toMatch(/\bversion\b/);
-            expect(block, `${path} never asks what the current release is`).toContain(`releases/latest`);
+            const block = bootstrapBlock(text) ?? ``;
             expect(block, `${path} downloads without being able to resume`).toMatch(/--continue-at|AddRange/);
+            expect(block, `${path} never pins the download to the tag \`latest\` resolves to`).toContain(`releases/latest`);
+            expect(block, `${path} never runs what it downloaded before installing it`).toMatch(/\bversion\b/);
+        }
+    });
+
+    /* The property the shims exist for: the DECISIONS stay in the agent. A script that grows an
+     * installed-vs-published comparison, a force-download switch, or an npx fallback is a script on its way
+     * back to being four copies of install.ts in two dialects — the design this rewrite retired. */
+    it(`leave every decision beyond the first download to \`setup\``, () => {
+        for (const { path, text } of both) {
+            expect(text, `${path} carries a force-download switch; deleting the installed binary is the way to force a reinstall`).not.toContain(
+                `FORCE_DOWNLOAD`,
+            );
+            expect(text, `${path} grew a second install channel (npx); the GitHub release is the one channel`).not.toMatch(/\bnpx\b/);
+            expect(text, `${path} never hands over to setup`).toMatch(/\bsetup\b/);
         }
     });
 });

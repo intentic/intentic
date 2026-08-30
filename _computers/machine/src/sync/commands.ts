@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, type CommandContext } from "@stricli/core";
+import { prepareSetup } from "../install.js";
 import { machineLauncher, reconcileResidency } from "../resident.js";
 import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
@@ -155,6 +156,10 @@ const setup = buildCommand<SetupFlags>({
         },
     },
     async func(this: CommandContext, flags: SetupFlags) {
+        /* Self-update, PATH, the Windows launcher — everything the install scripts used to decide — runs
+         * first (install.ts), in plain lines BEFORE the renderer opens: on an actual update this process
+         * re-execs the new agent with the same argv, and a UI opened here would be a second banner there. */
+        await prepareSetup((message) => void this.process.stdout.write(`${message}\n`), process.argv.slice(2));
         /* Rendered through the shared renderer (@intentic/local-agent), which is also what `ic` renders
          * through, so this reads as the same program whether it is pasted on its own or run by `ic` in the
          * middle of its install. Three modes and this command cares about none of them: a pipe still gets the

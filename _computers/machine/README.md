@@ -50,6 +50,7 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|uninstall`, shared `run|status|version|upgrade|uninstall`.
+- [src/install.ts](src/install.ts) — what every `setup` runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here.
 - [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
 - [src/computer/auto-prepare.ts](src/computer/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
@@ -61,15 +62,17 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 ## How it fits
 
 Runs on the user's machine, not in the sandbox. Installed by `computer.{sh,ps1}` / `sync.{sh,ps1}` (both cards
-put the same binary in `~/.intentic/machine/bin`, plus `intentic-launch.exe` on Windows), shipped as a
-bun-compiled binary per platform, self-updated by `upgrade`.
+put the same binary in `~/.intentic/machine/bin`), shipped as a bun-compiled binary per platform, self-updated
+by `upgrade`.
 
-Those four installers, and `upgrade`, all decide the same way and it is worth knowing before reading any of
-them: **ask the installed agent its `version`, ask GitHub what `releases/latest` currently points at, and move
-bytes only when the two differ.** Re-running a card's command is still how a machine is upgraded — it just no
-longer pays ~95 MB for an upgrade there is none of. What does download is pinned to the resolved tag, resumes
-a part file left by an interrupted run, shows progress, and is asked its own version before it is allowed to
-become the agent. The copies are held to each other by [src/installers.test.ts](src/installers.test.ts).
+Those four installers are **bootstrap shims**: they download a first agent onto a machine that has none
+(pinned to the tag `releases/latest` resolves to, resumable, probed by running `version` before it may become
+the agent) and exec `setup`. Every other decision — installed-vs-published, PATH repair, the Windows launcher
+stub — runs from [src/install.ts](src/install.ts) at the top of every `setup`: it self-updates through the
+same download→probe→swap→rollback machinery as `upgrade`, then re-execs the new agent with the same argv, so
+re-running a card's command still upgrades a machine while the rule lives in exactly one compiled, tested
+place. The shims' remaining bootstrap blocks are held identical per dialect by
+[src/installers.test.ts](src/installers.test.ts), which also pins that no decision creeps back into shell.
 
 The install-and-stay-alive plumbing is
 [`@intentic/local-agent`](../local-agent)'s; the windowless Windows logon start is

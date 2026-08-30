@@ -6,8 +6,9 @@ import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";
 
-/* THE ONE SOCKET a runner holds to its parent, the host agent's connection loop retold inside the daemon
- * (_computers/host/src/connection.ts is the original, comment for comment where the reasoning carries over).
+/* THE ONE SOCKET a runner holds to its parent, the machine agent's connection loop retold inside the daemon
+ * (_computers/machine/src/computer/connection.ts is the original, comment for comment where the reasoning
+ * carries over).
  * Outbound only: the runner has no tunnel and no public name, so it can only ever be the side that dials,
  * and everything the parent asks arrives on this socket as oRPC against runnerContract.
  *

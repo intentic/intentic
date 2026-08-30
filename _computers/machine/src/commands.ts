@@ -1,10 +1,10 @@
-import { setTimeout as sleep } from "node:timers/promises";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { computerCommands, computerUninstall } from "./computer/commands.js";
-import { readResidentPid, reconcileResidency, runForeground, stopResident } from "./resident.js";
+import { ensureWindowsLauncher, machineUpgradeExec } from "./install.js";
+import { reconcileResidency, runForeground, stopResident } from "./resident.js";
 import { status } from "./status.js";
 import { syncCommands, syncUninstall } from "./sync/commands.js";
-import { assetUrl, realUpgradeExec, runUpgrade, upgradeMessage } from "./upgrade.js";
+import { assetUrl, runUpgrade, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
 /* `intentic-machine`, the one agent that lives on a user's own computer.
@@ -61,23 +61,6 @@ const version = buildCommand({
     },
 });
 
-// How long to give a just-started loop to claim its pidfile before calling the upgrade a failure and rolling
-// back. It writes the file as its first act, so this is bounded by process startup, not by any work it does.
-const RESIDENT_START_TIMEOUT_MS = 10_000;
-const RESIDENT_START_POLL_MS = 200;
-
-const residentCameUp = async (): Promise<boolean> => {
-    for (let waited = 0; waited < RESIDENT_START_TIMEOUT_MS; waited += RESIDENT_START_POLL_MS) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait on one pidfile, by definition serial
-        if ((await readResidentPid()) !== undefined) {
-            return true;
-        }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- same
-        await sleep(RESIDENT_START_POLL_MS);
-    }
-    return false;
-};
-
 /* Move this machine onto the current agent. WITHOUT a pairing token, which is the entire point. Updating and
  * enrolling had been the same command, so the cost of a version bump was a trip to the browser for a single-use
  * token that expires in ten minutes; the predictable result was machines running whatever was current the day
@@ -103,8 +86,9 @@ const upgrade = buildCommand<UpgradeFlags>({
     },
     async func(this: CommandContext, flags: UpgradeFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        const exec = realUpgradeExec(stopResident, async () => await reconcileResidency(() => undefined), residentCameUp, out);
-        out(upgradeMessage(await runUpgrade(exec, assetUrl, MACHINE_VERSION, flags.force, out)));
+        out(upgradeMessage(await runUpgrade(machineUpgradeExec(out), assetUrl, MACHINE_VERSION, flags.force, out)));
+        // The launcher stub ships and updates with the agent now (install.ts), so an upgrade refreshes both.
+        await ensureWindowsLauncher(out);
     },
 });
 
