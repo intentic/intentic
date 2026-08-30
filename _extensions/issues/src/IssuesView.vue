@@ -138,7 +138,9 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                             @update:open="(open: boolean) => toggle(issue.id, open)"
                         >
                             <template #control>
-                                <span class="text-sm text-muted tabular-nums">{{ timesWords(issue.count) }} · {{ timeAgo(issue.lastSeen, { now }) }}</span>
+                                <span class="text-sm text-muted tabular-nums"
+                                    >{{ timesWords(issue.count) }} · {{ timeAgo(issue.lastSeen, { now }) }}</span
+                                >
                                 <!-- The one fact a status cannot carry: this was fixed and it is back. -->
                                 <StatusBadge v-if="returned(issue)" variant="warning" label="Came back" size="sm" />
                                 <template v-if="canShip">
@@ -153,7 +155,9 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                         size="small"
                                         severity="secondary"
                                         :disabled="setStatus.isPending.value"
-                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }), `Could not resolve that issue.`)"
+                                        @click="
+                                            act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }), `Could not resolve that issue.`)
+                                        "
                                     />
                                     <Button
                                         label="Ignore"

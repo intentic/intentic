@@ -37,14 +37,18 @@ export const timesWords = (count: number): string => (count === 1 ? `once` : `${
  * than rendered as an em dash: a row of placeholders reads as missing data, and this data is genuinely optional.
  */
 export const whereWords = (issue: IssueSummary): string =>
-    [issue.culprit, issue.release === undefined ? undefined : `build ${issue.release}`, issue.origin].filter((part) => part !== undefined).join(` · `);
+    [issue.culprit, issue.release === undefined ? undefined : `build ${issue.release}`, issue.origin]
+        .filter((part) => part !== undefined)
+        .join(` · `);
 
 /* WHAT THE ROW'S PRIMARY BUTTON DOES. An issue nobody has looked at wants a turn started; one that is being
  * looked at already has a conversation to open instead, and offering to start a second turn on a bug an agent
  * is mid-way through fixing is how two worktrees end up on one file. */
 export const primaryAction = (issue: IssueSummary): { kind: `investigate` } | { kind: `open`; conversationId: string } => {
     const latest = issue.runs?.at(-1);
-    return issue.status === `investigating` && latest !== undefined ? { kind: `open`, conversationId: latest.conversationId } : { kind: `investigate` };
+    return issue.status === `investigating` && latest !== undefined
+        ? { kind: `open`, conversationId: latest.conversationId }
+        : { kind: `investigate` };
 };
 
 // The short reference a person can be given for their report ("we filed this as 4f3a1b2c"). Half the digest,

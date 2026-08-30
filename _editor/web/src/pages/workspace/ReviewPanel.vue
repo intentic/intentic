@@ -1083,6 +1083,18 @@ const outgoing = computed<"flow" | "offer" | undefined>(() =>
 const barCovers = (repo: RepoChanges): boolean =>
     outgoing.value !== undefined && changes.count.value === 0 && syncRepos.value.length === 1 && syncRepos.value[0]!.repo === repo.repo;
 
+/* ONE RULE, AT THE BOTTOM OF THE STACK. Up to three blocks sit above the list (record, send, filter) and each
+ * used to draw a full-width border of its own. On a clean tree with a run in flight that read as a rule under
+ * the mode switch, a rule under "Checking · 18s", and then a rule under every repo row below: four lines in a
+ * hundred pixels, at two different strengths, none of which was about the thing being looked at.
+ *
+ * So the blocks are ONE stack now, told apart by their own padding, and the last one present carries the
+ * single rule that says where the chrome stops and the list begins. It is the only horizontal line this panel
+ * draws, which is also what makes it readable as a boundary rather than as more chrome. */
+const headerFoot = computed<"commit" | "outgoing" | "origins" | undefined>(() =>
+    legend.value.agents.length > 0 ? `origins` : outgoing.value !== undefined ? `outgoing` : changes.count.value > 0 ? `commit` : undefined,
+);
+
 // One click, every repo that has remote work: git can't span remotes, so the composable fans it out into one
 // real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
 const doSync = (): void =>
@@ -1141,7 +1153,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- Commit box (VSCode places it at the top). It records the index: staging is the selection. -->
-        <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 border-b border-line p-2">
+        <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2" :class="headerFoot === `commit` && `border-b border-line`">
             <!-- A textarea, not an input: the release-note trailer a session's landed sentence carries lives
                  under the subject, and a message the user writes by hand may have a body of its own. Enter
                  breaks the line; Ctrl/Cmd+Enter still commits, as the placeholder says. One row to start with:
@@ -1351,7 +1363,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              panel IS the screen, so the width objection that put the command in a tooltip does not apply. -->
         <div
             v-if="outgoing !== undefined"
-            class="relative flex shrink-0 items-center gap-1.5 border-b border-line px-2 py-1.5"
+            class="relative flex shrink-0 items-center gap-1.5 px-2 py-1.5"
+            :class="headerFoot === `outgoing` && `border-b border-line`"
             v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
         >
             <template v-if="outgoing === `flow`">
@@ -1436,7 +1449,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              first half of; a session with no such sentence just filters. And a chip whose session
              has not finished wears a leading dot, because a count from a session still running is an instalment
              rather than a total, and every other reading on this panel silently assumes a total. -->
-        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
+        <div
+            v-if="legend.agents.length > 0"
+            class="flex shrink-0 flex-wrap items-center gap-1 px-2 py-1.5"
+            :class="headerFoot === `origins` && `border-b border-line`"
+        >
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
                 v-for="entry in legend.agents"
@@ -1503,12 +1520,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  row, because dropping it from the list is the silent disappearance this reports instead: with
                  git's reason in the same notice every other failure here uses. There is nothing to stage,
                  commit or discard, so the row carries no actions at all. -->
-            <div v-for="group in unscannable" :key="group.repo" class="border-b border-line/50">
-                <div class="flex min-w-0 items-center gap-1.5 py-1.5 pl-2 pr-1">
-                    <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
+            <div v-for="group in unscannable" :key="group.repo" class="mt-1 px-1 first:mt-0">
+                <!-- The triangle takes the repo mark's slot, and the empty chevron slot before it is held, so a
+                     repo git could not read lines up with the ones it could. -->
+                <div class="flex min-w-0 items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1">
+                    <span class="flex shrink-0 items-center gap-0.5">
+                        <span class="w-2.5 shrink-0"></span>
+                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
+                    </span>
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
                 </div>
-                <div :class="[NOTICE, 'mx-2 mb-1.5']">
+                <div :class="[NOTICE, 'mb-1.5']">
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-danger">Couldn't read this repo</p>
                         <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="group.error">{{ group.error }}</p>
@@ -1524,14 +1546,23 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <div
                 v-for="group in scannable"
                 :key="group.repo"
-                class="group/repo border-b border-line/50 transition-opacity"
+                class="group/repo mt-1 px-1 transition-opacity first:mt-0"
                 :class="changes.committing.value.includes(group.repo) && `pointer-events-none opacity-50`"
             >
                 <!-- One row per repo, carrying everything about it: identity on the left, then sync state, the
                      change count, and the two actions that don't depend on state. The pills ARE the verbs:
                      clicking "↓2" pulls those two commits, so a repo that is in sync costs exactly this row
-                     and no more, where it used to cost this row plus a full-width bar mostly reading zero. -->
-                <div class="flex items-center gap-1 pr-1 transition-colors hover:bg-overlay">
+                     and no more, where it used to cost this row plus a full-width bar mostly reading zero.
+
+                     AN INSET, ROUNDED, TINTED ROW, and no rule under it. What separated one repo from the next
+                     used to be a full-width hairline at half the strength of every other line in the panel,
+                     which on a clean tree drew a divider under the LAST repo too: a line across the column with
+                     nothing beneath it. The hover tint is the design system's own row recipe (`ui-row-select`,
+                     `--color-content` at 5%) rather than `bg-overlay`, which is the same colour as this panel's
+                     surface in the light scheme, so the row it was drawn on answered the pointer with nothing
+                     at all. Rounded and held off the panel edge so the lit row reads as one object: the band it
+                     used to paint ran under the scrollbar and stopped dead against both walls. -->
+                <div class="ui-row-select flex items-center gap-1 rounded-md pr-1">
                     <!-- NO CHEVRON ON A REPO WITH NOTHING IN IT. A disclosure triangle is a promise that
                          something is under there, and on a clean repo it was a promise the row could not keep:
                          the screenshot this redesign started from is a chevron over an empty column, which
@@ -1539,18 +1570,34 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                          width, so a clean repo's name still lines up with a dirty one's. -->
                     <button
                         type="button"
-                        class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-2 text-left max-md:min-h-11"
+                        class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1 text-left max-md:min-h-11"
                         :disabled="repoCount(group) === 0"
                         @click="toggleGroup(group.repo)"
                     >
-                        <Icon
-                            v-if="repoCount(group) > 0"
-                            class="shrink-0 text-2xs text-subtle"
-                            :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'"
-                        />
-                        <span v-else class="w-2.5 shrink-0"></span>
+                        <!-- THE MARK THE LIST WAS MISSING. A repo row was a bare word in a column: nothing to
+                             scan down, and "web main" read as one two-word name rather than as a repository and
+                             the branch it is on. Two glyphs fix both halves. `code` is what this app already
+                             draws for a repository nobody has a brand mark for (pages/sandbox/workspaceRepo.ts),
+                             and the branch takes git's own branch glyph, which is the same pairing the sandbox's
+                             workspace card uses. Both sit a step under the name in colour: they are what the row
+                             IS, not what it says.
+                             The chevron rides WITH the mark in a tight pair rather than at the row's own
+                             spacing, so the lead reads as one lead: two identical-weight glyphs six pixels
+                             apart read as two facts, and only one of them is one. -->
+                        <span class="flex shrink-0 items-center gap-0.5">
+                            <Icon
+                                v-if="repoCount(group) > 0"
+                                class="shrink-0 text-2xs text-subtle"
+                                :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'"
+                            />
+                            <span v-else class="w-2.5 shrink-0"></span>
+                            <Icon name="code" class="shrink-0 text-2xs text-subtle" />
+                        </span>
                         <span class="shrink-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
-                        <span v-if="group.branch !== undefined" class="min-w-0 truncate text-2xs text-subtle">{{ group.branch }}</span>
+                        <span v-if="group.branch !== undefined" class="flex min-w-0 items-center gap-0.5 text-2xs text-subtle">
+                            <Icon name="fork" class="shrink-0 text-[0.6rem]" />
+                            <span class="min-w-0 truncate">{{ group.branch }}</span>
+                        </span>
                     </button>
 
                     <!-- THE SYNC PILLS, UNLESS THE BLOCK ABOVE IS ALREADY THIS REPO'S PUSH BUTTON. With one
@@ -1597,9 +1644,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         </button>
                     </template>
 
-                    <span v-if="repoCount(group) > 0" class="shrink-0 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted">{{
-                        repoCount(group)
-                    }}</span>
+                    <!-- A NUMBER, NOT A PILL. It used to be a filled chip in `bg-overlay`, which is the colour
+                         the row itself turns under the pointer: the one moment you are certainly looking at a
+                         repo was the one moment its count disappeared into the row. Nothing else on this row is
+                         a filled shape either, so the count now reads as the figure it is, in the column the
+                         sync pills already line up in. -->
+                    <span v-if="repoCount(group) > 0" class="shrink-0 px-0.5 text-2xs tabular-nums text-muted">{{ repoCount(group) }}</span>
 
                     <button
                         v-if="syncable(group)"
@@ -1630,7 +1680,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
                 <!-- A failed fetch/pull/push/discard/stage for THIS repo, under the row that caused it and
                      naming the verb. The message it carries is git's own verdict line. -->
-                <div v-if="failureIn(group.repo)" :class="[NOTICE, 'mx-2 mb-1.5']">
+                <div v-if="failureIn(group.repo)" :class="[NOTICE, 'mb-1.5 mt-0.5']">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-danger">{{ failureIn(group.repo)!.action }}</p>
@@ -1654,7 +1704,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      an agent's rebase that stopped, a land that could not finish. Above the sections rather than
                      inside Conflicts, because it explains the whole repo: git refuses almost every other verb
                      until it ends, including the commit the panel is otherwise inviting. -->
-                <div v-if="group.operation" :class="[NOTICE, 'mx-2 mb-1.5 border-warning/40 bg-warning/10']">
+                <div v-if="group.operation" :class="[NOTICE, 'mb-1.5 mt-0.5 border-warning/40 bg-warning/10']">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-warning" />
                     <div class="min-w-0 flex-1">
                         <p class="text-2xs font-medium text-warning">A {{ group.operation }} is in progress</p>
@@ -1674,7 +1724,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </button>
                 </div>
 
-                <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-2 pr-1">
+                <!-- NOTHING UNDER A REPO WITH NOTHING IN IT. This block used to render on every expanded repo,
+                     empty or not, and its bottom padding was 4px of dead column INSIDE the group: on a clean
+                     repo the hover tint stopped short of the group's own edge, which is exactly the unlit strip
+                     under a lit row that reads as a rendering fault. A repo with no rows has no body. -->
+                <div v-if="!collapsed.has(group.repo) && repoCount(group) > 0" class="pb-1 pl-1">
                     <!-- One block per git side: conflicts (blocking), then staged (what a bare commit records),
                          then unstaged. The header's action is whole-side and ignores the row selection, which is
                          VSCode's "Stage All Changes" / "Unstage All". -->
@@ -1725,17 +1779,21 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                 <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
-                                <!-- Selection is the explorer's own primary tint (WorkspaceTree's .treerow-on), NOT the
-                                 overlay: the overlay IS this list's hover colour, so a selected row was drawn
-                                 exactly like whichever row the pointer happened to sit on, which made the click
-                                 read as doing nothing, and a multi-selection invisible. Hover keeps its own step
-                                 above the selected tint, so a selected row still answers the pointer. -->
+                                <!-- Selection is the primary tint every selectable list in the app uses
+                                 (`ui-row-select-on`, 15%), NOT a surface: a surface IS this list's hover colour,
+                                 so a selected row was drawn exactly like whichever row the pointer happened to
+                                 sit on, which made the click read as doing nothing, and a multi-selection
+                                 invisible. Hover keeps its own step above the selected tint, which is this
+                                 list's one departure from the shared recipe: rows here are dragged through in
+                                 runs, and the row under the pointer has to stay findable inside a lit block.
+                                 The unselected state IS the shared recipe (`ui-row-select`), which is what the
+                                 repo rows above answer the pointer with too. -->
                                 <div
                                     class="group/file flex items-center gap-1 rounded transition-colors"
                                     :class="[
                                         isSelected({ repo: group.repo, side: section.side, path: change.path })
                                             ? 'bg-primary-500/15 hover:bg-primary-500/25'
-                                            : 'hover:bg-overlay',
+                                            : 'ui-row-select',
                                         // Under a header the rows step in, so the module reads as holding them
                                         // rather than sitting beside them.
                                         viewOf(group.repo, section.side).named ? 'pl-2' : '',

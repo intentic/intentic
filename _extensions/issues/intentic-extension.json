@@ -31,9 +31,7 @@
         "files": [
             {
                 "path": ".intentic/records/issues/",
-                "invalidates": [
-                    "issues"
-                ]
+                "invalidates": ["issues"]
             }
         ]
     }

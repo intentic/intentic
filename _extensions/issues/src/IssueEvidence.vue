@@ -59,6 +59,10 @@ const reporter = computed(() => {
 
         <section v-if="context.length > 0 || sample.userAgent !== undefined">
             <h3 :class="ui.sectionLabel(`mb-1`)">Where</h3>
+            <!-- `grid-cols-facts` is the design system's label/value pair (tokens.css: `max-content 1fr`), and
+                 the same class the other extensions' fact lists use. A column template written inline as an
+                 arbitrary value works only while this extension is built inside this repo: the surface an
+                 extension compiles against can promise a NAME, never a value nobody named. -->
             <dl class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-sm">
                 <template v-if="sample.url !== undefined">
                     <dt class="text-muted">Page</dt>

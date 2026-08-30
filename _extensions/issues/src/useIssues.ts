@@ -61,7 +61,9 @@ export function useIssues() {
         onSuccess: invalidate,
     });
 
-    const issues = computed<IssueSummary[]>(() => (data.value?.issues ?? []).toSorted((a, b) => RANK[a.status] - RANK[b.status] || b.lastSeen - a.lastSeen));
+    const issues = computed<IssueSummary[]>(() =>
+        (data.value?.issues ?? []).toSorted((a, b) => RANK[a.status] - RANK[b.status] || b.lastSeen - a.lastSeen),
+    );
 
     return {
         issues,
