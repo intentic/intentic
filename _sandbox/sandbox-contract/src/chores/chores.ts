@@ -661,7 +661,7 @@ const runtime: Chore = {
     },
     diagnosis: `An unsupported runtime stops receiving security patches, so every advisory against it stays open permanently.`,
     goal:
-        `Establish what actually pins this runtime: the image's own base, the workspace's useNodeVersion, and each package's engines ` +
+        `Establish what actually pins this runtime: the image's own base, the workspace's nodeVersion, and each package's engines ` +
         `range. Propose the smallest move to a supported LTS, which of those pins have to change, in what order, and what is likely to ` +
         `break at that boundary. Make the pin changes that are mechanical; do NOT attempt the image rebuild itself.`,
     done: `Done when the pins name a supported release, the repository's type-check and tests pass on it, and anything needing a rebuild is named as such.`,

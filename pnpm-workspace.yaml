@@ -29,7 +29,7 @@ syncInjectedDepsAfterScripts:
 # to do it for you.
 verifyDepsBeforeRun: false
 
-useNodeVersion: 24.18.0
+nodeVersion: 24.18.0
 
 overrides:
   zod: 4.4.3
