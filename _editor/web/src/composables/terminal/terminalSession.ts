@@ -7,6 +7,7 @@ import { boundCommand } from "../commands/useCommands";
 import { isApplePlatform } from "../commands/keybindings";
 import { toScreenPx } from "../uiScale";
 import { useSandbox } from "../sandbox/useSandbox";
+import { acquireStreamSlot } from "../sandbox/streamBudget";
 import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 import { registerFilePathLinks } from "./terminalFileLinks";
 import { registerUrlLinks } from "./terminalUrlLinks";
@@ -173,8 +174,31 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
         scheduleRetry(s);
         return;
     }
+    /* ONE PERMIT FOR THIS SOCKET, because it is a long-lived connection like any other and the budget's whole
+     * premise is that every one of them is counted (sandbox/streamBudget.ts).
+     *
+     * It was not counted. `/events` and the agent attaches took permits while every open terminal quietly took
+     * a seventh connection, an eighth, so on the plain-http loopback — HTTP/1.1, six per origin — two terminals
+     * were enough to consume the two connections held back for ordinary requests, and the file tree, the git
+     * status and the reconnect itself queued behind sockets that never end on their own. That is the same
+     * client-side freeze the budget was written to prevent, reached by the one stream it did not know about.
+     *
+     * Terminals share the `attach` pool rather than getting one of their own: same shape of stream (one per
+     * live thing the user is watching, unbounded in number, a lost one costs a reconnect and not a blind
+     * window), and reusing it keeps the four-stream ceiling exactly where it already was.
+     *
+     * Over budget the acquire still returns — a terminal that renders nothing is worse than one that opens
+     * late — and asks useEndpoint for a multiplexed transport, where the whole budget goes away. */
+    const release = await acquireStreamSlot(`attach`);
+    // Disposed while queueing for the permit: hand it straight back rather than opening a socket for a dead
+    // session, which is the same reason the token fetch above re-checks.
+    if (s.closing) {
+        release?.();
+        return;
+    }
     const ws = new WebSocket(url);
-    // Supersede any straggler socket (its close handler sees s.socket !== ws, clears its own ping, and stays silent).
+    // Supersede any straggler socket (its close handler sees s.socket !== ws, clears its own ping, releases its
+    // own permit, and stays silent).
     s.socket?.close();
     s.socket = ws;
     // Socket-scoped state lives in this closure so it cannot outlive the socket: every close event (including a
@@ -221,6 +245,11 @@ const connectSocket = async (s: TerminalSession): Promise<void> => {
     });
     ws.addEventListener(`close`, (event) => {
         window.clearInterval(ping);
+        /* Before the identity guard, so EVERY socket hands its permit back: a superseded straggler and a
+         * disposed session both leave through the return below, and a permit released on only the surviving
+         * path leaks the pool one terminal at a time until nothing can open. Releasing twice is harmless
+         * (streamBudget hands out a once-only release), releasing not at all is not. */
+        release?.();
         if (s.socket !== ws || s.closing) {
             return;
         }

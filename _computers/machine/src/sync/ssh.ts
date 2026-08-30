@@ -40,6 +40,11 @@ export const IGNORES = [
     ".cache",
     ".next",
     ".angular",
+    // Astro's build cache, the same shape as .next and .turbo: regenerated on every dev boot, and both sides
+    // generate their own. `.astro/dev.json` in particular is rewritten with machine-local paths and timestamps,
+    // so it arrives as a create-vs-create conflict that no resolution settles — the next dev server writes a
+    // fresh one on each side and the session pins at Conflicts: 1 again.
+    ".astro",
     ".env",
     ".secrets.json",
     "claude.json",

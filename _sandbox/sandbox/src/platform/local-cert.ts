@@ -1,8 +1,6 @@
 import { createPrivateKey, generateKeyPairSync, type KeyObject, X509Certificate } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { localHostname, zoneFromUrl } from "@intentic/sandbox-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import type { Config } from "../env.config.js";
 import { LETS_ENCRYPT_DIRECTORY, obtainCertificate } from "./acme.js";
@@ -52,26 +50,6 @@ const pathsFor = (config: Config): { dir: string; cert: string; key: string; acc
     return { dir, cert: join(dir, "fullchain.pem"), key: join(dir, "key.pem"), account: join(dir, "account-key.pem") };
 };
 
-/* THE NAME TO CERTIFY IS THE PLATFORM'S TO GIVE, not this daemon's to derive, because the platform is the one
- * that owns the zone the record goes in.
- *
- * This used to read `<id>.local.<zoneFromUrl(publicUrl)>` — the zone of the sandbox's OWN public hostname. That
- * is right only while the two zones happen to be the same one, and they stop being the same the moment a
- * sandbox's reachability moves: on the zrok hub a sandbox answers at `sandbox-<id>.sbx.<zone>`, so this derived
- * `<id>.local.sbx.<zone>` while the platform kept writing the wildcard and the ACME challenge under `<zone>`.
- * The two names never meet, validation asks for a TXT at a name the platform never wrote, and issuance fails
- * for every migrated sandbox — quietly, because a failed loopback certificate is a supported state that just
- * drops the browser onto the plain HTTP/1.1 shortcut.
- *
- * So it is ASKED FOR instead. `POST /sandbox/local-dns` already answers with the hostname it just asserted the
- * wildcard for; taking that answer makes the platform's zone the single source of the name, and a sandbox that
- * changes public address keeps its certificate working without either side being taught about the other. */
-const localCertHostname = (config: Config): string | undefined => {
-    const id = sandboxIdFromToken(config.connectToken);
-    const zone = zoneFromUrl(config.sandbox.publicUrl);
-    return id === undefined || zone === undefined ? undefined : localHostname(id, zone);
-};
-
 /* The certificate on disk, if it still has life in it and is for the name given. `hostname` undefined means
  * "whatever this was issued for", which is what BOOT needs: the authoritative name comes from the platform and
  * boot must not wait on a network call to serve TLS it already has. A certificate for a name that has since
@@ -112,10 +90,17 @@ const accountKeyOf = (config: Config): KeyObject => {
     }
 };
 
-// Ask the platform to write (or withdraw) the DNS-01 record. The hostname is derived platform-side from our
-// connect token, so this carries only the value, a sandbox cannot ask for records outside its own name.
-// Returns the hostname the platform asserted the wildcard for, which is the name to certify (see
-// localCertHostname). Undefined from a platform too old to answer with one, where the derived name stands.
+/* Ask the platform to write (or withdraw) the DNS-01 record. The hostname is derived platform-side from our
+ * connect token, so this carries only the value, a sandbox cannot ask for records outside its own name.
+ *
+ * RETURNS THE NAME TO CERTIFY, and it is the only source of it. The platform owns the zone the wildcard and
+ * the challenge are written in, so it is the only side that can say which zone this certificate belongs to.
+ * This daemon used to hold a second opinion, `<id>.local.<zoneFromUrl(publicUrl)>`, and the two stop agreeing
+ * the moment reachability moves to the tunnel hub: a sandbox then answers at `sandbox-<id>.sbx.<zone>`, so the
+ * derived name was `<id>.local.sbx.<zone>` while the platform kept writing under `<zone>`. Validation asked for
+ * a TXT at a name nothing ever wrote, every order timed out, and the listener stayed on plain HTTP — which is
+ * HTTP/1.1, six connections per origin, for every window of the app. Undefined means the platform declined to
+ * name one (the loopback-certificate path is off for this sandbox), which is a normal state, not a failure. */
 const relayChallenge = async (config: Config, value: string | undefined): Promise<string | undefined> => {
     const { status, json } = await postToPlatform(config, "/sandbox/local-dns", value === undefined ? {} : { challenge: value });
     if (status < 200 || status >= 300) {
@@ -129,22 +114,18 @@ const relayChallenge = async (config: Config, value: string | undefined): Promis
 /* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one,
  * every branch is a normal state, never an error the caller has to handle. */
 const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
-    const derived = localCertHostname(config);
-    if (derived === undefined || config.platform.url === "" || config.connectToken === "") {
+    if (config.platform.url === "" || config.connectToken === "") {
         return undefined;
     }
     /* Assert the wildcard and learn the authoritative name in the SAME call, before anything is compared
      * against it. It is one request either way (the record has to be re-asserted on every check regardless,
      * see below), so asking costs nothing and settles which zone this certificate belongs in. */
-    const answered = await relayChallenge(config, undefined).catch((error: unknown) => {
-        logger.warn({ err: error, hostname: derived }, "could not reach the platform for the loopback DNS record");
+    const hostname = await relayChallenge(config, undefined).catch((error: unknown) => {
+        logger.warn({ err: error }, "could not reach the platform for the loopback DNS record");
         return undefined;
     });
-    const hostname = answered ?? derived;
-    if (answered !== undefined && answered !== derived) {
-        // Worth a line: it means this sandbox's public zone and its certificate's zone have parted company,
-        // which is exactly the case the derived name got wrong.
-        logger.info({ derived, hostname }, "the platform named a different loopback hostname; using its answer");
+    if (hostname === undefined) {
+        return undefined;
     }
     const existing = readUsable(config, hostname, Date.now());
     if (existing !== undefined) {
