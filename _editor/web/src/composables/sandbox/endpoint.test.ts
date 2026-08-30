@@ -33,15 +33,19 @@ it(`derives the sandbox id from the connect TOKEN, matching what the container p
     expect(await sandboxIdOf(`other`)).not.toBe(id);
 });
 
-it(`orders candidates certified, plain, tunnel: the last one always dialable`, async () => {
+it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async () => {
     const id = await sandboxIdOf(TOKEN);
     const withToken = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere });
-    // HTTPS leads because it is the only form Safari will touch; plain http follows for the window before a
-    // certificate exists, where Chrome and Firefox still take the shortcut.
-    expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `local-insecure`, `tunnel`]);
+    /* THE ORDER IS THE WHOLE POLICY, so it is asserted as a whole. The certified loopback speaks h2 and the
+     * tunnel's edge speaks h2/h3; plain http is HTTP/1.1 and cannot be otherwise, because no browser speaks
+     * cleartext h2. Six connections per origin against an app holding one long-lived stream per window plus one
+     * per streaming agent is a workspace that freezes, so the un-multiplexed address goes BELOW the tunnel and
+     * is reached only when nothing else answers, which is the outage it was written for. Put it back in the
+     * middle and a missing DNS record silently downgrades every window again. */
+    expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `tunnel`, `local-insecure`]);
     expect(withToken[0]?.base).toBe(localDaemonUrl(id, ZONE));
-    expect(withToken[1]?.base).toBe(localDaemonUrlInsecure(id));
-    expect(withToken[2]?.base).toBe(TUNNEL);
+    expect(withToken[1]?.base).toBe(TUNNEL);
+    expect(withToken[2]?.base).toBe(localDaemonUrlInsecure(id));
     /* A label DEEPER than the sandbox's own hostname, and this is the assertion that keeps it there: a DNS
      * wildcard matches exactly one label, so `<id>.local.<zone>` is what lets one `*.local.<zone>` record
      * answer for every sandbox there will ever be. Flatten it back to `local-<id>.<zone>` and each sandbox
@@ -49,7 +53,7 @@ it(`orders candidates certified, plain, tunnel: the last one always dialable`, a
      * (and with it h2, and with it the workspace) down. */
     expect(new URL(withToken[0]!.base).hostname).toBe(`${id}.local.${ZONE}`);
     // Both loopback forms are the SAME published port: one mapping, and what the daemon serves decides.
-    expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[1]!.base).port);
+    expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[2]!.base).port);
 
     // No token ⇒ no derivable id ⇒ no address to guess. The tunnel is the only way in.
     expect(await candidatesFor({ daemonUrl: TUNNEL, token: undefined, ...anywhere })).toEqual([{ kind: `tunnel`, base: TUNNEL }]);
@@ -82,9 +86,10 @@ it(`never reaches for the machine when the sandbox cannot be on it`, async () =>
 });
 
 it(`drops the certified candidate when the sandbox's URL carries no zone to certify under`, async () => {
-    // A two-label host has no zone suffix to strip: an attached sandbox behind someone's own bare domain.
+    // A two-label host has no zone suffix to strip: an attached sandbox behind someone's own bare domain. It
+    // can never have a certificate, so it rides the tunnel and only drops to plain http when offline.
     const candidates = await candidatesFor({ daemonUrl: `https://example.com`, token: TOKEN, ...anywhere });
-    expect(candidates.map((candidate) => candidate.kind)).toEqual([`local-insecure`, `tunnel`]);
+    expect(candidates.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
 });
 
 it(`accepts a loopback candidate only when the daemon behind it names THIS sandbox`, async () => {
@@ -143,9 +148,30 @@ it(`treats every way a loopback call can be refused as the same instruction: use
     expect(await probeEndpoint(local, id, refused)).toBe(false);
 });
 
-it(`never probes the tunnel: it is the fallback, not a candidate to qualify`, async () => {
+it(`qualifies the tunnel too, now that something ranks below it`, async () => {
+    /* It was never probed while it sat last, which was coherent: nothing follows a fallback. Ranked above the
+     * plain-http address it has to be qualified like anything else, or it always wins and the offline case
+     * behind it is dead code. */
+    const id = await sandboxIdOf(TOKEN);
+    const tunnel = { kind: `tunnel` as const, base: TUNNEL };
+    const answering = vi.fn(async () => health(id));
+    expect(await probeEndpoint(tunnel, id, answering)).toBe(true);
+    expect(answering).toHaveBeenCalledWith(`${TUNNEL}/health`, expect.anything());
+
+    const offline = vi.fn(async () => {
+        throw new TypeError(`Failed to fetch`);
+    });
+    expect(await probeEndpoint(tunnel, id, offline)).toBe(false);
+});
+
+it(`takes the tunnel on trust when nothing ranks below it`, async () => {
+    // Qualifying the last candidate spends a request to choose between it and nothing. For a sandbox on a
+    // machine the platform placed elsewhere it is also the only candidate there has ever been.
     const fetchMock = vi.fn();
-    expect(await probeEndpoint({ kind: `tunnel`, base: TUNNEL }, `abc`, fetchMock)).toBe(true);
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: { state: `started` } }, fetchMock)).toEqual({
+        kind: `tunnel`,
+        base: TUNNEL,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -161,15 +187,27 @@ it(`selects the shortcut when it answers as us, and always resolves to something
         base: localDaemonUrl(id, ZONE),
     });
 
-    // A daemon serving the shortcut in plain http (no certificate yet) fails the https probe and passes the
-    // next one: the browsers that allow loopback http are accelerated without waiting on issuance.
-    const httpOnly = vi.fn(async (input: string | URL | Request) => {
+    /* NO CERTIFICATE, BUT ONLINE: the tunnel, not the plain loopback sitting right there. This is the case the
+     * whole incident was: the certified name stopped resolving, and every window stepped down to HTTP/1.1
+     * while a healthy h2/h3 tunnel went unused. Slower per request, and the only thing that makes an app
+     * holding a dozen live streams usable. */
+    const noCertificate = vi.fn(async (input: string | URL | Request) => {
         if (String(input).startsWith(localDaemonUrl(id, ZONE)!)) {
             throw new TypeError(`Failed to fetch`);
         }
         return health(id);
     }) as unknown as typeof fetch;
-    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, httpOnly)).toEqual({
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, noCertificate)).toEqual({ kind: `tunnel`, base: TUNNEL });
+
+    /* OFFLINE: neither public address resolves, and the daemon is a loopback hop away. This is the one state
+     * plain http exists for, and the only one that reaches it. */
+    const offline = vi.fn(async (input: string | URL | Request) => {
+        if (!String(input).startsWith(localDaemonUrlInsecure(id))) {
+            throw new TypeError(`Failed to fetch`);
+        }
+        return health(id);
+    }) as unknown as typeof fetch;
+    expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, offline)).toEqual({
         kind: `local-insecure`,
         base: localDaemonUrlInsecure(id),
     });

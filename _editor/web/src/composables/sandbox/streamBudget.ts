@@ -32,11 +32,13 @@ import type { EndpointKind } from "./endpoint";
  *     no counter of ours could promise. Where they are missing (tests, SSR) the in-memory counter below stands
  *     in, and a single-realm app is exactly the case that makes it correct.
  *
- *   · A caller that cannot be admitted MOVES rather than waits. Serializing the fifth agent's live view was the
- *     old answer, and it is the wrong one: the tunnel is sitting right there speaking h2 with no cap at all. So
- *     an acquire that cannot be served promptly demotes this window off the shortcut (useEndpoint wires the
- *     handler), the whole window retargets onto the tunnel, capacity goes unbounded, and the queue drains. The
- *     shortcut is then re-probed once its backoff expires, so a window that fits it gets it back. */
+ *   · A caller that cannot be admitted ASKS FOR A BETTER TRANSPORT rather than only waiting. Serializing the
+ *     fifth agent's live view was the old answer, and it is half an answer: reaching this transport at all
+ *     means every multiplexed address was tried and none answered (endpoint.ts ranks it last), and the thing
+ *     most likely to have changed since is the network. So an acquire that cannot be served promptly asks
+ *     useEndpoint to re-probe now instead of at the end of its interval; if anything better came up, the whole
+ *     window retargets onto it, capacity goes unbounded and the queue drains at once. If nothing did, the
+ *     waiting stands, which is the honest outcome of running five agents with no network. */
 
 // The per-origin ceiling every engine still ships for HTTP/1.1. Not negotiable, not configurable.
 const HTTP1_CONNECTIONS_PER_ORIGIN = 6;
@@ -249,10 +251,13 @@ const takePermit = async (stream: StreamKind, permits: number, signal: AbortSign
     if (aborted(signal)) {
         return undefined;
     }
-    /* The deadline passed with every permit still held. This window wants more of this transport than it has,
-     * so it stops using it: the tunnel multiplexes and the caller opens there instead of waiting on a socket
-     * that is not coming. Handing back a release that holds nothing is correct rather than sloppy, the permit
-     * it would have freed is on a transport this window has just left. */
+    /* The deadline passed with every permit still held: this window wants more of this transport than it has.
+     * Say so (useEndpoint re-probes for a multiplexed one), and let the caller open anyway.
+     *
+     * Opening over budget is deliberate. The alternative is refusing, and a refused attach is a conversation
+     * that renders nothing while its turn runs — worse than a seventh connection that queues behind the other
+     * six and arrives late. The release handed back holds nothing, which is correct rather than sloppy: there
+     * is no permit to give back, and counting one would leak the pool. */
     overflow();
     return () => undefined;
 };

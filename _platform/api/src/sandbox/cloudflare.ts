@@ -160,7 +160,20 @@ export const ensureLocalDnsRecord = async (apiToken: string, zone: string): Prom
         `/zones/${encodeURIComponent(zoneId)}/dns_records?type=A&name=${encodeURIComponent(hostname)}`,
         z.array(z.object({ id: z.string() })),
     );
-    const body = JSON.stringify({ type: "A", name: hostname, content: LOCAL_ADDRESS, proxied: false, comment: "intentic sandbox loopback" });
+    /* A DAY, against Cloudflare's 300s default, and the TTL is doing real work here rather than saving
+     * lookups. This record says 127.0.0.1 and will say 127.0.0.1 forever, so nothing is risked by caching it —
+     * and what it buys is the outage. A browser that has this name cached keeps reaching the daemon over the
+     * certified h2 address after the machine goes offline; one that does not falls through to plain http, which
+     * is HTTP/1.1 with six connections per origin for the whole app. The cache is the difference between a
+     * dropped wifi being invisible and a workspace that starts lagging a few minutes later. */
+    const body = JSON.stringify({
+        type: "A",
+        name: hostname,
+        content: LOCAL_ADDRESS,
+        proxied: false,
+        ttl: 86_400,
+        comment: "intentic sandbox loopback",
+    });
     const recordId = records[0]?.id;
     await cfCall(
         apiToken,

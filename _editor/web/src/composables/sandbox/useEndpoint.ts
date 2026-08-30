@@ -86,6 +86,22 @@ const usingLocal = computed(() => {
     return kind === `local` || kind === `local-insecure`;
 });
 
+/* IS THIS WINDOW ON THE ONE TRANSPORT THAT CANNOT MULTIPLEX, and therefore worth telling the user about?
+ *
+ * Every other state is an implementation detail nobody needs narrated: h2 on the shortcut and h2/h3 on the
+ * tunnel differ in latency, not in what the app can do. This one differs in what the app can DO — six
+ * connections per origin, shared across every window, against an app that holds one for each window's live
+ * feed and one per streaming agent. Agents lag, and the cause is invisible from the outside: the daemon is
+ * healthy, its log is silent, and the requests that never arrive leave no trace anywhere.
+ *
+ * Since the plain address now ranks BELOW the tunnel, being here means nothing multiplexed could be reached at
+ * all, which is very nearly a synonym for "this machine is offline". That is what makes it worth one line on
+ * screen rather than a diagnostic: it is a state the user can recognise and usually fix. */
+const degradedTransport = computed(() => {
+    const id = activeSandboxId.value;
+    return id !== undefined && endpoints.value[id]?.kind === `local-insecure`;
+});
+
 /* How many long-lived streams this ORIGIN may hold at once, which only the TRANSPORT can answer, h2 multiplexes
  * them onto one connection, plain http/1.1 spends a whole connection each and a browser has six per origin.
  * Read live (not snapshotted) because the endpoint resolves in the background and can change under a stream
@@ -99,14 +115,21 @@ setStreamCapacity((stream) => {
     return streamPermits(id === undefined ? undefined : endpoints.value[id]?.kind, stream);
 });
 setStreamScope(() => daemonBase.value ?? `unaddressed`);
-/* A window with more streams than the shortcut can carry leaves the shortcut. Demotion is the repair that
- * already exists for "this address stopped working for us", and it is the right one here: the tunnel speaks h2,
- * so every queued stream opens at once, and the backoff hands the shortcut back once this window has fewer
- * streams to hold. Nothing is torn down, the streams retarget with the base (see useSandboxLiveness). */
+/* A window with more streams than this transport can carry ASKS AGAIN, immediately, rather than waiting out
+ * the rest of the promotion interval.
+ *
+ * It used to demote to the tunnel, which was right while the plain address ranked above it: the window was
+ * there by preference, so preferring something else was the repair. It is not right now that it ranks last.
+ * Reaching it means every multiplexed address was probed and none answered, so a demotion would point the
+ * window at an address just established to be dead and cost it the whole backoff before it could come back.
+ *
+ * Re-probing says the true thing instead: "this is not enough, is anything better up yet?". If the network
+ * came back, the tunnel answers and every queued stream opens at once. If it did not, the plain address is
+ * re-adopted and the streams simply wait, which is the honest outcome of running five agents offline. */
 setStreamOverflow(() => {
     const id = activeSandboxId.value;
-    if (id !== undefined && endpoints.value[id] !== undefined) {
-        demote(id);
+    if (id !== undefined) {
+        resolvedAt.delete(id);
     }
 });
 
@@ -189,5 +212,5 @@ const reset = (sandboxId: string): void => {
 };
 
 export function useEndpoint() {
-    return { daemonBase, usingLocal, resolve, demote, reset };
+    return { daemonBase, usingLocal, degradedTransport, resolve, demote, reset };
 }

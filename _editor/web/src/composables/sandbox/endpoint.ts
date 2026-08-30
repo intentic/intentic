@@ -35,17 +35,22 @@ const PROBE_TIMEOUT_MS = 1500;
  * address that works from anywhere); the other two are the same loopback port, differing only in what the
  * daemon managed to serve on it.
  *
- * `local` is HTTPS on `<id>.local.<zone>`, a public name resolving to 127.0.0.1, the only form EVERY browser
- * accepts. `local-insecure` is plain http on 127.0.0.1; the mixed-content spec calls loopback
- * potentially-trustworthy so Chrome and Firefox take it, and Safari does not (WebKit 171934), which is
- * precisely why the certified form is tried first.
+ * `local` is HTTPS on `<id>.local.<zone>`, a public name resolving to 127.0.0.1. HTTPS is not decoration here:
+ * a browser trusts a certificate, a certificate needs a name a public CA will sign, and no CA can sign a
+ * loopback ADDRESS (validation has to reach it from the public internet, and 127.0.0.1 is not routable —
+ * true of Let's Encrypt's IP certificates too). A public name is the only way to put TLS, and therefore h2, on
+ * a socket that never leaves the machine.
+ *
+ * `local-insecure` is plain http on 127.0.0.1; the mixed-content spec calls loopback potentially-trustworthy so
+ * Chrome and Firefox take it from an HTTPS page, and Safari does not (WebKit 171934). It is HTTP/1.1 and cannot
+ * be otherwise, because no browser speaks cleartext h2.
  *
  * The daemon serves BOTH on that one port, at the same time, deciding per connection (sandbox
- * loopback-listener.ts). That is what makes the second one worth probing rather than a form that stopped
- * existing the moment issuance landed. It also makes it the candidate that survives an outage: `local` is a
- * PUBLIC name, so reaching it costs a DNS lookup on the public internet, while `local-insecure` needs no name
- * at all. When the owner's connection drops, the tunnel goes with it and `<id>.local.<zone>` stops resolving; plain
- * loopback is then the only thing still standing between the browser and a daemon on the same machine. */
+ * loopback-listener.ts), so the plain form is a live alternative rather than a phase that ended when issuance
+ * landed. What it is FOR is the outage: `local` is a public name, so reaching it costs a DNS lookup on the
+ * public internet, and the tunnel needs the internet outright. When the owner's connection drops, both go with
+ * it and plain loopback is the only thing still standing between the browser and a daemon on the same machine.
+ * That, and only that, is when it is chosen — see candidatesFor for what ranking it any higher cost. */
 export type EndpointKind = "local" | "local-insecure" | "tunnel";
 
 export interface Endpoint {
@@ -97,11 +102,27 @@ export const sandboxIdOf = async (connectToken: string): Promise<string> => (awa
 export const localDaemonUrl = (sandboxId: string, zone: string | undefined): string | undefined =>
     zone === undefined || zone === `` ? undefined : `https://${localHostname(sandboxId, zone)}:${localDaemonPort(sandboxId)}`;
 
-// The addresses worth trying for a sandbox, best first. Without a connect token there is no id, hence no
-// derivable port and no local candidate at all, and a sandbox on a machine the platform placed elsewhere has
-// nothing to reach for either, so both collapse to the tunnel being the only way in. The certified form leads;
-// the plain one follows for the window before issuance lands, and forever where it cannot happen (no zone, an
-// own-Cloudflare sandbox, a CA that refused).
+/* THE ADDRESSES WORTH TRYING FOR A SANDBOX, BEST FIRST, and the order is a ranking by MULTIPLEXING before it
+ * is a ranking by distance.
+ *
+ * Two of the three carry as many streams as this app wants on one connection: the certified loopback speaks
+ * h2, and the tunnel's edge speaks h2 and advertises h3. The third cannot and never will: no browser speaks
+ * cleartext h2, so `http://127.0.0.1` is HTTP/1.1 with SIX connections per origin, against an app that holds
+ * a long-lived one per window plus one per streaming agent.
+ *
+ * It used to rank second, ahead of the tunnel, on the reasoning that a loopback hop beats a round trip to an
+ * edge. It does — right up until the sixth connection, at which point every further request in every window of
+ * this app queues in the browser until some stream ends. Measured: reads waiting 221 seconds against a daemon
+ * answering in a mean of 66ms, with the tunnel sitting there healthy and unused the whole time. So the plain
+ * form is LAST, and the price of choosing it is only ever paid when the alternative is nothing at all.
+ *
+ * That makes it what it was always described as and never was: the candidate for when the network is gone.
+ * `local` is a public name, so it needs DNS; the tunnel needs the internet outright. When the owner's
+ * connection drops, `http://127.0.0.1` is the only thing still standing between the browser and a daemon on
+ * the same machine, and the tunnel probe ahead of it fails in milliseconds to get there.
+ *
+ * Without a connect token there is no id, hence no derivable port and no local candidate at all; a sandbox on
+ * a machine the platform placed elsewhere has nothing to reach for either. Both collapse to the tunnel. */
 export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> => {
     const tunnel: Endpoint = { kind: `tunnel`, base: sandbox.daemonUrl };
     if (sandbox.token === undefined || sandbox.token === `` || !couldBeOnThisMachine(sandbox)) {
@@ -113,28 +134,24 @@ export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> =>
     const secure = localDaemonUrl(id, zoneFromUrl(sandbox.daemonUrl));
     return [
         ...(secure === undefined ? [] : [{ kind: `local`, base: secure } as const]),
-        { kind: `local-insecure`, base: localDaemonUrlInsecure(id) },
         tunnel,
+        { kind: `local-insecure`, base: localDaemonUrlInsecure(id) },
     ];
 };
 
 /* IS THE ANSWER A WINDOW IS HOLDING STILL THE BEST ONE AVAILABLE, or is it the kind that goes stale?
  *
- * Two of the three are final. The tunnel always works, and the certified shortcut is the best address there
- * is, so a window holding either has nothing to gain from asking again. `local-insecure` is the odd one out,
- * because it is not really an answer to "where is this daemon" — it is the answer to "where is this daemon
- * REACHABLE FROM HERE YET", and yet is the whole problem. Issuance is a CA validating DNS, tens of seconds at
- * best, and a sandbox that has just been created has no certificate at all. So the ordinary sequence is: a
- * window opens, the certified name does not resolve, plain http qualifies, and the certificate lands a minute
- * later.
+ * Two of the three are final. The certified shortcut is the best address there is, and the tunnel is the one
+ * that works from anywhere, so a window holding either has nothing to gain from asking again.
  *
- * Nothing re-asked. That window then spent the rest of its life on HTTP/1.1 with six connections per origin,
- * against a daemon that had been speaking h2 almost the whole time — and a healthy stream never reconnects, so
- * "the rest of its life" is hours. It is not a corner case either: it is what happens every single time
- * somebody opens a sandbox they just made.
+ * `local-insecure` is different in kind: since it ranks below the tunnel it is never a preference, it is a
+ * VERDICT — "nothing multiplexed could be reached from here" — and a verdict about the network is exactly the
+ * sort of thing that stops being true without telling anyone. Wifi comes back, the laptop wakes, the DNS
+ * record is restored. Nothing re-asked, and a healthy stream never reconnects, so a window that qualified it
+ * during a blip stayed on HTTP/1.1 with six connections per origin for hours afterwards.
  *
- * Hence provisional, and re-probed on an interval. The cost is one /health per minute against a name that
- * either resolves or does not, and only while a window is on the transport it would rather leave. */
+ * Hence provisional, and re-probed on an interval. The cost is one /health per minute, and only while a window
+ * is on the transport it would rather leave. */
 export const PROMOTION_INTERVAL_MS = 60_000;
 
 export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: number | undefined, now: number): boolean => {
@@ -146,20 +163,35 @@ export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: numb
     return endpoint.kind !== `local-insecure` || now - (resolvedAt ?? now) < PROMOTION_INTERVAL_MS;
 };
 
+/* The tunnel's own budget, far above the loopback one, because it is measuring something else entirely. A
+ * loopback candidate is sub-millisecond when it works, so 1.5s there means "hung socket". The tunnel is a
+ * Cloudflare edge plus a hop through the hub to a container that may be cold, and seconds are ordinary.
+ *
+ * Being generous costs nothing in the case that matters. An OFFLINE browser does not time this out, it fails
+ * on DNS or a refused connection, in milliseconds, and falls straight through. The only thing this budget
+ * buys is the reverse mistake: a tunnel that is alive but slow must not be mistaken for a dead one, because
+ * the answer below it is HTTP/1.1 and six connections per origin. */
+const TUNNEL_PROBE_TIMEOUT_MS = 5000;
+
 /* Does this address reach the daemon we mean? Unauthenticated (/health is exempt from the daemon's gate), so
  * a candidate can be qualified before any credential is presented to it, which matters, because presenting a
  * session bearer to whatever happens to hold a loopback port is precisely the mistake this prevents.
  *
- * Every failure mode collapses to `false` on purpose, because they are all the same instruction, use the
- * tunnel. Safari refusing the request as mixed content (it does not honour the spec's loopback exemption,
+ * THE TUNNEL IS PROBED NOW TOO, which it never used to be. It was "the registry's own answer, the fallback,
+ * never something we qualify", and that was coherent while it sat LAST: an address you fall back to needs no
+ * qualifying, because there is nothing after it. It does not sit last any more (see candidatesFor), and an
+ * unprobed candidate in the middle of a list is one that always wins, which would leave the plain-http
+ * fallback behind it dead code and take the offline case with it.
+ *
+ * Every failure mode collapses to `false` on purpose, because they are all the same instruction, try the next
+ * address. Safari refusing a loopback request as mixed content (it does not honour the spec's exemption,
  * WebKit 171934), Chrome's Local Network Access permission being declined, nothing listening, a stranger
- * listening: none of them are worth telling apart, and none of them are errors the user should see. */
+ * listening, an edge that does not answer: none are worth telling apart, and none are errors the user should
+ * see. */
 export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> => {
-    if (endpoint.kind === `tunnel`) {
-        return true; // the registry's own address: the fallback, never something we qualify
-    }
+    const budget = endpoint.kind === `tunnel` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS;
     try {
-        const response = await fetchImpl(`${endpoint.base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        const response = await fetchImpl(`${endpoint.base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(budget) });
         if (!response.ok) {
             return false;
         }
@@ -170,17 +202,25 @@ export const probeEndpoint = async (endpoint: Endpoint, expectedSandboxId: strin
     }
 };
 
-// The first candidate that answers as the sandbox we mean. The tunnel closes the list and is never probed, so
-// this always resolves to something dialable, a sandbox with no working local shortcut is not a failure.
+/* The first candidate that answers as the sandbox we mean, with the tunnel as the floor under all of them: it
+ * is the registry's own address, so a sandbox whose every probe failed is still addressable rather than broken.
+ *
+ * A candidate with NOTHING AFTER IT is taken on trust, and only the tunnel is ever in that position. Qualifying
+ * it would be spending a request to decide between it and nothing, and for the two lanes where the platform
+ * placed the machine itself (a hosted VM, a cloud machine) it is the only candidate there has ever been. The
+ * loopback forms are never taken on trust at any position: a port is not a sandbox, and adopting whatever
+ * happens to hold one would point this sandbox's session, uploads and terminals at another daemon. */
 export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetch = fetch): Promise<Endpoint> => {
     const candidates = await candidatesFor(sandbox);
     const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
-    for (const candidate of candidates) {
+    for (const [index, candidate] of candidates.entries()) {
+        if (candidate.kind === `tunnel` && index === candidates.length - 1) {
+            return candidate;
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- candidates are ORDERED preferences: probing the rest in parallel would spend requests on addresses we would discard anyway
         if (await probeEndpoint(candidate, expected, fetchImpl)) {
             return candidate;
         }
     }
-    // Unreachable while `candidatesFor` ends with the tunnel, which `probeEndpoint` always accepts.
     return { kind: `tunnel`, base: sandbox.daemonUrl };
 };

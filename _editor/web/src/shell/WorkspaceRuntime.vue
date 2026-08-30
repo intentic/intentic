@@ -10,6 +10,7 @@ import { startDraftingReceipts } from "../composables/workspace/draftingReceipts
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
 import LocalShortcutNotice from "./LocalShortcutNotice.vue";
+import SlowTransportNotice from "./SlowTransportNotice.vue";
 import PoppablePanels from "./PoppablePanels.vue";
 import PushNotice from "./PushNotice.vue";
 import ReceiptBar from "./ReceiptBar.vue";
@@ -90,4 +91,9 @@ startDraftingReceipts();
          dialog can ask it worse. Up here because the stream is: the probe that raises it runs on every connect,
          and a connect happens on /setup and behind an invite link as readily as in the workspace. -->
     <LocalShortcutNotice />
+    <!-- And the state that shortcut lands in when nothing else can be reached: HTTP/1.1, six connections for
+         the whole app. Beside the offer rather than in a settings panel, because its symptom (agents lagging,
+         reads that never arrive) is indistinguishable from the workspace being broken, and the cause is three
+         layers away from anything else on screen. -->
+    <SlowTransportNotice />
 </template>
