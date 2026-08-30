@@ -221,6 +221,14 @@ catalog:
   "@slack/socket-mode": 3.0.0
   "@slack/web-api": 8.0.0
   "@stricli/core": 1.3.0
+  # Mutation testing, behind the `test-strength` chore and opted into by stryker.conf.mjs at the repo root.
+  # BOTH PACKAGES, PINNED TO EACH OTHER: the runner embeds assumptions about the vitest it drives, and a core
+  # that has moved past its runner fails at plugin-load rather than at a version check. Real dependencies rather
+  # than `pnpm dlx` because under dlx Stryker resolves its plugins from the working directory and finds none —
+  # "no TestRunner plugins were loaded" — which stryker.conf.mjs records as measured twice.
+  # ponytail: bump together.
+  "@stryker-mutator/core": 10.0.0
+  "@stryker-mutator/vitest-runner": 10.0.0
   "@tailwindcss/vite": 4.3.3
   "@tanstack/query-persist-client-core": 5.101.4
   "@tanstack/vue-query": 5.101.4

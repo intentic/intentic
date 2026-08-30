@@ -40,9 +40,16 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 
 const exec = promisify(execFile);
 
-// Long enough for a cold suite on a loaded box, short enough that a hung run cannot hold the turn. A timeout here
-// reads as "no answer" and says nothing, like every other failure in this file.
-const RUN_TIMEOUT_MS = 90_000;
+/* THE BUDGET IS THE AGENT'S PATIENCE, NOT THE SUITE'S NEED. This runs inside a PostToolUse hook, so every
+ * millisecond here is a millisecond the Edit's result is withheld and the turn is stopped — and it fires on the
+ * first edit of each test file, which is roughly three times in a median session and seven at p90.
+ *
+ * 90s was sized against "a cold suite on a loaded box", which is the wrong question: at that ceiling a handful of
+ * slow packages could add ten minutes to a session, and the finding is worth a fraction of that. 20s buys the
+ * fast packages — where most test edits land — and gives up on the slow ones, which is the right trade for a
+ * signal that is advisory anyway. A timeout reads as "no answer" and says nothing, like every other failure in
+ * this file, so the cost of giving up early is a missed report and never a wrong one. */
+const RUN_TIMEOUT_MS = 20_000;
 // What a package's own vitest config is called. Without one there is no suite to borrow settings from — jsdom,
 // setup files, the timeouts — and a generated config would run the test under different conditions than the
 // package does, which is a different measurement wearing this one's name.

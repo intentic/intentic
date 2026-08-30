@@ -67,6 +67,8 @@
         "@intentic/constants": "workspace:*",
         "@oxlint/plugins": "catalog:",
         "@semantic-release/exec": "catalog:",
+        "@stryker-mutator/core": "catalog:",
+        "@stryker-mutator/vitest-runner": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "knip": "catalog:",
