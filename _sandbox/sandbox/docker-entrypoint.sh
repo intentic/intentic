@@ -117,6 +117,17 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
         echo "releasing stale share $stale from a previous container" >> "$HISTORY_ROOT/logs/zrok.log"
         zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
     done
+    # THE AGENT'S CONTROL SOCKET IS THE SAME KIND OF CORPSE, and it kills the agent outright rather than
+    # degrading it. $HOME/.zrok2 is a symlink onto the /history volume (above), which is exactly what makes the
+    # environment survive a recreate — and it makes `agent.socket` survive too. A unix socket whose owner is
+    # gone still occupies its path, so `zrok2 agent start` dies on `bind: address already in use`, the restart
+    # loop below spins on it every 2s forever, and the sandbox has no agent: no previews, no port shares, and
+    # `zrok2 agent status` answers "connection refused" while the log fills with `started` / `aborted` pairs.
+    #
+    # Safe to remove unconditionally because of WHERE this runs: the entrypoint is the container's first
+    # process, so there is no agent of ours alive to own it. Anything at this path is by definition left over
+    # from a container that no longer exists.
+    rm -f "$HOME/.zrok2/agent.socket"
     (
         while :; do
             zrok2 agent start >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
