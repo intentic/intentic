@@ -196,6 +196,13 @@ export const configSchema = z.object({
              * HOSTED_CANARY_MINUTES, HOSTED_CANARY_EMAIL. */
             canaryMinutes: z.coerce.number().int().nonnegative().default(0),
             canaryEmail: z.string().default(``),
+            /* WHO THIS DEPLOYMENT IS to the provider, stamped into every machine it creates and the only
+             * thing its orphan sweep will destroy (hosted.ts). Derived from the API URL and the database when
+             * empty, which separates deployments without anybody having to remember a knob; set it only to
+             * carry an identity across a database move, or to hand one fleet deliberately from one deployment
+             * to another. Two deployments sharing this value share a fleet, including the right to destroy
+             * each other's machines. HOSTED_INSTANCE_ID. */
+            instanceId: z.string().default(``),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL, intentic's OWN model keys, and the SECOND documented exception to the secret-free

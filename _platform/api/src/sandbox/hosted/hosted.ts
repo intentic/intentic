@@ -36,11 +36,39 @@ export const hostedEnabled = (config: Config): boolean =>
     config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
 
 /* WHICH PLATFORM THIS IS, as the twelve hex characters every machine it creates carries in its Fly metadata
- * (fly.ts). Derived from the API's own public URL because that is the one setting two deployments can never
- * legitimately share: a staging box, a laptop and production may hold the same Fly token, org, prefix and
- * image, but they answer on different addresses, so the id separates them without anybody having to remember
- * to set a knob. A copied env file is therefore harmless by construction rather than by discipline. */
-export const hostedInstanceId = (config: Config): string => createHash(`sha256`).update(config.api.url).digest(`hex`).slice(0, 12);
+ * (fly.ts), and the thing the orphan sweep checks before it destroys anything.
+ *
+ * Derived from the API's public URL AND its database, because the copied env file is not a hypothetical here:
+ * it is how a laptop came to hold production's Fly token in the first place, and a copy carries API_URL with
+ * it. Two deployments that share an address AND a database are the same deployment (two replicas, a redeploy),
+ * and everything else is somebody else:
+ *   • a laptop with a verbatim copy of production's env still points at its own Postgres, because it cannot
+ *     reach production's, so its id differs, which is the case that mattered.
+ *   • a staging box restored from a production dump shares the database's NAME but answers on its own URL.
+ *   • replicas and redeploys of one deployment share both, and must keep one identity across restarts.
+ * Host and database name only, never the credential: this is a label the provider stores in plaintext.
+ *
+ * `HOSTED_INSTANCE_ID` overrides the derivation, for the two cases where identity has to outlive its inputs:
+ * moving the database, and deliberately handing one fleet from one deployment to another. */
+const instanceFingerprint = (config: Config): string => {
+    const raw = config.database?.url ?? ``;
+    try {
+        const dsn = new URL(raw);
+        return `${config.api.url}|${dsn.host}${dsn.pathname}`;
+    } catch {
+        // Not a URL we can parse (an empty config in a test, a DSN shape we do not model): the address alone
+        // still separates deployments, and a fingerprint that threw would take the whole lane down with it.
+        return `${config.api.url}|`;
+    }
+};
+
+export const hostedInstanceId = (config: Config): string => {
+    // `?? ` rather than a bare equality: an id that came back undefined would compare unequal to every stamp
+    // ever written, which reads as "none of these machines are mine" — the one wrong answer this must never
+    // give quietly.
+    const override = config.hosted.instanceId ?? ``;
+    return override === `` ? createHash(`sha256`).update(instanceFingerprint(config)).digest(`hex`).slice(0, 12) : override;
+};
 
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;

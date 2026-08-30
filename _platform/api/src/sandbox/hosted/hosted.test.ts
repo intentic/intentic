@@ -101,6 +101,46 @@ describe(`hostedEnabled`, () => {
     });
 });
 
+/* WHO THIS DEPLOYMENT IS, and the reason it is not just the API URL. The laptop that destroyed production's
+ * fleet held a COPY of production's env file, which is how it had the Fly token at all, and a copy carries
+ * API_URL with it. What a copy cannot carry is the database: a laptop cannot reach production's Postgres, so
+ * it points at its own, and that is the difference the id has to be made of. */
+describe(`hostedInstanceId`, () => {
+    const withDb = (url: string, over: Record<string, unknown> = {}) => config({ database: { url }, ...over });
+
+    it(`is stable for one deployment across restarts and replicas`, () => {
+        expect(hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`))).toBe(
+            hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`)),
+        );
+    });
+
+    it(`differs for a copy of the same env file pointed at its own database`, () => {
+        const production = hostedInstanceId(withDb(`postgresql://app:secret@postgres:5432/intentic`));
+        const laptop = hostedInstanceId(withDb(`postgresql://app:app@localhost:5440/app`));
+        expect(laptop).not.toBe(production);
+    });
+
+    // …and the mirror image: a staging box restored from a production dump carries the same database NAME and
+    // answers on its own address.
+    it(`differs for the same database name reached at a different address`, () => {
+        const production = hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`));
+        const staging = hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`, { api: { url: `https://api.staging.test` } }));
+        expect(staging).not.toBe(production);
+    });
+
+    // The credential never goes into the stamp: this is a label Fly stores in plaintext and shows to anyone
+    // who can read the machine.
+    it(`ignores the database's credentials, so the same server under two passwords is one deployment`, () => {
+        expect(hostedInstanceId(withDb(`postgresql://app:one@db:5432/intentic`))).toBe(hostedInstanceId(withDb(`postgresql://app:two@db:5432/intentic`)));
+    });
+
+    it(`hands identity over when HOSTED_INSTANCE_ID says so`, () => {
+        expect(hostedInstanceId(withDb(`postgresql://app:app@db:5432/intentic`, { hosted: { ...config().hosted, instanceId: `handed-over` } }))).toBe(
+            `handed-over`,
+        );
+    });
+});
+
 describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,
