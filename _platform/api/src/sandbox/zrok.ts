@@ -124,4 +124,17 @@ export const publicNamespaceToken = async (config: { apiEndpoint: string; adminT
  * grant could never be found again. The invariant is kept at the only place it can be: a sandbox's grant is
  * revoked BEFORE its row is deleted (sandbox.routes.ts), so a hub hiccup fails the removal and leaves the row
  *, the record of the grant, instead of stranding an address nobody can revoke. The other way an orphan
- * appears (a mint whose row-write did not land) heals itself on the next mint, above. */
+ * appears (a mint whose row-write did not land) heals itself on the next mint, above.
+ *
+ * WHAT THAT LEAVES BEHIND, and where it is collected instead. `DELETE /account` SOFT-deletes on the hub: the
+ * row stays with `deleted` set. Shares go with it properly (and ziti drops their services), but the account's
+ * NAMES do not — `fk_names_accounts ON DELETE CASCADE` only fires on a real row delete, and zrok's unique
+ * index on names is partial (`WHERE NOT deleted`), so every hostname a destroyed sandbox reserved stays
+ * claimed for good. Measured: 155 of 282 live name rows were held by accounts already deleted, about ten per
+ * sandbox ever destroyed, growing without bound.
+ *
+ * That cannot be collected from here for the same reason there is no reconcile — there is no endpoint to list
+ * or release a name — so it is collected where the data lives: the `name-reaper` service in
+ * _tools/selfhost/zrok/docker-compose.yml releases names whose account this platform has already deleted.
+ * Nothing on this side needs to change when it runs; it is named here so the absence above reads as a
+ * division of labour rather than an oversight. */

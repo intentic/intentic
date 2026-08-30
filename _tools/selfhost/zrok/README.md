@@ -117,6 +117,26 @@ writes it into `frontend.yaml` on every deploy (`zrok2-frontend-token`, which th
 ever see the symptom again, that service's log line (and `grep frontend_token` in the config volume) is the
 first place to look.
 
+### Names are the one thing that leaks (and the reaper that collects them)
+
+Deleting a sandbox does the right thing everywhere except one table. The platform calls `DELETE /account`,
+which **soft**-deletes: the row stays with `deleted` set. Shares go with it properly and ziti drops their
+services, but the account's **names** do not, because `fk_names_accounts ON DELETE CASCADE` only fires on a
+real row delete. Since the unique index on names is partial (`WHERE NOT deleted`), a surviving row is a
+permanent claim on that hostname.
+
+Left alone it grows with every sandbox that has ever existed: measured here at **155 of 282** live name rows
+held by accounts already deleted, roughly ten per destroyed sandbox. The platform cannot collect them — zrok's
+admin API is account create/delete and nothing else, no listing, no lookup — so the `name-reaper` service does
+it here, where the data is: one indexed `UPDATE` every six hours (`ZROK2_NAME_REAP_INTERVAL`) that sets
+`names.deleted` for names whose **account** is already deleted.
+
+Two properties worth keeping if you ever touch it. It **soft**-deletes, so it is reversible and cannot cascade
+into `share_name_mappings`. And it is scoped to deleted **accounts**, never to "names with no live share": a
+stopped sandbox still holds its reserved hostname and reclaims it on restart, so collecting on liveness would
+hand one sandbox's address to whoever asked next. Hard-deleting the account rows instead is not an option —
+every other foreign key into `accounts` is `NO ACTION`, so the delete fails against the environment rows.
+
 ### Parked until private shares land
 
 SSH-shaped traffic can't ride a public HTTP frontend, so three things wait for zrok *private* `tcpTunnel`

@@ -177,6 +177,59 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ── Name reaper ───────────────────────────────────────────────────────────
+  #
+  # RELEASES THE HOSTNAMES OF ACCOUNTS THE PLATFORM HAS ALREADY DELETED, which nothing else does and, from
+  # outside this stack, nothing else CAN do. zrok's admin API is account CREATE and DELETE and nothing more —
+  # no listing, no lookup (_platform/api/src/sandbox/zrok.ts says so, and that is why there is no reconcile on
+  # the platform side) — and `DELETE /account` SOFT-deletes: it sets accounts.deleted, it does not remove the
+  # row. The one foreign key that would have freed the names, fk_names_accounts ON DELETE CASCADE, therefore
+  # never fires, and every hostname a destroyed sandbox reserved stays reserved for good, because uk_names is
+  # UNIQUE (namespace_id, name) WHERE NOT deleted and a live row is a permanent claim on that name.
+  #
+  # Measured before this existed: 282 live name rows against 121 live shares, 155 of them held by accounts
+  # that were already deleted — roughly ten per sandbox ever destroyed, accumulating forever. The shares
+  # themselves are fine (zrok soft-deletes those correctly, and ziti drops their services with them); it is
+  # only the names that are never collected.
+  #
+  # SOFT-DELETE RATHER THAN DELETE, so this is reversible and cannot cascade: setting names.deleted drops the
+  # row out of the partial unique index, which is the whole point (the hostname becomes claimable again),
+  # while share_name_mappings — which CASCADEs from names — is left intact for anyone reading the history.
+  # Hard-deleting the ACCOUNT rows instead is not an option: every other FK into accounts is NO ACTION, so the
+  # delete fails against the environment rows still referencing it.
+  #
+  # SCOPED TO DELETED ACCOUNTS ONLY, and that is the entire safety argument. A name under a LIVE account is
+  # not garbage even when no share is currently up: a stopped sandbox still holds its reserved hostname and
+  # reclaims it on restart (its agent asks for `public:sandbox-<id>` by name), so collecting those would hand
+  # one sandbox's address to whoever asked for it next. Liveness is read from the account row the platform
+  # itself deletes, never from whether a share happens to be running.
+  name-reaper:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${ZROK2_DB_PASSWORD:?err}
+      # Deliberately slow rather than reactive: a name released six hours late costs nothing, the sweep is one
+      # indexed UPDATE, and a tight loop here would be one more thing competing for a busy host's CPU.
+      SWEEP_INTERVAL_SECONDS: ${ZROK2_NAME_REAP_INTERVAL:-21600}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          if psql -h postgresql -U zrok2 -d zrok2 -v ON_ERROR_STOP=1 -c \
+            "UPDATE names n SET deleted = true, updated_at = now() FROM accounts a
+               WHERE a.id = n.account_id AND n.deleted = false AND a.deleted = true;"; then
+            echo "name-reaper: swept at $$(date -Iseconds)"
+          else
+            echo "name-reaper: sweep failed, retrying at the next interval" >&2
+          fi
+          sleep "$$SWEEP_INTERVAL_SECONDS"
+        done
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - zrok2
+    restart: unless-stopped
+
   # ── zrok2 Bootstrap (one-shot) ────────────────────────────────────────────
   #
   # Sources nfpm/zrok2-bootstrap.bash (the same library used for Linux
