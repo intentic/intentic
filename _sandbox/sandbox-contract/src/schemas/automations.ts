@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema } from "./agent.js";
 import { AgentSummarySchema } from "./agents.js";
 import { entryId } from "./internal.js";
+import { IssuesConfigSchema } from "./issues.js";
 // An automation wakes the agent autonomously: the daemon's scheduler fires each enabled automation on its
 // trigger, runs the optional guard command (a shell command in the workspace; non-zero exit skips the wake),
 // then runs one agent turn with the prompt. The manifest is user config; run history is daemon-recorded.
@@ -108,8 +109,14 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
             .min(1)
             .optional()
             .describe("Narrow it to one branch, for the sources that have branches. Absent means every branch of the repositories it matches."),
-        // webchat only: the website origins allowed to POST to the widget endpoint. Absent/empty ⇒ none admitted.
-        allowedOrigins: z.array(z.string()).optional().describe("Which websites may reach the chat widget. Absent or empty admits nobody."),
+        /* The two gateway-less browser sources, `webchat` and `issues`: the website origins allowed to POST to
+         * the public endpoint. Absent/empty ⇒ none admitted, on both. One field rather than one per source,
+         * because it is the same question asked of the same header by the same kind of caller, and an intake
+         * whose allowlist lived somewhere else would be a second gate to keep in step with the first. */
+        allowedOrigins: z
+            .array(z.string())
+            .optional()
+            .describe("Which websites may reach the public endpoint, the chat widget's or the bug reporter's. Absent or empty admits nobody."),
     }),
     // `repo` narrows to events whose span touches one workspace repo ("root" or a repo id); absent ⇒ any.
     z.object({
@@ -266,6 +273,11 @@ export const AutomationSchema = z.object({
     prompt: z.string().min(1).describe("What the woken agent is told."),
     // The Front Desk widget's settings, `webchat` listener automations only, ignored on every other trigger.
     webchat: WebchatConfigSchema.optional().describe("Settings for the public chat widget, for an automation that answers visitors."),
+    // The bug intake's settings, `issues` listener automations only, ignored on every other trigger. Its own
+    // field rather than a shared "public endpoint" bag: the two sources answer different questions (a chat's
+    // greeting and access model, an intake's dedup ceiling and ingest key) and a union of both would be a
+    // schema where most fields are wrong for whichever source is reading it.
+    issues: IssuesConfigSchema.optional().describe("Settings for the bug reporter, for an automation that takes crash reports from your own sites and apps."),
     /* NARROW THIS ONE JOB FURTHER than the persona it runs as, raw tool names, and the escape hatch under the
      * shelves rather than the way anyone is expected to answer this question.
      *

@@ -301,6 +301,17 @@ export const docsBook: Book = {
                             },
                         },
                         {
+                            id: "bug-reports",
+                            title: "Bug reports",
+                            blurb: "Your users' crashes, fixed by your agent",
+                            meta: {
+                                title: "Bug reports · your users' crashes, fixed by your agent · intentic docs",
+                                description:
+                                    "Embed a crash reporter on your site or app with one script tag. Reports are grouped, so a crash that hit a thousand people is one issue your agent investigates once.",
+                                datePublished: "2026-08-30",
+                            },
+                        },
+                        {
                             id: "autonomous-employees",
                             title: "Autonomous employees",
                             blurb: "Specialize a sandbox until it does a job alone",

@@ -1,8 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
 import type { WebchatChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
 
-/* The bot ceiling for a public endpoint, in the two flavours webchat-config offers, and the reason it is a
- * ceiling rather than a wall: neither of these stops a determined human, and the automation's tool allowlist
+/* The bot ceiling for an ANONYMOUS endpoint, in two flavours, shared by the Front Desk widget and the bug
+ * intake because both face the same caller: a browser with no credential on a page we do not control. It lives
+ * under auth/ rather than beside either of them for exactly that reason, it is what stands in for authentication
+ * when there is none to have. The reason it is a ceiling rather than a wall: neither of these stops a determined human, and the automation's tool allowlist
  * and budget caps are what bound the damage if one gets through. What these buy is that a scraper pointed at
  * a Front Desk does not get to spend an agent turn per request. */
 
@@ -24,7 +26,7 @@ const secret = randomBytes(32);
 const sign = (issuedAt: number, nonce: string, conversationId: string): string =>
     createHmac("sha256", secret).update(`${issuedAt}.${nonce}.${conversationId}`).digest("hex");
 
-export const issueChallenge = (conversationId: string, now: number): WebchatChallenge => {
+export const mintChallenge = (conversationId: string, now: number): WebchatChallenge => {
     const issuedAt = now;
     const nonce = randomBytes(9).toString("base64url");
     return { salt: `${issuedAt}.${nonce}.${sign(issuedAt, nonce, conversationId)}`, difficulty: POW_DIFFICULTY };

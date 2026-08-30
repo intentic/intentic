@@ -19,6 +19,7 @@ import { createGrokRoutes } from "./grok/grok.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
 import { createIntenticRoutes } from "./intentic/intentic.routes.js";
 import { createInventoryRoutes } from "./inventory/inventory.routes.js";
+import { createIssuesRoutes } from "./issues/issues.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
 import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
@@ -64,6 +65,7 @@ export const createRouter = (services: Services) => ({
     history: createHistoryRoutes(services),
     workspace: createWorkspaceRoutes(services),
     inventory: createInventoryRoutes(services),
+    issues: createIssuesRoutes(services),
     logs: createLogsRoutes(services),
     loops: createLoopsRoutes(services),
     workflows: createWorkflowsRoutes(services),

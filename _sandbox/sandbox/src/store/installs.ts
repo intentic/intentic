@@ -1,32 +1,37 @@
-import { jsonFile } from "../store/json-file.js";
 import { z } from "zod";
-import { statePath } from "../workspace/state-paths.js";
+import { jsonFile } from "./json-file.js";
 
-/* Did the snippet actually land on the site?
+/* DID THE SNIPPET ACTUALLY LAND ON THE SITE?
  *
- * Until this existed the app could not tell "installed correctly, nobody has written yet" from "the snippet was
- * never pasted" or "it was pasted on an origin the allowlist doesn't have", all three are an automation with no
- * runs, and the middle one is the single likeliest setup mistake (www.example.com and example.com are different
- * origins, and a site that redirects one to the other still loads the widget from whichever the browser was on).
+ * Shared by the two public endpoints a customer embeds a script for, the Front Desk widget and the bug
+ * reporter's SDK, because the silence is identical on both and so is the mistake behind it: until this existed
+ * the app could not tell "installed correctly, nobody has written yet" from "the snippet was never pasted" or
+ * "it was pasted on an origin the allowlist doesn't have", all three are an automation with no runs, and the
+ * middle one is the single likeliest setup mistake (www.example.com and example.com are different origins, and
+ * a site that redirects one to the other still loads the script from whichever the browser was on).
  *
- * Every widget load fetches /webchat/<id>/config, so that request is the probe. Recording it turns the silence
- * into an answer, and recording the REFUSED ones turns the commonest mistake into a sentence naming the origin
- * to add. */
+ * Every embed fetches its `/…/<id>/config` on every page load, so that request is the probe. Recording it turns
+ * the silence into an answer, and recording the REFUSED ones turns the commonest mistake into a sentence naming
+ * the origin to add.
+ *
+ * ONE STORE, TWO FILES: the two callers differ only in which path they hand this, which is what "the same
+ * diagnostic" means concretely. They must not share one file, though, since the key inside is an automation id
+ * and a Front Desk's id colliding with an intake's would merge two panels' answers. */
 
 const ProbeSchema = z.object({
     // Whether this origin was admitted. A refused probe is the useful one, it is a site asking to be let in.
     allowed: z.boolean(),
     lastSeenAt: z.number(),
-    // Widget loads seen from this origin. Approximate by design (see the flush note below); it is here to
+    // Script loads seen from this origin. Approximate by design (see the flush note below); it is here to
     // distinguish "one page load while testing" from "this is live", not to be an analytics number.
     loads: z.number(),
 });
-export type WebchatInstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
+export type InstallProbe = z.infer<typeof ProbeSchema> & { origin: string };
 
 const FileSchema = z.record(z.string(), z.record(z.string(), ProbeSchema));
 type InstallsFile = z.infer<typeof FileSchema>;
 
-/* A busy site loads the widget on every page view, so writing per probe would be a write storm on the workspace
+/* A busy site loads the script on every page view, so writing per probe would be a write storm on the workspace
  * volume for information nobody is watching second-by-second. The map is authoritative in memory and flushed on
  * a timer, which means a daemon killed inside the window loses at most this many seconds of counts, an
  * acceptable trade for a diagnostic, and the reason `loads` is documented as approximate. */
@@ -36,23 +41,23 @@ const FLUSH_MS = 30_000;
 // installing on is never the one dropped.
 const MAX_ORIGINS_PER_AUTOMATION = 20;
 
-export interface WebchatInstallsStore {
-    // One widget load. `allowed` is the admission decision that was actually made, so the panel reports what
+export interface InstallsStore {
+    // One script load. `allowed` is the admission decision that was actually made, so the panel reports what
     // happened rather than re-deriving it from a list that may have been edited since.
     readonly record: (automationId: string, origin: string, allowed: boolean, now: number) => void;
     // Newest first, what the install panel renders.
-    readonly list: (automationId: string) => Promise<WebchatInstallProbe[]>;
+    readonly list: (automationId: string) => Promise<InstallProbe[]>;
     // Flush now and stop the timer. For tests and shutdown; ordinary use never calls it.
     readonly flush: () => Promise<void>;
 }
 
-export const fileWebchatInstallsStore = (root: string): WebchatInstallsStore => {
-    const file = jsonFile<InstallsFile>(statePath(root, ".intentic/records/webchat-installs.json"), {
+export const fileInstallsStore = (path: string): InstallsStore => {
+    const file = jsonFile<InstallsFile>(path, {
         parse: (raw) => FileSchema.safeParse(raw).data,
         fallback: () => ({}),
     });
 
-    // undefined until the first read/record pulls the file in, so a daemon whose Front Desks nobody visits never
+    // undefined until the first read/record pulls the file in, so a daemon whose embeds nobody visits never
     // touches this file at all.
     let memory: InstallsFile | undefined;
     let timer: NodeJS.Timeout | undefined;

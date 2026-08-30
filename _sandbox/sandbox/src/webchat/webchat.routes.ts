@@ -8,11 +8,12 @@ import { fireAutomation, PAYLOAD_MAX, TITLE_MAX, type WakeFn } from "../automati
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../context.js";
 import { dailyBudget } from "../store/daily-budget.js";
+import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
+import { statePath } from "../workspace/state-paths.js";
 import { createSseStream } from "./sse-stream.js";
-import { antiBotAccepted, issueChallenge } from "./webchat-antibot.js";
+import { antiBotAccepted, mintChallenge } from "../auth/antibot.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired } from "./webchat-identity.js";
-import { fileWebchatInstallsStore, type WebchatInstallsStore } from "./webchat-installs.js";
 import { threadKey, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 
 /* The Front Desk's ingest: the daemon's ONLY routes an anonymous browser may reach. Unlike Discord (a gateway
@@ -105,7 +106,7 @@ const remoteIpOf = (c: Context<AppEnv>): string | undefined =>
 export const createWebchatRoutes = (
     services: Services,
     wake: WakeFn = streamAgent,
-    installs: WebchatInstallsStore = fileWebchatInstallsStore(services.workspace.root),
+    installs: InstallsStore = fileInstallsStore(statePath(services.workspace.root, ".intentic/records/webchat-installs.json")),
 ) => {
     // The Front Desk is one PROVIDER of the shared thread store (services.threadSessions): its "channel" is the id
     // the widget minted for this visitor, so a five-message chat is one conversation exactly as a five-mention
@@ -148,7 +149,7 @@ export const createWebchatRoutes = (
             if (conversation === undefined || conversation === "") {
                 return c.json({ error: "conversation required" }, 400);
             }
-            return c.json(issueChallenge(conversation, Date.now()));
+            return c.json(mintChallenge(conversation, Date.now()));
         },
 
         message: async (c: Context<AppEnv, "/webchat/:id/message">): Promise<Response> => {

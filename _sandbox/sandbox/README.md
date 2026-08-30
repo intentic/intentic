@@ -125,6 +125,15 @@ reports the profile.
   edges (`deps.broken`/`deps.fixed`) that wake a fix chore the owner picked from the Automations templates: every
   step in a visible terminal panel and the activity feed (src/workspace/reconcile-deps.ts → verify-deps.ts →
   src/automations).
+- Take bug reports straight from the owner's own sites and apps (src/issues): a reporter SDK
+  (`@intentic/issue-sdk`, served at `/intake/sdk.js`) POSTs crashes and written reports to a public ingest, and
+  every one of them is FINGERPRINTED before anything else happens, so a crash loop on a popular page is one
+  inbox row with a rising count rather than one agent turn per affected browser. A group wakes an agent when it
+  is new and again only once it has grown past its escalation step; the wake carries the stack, the breadcrumbs
+  and the build, and the build is what replaces a sourcemap pipeline outright, since the agent has the
+  repository and can check that commit out and read the real frames. Held for the owner by default (the
+  `issues` admission floor), because a bug-fix turn has the run of the repo on a brief a stranger's browser
+  wrote. The owner's side is the Issues page over `/issues`.
 - Hold outbound posts as an approval queue: the agent proposes drafts as files (`.intentic/config/drafts/`, src/drafts),
   the owner approves them on the Drafts page, and the daemon itself sends each one the moment it comes due:
   sleeping on one timer until then rather than sweeping, since it is the process that wrote the deadline. A

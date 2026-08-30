@@ -301,6 +301,24 @@ const STATE_FILES = [
         why: "Declared by the intentic.automations extension's contributes.files, `automation-approvals` is its query key, not core's.",
         portability: "carry",
     },
+    /* The bug-report inbox, one file per fingerprint, written by the daemon's issues-store as reports arrive
+     * from the owner's own sites and apps, and rendered by the intentic.issues extension. Its invalidation is
+     * the extension's own (`issues`), declared in that manifest, the automations shape exactly.
+     *
+     * `carry` rather than `local`: an issue is a fact about the PRODUCT, not about this container. A workspace
+     * exported and restored elsewhere that arrived claiming nothing had ever crashed would have thrown away
+     * the one record that says which bug is worth fixing first, and the counts are the whole of that record.
+     *
+     * NOT `versioned`, and the drafts entry is the contrast worth reading: a draft is authored, reviewable and
+     * goes out under the owner's name, so it earns a diff. An issue is machine-recorded telemetry whose count
+     * moves on every crash: tracking it would put a commit's worth of churn in `git log` per bad afternoon,
+     * and nothing in it is a decision anybody made. */
+    {
+        path: ".intentic/records/issues/",
+        invalidates: [],
+        why: "Declared by the intentic.issues extension's contributes.files, `issues` is its query key, not core's.",
+        portability: "carry",
+    },
     /* The maintenance ledger and probe evidence, written by the daemon's chores-store and rendered by the
      * intentic.maintenance extension, the automations shape exactly: the path is the daemon's, the query keys
      * (`maintenance-report`, `maintenance-runs`) are the extension's own contributes.files. Point-in-time
@@ -357,6 +375,12 @@ const STATE_FILES = [
         path: ".intentic/records/webchat-installs.json",
         invalidates: [],
         why: "Which origins have loaded a Front Desk's widget, written on a 30s flush timer while a customer's site serves page views. The install panel that renders it fetches on open and polls itself while it is on screen, which is the whole window in which the answer changes for anyone. Pushing instead would bill every connected browser a refetch per flush, for a panel almost nobody has open.",
+        portability: "carry",
+    },
+    {
+        path: ".intentic/records/issue-installs.json",
+        invalidates: [],
+        why: "The same probe for the bug reporter's script, on the same flush timer and read by the same kind of panel, so it is outside the push path for the same reason the Front Desk's is.",
         portability: "carry",
     },
     {

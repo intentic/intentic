@@ -3,7 +3,17 @@ import type { AdmissionPolicy } from "@intentic/sandbox-contract";
 import { childSpawn, commandRun, outboundSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
-const allowAll: AdmissionPolicy = { schedule: "allow", event: "allow", listener: "allow", webchat: "allow", workspace: "allow", workflow: "allow" };
+// Spelled out rather than built from the schema's defaults on purpose: `issues` defaults to "hold", and a
+// fixture that inherited that would be testing the policy instead of the mechanism.
+const allowAll: AdmissionPolicy = {
+    schedule: "allow",
+    event: "allow",
+    listener: "allow",
+    webchat: "allow",
+    issues: "allow",
+    workspace: "allow",
+    workflow: "allow",
+};
 
 describe("guard mechanism", () => {
     test("fails closed on a throwing decide", () => {

@@ -1,0 +1,39 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "issues",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "exclamation-triangle",
+    "engines": {
+        "intentic": "^2.3.0"
+    },
+    "permissions": {
+        "sandbox": [
+            "GET /issues",
+            "POST /issues/*",
+            "DELETE /issues/*",
+            "GET /issues/installs/*",
+            "GET /automations",
+            "GET /extensions"
+        ]
+    },
+    "contributes": {
+        "views": [
+            {
+                "id": "issues",
+                "label": "Issues",
+                "surface": "rail",
+                "badge": true
+            }
+        ],
+        "files": [
+            {
+                "path": ".intentic/records/issues/",
+                "invalidates": [
+                    "issues"
+                ]
+            }
+        ]
+    }
+}

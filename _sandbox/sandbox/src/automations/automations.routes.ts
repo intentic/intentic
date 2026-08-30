@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
+import { type Automation, automationsContract, FRONT_DESK_PERSONA } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
 import { streamAgent } from "../agent/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
+import { ISSUES_PROVIDER } from "../issues/provider.js";
 import { ensureFrontDeskPersona } from "../personas/front-desk.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { automationCatalog, triggerSourceEvents } from "./catalog.js";
@@ -22,6 +23,35 @@ const nextRunOf = (automation: AutomationRecord): number | undefined => {
     } catch {
         return undefined;
     }
+};
+
+/* WHAT THE DAEMON MINTS FOR A TRIGGER THAT NEEDS A CREDENTIAL, and keeps when one round-trips.
+ *
+ * Both cases here are the same question asked of the two doors an outside caller reaches without a Google
+ * identity, so they belong side by side rather than as two conditions inside the handler:
+ *
+ *   event     the webhook's auth token, which /automations/{id}/fire compares against. The only mechanism
+ *             every webhook sender supports.
+ *   issues    the ingest key, which a client with no Origin header presents (a phone, a desktop build, a
+ *             server). Minted for every intake rather than on request, because it costs nothing to hold and
+ *             the install panel cannot offer a mobile snippet for a key that does not exist yet. It admits
+ *             nobody on its own: a browser still has to be on the allowlist unless `keyFromBrowsers` says
+ *             otherwise.
+ *
+ * KEPT WHEN IT ROUND-TRIPS, which is what the `undefined` checks are for: the enabled toggle and an edit to
+ * the wording both re-post the whole record, and re-minting there would rotate a live credential out from
+ * under a shipped app. Rotating one deliberately is clearing the field and saving.
+ *
+ * Listener triggers need no other provisioning: the listeners reconcile tick picks them up within its interval.
+ */
+const provisioned = (input: Automation): Automation => {
+    if (input.trigger.kind === "event" && input.trigger.token === undefined) {
+        return { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } };
+    }
+    if (input.trigger.kind === "listener" && input.trigger.provider === ISSUES_PROVIDER && input.issues?.ingestKey === undefined) {
+        return { ...input, issues: { ...input.issues, ingestKey: `ik_${randomBytes(18).toString("base64url")}` } };
+    }
+    return input;
 };
 
 // The automations manifest routes. `upsert` validates the cron with the scheduler's own parser, so what's
@@ -64,13 +94,7 @@ export const createAutomationsRoutes = (services: Services) => {
                     throw new ORPCError("BAD_REQUEST", { message: `provider "${provider}" has no event type "${eventType}"` });
                 }
             }
-            // Event: keep the round-tripped token (the enabled toggle re-posts the trigger) or mint the
-            // webhook's auth token: /automations/{id}/fire compares against it. Listener triggers need no
-            // provisioning: the listeners reconcile tick picks them up within its interval.
-            const automation =
-                input.trigger.kind === "event" && input.trigger.token === undefined
-                    ? { ...input, trigger: { ...input.trigger, token: randomBytes(24).toString("base64url") } }
-                    : input;
+            const automation = provisioned(input);
             await services.automations.upsert(automation);
             /* A FRONT DESK PINNED TO THE FRONT DESK BRINGS THAT CARD INTO BEING. Nothing seeds personas any more, so
              * the card this wake names may not exist yet, and turnPersona answers a named-but-missing card by

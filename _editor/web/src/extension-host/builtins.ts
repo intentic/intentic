@@ -9,6 +9,7 @@ import * as deployments from "@intentic/ext-deployments";
 import * as documentation from "@intentic/ext-documentation";
 import * as drafts from "@intentic/ext-drafts";
 import * as gitHistory from "@intentic/ext-git-history";
+import * as issues from "@intentic/ext-issues";
 import * as knowledge from "@intentic/ext-knowledge";
 import * as maintenance from "@intentic/ext-maintenance";
 import * as pipelines from "@intentic/ext-pipelines";
@@ -42,6 +43,7 @@ const modules: readonly BuiltinModule[] = [
     acceptance,
     documentation,
     gitHistory,
+    issues,
     maintenance,
     preview,
     viewers,

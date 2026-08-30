@@ -1,0 +1,116 @@
+---
+import DocsLayout from "../../components/DocsLayout.astro";
+---
+
+<DocsLayout
+    pageId="bug-reports"
+    heading="Bug reports · your users' crashes, fixed by your agent"
+    lead="One script tag on your site sends crashes and problem reports to your sandbox. They arrive grouped, so a bug that hit a thousand people is one issue — and your agent has the repository it happened in."
+>
+    <h2>What it is</h2>
+    <p>
+        An <strong>intake</strong> is an automation with a crash reporter in front of it. When something throws on your site, or somebody
+        writes in to say a button does nothing, it lands in the <strong>Issues</strong> page of your sandbox: what broke, where, how often,
+        and what the person was doing just before.
+    </p>
+    <p>
+        The difference from an error tracker is what happens next. The thing reading the report has your repository checked out, so it can
+        reproduce the crash, fix the cause and run your tests — instead of paging you at eleven at night with a stack trace.
+    </p>
+
+    <h2>Reports are grouped, not counted twice</h2>
+    <p>
+        Every report is fingerprinted the moment it arrives, from the shape of its stack rather than its text: the line numbers, the hash in
+        your bundle's filename, the order id in the message and the host it was served from are all normalized away. So one broken deploy is{" "}
+        <strong>one issue with a rising count</strong>, not one per affected browser.
+    </p>
+    <p>
+        That is also what makes this safe to leave switched on. A crash loop on a popular page would otherwise be an agent turn per visitor,
+        which is a bill rather than a bug report. A known issue wakes your agent again only once it has happened{" "}
+        <strong>ten more times</strong> since the last look — except when it was already resolved, in which case it interrupts immediately,
+        because a fix that did not hold is the most important thing this inbox can tell you.
+    </p>
+
+    <h2>1 · Create it</h2>
+    <p>
+        Open <strong>Automations</strong> and pick <strong>Bug reports</strong>, or press <strong>New automation</strong>, choose{" "}
+        <strong>Listen (live)</strong>, then <strong>Bug reports</strong>. The prompt comes prefilled: judge whether it is worth fixing, read
+        the real source at the build it came from, reproduce, fix, run the checks.
+    </p>
+
+    <h2>2 · List the sites that may report</h2>
+    <p>Under <strong>Allowed sites</strong>, one origin per line — scheme and host only, no path, no trailing slash:</p>
+    <pre><code>https://example.com
+https://www.example.com</code></pre>
+    <p>
+        <strong>Those two are different origins.</strong> This is the commonest reason a fresh intake stays empty: the site redirects one to
+        the other, the browser lands on the one you did not list, and every report is refused. List both. The install panel names the origin
+        it turned away.
+    </p>
+
+    <h2>3 · Paste the snippet</h2>
+    <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
+    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/intake/sdk.js"
+        data-automation="bug-reports" data-release="a1b2c3d" defer&gt;&lt;/script&gt;</code></pre>
+    <p>
+        <strong><code>data-release</code> is the one worth wiring up.</strong> Give it whatever your build already knows — a commit sha, a
+        tag — and the agent checks that commit out and reads your real frames. There are no sourcemaps to upload anywhere in this product,
+        because the thing reading the crash has the source.
+    </p>
+    <p>
+        With a bundler instead of a script tag, install <code>@intentic/issue-sdk</code> and call <code>init()</code> with the same three
+        values. Anything that is not a browser — a phone, a desktop build, a server — POSTs the documented shape directly and presents an{" "}
+        <strong>ingest key</strong> from the intake's settings instead of an origin.
+    </p>
+
+    <h2>4 · Check that it landed</h2>
+    <p>
+        Reload your site, then look at the <strong>Install</strong> panel again. It lists every origin that has loaded this reporter and
+        whether it was let in, so "installed, nothing has crashed yet" is visibly different from "the snippet never ran".
+    </p>
+
+    <h2>What gets sent</h2>
+    <ul>
+        <li><strong>Crashes</strong>: uncaught errors and unhandled promise rejections, with the stack and the page.</li>
+        <li><strong>What people write in</strong>: a description they typed, and an address to reply to if you ask for one. Never grouped with anybody else's — two people describing one annoyance in their own words are two things to read.</li>
+        <li>
+            <strong>Breadcrumbs</strong>: the last few things that happened — console warnings and errors, <em>failed</em> requests,
+            navigations, clicks. A failed request records its method, path and status; <strong>never its body</strong>, which is where the
+            passwords are. A click is recorded as <code>button#checkout "Pay now"</code>, never as the page's content. Keystrokes are not
+            instrumented at all.
+        </li>
+        <li>
+            A <code>beforeSend</code> hook is the last word on what leaves the page: return a modified report, or <code>null</code> to drop
+            it. Where you scrub an id out of a message or throw away crashes coming from a browser extension.
+        </li>
+    </ul>
+
+    <h2>What the agent may do about it</h2>
+    <p>
+        A bug-fix turn is the opposite of a Front Desk's: it needs the run of your repository, and its brief was written by a stranger's
+        browser. So bug-report wakes are <strong>held for your approval by default</strong> — the wake waits in your approvals queue with the
+        crash's own title on the card, and one click runs it. Read the first few, then set the intake to run on its own if you like what it
+        does.
+    </p>
+    <p>
+        Everything the report carries reaches the agent under a key that says it came from outside, and the sandbox's own floor holds
+        credential reads and destructive commands in any turn that has taken in outside content. Each issue's turns run in their own git
+        worktree.
+    </p>
+
+    <h2>Triaging</h2>
+    <p>The <strong>Issues</strong> page is three lists, in the order they owe you a decision:</p>
+    <ul>
+        <li><strong>Waiting on you</strong> — open the row to read the stack and the breadcrumbs, then <em>Investigate</em>, <em>Resolve</em> or <em>Ignore</em>.</li>
+        <li><strong>Being looked at</strong> — a turn is running; the row offers that conversation rather than starting a second one.</li>
+        <li><strong>Dealt with</strong> — kept, not hidden, because "we fixed this in March" is what makes a recurrence legible.</li>
+    </ul>
+
+    <h2>Good to know</h2>
+    <ul>
+        <li>The reporter loads from your sandbox, so while the sandbox is off nothing is collected — and nothing on your page breaks either.</li>
+        <li>The trigger's filters narrow what <em>wakes</em> an agent, not what is recorded: you can hear about production crashes while still reading staging's, from one intake.</li>
+        <li>A daily ceiling caps what one intake can spend, and the grouping is what bounds it long before that.</li>
+        <li>A cross-origin script without <code>crossorigin</code> gives every browser "Script error." and nothing else. Those are still reported, grouped by page, which is how you find out to add the attribute.</li>
+    </ul>
+</DocsLayout>

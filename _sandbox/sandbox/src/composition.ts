@@ -86,6 +86,8 @@ import { createSessions, type MintedSession } from "./auth/session.js";
 import { type AccountUsageStore, fileAccountUsageStore } from "./usage/account-usage.js";
 import { fileProviderRefusalStore, type ProviderRefusalStore } from "./usage/provider-refusals.js";
 import { type DraftsStore, fileDraftsStore } from "./drafts/drafts-store.js";
+import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
+import { fileInstallsStore, type InstallsStore } from "./store/installs.js";
 import { createHostHub, type HostHub } from "./hosts/host-hub.js";
 import { fileHostsStore, type HostsStore } from "./hosts/hosts-store.js";
 import { createWebExtHub, type WebExtHub } from "./webext/webext-hub.js";
@@ -448,6 +450,17 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Agent-proposed post drafts (.intentic/config/drafts/, one file per draft), the agent writes them; /drafts is
     // the owner's approve/edit/reject side.
     readonly drafts: DraftsStore;
+    /* Bug reports from the owner's own sites and apps (.intentic/records/issues/, one file per fingerprint),
+     * written by the public /intake ingest and triaged from /issues.
+     *
+     * ONE INSTANCE, WHICH IS THE WHOLE REASON IT IS A SERVICE rather than something each route factory builds:
+     * the store serializes its read-modify-writes per fingerprint, and a hundred browsers hitting one bug in the
+     * same second is exactly the traffic it is built for. Two instances would each serialize against themselves
+     * and race each other, and a crash affecting a thousand people would report as affecting three. */
+    readonly issues: IssuesStore;
+    // Which sites have actually loaded the reporter's script, and which were turned away (the intake's config
+    // fetch is the probe). The install panel's whole answer to "did the snippet land?".
+    readonly issueInstalls: InstallsStore;
     // What is in flight right now (historyRoot/turns/, one file per in-flight turn or automation fire). Written
     // at the turn's start, cleared when it settles, so whatever is still there at boot is exactly what the
     // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
@@ -1271,6 +1284,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         approvals: fileApprovalsStore(statePath(workspace.root, ".intentic/records/approvals/")),
         threadSessions: fileThreadSessionsStore(statePath(workspace.root, ".intentic/records/thread-sessions.json")),
         drafts: fileDraftsStore(statePath(workspace.root, ".intentic/config/drafts/")),
+        issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
+        issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
         turnJournal,
         invariants,
         // The same instance the transcript reader holds, two would answer a read from a file the other had

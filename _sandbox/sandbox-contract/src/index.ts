@@ -19,6 +19,7 @@ import { grokContract } from "./contracts/grok.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { intenticContract } from "./contracts/intentic.contract.js";
 import { inventoryContract } from "./contracts/inventory.contract.js";
+import { issuesContract } from "./contracts/issues.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
@@ -66,6 +67,7 @@ export { webextContract } from "./contracts/webext.contract.js";
 export { runnerContract } from "./contracts/runner.contract.js";
 export { intenticContract } from "./contracts/intentic.contract.js";
 export { inventoryContract } from "./contracts/inventory.contract.js";
+export { issuesContract } from "./contracts/issues.contract.js";
 export { logsContract } from "./contracts/logs.contract.js";
 export { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER } from "./request-id.js";
 export { loopsContract } from "./contracts/loops.contract.js";
@@ -152,6 +154,7 @@ export * from "./schemas/history.js";
 export * from "./schemas/hosts.js";
 export * from "./schemas/intentic.js";
 export * from "./schemas/inventory.js";
+export * from "./schemas/issues.js";
 export * from "./schemas/logs.js";
 export * from "./schemas/loops.js";
 export * from "./schemas/maintenance.js";
@@ -214,6 +217,7 @@ export const sandboxContract = {
     history: historyContract,
     workspace: workspaceContract,
     inventory: inventoryContract,
+    issues: issuesContract,
     logs: logsContract,
     loops: loopsContract,
     panels: panelsContract,

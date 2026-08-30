@@ -425,6 +425,7 @@ COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
 COPY _extensions/deployments/intentic-extension.json /opt/extensions/deployments/
 COPY _extensions/drafts/intentic-extension.json /opt/extensions/drafts/
+COPY _extensions/issues/intentic-extension.json /opt/extensions/issues/
 # …deployments ships a BACKEND bundle too (manifest `server`, run by the daemon's backend host), like memory below.
 # From the trees context, like every other compiled artifact: the root context excludes **/dist, so the bundle is
 # invisible to a COPY that reads the repo tree — however plainly it sits beside the manifest in the checkout.

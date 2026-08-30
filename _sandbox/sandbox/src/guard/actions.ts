@@ -16,9 +16,15 @@ import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
  * different policy than the one it logs.
  */
 
-// Which admission-floor key a wake falls under, from the automation's trigger. The webchat listener is its own
-// source, a Front Desk visitor is a stranger on a public widget, which is not the same trust as a Discord
-// channel the owner wired, and every other listener provider shares the "listener" rule.
+/* Which admission-floor key a wake falls under, from the automation's trigger. Two listener providers are their
+ * own source and everything else shares the "listener" rule, because those two are the ones a STRANGER can
+ * reach without the owner having wired anything:
+ *
+ *   webchat  a visitor on a public widget, which is not the same trust as a Discord channel the owner set up.
+ *   issues   a crash report from any browser on a site the owner listed, and the one whose floor is `hold`
+ *            rather than `allow` (AdmissionPolicySchema argues why): the toolbox a bug-fix turn needs is the
+ *            opposite of the Front Desk persona's, and the brief is a stack trace somebody else's machine wrote.
+ */
 export const wakeSourceOf = (trigger: Trigger): WakeSource => {
     switch (trigger.kind) {
         case "schedule":
@@ -26,11 +32,15 @@ export const wakeSourceOf = (trigger: Trigger): WakeSource => {
         case "event":
             return "event";
         case "listener":
-            return trigger.provider === "webchat" ? "webchat" : "listener";
+            return LISTENER_SOURCES[trigger.provider] ?? "listener";
         case "workspace":
             return "workspace";
     }
 };
+
+// The listener providers that carry their own admission floor. A map rather than a chain of ternaries: the next
+// one added is a line here, and the set is small and closed on purpose.
+const LISTENER_SOURCES: Readonly<Record<string, WakeSource>> = { webchat: "webchat", issues: "issues" };
 
 export interface SessionStartInput {
     readonly source: WakeSource;

@@ -165,6 +165,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.git-history",
         "intentic.google-workspace",
         "intentic.imap",
+        "intentic.issues",
         "intentic.knowledge",
         /* No `intentic.logs`, and its absence is the first instance of a deliberate pattern rather than a
          * regression. Logs moved OUT of this repo to its own (extensions/logs), because a screen that is not a

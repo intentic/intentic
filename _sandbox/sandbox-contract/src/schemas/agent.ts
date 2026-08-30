@@ -74,7 +74,7 @@ export type AgentOrigin = z.infer<typeof AgentOriginSchema>;
  * gate); never sent by a client. Chat and loops are absent deliberately: both begin with the owner's own
  * click, and holding the owner's work in their own queue is a queue entry that says nothing (the same argument
  * fireAutomation's `cleared` makes about a by-hand fire). */
-export const WakeSourceSchema = z.enum(["schedule", "event", "listener", "webchat", "workspace", "workflow"]);
+export const WakeSourceSchema = z.enum(["schedule", "event", "listener", "webchat", "issues", "workspace", "workflow"]);
 export type WakeSource = z.infer<typeof WakeSourceSchema>;
 // One admission verdict the owner can configure: let it run, hold it for approval, or refuse it outright.
 export const AdmissionRuleSchema = z.enum(["allow", "hold", "deny"]);
@@ -118,6 +118,15 @@ export const AdmissionPolicySchema = z.object({
     event: AdmissionRuleSchema.default("allow"),
     listener: AdmissionRuleSchema.default("allow"),
     webchat: AdmissionRuleSchema.default("allow"),
+    /* THE ONE SOURCE THAT HOLDS BY DEFAULT, and the exception is argued rather than assumed. A Front Desk wake
+     * runs the read-only Front Desk persona: a stranger drives the prompt and the toolbox is a shelf of two.
+     * A bug-report wake is the opposite on both counts, it is pointed at the repository with the powers to
+     * change it, and the brief is a stack trace and a sentence somebody else's browser wrote.
+     *
+     * Held is not blocked: the wake sits in the same approvals queue every other hold uses, with the issue's
+     * own title on the card, and one click runs it. An owner who wants their crashes fixed while they sleep
+     * sets this to `allow` deliberately, which is the direction that decision should have to be made in. */
+    issues: AdmissionRuleSchema.default("hold"),
     workspace: AdmissionRuleSchema.default("allow"),
     workflow: z.enum(["allow", "deny"]).default("allow"),
 });

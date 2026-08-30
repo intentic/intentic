@@ -80,6 +80,8 @@ import { createBrowserViewRoute } from "./browser/browser-view.js";
 import { createTerminalRoute } from "./terminal/terminal.js";
 import { createWebchatRoutes } from "./webchat/webchat.routes.js";
 import { createWidgetRoute } from "./webchat/webchat-widget.js";
+import { createIntakeRoutes } from "./issues/intake.routes.js";
+import { createSdkRoute } from "./issues/issue-sdk.js";
 import { createGateRoute } from "./workflows/gate.routes.js";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace/workspace-diff.js";
@@ -148,6 +150,15 @@ const eventFirePath = /^\/automations\/[^/]+\/fire$/;
  * constant per route: the set IS the boundary, and a boundary spread across four names is one somebody widens
  * by accident. `widget.js` is the only fixed path, the rest are per-automation. */
 const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|config|challenge)$/.test(path);
+
+/* The bug intake's public surface, the daemon's second anonymous door and the same shape as the one above: a
+ * stranger's browser (or a phone, or a server) with no Google token, gated instead by the automation's origin
+ * allowlist or its ingest key, a per-client rate window and a daily ceiling (see issues/intake.routes.ts).
+ *
+ * A SEPARATE PREFIX FROM `/issues`, which is the OWNER's inbox and stays behind the bearer middleware. The two
+ * are keyed by different things, an automation's public id out here, an issue's fingerprint in there, and one
+ * prefix covering both is how a rule gets widened by accident. `sdk.js` is the only fixed path. */
+const intakePublicPath = (path: string): boolean => path === "/intake/sdk.js" || /^\/intake\/[^/]+\/(report|config|challenge)$/.test(path);
 
 /* THE PATH THE ROUTER WILL ACTUALLY MATCH, which is not always the one the client typed, and the gap between
  * the two is a way through every path-shaped rule in this file.
@@ -384,7 +395,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
              * user's browser could walk that port range, read the id, and derive every preview hostname the
              * sandbox publishes. An unmatched origin gets no ACAO header, so the browser refuses the read. */
             origin: (origin, c) => {
-                if (webchatPublicPath(c.req.path)) {
+                if (webchatPublicPath(c.req.path) || intakePublicPath(c.req.path)) {
                     return origin ?? "*";
                 }
                 // Reflect only a match (exact, or one family entry's single floating label): returning the
@@ -439,6 +450,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
                 c.req.path === "/system/access/disable" ||
                 eventFirePath.test(c.req.path) ||
                 webchatPublicPath(c.req.path) ||
+                intakePublicPath(c.req.path) ||
                 ciWebhookPath.test(c.req.path) ||
                 gatePath.test(c.req.path) ||
                 hostPublicPath(c.req.path) ||
@@ -867,6 +879,21 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // NOT public (absent from webchatPublicPath above): which sites have loaded this Front Desk's widget is the
     // owner's install diagnostic, so it takes the ordinary bearer middleware like every other app route.
     app.get("/webchat/:id/installs", webchat.installs);
+
+    /* The bug intake: the reporter's bundle, the per-automation config it renders itself from, its puzzle for
+     * written reports, and the ingest itself. Exempt from the bearer middleware for the Front Desk's reason
+     * (nobody reporting a crash has a Google token) and gated instead by the origin allowlist or the ingest key,
+     * a per-client rate window and a daily ceiling. `sdk.js` is declared first so it cannot be shadowed by the
+     * :id routes.
+     *
+     * The ingest answers IMMEDIATELY and decides about waking anyone afterwards, unlike the chat above: the page
+     * that is reporting a crash is often seconds from unloading, and there is nothing for it to wait on. The
+     * owner's inbox for what lands here is the oRPC /issues surface, which is not public. */
+    const intake = createIntakeRoutes(services);
+    app.get("/intake/sdk.js", createSdkRoute());
+    app.get("/intake/:id/config", intake.config);
+    app.get("/intake/:id/challenge", intake.challenge);
+    app.post("/intake/:id/report", intake.report);
 
     // The operating gate used by privileged sandbox controls. Maintainer is deliberately owner-equivalent here;
     // ownership itself is kept separate below for the one thing a revokable grant cannot control: membership.

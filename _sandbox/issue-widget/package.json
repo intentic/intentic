@@ -1,0 +1,39 @@
+{
+    "name": "@intentic/issue-sdk",
+    "version": "0.0.0",
+    "description": "The bug reporter a website or app embeds to send crashes and user reports to a sandbox agent",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_sandbox/issue-widget"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        ".": "./dist/sdk.mjs",
+        "./sdk.js": "./dist/sdk.js"
+    },
+    "scripts": {
+        "build": "vite build",
+        "typecheck": "tsgo --noEmit",
+        "watch": "vite build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "devDependencies": {
+        "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@typescript/native-preview": "catalog:",
+        "jsdom": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:"
+    }
+}
