@@ -382,8 +382,11 @@
         font-family: var(--font-display);
         font-weight: 600;
         /* Positive tracking, because Playfair at these sizes sets tight enough that adjacent letters kiss;
-           the stone fill makes any touching pair read as one blotched glyph, so the letters are given air. */
-        letter-spacing: 0.02em;
+           the stone fill makes any touching pair read as one blotched glyph, so the letters are given air.
+           `0.02em` alone scales with font size, so a page h1 at text-4xl lands at half the absolute spacing
+           the home hero gets at the same em value and reads tighter. The rem floor matches the hero's
+           tracking at display size (~1.44px) so every carved heading carries the same air. */
+        letter-spacing: max(0.02em, 0.09rem);
         line-height: 1.24;
         --display-descender: 0.2em;
         padding-block-end: var(--display-descender);
