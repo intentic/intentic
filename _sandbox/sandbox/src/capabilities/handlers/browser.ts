@@ -26,13 +26,21 @@ import { browserUrls, contributionKey, contributionRegistry, hostOf } from "../c
 // entry's ID (session-store.ts), as this handler's skill file and the agent's tool prefix already are. So the
 // status below asks whether THIS account signed in, and the removal takes only this account's session with it.
 
-// Is the browser pack actually present. Chromium at playwright's cache path AND Xvfb on PATH? The probe for
-// the "rebuild pending" state between "add" and "rebuild" (on a core image the pack rides the overlay). Both
-// halves checked because the pack installs them as one unit and a half-present browser is unusable: Chromium
-// without Xvfb can only run headless (fingerprinted and blocked), Xvfb without Chromium has nothing to display.
-// Exported for the identity handler, whose browser is this same machinery.
+/* Is the browser pack actually present. The probe for the "rebuild pending" state between "add" and "rebuild"
+ * (on a core image the pack rides the overlay). EVERY piece is checked, because the pack installs them as one
+ * unit and a half-present browser is unusable rather than merely reduced:
+ *
+ *   - Chromium without Xvfb can only run headless, which is fingerprinted and turned away by the WAFs these
+ *     accounts exist to get past; Xvfb without Chromium has nothing to display.
+ *   - Without ffmpeg and xdotool the browser runs and NOBODY CAN SEE IT. Watching one is x11grab off its
+ *     display (browser/videocast.ts) and taking the wheel is XTEST driving that display (browser/xinput.ts),
+ *     so a pack missing either is a connected account the owner cannot sign in to by hand — which is the one
+ *     thing the guided login exists to do. Reading as "rebuild pending" says that in the place the owner can
+ *     act on it, where launching anyway would be a black window and a line in a log.
+ *
+ * Exported for the identity handler, whose browser is this same machinery. */
 export const browserPackInstalled = (): boolean => {
-    if (!existsSync("/usr/bin/Xvfb")) {
+    if (!["/usr/bin/Xvfb", "/usr/bin/ffmpeg", "/usr/bin/xdotool"].every((tool) => existsSync(tool))) {
         return false;
     }
     try {

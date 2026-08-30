@@ -1,9 +1,18 @@
-# Chromium for the agent's browser tools + Xvfb, the virtual display it runs HEADED on — one unit, because a
-# browser that exists but can only run headless is useless here (the headless shell is fingerprinted and
-# blocked by anti-bot WAFs, e.g. Reddit's "network security"; headed full Chromium under Xvfb looks like a
-# real browser). Chromium launches with `--no-sandbox` (an app-level flag), so this pack asks for no runtime
-# directive / container privilege — and must never name that token even in prose: the rebuild executors grep
-# for it, comments included.
+# Chromium for the agent's browser tools + Xvfb, the virtual display it runs HEADED on, + the two small tools
+# that make that display WATCHABLE — one unit, because a browser that exists but can only run headless is
+# useless here (the headless shell is fingerprinted and blocked by anti-bot WAFs, e.g. Reddit's "network
+# security"; headed full Chromium under Xvfb looks like a real browser). Chromium launches with `--no-sandbox`
+# (an app-level flag), so this pack asks for no runtime directive / container privilege — and must never name
+# that token even in prose: the rebuild executors grep for it, comments included.
+#
+# ffmpeg and xdotool are the picture and the hands. The owner watching a browser is x11grab off its display,
+# encoded as H.264 (browser/videocast.ts), and taking the wheel is XTEST driving that same display
+# (browser/xinput.ts). Both live HERE rather than in the base image because that is where the thing they
+# operate lives: a sandbox with no browser has no display to grab and nothing to click. The base image
+# deliberately carries no ffmpeg for exactly this reason — "heavy and task-specific: capability or overlay" —
+# and a browser capability is the task. xdotool is 126 kB and needs only libx11, which Chromium already pulled.
+# ffmpeg is the weight (~200 MB with its codec libraries), and it is the price of the browser being watchable
+# at all: the alternative measured ~10x the bandwidth for a tenth of the frame rate.
 # The playwright version pins the chromium revision — it MUST be the one the daemon's own playwright resolves
 # (browser-tools.ts hands chromium.executablePath() to @playwright/mcp), so installing the same version yields
 # the same revision by construction. packs.integration.test.ts holds the pin to the daemon's playwright dependency.
@@ -20,5 +29,5 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     --mount=type=cache,target=/root/.npm \
     npx --yes playwright@1.62.1 install --with-deps chromium \
-    && apt-get update && apt-get install -y --no-install-recommends xvfb \
+    && apt-get update && apt-get install -y --no-install-recommends xvfb ffmpeg xdotool \
     && rm -rf /root/.cache/ms-playwright/chromium_headless_shell-*

@@ -2,16 +2,16 @@ import type { BrowserSession } from "@intentic/sandbox-contract";
 import { checkoutPage, DOC_STEPS, docsPage, pricingPage } from "./fixture/storefront";
 import type { DemoSession, DemoSocket } from "./transport";
 
-/* THE AGENT'S BROWSER, RECORDED. `/system/browser-view` is a WebSocket of JSON frames whose `data` is a
- * base64 image, and the view is an <img> pointed at whatever the last frame carried, so a stream of drawn
+/* THE AGENT'S BROWSER, RECORDED. `/system/browser-view` carries pictures as BINARY frames — one format byte
+ * then the image — and the view is an <img> pointed at whatever the last frame carried, so a stream of drawn
  * frames is, to that view, indistinguishable from a Chromium screencast. This is the checkout agent verifying
  * its own work: it opens the pricing page, presses the CTA it just wired, and watches the Stripe session it
  * created come back.
  *
  * The pages themselves are fixture/storefront.ts, the recorded product's screens, shared with the screenshots
- * an acceptance run's report carries, because those are pictures of the same three pages. `format` rides each
- * frame (screencast.ts switches between jpeg and webp for real), so `svg+xml` needs no cooperation from the
- * client.
+ * an acceptance run's report carries, because those are pictures of the same three pages. The format travels
+ * WITH each frame (screencast.ts switches between jpeg and webp for real), so SVG needs no cooperation from the
+ * client beyond a tag of its own.
  *
  * The page tabs work: the view sends `bind` when the visitor clicks one, this answers by playing THAT page's
  * loop, and an unbound stream follows the agent, the same contract the daemon's screencast has. */
@@ -53,7 +53,19 @@ const STEPS: Record<string, number> = { page_pricing: 4, page_checkout: 4, page_
 // The page an unbound stream follows, the one the agent is driving, which is the one the roster marks active.
 const FOLLOWING = `page_checkout`;
 
-const encode = (svg: string): string => btoa(String.fromCharCode(...new TextEncoder().encode(svg)));
+/* A drawn page as the wire carries a picture: one FORMAT BYTE then the image, which for the daemon is a jpeg or
+ * a webp and here is an SVG (tag 2, see screencast.ts). Binary rather than base64-in-JSON for the same reason
+ * the real stream is — and it means this plays down the identical path rather than a text-shaped imitation of
+ * one, so a change to how frames are read is caught here instead of only in production. */
+const FRAME_SVG = 2;
+
+const encode = (svg: string): ArrayBuffer => {
+    const body = new TextEncoder().encode(svg);
+    const wire = new Uint8Array(body.byteLength + 1);
+    wire[0] = FRAME_SVG;
+    wire.set(body, 1);
+    return wire.buffer;
+};
 
 /** The recorded screencast, played on the socket the Browsers view just opened. */
 export const browserSession: DemoSession = (socket: DemoSocket) => {
@@ -63,7 +75,7 @@ export const browserSession: DemoSession = (socket: DemoSocket) => {
 
     const paint = (): void => {
         const draw = LOOPS[pageId] ?? LOOPS[FOLLOWING];
-        socket.emit(JSON.stringify({ type: `frame`, format: `svg+xml`, data: encode(draw!(step)), pageId }));
+        socket.emit(encode(draw!(step)));
         step = (step + 1) % (STEPS[pageId] ?? 1);
     };
 
@@ -72,7 +84,11 @@ export const browserSession: DemoSession = (socket: DemoSocket) => {
         timer = window.setInterval(paint, FRAME_MS);
     };
 
-    socket.emit(JSON.stringify({ type: `ready` }));
+    /* The recording is DRAWN PAGES, so it plays down the frames path rather than the video one: a `kind` of
+     * `frames` is what stops the view building an H.264 decoder for pictures that are SVG. The geometry has to
+     * be stated for the same reason it does on a real socket — the two paths have different shapes (a whole
+     * window versus a page alone), so nothing assumes one, and these are the storefront fixture's own. */
+    socket.emit(JSON.stringify({ type: `ready`, kind: `frames`, width: 1280, height: 800 }));
     paint();
     play();
 

@@ -69,21 +69,66 @@ const STILL_IDLE_MS = 5000;
 
 const SCREENCAST_OPTIONS = { format: "jpeg", quality: MOTION_QUALITY, maxWidth: VIEW_WIDTH, maxHeight: VIEW_HEIGHT, everyNthFrame: 1 } as const;
 
-// One picture on its way to the client. The format travels WITH the frame because the two kinds are encoded
-// differently, see the still below, and the client needs it to build the data URL.
+/* One picture on its way to the client, AS BYTES. The format travels with it because the two kinds are encoded
+ * differently (see the still below) and the decoder on the far side has to be told which it is.
+ *
+ * WHY NOT BASE64 IN JSON, which is what this was. CDP hands frames over base64-encoded, so shipping them on as
+ * text looked free; it is not. Base64 is a flat 33% on top of a 1280x800 JPEG that is already 150-250 kB, and the
+ * client then held each one as a `data:` URL string, so every frame allocated a fresh multi-hundred-kB string in
+ * a hot path and left it for the collector. A WebSocket carries binary natively. The decode here costs a memcpy
+ * and buys back a third of the wire on the most bandwidth-hungry thing this daemon sends. */
 export interface ScreencastFrame {
-    readonly data: string;
+    readonly bytes: Buffer;
     readonly format: "jpeg" | "webp";
 }
 
+/* The format byte a binary frame is prefixed with, so one socket can carry every kind (and, later, coded video)
+ * without a parallel JSON message describing what just arrived. SVG is nothing this daemon ever encodes: it is
+ * how the recorded demo (_site/demo/src/browser.ts) plays drawn pages down the same wire, which is only possible
+ * because the format traveling WITH the frame means the client never assumes one. */
+export const FRAME_JPEG = 0;
+export const FRAME_WEBP = 1;
+export const FRAME_SVG = 2;
+
+// A frame as it goes on the wire: one tag byte, then the image. Shared by both routes so the two surfaces
+// cannot disagree about the header the client is about to parse.
+export const encodeFrame = (frame: ScreencastFrame): Uint8Array<ArrayBuffer> => {
+    const wire = new Uint8Array(frame.bytes.byteLength + 1);
+    wire[0] = frame.format === "webp" ? FRAME_WEBP : FRAME_JPEG;
+    wire.set(frame.bytes, 1);
+    return wire;
+};
+
 // Client → server input frames (JSON, mirrored on the web side, the browser can't import this contract package).
 export type ScreencastClientMessage =
+    /* A POINTER EVENT, WITH THE THREE FIELDS THAT MAKE IT ONE. `x`/`y`/`button` alone describe a click and
+     * nothing else, which is how this window came to be unable to drag, to double-click, or to Ctrl-click:
+     *
+     *   - `buttons` is the DOM bitmask of what is HELD (left 1, right 2, middle 4), and CDP uses the identical
+     *     encoding, so it passes straight through. Without it every move is dispatched as `buttons: 0` and the
+     *     renderer sees a hover, so a press-move-release selects no text, moves no slider, drags no file and
+     *     draws on no canvas — the button may as well not have been down. It is read off the DOM event rather
+     *     than tracked here on purpose: a lost `up` (the pointer left the picture, the socket blinked) would
+     *     otherwise strand this end believing a button is still down forever.
+     *   - `clickCount` is the browser's own `detail`, which is how double-click-to-select-a-word and
+     *     triple-click-to-select-a-line reach the page. Hardcoding 1 made both of them a pair of single clicks.
+     *   - the modifiers, so Ctrl+click opens in a new tab and Shift+click extends a selection.
+     *
+     * No `meta`, for the same reason the key frame has none: the Chromium at the far end is a Linux one, and a
+     * Mac's ⌘ arrives here already translated to `ctrl` by the client that read it. */
     | {
           readonly type: "mouse";
           readonly action: "move" | "down" | "up" | "wheel";
           readonly x: number;
           readonly y: number;
+          // Which button changed, in DOM numbering (0 left, 1 middle, 2 right, 3 back, 4 forward).
           readonly button?: number;
+          // Which buttons are held, as a DOM/CDP bitmask. Present on every action, including moves.
+          readonly buttons?: number;
+          readonly clickCount?: number;
+          readonly ctrl?: boolean;
+          readonly shift?: boolean;
+          readonly alt?: boolean;
           readonly deltaX?: number;
           readonly deltaY?: number;
       }
@@ -105,12 +150,11 @@ export type ScreencastClientMessage =
     // Stream a specific page instead of whichever the agent opened last, the browser view's tab strip. Pins,
     // so the agent opening a tab no longer moves the picture out from under the user (see `pinned` below).
     | { readonly type: "bind"; readonly pageId: string }
-    /* The address bar, which only the owner's own window (browser-profile.ts) has: the picture is the page and
-     * nothing else, so there is no window chrome in it to click. Handled by that route against the bound PAGE
-     * rather than here against a CDP session, going back is a page's history, not an input event. */
-    | { readonly type: "go"; readonly url: string }
-    | { readonly type: "back" }
-    | { readonly type: "reload" }
+    /* THERE IS NO `go`/`back`/`reload` ANY MORE, and the reason is the whole X-capture design. Those existed
+     * because the picture was a page's compositor surface — the browser's own chrome was not in it, so an
+     * address bar and three buttons had to be drawn in HTML and wired back to Playwright navigations. The
+     * picture is the WINDOW now (videocast.ts), so the real address bar and the real back button are in it, and
+     * XTEST clicks them like a person would. See live-view.ts. */
     // The tab went to the background (or the route was left). Nobody is looking, so nothing should be encoded
     // or sent, a browsing agent would otherwise push frames down the tunnel at a hidden <img> indefinitely.
     | { readonly type: "pause" }
@@ -118,7 +162,22 @@ export type ScreencastClientMessage =
     | { readonly type: "done" }
     | { readonly type: "ping" };
 
-const cdpButton = (button: number | undefined): "left" | "middle" | "right" => (button === 1 ? "middle" : button === 2 ? "right" : "left");
+/* DOM button numbering to CDP's names, indexed rather than branched so back and forward are not silently
+ * reported as left clicks. "none" is what a MOVE carries: CDP reads a move that names a button as a button
+ * event, and `buttons` below is the field that says what is actually held. */
+const CDP_BUTTON = ["none", "left", "middle", "right", "back", "forward"] as const;
+const cdpButton = (button: number | undefined): (typeof CDP_BUTTON)[number] => CDP_BUTTON[(button ?? 0) + 1] ?? "left";
+// Chromium counts 1, 2 and 3; anything past a triple-click is a triple-click as far as any page is concerned.
+const clickCount = (count: number | undefined): number => Math.min(3, Math.max(1, Math.trunc(count ?? 1)));
+
+// CDP's Input domain packs the held modifiers into one integer. Meta is 4 and deliberately never set, see the
+// note on the `key` frame. Shared by pointer and keyboard: Shift+click and Shift+End are the same bit.
+const CDP_ALT = 1;
+const CDP_CTRL = 2;
+const CDP_SHIFT = 8;
+
+const cdpModifiers = (held: { readonly ctrl?: boolean; readonly shift?: boolean; readonly alt?: boolean }): number =>
+    (held.alt === true ? CDP_ALT : 0) | (held.ctrl === true ? CDP_CTRL : 0) | (held.shift === true ? CDP_SHIFT : 0);
 
 // The few non-text keys a form needs; anything printable arrives as a `text` frame (Input.insertText).
 const SPECIAL_KEYS: Record<string, { code: string; vk: number; text?: string }> = {
@@ -134,12 +193,6 @@ const SPECIAL_KEYS: Record<string, { code: string; vk: number; text?: string }> 
     Home: { code: "Home", vk: 36 },
     End: { code: "End", vk: 35 },
 };
-
-// CDP's Input domain packs the held modifiers into one integer. Meta is 4 and deliberately never set, see the
-// note on the `key` frame.
-const CDP_ALT = 1;
-const CDP_CTRL = 2;
-const CDP_SHIFT = 8;
 
 /* WHY A CHORD HAS TO ARRIVE AS A REAL KEY EVENT, when ordinary typing does not.
  *
@@ -170,28 +223,63 @@ const keyDescriptor = (message: { readonly key: string; readonly shift?: boolean
     return { key: message.key, code: spec.code, vk: spec.vk, ...(spec.text !== undefined ? { text: spec.text } : {}) };
 };
 
+export type MouseMessage = Extract<ScreencastClientMessage, { type: "mouse" }>;
+
+const dispatchMouse = async (session: CDPSession, message: MouseMessage): Promise<void> => {
+    // Held buttons and modifiers ride on EVERY pointer event, wheel included: Ctrl+wheel is zoom, and a wheel
+    // mid-drag is a page scrolling under a selection that has to keep growing.
+    const modifiers = cdpModifiers(message);
+    const buttons = message.buttons ?? 0;
+    if (message.action === "wheel") {
+        await session.send("Input.dispatchMouseEvent", {
+            type: "mouseWheel",
+            x: message.x,
+            y: message.y,
+            modifiers,
+            buttons,
+            deltaX: message.deltaX ?? 0,
+            deltaY: message.deltaY ?? 0,
+        });
+        return;
+    }
+    const move = message.action === "move";
+    const type = message.action === "down" ? "mousePressed" : message.action === "up" ? "mouseReleased" : "mouseMoved";
+    await session.send("Input.dispatchMouseEvent", {
+        type,
+        x: message.x,
+        y: message.y,
+        modifiers,
+        // A move names no button and carries no count; what it carries is `buttons`, which is what makes it a
+        // drag rather than a hover.
+        button: move ? "none" : cdpButton(message.button),
+        buttons,
+        clickCount: move ? 0 : clickCount(message.clickCount),
+    });
+};
+
+const dispatchKey = async (session: CDPSession, message: Extract<ScreencastClientMessage, { type: "key" }>): Promise<void> => {
+    const descriptor = keyDescriptor(message);
+    if (descriptor === undefined) {
+        return;
+    }
+    const modifiers = cdpModifiers(message);
+    // Shift is the modifier that still produces a character; Ctrl and Alt turn the keystroke into a command,
+    // and Chromium only reads it as one when the event carries NO text, hence rawKeyDown for every chord.
+    const text = (modifiers & (CDP_CTRL | CDP_ALT)) !== 0 ? undefined : descriptor.text;
+    const stroke = { modifiers, key: descriptor.key, code: descriptor.code, windowsVirtualKeyCode: descriptor.vk };
+    await session.send("Input.dispatchKeyEvent", {
+        ...stroke,
+        type: text !== undefined ? "keyDown" : "rawKeyDown",
+        ...(text !== undefined ? { text } : {}),
+    });
+    await session.send("Input.dispatchKeyEvent", { ...stroke, type: "keyUp" });
+};
+
 // Forward one input frame to the page the CDP session is attached to. `bind`/`pause`/`resume`/`done`/`ping` are
 // conversation-level and belong to the route; everything else is a pointer or a keystroke and lands here.
 export const dispatchInput = async (session: CDPSession, message: ScreencastClientMessage): Promise<void> => {
     if (message.type === "mouse") {
-        if (message.action === "wheel") {
-            await session.send("Input.dispatchMouseEvent", {
-                type: "mouseWheel",
-                x: message.x,
-                y: message.y,
-                deltaX: message.deltaX ?? 0,
-                deltaY: message.deltaY ?? 0,
-            });
-            return;
-        }
-        const type = message.action === "down" ? "mousePressed" : message.action === "up" ? "mouseReleased" : "mouseMoved";
-        await session.send("Input.dispatchMouseEvent", {
-            type,
-            x: message.x,
-            y: message.y,
-            button: cdpButton(message.button),
-            clickCount: message.action === "move" ? 0 : 1,
-        });
+        await dispatchMouse(session, message);
         return;
     }
     if (message.type === "text") {
@@ -199,21 +287,7 @@ export const dispatchInput = async (session: CDPSession, message: ScreencastClie
         return;
     }
     if (message.type === "key") {
-        const descriptor = keyDescriptor(message);
-        if (descriptor === undefined) {
-            return;
-        }
-        const modifiers = (message.alt === true ? CDP_ALT : 0) | (message.ctrl === true ? CDP_CTRL : 0) | (message.shift === true ? CDP_SHIFT : 0);
-        // Shift is the modifier that still produces a character; Ctrl and Alt turn the keystroke into a command,
-        // and Chromium only reads it as one when the event carries NO text, hence rawKeyDown for every chord.
-        const text = (modifiers & (CDP_CTRL | CDP_ALT)) !== 0 ? undefined : descriptor.text;
-        const stroke = { modifiers, key: descriptor.key, code: descriptor.code, windowsVirtualKeyCode: descriptor.vk };
-        await session.send("Input.dispatchKeyEvent", {
-            ...stroke,
-            type: text !== undefined ? "keyDown" : "rawKeyDown",
-            ...(text !== undefined ? { text } : {}),
-        });
-        await session.send("Input.dispatchKeyEvent", { ...stroke, type: "keyUp" });
+        await dispatchKey(session, message);
     }
 };
 
@@ -323,10 +397,101 @@ export const applySelect = async (page: Page, index: number): Promise<void> => {
     }
 };
 
+/* WHAT SHAPE THE POINTER SHOULD BE, which the picture by itself can never say.
+ *
+ * `Page.startScreencast` streams the page's COMPOSITOR SURFACE, and a cursor is not part of it — Chromium draws
+ * that on top, in the window, where no frame goes. So the owner's arrow stayed an arrow over every link, every
+ * text field, every resize handle and every drag grip in the remote page. Half of "does this thing respond to
+ * me" is the pointer changing before the click, and none of it was arriving: the window read as dead even when
+ * it was keeping up.
+ *
+ * The page is ASKED rather than instrumented. `elementFromPoint` and `getComputedStyle` are reads, exactly like
+ * readSelection and readSelect above, so nothing is injected into a page the agent is working in and the answer
+ * cannot show up in the agent's own next snapshot.
+ *
+ * SAME-ORIGIN FRAMES ARE WALKED, because the interesting controls are so often inside an embedded sign-in, and
+ * `elementFromPoint` on the top document answers `<iframe>` for every one of them. A cross-origin frame refuses
+ * `contentDocument`, and its own computed cursor is the honest fallback — an OAuth button that reports `pointer`
+ * on the frame is still better than an arrow, and the click lands either way. Bounded depth: a page that nests
+ * frames in a cycle must not spin here. */
+const CURSOR_PROBE = `(() => {
+    let x = __X__, y = __Y__, doc = document;
+    for (let depth = 0; depth < 8; depth += 1) {
+        const el = doc.elementFromPoint(x, y);
+        if (el === null) { return "default"; }
+        const style = getComputedStyle(el).cursor;
+        if (el.tagName !== "IFRAME" && el.tagName !== "FRAME") { return style; }
+        let inner = null;
+        try { inner = el.contentDocument; } catch { inner = null; }
+        if (inner === null) { return style; }
+        const box = el.getBoundingClientRect();
+        x -= box.left; y -= box.top; doc = inner;
+    }
+    return "default";
+})()`;
+
+// A cursor keyword long enough to be a `url(...)` with a data URI in it is not one this is going to forward:
+// the client maps a keyword onto its own CSS, and an unbounded string from a page is not a keyword.
+const CURSOR_MAX = 32;
+
+export const readCursor = async (session: CDPSession, x: number, y: number): Promise<string | undefined> => {
+    const result = await session
+        .send("Runtime.evaluate", {
+            expression: CURSOR_PROBE.replace("__X__", String(Math.round(x))).replace("__Y__", String(Math.round(y))),
+            returnByValue: true,
+        })
+        // Navigated mid-probe, or a page that has no document yet. The next move asks again.
+        .catch(() => undefined);
+    const value: unknown = result?.result?.value;
+    return typeof value === "string" && value !== "" && value.length <= CURSOR_MAX ? value : undefined;
+};
+
+/* How often the pointer's shape is re-read while it moves, and why this is not a round trip per move. The probe
+ * is fire-and-forget — it never sits in front of the input it followed — and an answer is only SENT when the
+ * shape actually changed, so a pointer crossing a paragraph reports once rather than sixty times. 60ms is well
+ * under how long a person takes to notice a shape change and well over the cost of one Runtime.evaluate. */
+const CURSOR_INTERVAL_MS = 60;
+
+/* One throttled cursor probe per socket, shared by both surfaces so the two cannot drift into different answers
+ * for the same gesture. Holds the last reported shape, which is what makes this quiet: the common case is a
+ * pointer that has been over the same kind of thing for the last twenty moves. */
+export const cursorReporter = (send: (cursor: string) => void): ((session: CDPSession, x: number, y: number) => void) => {
+    let reported: string | undefined;
+    let probedAt = 0;
+    let inFlight = false;
+    return (session, x, y) => {
+        const now = Date.now();
+        // One probe in the air at a time: a tunnel slower than the interval must not queue a probe per move.
+        if (inFlight || now - probedAt < CURSOR_INTERVAL_MS) {
+            return;
+        }
+        probedAt = now;
+        inFlight = true;
+        void readCursor(session, x, y)
+            .then((cursor) => {
+                if (cursor !== undefined && cursor !== reported) {
+                    reported = cursor;
+                    send(cursor);
+                }
+            })
+            .finally(() => {
+                inFlight = false;
+            });
+    };
+};
+
 // A live view of ONE browser context: the CDP session currently streaming, rebound as pages come and go.
 // `attached` is what an input frame is dispatched to, so mouse/keyboard follow the page on screen automatically.
 export interface Screencast {
     readonly attached: () => CDPSession | undefined;
+    /* THE OWNER JUST DID SOMETHING, so the next frame is an answer and not an echo. Called by the routes on
+     * every pointer and keystroke they forward, and read by the frame handler below to decide whether a frame
+     * inside a suppression window is the page responding or our own camera shaking the picture it took.
+     *
+     * Without it the two were indistinguishable and the suppressor guessed "shake", which is why taking the
+     * wheel felt broken: a click's own repaint was dropped and re-read up to a still-delay later, so every
+     * press, every hover and every keystroke paid half a second before anything on screen moved. */
+    readonly noteInput: () => void;
     // The page those frames are of, what a navigation acts on and where an address bar reads its text. The
     // session above is the input path; this is the same picture asked about as a page rather than a socket.
     readonly page: () => Page | undefined;
@@ -361,6 +526,10 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     // Whether a frame arriving now is the page moving or our own still capture shaking it, see CAPTURE_ECHO_MS.
     let capturing = false;
     let echoUntil = 0;
+    // When the capture whose echo is being suppressed began, and when the owner last put something into the
+    // page. A frame in the window is ours only if nothing was clicked or typed since. See `noteInput`.
+    let captureStartedAt = 0;
+    let lastInputAt = 0;
     // The sharp frame the client is currently showing, kept to compare the next capture against: same bytes
     // means the page has not moved since, which is the only reliable way to tell an echo from a real change.
     let lastStill: string | undefined;
@@ -388,6 +557,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
          * frame brought it back: the view flickered exactly when someone was reading it. */
         capturing = true;
         const startedAt = Date.now();
+        captureStartedAt = startedAt;
         const shot = await session
             .send("Page.getLayoutMetrics")
             .then(({ visualViewport }) =>
@@ -413,8 +583,10 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             return;
         }
         quiet = 0;
+        // Compared as base64 (what CDP hands over) and sent as bytes: the equality test above is the cheap half
+        // and runs on every capture, the decode is the expensive half and runs only on the ones worth sending.
         lastStill = shot.data;
-        onFrame({ data: shot.data, format: "webp" });
+        onFrame({ bytes: Buffer.from(shot.data, "base64"), format: "webp" });
     };
 
     // Every path that wants another sharp reading goes through here, so the back-off is applied in one place.
@@ -458,10 +630,26 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
             if (paused || stopped) {
                 return;
             }
-            if (capturing || Date.now() < echoUntil) {
-                // Probably our own still shaking the page it photographed, forwarding it would undo the sharp
-                // frame we just sent, which is the flicker. But it may equally be the page answering a click,
-                // so dropping it is never the last word: look again, and let the capture settle the question.
+            /* OUR OWN CAMERA SHAKING THE PICTURE IT TOOK — BUT ONLY IF NOBODY TOUCHED ANYTHING.
+             *
+             * A frame inside the suppression window has two possible authors, and for a long time this could
+             * not tell them apart, so it assumed the flattering one: its own still capture. That assumption is
+             * right whenever the view is being WATCHED, which is most of the time, and wrong at exactly the
+             * moment somebody takes the wheel. The whole point of a click is that the page moves right after
+             * it, which puts the frame that proves the click worked squarely inside this window.
+             *
+             * Dropping it and re-reading later is not a small penalty. The re-read waits a still delay and then
+             * pays for a 2560x1600 capture, so every press, every hover, every keystroke went dark for half a
+             * second or more — and because interacting keeps arming stills, driving the browser spent most of
+             * its time inside a window built for a page nobody was touching. Hovers "slow and unresponsive" and
+             * clicks with "no feedback from buttons" were both this, not the network.
+             *
+             * `lastInputAt` settles it honestly. Input since the capture began means the page is answering a
+             * person and the frame goes out AT ONCE, blurry or not: feedback beats sharpness while a hand is on
+             * the mouse, and the still that follows the settle sharpens it a moment later anyway. No input means
+             * nothing but our own shutter can have moved anything, which is the original case, unchanged. */
+            if ((capturing || Date.now() < echoUntil) && lastInputAt < captureStartedAt) {
+                // Dropping it is never the last word: look again, and let the capture settle the question.
                 armStill(session);
                 return;
             }
@@ -472,7 +660,7 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
              * page unchanged, and sends nothing, stranding the viewer on the blurry one for good. */
             quiet = 0;
             lastStill = undefined;
-            onFrame({ data: frame.data, format: "jpeg" });
+            onFrame({ bytes: Buffer.from(frame.data, "base64"), format: "jpeg" });
             armStill(session);
         });
         // Normalize the window so client coords (VIEW_WIDTH x VIEW_HEIGHT) map 1:1 even for a smaller popup.
@@ -516,6 +704,9 @@ export const startScreencast = async (context: BrowserContext, onFrame: (frame: 
     return {
         attached: () => attached,
         page: () => boundTo,
+        noteInput: () => {
+            lastInputAt = Date.now();
+        },
         bind,
         setPaused: async (next) => {
             if (stopped || paused === next) {

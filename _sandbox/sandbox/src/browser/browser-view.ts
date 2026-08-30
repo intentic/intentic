@@ -1,38 +1,34 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import { browserSessionContext, browserSessionPage } from "./browser-sessions.js";
-import {
-    applySelect,
-    dispatchInput,
-    readSelect,
-    readSelection,
-    startScreencast,
-    VIEW_HEIGHT,
-    VIEW_WIDTH,
-    type Screencast,
-    type ScreencastClientMessage,
-} from "./screencast.js";
+import type { WSContext } from "hono/ws";
+import { browserSessionContext, browserSessionDisplayKey, browserSessionPage } from "./browser-sessions.js";
+import { startLiveView, type LiveView } from "./live-view.js";
+import type { ScreencastClientMessage } from "./screencast.js";
 import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
+
+// The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
+type Socket = WSContext;
 
 /* The /system/browser-view route: WATCH THE AGENT BROWSE, and take the wheel if you want to.
  *
  * Same wire as /system/browser-profile (a header-less WebSocket authorizing token+connect from the query string;
- * app.ts exempts it from the bearer middleware) and the same frames, because it is the same thing pointed at a
- * different browser: there, the platform's own profile with the owner at the wheel; here, the Chromium the
- * agent is driving through its tools.
+ * app.ts exempts it from the bearer middleware) and the same pictures, because it is the same thing pointed at a
+ * different browser: there, the platform's own profile with the owner at the wheel; here, the Chromium the agent
+ * is driving through its tools. WHAT the picture is — video off the browser's own X display, or CDP frames of
+ * one page — is live-view.ts's decision, made once for both surfaces.
  *
  * The stream is READ-ONLY BY DEFAULT, not by refusing input, but because the client sends none until the user
  * asks. That distinction matters: this is the owner's own browser inside the owner's own sandbox, so there is
  * nothing to forbid; what there is, is a default that keeps a click meant for the transcript from landing on the
  * page the agent is mid-way through filling in. When the user does take over (the view's Take control), the
- * frames start flowing and land here unremarked.
+ * input starts flowing and lands here unremarked.
  *
- * Closing this socket stops the screencast and nothing else. The browser belongs to the turn, not to the
- * viewer, walking away from the window must not end the work being watched, which is the same contract the
- * terminal panel's attach has with tmux. */
+ * Closing this socket stops the picture and nothing else. The browser belongs to the turn, not to the viewer,
+ * walking away from the window must not end the work being watched, which is the same contract the terminal
+ * panel's attach has with tmux. */
 export const createBrowserViewRoute = (services: Services) =>
     upgradeWebSocket((c) => {
-        let screencast: Screencast | undefined;
+        let view: LiveView | undefined;
         let closed = false;
         let unregisterAccess: (() => void) | undefined;
         // The session this socket watches, read once in onOpen and needed again by every `bind` frame.
@@ -45,8 +41,65 @@ export const createBrowserViewRoute = (services: Services) =>
             closed = true;
             unregisterAccess?.();
             unregisterAccess = undefined;
-            await screencast?.stop();
-            screencast = undefined;
+            await view?.stop();
+            view = undefined;
+        };
+
+        /* THE TAB STRIP, which only the frames path has and only the frames path needs. A screencast shows ONE
+         * page, so choosing which is a real question; the video path shows the window, and the window already
+         * has Chromium's own tab strip in it, which the owner clicks directly. `bind` is answered either way so
+         * the client never has to know which it is looking at — on video it simply lands on nothing.
+         *
+         * A page id the session doesn't know is a tab that closed between the relist and the click: say so
+         * rather than leaving the strip lying about it. */
+        const onBind = async (pageId: string, ws: Socket): Promise<void> => {
+            const page = browserSessionPage(session, pageId);
+            if (page === undefined) {
+                ws.send(JSON.stringify({ type: "gone", pageId }));
+                return;
+            }
+            await view?.bind(page);
+        };
+
+        // Ctrl+C over the picture: hand back what the page has selected so the client can put it on the
+        // clipboard of the machine the person is actually sitting at. Answered even when empty, because the
+        // client is waiting on it before it lets the keystroke go.
+        const onSelection = async (ws: Socket): Promise<void> => {
+            ws.send(JSON.stringify({ type: "selection", text: (await view?.selection()) ?? "" }));
+        };
+
+        /* THE CONVERSATION-LEVEL HALF of this socket: keepalive, what to stream, what is selected, whether
+         * anyone is looking. Split from the input half because the two answer different questions — this one is
+         * about the VIEW, the other is about the BROWSER. Answers whether it handled the frame. */
+        const handleControl = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
+            switch (message.type) {
+                case "ping":
+                    // The client's keepalive against tunnel idle-reaping; the pong is its read-side liveness
+                    // signal, exactly as on the terminal socket (a picture of a STILL page may send nothing at
+                    // all, so silence here would be indistinguishable from a half-open connection). Answered
+                    // before anything is attached, or a slow Chromium start would read as a dead socket and the
+                    // client would tear down the very connection it is waiting on.
+                    ws.send(JSON.stringify({ type: "pong" }));
+                    return true;
+                case "pause":
+                case "resume":
+                    // Nobody is looking (hidden tab, another route). On video this kills the encoder outright,
+                    // which is a core given back; on frames it holds the binding and sends nothing.
+                    await view?.setPaused(message.type === "pause");
+                    return true;
+                case "bind":
+                    await onBind(message.pageId, ws);
+                    return true;
+                case "selection":
+                    await onSelection(ws);
+                    return true;
+                case "selectOption":
+                    // The owner picked from a menu the CLIENT drew, which only ever happens on the frames path.
+                    await view?.chooseOption(message.index);
+                    return true;
+                default:
+                    return false;
+            }
         };
 
         return {
@@ -77,13 +130,16 @@ export const createBrowserViewRoute = (services: Services) =>
                     return;
                 }
                 try {
-                    screencast = await startScreencast(context, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
-                    ws.send(JSON.stringify({ type: "ready", width: VIEW_WIDTH, height: VIEW_HEIGHT }));
+                    // The key the session's display was allocated under, which is what decides video or frames.
+                    // A session whose browser ended up headless has none, and the frames path answers instead.
+                    view = await startLiveView(context, browserSessionDisplayKey(session) ?? "", { send: (data) => ws.send(data) }, (reason) => {
+                        services.logger.warn({ reason }, "browser-view stream failed");
+                    });
                 } catch (err) {
-                    services.logger.warn({ err }, "browser-view screencast failed");
+                    services.logger.warn({ err }, "browser-view attach failed");
                     ws.send(JSON.stringify({ type: "error", message: "Couldn't attach to that browser." }));
                     await cleanup();
-                    ws.close(1011, "screencast failed");
+                    ws.close(1011, "attach failed");
                 }
             },
             onMessage: async (event, ws) => {
@@ -96,69 +152,9 @@ export const createBrowserViewRoute = (services: Services) =>
                 } catch {
                     return;
                 }
-                if (message.type === "ping") {
-                    // The client's keepalive against tunnel idle-reaping; the pong is its read-side liveness
-                    // signal, exactly as on the terminal socket (a screencast of a STILL page sends no frames,
-                    // so silence here would otherwise be indistinguishable from a half-open connection).
-                    // Answered before anything is attached, or a slow Chromium start would read as a dead
-                    // socket and the client would tear down the very connection it is waiting on.
-                    ws.send(JSON.stringify({ type: "pong" }));
-                    return;
-                }
-                if (message.type === "pause" || message.type === "resume") {
-                    // Nobody is looking (hidden tab, another route). Holding the binding but sending nothing is
-                    // the whole trick: coming back is one frame away, and a browsing agent stops pushing JPEGs
-                    // through the tunnel at an <img> in a background tab.
-                    await screencast?.setPaused(message.type === "pause");
-                    return;
-                }
-                if (message.type === "bind") {
-                    // The tab strip: stream the page the user clicked, and PIN it so the agent opening another
-                    // tab no longer moves the picture. A page id the session doesn't know is a tab that closed
-                    // between the relist and the click, say so rather than leaving the strip lying about it.
-                    const page = browserSessionPage(session, message.pageId);
-                    if (page === undefined) {
-                        ws.send(JSON.stringify({ type: "gone", pageId: message.pageId }));
-                        return;
-                    }
-                    await screencast?.bind(page, true);
-                    return;
-                }
-                if (message.type === "selection") {
-                    // Ctrl+C over the picture: hand back what the page has selected so the client can put it on
-                    // the clipboard of the machine the person is actually sitting at. Answered even when empty,
-                    // because the client is waiting on it before it lets the keystroke go.
-                    const page = screencast?.page();
-                    ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
-                    return;
-                }
-                if (message.type === "selectOption") {
-                    // The owner picked from the menu the client drew for them, see readSelect in screencast.ts.
-                    const page = screencast?.page();
-                    if (page !== undefined) {
-                        await applySelect(page, message.index);
-                    }
-                    return;
-                }
-                // Everything left is a pointer or a keystroke, and needs somewhere to land.
-                const attached = screencast?.attached();
-                if (attached === undefined) {
-                    return;
-                }
-                try {
-                    await dispatchInput(attached, message);
-                } catch (err) {
-                    // A page that navigated out from under the click, the rebind follows it; the input is lost.
-                    services.logger.warn({ err }, "browser-view input dispatch failed");
-                }
-                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE. Chromium draws that list outside the page,
-                 * so the frames will never show it; asking after every release is how the client learns to draw
-                 * one itself. Release rather than press, because that is when the page has settled on what is
-                 * focused, and the answer is sent either way, an empty one closes a menu the owner clicked off. */
-                if (message.type === "mouse" && message.action === "up") {
-                    const page = screencast?.page();
-                    const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
-                    ws.send(JSON.stringify({ type: "select", menu: menu ?? null }));
+                // Control first; whatever it does not claim is a pointer or a keystroke for the browser.
+                if (!(await handleControl(message, ws))) {
+                    await view?.input(message);
                 }
             },
             onClose: () => {

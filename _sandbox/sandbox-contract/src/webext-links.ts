@@ -23,6 +23,16 @@ export const webextConnectUrl = (sandboxUrl: string): string => `${sandboxUrl.re
  * and the one thing that would be catastrophic to leak is the one thing the model never sees. */
 export const webextSessionUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/session`;
 
+/* The same door in the other direction: where the extension asks for a sandbox account's session to be LENT to
+ * this browser, so the owner can finish a step no remote browser can do — a passkey, a hardware second factor,
+ * an employer's SSO that checks the device.
+ *
+ * A separate path rather than a verb on the one above, because the two are different acts with different
+ * refusals ("no such account" versus "that account is not signed in there") and a single endpoint doing both
+ * would have to be read twice to know which. Same bearer, and the same rule about the socket: the cookies come
+ * back on THIS request, never as an MCP result. */
+export const webextLendUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/lend`;
+
 /* ---- the pairing code: the one string that travels from the sandbox's card into the extension ----
  *
  * A connected computer is paired by a shell one-liner, which can carry two values in two environment variables

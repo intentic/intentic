@@ -5,8 +5,14 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
 import { expect, test } from "vitest";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, writeBrowserConfig } from "./browser-tools.js";
+import { type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "./display.js";
 import { browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, releaseProfileLock } from "./session-store.js";
+
+/* A display, as the launchers now take one rather than a bare DISPLAY string. The size travels with it because
+ * it is what the WINDOW is set to: there is no viewport emulation any more, so the page is exactly the window's
+ * content area and the picture the owner watches is the window itself (browser/videocast.ts). */
+const DISPLAY: Display = { name: ":99", width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT };
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "browser-tools-"));
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
@@ -34,7 +40,7 @@ test("an exit-bound config carries the proxy and the matching clock", async () =
     const server = `bound-${process.hrtime.bigint()}`;
     const berlin = { locale: "de-DE", timezoneId: "Europe/Berlin", languages: ["de-DE", "de", "en"] };
     const device = await browserFingerprint(tempRoot(), "reddit", berlin);
-    const path = await writeBrowserConfig(server, 41_239, device, {
+    const path = await writeBrowserConfig(server, 41_239, device, DISPLAY, {
         exitId: "berlin",
         proxy: "socks5://127.0.0.1:19042",
         country: "DE",
@@ -54,6 +60,42 @@ test("an exit-bound config carries the proxy and the matching clock", async () =
      * told the page `["de-DE","de","en"]`. A German address and a German clock under a header that disagrees
      * with the page's own property is the contradiction the other two lines exist to avoid. */
     expect(config.browser.contextOptions.extraHTTPHeaders["Accept-Language"]).toBe("de-DE,de;q=0.9,en;q=0.8");
+});
+
+/* THE WINDOW IS THE VIEWPORT, and both halves of that have to be in the config or the picture is wrong.
+ *
+ * This used to be `--viewport-size 1280,800` on the command line, which sets the page size through CDP's
+ * device-metrics EMULATION: the page is told it is that size whatever the window around it happens to be. That
+ * was invisible while the picture came from the page's own compositor, and it is wrong now that the picture is
+ * the whole DISPLAY — an emulated viewport inside a differently-sized window renders clipped, so what is
+ * grabbed is not what the page thinks it has. `viewport: null` plus a sized window makes them the same thing by
+ * construction, which is also what puts the click coordinates and the picture in ONE space.
+ *
+ * `--window-position=0,0` is as load-bearing as the size: there is no window manager on an Xvfb, so a window
+ * lands wherever Chromium asks, and pinning it to the origin is what makes a grab of the screen a grab of
+ * exactly this window. */
+test("a headed config sizes the WINDOW and turns viewport emulation off", async () => {
+    const server = `windowed-${process.hrtime.bigint()}`;
+    const path = await writeBrowserConfig(server, 41_241, await anyDevice(), DISPLAY);
+    const config = JSON.parse(readFileSync(path, "utf8")) as {
+        browser: { launchOptions: { args: string[] }; contextOptions: { viewport?: unknown } };
+    };
+    expect(config.browser.launchOptions.args).toContain(`--window-size=${DISPLAY_WIDTH},${DISPLAY_HEIGHT}`);
+    expect(config.browser.launchOptions.args).toContain("--window-position=0,0");
+    expect(config.browser.contextOptions.viewport).toBeNull();
+});
+
+/* …and a HEADLESS one sizes nothing, because it has no window. A `--window-size` there would be a flag about a
+ * thing that does not exist, and `viewport: null` would hand the page whatever Chromium's default happens to
+ * be rather than a size anything chose. */
+test("a headless config sizes no window and leaves the viewport alone", async () => {
+    const server = `headless-${process.hrtime.bigint()}`;
+    const path = await writeBrowserConfig(server, 41_242, await anyDevice());
+    const config = JSON.parse(readFileSync(path, "utf8")) as {
+        browser: { launchOptions: { args: string[] }; contextOptions: { viewport?: unknown } };
+    };
+    expect(config.browser.launchOptions.args.some((arg) => arg.startsWith("--window-size"))).toBe(false);
+    expect(config.browser.contextOptions.viewport).toBeUndefined();
 });
 
 // An unbound profile gets no proxy at all: nothing is routed through an exit unless something asked for it,
@@ -111,7 +153,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
         "/ms/chrome",
         `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/reddit`,
         `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/stealth.js`,
-        ":99",
+        DISPLAY,
         "/tmp/cfg.json",
     ) as {
         type: string;
@@ -129,7 +171,7 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
     // The config file is what carries --remote-debugging-port, and so what makes the browser watchable.
     expect(spec.args).toContain("--config");
     expect(spec.args).toContain("/tmp/cfg.json");
-    // Headed, not the fingerprinted headless shell, and rendering to the shared Xvfb.
+    // Headed, not the fingerprinted headless shell, and rendering to the display this browser was given.
     expect(spec.args).not.toContain("--headless");
     expect(spec.env["DISPLAY"]).toBe(":99");
 });
@@ -140,8 +182,8 @@ test("browserServerSpec is a HEADED stdio server bound to the profile + stealth 
  * rather than MCP_TOOL_TIMEOUT because the same process serves tools that must wait for a human. */
 test("every browser server bounds a single tool call", () => {
     const specs = [
-        browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", ":99", "/tmp/cfg.json"),
-        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", ":99", "/tmp/cfg.json"),
+        browserServerSpec("cli.js", "/ms/chrome", "/profile", "/stealth.js", DISPLAY, "/tmp/cfg.json"),
+        isolatedBrowserSpec("cli.js", "/ms/chrome", "/out", "/stealth.js", DISPLAY, "/tmp/cfg.json"),
     ] as { timeout?: number }[];
     for (const spec of specs) {
         expect(spec.timeout).toBeGreaterThan(60_000); // clears @playwright/mcp's own 60s navigation timeout
@@ -159,7 +201,7 @@ test("isolatedBrowserSpec keeps the profile in memory and still passes for a rea
         "/ms/chrome",
         `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
         `${WORKSPACE_ROOT}/${STATE_DIR}/local/browser/web.stealth.js`,
-        ":99",
+        DISPLAY,
         "/tmp/cfg.json",
     ) as { args: string[]; env: Record<string, string> };
     expect(spec.args).toContain("--isolated");

@@ -481,6 +481,24 @@ reports the profile.
   (`email-codes.ts`); opening a NEW account is gated on the identity card's own switch
   ([src/capabilities/open-account.ts](src/capabilities/open-account.ts)); and anything only a person can clear
   parks on a help request the owner answers over the live view.
+- [src/browser/live-view.ts](src/browser/live-view.ts): what "watching a browser" actually sends, and the one
+  place the choice is made for both surfaces. A browser is headed on a virtual X display OF ITS OWN
+  ([src/browser/display.ts](src/browser/display.ts)), so the display is the browser: H.264 grabbed off it
+  ([src/browser/videocast.ts](src/browser/videocast.ts)) carries the whole window — chrome, the real cursor,
+  an open `<select>`, the autofill drop-down, the file picker, the permission prompt — and XTEST drives that
+  same display ([src/browser/xinput.ts](src/browser/xinput.ts)), so all of it is clickable. One coordinate
+  space containing everything, which is what let the drop-down reimplementation and the HTML address bar be
+  deleted rather than maintained: both existed only because the old picture was one page's compositor surface
+  with nothing outside it. It is also ~1% of the bytes: three seconds of a settled page is ~23 kB where one
+  JPEG frame of it was 150-250 kB. The CDP screencast ([src/browser/screencast.ts](src/browser/screencast.ts))
+  remains for the one case with no display to grab — a sandbox without the browser pack, whose Chromium can
+  only run headless — and says so in its `ready` so the client builds the right decoder.
+- The session a site's sign-in lives in crosses BOTH ways, on its own HTTPS door rather than the socket,
+  because a socket answer is an MCP result and an MCP result is something the model reads:
+  [src/webext/session-import.ts](src/webext/session-import.ts) takes one from the owner's own browser into a
+  sandbox profile, and [src/webext/session-export.ts](src/webext/session-export.ts) lends one back for the
+  steps no remote browser can perform — a passkey bound to an authenticator they hold, a hardware key that has
+  to be touched, an SSO that checks the device.
 - [src/secrets/secret-registry.ts](src/secrets/secret-registry.ts): every stored credential under its stable
   name, and the `{{secret:name}}` reference language built on it: masking rewrites values to references in
   every tool result ([src/agent/agent-redaction.ts](src/agent/agent-redaction.ts)) and in the terminal lane

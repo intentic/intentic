@@ -11,7 +11,7 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { workloadStamp } from "../platform/leftovers.js";
 import { browserOutputDir } from "./browser-artifacts.js";
 import { type ProfileExit, resolveProfileExit } from "./browser-exit.js";
-import { ensureXvfb } from "./display.js";
+import { type Display, ensureDisplay } from "./display.js";
 import { acceptLanguage, browserFingerprint, type BrowserFingerprint } from "./fingerprint.js";
 import { isProfileOpen, passkeyPath, profileOwner, sessionDir } from "./session-store.js";
 import { ensureStealthScript } from "./stealth.js";
@@ -178,6 +178,9 @@ export const writeBrowserConfig = async (
     server: string,
     port: number,
     fingerprint: BrowserFingerprint,
+    // The display this browser will be headed on, when it is headed at all. Its size becomes the WINDOW's, see
+    // the note on `viewport` below. Absent for a headless one, which has no window to size.
+    display?: Display | undefined,
     exit?: ProfileExit | undefined,
 ): Promise<string> => {
     await mkdir(configDir, { recursive: true, mode: 0o700 });
@@ -196,13 +199,29 @@ export const writeBrowserConfig = async (
      * own: @playwright/mcp has none for either. The clock above already agrees with it, because the
      * fingerprint this was built from was derived with the exit's country as its place (fingerprint.ts) — an
      * address in Berlin under a New York clock is worse than not having moved at all. */
+    /* THE WINDOW IS THE VIEWPORT, and `viewport: null` is what says so. This used to be `--viewport-size
+     * 1280,800`, which sets the page size through CDP's device-metrics EMULATION — the page is told it is
+     * 1280x800 whatever the window around it happens to be. That was invisible while the picture came from the
+     * page's own compositor, and it is wrong now that the picture is the DISPLAY: an emulated viewport inside a
+     * differently-sized window renders clipped or letterboxed, so what is grabbed is not what the page thinks
+     * it has. Sizing the window and letting the page fill it makes the two the same thing by construction, and
+     * it is also what makes the coordinates one space: a point in the captured picture is a point on the
+     * display is a point xinput.ts can click.
+     *
+     * `--window-position=0,0` matters as much as the size. There is no window manager on an Xvfb, so a window
+     * lands wherever Chromium asks; pinning it to the origin is what makes the grab of the whole screen a grab
+     * of exactly this window. */
     const config = {
         browser: {
             launchOptions: {
-                args: [`--remote-debugging-port=${port}`],
+                args: [
+                    `--remote-debugging-port=${port}`,
+                    ...(display === undefined ? [] : ["--window-position=0,0", `--window-size=${display.width},${display.height}`]),
+                ],
                 ...(exit === undefined ? {} : { proxy: { server: exit.proxy } }),
             },
             contextOptions: {
+                ...(display === undefined ? {} : { viewport: null }),
                 locale: fingerprint.locale,
                 timezoneId: fingerprint.timezoneId,
                 extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
@@ -225,7 +244,7 @@ export const browserServerSpec = (
     executablePath: string,
     userDataDir: string,
     stealthPath: string,
-    display: string,
+    display: Display,
     configPath: string,
 ): McpServerConfig => ({
     type: "stdio",
@@ -243,10 +262,8 @@ export const browserServerSpec = (
         userDataDir,
         "--init-script",
         stealthPath,
-        "--viewport-size",
-        "1280,800",
     ],
-    env: { ...process.env, DISPLAY: display },
+    env: { ...process.env, DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
     alwaysLoad: true,
 });
@@ -270,7 +287,7 @@ export const isolatedBrowserSpec = (
     executablePath: string,
     outputDir: string,
     stealthPath: string,
-    display: string | undefined,
+    display: Display | undefined,
     configPath: string,
 ): McpServerConfig => ({
     type: "stdio",
@@ -290,8 +307,6 @@ export const isolatedBrowserSpec = (
         stealthPath,
         "--output-dir",
         outputDir,
-        "--viewport-size",
-        "1280,800",
     ],
     // With no display, DISPLAY is STRIPPED rather than merely unset: a headless Chromium that inherits one from
     // the daemon's own environment will try to talk to that X server and fail on a display it was never meant
@@ -299,7 +314,7 @@ export const isolatedBrowserSpec = (
     env:
         display === undefined
             ? (Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "DISPLAY")) as Record<string, string>)
-            : { ...process.env, DISPLAY: display },
+            : { ...process.env, DISPLAY: display.name },
     timeout: BROWSER_CALL_TIMEOUT_MS,
     // NOT alwaysLoad: @playwright/mcp carries ~20 tools, and pinning them into every turn's prompt taxes the
     // turns that never browse. Deferred, they cost nothing until ToolSearch pulls them in, the system append
@@ -389,6 +404,19 @@ export interface BrowserTurnTools {
     readonly passkeys: Record<string, string>;
 }
 
+/* Take an owner out of the routing table, and every account that lives in its browser with it. Used for the two
+ * reasons an owner can be dropped mid-setup — an exit that would not come up, a display that would not start —
+ * because in both cases the browser would otherwise be launched wrong rather than not at all, and the router's
+ * "no such account" is the refusal the agent should read. */
+const dropOwner = (accounts: Record<string, string>, owner: string): void => {
+    delete accounts[owner];
+    for (const [id, mapped] of Object.entries(accounts)) {
+        if (mapped === owner) {
+            delete accounts[id];
+        }
+    }
+};
+
 const NO_BROWSER_TOOLS: BrowserTurnTools = { servers: {}, accounts: {}, ports: {}, passkeys: {} };
 
 // The turn's browser servers. An account is included whether or not it has signed in yet, a PENDING account's
@@ -425,13 +453,18 @@ export const browserServersOf = async (
     const ports: Record<string, number> = {};
     const passkeys: Record<string, string> = {};
     const servers: Record<string, McpServerConfig> = {};
-    /* One display for every browser this turn starts, headed being the point of it (display.ts). It is asked
-     * for ONCE and shared, and it is asked for even by a turn that logs into nothing, because the
-     * credential-free browser is headed too now. Failure is not fatal: Xvfb rides the browser capability's
-     * Dockerfile fragment, so a sandbox whose owner has never connected an account has no Xvfb, and "read this
-     * URL" must keep working there. `undefined` sends the isolated browser back to headless; the logged-in
-     * path, which cannot fall back (its whole job is to pass for a person), refuses below instead. */
-    const display = await ensureXvfb().catch(() => undefined);
+    /* A DISPLAY PER BROWSER, not one shared by all of them, which is a change and the reason display.ts now
+     * takes a key. Headed is the point of having one at all (the headless shell is fingerprinted and turned
+     * away), but the display is now also the PICTURE: the view routes grab it as video and drive its pointer,
+     * and a pointer is a property of the X server rather than of a window, so two browsers sharing a display
+     * would share one cursor and overlap each other's windows. See display.ts.
+     *
+     * Asked for even by a turn that logs into nothing, because the credential-free browser is headed too.
+     * Failure is not fatal: Xvfb rides the browser capability's Dockerfile fragment, so a sandbox whose owner
+     * has never connected an account has none, and "read this URL" must keep working there. `undefined` sends
+     * the isolated browser back to headless; the logged-in path, which cannot fall back (its whole job is to
+     * pass for a person), refuses below instead. */
+    const webDisplay = await ensureDisplay("web").catch(() => undefined);
     if (anonymous) {
         const webPort = await freePort();
         ports["web"] = webPort;
@@ -441,8 +474,8 @@ export const browserServersOf = async (
             runtime.executablePath,
             browserOutputDir(root),
             await ensureStealthScript(root, "web", fingerprint),
-            display,
-            await writeBrowserConfig("web", webPort, fingerprint),
+            webDisplay,
+            await writeBrowserConfig("web", webPort, fingerprint, webDisplay),
         );
     }
     const granted = capabilities.filter((capability) => capability.kind === "browser" || capability.kind === "identity");
@@ -467,7 +500,7 @@ export const browserServersOf = async (
      * way to fail that, so a missing Xvfb stands the logged-in browsers down (the agent still has `web`, and
      * the Environment card is where the owner installs the pack) rather than quietly shipping a browser that
      * every WAF turns away. */
-    if (display === undefined) {
+    if (webDisplay === undefined) {
         return { ...NO_BROWSER_TOOLS, servers, ports };
     }
     const backends: Record<string, { command: string; args: readonly string[]; env: Record<string, string> }> = {};
@@ -499,12 +532,7 @@ export const browserServersOf = async (
     for (const owner of owners) {
         const bound = resolved.get(owner);
         if (bound !== undefined && "refusal" in bound) {
-            delete accounts[owner];
-            for (const [id, mapped] of Object.entries(accounts)) {
-                if (mapped === owner) {
-                    delete accounts[id];
-                }
-            }
+            dropOwner(accounts, owner);
             continue;
         }
         const exit = bound?.exit;
@@ -519,20 +547,29 @@ export const browserServersOf = async (
          * leaves by, and a bound profile's address is the exit's, not the sandbox's. Unbound, `place` is
          * undefined and the sandbox's own clock answers, as it does for everyone else. */
         const fingerprint = await browserFingerprint(root, owner, exit?.place);
+        /* THIS OWNER'S OWN DISPLAY, so the browser the user later watches is alone on the thing being
+         * photographed. An owner whose display cannot be started is dropped from the turn exactly as a refused
+         * exit drops one: a logged-in browser with nowhere headed to run is a headless one, and headless is
+         * what these accounts exist to avoid. */
+        const display = await ensureDisplay(owner).catch(() => undefined);
+        if (display === undefined) {
+            dropOwner(accounts, owner);
+            continue;
+        }
         const spec = browserServerSpec(
             runtime.cli,
             runtime.executablePath,
             sessionDir(root, owner),
             await ensureStealthScript(root, owner, fingerprint),
             display,
-            await writeBrowserConfig(owner, port, fingerprint, exit),
+            await writeBrowserConfig(owner, port, fingerprint, display, exit),
         );
         if (spec.type !== "stdio") {
             return { ...NO_BROWSER_TOOLS, servers, ports };
         }
         // Argv and the DISPLAY delta only, never the whole environment: the backends inherit the rest, the
         // conversation stamp included, from the router at spawn time.
-        backends[owner] = { command: spec.command, args: spec.args ?? [], env: { DISPLAY: display } };
+        backends[owner] = { command: spec.command, args: spec.args ?? [], env: { DISPLAY: display.name } };
     }
     const manifest = {
         schemaCachePath: join(configDir, `tools-${mcpVersion}.json`),

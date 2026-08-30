@@ -94,13 +94,19 @@ test("apply writes the platform SKILL.md; status is pending until logged in / re
     expect((await browserHandler.status(harness.ctx, "reddit", reddit.config)).state).toBe("pending");
 });
 
-test("the fragment is the browser pack: Chromium + Xvfb as one unit, no runtime directive", async () => {
+test("the fragment is the browser pack: Chromium, its display and the tools that make it watchable, as one unit", async () => {
     // The pack rides whole on a core image and composes to nothing on a standard image (stamped base), so
     // WHAT the fragment says is pinned on the pack itself and WHETHER it rides on what the base already
     // bakes: the alternative asserts whichever of the two images the suite happens to run in.
     const pack = (await readPack("browser"))!;
     expect(pack.content).toContain("xvfb");
     expect(pack.content).toContain("install --with-deps chromium");
+    /* The picture and the hands, held here because they are the half of "a browser you can watch" that is easy
+     * to drop. A pack with Chromium and a display but no ffmpeg launches a browser that streams nothing, and no
+     * test of the streaming code would catch it: the failure is an absent binary in an image, not a bug in a
+     * function. browserPackInstalled refuses the whole pack without them for the same reason. */
+    expect(pack.content).toContain("ffmpeg");
+    expect(pack.content).toContain("xdotool");
     // Into playwright's default cache path: a PLAYWRIGHT_BROWSERS_PATH override here would put a second
     // Chromium beside the one chromium.executablePath() resolves.
     expect(pack.content).not.toContain("PLAYWRIGHT_BROWSERS_PATH");

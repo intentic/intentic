@@ -67,7 +67,13 @@ import { createCiWebhookRoute } from "./ci/webhook.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/browser-profile.js";
 import { createHostConnectRoute, createHostMcpRoute, hostSummaries } from "./hosts/host.routes.js";
-import { createWebExtConnectRoute, createWebExtMcpRoute, createWebExtSessionRoute, webextSummaries } from "./webext/webext.routes.js";
+import {
+    createWebExtConnectRoute,
+    createWebExtLendRoute,
+    createWebExtMcpRoute,
+    createWebExtSessionRoute,
+    webextSummaries,
+} from "./webext/webext.routes.js";
 import { createRunnerConnectRoute, runnerSummaries } from "./runners/runner.routes.js";
 import {
     createRunnerCredentialRefreshRoute,
@@ -195,12 +201,14 @@ const gatePath = /^\/workflows\/[^/]+\/gate$/;
 const hostPublicPath = (path: string): boolean => path === "/system/hosts/connect" || path === "/system/hosts/enroll";
 const hostMcpPath = /^\/mcp\/hosts\/[^/]+$/;
 
-/* A connected BROWSER's three doors, exempt for the same reason: an extension has no Google identity to
- * present. `connect` authenticates in its first frame, `enroll` redeems a one-time pairing, and `session`
- * carries the extension's own durable token as a bearer, which the route verifies itself (webext.routes.ts).
+/* A connected BROWSER's four doors, exempt for the same reason: an extension has no Google identity to present.
+ * `connect` authenticates in its first frame, `enroll` redeems a one-time pairing, and `session` and `lend`
+ * carry the extension's own durable token as a bearer, which the routes verify themselves (webext.routes.ts).
+ * The two credential doors are a pair pointing opposite ways: `session` takes a site's sign-in from the
+ * person's browser into a sandbox profile, `lend` takes one back out for a step no remote browser can perform.
  * The MCP bridge is the agent's door and carries the per-boot bridge token. */
 const webextPublicPath = (path: string): boolean =>
-    path === "/system/webext/connect" || path === "/system/webext/enroll" || path === "/system/webext/session";
+    path === "/system/webext/connect" || path === "/system/webext/enroll" || path === "/system/webext/session" || path === "/system/webext/lend";
 const webextMcpPath = /^\/mcp\/webext\/[^/]+$/;
 
 // A RUNNER's doors, the same exemption for the same reason: the caller is a container on another machine
@@ -1573,6 +1581,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // A handed-over site session. Authenticated by the extension's own enrollment token, and deliberately not
     // an answer on the socket: see webext-protocol.ts.
     app.post("/system/webext/session", createWebExtSessionRoute(services));
+    app.post("/system/webext/lend", createWebExtLendRoute(services));
     /* This sandbox's RUNNERS (runners/, docs/remote-runners-plan.md at the workspace root): the hosts block
      * retold for a container this sandbox provisions on another machine. Pairing is owner-minted and bound to
      * one runner id; enrollment is authorized by the pairing alone (the runner has no Google identity, only

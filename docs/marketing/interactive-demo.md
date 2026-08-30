@@ -175,10 +175,15 @@ progress instead of restarting the script mid-sentence. `stop`, `steer` and a fr
 same run registry, so the composer starts a short honest reply: "this is a recorded workspace; start a sandbox
 and the same agent works on your repos": rather than going nowhere.
 
-**The agent's browser is the second recorded stream**, and it costs almost nothing: `/system/browser-view` is a
-socket of frames whose payload is a base64 image, so a few hundred lines of generated SVG *are* a screencast as
+**The agent's browser is the second recorded stream**, and it costs almost nothing: `/system/browser-view` sends
+pictures as binary messages tagged with their format, so a few hundred lines of generated SVG *are* a stream as
 far as the view can tell: three pages, a moving cursor, and the page tabs really switching, because the fixture
 answers the `bind` frame the strip sends. No captured PNGs to go stale, nothing in the bundle but markup.
+
+A live sandbox sends H.264 grabbed off the browser's own X display instead; the recording rides the same socket
+by declaring `kind: "frames"` in its `ready`, which is the same thing a real browser with no display to grab
+says. That the demo can do this at all is the point of the format travelling WITH each picture rather than being
+agreed once — a stream that named its encoding in advance would have no room for a fixture drawing SVG.
 
 ## Landing, which is the press the board exists for
 

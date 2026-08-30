@@ -41,7 +41,7 @@ blocked and unpinned rows remain non-admitted.
 | `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, with its frame log |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
-| `src/browser.ts` | the recorded screencast of the agent's Chromium, played from the pages below |
+| `src/browser.ts` | the recorded stream of the agent's Chromium, drawn pages played down the real picture wire |
 | `src/mode.ts` | how full the recording is: the three states, and which one this page load serves |
 | `src/switcher.ts` | the bar at the bottom of the screen that switches between them; the demo's only chrome |
 | `src/fixture/` | the data: `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `openChats.ts` (the chats this window opens holding, the featured run, plus one per persona), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |

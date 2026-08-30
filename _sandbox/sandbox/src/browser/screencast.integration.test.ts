@@ -117,7 +117,8 @@ test("the settle still photographs the page where it is now, not the top of the 
                     const bandAt = (y: number): number => Math.round(ctx.getImageData(image.width / 2, y, 1, 1).data[0]! / 4);
                     return { top: bandAt(2), bottom: bandAt(image.height - 2), width: image.width, height: image.height };
                 },
-                `data:image/webp;base64,${stills.at(-1)!.data}`,
+                // Frames travel as bytes now; a data URL is only how this hands one to a page that can decode it.
+                `data:image/webp;base64,${stills.at(-1)!.bytes.toString("base64")}`,
             );
 
             expect(bands.top).toBe(SCROLL_TO / BAND_HEIGHT);

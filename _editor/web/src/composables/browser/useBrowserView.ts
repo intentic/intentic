@@ -1,10 +1,27 @@
 import { onScopeDispose, ref, type Ref, shallowRef, watch } from "vue";
+import { FRAME_H264_DELTA, FRAME_H264_KEY, frameUrls } from "./frameUrls";
 import { keyIntent, type KeyFrame } from "./keyIntent";
-import { viewportCoords } from "./viewportCoords";
+import { pointerFrame, type PointerAction } from "./pointerFrame";
+import { canDecodeVideo, videoSink } from "./videoSink";
 import { socketUrl as wsSocketUrl } from "../sandbox/wsTicket";
 
-/* ONE live view of the agent's browser: a `browser-*` session streamed over the daemon's /system/browser-view
- * WebSocket as image frames, with the owner's clicks and keystrokes going back the other way.
+/* ONE live view of the agent's browser: a `browser-*` session over the daemon's /system/browser-view WebSocket,
+ * with the owner's clicks and keystrokes going back the other way.
+
+ * TWO KINDS OF PICTURE, and the daemon says which in its `ready` message rather than this guessing:
+ *
+ *   VIDEO is the real one. The browser is headed on a virtual X display of its own and the daemon grabs it as
+ *   H.264, so what arrives is the whole WINDOW — chrome, the real cursor, an open <select>, the autofill
+ *   drop-down, the file picker — and the owner's pointer drives that same display, so all of it is clickable.
+ *   Painted into a <canvas> by videoSink.ts.
+ *
+ *   FRAMES is what is left when the browser has no display to grab, which means it is running headless, which
+ *   means the sandbox has no browser pack. CDP photographs one page's compositor surface: no cursor, no native
+ *   menu, nothing outside the page. Painted into an <img>.
+ *
+ * The two also have DIFFERENT GEOMETRY — the window including chrome, versus the page alone — so `viewWidth`
+ * and `viewHeight` come off the wire instead of being constants here. A client that assumed either would put
+ * every click in the wrong place on the other.
  *
  * This is NOT built like terminalSession.ts, and the difference is deliberate. A terminal's xterm is a
  * persistent host element shuffled between containers so a tab switch doesn't drop its scrollback, a browser
@@ -24,11 +41,15 @@ const STABLE_MS = 5000;
 // The daemon answers every ping with a pong, and a STILL page sends no frames at all, so silence this long is
 // a half-open socket, not a quiet browser.
 const STALE_MS = 90_000;
-// The remote viewport (the daemon's screencast.ts VIEW_WIDTH/VIEW_HEIGHT) pointer coordinates map back onto.
-export const VIEW_WIDTH = 1280;
-export const VIEW_HEIGHT = 800;
-// Pointer moves are throttled to roughly a frame. CDP dispatches each one synchronously in the page.
-const MOVE_THROTTLE_MS = 40;
+/* What to assume before the daemon has said otherwise. Only ever used for the moments between the socket
+ * opening and its `ready` landing, when there is no picture to click on anyway. */
+const VIEW_WIDTH = 1280;
+const VIEW_HEIGHT = 880;
+/* Pointer moves are throttled to roughly one display frame. This was 40ms, which is 25 Hz — a ceiling on how
+ * responsive the pointer could be BEFORE the network had its turn, and coarse enough that a drag visited a
+ * handful of points instead of tracing the path the hand took. 16ms is the rate the far side can act on anyway
+ * (CDP dispatches each one synchronously in the page) and each frame is a few dozen bytes of JSON. */
+const MOVE_THROTTLE_MS = 16;
 // How long a Ctrl+C waits for the remote page to answer with its selection before the keystroke goes on
 // without it. Long enough for a round trip through the tunnel, short enough not to strand the keyboard.
 const SELECTION_TIMEOUT_MS = 1500;
@@ -42,14 +63,29 @@ export interface SelectMenu {
 }
 
 export interface BrowserView {
-    // The current frame as a data URL. Undefined until the first one lands, the view shows `status` instead.
-    // Its encoding changes under it: a low-cost jpeg while the page moves, then one sharp webp once it settles
-    // (see screencast.ts), which is why the frame carries its own format rather than the client assuming one.
+    // Which picture this is, so the pane knows whether to mount a canvas or an <img>. Undefined until `ready`.
+    readonly kind: Ref<"video" | "frames" | undefined>;
+    // The remote geometry pointer coordinates map back onto: the whole window on video, the page alone on
+    // frames. Off the wire, never assumed — see the note at the top of this file.
+    readonly viewWidth: Ref<number>;
+    readonly viewHeight: Ref<number>;
+    // Where the video is painted. The pane hands its canvas over on mount; nothing else uses it.
+    readonly attachCanvas: (canvas: HTMLCanvasElement | undefined) => void;
+    // The current frame as an object URL, on the FRAMES path only. Undefined until the first one lands, and
+    // undefined forever on video, where the picture lives in the canvas instead.
     readonly frame: Ref<string | undefined>;
     // What to say while there is no picture: connecting, reconnecting, or why there never will be one.
     readonly status: Ref<string | undefined>;
     // True while the user's input is being forwarded. Off by default, see the note above.
     readonly driving: Ref<boolean>;
+    /* THE SHAPE THE POINTER SHOULD TAKE over the picture, as a CSS cursor keyword, reported by the daemon as it
+     * changes under the pointer while driving.
+     *
+     * A screencast carries the page's compositor surface, and a cursor is not part of it — Chromium draws that
+     * in the window, above everything a frame contains. So the arrow stayed an arrow over every link, every text
+     * field and every drag handle in the remote page, and half of what tells a person a control is a control
+     * never arrived. Applied by the pane to the element the frame paints in. */
+    readonly cursor: Ref<string>;
     // Stream a specific page instead of following the agent. Pins daemon-side until the page closes.
     readonly bindPage: (pageId: string) => void;
     /* THE DROP-DOWN THE PICTURE CANNOT SHOW. An open <select> is a native menu Chromium draws outside the page,
@@ -85,8 +121,18 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const frame = ref<string | undefined>();
     const status = ref<string | undefined>(`Connecting to the agent's browser…`);
     const driving = ref(false);
+    const kind = ref<"video" | "frames" | undefined>();
+    const viewWidth = ref(VIEW_WIDTH);
+    const viewHeight = ref(VIEW_HEIGHT);
+    const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
     const socket = shallowRef<WebSocket | undefined>();
+    // Turns each binary frame into an object URL and lets go of the ones the <img> has moved on from. Used by
+    // the frames path only; the video path decodes into a canvas instead.
+    const pictures = frameUrls();
+    const video = videoSink((message) => {
+        status.value = message;
+    });
     // The page the user picked, re-sent on every reconnect so a dropped socket doesn't silently hand them back
     // whichever tab the agent happens to be on.
     let pinned: string | undefined;
@@ -100,6 +146,108 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
     const send = (message: object): void => {
         if (socket.value?.readyState === WebSocket.OPEN) {
             socket.value.send(JSON.stringify(message));
+        }
+    };
+
+    /* Attached, and now the client knows WHAT it is attached to: which decoder to build, and what the
+     * coordinates of a click mean. The daemon sends this before any picture — on the video path it is emitted
+     * the moment the codec has been read out of the stream, which is the same instant the first keyframe is
+     * about to go out. */
+    const onReady = (message: { kind?: string; width?: number; height?: number; codec?: string }): void => {
+        kind.value = message.kind === `video` ? `video` : `frames`;
+        viewWidth.value = message.width ?? viewWidth.value;
+        viewHeight.value = message.height ?? viewHeight.value;
+        if (kind.value === `video`) {
+            if (!canDecodeVideo()) {
+                status.value = `This browser can't play the live view. Chrome, Edge, Safari 16.4+ or Firefox 130+ can.`;
+                return;
+            }
+            video.configure(message.codec ?? ``);
+        }
+        status.value = `Waiting for the first frame…`;
+    };
+
+    // What the remote page would be showing under the pointer. Sent only when it CHANGES, so this is quiet; see
+    // the note on `cursor` in the interface for why it has to be sent at all.
+    const onCursor = (shape: string | undefined): void => {
+        cursor.value = shape ?? `default`;
+    };
+
+    /* ONE BINARY MESSAGE, WHICHEVER PICTURE IT IS. The tag byte is the daemon's (screencast.ts and
+     * videocast.ts share the table): 0 jpeg, 1 webp, 2 svg, 3 a keyframe, 4 a delta. Read here rather than
+     * behind a mode flag, because the tag is the truth and a flag is a claim about it — and a socket that
+     * reconnects onto a browser whose display appeared in the meantime would have the flag wrong. */
+    const takePicture = (data: ArrayBuffer): void => {
+        const bytes = new Uint8Array(data);
+        const tag = bytes[0];
+        if (tag === FRAME_H264_KEY || tag === FRAME_H264_DELTA) {
+            video.push(bytes.subarray(1), tag === FRAME_H264_KEY);
+            status.value = undefined;
+            return;
+        }
+        const picture = pictures.from(data);
+        if (picture !== undefined) {
+            frame.value = picture;
+            status.value = undefined;
+        }
+    };
+
+    const onSelection = (text: string | undefined): void => {
+        pendingSelection?.(text ?? ``);
+        pendingSelection = undefined;
+    };
+
+    // The daemon knows this session for good, so a reconnect would only ask the same dead question.
+    const onError = (reason: string | undefined): void => {
+        closing = true;
+        status.value = reason ?? `That browser session is gone.`;
+        frame.value = undefined;
+    };
+
+    // Everything on this socket that is not a picture. Its own function so the message listener stays a fork
+    // between the two kinds rather than a branch per message type on top of it.
+    const handleJson = (raw: string): void => {
+        let message: {
+            type?: string;
+            kind?: string;
+            width?: number;
+            height?: number;
+            codec?: string;
+            message?: string;
+            text?: string;
+            cursor?: string;
+            menu?: SelectMenu | null;
+        };
+        try {
+            message = JSON.parse(raw) as typeof message;
+        } catch {
+            return;
+        }
+        switch (message.type) {
+            case `ready`:
+                onReady(message);
+                break;
+            case `cursor`:
+                onCursor(message.cursor);
+                break;
+            case `selection`:
+                onSelection(message.text);
+                break;
+            case `select`:
+                // Sent after every release: a menu to draw, or null for "nothing is open now", which is what
+                // closes one the user has clicked away from.
+                select.value = message.menu ?? undefined;
+                break;
+            case `gone`:
+                // The tab closed between the relist and the click. Drop the pin and let the stream follow the
+                // agent again, the strip's next poll drops the tab itself.
+                pinned = undefined;
+                break;
+            case `error`:
+                onError(message.message);
+                break;
+            default:
+                break;
         }
     };
 
@@ -156,6 +304,8 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             return;
         }
         const ws = new WebSocket(url);
+        // Frames arrive as binary; everything else on this socket is JSON, and `event.data` tells them apart.
+        ws.binaryType = `arraybuffer`;
         // Supersede any straggler socket (its handlers see socket.value !== ws and stay silent).
         socket.value?.close();
         socket.value = ws;
@@ -185,52 +335,13 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         });
         ws.addEventListener(`message`, (event) => {
             lastFrameAt = Date.now();
-            let message: {
-                type?: string;
-                data?: string;
-                format?: string;
-                message?: string;
-                pageId?: string;
-                text?: string;
-                menu?: SelectMenu | null;
-            };
-            try {
-                message = JSON.parse(String(event.data)) as typeof message;
-            } catch {
+            // A picture. Binary either way, and the FIRST BYTE says which kind: a coded video frame goes to the
+            // decoder, an image becomes an object URL for the <img>. See takePicture.
+            if (event.data instanceof ArrayBuffer) {
+                takePicture(event.data);
                 return;
             }
-            if (message.type === `frame` && message.data !== undefined && message.format !== undefined) {
-                frame.value = `data:image/${message.format};base64,${message.data}`;
-                status.value = undefined;
-                return;
-            }
-            if (message.type === `ready`) {
-                status.value = frame.value === undefined ? `Waiting for the first frame…` : undefined;
-                return;
-            }
-            if (message.type === `selection`) {
-                pendingSelection?.(message.text ?? ``);
-                pendingSelection = undefined;
-                return;
-            }
-            if (message.type === `select`) {
-                // Sent after every release: a menu to draw, or null for "nothing is open now", which is what
-                // closes one the user has clicked away from.
-                select.value = message.menu ?? undefined;
-                return;
-            }
-            if (message.type === `gone`) {
-                // The tab closed between the relist and the click. Drop the pin and let the stream follow the
-                // agent again, the strip's next poll drops the tab itself.
-                pinned = undefined;
-                return;
-            }
-            if (message.type === `error`) {
-                // The daemon knows this session for good, a reconnect would only ask the same dead question.
-                closing = true;
-                status.value = message.message ?? `That browser session is gone.`;
-                frame.value = undefined;
-            }
+            handleJson(String(event.data));
         });
         ws.addEventListener(`close`, () => {
             window.clearInterval(ping);
@@ -264,6 +375,13 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             retryDelay = RETRY_MS;
             frame.value = undefined;
             driving.value = false;
+            // A decoder holds the state of the stream it was built for, and the next browser is a different
+            // stream: its `ready` builds another.
+            video.close();
+            kind.value = undefined;
+            // A shape read off the browser being switched away from describes nothing in the next one, and the
+            // next one is not being driven yet anyway.
+            cursor.value = `default`;
             // A menu describing a control in the browser being switched away from has nothing left to point at.
             select.value = undefined;
             status.value = name.value === undefined ? undefined : `Connecting to the agent's browser…`;
@@ -276,13 +394,29 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
         closing = true;
         document.removeEventListener(`visibilitychange`, syncVisibility);
         teardown();
+        // An object URL holds its blob until it is revoked, so a view left without this leaks the last frames of
+        // every browser it ever showed for the life of the document. A decoder holds buffers of its own.
+        pictures.release();
+        video.close();
     });
 
     let lastMove = 0;
+    // Every pointer event goes out through here, so `driving` is checked in ONE place and a frame is built in
+    // one place (pointerFrame, which both surfaces share). Nothing reaches the page while the user is watching.
+    const sendPointer = (action: PointerAction, event: MouseEvent, element: HTMLElement): void => {
+        if (driving.value) {
+            send(pointerFrame(action, event, element, viewWidth.value, viewHeight.value));
+        }
+    };
     return {
+        kind,
+        viewWidth,
+        viewHeight,
+        attachCanvas: video.attach,
         frame,
         status,
         driving,
+        cursor,
         bindPage: (pageId) => {
             pinned = pageId;
             send({ type: `bind`, pageId });
@@ -299,35 +433,25 @@ export const useBrowserView = (name: Ref<string | undefined>): BrowserView => {
             if (!driving.value) {
                 return;
             }
+            /* Throttled, but only enough to stop a 1000 Hz mouse flooding the socket. It used to be 40ms, which
+             * capped the pointer at 25 Hz BEFORE the network had its turn, and a drag sampled that coarsely does
+             * not trace what the hand did — it visits a handful of points on the way. One frame at 60 Hz is the
+             * rate the far side can act on anyway. */
             const now = Date.now();
             if (now - lastMove < MOVE_THROTTLE_MS) {
                 return;
             }
             lastMove = now;
-            send({ type: `mouse`, action: `move`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT) });
+            sendPointer(`move`, event, element);
         },
-        onMouseDown: (event, element) => {
-            if (driving.value) {
-                send({ type: `mouse`, action: `down`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT), button: event.button });
-            }
-        },
-        onMouseUp: (event, element) => {
-            if (driving.value) {
-                send({ type: `mouse`, action: `up`, ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT), button: event.button });
-            }
-        },
+        onMouseDown: (event, element) => sendPointer(`down`, event, element),
+        onMouseUp: (event, element) => sendPointer(`up`, event, element),
         onWheel: (event, element) => {
             if (!driving.value) {
                 return;
             }
             event.preventDefault();
-            send({
-                type: `mouse`,
-                action: `wheel`,
-                ...viewportCoords(event, element, VIEW_WIDTH, VIEW_HEIGHT),
-                deltaX: event.deltaX,
-                deltaY: event.deltaY,
-            });
+            sendPointer(`wheel`, event, element);
         },
         // Which half of the keyboard a keystroke belongs to is keyIntent's decision, see that module for why a
         // paste is left to the host and a select-all is not. Nothing at all happens unless the user took the

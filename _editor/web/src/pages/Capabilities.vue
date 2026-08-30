@@ -1906,7 +1906,8 @@ const submitLabel = computed(() => {
                 @rename="confirmRename"
             />
 
-            <!-- Guided browser login for one connected account (screencast a live Chromium the user signs into). -->
+            <!-- Guided browser login for one connected account: a live Chromium, shown as video off its own X
+                 display and driven back through it, that the user signs into by hand. -->
             <BrowserProfileDialog
                 v-model:visible="profileVisible"
                 :capability="profileCapability"

@@ -1,18 +1,10 @@
 import { upgradeWebSocket } from "@hono/node-server";
+import type { WSContext } from "hono/ws";
 import type { BrowserContext, Page } from "playwright";
-import { ensureXvfb } from "./display.js";
+import { ensureDisplay } from "./display.js";
+import { startLiveView, type LiveView } from "./live-view.js";
 import { armPasskeys } from "./passkeys.js";
-import {
-    applySelect,
-    dispatchInput,
-    readSelect,
-    readSelection,
-    startScreencast,
-    VIEW_HEIGHT,
-    VIEW_WIDTH,
-    type Screencast,
-    type ScreencastClientMessage,
-} from "./screencast.js";
+import type { ScreencastClientMessage } from "./screencast.js";
 import { resolveProfileExit } from "./browser-exit.js";
 import { acceptLanguage, browserFingerprint } from "./fingerprint.js";
 import { acquireProfileLock, markConnected, passkeyPath, profileOwner, releaseProfileLock, sessionDir } from "./session-store.js";
@@ -21,6 +13,9 @@ import type { Services } from "../composition.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
 import { browserUrls, contributionKey, contributionRegistry } from "../capabilities/contributions.js";
 import { identityLoginUrl } from "../capabilities/handlers/identity.js";
+
+// The socket the handlers below answer on, named once so each of them does not repeat hono's generic.
+type Socket = WSContext;
 
 /* The /system/browser-profile route: THE OWNER'S OWN HANDS ON ONE CONNECTED ACCOUNT'S BROWSER. Like
  * /system/terminal it's a WebSocket the header-less browser drives, so it authorizes token+connect from the
@@ -54,7 +49,7 @@ export const createBrowserProfileRoute = (services: Services) =>
         // Whose profile that entry lives in (profileOwner), the dir, the passkeys and the lock are all its.
         let owner: string | undefined;
         let context: BrowserContext | undefined;
-        let screencast: Screencast | undefined;
+        let view: LiveView | undefined;
         let closed = false;
         let unregisterAccess: (() => void) | undefined;
         // Whether finishing means "this account is now connected" (login) or just "close the window" (browse).
@@ -67,8 +62,8 @@ export const createBrowserProfileRoute = (services: Services) =>
             closed = true;
             unregisterAccess?.();
             unregisterAccess = undefined;
-            await screencast?.stop();
-            screencast = undefined;
+            await view?.stop();
+            view = undefined;
             try {
                 await context?.close();
             } catch (err) {
@@ -77,6 +72,48 @@ export const createBrowserProfileRoute = (services: Services) =>
             if (owner !== undefined) {
                 releaseProfileLock(owner);
             }
+        };
+
+        // Finish. Close first so Chromium flushes the profile's cookies to disk, then mark connected: a browse
+        // window changes nothing about whether the account is connected, so it only closes.
+        const onDone = async (ws: Socket): Promise<void> => {
+            const finished = account;
+            await cleanup();
+            if (signingIn && finished !== undefined) {
+                await markConnected(services.workspace.root, finished);
+            }
+            ws.send(JSON.stringify({ type: "saved" }));
+            ws.close(1000, "done");
+        };
+
+        /* THE WINDOW-LEVEL HALF of this socket: finishing, and the clipboard. Everything that used to be here
+         * besides those two is GONE, and the deletions are the point of the X-capture design rather than a side
+         * effect of it:
+         *
+         *   - NO ADDRESS BAR. `go`, `back` and `reload` existed because the picture was the page alone, so the
+         *     browser's own chrome had to be redrawn in HTML and wired back to Playwright calls. The picture is
+         *     the window now; the real address bar and the real back button are in it, and XTEST clicks them.
+         *   - NO DROP-DOWN PROBE. `selectOption` existed because an open <select> is a native menu Chromium
+         *     draws outside the page, so no frame ever carried it and the options had to be read out of the DOM
+         *     and re-drawn as a menu of our own. It is on the display, so it is in the picture, so it is
+         *     clickable.
+         *
+         * The clipboard stays, because it is not a picture problem: the Chromium at the far end has a clipboard
+         * inside the sandbox that nothing on the owner's machine can read, and that is true however good the
+         * video is. */
+        const handleWindow = async (message: ScreencastClientMessage, ws: Socket): Promise<boolean> => {
+            if (message.type === "done") {
+                await onDone(ws);
+                return true;
+            }
+            if (message.type === "selection") {
+                // Ctrl+C over the picture: hand back what the page has selected so the client can put it on the
+                // clipboard of the machine the person is actually sitting at. Answered even when empty, because
+                // the client is waiting on it before it lets the keystroke go.
+                ws.send(JSON.stringify({ type: "selection", text: (await view?.selection()) ?? "" }));
+                return true;
+            }
+            return false;
         };
 
         return {
@@ -162,9 +199,11 @@ export const createBrowserProfileRoute = (services: Services) =>
                     return;
                 }
                 try {
-                    // Run HEADED on a virtual display: the headless shell is fingerprinted and blocked by anti-bot
-                    // WAFs (Reddit's "network security"). Xvfb rides the capability's Dockerfile fragment.
-                    const display = await ensureXvfb();
+                    /* Run HEADED on a virtual display of this profile's OWN: the headless shell is
+                     * fingerprinted and blocked by anti-bot WAFs (Reddit's "network security"), and the display
+                     * is now also the picture the owner watches, so it cannot be shared with another browser
+                     * (display.ts says why). Xvfb rides the capability's Dockerfile fragment. */
+                    const display = await ensureDisplay(profile);
                     /* THE SAME DEVICE THE AGENT'S BROWSER PRESENTS, derived from the same seed for the same
                      * profile owner (fingerprint.ts). This window and @playwright/mcp share one profile, so a
                      * site watches the owner sign in here and then meets the agent later on what has to be the
@@ -173,8 +212,13 @@ export const createBrowserProfileRoute = (services: Services) =>
                     const fingerprint = await browserFingerprint(services.workspace.root, profile, boundExit?.place);
                     context = await playwright.chromium.launchPersistentContext(sessionDir(services.workspace.root, profile), {
                         headless: false,
-                        env: { ...process.env, DISPLAY: display },
-                        viewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT },
+                        env: { ...process.env, DISPLAY: display.name },
+                        /* THE WINDOW IS THE VIEWPORT. `null` turns off Playwright's device-metrics emulation so
+                         * the page is exactly the size of the window around it — which matters because the
+                         * picture is now the whole DISPLAY, chrome included, and an emulated viewport inside a
+                         * differently-sized window renders clipped. It is also what makes the coordinates one
+                         * space: a point in the picture is a point on the display is a point XTEST can click. */
+                        viewport: null,
                         /* Look like a normal desktop browser (headed full Chromium already has a real UA /
                          * window.chrome). The clock and the language come from the fingerprint, which was
                          * derived with this profile's exit as its place, so a bound profile claims the country
@@ -189,7 +233,16 @@ export const createBrowserProfileRoute = (services: Services) =>
                         ...(boundExit === undefined ? {} : { proxy: { server: boundExit.proxy } }),
                         // --no-sandbox: Chromium runs as root and the container IS the isolation boundary. --disable-dev-shm-usage:
                         // a container's tiny /dev/shm crashes Chromium. The blink flag drops navigator.webdriver.
-                        args: ["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
+                        // --window-position pins the window to the origin (there is no window manager on an
+                        // Xvfb, so it lands where Chromium asks), which is what makes a grab of the screen a
+                        // grab of exactly this window.
+                        args: [
+                            "--no-sandbox",
+                            "--disable-blink-features=AutomationControlled",
+                            "--disable-dev-shm-usage",
+                            "--window-position=0,0",
+                            `--window-size=${display.width},${display.height}`,
+                        ],
                     });
                     // Patch the residual server tells (SwiftShader GPU, a host's core count) before the first navigation.
                     await context.addInitScript(stealthInit(fingerprint));
@@ -210,32 +263,13 @@ export const createBrowserProfileRoute = (services: Services) =>
                         );
                     ctx.on("page", arm);
                     arm(page);
-                    // WHERE THE ADDRESS BAR GETS ITS TEXT. Read off the STREAMED page rather than the one that
-                    // fired the event, because a popup moves the picture: what the field must show is the page
-                    // being looked at. Same-document navigations count, an SPA's own routing is most of what
-                    // moves on these sites.
-                    const report = (): void => {
-                        const current = screencast?.page()?.url();
-                        if (current !== undefined && !closed) {
-                            ws.send(JSON.stringify({ type: "url", url: current }));
-                        }
-                    };
-                    const watch = (target: Page): void => {
-                        target.on("framenavigated", (frame) => {
-                            if (frame === target.mainFrame()) {
-                                report();
-                            }
-                        });
-                    };
-                    ctx.on("page", watch);
-                    watch(page);
-                    screencast = await startScreencast(ctx, (frame) => ws.send(JSON.stringify({ type: "frame", ...frame })));
+                    view = await startLiveView(ctx, profile, { send: (data) => ws.send(data) }, (reason) => {
+                        services.logger.warn({ reason }, "browser-profile stream failed");
+                    });
                     // Don't hard-fail on a slow page; the user can still interact once it paints.
                     await page.goto(startUrl, { waitUntil: "domcontentloaded" }).catch((err: unknown) => {
                         services.logger.warn({ err }, "browser-profile initial nav");
                     });
-                    ws.send(JSON.stringify({ type: "ready", width: VIEW_WIDTH, height: VIEW_HEIGHT }));
-                    report();
                 } catch (err) {
                     services.logger.warn({ err }, "browser-profile launch failed");
                     ws.send(JSON.stringify({ type: "error", message: err instanceof Error ? err.message : "failed to start the browser" }));
@@ -244,11 +278,7 @@ export const createBrowserProfileRoute = (services: Services) =>
                 }
             },
             onMessage: async (event, ws) => {
-                // Read through the screencast each message rather than holding a session: the stream rebinds as
-                // popups open and close, so "the page the owner is looking at" is whatever it is attached to now.
-                const view = screencast;
-                const session = view?.attached();
-                if (view === undefined || session === undefined || closed) {
+                if (view === undefined || closed) {
                     return;
                 }
                 let message: ScreencastClientMessage;
@@ -257,63 +287,10 @@ export const createBrowserProfileRoute = (services: Services) =>
                 } catch {
                     return;
                 }
-                if (message.type === "done") {
-                    const finished = account;
-                    // Close first so Chromium flushes the profile's cookies to disk, then mark connected, a
-                    // browse window changes nothing about whether the account is connected, so it only closes.
-                    await cleanup();
-                    if (signingIn && finished !== undefined) {
-                        await markConnected(services.workspace.root, finished);
-                    }
-                    ws.send(JSON.stringify({ type: "saved" }));
-                    ws.close(1000, "done");
-                    return;
-                }
-                // The address bar's three buttons. Driven through Playwright rather than raw CDP so a navigation
-                // that hangs gives up on its own instead of leaving the click looking ignored; each is best-effort
-                // for the same reason the initial goto is (a slow site is still usable once it paints).
-                if (message.type === "go" || message.type === "back" || message.type === "reload") {
-                    const page = view.page();
-                    if (page === undefined) {
-                        return;
-                    }
-                    const navigation =
-                        message.type === "go"
-                            ? page.goto(message.url, { waitUntil: "domcontentloaded" })
-                            : message.type === "back"
-                              ? page.goBack({ waitUntil: "domcontentloaded" })
-                              : page.reload({ waitUntil: "domcontentloaded" });
-                    await navigation.catch((err: unknown) => services.logger.warn({ err }, "browser-profile navigation failed"));
-                    return;
-                }
-                if (message.type === "selection") {
-                    // Ctrl+C over the picture: hand back what the page has selected so the client can put it on
-                    // the clipboard of the machine the person is actually sitting at. Answered even when empty,
-                    // because the client is waiting on it before it lets the keystroke go.
-                    const page = view.page();
-                    ws.send(JSON.stringify({ type: "selection", text: page === undefined ? "" : await readSelection(page) }));
-                    return;
-                }
-                if (message.type === "selectOption") {
-                    // The owner picked from the menu the client drew for them, see readSelect in screencast.ts.
-                    const page = view.page();
-                    if (page !== undefined) {
-                        await applySelect(page, message.index);
-                    }
-                    return;
-                }
-                try {
-                    await dispatchInput(session, message);
-                } catch (err) {
-                    services.logger.warn({ err }, "browser-profile input dispatch failed");
-                }
-                /* A CLICK MAY HAVE OPENED A DROP-DOWN NOBODY CAN SEE. Chromium draws that list outside the page
-                 * and the frames will never carry it, so the client is told what to draw instead. Answered on
-                 * release either way: an empty answer closes a menu the owner has clicked away from. */
-                if (message.type === "mouse" && message.action === "up") {
-                    const page = view.page();
-                    const menu = page === undefined ? undefined : await readSelect(page).catch(() => undefined);
-                    ws.send(JSON.stringify({ type: "select", menu: menu ?? null }));
+                // Window-level first (finishing, the clipboard); whatever it does not claim is a pointer or a
+                // keystroke for the browser, and live-view.ts decides where those actually land.
+                if (!(await handleWindow(message, ws))) {
+                    await view.input(message);
                 }
             },
             onClose: () => {

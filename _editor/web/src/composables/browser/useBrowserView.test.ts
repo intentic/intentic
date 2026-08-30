@@ -19,19 +19,45 @@ class FakeSocket {
     static readonly OPEN = 1;
     readonly readyState = FakeSocket.OPEN;
     readonly sent: string[] = [];
-    private readonly listeners = new Map<string, (event: { data: string }) => void>();
+    binaryType = `blob`;
+    private readonly listeners = new Map<string, (event: { data: string | ArrayBuffer }) => void>();
     send(data: string): void {
         this.sent.push(data);
     }
     close(): void {}
-    addEventListener(type: string, handler: (event: { data: string }) => void): void {
+    addEventListener(type: string, handler: (event: { data: string | ArrayBuffer }) => void): void {
         this.listeners.set(type, handler);
     }
-    // A frame from the daemon, delivered the way the real socket delivers one.
+    // A message from the daemon, delivered the way the real socket delivers one.
     deliver(message: object): void {
         this.listeners.get(`message`)?.({ data: JSON.stringify(message) });
     }
+    // A PICTURE from the daemon, which is binary: one format byte then the image (the daemon's encodeFrame).
+    deliverFrame(bytes: readonly number[]): void {
+        this.listeners.get(`message`)?.({ data: new Uint8Array(bytes).buffer });
+    }
 }
+
+// The picture surface, sized so the remote viewport maps onto it 1:1 and a click's coordinates are the ones
+// asserted below rather than the output of the letterbox arithmetic (viewportCoords has its own suite).
+const stage = (): HTMLElement => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 800 }) }) as unknown as HTMLElement;
+
+// A pointer event as the host browser reports it: only the fields the view reads, defaulted to "nothing held,
+// no modifier, not a repeat click" so each test states just the part it is about.
+const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
+    ({
+        clientX: 100,
+        clientY: 200,
+        button: 0,
+        buttons: 0,
+        detail: 0,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        altKey: false,
+        preventDefault: vi.fn(),
+        ...over,
+    }) as unknown as MouseEvent;
 
 // A keydown as the host browser reports it: only the fields the view reads.
 const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): KeyboardEvent =>
@@ -69,6 +95,11 @@ const connected = async (): Promise<{
     const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
     // connect() awaits the ticket before it constructs anything.
     await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    /* THE GEOMETRY COMES OFF THE WIRE, so a test that wants coordinates it can read has to say what the picture
+     * is — exactly as the daemon does before it sends one. The two paths have different shapes (the whole
+     * window on video, the page alone on frames), which is why nothing assumes either. `stage()` below is this
+     * same size, so the letterbox arithmetic is the identity and a click lands where it was aimed. */
+    sockets[0]!.deliver({ type: `ready`, kind: `frames`, width: 1280, height: 800 });
     return { view, wire: () => sockets[0]!.sent.map((message) => JSON.parse(message) as unknown), socket: () => sockets[0]! };
 };
 
@@ -140,6 +171,166 @@ test("copying puts the remote page's selection on the user's own clipboard, then
     socket().deliver({ type: `selection`, text: `one-time 314159` });
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`one-time 314159`));
     await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `x`, ctrl: true }));
+});
+
+/* THE FIELD THAT MADE A DRAG A DRAG, and whose absence made every one of them a hover.
+ *
+ * Chromium decides whether a move is part of a drag from the buttons currently HELD, not from whatever the last
+ * press said. A move that reports none is a move with the mouse up, so press-move-release selected no text,
+ * moved no slider and drew on no canvas — the whole gesture was delivered as a click and a wander. */
+test("a move made with the button down says so, which is what makes it a drag", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+    const surface = stage();
+
+    view.onMouseDown(mouse({ buttons: 1, detail: 1 }), surface);
+    view.onMouseMove(mouse({ clientX: 900, buttons: 1 }), surface);
+
+    expect(wire()).toContainEqual({ type: `mouse`, action: `move`, x: 900, y: 200, buttons: 1 });
+});
+
+// Double-click-to-select-a-word and triple-click-to-select-a-line are the browser's own count reaching the page.
+// Sending 1 every time turned both into a series of unrelated single clicks.
+test("a double click arrives as one, not as two single clicks", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+
+    view.onMouseDown(mouse({ buttons: 1, detail: 2 }), stage());
+
+    expect(wire()).toContainEqual({ type: `mouse`, action: `down`, x: 100, y: 200, button: 0, buttons: 1, clickCount: 2 });
+});
+
+// Ctrl+click opens a link in a new tab, Shift+click extends a selection. Neither reached the page at all.
+test("a modifier held over the picture reaches the page with the click", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+
+    view.onMouseDown(mouse({ buttons: 1, detail: 1, ctrlKey: true, shiftKey: true }), stage());
+
+    expect(wire()).toContainEqual({
+        type: `mouse`,
+        action: `down`,
+        x: 100,
+        y: 200,
+        button: 0,
+        buttons: 1,
+        clickCount: 1,
+        ctrl: true,
+        shift: true,
+    });
+});
+
+// A Mac's ⌘ means nothing to the Linux Chromium at the far end, so it travels as the ctrl it stands for — the
+// same translation keyIntent makes for the keyboard half.
+test("a Mac's command key travels as the ctrl it stands for", async () => {
+    const { view, wire } = await connected();
+    view.driving.value = true;
+
+    view.onMouseDown(mouse({ buttons: 1, detail: 1, metaKey: true }), stage());
+
+    expect(wire()).toContainEqual({ type: `mouse`, action: `down`, x: 100, y: 200, button: 0, buttons: 1, clickCount: 1, ctrl: true });
+});
+
+// Watching must stay watching: a pointer over a page the agent is filling in changes nothing about it.
+test("no pointer event reaches a browser the user is only watching", async () => {
+    const { view, wire } = await connected();
+    const surface = stage();
+
+    view.onMouseDown(mouse({ buttons: 1, detail: 1 }), surface);
+    view.onMouseMove(mouse({ buttons: 1 }), surface);
+    view.onMouseUp(mouse(), surface);
+
+    expect(wire()).toHaveLength(0);
+});
+
+/* A PICTURE IS BINARY NOW, one format byte then the image, because base64 inside JSON cost a third of the wire
+ * and a fresh multi-hundred-kilobyte string per frame. The tag byte is what lets one socket carry both a cheap
+ * jpeg while the page moves and a sharp webp once it settles. */
+test("a frame arrives as bytes, and its tag byte decides how it is read", async () => {
+    const made: string[] = [];
+    vi.stubGlobal(`URL`, {
+        createObjectURL: (blob: Blob) => {
+            made.push(blob.type);
+            return `blob:frame-${made.length}`;
+        },
+        revokeObjectURL: () => {},
+    });
+    const { view, socket } = await connected();
+    expect(view.frame.value).toBeUndefined();
+
+    socket().deliverFrame([1, 0x52, 0x49]);
+    expect(view.frame.value).toBe(`blob:frame-1`);
+    expect(made).toEqual([`image/webp`]);
+
+    socket().deliverFrame([0, 0xff, 0xd8]);
+    expect(view.frame.value).toBe(`blob:frame-2`);
+    expect(made).toEqual([`image/webp`, `image/jpeg`]);
+});
+
+/* THE VIDEO PATH, which is what a browser with a display of its own actually sends. `ready` is what selects it,
+ * and it carries the geometry AND the codec — the codec because the daemon reads it out of its own stream
+ * rather than agreeing it in advance, and the geometry because the video is the whole WINDOW where a frame is
+ * the page alone. A client that assumed either would put every click in the wrong place. */
+test("a video stream is announced by its ready, and the geometry it brings is what clicks are measured against", async () => {
+    const decoded: { codec?: string; chunks: { key: boolean; bytes: number[] }[] } = { chunks: [] };
+    vi.stubGlobal(
+        `VideoDecoder`,
+        class {
+            state = `configured`;
+            configure(config: { codec: string }): void {
+                decoded.codec = config.codec;
+            }
+            decode(chunk: { type: string; data: Uint8Array }): void {
+                decoded.chunks.push({ key: chunk.type === `key`, bytes: [...chunk.data] });
+            }
+            close(): void {}
+        },
+    );
+    vi.stubGlobal(
+        `EncodedVideoChunk`,
+        class {
+            constructor(readonly init: { type: string; data: Uint8Array }) {
+                return init as never;
+            }
+        },
+    );
+    const { view, socket } = await connected();
+
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
+    expect(view.kind.value).toBe(`video`);
+    expect([view.viewWidth.value, view.viewHeight.value]).toEqual([1280, 880]);
+    expect(decoded.codec).toBe(`avc1.42C028`);
+
+    // Tag 3 is a keyframe, 4 a delta, and the tag byte itself is stripped before the decoder sees the frame.
+    socket().deliverFrame([3, 0, 0, 0, 1, 9]);
+    socket().deliverFrame([4, 0, 0, 0, 1, 9]);
+    expect(decoded.chunks).toEqual([
+        { key: true, bytes: [0, 0, 0, 1, 9] },
+        { key: false, bytes: [0, 0, 0, 1, 9] },
+    ]);
+    // Nothing goes to the <img> on this path: the picture is in the canvas.
+    expect(view.frame.value).toBeUndefined();
+});
+
+// A browser with no decoder cannot show this, and there is no second implementation to fall back to. Saying so
+// beats a permanently black rectangle that looks like a browser which stopped painting.
+test("a client that cannot decode video says so instead of showing nothing", async () => {
+    vi.stubGlobal(`VideoDecoder`, undefined);
+    const { view, socket } = await connected();
+
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
+
+    expect(view.status.value).toContain(`can't play the live view`);
+});
+
+/* THE SHAPE THE POINTER TAKES, which no frame can carry: a screencast is the page's compositor surface, and
+ * Chromium draws the cursor above it, in the window. Without this the arrow stayed an arrow over every link. */
+test("the pointer takes the shape the remote page would give it", async () => {
+    const { view, socket } = await connected();
+    expect(view.cursor.value).toBe(`default`);
+
+    socket().deliver({ type: `cursor`, cursor: `pointer` });
+    expect(view.cursor.value).toBe(`pointer`);
 });
 
 // A copy over a page with nothing selected must not leave stale text on the clipboard, and must still let the

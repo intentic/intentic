@@ -77,3 +77,32 @@ export const WebExtSessionImportSchema = z.object({
     cookies: z.array(WebExtCookieSchema).min(1).max(300),
 });
 export type WebExtSessionImport = z.infer<typeof WebExtSessionImportSchema>;
+
+/* ---- and the same door in the other direction: LENDING a sandbox session to the person's own browser ----
+ *
+ * The case this answers is the one no amount of streaming quality can: a passkey bound to an authenticator the
+ * person physically holds, a hardware second factor that has to be touched, an employer's SSO that checks the
+ * device. Driving the sandbox's browser remotely is not a worse experience on those sites, it is an impossible
+ * one — so the session goes to the browser the account was actually enrolled on, the person finishes the step
+ * as themselves, and `connect_site` hands it back.
+ *
+ * Same door and same rule as the import above: the cookies travel on the extension's own HTTPS request, never
+ * as a socket answer, because socket answers are MCP results and MCP results land in the model's context. */
+export const WebExtSessionExportSchema = z.object({
+    // The `browser`-kind capability to lend FROM. Named by the agent out of the roster it can already read.
+    account: z.string().min(1),
+    // The registrable domain to lend, and the reason this cannot lend a whole profile: a profile holds every
+    // account its owner ever connected, and handing all of it over because one site got stuck is the kind of
+    // over-broad grant that is invisible until it matters.
+    domain: z.string().min(1),
+});
+export type WebExtSessionExport = z.infer<typeof WebExtSessionExportSchema>;
+
+export const WebExtSessionExportResultSchema = z.object({
+    ok: z.boolean(),
+    // What the owner reads and the agent reads back. Never carries a cookie name or a value.
+    message: z.string(),
+    // Only ever read by the extension, which writes it straight into this browser's own cookie store.
+    cookies: z.array(WebExtCookieSchema).optional(),
+});
+export type WebExtSessionExportResult = z.infer<typeof WebExtSessionExportResultSchema>;

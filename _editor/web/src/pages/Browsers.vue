@@ -5,12 +5,12 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
 import { closeBrowser, useBrowsersQuery } from "../composables/browser/browsersQuery";
-import { useBrowserView, VIEW_HEIGHT, VIEW_WIDTH } from "../composables/browser/useBrowserView";
+import { useBrowserView } from "../composables/browser/useBrowserView";
 import BrowserSelectMenu from "../components/BrowserSelectMenu.vue";
 import { relativeTime } from "../composables/chat/catalog";
 import { postTurnControl } from "../composables/chat/turnStream";
 
-/* THE AGENT'S BROWSER, AS A BROWSER. A live screencast of the Chromium a turn is driving through its
+/* THE AGENT'S BROWSER, AS A BROWSER. A live view of the Chromium a turn is driving through its
  * @playwright/mcp tools, with the pages it has open as a tab strip, because the agent's browser IS a browser,
  * and the shape a person already knows how to read is the shape it should be shown in.
  *
@@ -26,10 +26,9 @@ import { postTurnControl } from "../composables/chat/turnStream";
  * several existed, and a menu says "several exist" in the width of a caret), WHICH PAGE keeps the tab strip it
  * has earned, and WHERE IT IS rides the same line as an address rather than a band of its own.
  *
- * THE ROWS WERE ALSO WHAT PUT BLACK DOWN BOTH SIDES. The remote viewport is fixed (screencast.ts: it is the
- * agent's own layout viewport, and reflowing it would move the coordinates its screenshots and clicks are
- * written against), so the picture keeps 1280x800 whatever this pane's shape is, and the leftover is a
- * letterbox. Every band removed gives its height back to the picture, and a taller picture is a WIDER one:
+ * THE ROWS WERE ALSO WHAT PUT BLACK DOWN BOTH SIDES. The remote picture has a fixed shape whatever this pane's
+ * shape is — the browser's whole window when it is grabbed off an X display, one page's surface when it is not
+ * (live-view.ts) — and the leftover is a letterbox. Every band removed gives its height back to the picture, and a taller picture is a WIDER one:
  * dropping four of the five bands is most of the gutter gone. What is left is not painted black across the
  * whole pane any more: the chrome and the picture are sized together into one window that sits on the app's
  * canvas, so the space around it reads as the matting of a window rather than as a stream that failed to fill.
@@ -136,8 +135,19 @@ const addressParts = computed<{ host: string; rest: string; secure: boolean | un
     }
 });
 
+/* THE ELEMENT THE PICTURE IS IN, whichever picture it is. There are two: a canvas the video is decoded into,
+ * and an <img> for the frames a browser with no display to grab falls back to. Pointer coordinates are measured
+ * against whichever is painting (viewportCoords), so it has to be that element rather than the stage around it,
+ * which is a different shape whenever the two aspect ratios disagree. Both carry `object-contain`, so one
+ * geometry rule covers them. */
 const frameEl = ref<HTMLElement | undefined>();
+const canvasEl = ref<HTMLCanvasElement | undefined>();
 const stageEl = ref<HTMLElement | undefined>();
+// Whichever of the two is currently painting. Every pointer handler measures against this, so neither kind of
+// picture needs its own copy of the geometry.
+const pictureEl = computed<HTMLElement | undefined>(() => canvasEl.value ?? frameEl.value);
+// The canvas mounts and unmounts with the picture kind; the decoder outlives it, so they are connected here.
+watch(canvasEl, (canvas) => view.attachCanvas(canvas));
 
 /* WATCHING AND DRIVING ARE TWO STATES, AND THE BUTTON HAS TO NAME THE ONE IT IS IN. It used to read "Take
  * control" while watching and "Watching only" while driving: an action on one side and a state on the other,
@@ -204,10 +214,17 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
     }
 };
 
-/* THE WINDOW IS SIZED, NOT STRETCHED. The picture's shape is fixed at the far end (VIEW_WIDTH/VIEW_HEIGHT), so
- * the only question is how big a 1280x800 rectangle fits in what is left after the chrome, and the answer is
- * the width of BOTH: a chrome bar wider than the picture under it is the thing that made the old strips read
- * as app furniture rather than as this browser's own.
+/* THE WINDOW IS SIZED, NOT STRETCHED. The picture's shape is decided at the far end, so the only question is
+ * how big a rectangle of that shape fits in what is left after the chrome, and the answer is the width of
+ * BOTH: a chrome bar wider than the picture under it is the thing that made the old strips read as app
+ * furniture rather than as this browser's own.
+ *
+ * THE SHAPE IS NO LONGER A CONSTANT, which is why this reads it off the view. There are two pictures now and
+ * they are not the same rectangle: video grabbed off the browser's own X display is the WHOLE WINDOW, chrome
+ * included (1280x880), while the CDP frames a display-less browser falls back to are the page alone
+ * (1280x800). The daemon says which in its `ready`, so the numbers arrive a moment after the socket does and
+ * this recomputes — which is the point, since sizing a window to the wrong rectangle is a letterbox down two
+ * sides, the very thing the measuring below exists to remove.
  *
  * Measured rather than derived in CSS: an `aspect-ratio` box can size its width off a definite height, but the
  * height here is "whatever is left after a bar whose own height moves with the reader's text scale", and one
@@ -250,7 +267,7 @@ const windowWidth = computed<string>(() => {
         return `100%`;
     }
     const room = Math.max(0, height - chromeHeight.value);
-    return `${Math.floor(Math.min(width, (room * VIEW_WIDTH) / VIEW_HEIGHT))}px`;
+    return `${Math.floor(Math.min(width, (room * view.viewWidth.value) / view.viewHeight.value))}px`;
 });
 
 /* WHEN THE ROW HAS TO GIVE SOMETHING UP. Read off the measured window rather than a viewport breakpoint: this
@@ -472,25 +489,42 @@ watch(
                 <div
                     class="relative min-h-0 w-full"
                     :class="current?.running ? 'bg-terminal' : ''"
-                    :style="{ aspectRatio: `${VIEW_WIDTH} / ${VIEW_HEIGHT}` }"
+                    :style="{ aspectRatio: `${view.viewWidth.value} / ${view.viewHeight.value}` }"
                 >
                     <div
                         v-if="current?.running"
                         ref="stageEl"
                         tabindex="0"
                         class="absolute inset-0 flex select-none items-center justify-center outline-none"
-                        @mousemove="frameEl && view.onMouseMove($event, frameEl)"
-                        @mousedown="frameEl && view.onMouseDown($event, frameEl)"
-                        @mouseup="frameEl && view.onMouseUp($event, frameEl)"
-                        @wheel="frameEl && view.onWheel($event, frameEl)"
+                        @mousemove="pictureEl && view.onMouseMove($event, pictureEl)"
+                        @mousedown="pictureEl && view.onMouseDown($event, pictureEl)"
+                        @mouseup="pictureEl && view.onMouseUp($event, pictureEl)"
+                        @wheel="pictureEl && view.onWheel($event, pictureEl)"
                         @keydown="view.onKeyDown"
                         @paste="view.onPaste"
                         @contextmenu.prevent
                     >
+                        <!-- VIDEO: the whole browser window, decoded from H.264 grabbed off its own X display,
+                             so the cursor, an open <select>, the autofill drop-down and the file picker are all
+                             IN the picture. Nothing here draws a pointer — the one you see is the X server's
+                             own, at the place the owner moved it, in the shape Chromium gave it, so
+                             `cursor-none` hides the local arrow rather than showing two half a frame apart. -->
+                        <canvas
+                            v-if="view.kind.value === 'video'"
+                            ref="canvasEl"
+                            class="h-full w-full object-contain"
+                            :class="view.driving.value ? 'cursor-none' : ''"
+                        />
+                        <!-- FRAMES: one page's compositor surface, which is all a browser with no display to
+                             grab can offer. No cursor in it, so the shape the remote page would have shown is
+                             reported separately and worn by the operator's own pointer — and only while
+                             driving, since an arrow is the honest shape over a picture you are just watching. -->
                         <img
+                            v-else
                             v-show="view.frame.value"
                             ref="frameEl"
                             :src="view.frame.value"
+                            :style="view.driving.value ? { cursor: view.cursor.value } : undefined"
                             alt=""
                             draggable="false"
                             class="h-full w-full object-contain"
@@ -498,13 +532,15 @@ watch(
                         <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
                             <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
                         </div>
-                        <!-- An open drop-down, which the picture itself can never show: see BrowserSelectMenu. -->
+                        <!-- An open drop-down the picture cannot show, which is only ever the FRAMES path: on
+                             video the native menu is on the display, so it is photographed and clickable, and
+                             the daemon never sends one of these. See BrowserSelectMenu. -->
                         <BrowserSelectMenu
                             v-if="view.select.value && view.driving.value"
                             :menu="view.select.value"
-                            :frame="frameEl"
-                            :view-width="VIEW_WIDTH"
-                            :view-height="VIEW_HEIGHT"
+                            :frame="pictureEl"
+                            :view-width="view.viewWidth.value"
+                            :view-height="view.viewHeight.value"
                             @pick="view.chooseOption"
                             @close="view.closeSelect"
                         />

@@ -1,5 +1,12 @@
 import { upgradeWebSocket } from "@hono/node-server";
-import { type Capability, MCP_PROTOCOL_VERSION, WebExtHelloSchema, WebExtSessionImportSchema, type WebExtSummary } from "@intentic/sandbox-contract";
+import {
+    type Capability,
+    MCP_PROTOCOL_VERSION,
+    WebExtHelloSchema,
+    WebExtSessionExportSchema,
+    WebExtSessionImportSchema,
+    type WebExtSummary,
+} from "@intentic/sandbox-contract";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
@@ -7,6 +14,7 @@ import type { Services } from "../composition.js";
 import { bearerFrom, tokenEquals } from "../auth/auth.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { WebExtClient } from "./webext-hub.js";
+import { exportBrowserSession } from "./session-export.js";
 import { importBrowserSession } from "./session-import.js";
 
 /* The four surfaces of a connected browser:
@@ -14,6 +22,9 @@ import { importBrowserSession } from "./session-import.js";
  *   /system/webext/connect  the extension's own WebSocket (authenticated by its first frame, webext-protocol).
  *   /system/webext/enroll   redeems the one-time pairing the owner minted in the app.
  *   /system/webext/session  where a handed-over site session arrives (never the socket: it must not be a tool result).
+ *   /system/webext/lend     the same door outbound, where a sandbox account's session is collected to be lent
+ *                           to the person's own browser for a step no remote browser can do (a passkey, a
+ *                           hardware key, an SSO that checks the device).
  *   /mcp/webext/:id         the loopback MCP endpoint the AGENT's tools point at, tunnelling JSON-RPC to it.
  *
  * The security shape is the connected computer's (hosts/host.routes.ts): the agent reaches the browser through
@@ -37,7 +48,7 @@ const AUTH_DEADLINE_MS = 10_000;
  * Note what is not on the list: `tabs`. A tab's title and URL are page-controlled strings, and a title is the
  * cheapest injection surface on the web. `describe` is, because every field in it is the extension's own
  * account of itself; the two grant tools are, because their answer is a sentence this connector wrote. */
-const OWN_VOICE = new Set(["describe", "ask_access", "connect_site"]);
+const OWN_VOICE = new Set(["describe", "ask_access", "connect_site", "lend_site"]);
 
 // One MCP result, sealed. Text blocks only: an image has no marker to forge, and the model reads it as pixels.
 const sealAnswer = (id: string, tool: string, answer: unknown): unknown => {
@@ -218,6 +229,35 @@ export const createWebExtSessionRoute =
             capabilities: await services.capabilities.list(),
         });
         services.logger.info({ browser: id, account: parsed.data.account, ok: result.ok }, "webext: session handed over");
+        return c.json(result, result.ok ? 200 : 409);
+    };
+
+/* The same door in the other direction: where the extension collects a sandbox account's session to LEND to the
+ * person's own browser, for the step no remote browser can do — a passkey, a hardware key, an SSO that checks
+ * the device. Authenticated identically, and answering with the cookies ON THIS RESPONSE, which is the whole
+ * reason it is a route rather than a socket call: a socket answer is an MCP result, and an MCP result is
+ * something the model reads.
+ *
+ * The log line names the account and the site and never the jar, exactly as the import's does. */
+export const createWebExtLendRoute =
+    (services: Services) =>
+    async (c: Context): Promise<Response> => {
+        const id = await services.webexts.verify(bearerFrom(c.req.header("authorization")) ?? "");
+        if (id === undefined) {
+            return c.json({ error: "unauthorized" }, 401);
+        }
+        const parsed = WebExtSessionExportSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: "That request is not one this sandbox can read." }, 400);
+        }
+        const result = await exportBrowserSession(parsed.data, {
+            workspaceRoot: services.workspace.root,
+            capabilities: await services.capabilities.list(),
+        });
+        services.logger.info(
+            { browser: id, account: parsed.data.account, domain: parsed.data.domain, ok: result.ok, cookies: result.cookies?.length ?? 0 },
+            "webext: session lent to the owner's browser",
+        );
         return c.json(result, result.ok ? 200 : 409);
     };
 

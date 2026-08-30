@@ -366,6 +366,16 @@ export const browserAccountPage = (account: string): Page | undefined => {
 // The Playwright Page one `bind` frame names, for the view route to point its screencast at. Undefined once
 // the browser is gone: the handles a finished session still lists are dead, and binding one would throw deep
 // inside CDP rather than telling the client what actually happened.
+/* WHICH DISPLAY THIS SESSION'S BROWSER IS ON, as the key display.ts allocated it under — which is simply the
+ * server that drives it, because that is the key browser-tools.ts asks for a display with (`web` for the
+ * credential-free browser, the profile owner for a logged-in one). Nothing new is tracked for this: the two
+ * were always the same string, and threading a second copy of it through the hooks would be a second thing
+ * that can disagree.
+ *
+ * The view route asks so it can decide how to show the browser: a session whose browser is headed has a display
+ * to grab as video, and one that fell back to headless does not. See live-view.ts. */
+export const browserSessionDisplayKey = (name: string): string | undefined => sessions.get(name)?.server;
+
 export const browserSessionPage = (name: string, pageId: string): Page | undefined => {
     const record = sessions.get(name);
     if (record === undefined || record.finishedAt !== undefined) {

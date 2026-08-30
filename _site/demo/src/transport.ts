@@ -152,8 +152,8 @@ class DemoSocket extends EventTarget {
         });
     }
 
-    /** Deliver one server frame to the app, as the wire would. */
-    emit(data: string): void {
+    /** Deliver one server frame to the app, as the wire would: JSON as text, a picture as bytes. */
+    emit(data: string | ArrayBuffer): void {
         if (this.readyState === DemoSocket.OPEN) {
             this.dispatchEvent(new MessageEvent(`message`, { data }));
         }

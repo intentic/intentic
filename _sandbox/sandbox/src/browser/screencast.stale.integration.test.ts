@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import type { Browser, Page } from "playwright";
 import { expect, test } from "vitest";
-import { ensureXvfb } from "./display.js";
+import { ensureDisplay } from "./display.js";
 import { startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
 
 /* THE CLICK THAT LOOKED LIKE IT DID NOTHING.
@@ -34,12 +34,14 @@ const launch = async (): Promise<Browser | undefined> => {
     if (!existsSync(executablePath)) {
         return undefined; // installed, but the binary isn't on disk
     }
-    const display = await ensureXvfb().catch(() => undefined);
+    // A display of this test's own, which is what ensureDisplay's key buys: the suite may run beside a daemon
+    // that has browsers of its own on theirs, and two Chromiums on one display would overlap.
+    const display = await ensureDisplay("screencast-stale-test").catch(() => undefined);
     if (display === undefined) {
         return undefined; // no virtual display on this box, so no headed browser to ask
     }
     return playwright.chromium
-        .launch({ executablePath, headless: false, env: { ...process.env, DISPLAY: display }, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
+        .launch({ executablePath, headless: false, env: { ...process.env, DISPLAY: display.name }, args: ["--no-sandbox", "--disable-dev-shm-usage"] })
         .catch(() => undefined);
 };
 
@@ -80,7 +82,8 @@ const centreOf = async (reader: Page, frame: ScreencastFrame): Promise<number> =
         const ctx = canvas.getContext("2d")!;
         ctx.drawImage(image, 0, 0);
         return ctx.getImageData(image.width / 2, image.height / 2, 1, 1).data[0]!;
-    }, `data:image/${frame.format};base64,${frame.data}`);
+        // Frames travel as bytes now; a data URL is only how this test hands one to a page that can decode it.
+    }, `data:image/${frame.format};base64,${frame.bytes.toString("base64")}`);
 
 /* Swept rather than staged at one offset. The suppression window is a few hundred milliseconds wide and moves
  * with the debounce, so a single hand-picked delay proves only that one delay: it is exactly how the first

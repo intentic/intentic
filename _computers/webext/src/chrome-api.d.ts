@@ -68,6 +68,9 @@ declare namespace chrome {
         function update(tabId: number, properties: { url?: string; active?: boolean }): Promise<Tab>;
         function create(properties: { url?: string; active?: boolean }): Promise<Tab>;
         function captureVisibleTab(windowId: number, options: { format: "png" | "jpeg"; quality?: number }): Promise<string>;
+        // Needed after a session is written into this browser's cookie store: a page already open is still
+        // showing the old one, and nothing about setting a cookie tells it otherwise (tools/lend.ts).
+        function reload(tabId: number): Promise<void>;
     }
 
     namespace scripting {
@@ -104,6 +107,23 @@ declare namespace chrome {
             session: boolean;
         }
         function getAll(details: { domain?: string; url?: string }): Promise<Cookie[]>;
+        /* Writing one, for the session a sandbox account lends to this browser (tools/lend.ts).
+         *
+         * `url` rather than a domain is Chrome's own shape, and the pair decides the scope: `url` alone stores
+         * a HOST-ONLY cookie, while `domain` present stores one covering subdomains. Which of the two a cookie
+         * was is part of what makes a session work, so the caller reproduces it rather than picking one.
+         * Answers null for a cookie the browser declined (a bad domain, a `secure` cookie on http). */
+        function set(details: {
+            url: string;
+            name: string;
+            value: string;
+            domain?: string;
+            path?: string;
+            secure?: boolean;
+            httpOnly?: boolean;
+            sameSite?: "no_restriction" | "lax" | "strict" | "unspecified";
+            expirationDate?: number;
+        }): Promise<Cookie | null>;
     }
 
     namespace action {

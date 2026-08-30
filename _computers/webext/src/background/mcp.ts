@@ -4,6 +4,7 @@ import { record } from "./audit.js";
 import { RefusedError } from "./policy.js";
 import { askAccess, describeAccess } from "./tools/access.js";
 import { click, fill, openUrl, pressKey, readable, screenshot, scroll, selectOption, snapshot, waitFor } from "./tools/page.js";
+import { lendSite } from "./tools/lend.js";
 import { connectSite } from "./tools/session.js";
 import { listTabs, selectTab } from "./tools/tabs.js";
 
@@ -183,6 +184,16 @@ const TOOLS: readonly Tool[] = [
             tab,
         }),
         run: async ({ account, tab: id }) => textResult(await connectSite(account, id)),
+    }),
+    tool({
+        name: "lend_site",
+        description:
+            "Borrow a sandbox account's sign-in for THIS site into this browser, so the owner can finish a step no remote browser can do: a passkey, a hardware security key, an SSO or a bank that checks the device. Needs the owner's click every time, and the same switch as connect_site. Reach for this when you are stuck on such a step, not as a shortcut — and tell them to hand the session back with connect_site when they are done, or the sandbox keeps the older one.",
+        input: z.object({
+            account: required.describe("The connected-browser account in the sandbox whose session should be borrowed."),
+            tab,
+        }),
+        run: async ({ account, tab: id }) => textResult(await lendSite(account, id)),
     }),
 ];
 

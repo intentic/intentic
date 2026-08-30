@@ -16,6 +16,7 @@ your browser                                   your sandbox
 │  ├─ per-site grants (Chrome's)│              └─────────────────────────────┘
 │  └─ activity log│             │
 │     popup ──────┘             │  POST /system/webext/session ──▶ (cookies, never a tool result)
+│                               │  POST /system/webext/lend    ◀── (the same door, outbound)
 └───────────────────────────────┘
         │ chrome.scripting
         ▼
@@ -35,6 +36,13 @@ cookies leave only through the separate hand-over action, behind an off-by-defau
 confirmation. The person is sitting in front of it, which is the other half of the design: every action draws
 a line in the corner of the tab it happened in, and anything that looks like paying, deleting or submitting a
 credential asks them first, in the page.
+
+**And the same door runs the other way.** The sandbox can show its own browser and let the owner drive it, which
+covers most things and cannot cover a passkey bound to an authenticator they physically hold, a hardware key
+that has to be touched, or an SSO that checks the device. For those, driving a remote browser is not a worse
+experience — it is an impossible one. `lend_site` borrows that account's session into THIS browser for the
+length of that step, the person finishes it as themselves, and `connect_site` hands the refreshed session back.
+Same switch, same in-page confirmation, same rule about the socket, one site at a time.
 
 ## The three gates, and only one of them is ours
 
@@ -118,6 +126,8 @@ unset, which is the state until the listing has been created by hand once.
 - [src/background/link.ts](src/background/link.ts): the one socket, and why reconnection is shaped by the worker's lifetime.
 - [src/background/mcp.ts](src/background/mcp.ts): the tool surface the agent sees. Adding a tool is a store release, not a daemon one.
 - [src/background/policy.ts](src/background/policy.ts): the enforcement point. Every refusal a person will read starts here.
+- [src/background/tools/session.ts](src/background/tools/session.ts): handing a site's session TO the sandbox — the one place a credential leaves this browser.
+- [src/background/tools/lend.ts](src/background/tools/lend.ts): borrowing one back, for the steps no remote browser can perform, and why the cookies ride an HTTPS response rather than the socket.
 - [src/page/driver.ts](src/page/driver.ts): what runs inside the page — the walk, the actions, the banner, the confirmation.
 - [src/popup/popup.ts](src/popup/popup.ts): the 340 pixels that make this installable, and the only place a permission is ever asked for.
 - [static/manifest.json](static/manifest.json): four permissions, one optional host pattern, one content script.
