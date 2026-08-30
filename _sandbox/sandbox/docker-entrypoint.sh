@@ -92,8 +92,30 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
         daemon_name="$(printf '%s' "$SANDBOX_PUBLIC_URL" | sed -e 's#^https\?://##' -e 's#/.*##' -e 's#\..*##')"
         zrok_namespace="${ZROK_NAMESPACE:-public}"
         (
-            # Until the share is bound: the agent needs a moment to come up, and a bind that answers "already
-            # in use" is this sandbox's own share from a previous boot — done either way.
+            # Until the share is bound. The agent needs a moment to come up, so the loop is expected to fail a
+            # few times first; what it must NOT do is give up when the name is taken.
+            #
+            # "already in use" USED TO COUNT AS SUCCESS, on the reasoning that the holder is this sandbox's own
+            # share from a previous boot, so the address works either way. The first half is right and the
+            # second is not. A container recreate (`docker rm -f` + `docker run`, what every rebuild does)
+            # never releases anything: the hub keeps the old share, still holding the name, with a terminator
+            # pointing at an edge connection that died with the old container. So the new agent asks for its
+            # own hostname, is told 409 shareConflict, treats that as done, and the sandbox comes up with NO
+            # share of its own — reachable at an address whose only terminator is dead. Every request to it
+            # 502s, the daemon's own reachability probe says "not routing here yet" forever, and because the
+            # SYNC transport rides that same address (platform/sync-ssh.ts), desktop sync dies with it while
+            # the workspace itself still looks fine over the loopback shortcut. That is the whole failure, and
+            # it arrives on every rebuild.
+            #
+            # So a taken name is RECLAIMED instead. `zrok2 overview` is the only listing the account has, and
+            # it maps each name to the share token holding it; deleting that share frees the name for the bind
+            # on the next pass. Only ever this sandbox's OWN account is listed, so there is nothing here that
+            # could reach another sandbox's share.
+            #
+            # Bounded, because a reclaim that keeps failing is a different problem: after three tries the loop
+            # stops deleting and just keeps retrying the bind, so a hub that is merely slow is waited out
+            # rather than fought, and a delete/create fight can never run forever.
+            reclaims=0
             while :; do
                 zrok2 create name "$daemon_name" --namespace-token "$zrok_namespace" \
                     >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
@@ -101,8 +123,17 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
                     --name-selection "$zrok_namespace:$daemon_name" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1; then
                     break
                 fi
-                if grep -q "already in use" "$HISTORY_ROOT/logs/zrok.log" 2>/dev/null; then
-                    break
+                if [ "$reclaims" -lt 3 ] && tail -n 20 "$HISTORY_ROOT/logs/zrok.log" 2>/dev/null | grep -q "already in use"; then
+                    reclaims=$((reclaims + 1))
+                    # The table is box-drawn: turn the rules into a plain delimiter, drop the padding, then the
+                    # row whose URL starts with our name yields the token of the share sitting on it.
+                    stale="$(zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
+                        | awk -F'|' -v n="$daemon_name" '$2 ~ ("^" n "\\.") { print $4; exit }')"
+                    if [ -n "$stale" ]; then
+                        echo "reclaiming '$daemon_name' from stale share $stale (attempt $reclaims)" \
+                            >> "$HISTORY_ROOT/logs/zrok.log"
+                        zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+                    fi
                 fi
                 sleep 2
             done
