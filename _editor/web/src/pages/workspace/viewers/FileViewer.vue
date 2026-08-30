@@ -13,6 +13,7 @@ import { useMonaco } from "../../../composables/workspace/useMonaco";
 import { changeEpochOf } from "../../../composables/workspace/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../composables/workspace/useWorkspaceTree";
 import { scopeQuery, workspaceAgent } from "../../../composables/workspace/workspaceScope";
+import { useScopeTitle } from "../../../composables/workspace/scopeTitle";
 import BigTextView from "./BigTextView.vue";
 import CodeView from "./CodeView.vue";
 import FileBreadcrumb from "../FileBreadcrumb.vue";
@@ -353,14 +354,24 @@ const markdownView = ref<InstanceType<typeof MarkdownViewer>>();
 // global edit mode is ignored and the Edit affordance hidden below 768px.
 const { mobile } = useDevice();
 
+// A file this surface knows how to put a caret in, scope aside. Split out of `canEdit` because the two answers
+// are needed apart: one decides whether the Edit button appears, the other whether its ABSENCE needs explaining.
+const editableKind = computed(() => (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null);
 /* Editing is off while the view is showing a conversation's own copy (workspaceScope). The daemon refuses a
  * write into a checkout by construction: no write route can even name one, so a Save here would silently go
  * to the SHARED tree's file of the same path, which is the exact confusion this scope exists to end. And the
  * agent may be writing to that file right now: two writers on one worktree file lose each other's work with
- * nothing to notice it. Read-only is stated in the banner above, so the missing Edit button is explained
- * rather than merely absent. */
-const canEdit = computed(
-    () => workspaceAgent.value === undefined && (open.value.kind === `code` || open.value.kind === `markdown`) && text.value !== null,
+ * nothing to notice it. */
+const canEdit = computed(() => workspaceAgent.value === undefined && editableKind.value);
+/* AND THE REASON IS SAID HERE, on the row where the Edit button would have been, because that is where somebody
+ * finds out they wanted it. It used to be a clause in a banner across the top of the whole view, which charged
+ * every reader of every file for a sentence that only matters to the one who reaches for the keyboard: the
+ * textbook trade of a permanent cost against an occasional need. The chip in the tab row says WHICH copy; this
+ * says what that means for the file in front of you, at the moment it means anything. */
+const scopedReadOnly = computed(() => !mobile.value && workspaceAgent.value !== undefined && editableKind.value);
+const scopeTitle = useScopeTitle();
+const readOnlyReason = computed(
+    () => `Showing ${scopeTitle.value}'s copy of the workspace: its work hasn't landed yet, so these files can't be edited here.`,
 );
 /* MARKDOWN ANSWERS THE SAME EDIT SWITCH AS EVERY OTHER FILE, and only differs in what it opens INTO: the
  * rendered document becomes typeable (MarkdownViewer), where a `.ts` file opens in the code editor. One button,
@@ -429,9 +440,9 @@ const onEditorSave = (value: string): void =>
                 <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-[0.7rem]" />
                 <span class="max-md:hidden">Comments</span>
             </button>
-            <!-- The banner above says the view is showing an agent's copy; this file is one that copy doesn't
-                 carry, so it comes from the shared workspace. Said here rather than there because it is a fact
-                 about this file, not about the view. -->
+            <!-- The chip in the tab row says the view is showing an agent's copy; this file is one that copy
+                 doesn't carry, so it comes from the shared workspace. Said here rather than there because it is
+                 a fact about this file, not about the view. -->
             <span
                 v-if="workspaceAgent !== undefined && fromShared"
                 class="inline-flex shrink-0 items-center gap-1 rounded-md bg-overlay px-1.5 py-0.5 text-2xs text-muted"
@@ -440,6 +451,16 @@ const onEditorSave = (value: string): void =>
                 <Icon name="folder" class="text-[0.65rem]" /> Shared
             </span>
             <CopyButton v-if="text !== null" :text="editorSeed" aria-label="Copy file content" v-tooltip.bottom="'Copy content'" />
+            <!-- The Edit button's own seat, while the scope is what is keeping it empty: an affordance that is
+                 merely missing reads as a bug, and this is the row where somebody goes looking for it. -->
+            <span
+                v-if="scopedReadOnly"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted"
+                v-tooltip.bottom="readOnlyReason"
+            >
+                <Icon name="lock" class="text-[0.7rem]" />
+                <span class="max-md:hidden">Read-only</span>
+            </span>
             <template v-if="!mobile && (canEdit || editingThis)">
                 <span v-if="dirtyThis" class="inline-flex shrink-0 items-center text-warning" v-tooltip.bottom="'Unsaved changes: Ctrl+S to save'">
                     <Icon name="circle-fill" class="text-[0.4rem]" />

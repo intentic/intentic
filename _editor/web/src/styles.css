@@ -272,3 +272,31 @@
 #credential_picker_iframe {
     color-scheme: light;
 }
+
+/* THE WORKSPACE IS SHOWING SOMEBODY ELSE'S COPY, said by the surface instead of by a strip above it.
+ *
+ * This is the private-browsing answer, and it is right for the same reason: a mode is a STATE of the container,
+ * not an event inside it, so the container is what should look different. A sentence narrating it is read once
+ * and then becomes furniture — worst at the hour it starts mattering, when somebody has forgotten why the
+ * README in front of them looks wrong. A room that is a different colour cannot stop being a different colour.
+ * WHOSE copy is the half a colour cannot say, and that is the chip in the tab row (WorkspaceScopeChip).
+ *
+ * Costs no layout: an inset shadow, so nothing moves when the scope changes and there is no band to animate in
+ * or out. Global rather than scoped to one view because both workspaces wear it — the desktop's split and the
+ * phone's drill-down — and whose copy you are in is not a fact about a form factor.
+ *
+ * UNLAYERED, DELIBERATELY, and this is the whole reason these two rules are not up in @layer components with
+ * .view-header itself. The bars carry `bg-card`, a Tailwind UTILITY, and utilities are the last layer in the
+ * cascade (see the @layer statement at the top of this file): a component-layer rule loses to them however
+ * specific it is. An unlayered rule beats every layered one, which is exactly the standing this needs — it is
+ * not styling a component, it is overruling the component's own background for as long as the view is somewhere
+ * it does not normally go.
+ *
+ * `background-color` rather than the shorthand, so it composes with the skins, which paint these same bars with
+ * `background-image` (see hud.css) instead of one of the two silently winning. */
+.ws-scoped {
+    box-shadow: inset 0 2px 0 var(--color-primary-500);
+}
+.ws-scoped .view-header {
+    background-color: color-mix(in srgb, var(--color-primary-500) 8%, var(--color-card));
+}

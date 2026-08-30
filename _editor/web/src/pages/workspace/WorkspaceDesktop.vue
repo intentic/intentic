@@ -3,7 +3,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { Button, clipboardOf, ui, ConfirmDialog, ContextMenu, type IconName, SegmentedControl, useNarrow, useLoadingReveal } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { commandShortcut, type CommandRegistration, registerCommand } from "../../composables/commands/useCommands";
 import { openPreview } from "../../composables/preview/previewSurface";
@@ -12,7 +12,8 @@ import { useCapabilities } from "../../composables/extensions/useCapabilities";
 import { usePanels } from "../../composables/extensions/usePanels";
 import { personaStartDirs } from "../../composables/sandbox/personaCard";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
-import { lensPersonaId } from "../../composables/workspace/personaReach";
+import { lensPersonaId, reachOf, reachSentence } from "../../composables/workspace/personaReach";
+import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 import { detectActivations } from "../../core-views/registry";
 import { useEditBuffers } from "../../composables/workspace/useEditBuffers";
 import { useMonaco } from "../../composables/workspace/useMonaco";
@@ -45,11 +46,13 @@ import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
-import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
+import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
+import WorkspaceScopeGone from "./WorkspaceScopeGone.vue";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import WorkspaceTree from "./WorkspaceTree.vue";
 import ExtensionDocument from "../../core-views/ExtensionDocument.vue";
 import { type RowAction, rowActionsFor } from "./rowActions";
+import { CONTEXT_TARGET, HOISTED_CONTEXT } from "./viewerChrome";
 
 /* The Workspace area: a VSCode-like, full-height explorer + viewer of the /work filesystem the agent sees
  * ("what the LLM sees"), read DIRECTLY from the sandbox daemon (no platform state, see CLAUDE.md). A resizable
@@ -67,6 +70,16 @@ const changes = useChanges();
 const { repoDirs } = useRepos();
 
 const openReview = (): void => layout.setSidebarPanel(`changes`);
+
+/* THIS VIEW'S BAR CARRIES THE OPEN FILE'S CONTEXT, so the breadcrumb rides the tab row instead of opening a
+ * band under it, and the markdown surface's controls ride the breadcrumb (see viewerChrome). The phone provides
+ * nothing and gets the bands, which is right there: it has no tab strip to hang them on. */
+provide(HOISTED_CONTEXT, true);
+
+/* THE SCOPE IS POINTED AT A CHECKOUT THAT ISN'T THERE. An archived agent keeps its work on its branch but
+ * loses its working copy, so there is no tree to read and no file to open: every pane in this view is about to
+ * fail for the same one reason. Said once, in the pane, rather than three times in three error slots. */
+const scopeBroken = computed(() => workspaceAgent.value !== undefined && error.value !== undefined);
 
 // The Changes tab's chip when there is no count to show: committed work still on this disk. Gated on a zero
 // count because the chip states ONE thing: with files to review, how many is the more urgent of the two.
@@ -322,6 +335,19 @@ const filterMenuItems = computed<MenuItem[]>(() =>
 // node_modules: never reads as the workspace itself having changed.
 const filtersActive = computed(() =>
     contentMode.value ? search.includeIgnored.value : layout.showIgnored.value || layout.hideTests.value || lensPersonaId.value !== undefined,
+);
+
+/* WHOSE REACH THE TREE IS BEING DIMMED BY, on the funnel that is already lit for it rather than in a stripe of
+ * its own above the tree. The stripe was a second indicator for a state this button ALREADY reports (see
+ * `filtersActive`, which counts the lens), and it was the more expensive of the two by the width of the
+ * sidebar: its payload is a folder list, which is exactly what a 256px strip has to truncate, so it wrapped to
+ * two lines and took them from the tree.
+ *
+ * A tooltip is where a long answer belongs on a lit control: the lens is visible without it, and the reader who
+ * wants to know WHICH folders is the reader whose pointer is already on the funnel, going for the menu. */
+const lensCard = computed(() => personas.value.find((persona) => persona.id === lensPersonaId.value));
+const lensLine = computed(() =>
+    lensCard.value === undefined ? undefined : reachSentence(lensCard.value.label ?? lensCard.value.id, reachOf(lensCard.value)),
 );
 
 // Right-click tab menu (VSCode-style). It acts on the right-clicked tab (`menuTabId`), which "Close Others"/"Close to
@@ -710,14 +736,10 @@ const endResize = (event: PointerEvent): void => {
     <div
         ref="rootEl"
         class="ws flex h-full min-h-0 flex-col overflow-hidden bg-canvas text-content"
-        :class="{ 'is-resizing': resizing }"
+        :class="{ 'is-resizing': resizing, 'ws-scoped': workspaceAgent !== undefined }"
         @dragover.prevent
         @drop.prevent
     >
-        <!-- Whose copy of the workspace this is, whenever it isn't the shared one. Above the split rather than
-             inside the viewer: the tree is scoped too, and a reader browsing folders needs the answer as much
-             as one reading a file. -->
-        <WorkspaceScopeBanner />
         <!-- Body: sidebar + viewer; only the leaf panes scroll. The whole body is the root drop target (sidebar
              background, viewer, and empty state all upload to /work root); a folder row captures its own drop
              (stopPropagation) so hovering a folder targets that folder instead. -->
@@ -879,7 +901,7 @@ const endResize = (event: PointerEvent): void => {
                             :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
                             aria-haspopup="menu"
                             aria-label="Filter what the explorer lists"
-                            v-tooltip.bottom="'Filter'"
+                            v-tooltip.bottom="lensLine ?? 'Filter'"
                             @click="filterMenu?.show($event)"
                         >
                             <Icon name="filter" class="text-xs" />
@@ -967,8 +989,14 @@ const endResize = (event: PointerEvent): void => {
             <div v-if="narrowBody && sidebarOpen" class="absolute inset-0 z-10 bg-black/30" @click="drawerOpen = false"></div>
 
             <section class="relative flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
-                <!-- Tab row: explorer toggle + open tabs + the workspace status/actions the old top bar held.
-                     Always rendered so the controls survive zero open tabs. -->
+                <!-- THE VIEW'S ONE BAR: explorer toggle, open tabs, the open file's own context, the workspace
+                     status/actions the old top bar held, and which copy of the workspace all of it is about.
+                     Always rendered so the controls survive zero open tabs.
+
+                     It absorbed two bands. The breadcrumb used to sit under it repeating the active tab's
+                     filename, and a markdown file put a third band under THAT for three toggles; both now
+                     arrive in `#ws-viewer-context` by teleport (see viewerChrome), which is why a viewer this
+                     component never renders directly can still put controls on its bar. -->
                 <div class="view-header flex items-stretch border-b border-line bg-card">
                     <button
                         type="button"
@@ -988,6 +1016,13 @@ const endResize = (event: PointerEvent): void => {
                         @close="closeTab"
                         @contextmenu="openTabMenu"
                     />
+                    <!-- Where the open file's breadcrumb and its viewer's controls land.
+                         RULED OFF FROM THE TABS, and it earns the line: the strip scrolls its overflow, so on a
+                         busy row the last tab is clipped mid-word, and against a bare crumb that reads as
+                         broken text rather than as a strip continuing under a boundary. Capped at a share of
+                         the row for the same reason: this region is what a file brings WITH it, and no file's
+                         context is worth more than half the space for reaching the other files. -->
+                    <div :id="CONTEXT_TARGET" class="ws-context flex min-w-0 max-w-[45%] shrink items-center gap-2"></div>
                     <div class="flex shrink-0 items-center gap-2 px-2">
                         <span
                             v-if="actionError"
@@ -998,11 +1033,21 @@ const endResize = (event: PointerEvent): void => {
                         <!-- The lone remaining status: one spinner for both a running file action and a tree
                              (re)load: the Refresh button that used to spin is now only the command. -->
                         <Icon name="spinner" v-if="busy || isLoading" class="text-sm text-muted" spin aria-label="Working" />
-                        <span v-if="error" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{ error }}</span>
+                        <!-- Suppressed while the scope is what failed: the pane below is already saying it at
+                             full size, and the same sentence twice on one screen reads as two problems. -->
+                        <span v-if="error && !scopeBroken" class="max-w-64 truncate text-2xs text-danger" v-tooltip.bottom.overflow="error">{{
+                            error
+                        }}</span>
+                        <!-- Which copy of the workspace all of the above is about. Absent on the shared tree:
+                             the default needs no marker (see WorkspaceScopeChip). -->
+                        <WorkspaceScopeChip />
                         <input ref="fileInput" type="file" multiple class="hidden" @change="onPick" />
                     </div>
                 </div>
-                <template v-if="activeFile">
+                <!-- Nothing in this view can be read: the scope names a checkout that no longer exists. It
+                     pre-empts every branch below rather than letting each one fail in its own words. -->
+                <WorkspaceScopeGone v-if="scopeBroken" />
+                <template v-else-if="activeFile">
                     <!-- FileViewer renders its own breadcrumb (with edit actions); the directory UI gets a bare one. -->
                     <FileBreadcrumb v-if="directoryUiDir !== undefined" :path="activeFile.path" :meta="openMeta" />
                     <div class="min-h-0 flex-1">
@@ -1125,6 +1170,23 @@ const endResize = (event: PointerEvent): void => {
 }
 .ws.is-resizing {
     user-select: none;
+}
+/* `.ws-scoped` (the tint that says this is not the shared tree) lives in styles.css beside .view-header: it has
+ * to reach the bars inside child components, and the phone's workspace wears the same one. */
+
+/* The seat the open file's context is teleported into, ruled off from the tab strip beside it. THE RULE IS
+ * CONDITIONAL ON THERE BEING SOMETHING THERE, and `:empty` is what states that rather than a `v-if` on a class:
+ * this seat is filled from elsewhere (see viewerChrome), so the component that draws the border is not the one
+ * that knows whether anything arrived, and a diff, a health report or an empty strip would each have to
+ * remember to say so. A stray 1px rule floating in a bar is exactly the kind of thing nobody files a bug for
+ * and everybody sees.
+ *
+ * The line matches a tab's own right divider, deliberately: the strip scrolls its overflow, so a busy row clips
+ * its last tab mid-word, and the eye needs to read that as a strip continuing under a boundary rather than as
+ * broken text running into a path. */
+.ws-context:not(:empty) {
+    border-left: 1px solid var(--color-line);
+    padding-left: 0.5rem;
 }
 /* Root drop-zone hint (a folder row shows its own inset ring instead). */
 .ws-dropzone {

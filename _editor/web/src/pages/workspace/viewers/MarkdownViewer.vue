@@ -12,6 +12,7 @@ import MarkdownDocumentSurface from "./MarkdownDocumentSurface.vue";
 import MarkdownOutline from "./MarkdownOutline.vue";
 import { toggleTaskCheckbox } from "./markdownTasks";
 import { useMarkdownOutline } from "./markdownOutline";
+import { VIEWER_ACTIONS_TARGET } from "../viewerChrome";
 
 /* THE MARKDOWN SURFACE: one rendered document, in both of the app's two states.
  *
@@ -174,7 +175,11 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
 
 <template>
     <div ref="root" class="flex h-full min-h-0 flex-col">
-        <div class="relative flex shrink-0 items-center gap-2 border-b border-line px-2 py-1.5">
+        <!-- THIS SURFACE OPENS NO BAR OF ITS OWN. Three controls and a section name are not a toolbar's worth
+             of content, and a band of them under the breadcrumb, under the tab row, put a markdown file's
+             first line four rules down the screen. They ride the breadcrumb instead (see viewerChrome), which
+             on the desktop is itself riding the tab row: same controls, same order, no band. -->
+        <Teleport defer :to="`#${VIEWER_ACTIONS_TARGET}`">
             <!-- The section the reader is in. A button rather than a label because the list behind it is what
                  they want next often enough to be worth the press, and on a pane too narrow to dock the rail,
                  this is the only way to it. -->
@@ -187,10 +192,10 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 @click="overlayOpen = !overlayOpen"
             >
                 <Icon name="align-left" class="shrink-0 text-subtle" aria-hidden="true" />
-                <span class="truncate">{{ current }}</span>
+                <!-- Narrower here than it was on a bar of its own, and it has to be: this now shares a row with
+                     the tab strip. The glyph alone still opens the outline, which is the control's whole job. -->
+                <span class="max-w-32 truncate max-md:hidden">{{ current }}</span>
             </button>
-
-            <div class="min-w-0 flex-1"></div>
 
             <button
                 v-if="dockable"
@@ -217,20 +222,21 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             >
                 <Icon :name="view === `source` ? `eye` : `code`" />
             </button>
+        </Teleport>
 
-            <!-- HOW MUCH IS LEFT, drawn over the toolbar's own bottom rule rather than as a bar of its own: a
-                 reading position is a hairline's worth of information and does not deserve a row. Absent while
-                 the document fits its pane: a full-width accent line under the toolbar of a short file reads
-                 as a progress bar that finished, which is a claim about loading, not about reading. -->
+        <div class="relative flex min-h-0 flex-1">
+            <!-- HOW MUCH IS LEFT, a hairline along the top of the document rather than a bar of its own: a
+                 reading position is a hairline's worth of information and does not deserve a row. It used to
+                 hang off the toolbar's bottom rule, which is the same edge, and now that the toolbar has gone
+                 up into the breadcrumb it hangs off the rule the document has instead. Absent while the
+                 document fits its pane: a full-width accent line over a short file reads as a progress bar
+                 that finished, which is a claim about loading, not about reading. -->
             <div
                 v-if="view === `document` && outline.scrollable.value"
-                class="pointer-events-none absolute -bottom-px left-0 h-px bg-link/60"
+                class="pointer-events-none absolute left-0 top-0 z-10 h-px bg-link/60"
                 :style="{ width: `${outline.progress.value * 100}%` }"
                 aria-hidden="true"
             ></div>
-        </div>
-
-        <div class="relative flex min-h-0 flex-1">
             <template v-if="view === `document`">
                 <!-- THE SCROLLER SPANS THE WHOLE PANE, so its scrollbar sits at the pane's outermost edge:
                      which is the entire point of the layout below. The rail used to be a column BESIDE this

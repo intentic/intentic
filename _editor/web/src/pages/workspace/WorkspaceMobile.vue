@@ -41,7 +41,8 @@ import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
 import UploadProgress from "./UploadProgress.vue";
-import WorkspaceScopeBanner from "./WorkspaceScopeBanner.vue";
+import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
+import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
 import { parentDir } from "@intentic/ui/path";
 
@@ -300,10 +301,10 @@ const onPick = (event: Event): void => {
 </script>
 
 <template>
-    <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-canvas text-content">
-        <!-- Whose copy of the workspace this is, whenever it isn't the shared one (see WorkspaceScopeBanner).
-             Above the viewer as well as the list: a phone shows one at a time, and both need the answer. -->
-        <WorkspaceScopeBanner />
+    <!-- Whose copy of the workspace this is, whenever it isn't the shared one: the same tint the desktop wears
+         (see `.ws-scoped` in styles.css), because that is a fact about the view and not about the form factor.
+         The chip that names the agent rides each of this view's headers below. -->
+    <div ref="rootEl" class="relative flex h-full min-h-0 flex-col bg-canvas text-content" :class="{ 'ws-scoped': workspaceAgent !== undefined }">
         <!-- Full-screen viewer: `?file=` (any kind) or `?diff=` (from Changes/History). Back = OS gesture. -->
         <template v-if="openPath !== undefined || diffTab !== undefined">
             <!-- A diff gets the SAME bar the desktop tab and the agent review get, with the phone's back arrow
@@ -339,6 +340,7 @@ const onPick = (event: Event): void => {
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(openPath ?? "") }}</span>
+                <WorkspaceScopeChip />
             </div>
             <div class="min-h-0 flex-1">
                 <template v-if="diffTab">
@@ -375,6 +377,7 @@ const onPick = (event: Event): void => {
             <div class="flex shrink-0 items-center gap-2 border-b border-line bg-card px-2 py-1.5">
                 <SegmentedControl v-model="segment" size="sm" :options="segmentOptions" />
                 <span class="flex-1"></span>
+                <WorkspaceScopeChip />
                 <button
                     type="button"
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
