@@ -164,31 +164,6 @@ export const stripManagedIncludes = (config: string): string =>
         .filter((line) => !MANAGED_INCLUDE.test(line))
         .join("\n");
 
-/* THE ENTRY THAT CAN ONLY BE WRECKAGE. An earlier build wrote `HostKeyAlias %h` and ssh does not expand it, so
- * every sandbox's host key landed in one bucket literally named "%h", after which the first sandbox's key is
- * the only one accepted and every other pairing is refused with "Host key for %h has changed", permanently,
- * because accept-new accepts an unknown host but never a changed one.
- *
- * Writing the alias literally (sshConfigBlock) stops it being created. It does not remove the one already
- * sitting in a paired machine's known_hosts, and nothing else ever will: the file is ours, the line names a host
- * that cannot exist, and the sandboxes it locks out stay locked out through every upgrade. So the agent deletes
- * it whenever it rewrites the config, a fix that reaches the machines that already have the bug, which is the
- * only kind worth shipping for a state this durable. */
-const LITERAL_HOST_KEY_ALIAS = "%h";
-
-export const pruneKnownHosts = async (): Promise<boolean> => {
-    const current = await readFile(knownHostsPath, "utf8").catch(() => undefined);
-    if (current === undefined) {
-        return false;
-    }
-    const kept = current.split("\n").filter((line) => line.split(" ")[0] !== LITERAL_HOST_KEY_ALIAS);
-    if (kept.length === current.split("\n").length) {
-        return false;
-    }
-    await writeFile(knownHostsPath, kept.join("\n"), { mode: 0o600 });
-    return true;
-};
-
 // Generate the ed25519 keypair on first setup; return the public key line to enroll on the daemon.
 export const ensureSshKey = async (): Promise<string> => {
     await mkdir(baseDir, { recursive: true });

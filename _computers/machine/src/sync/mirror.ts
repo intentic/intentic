@@ -27,7 +27,7 @@ import {
     runMutagenAsync,
 } from "./mutagen.js";
 import { machineReport, scopedReport } from "./report.js";
-import { pairingSshConfig, pruneKnownHosts, sshAlias, writeManagedSshConfig } from "./ssh.js";
+import { pairingSshConfig, sshAlias, writeManagedSshConfig } from "./ssh.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
 // Port mirroring: every WORKSPACE port listening in a paired sandbox is bound to the SAME port on this machine's
@@ -469,22 +469,16 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
      * so Mutagen has nothing to connect to until these listeners are bound. Reconciled again on every tick
      * below, for the same reason the pairing list is re-read: a sandbox paired or dropped while this is running
      * must gain or lose its transport without a restart. */
-    /* THE SSH FRAGMENT, REGENERATED HERE, because until now only `setup` and `uninstall` ever wrote it, and
-     * that made it the one piece of this agent's state an upgrade could not reach. A machine paired months ago
-     * kept dialling on whatever rules were current the day it was paired, no matter how many times the binary was
-     * replaced, and the only cure was to go back to the browser for a fresh pairing token.
+    /* THE SSH FRAGMENT, REGENERATED HERE, because otherwise only `setup` and `uninstall` would ever write it,
+     * and that would make it the one piece of this agent's state an upgrade cannot reach. A machine paired
+     * months ago would keep dialling on whatever rules were current the day it was paired, no matter how many
+     * times the binary was replaced, and the only cure would be to go back to the browser for a fresh pairing
+     * token.
      *
-     * It is not hypothetical: the `HostKeyAlias %h` bug (ssh.ts) was fixed in the agent and stayed live on every
-     * already-paired machine, refusing every sandbox but the first. Same argument as ensureSyncSession, the
-     * watcher runs at every login, so it is where an inherited configuration is brought onto this build's rules.
-     * The write is idempotent and derived from the pairing list, so a machine that is already correct pays one
-     * file comparison. The poisoned known_hosts entry goes with it, since nothing else can ever remove it. */
-    await guard(log, "refreshing the ssh configuration", async () => {
-        await writeManagedSshConfig(pairingSshConfig(initial.pairings));
-        if (await pruneKnownHosts()) {
-            log("  removed a stale `%h` host-key entry left by an older agent: it was refusing every sandbox but the first.");
-        }
-    });
+     * Same argument as ensureSyncSession: the watcher runs at every login, so it is where an inherited
+     * configuration is brought onto this build's rules. The write is idempotent and derived from the pairing
+     * list, so a machine that is already correct pays one file comparison. */
+    await guard(log, "refreshing the ssh configuration", async () => await writeManagedSshConfig(pairingSshConfig(initial.pairings)));
     const tunnels = createTunnelPool(log);
     await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(initial.pairings)));
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file

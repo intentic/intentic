@@ -37,7 +37,9 @@ Built on [stricli](https://github.com/bloomberg/stricli) with generated `--help`
 Secrets split by who provides them:
 
 - **User-supplied** (`source: env`), credentials to systems intentic does **not** create:
-  `HOST_SSH_KEY`, `CLOUDFLARE_API_TOKEN`, and each environment's `*_DATABASE_URL`. You set these in
+  `HOST_SSH_KEY`, `CLOUDFLARE_API_TOKEN`, and each environment's `*_DATABASE_URL`. A host's key var is
+  derived from its name (`<NAME>_SSH_KEY`), so the templates' `host` reads `HOST_SSH_KEY` and a host you
+  call `prod` reads `PROD_SSH_KEY`; there is no name spelled differently from the rest. You set these in
   `.env` beside the artifact (or the ambient environment). The required set is more than what your
   `deploy.config.ts` names, so `resolve` derives it from the graph and writes `desired-state/.env.example`.
 - **intentic-generated** (`source: generated`), admin credentials for the services intentic itself

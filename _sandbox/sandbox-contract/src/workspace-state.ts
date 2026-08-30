@@ -829,34 +829,6 @@ export const REPORTED_MANIFEST_PATHS: readonly string[] = WORKSPACE_STATE_FILES.
 // them relative at the last moment, and normalizing at each call site is the one that eventually gets forgotten.
 export const isReportedManifest = (relPath: string): boolean => REPORTED_MANIFEST_PATHS.includes(relPath.replaceAll("\\", "/"));
 
-/* Old directory names are never read or migrated. Keep that finite set in one quarantine record so access,
- * export, and search cannot reinterpret abandoned machine state as ordinary workspace content after a rename.
- * `artifacts` still carry; the distinction here tells portability only which retired roots are secrets or
- * derived, and tells the state janitor which it may DELETE: a retired `derived` root is a rebuildable cache
- * by its own classification, so leaving 466 MB of abandoned model where only a manual `rm` reaches it was
- * quarantine doing half its job. Secret and artifact roots stay until an owner removes them by hand: deleting
- * content is not the janitor's call, only deleting what the class already says is disposable. */
-export const RETIRED_WORKSPACE_STATE_DIRS = {
-    /* The flat spellings, from before the state dir was grouped into its five folders. Every entry in the table
-     * used to sit directly under `.intentic/`, and a sandbox that predates the move still has those directories
-     * on disk with real contents in them. They are quarantined rather than migrated, the workspace rule is fresh
-     * state and no compatibility layers, but quarantine is exactly what they need, because the alternative is
-     * worse than leaving them: `auth` at the old spelling is a real credential store that the classifier no
-     * longer recognises, so without these names it would read as ordinary workspace content and be indexed by
-     * search, carried by an export and copied down by the backup. Being listed here keeps the old copy as
-     * untouchable as the new one, and lets the janitor delete the rebuildable half. */
-    secret: ["claude", "codex", "kimi", "opencode", "cliproxy", "auth", "ci.json"],
-    /* The ownership records at their OLD flat spelling, and a bucket of their own rather than a few more names
-     * in `secret`, because the two classes differ on exactly the thing that matters for a leftover. A `secret`
-     * travels when the owner opts in at export; an `identity` never travels at all, since a list of who may
-     * drive this sandbox arriving in another one is how a source hands itself the target's ownership. Filed under
-     * `secret` these would have become carryable by ticking a box, which is the one outcome their live entries
-     * are written to prevent. */
-    identity: ["owner.json", "members.json", "workspace.json", "control-tokens.json"],
-    derived: ["iq", "extensions-runtime", "whisper", "browser/output", "browser", "cache", "runtime", "tmp", ".pnpm-store", "extensions", "verify"],
-    artifacts: ["attachments", "acceptance", "loops", "workflow-runs", "transcripts", "artifacts", "sessions"],
-} as const;
-
 /* THE DAEMON'S OWN CONTROL PLANE, the entries directly under the workspace root's `.intentic/` that the file
  * API refuses to read, write, move or delete for anyone, the owner included (workspace/workspace-files.ts holds
  * the enforcement and the full reasoning for each name).
@@ -908,15 +880,9 @@ export const isLockedWorkspacePath = (relPath: string): boolean => {
     if (segments[0] !== STATE_DIR) {
         return false;
     }
-    /* Two shapes, because two layouts exist on disk. A current entry is `<group>/<name>`; a leftover from before
-     * the regrouping is a bare name directly under the state dir, and the quarantine record is what still knows
-     * those are credentials. Both are locked, a stale `auth/` full of real tokens is no safer to open than the
-     * live one, and the whole point of quarantining the old spellings was that nothing downstream reclassifies
-     * them as ordinary content. */
-    return (
-        LOCKED_STATE_ENTRIES.has(segments.slice(1, 3).join("/")) ||
-        (segments.length >= 2 && RETIRED_WORKSPACE_STATE_DIRS.secret.includes(segments[1] as never))
-    );
+    // Two segments, which covers both spellings in the set above: a grouped entry (`secrets/auth`) matches as
+    // written, and a bare root entry (`claude.json`) joins to itself because there is no second segment to add.
+    return LOCKED_STATE_ENTRIES.has(segments.slice(1, 3).join("/"));
 };
 
 /* THE LOCKED ENTRIES THE ROOT REPO TRACKS, refused by the file API, and diffable anyway.

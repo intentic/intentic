@@ -2,7 +2,6 @@ import { computed, ref, watch } from "vue";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../browserStorage";
 import { useGoogleIdentity } from "../useGoogleIdentity";
-import { routeAdvertised } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
 
@@ -19,9 +18,10 @@ import { currentSandboxTarget, type SandboxTarget } from "./sandboxTarget";
  *
  * Sessions are per sandbox (each daemon signs with its own secret), persisted in localStorage like the Google
  * credential, and renewed IN THE BACKGROUND with the session itself once within a week of expiry, an active
- * user re-proves to Google only after a month away. Old daemons keep working: one that positively advertises
- * no `system.session` route (or 404s the exchange) simply gets the raw Google ID token per call, exactly the
- * pre-session behavior. */
+ * user re-proves to Google only after a month away. The exchange is the ONLY road to a bearer for a named
+ * sandbox: a daemon that will not mint one fails visibly rather than falling back to spending a raw Google
+ * proof per call, which is a credential mode nobody chose and nothing reports. Loopback, where there is no
+ * sandbox id to key a session by, is the one place the raw proof is still the answer. */
 
 interface StoredSession {
     readonly token: string;
@@ -64,9 +64,6 @@ const { activeSandboxId } = useSandbox();
 // In-memory mirror of the persisted sessions (hydrated lazily per sandbox), so presentedEmail is reactive to
 // mints and invalidations without re-reading storage.
 const sessions = ref<Record<string, StoredSession>>({});
-// Sandboxes whose daemon 404'd the exchange without advertising any route surface (a build predating both),
-// stops re-probing on every call. Cleared per sandbox the moment a hello positively advertises the route.
-const unsupported = new Set<string>();
 // One in-flight establish per sandbox, so concurrent calls share a single Google mint + exchange.
 const inflight = new Map<string, Promise<SandboxBearer | undefined>>();
 const renewing = new Set<string>();
@@ -131,8 +128,8 @@ const write = (sandboxId: string, session: StoredSession, broadcast = true): voi
 
 // Exchange a verified bearer (Google ID token, or a still-valid session when renewing) for a fresh session.
 // A raw fetch on purpose: sandboxRpc's own headers hook calls back into this module, so routing the exchange
-// through it would recurse. `unsupported` is a 404, the daemon predates the route.
-const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unsupported` | `unauthorized`> => {
+// through it would recurse.
+const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSession | `unauthorized`> => {
     try {
         const response = await fetch(`${target.base}/system/session`, {
             method: `POST`,
@@ -142,9 +139,6 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
             },
             signal: AbortSignal.timeout(10_000),
         });
-        if (response.status === 404) {
-            return `unsupported`;
-        }
         if (response.status === 401) {
             return `unauthorized`;
         }
@@ -174,8 +168,8 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
 };
 
 // The sign-in moment: mint a Google proof (silent for a returning Google session; One Tap / the rendered
-// gate otherwise) and exchange it. Only an explicit 404 proves an old daemon needs the raw-token fallback;
-// network errors and malformed/non-2xx answers fail instead of silently changing credential modes.
+// gate otherwise) and exchange it. Network errors and malformed/non-2xx answers fail loudly: a daemon that
+// cannot mint a session is broken, not old, and pretending otherwise would spend a raw Google proof per call.
 const establish = (target: SandboxTarget & { readonly sandboxId: string }): Promise<SandboxBearer | undefined> => {
     const generation = generationOf(target.sandboxId);
     const pending = (async (): Promise<SandboxBearer | undefined> => {
@@ -196,10 +190,6 @@ const establish = (target: SandboxTarget & { readonly sandboxId: string }): Prom
         }
         if (generationOf(target.sandboxId) !== generation) {
             return undefined;
-        }
-        if (minted === `unsupported`) {
-            unsupported.add(target.sandboxId);
-            return { token: idToken, kind: `google` };
         }
         if (minted === `unauthorized`) {
             clearCredential();
@@ -224,7 +214,7 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
     renewing.add(target.sandboxId);
     try {
         const minted = await exchange(target, sessionToken);
-        if (minted !== `unsupported` && minted !== `unauthorized` && generation === generationOf(target.sandboxId)) {
+        if (minted !== `unauthorized` && generation === generationOf(target.sandboxId)) {
             write(target.sandboxId, minted);
         }
         // A failed renewal changes nothing: the current session keeps working until expiry, and a daemon that
@@ -234,16 +224,15 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
     }
 };
 
-// The raw Google proof as a bearer, for the two callers that legitimately spend one: a daemon predating the
-// session exchange, and loopback mode, where there is no sandbox id to key a session by.
+// The raw Google proof as a bearer, for the one caller that legitimately spends one: loopback mode, where
+// there is no sandbox id to key a session by.
 const googleBearer = async (): Promise<SandboxBearer | undefined> => {
     const token = await getIdToken();
     return token === undefined ? undefined : { token, kind: `google` };
 };
 
-// The bearer for the active sandbox: a valid session (renewed in the background when due), or the freshly
-// established one, or, only for pre-session daemons, the raw Google ID token. Undefined
-// only when the user dismisses the sign-in gate.
+// The bearer for the active sandbox: a valid session (renewed in the background when due) or the freshly
+// established one. Undefined only when the user dismisses the sign-in gate.
 const getSessionToken = async (target = currentSandboxTarget()): Promise<SandboxBearer | undefined> => {
     if (target === undefined || target.sandboxId === undefined) {
         return googleBearer();
@@ -258,16 +247,6 @@ const getSessionToken = async (target = currentSandboxTarget()): Promise<Sandbox
             void renew({ ...target, sandboxId }, stored.token).catch(() => undefined);
         }
         return { token: stored.token, kind: `session` };
-    }
-    const advertises = activeSandboxId.value === sandboxId ? routeAdvertised(`system.session`) : undefined;
-    if (advertises === false) {
-        return googleBearer();
-    }
-    if (advertises === true) {
-        unsupported.delete(sandboxId);
-    }
-    if (unsupported.has(sandboxId)) {
-        return googleBearer();
     }
     return inflight.get(sandboxId) ?? establish({ ...target, sandboxId });
 };

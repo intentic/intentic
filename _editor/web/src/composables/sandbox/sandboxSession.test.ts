@@ -10,8 +10,8 @@ import "./sandboxSession";
 
 /* useSandboxSession decides which bearer a daemon call presents. The contract under test: a valid stored
  * session needs neither Google nor the network; establishing one is a single shared Google mint + exchange;
- * pre-session daemons degrade to the raw ID token (and are not re-probed per call); renewal happens in the
- * background with the session itself. */
+ * a daemon that refuses the exchange fails loudly rather than degrading to the raw ID token; renewal happens
+ * in the background with the session itself. */
 
 const state = vi.hoisted(() => ({
     idToken: `id-token` as string | undefined,
@@ -19,7 +19,6 @@ const state = vi.hoisted(() => ({
     // What the Google layer was ASKED to do with the credential: a session rejection must never reach either.
     cleared: 0,
     canceled: 0,
-    advertised: undefined as boolean | undefined,
     sandboxId: `sb-1` as string | undefined,
     /* A mint that does not resolve: what a real one does while Google's prompt (or the app's own gate) is up
      * and the reader has not answered it. The state a switch has to be able to leave behind.
@@ -70,8 +69,6 @@ vi.mock("./useSandbox", async () => {
         }),
     };
 });
-vi.mock("./useDaemonRoutes", () => ({ routeAdvertised: () => state.advertised }));
-
 // Storage stub for the node test environment: the standard Storage surface, backed by a Map.
 const stubStorage = (): void => {
     const map = new Map<string, string>();
@@ -97,7 +94,7 @@ const sessionResponse = (token = `sess-minted`): Response =>
         headers: { "content-type": `application/json` },
     });
 
-// Fresh module per test: the singleton carries the in-memory session mirror and the learned-unsupported set.
+// Fresh module per test: the singleton carries the in-memory session mirror.
 const load = async (): Promise<typeof import("./sandboxSession")> => {
     vi.resetModules();
     return import("./sandboxSession");
@@ -109,7 +106,6 @@ beforeEach(() => {
     state.minted = 0;
     state.cleared = 0;
     state.canceled = 0;
-    state.advertised = undefined;
     state.sandboxId = `sb-1`;
     state.mintParks = false;
     // The active-sandbox ref lives in the mock factory, which vitest evaluates once for the whole file, so it
@@ -162,37 +158,20 @@ it(`shares one in-flight establish across concurrent calls`, async () => {
     expect(state.minted).toBe(1);
 });
 
-it(`falls back to the raw ID token on a 404 exchange and stops probing, until the route is advertised`, async () => {
-    const fetchMock = vi.fn(async () => new Response(`not found`, { status: 404 }));
-    vi.stubGlobal(`fetch`, fetchMock);
-    const { useSandboxSession } = await load();
-    const { getSessionToken } = useSandboxSession();
-    expect(await getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
-    expect(await getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    // The daemon was updated mid-session: a hello now advertises the route, so the exchange is retried.
-    state.advertised = true;
-    fetchMock.mockImplementation(async () => sessionResponse());
-    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-});
-
-it(`does not fall back to the raw Google token when session exchange fails`, async () => {
+/* A DAEMON THAT WILL NOT MINT IS BROKEN, NOT OLD, and both spellings of the refusal say so. A 404 used to
+ * mean "this build predates the route" and bought the caller a raw Google ID token per call, silently: a
+ * credential mode nobody chose, on a sandbox nothing reported as degraded. The exchange is the only road to a
+ * bearer now, so the failure surfaces where it happened. */
+it.each([
+    [404, /refused its session exchange \(404\)/],
+    [500, /refused its session exchange \(500\)/],
+])(`fails loudly on a %i exchange rather than spending a raw Google token`, async (status, message) => {
     vi.stubGlobal(
         `fetch`,
-        vi.fn(async () => new Response(`broken`, { status: 500 })),
+        vi.fn(async () => new Response(`refused`, { status })),
     );
     const { useSandboxSession } = await load();
-    await expect(useSandboxSession().getSessionToken()).rejects.toThrow(/refused its session exchange/);
-});
-
-it(`skips the exchange entirely when the daemon positively advertises no session route`, async () => {
-    state.advertised = false;
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
-    const { useSandboxSession } = await load();
-    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(useSandboxSession().getSessionToken()).rejects.toThrow(message);
 });
 
 it(`serves a session nearing expiry immediately and renews it in the background with the session bearer`, async () => {
@@ -295,11 +274,12 @@ it(`…including when the other window's invalidate lands first`, async () => {
     expect(state.cleared).toBe(0);
 });
 
+// Loopback: no sandbox id to key a session by, so the raw Google proof is the bearer. It is the only caller
+// that still spends one, and a rejection has to throw it away or a dead token is replayed forever.
 it(`a rejected raw Google proof still clears it, so a dead token cannot be replayed forever`, async () => {
-    state.advertised = false;
     const { useSandboxSession } = await load();
     const { getSessionToken, rejectSessionToken } = useSandboxSession();
-    const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
+    const target = { sandboxId: undefined, base: `https://daemon.test`, connectToken: `connect` };
     const bearer = await getSessionToken(target);
     expect(bearer).toEqual({ token: `id-token`, kind: `google` });
 

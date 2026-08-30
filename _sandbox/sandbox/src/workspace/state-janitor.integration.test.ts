@@ -26,30 +26,27 @@ test("boot sweep empties tmp/ but keeps the directory for the next writer", asyn
     expect(await readdir(join(root, ".intentic/local/tmp"))).toEqual([]);
 });
 
-test("boot sweep deletes retired DERIVED roots and leaves secret and artifact quarantine alone", async () => {
+/* THE SWEEP DELETES WHAT THE TABLE CLASSES AS DISPOSABLE, AND NOTHING ELSE. Every rule it has is derived from
+ * a class, so a tree the table has no name for is not the janitor's to touch: "I don't recognise this" is the
+ * one input that must never resolve to `rm -rf`, because it is exactly what a store added tomorrow, and a
+ * directory an owner put there by hand, both look like. */
+test("boot sweep leaves declared state and undeclared trees alike alone", async () => {
     const root = await workspace();
-    // A retired derived root (the abandoned whisper home) and a nested one (the pre-artifacts capture dir).
-    await mkdir(join(root, ".intentic/whisper"), { recursive: true });
-    await writeFile(join(root, ".intentic/whisper/ggml-small.bin"), "model bytes");
-    await mkdir(join(root, ".intentic/browser/output"), { recursive: true });
-    await writeFile(join(root, ".intentic/browser/output/page.png"), "png");
-    // Quarantined but NOT the janitor's to delete: a retired secret root and a retired artifacts root.
-    await mkdir(join(root, ".intentic/claude"), { recursive: true });
-    await mkdir(join(root, ".intentic/attachments"), { recursive: true });
-    // The LIVE profile dir, which since the state dir was grouped is a different place entirely from the
-    // retired flat one above, and is the thing that must survive the sweep.
+    await mkdir(join(root, ".intentic/local/tmp"), { recursive: true });
+    // Declared, and not disposable: credentials, config and the live browser profiles.
+    await mkdir(join(root, ".intentic/secrets/auth/claude"), { recursive: true });
+    await mkdir(join(root, ".intentic/records/artifacts/attachments"), { recursive: true });
     await mkdir(join(root, ".intentic/local/browser/reddit"), { recursive: true });
+    // Undeclared: a tree at the state root that no entry in the table claims.
+    await mkdir(join(root, ".intentic/some-future-store"), { recursive: true });
+    await writeFile(join(root, ".intentic/some-future-store/state.bin"), "bytes");
 
     await sweepStateAtBoot(root, log);
 
-    expect(await exists(join(root, ".intentic/whisper"))).toBe(false);
-    // The whole flat profile root goes now, not just its capture subdir: the live profiles moved under `local`,
-    // so everything left at the old spelling is abandoned by definition.
-    expect(await exists(join(root, ".intentic/browser"))).toBe(false);
-    expect(await exists(join(root, ".intentic/claude"))).toBe(true);
-    expect(await exists(join(root, ".intentic/attachments"))).toBe(true);
-    // …and the live profiles, one folder over, are untouched by any of it.
+    expect(await exists(join(root, ".intentic/secrets/auth/claude"))).toBe(true);
+    expect(await exists(join(root, ".intentic/records/artifacts/attachments"))).toBe(true);
     expect(await exists(join(root, ".intentic/local/browser/reddit"))).toBe(true);
+    expect(await exists(join(root, ".intentic/some-future-store/state.bin"))).toBe(true);
 });
 
 test("aged sweep deletes month-old captures and keeps fresh ones and everything else in artifacts/", async () => {

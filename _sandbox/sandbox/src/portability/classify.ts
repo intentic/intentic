@@ -1,11 +1,4 @@
-import {
-    HISTORY_STATE_FILES,
-    type Portability,
-    RETIRED_WORKSPACE_STATE_DIRS,
-    type StateFile,
-    stateFileFor,
-    WORKSPACE_STATE_FILES,
-} from "@intentic/sandbox-contract";
+import { HISTORY_STATE_FILES, type Portability, type StateFile, stateFileFor, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
 
 /* WHAT HAPPENS TO ONE PATH IN A BUNDLE, the manifests turned into a decision, in the one place both sides read.
  *
@@ -29,31 +22,12 @@ import {
  *   in a bundle, and the manifest is small enough that declaring is cheap.
  */
 
-// Retired roots are quarantine only: no producer reads them. The runtime tree that used to be patched in here
-// as an out-of-table exception is now the table's own `.intentic/local/runtime/` entry, the longest-match below
-// answers for it like everything else.
-const retiredPrefixes = (dirs: readonly string[]): string[] => dirs.map((dir) => `.intentic/${dir}/`);
-const RETIRED_SECRET = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.secret);
-const DERIVED_PREFIXES = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.derived);
-// The ownership records left at their old flat spelling. `identity` rather than `secret` so an export that
-// opts into secrets still cannot carry a stale one, see their entry in the quarantine record.
-const RETIRED_IDENTITY = retiredPrefixes(RETIRED_WORKSPACE_STATE_DIRS.identity);
-const hasPrefix = (relPath: string, prefixes: readonly string[]): boolean =>
-    prefixes.some((prefix) => relPath === prefix.slice(0, -1) || relPath.startsWith(prefix));
-
-// Workspace-root-relative, forward-slash. Longest-match over the core table, then the default.
-export const workspacePortability = (relPath: string): Portability => {
-    if (hasPrefix(relPath, DERIVED_PREFIXES)) {
-        return "derived";
-    }
-    if (hasPrefix(relPath, RETIRED_SECRET)) {
-        return "secret";
-    }
-    if (hasPrefix(relPath, RETIRED_IDENTITY)) {
-        return "identity";
-    }
-    return stateFileFor(relPath, WORKSPACE_STATE_FILES)?.portability ?? "carry";
-};
+/* Workspace-root-relative, forward-slash. Longest-match over the core table, then the default, and nothing
+ * else: the runtime tree that used to be patched in here as an out-of-table exception is the table's own
+ * `.intentic/local/runtime/` entry now, so the longest-match answers for it like everything else. Every
+ * exception this function has ever grown was a name the table did not yet carry, which is the argument for
+ * adding the entry rather than the branch. */
+export const workspacePortability = (relPath: string): Portability => stateFileFor(relPath, WORKSPACE_STATE_FILES)?.portability ?? "carry";
 
 // historyRoot-relative, forward-slash. Unclaimed is `derived`, see the asymmetry note above.
 export const historyPortability = (relPath: string): Portability => stateFileFor(relPath, HISTORY_STATE_FILES)?.portability ?? "derived";

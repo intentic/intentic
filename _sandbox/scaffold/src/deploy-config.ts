@@ -38,8 +38,9 @@ interface ProviderSpec {
     readonly fields: readonly FieldSpec[];
 }
 
-// Cloudflare/github/stripe use fixed env-var names (a single account each). Hosts get a PER-NAME ssh-key var (see
-// hostSshKeyEnvVar) so multiple deploy targets don't collide; the `envVar` here is the `self` fallback.
+// Cloudflare/github/stripe use fixed env-var names (a single account each). Hosts get a PER-NAME ssh-key var
+// (see hostSshKeyEnvVar) so multiple deploy targets don't collide, so the `envVar` here is never read for a
+// host: hostSshKeyEnvVar answers for every one of them, `self` included.
 const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
     host: {
         fields: [
@@ -48,7 +49,9 @@ const REGISTRY: Record<InventoryProvider, ProviderSpec> = {
             { key: `port`, source: `number` },
             // SSH transport; only written when non-default (e.g. "cloudflared" for a NAT'd self-host).
             { key: `via`, source: `string`, optional: true },
-            { key: `sshKey`, source: `env`, envVar: `HOST_SSH_KEY` },
+            // No `envVar`: hostSshKeyEnvVar answers for every host, so a static one here could only ever be a
+            // second spelling nothing reads.
+            { key: `sshKey`, source: `env` },
         ],
     },
     cloudflare: {
@@ -86,10 +89,10 @@ const SERVICE_REGISTRY: Record<ServiceKind, ProviderSpec> = {
     infisical: { fields: [{ key: `domain`, source: `string` }] },
 };
 
-// The env var a host's SSH private key rides. `self` keeps HOST_SSH_KEY (legacy); any other host `<name>` reads
-// env("<NAME>_SSH_KEY") (name upper-cased). ONE rule, shared by the render below and the daemon's /enroll route
+// The env var a host's SSH private key rides: host `<name>` reads env("<NAME>_SSH_KEY"), name upper-cased, with
+// no name spelled differently from the rest. ONE rule, shared by the render below and the daemon's /enroll route
 // (enroll-host.ts) so the two can never drift.
-export const hostSshKeyVar = (name: string): string => (name === `self` ? `HOST_SSH_KEY` : `${name.toUpperCase()}_SSH_KEY`);
+export const hostSshKeyVar = (name: string): string => `${name.toUpperCase()}_SSH_KEY`;
 
 // Returns undefined for non-host / non-sshKey fields so they use their static envVar.
 const hostSshKeyEnvVar = (entry: InventoryEntry, field: FieldSpec): string | undefined =>

@@ -603,8 +603,9 @@ conversation's worktree instead of a path that still reaches the shared checkout
   evidence/workflow reports are under `.intentic/records/artifacts/`, extension scratch is derived under
   `.intentic/local/runtime/`, and agent scratch is derived under `.intentic/local/tmp/`. Small owner-edited manifests remain
   directly under `.intentic/` so their stable paths stay readable. A janitor
-  (src/workspace/state-janitor.ts) collects what the classes call disposable: tmp/ at boot, retired derived
-  roots, unreferenced pnpm-store blobs, browser captures past thirty days.
+  (src/workspace/state-janitor.ts) collects what the classes call disposable, and only that: tmp/ at boot,
+  unreferenced pnpm-store blobs, browser captures past thirty days. A tree the table has no name for is left
+  alone, since "I don't recognise this" must never resolve to a delete.
 - The Claude credential lives in the sandbox's own `.intentic/secrets/auth/claude/` store (connected via the daemon's
   `/claude/*` flow), resolved + injected into the SDK per turn: never held by the platform. The generic file API
   protects the whole `auth/` parent, provider-native `sessions/`, and logged-in `browser/` profiles; purpose-built

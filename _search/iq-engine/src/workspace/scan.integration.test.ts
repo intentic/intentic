@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { RETIRED_WORKSPACE_STATE_DIRS } from "@intentic/sandbox-contract";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeFixtureWorkspace } from "../testing.js";
 import { filterScope, langOf, sweep } from "./scan.js";
@@ -82,7 +81,9 @@ test("the agent plane's byproducts are excluded, its manifests are not", async (
         `${STATE_DIR}/records/artifacts/attachments/u1/brief.md`,
         `${STATE_DIR}/local/runtime/extensions/whatsapp/gateway.url`,
         `${STATE_DIR}/local/browser/reddit/Default/Cookies`,
-        ...Object.values(RETIRED_WORKSPACE_STATE_DIRS).flatMap((dirs) => dirs.map((dir) => `.intentic/${dir}/retired-state`)),
+        // A tree the state table has never heard of. The floor is an allow-list, so tomorrow's undeclared store
+        // is out of scope by construction rather than by somebody remembering to name it.
+        `${STATE_DIR}/some-future-store/state.bin`,
         // A workspace can contain checkouts that are themselves intentic workspaces: their byproducts are no
         // more searchable than the root's own.
         "alpha/.intentic/local/cache/iq/index.db",

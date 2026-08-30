@@ -374,7 +374,7 @@ const convergeSession = async (mutagen: string, spec: SyncSessionSpec, log: Log)
             return;
         }
         log(
-            "the running sync session was created by an older agent: recreating it so this version's rules apply (no .git file-syncs anymore; commits arrive via the git bridge instead).",
+            "the running sync session does not match this build's spec: recreating it so the current rules apply (no .git file-syncs; commits arrive via the git bridge instead).",
         );
         spawnSync(mutagen, ["sync", "terminate", spec.name], { stdio: "ignore", windowsHide: true });
     }

@@ -32,19 +32,21 @@ describe("deploy-config managed region", () => {
 
     test("round-trips a backend entry, dropping its secret (env) fields from the parsed values", () => {
         const src = scaffoldDeployConfig([hostEntry]);
-        // The rendered host carries sshKey: env("HOST_SSH_KEY"); the parser surfaces only the non-secret scalars.
-        expect(src).toContain(`sshKey: env("HOST_SSH_KEY")`);
+        // The rendered host carries sshKey: env("SELF_SSH_KEY"); the parser surfaces only the non-secret scalars.
+        expect(src).toContain(`sshKey: env("SELF_SSH_KEY")`);
         expect(readManagedRegion(src)).toEqual([
             { kind: "backend", provider: "host", name: "self", values: { address: "1.2.3.4", user: "deploy", port: 22 } },
         ]);
     });
 
-    test("a non-self host reads its OWN ssh-key env var (<NAME>_SSH_KEY); self keeps HOST_SSH_KEY", () => {
+    // ONE RULE FOR EVERY HOST: <NAME>_SSH_KEY, `self` included. `self` used to be spelled HOST_SSH_KEY, which
+    // made the local target the one host whose secret could not be derived from its name.
+    test("every host reads its OWN ssh-key env var (<NAME>_SSH_KEY), with no name spelled differently", () => {
         const prod = { kind: "backend", provider: "host", name: "prod", values: { address: "203.0.113.10", user: "deploy", port: 22 } } as const;
         const src = scaffoldDeployConfig([prod]);
         expect(src).toContain(`sshKey: env("PROD_SSH_KEY")`);
-        expect(src).not.toContain(`HOST_SSH_KEY`);
         expect(readManagedRegion(src)).toEqual([prod]);
+        expect(scaffoldDeployConfig([hostEntry])).toContain(`sshKey: env("SELF_SSH_KEY")`);
     });
 
     test("round-trips the cloudflare zone picked at connect time (token stays an env() secret)", () => {
@@ -88,7 +90,7 @@ describe("deploy-config managed region", () => {
             ``,
             `export const intent = defineIntent((i) => {`,
             `    // <intentic> managed: do not edit by hand`,
-            `    const self = i.have.host("self", { address: "1.2.3.4", user: "deploy", port: 22, sshKey: env("HOST_SSH_KEY") });`,
+            `    const self = i.have.host("self", { address: "1.2.3.4", user: "deploy", port: 22, sshKey: env("SELF_SSH_KEY") });`,
             `    // </intentic>`,
             `    i.want.app("web", { on: self, expose: cf, environments: {} });`,
             `});`,

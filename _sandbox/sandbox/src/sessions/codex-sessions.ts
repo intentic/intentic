@@ -81,11 +81,11 @@ const outputText = (output: string | { type?: string; text?: string }[] | undefi
 
 /* A finished Codex thread, in the shape a reopened chat redraws.
  *
- * This is the BACKFILL path, not the live one: a thread that ran under the transcript record reads back from
- * there, exactly as it streamed. What is here is the thread that ran before it, the rollout is a lower-level
- * format than the frames the client saw (the tool vocabulary is the model's, not the daemon's normalized one),
- * so the cards it yields are coarser than they were live. Coarse and present beats a blank conversation, which
- * is what every native Codex agent showed before this existed. */
+ * This is the RECOVERY path, not the live one: a thread with a settled turn reads back from the transcript
+ * record, exactly as it streamed. What is here is the thread that has no record yet, because the turn that
+ * would have written one was killed mid-flight (agent-transcript.ts). The rollout is a lower-level format than
+ * the frames the client saw (the tool vocabulary is the model's, not the daemon's normalized one), so the cards
+ * it yields are coarser than they were live. Coarse and present beats a blank conversation. */
 export const readCodexSession = async (home: string, threadId: string, root: string): Promise<RestoredMessage[]> => {
     const path = await findRollout(home, threadId);
     if (path === undefined) {
