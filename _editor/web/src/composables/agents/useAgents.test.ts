@@ -325,6 +325,33 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
+    /* THE SAME COMPOSER ONE SEND LATER, and the mirror image of the case above: the reported bug.
+     *
+     * A window that is not drawing the chat keeps the tab objects it already built, frozen with whatever was in
+     * their composers when the panel left (it forgets the stored strip, not the in-memory one). The board counted
+     * those AND the echo, so the send went out in the popped-out window, which cleared its own composer and
+     * published an empty snapshot, and the card over here went on wearing "Unsent message" for a message that no
+     * longer existed anywhere: nothing this window could do would ever clear a composer it is not showing. */
+    it("drops the mark when the popped-out chat says the message went, whatever this window's frozen tab holds", async () => {
+        const { receiveDraftNote } = await import("../chat/draftEcho");
+        const { receiveFloatingNote } = await import("../floating");
+        setAgents([registered(`a1`)], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.draft.value = `fix the login redirect`;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [{ id: `a1`, preview: `fix the login redirect` }] });
+        expect(useAgents().lanes.value.finished.map((card) => card.unsent)).toEqual([true]);
+
+        // Sent out there: the holder's next snapshot names nothing, and this window's copy is now a stale one.
+        receiveDraftNote({ kind: `drafts`, sandbox: undefined, drafts: [] });
+
+        expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent }))).toEqual([{ id: `a1`, unsent: false }]);
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
     /* AN UNREGISTERED CONVERSATION CARRYING AN ERROR IS NOT A DRAFT. The only way one gets here is that its send
      * was REFUSED: the daemon turns a request away and never makes an entry, which is precisely why the fleet
      * has never heard of it. Reading that as a draft put a card nobody can act on into the Active lane, sorted

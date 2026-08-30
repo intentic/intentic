@@ -4,7 +4,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, turnInFlight, unregistered } from "./agentStatus";
 import type { Conversation } from "../chat/conversation";
 import { invalidateAgentTranscript } from "../chat/agentTranscript";
-import { draftPreview, elsewhereDrafts } from "../chat/draftEcho";
+import { draftPreview, drawsChat, elsewhereDrafts } from "../chat/draftEcho";
 import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
 import { summonChat } from "../chat/summon";
 import { onScreen } from "../onScreen";
@@ -376,17 +376,22 @@ const fleet = computed<FleetAgent[]>(() => {
     const openIds = new Set(conversations.value.map((conversation) => conversation.conversationId));
     const carded = new Set(registry.value.map((agent) => agent.id));
     /* The tabs holding words that have not gone out, the one thing the daemon's roster cannot know, and the
-     * reason the two halves below are joined against it rather than against `openIds` alone.
+     * reason the halves below are joined against it rather than against `openIds` alone.
      *
-     * BOTH HALVES OF "THIS BROWSER": the composers in this window, and the ones in the window that has the chat
-     * panel when that is somewhere else (draftEcho). Without the second the board went blind exactly when it
-     * was the only surface left showing the work: the chat popped out onto another screen, its composer out
-     * there, and the card over here claiming there was nothing in it. */
+     * ASKED OF WHICHEVER WINDOW DRAWS THE CHAT, and of that one only (draftEcho): this window's own composers
+     * while the chat is docked here, the echo from the window holding it while it is popped out. Without the
+     * echo the board went blind exactly when it was the only surface left showing the work, the chat popped out
+     * onto another screen and the card over here claiming there was nothing in it. Taking BOTH, which is what
+     * this used to do, fails the other way round and is the bug it replaces: a window that is not drawing the
+     * chat keeps its tab objects frozen at the moment the panel left, so a message sent out in the floating
+     * window cleared its mark out there and left this board wearing "Unsent message" for words that no longer
+     * existed anywhere. */
     const elsewhere = elsewhereDrafts.value;
-    const unsentIds = new Set([
-        ...conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId),
-        ...elsewhere.keys(),
-    ]);
+    const unsentIds = new Set(
+        drawsChat.value
+            ? conversations.value.filter((conversation) => conversation.unsent.value).map((conversation) => conversation.conversationId)
+            : elsewhere.keys(),
+    );
     // A draft is a conversation the fleet has never heard of. NOT one that is merely absent from the live
     // roster, which is also true of every agent the user has archived and of every agent at all while the
     // events stream is down. `carded` is the join's own guard: an id the registry half already rendered must
@@ -399,9 +404,11 @@ const fleet = computed<FleetAgent[]>(() => {
              * when that is another one. A board of drafts otherwise says "New agent" as many times as there are
              * cards, at the one moment the reader is trying to tell them apart.
              *
-             * Both halves go through the same fold, which is also what turns "unsent, but an attachment rather
-             * than words" into no name at all: such a card wears the mark and keeps its "New agent". */
-            const preview = draftPreview(conversation.draft.value) ?? draftPreview(elsewhere.get(conversation.conversationId) ?? ``);
+             * The same source as the mark above, never a fallback from one to the other: a stale local draft is
+             * exactly as wrong as a name as it is as a mark. Both halves go through the same fold, which is also
+             * what turns "unsent, but an attachment rather than words" into no name at all: such a card wears the
+             * mark and keeps its "New agent". */
+            const preview = draftPreview(drawsChat.value ? conversation.draft.value : (elsewhere.get(conversation.conversationId) ?? ``));
             const draft: FleetAgent = {
                 id: conversation.conversationId,
                 status: clientStatus(conversation),
@@ -411,7 +418,7 @@ const fleet = computed<FleetAgent[]>(() => {
                 attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
                 open: true,
                 unread: false,
-                unsent: conversation.unsent.value || elsewhere.has(conversation.conversationId),
+                unsent: unsentIds.has(conversation.conversationId),
                 preview,
             };
             if (conversation.title.value !== null) {

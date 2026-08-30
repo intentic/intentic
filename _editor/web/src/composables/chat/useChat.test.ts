@@ -887,6 +887,31 @@ describe(`abandoned drafts`, () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
+    /* ...and the words may be GONE from that other window, which is the same rule read the other way. This
+     * window's copy of a popped-out chat's tab is frozen at the moment the panel left, so once the message is
+     * sent out there nothing here can clear it: the holder's snapshot stops naming the chat, and a sweep that
+     * still read the frozen composer kept the tab (and its board card) alive for the rest of the session. */
+    it(`sweeps a draft the popped-out chat no longer names, whatever this window's frozen copy holds`, async () => {
+        const { receiveDraftNote } = await import("./draftEcho");
+        const { receiveFloatingNote } = await import("../floating");
+        const chat = useChat();
+        const first = chat.active.value.conversationId;
+        chat.draft.value = `real work`;
+        const elsewhere = newChat();
+        // This window's frozen copy of the popped-out tab, still holding what was in it when the panel left.
+        elsewhere.draft.value = `half a thought`;
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
+        receiveDraftNote({ kind: `drafts`, sandbox: `sb1`, drafts: [] });
+        await nextTick();
+
+        chat.setActive(first);
+        await nextTick();
+
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+    });
+
     it(`leaves a draft the fleet has registered alone: that tab is a real agent now`, async () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;

@@ -85,6 +85,22 @@ const NOTHING: ReadonlyMap<string, string> = new Map();
  *  the chat itself, since then its own conversations are the answer and an echo could only be a stale copy. */
 export const elsewhereDrafts: ComputedRef<ReadonlyMap<string, string>> = computed(() => (shows.value ? NOTHING : heard.value));
 
+/** THE OTHER HALF OF THAT RULE, and the one every reader outside this module has to apply for itself: exactly
+ *  one window speaks for a composer, so while the chat is drawn somewhere else this window's OWN conversations
+ *  are the stale copy and the echo above is the only account worth believing.
+ *
+ *  A window that stops drawing the chat forgets its STORED strip (useChat's snapshot watch) but keeps the tab
+ *  objects it already built, frozen with whatever was in their composers at the moment the panel left. A reader
+ *  that took the UNION of the two halves therefore latched those words permanently: the send happened out in the
+ *  floating window, which cleared its own mark and published an empty snapshot, while the dashboard went on
+ *  wearing "Unsent message" for a message that no longer existed anywhere. Nothing can retract a local draft in a
+ *  window whose composer the user cannot reach.
+ *
+ *  It reads optimistically during boot (`showsPanel`: a window believes it draws every panel until a holder's
+ *  first beat arrives), which is the right way round for this: an unproven window answers from its own tabs,
+ *  exactly as it did before the chat moved, and switches to the echo the moment the holder speaks. */
+export const drawsChat: ComputedRef<boolean> = shows;
+
 // The latest snapshot this window could publish, so taking ownership and a roll-call can both answer without
 // waiting for a keystroke. It is filled before the floating route claims the panel during boot.
 let published: readonly UnsentDraft[] = [];

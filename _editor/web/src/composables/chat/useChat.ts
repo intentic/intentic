@@ -24,7 +24,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey, ref, shallowRef, watch } from "vue";
 import { agentTranscript, type AgentTranscript } from "./agentTranscript";
-import { draftPreview, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
+import { draftPreview, drawsChat, elsewhereDrafts, publishDrafts, type UnsentDraft } from "./draftEcho";
 import { traceFocus } from "./focusTrace";
 import { Conversation, type PendingAttachment } from "./conversation";
 import { accountsLoaded, providerAccounts, providerRefusals, rememberedAccountFor, selectedAccountId, translatorAccounts } from "./providerAccounts";
@@ -96,15 +96,17 @@ const activeId = ref<string>(``);
  * anything unsent (Conversation.unsent, composer text, a staged attachment, a queued message), a transcript,
  * a session, a running turn, a rename, an unread error, or a fleet registration.
  *
- * ...and words in the composer count WHICHEVER WINDOW's composer they are in (draftEcho). A popped-out chat is
- * a window of its own, so a draft being typed out there is empty here, and this sweep was taking the board's
- * card for it away on the next click: the one thing in this app that exists nowhere but in front of the user,
- * dropped because it was in front of them on another screen. */
+ * ...and words in the composer are read from WHICHEVER WINDOW is drawing the chat, this one or the one that
+ * popped it out (draftEcho), never from both. A popped-out chat is a window of its own, so a draft being typed
+ * out there is empty here, and this sweep was taking the board's card for it away on the next click: the one
+ * thing in this app that exists nowhere but in front of the user, dropped because it was in front of them on
+ * another screen. Reading this window's frozen copy ALONGSIDE the echo is the opposite failure and just as
+ * durable: words the panel took with it when it left keep a tab alive here forever, since no send out there can
+ * clear a composer this window is no longer showing. */
 const untouchedDraft = (conversation: Conversation): boolean =>
     !conversation.registered.value &&
     !conversation.streaming.value &&
-    !conversation.unsent.value &&
-    !elsewhereDrafts.value.has(conversation.conversationId) &&
+    !(drawsChat.value ? conversation.unsent.value : elsewhereDrafts.value.has(conversation.conversationId)) &&
     conversation.messages.value.length === 0 &&
     conversation.session.value === undefined &&
     conversation.title.value === null &&
