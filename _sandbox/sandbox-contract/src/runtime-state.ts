@@ -69,6 +69,22 @@ const RUNTIME_DOMAINS = [
     // is why the daemon rate-limits this domain rather than pushing every mutation (see runtime-watch.ts).
     { domain: "subagents", invalidates: [["subagents"]] },
 
+    /* THE MACHINES ON THE OTHER END OF A SOCKET, three domains that are one story: the user's computers, the
+     * browsers holding the extension, and this sandbox's runners.
+     *
+     * Announced, and about as announced as a fact can be. "Online" here is not sampled, inferred or timed out
+     * of, it IS a socket in this process: the hub accepts one, replaces one, drops one on a failed heartbeat, or
+     * cuts one on a revoke, and those four moments are the entire set of ways the answer changes. Nothing on
+     * disk moves, no pane appears, and no other feed could carry it.
+     *
+     * They land on `capabilities` because a host or webext card's state is LITERALLY the hub's answer
+     * (handlers/host.ts: `hub.online(id) ? active : pending`), which is what a person watches while they paste a
+     * pairing command into a laptop. That wait is the whole reason these are here: it was three seconds of
+     * polling per card, running only because nobody had told the browser that the daemon already knew. */
+    { domain: "hosts", invalidates: [["capabilities"], ["computers"]] },
+    { domain: "webext", invalidates: [["capabilities"]] },
+    { domain: "runners", invalidates: [["runners"]] },
+
     /* The post queue, when the DAEMON moves it rather than the owner. Approving is the owner's own mutation and
      * refetches itself, but everything after that happens while nobody is touching the page: a held post coming
      * due, a Discord send landing, a publish turn writing back what went out. Those are the moments the row on

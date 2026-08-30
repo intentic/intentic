@@ -3,7 +3,7 @@ import { INVENTORY_SERVICES } from "@intentic-app/capability-catalog";
 import type { InventoryEntry } from "@intentic-app/api-contract";
 import { Button, Card, ui, Code, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import SecretField from "../../components/SecretField.vue";
 import { bashCommand } from "../../environments/scriptCommand";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
@@ -268,9 +268,10 @@ const onAdded = (): void => {
     }
 };
 
-// A refresh/navigation during a run: the tmux job survived it, recover "Applying…" and resume watching.
+// A refresh/navigation during a run: the tmux job survived it, recover "Applying…" and resume watching. No
+// teardown to pair with it any more: what watches the run is a scope-bound watcher on the shared terminals
+// list, which retires with this component the way every other watcher here does.
 onMounted(progress.recover);
-onUnmounted(progress.stopWatching);
 </script>
 
 <template>

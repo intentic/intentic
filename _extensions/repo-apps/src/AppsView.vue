@@ -12,11 +12,11 @@ import {
     useLoadingReveal,
     type IconName,
 } from "@intentic/extension-ui";
-import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
+import { computed, onMounted, ref, toRef, watch } from "vue";
 import AddAppDialog from "./AddAppDialog.vue";
 import { groupTests } from "./appTests";
 import { host } from "./host";
-import { listTerminals } from "./terminals";
+import { listTerminals, useTerminals } from "./terminals";
 import { useApps } from "./useApps";
 import { useVitest } from "./useVitest";
 
@@ -40,11 +40,14 @@ const actionError = ref<string | undefined>(undefined);
 const addOpen = ref(false);
 // The add-apps job runs in a one-shot tmux session (see workspace.routes addApps); its terminal is the live
 // install log. `adding` drives the indicator from kickoff until the daemon's sweep sees the job's shell back at
-// its prompt (watchAdd). The `--add_apps` key uses an underscore so it can never collide with an app panel
-// session (panel-<repo>--<app>).
+// its prompt, which it announces on the `terminals` domain (watchAdd). The `--add_apps` key uses an underscore
+// so it can never collide with an app panel session (panel-<repo>--<app>).
 const adding = ref(false);
 const ADD_SESSION = `panel-${props.repo}--add_apps`;
-let addPoll: ReturnType<typeof setInterval> | undefined;
+/* Whether the add job's session has been SEEN alive. Absence reads as "finished" only after presence: before
+ * that it is the ordinary first moment after kickoff, when the daemon has created the session and not listed it
+ * yet, and taking it for completion would clear the spinner instantly on every add. */
+let sawAdd = false;
 
 const stopped = computed(() => apps.value.filter((app) => !app.running));
 const running = computed(() => apps.value.filter((app) => app.running));
@@ -130,21 +133,31 @@ const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
         openFocused(`panel-${props.repo}--${suffix}`);
     });
 
-// Poll until the add-apps session is gone or its tab dims (running=false once the daemon's sweep sees the job's
-// shell back at its prompt), then clear the spinner and refresh so the new apps appear. A transient list failure
-// keeps polling: the job's fate is unknown.
+/* Wait for the add-apps session to go away or its tab to dim (running=false once the daemon's sweep sees the
+ * job's shell back at its prompt), then clear the spinner and refresh so the new apps appear.
+ *
+ * Pushed rather than polled: `sessions` is the shared, unpolled terminals list (terminals.ts), which the daemon
+ * refreshes on the `terminals` frame it sends for exactly this transition. A transient list failure cannot
+ * clear the spinner early, vue-query holds the last good data through a failed refetch, so the list never
+ * blanks, and `sawAdd` means absence is only read as an ending once there was something to end. */
+const { sessions } = useTerminals();
 const watchAdd = (): void => {
-    addPoll ??= setInterval(async () => {
-        const sessions = await listTerminals().catch(() => undefined);
-        if (sessions === undefined || sessions.some((session) => session.name === ADD_SESSION && session.running)) {
-            return;
-        }
-        clearInterval(addPoll);
-        addPoll = undefined;
+    sawAdd = false;
+};
+watch(sessions, (list) => {
+    if (!adding.value) {
+        return;
+    }
+    if (list.some((session) => session.name === ADD_SESSION && session.running)) {
+        sawAdd = true;
+        return;
+    }
+    if (sawAdd) {
+        sawAdd = false;
         adding.value = false;
         void refresh();
-    }, 2500);
-};
+    }
+});
 
 // Kick off the add-apps tmux job (from the dialog's picks) and hand the user its terminal tab: the terminal IS
 // the live install log and survives refresh/navigation. Completion is observed by watchAdd polling `running`.
@@ -188,19 +201,17 @@ const startAll = (): Promise<void> =>
     });
 const stopAll = (): Promise<void> => act(async () => Promise.all(running.value.map((app) => stopApp(app.app))).then(() => undefined));
 
-// A refresh/navigation during a run: the tmux job survived it, so recover the "Adding…" state from the
-// terminals list and resume watching. Unmount only stops the watcher: the job and its tab live on globally.
+/* A refresh/navigation during a run: the tmux job survived it, so recover the "Adding…" state from the terminals
+ * list and resume watching. A one-shot read rather than the reactive list, which may not have answered yet on
+ * mount, and seeing the session here is what arms `sawAdd` for the ending.
+ *
+ * No unmount teardown to pair with it any more: what watches the job is a scope-bound watcher that retires with
+ * this view, and the job and its tab live on globally either way. */
 onMounted(async () => {
-    const sessions = await listTerminals().catch(() => undefined);
-    if (sessions !== undefined && sessions.some((session) => session.name === ADD_SESSION && session.running)) {
+    const listed = await listTerminals().catch(() => undefined);
+    if (listed?.some((session) => session.name === ADD_SESSION && session.running)) {
         adding.value = true;
-        watchAdd();
-    }
-});
-onUnmounted(() => {
-    if (addPoll !== undefined) {
-        clearInterval(addPoll);
-        addPoll = undefined;
+        sawAdd = true;
     }
 });
 </script>
@@ -231,7 +242,12 @@ onUnmounted(() => {
                     <!-- The scan of the workspace, as the rows it is about to produce. The empty state was
                          already held back until the answer was in, which left the section blank meanwhile:
                          correct, and indistinguishable from a repository with no apps in it. -->
-                    <div v-if="isLoading && outline" class="overflow-hidden rounded-lg border border-line-subtle bg-card" role="status" aria-busy="true">
+                    <div
+                        v-if="isLoading && outline"
+                        class="overflow-hidden rounded-lg border border-line-subtle bg-card"
+                        role="status"
+                        aria-busy="true"
+                    >
                         <span class="sr-only">Reading this repository's apps…</span>
                         <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
                             <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2.5">

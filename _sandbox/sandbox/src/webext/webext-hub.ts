@@ -1,5 +1,6 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import type { WebExtFacts, webextContract, WebExtScopes, WebExtSummary } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* The live half of the `webext` capability: which of the user's browsers are holding a socket right now, and
  * the typed client for each.
@@ -74,10 +75,17 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
     const seen = new Map<string, { version: string | undefined; facts: WebExtFacts | undefined; lastSeen: number }>();
     const tools = new Map<string, unknown>();
 
+    /* Say so on every transition of this hub's one fact, the host hub's line for the host hub's reason: a webext
+     * card's state IS `online(id)` (handlers/webext.ts), and a person pasting a pairing code into another
+     * browser is watching exactly that. Deliberately NOT published from `state` below, which mutates `facts` on
+     * every read: that one IS a reader path, and publishing from it would refetch itself forever. */
+    const said = (): void => publishRuntimeChange("webext");
+
     const drop = (id: string, extension: LiveExtension): void => {
         clearInterval(extension.heartbeat);
         seen.set(id, { version: extension.version, facts: extension.facts, lastSeen: Date.now() });
         live.delete(id);
+        said();
     };
 
     return {
@@ -107,6 +115,7 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
                 lastSeen: Date.now(),
             };
             live.set(id, extension);
+            said();
             return () => {
                 const current = live.get(id);
                 if (current === extension) {
@@ -121,6 +130,7 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
             }
             extension.version = version;
             extension.lastSeen = Date.now();
+            said();
         },
         observe: (id, facts) => {
             const extension = live.get(id);
@@ -129,6 +139,8 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
             }
             extension.facts = facts;
             extension.lastSeen = Date.now();
+            // Once each, off the hello, which is what makes publishing from here safe (see `said` above).
+            said();
         },
         mcp: async (id, payload, options) => {
             const extension = live.get(id);
@@ -157,6 +169,7 @@ export const createWebExtHub = (logger: { warn: (data: object, message: string) 
             extension.close(1000, reason);
             seen.delete(id);
             live.delete(id);
+            said();
         },
         online: (id) => live.has(id),
         state: async (id) => {

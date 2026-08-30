@@ -1,5 +1,6 @@
 import { WEBEXT_PAIR_MESSAGE, WEBEXT_PAIRED_MESSAGE, type WebExtSummary, webextPairingCode } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
+import { onRuntimeChanged } from "./runtimeEvents";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
@@ -7,8 +8,8 @@ import { useSandbox } from "./useSandbox";
  * replaced by a code, because the far end is not a terminal.
  *
  * Connect mints a single-use pairing BOUND TO THIS CAPABILITY, so the code it produces can only ever connect
- * the browser the user is looking at. While it is live we poll /system/webext, because the extension coming
- * online is what the user is standing there waiting for and it happens out-of-band.
+ * the browser the user is looking at. The extension coming online is what the user is standing there waiting
+ * for and it happens out-of-band, so the daemon pushes it (`webext`) rather than this card asking on a clock.
  *
  * THE HANDOFF IS THE INTERESTING PART. The code is also posted on this window, where the extension's own
  * content script picks it up (it is loaded on this origin and no other), so a person with the extension already
@@ -91,20 +92,17 @@ export function useWebExtConnect() {
         }
     };
 
-    let timer: ReturnType<typeof setInterval> | undefined;
-    // Poll ONLY while a pairing is live: that is the one window where this state changes without the user
-    // touching the page. Just having the card open costs nothing.
+    let unsubscribe: (() => void) | undefined;
+    // Pushed rather than polled, the host card's story exactly (useHostConnect): a browser is online iff its
+    // socket is held in webext-hub.ts, so the daemon announces the redemption on the `webext` domain the moment
+    // the person clicks Connect in their popup. One read on open, then silence until that lands.
     const start = (): void => {
         void refresh();
-        timer ??= setInterval(() => {
-            if (pairToken.value !== undefined) {
-                void refresh();
-            }
-        }, 3000);
+        unsubscribe ??= onRuntimeChanged([`webext`], () => void refresh());
     };
     const stop = (): void => {
-        clearInterval(timer);
-        timer = undefined;
+        unsubscribe?.();
+        unsubscribe = undefined;
     };
 
     const close = (): void => {

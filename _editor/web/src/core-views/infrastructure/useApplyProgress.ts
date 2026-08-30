@@ -1,9 +1,10 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { readIntenticLines } from "../../composables/intenticStream";
 import { sandboxJson, sandboxRequest } from "../../composables/sandbox/sandboxClient";
-import { globalTerminalSource, useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
+import { listTerminals, useTerminalsQuery } from "../../composables/terminal/terminalsQuery";
+import { useTerminalPanel } from "../../composables/terminal/useTerminalPanel";
 import { DEPLOYMENTS, INVENTORY, WORKSPACE_STATE } from "../../composables/queryKeys";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
@@ -11,11 +12,15 @@ import { describeProvisionError } from "./provisionError";
 /* The apply half of the infra flow: kicks off the durable apply → adopt tmux job, then surfaces structured live
  * progress by tailing the daemon's /intentic/apply/events stream (per-resource create → ready, readiness URLs,
  * convergence). Completion is EVIDENCE-based: the event log's terminal exit ({command:"adopt"}, or a failed
- * apply's) ends the run; the terminal-list poll is only the fallback for a SIGKILLed job that wrote no exit,
- * and needs two consecutive "gone" reads, so a partial terminal list can't fake completion. The tail replays
- * from the run's start (refresh rebuilds the full view), a stall watchdog catches a dead stream (the daemon
- * heartbeats every second), and a dropped stream visibly auto-reattaches instead of silently freezing.
- * Instantiated once in InfraDeclare; everything is relayed THROUGH the sandbox. */
+ * apply's) ends the run; the run's tmux session going away is only the fallback for a SIGKILLed job that wrote
+ * no exit, and is read as an ending only after that session was seen alive, so a list taken before the daemon
+ * has listed it can't fake completion. The tail replays from the run's start (refresh rebuilds the full view),
+ * a stall watchdog catches a dead stream (the daemon heartbeats while a run is idle), and a dropped stream
+ * visibly auto-reattaches instead of silently freezing.
+ *
+ * NOTHING HERE IS ON A CLOCK. Both feeds are pushed: the daemon follows the events file with a watch and the
+ * terminals list with its own `terminals` frame, so this view moves when the apply moves rather than up to a
+ * poll-interval later. Instantiated once in InfraDeclare; everything is relayed THROUGH the sandbox. */
 const APPLY_SESSION = `panel-infra-apply`;
 // The daemon's tail heartbeats ~1s; no line for this long = the stream is dead, reattach.
 const STALL_MS = 30_000;
@@ -33,9 +38,11 @@ export function useApplyProgress() {
     const startError = ref<string | undefined>(undefined);
     // The events stream dropped and is being re-opened, progress may lag; visible, never silent.
     const reattaching = ref(false);
-    let applyPoll: ReturnType<typeof setInterval> | undefined;
-    // Consecutive polls that saw no running session, two in a row declare the job dead (fallback path).
-    let missStreak = 0;
+    /* Whether this run's tmux session has been SEEN alive in the shared terminals list. Absence only means
+     * "finished" AFTER presence: before it, absence is the ordinary first moment of a run, the daemon has
+     * launched the session and not listed it yet, and treating that as completion would end every run the
+     * instant it started. Evidence, in place of the two-consecutive-misses counter a poll needed to fake it. */
+    let sawSession = false;
     // Invalidates stale attach loops after the run they belonged to ended.
     let attachGeneration = 0;
 
@@ -58,40 +65,45 @@ export function useApplyProgress() {
         void queryClient.invalidateQueries({ queryKey: INVENTORY.of() });
     };
 
-    const stopWatching = (): void => {
-        if (applyPoll !== undefined) {
-            clearInterval(applyPoll);
-            applyPoll = undefined;
-        }
-    };
-
     const finishRun = (): void => {
-        stopWatching();
+        sawSession = false;
         attachGeneration += 1;
         reattaching.value = false;
         applying.value = false;
         refreshWorld();
     };
 
-    // FALLBACK completion: poll the terminals list for the session being gone. Only a SIGKILLed job (no exit
-    // line ever written) should end a run this way; two consecutive misses guard against a partial list read.
+    /* FALLBACK completion: the run's tmux session going away. Only a SIGKILLed job (no exit line ever written)
+     * should end a run this way, the event log's terminal exit is the primary path and gets there first.
+     *
+     * NOT POLLED. This reads the shared terminals list (terminalsQuery.ts), which the daemon already pushes on:
+     * it watches its own tmux and sends a `terminals` frame when a pane's state changes, which is exactly and
+     * only the transition being waited for here. A 2.5s timer over the tunnel used to ask the same question,
+     * almost always answering "still running", for as long as an apply took.
+     *
+     * A transient list failure cannot fake completion: vue-query keeps the last good data through a failed
+     * refetch, so `sessions` never blanks, and `sawSession` means absence is only read as an ending once there
+     * was something to end. */
     const watchApply = (): void => {
-        missStreak = 0;
-        applyPoll ??= setInterval(async () => {
-            const sessions = await globalTerminalSource.list().catch(() => undefined);
-            if (sessions === undefined) {
-                return; // transient list failure: the job's fate is unknown, keep polling.
-            }
-            if (sessions.some((session) => session.name === APPLY_SESSION && session.running)) {
-                missStreak = 0;
-                return;
-            }
-            missStreak += 1;
-            if (missStreak >= 2) {
-                finishRun();
-            }
-        }, 2500);
+        sawSession = false;
     };
+
+    // The list itself, observed for as long as InfraDeclare is mounted, which is what makes the daemon's
+    // `terminals` frame refetch it. The watcher is scope-bound, so it retires with the view and there is
+    // nothing to stop by hand.
+    const { sessions } = useTerminalsQuery();
+    watch(sessions, (list) => {
+        if (!applying.value) {
+            return;
+        }
+        if (list.some((session) => session.name === APPLY_SESSION && session.running)) {
+            sawSession = true;
+            return;
+        }
+        if (sawSession) {
+            finishRun();
+        }
+    });
 
     // Tail the durable apply events into the reduced state, replaying from the run's {kind:"start"}. The
     // terminal exit ends the run (evidence-based completion); a dropped/stalled stream visibly reattaches,
@@ -162,15 +174,20 @@ export function useApplyProgress() {
         watchApply();
     };
 
-    // A refresh/navigation during a run: the tmux job survived it. Recover "Applying…" from the terminals list,
-    // re-attach the event stream (replays from the run's start), and resume the poll.
+    /* A refresh/navigation during a run: the tmux job survived it. Recover "Applying…" from the terminals list,
+     * re-attach the event stream (replays from the run's start), and resume watching.
+     *
+     * Reads the shared list rather than the reactive one above: on mount that query may not have answered yet,
+     * and "no data yet" must not be read as "no run in progress". Seeing the session HERE is also what arms
+     * `sawSession`, so a job SIGKILLed after this point still ends the run. */
     const recover = async (): Promise<void> => {
-        const sessions = await globalTerminalSource.list().catch(() => undefined);
-        if (sessions?.some((session) => session.name === APPLY_SESSION && session.running)) {
+        const listed = await listTerminals().catch(() => undefined);
+        if (listed?.some((session) => session.name === APPLY_SESSION && session.running)) {
             applying.value = true;
             attachGeneration += 1;
             void attach();
             watchApply();
+            sawSession = true;
         }
     };
 
@@ -188,7 +205,6 @@ export function useApplyProgress() {
         progressPct,
         launch,
         recover,
-        stopWatching,
         viewLogs: (): void => openFocused(APPLY_SESSION),
     };
 }

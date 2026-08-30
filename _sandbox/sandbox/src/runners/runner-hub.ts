@@ -1,5 +1,6 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import type { runnerContract, RunnerFacts, RunnerHello, RunnerSummary } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* WHAT THE LIVE HALF KNOWS about a runner, which is deliberately less than a row shows: this hub holds
  * sockets, so it can say whether one is up, what it announced about its build, and what it last measured.
@@ -40,7 +41,10 @@ export interface RunnerHub {
     // Take over as THE connection for this runner, closing any socket it left behind (a machine waking from
     // sleep reconnects long before the old socket's keepalive gives up). Returns a detach for the socket's
     // own close handler; calling it after a newer connection replaced this one does nothing.
-    readonly attach: (id: string, connection: { client: RunnerClient; close: (code: number, reason: string) => void; parity: RunnerParity }) => () => void;
+    readonly attach: (
+        id: string,
+        connection: { client: RunnerClient; close: (code: number, reason: string) => void; parity: RunnerParity },
+    ) => () => void;
     // What the runner answered to `describe`, refreshed whenever the parent asks it fresh.
     readonly observe: (id: string, facts: RunnerFacts) => void;
     /* The runner's declared shape as its hello last claimed it (a settings-only sandbox.toml), and the door
@@ -62,10 +66,16 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
     // "last seen" and still name its image instead of going blank the moment a machine sleeps.
     const seen = new Map<string, { parity: RunnerParity; facts: RunnerFacts | undefined; lastSeen: number }>();
 
+    /* Say so on every transition, the host hub's line again. What it saves here is the composer's placement
+     * picker and the Computers view agreeing about a runner the moment its machine wakes, rather than up to
+     * fifteen seconds later, which was the interval a row's only two moving facts used to be re-asked on. */
+    const said = (): void => publishRuntimeChange("runners");
+
     const drop = (id: string, runner: LiveRunner): void => {
         clearInterval(runner.heartbeat);
         seen.set(id, { parity: runner.parity, facts: runner.facts, lastSeen: Date.now() });
         live.delete(id);
+        said();
     };
 
     return {
@@ -94,6 +104,7 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
                 lastSeen: Date.now(),
             };
             live.set(id, runner);
+            said();
             return () => {
                 const current = live.get(id);
                 if (current === runner) {
@@ -108,6 +119,8 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
             }
             runner.facts = facts;
             runner.lastSeen = Date.now();
+            // Once, off the hello, so this cannot chase the `runners` invalidation it causes.
+            said();
         },
         // Read from live OR remembered: a sleeping runner's drift is still worth showing, its settings did
         // not change by going offline.
@@ -118,6 +131,9 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
                 return;
             }
             runner.parity = { ...runner.parity, definitionToml: toml };
+            // The drift lines on this runner's card just stopped being true. The tab that pushed the settings
+            // refetches on its own mutation; every OTHER open tab hears it here.
+            said();
         },
         client: (id) => live.get(id)?.client,
         disconnect: (id, reason) => {
@@ -129,6 +145,7 @@ export const createRunnerHub = (logger: { warn: (data: object, message: string) 
             runner.close(1000, reason);
             seen.delete(id);
             live.delete(id);
+            said();
         },
         online: (id) => live.has(id),
         state: (id) => {

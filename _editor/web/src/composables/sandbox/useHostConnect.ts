@@ -1,6 +1,7 @@
 import type { HostSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
+import { onRuntimeChanged } from "./runtimeEvents";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
@@ -8,9 +9,10 @@ import { useSandbox } from "./useSandbox";
  * to one machine.
  *
  * Connect mints a single-use pairing token BOUND TO THIS CAPABILITY, so the one-liner it produces can only ever
- * connect the computer the user is looking at. While that token is live we poll /system/hosts, because the
- * machine coming online is the thing the user is waiting for and it happens out-of-band, the moment they paste
- * the command into their laptop, this card should say so without a refresh.
+ * connect the computer the user is looking at. The machine coming online is the thing the user is waiting for
+ * and it happens out-of-band, so the daemon pushes it: the moment they paste the command into their laptop and
+ * its socket lands, the `hosts` domain frame arrives and this card re-reads itself, without a refresh and
+ * without a timer.
  *
  * The token is shown once and never stored: a re-click mints a fresh one, which is cheaper than keeping a live
  * credential in a browser tab for ten minutes. */
@@ -69,20 +71,21 @@ export function useHostConnect() {
         }
     };
 
-    let timer: ReturnType<typeof setInterval> | undefined;
-    // Poll ONLY while a pairing is live, that is the one window where this state changes without the user
-    // touching the page. Just having the card open costs nothing.
+    let unsubscribe: (() => void) | undefined;
+    /* PUSHED, not polled, and the difference is the whole of this card's job. "Is that computer up" is a socket
+     * in the daemon (hosts/host-hub.ts) and nothing else, so the daemon knows the instant the laptop answers and
+     * says so on the `hosts` domain. What stood here was a three-second timer, which meant a machine that came
+     * up promptly still looked absent for up to three seconds, on the one screen whose entire content is
+     * whether it came up.
+     *
+     * One read on open for the state as it already stands, then nothing at all until something moves. */
     const start = (): void => {
         void refresh();
-        timer ??= setInterval(() => {
-            if (pairToken.value !== undefined) {
-                void refresh();
-            }
-        }, 3000);
+        unsubscribe ??= onRuntimeChanged([`hosts`], () => void refresh());
     };
     const stop = (): void => {
-        clearInterval(timer);
-        timer = undefined;
+        unsubscribe?.();
+        unsubscribe = undefined;
     };
 
     const close = (): void => {

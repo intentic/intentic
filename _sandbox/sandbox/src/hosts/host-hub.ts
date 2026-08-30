@@ -1,5 +1,6 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import type { HostFacts, hostContract, HostScopes, HostSummary } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 /* The live half of the `host` capability: which of the user's computers are holding a socket right now, and the
  * typed client for each.
@@ -77,10 +78,17 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
     const seen = new Map<string, { version: string | undefined; facts: HostFacts | undefined; lastSeen: number }>();
     const tools = new Map<string, unknown>();
 
+    /* SAY SO, on every transition of this hub's one fact. A card's state is `online(id)` and nothing else, so
+     * the socket opening or closing IS the news, and the browser has no other way to hear it: there is no file
+     * to watch and nothing for the runtime sampler to see. Coalesced and rate-limited downstream, and dropped
+     * outright when nobody is connected, so a laptop flapping on a bad train wifi costs a set membership. */
+    const said = (): void => publishRuntimeChange("hosts");
+
     const drop = (id: string, host: LiveHost): void => {
         clearInterval(host.heartbeat);
         seen.set(id, { version: host.version, facts: host.facts, lastSeen: Date.now() });
         live.delete(id);
+        said();
     };
 
     const hub: HostHub = {
@@ -112,6 +120,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
                 lastSeen: Date.now(),
             };
             live.set(id, host);
+            said();
             return () => {
                 const current = live.get(id);
                 if (current === host) {
@@ -126,6 +135,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             }
             host.version = version;
             host.lastSeen = Date.now();
+            said();
         },
         observe: (id, facts) => {
             const host = live.get(id);
@@ -134,6 +144,10 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             }
             host.facts = facts;
             host.lastSeen = Date.now();
+            // Both of these run ONCE, off the hello, and describing a machine is the rest of what its card
+            // draws. Safe to publish from precisely because no reader path reaches them: were `/system/computers`
+            // to call `observe`, this line and the domain's own invalidation would be a refetch loop.
+            said();
         },
         client: (id) => live.get(id)?.client,
         mcp: async (id, payload, options) => {
@@ -163,6 +177,7 @@ export const createHostHub = (logger: { warn: (data: object, message: string) =>
             host.close(1000, reason);
             seen.delete(id);
             live.delete(id);
+            said();
         },
         online: (id) => live.has(id),
         state: (id) => {

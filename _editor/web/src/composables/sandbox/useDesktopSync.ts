@@ -3,12 +3,14 @@ import { timeAgo } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { desktopSyncLink } from "../../environments/desktop";
 import { bashCommand, psCommand } from "../../environments/scriptCommand";
+import { onRuntimeChanged } from "./runtimeEvents";
 import { sandboxRequest } from "./sandboxClient";
 import { useSandbox } from "./useSandbox";
 
 /* Drives the Desktop sync card. "Enable" mints a short-lived, single-use pairing token from the daemon; the
- * copy-paste one-liner carries it, and the agent redeems it once to enroll its SSH key. We poll /system/sync
- * for `enrolled`, the "enabled" signal. No Google sign-in on the laptop.
+ * copy-paste one-liner carries it, and the agent redeems it once to enroll its SSH key. The daemon announces
+ * that redemption, so the card re-reads /system/sync for `enrolled`, the "enabled" signal, when it happens
+ * rather than on a clock. No Google sign-in on the laptop.
  *
  * Pairings carry a MODE: "sync" (file sync + port mirroring, single holder) or "mirror" (ports only, unlimited
  * machines). The daemon grants full sync to the operating tier and mirror-only below it, so pairMode reflects
@@ -155,12 +157,10 @@ export function useDesktopSync() {
         }
     };
 
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let unsubscribe: (() => void) | undefined;
     const stop = (): void => {
-        if (timer !== undefined) {
-            clearInterval(timer);
-            timer = undefined;
-        }
+        unsubscribe?.();
+        unsubscribe = undefined;
     };
     const refresh = async (): Promise<void> => {
         try {
@@ -181,15 +181,18 @@ export function useDesktopSync() {
             // Sandbox not reachable yet, leave the last known state.
         }
     };
-    // Poll every 3s ONLY while a pairing one-liner is live (Enable clicked, fresh enroll OR takeover): that's the
-    // only window where enrolled/syncingFrom flip out-of-band as the agent redeems the token, so the card must
-    // catch up fast. Just viewing the card (no pairToken, the common /sandbox case) polls zero times; mount does
-    // a single refresh for the current state. Replaces the unconditional 3s poll that ran the whole time the card
-    // was open. disable() clears pairToken, so it also stops the poll.
+    /* Listen ONLY while a pairing one-liner is live (Enable clicked, fresh enroll OR takeover): that is the one
+     * window where enrolled/syncingFrom flip out-of-band as the agent redeems the token. Just viewing the card
+     * (no pairToken, the common /sandbox case) subscribes to nothing; mount does a single refresh for the
+     * current state. disable() clears pairToken, so it also drops the listener.
+     *
+     * The redemption is a POST the daemon serves (/system/authorized-key → platform/sync.ts persist), so it can
+     * and does announce itself on the `hosts` domain. That replaces a three-second poll whose entire purpose was
+     * to eventually notice something the daemon had already done. */
     watch(pairToken, (token) => {
         stop();
         if (token !== undefined) {
-            timer = setInterval(() => void refresh(), 3000);
+            unsubscribe = onRuntimeChanged([`hosts`], () => void refresh());
         }
     });
     // Mount: one-shot read of the current enrollment state (no steady polling until a pairing starts).

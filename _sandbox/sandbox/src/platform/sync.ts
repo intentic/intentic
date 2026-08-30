@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { MachineReport } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 // Desktop enrollment for Mutagen: a machine lands its ed25519 public key here (redeeming a browser-minted
 // pairing token), then Mutagen rides SSH with that key for two things, bidirectional FILE sync of /work, and
@@ -81,11 +82,18 @@ const writeAuthorizedKeys = async (enrollments: readonly SyncEnrollment[]): Prom
     await writeFile(authorizedKeysPath(), enrollments.map((entry) => entry.key).join("\n") + (enrollments.length > 0 ? "\n" : ""), { mode: 0o600 });
 };
 
-// Persist the store AND rewrite authorized_keys from it, the two always move together.
+/* Persist the store AND rewrite authorized_keys from it, the two always move together.
+ *
+ * And say so, because every way this set changes passes through here: a machine redeeming a pairing token, one
+ * self-revoking on uninstall, the owner's kill switch. THE REDEMPTION IS THE ONE THAT MATTERED, it lands while
+ * the person is looking at the sync card having just pasted a one-liner into their laptop, and it is the moment
+ * the card's whole claim changes. The store is on /history rather than in the watched tree, so no
+ * `workspaceChanged` batch could ever mention it and this is the only feed that can carry it. */
 const persist = async (historyRoot: string, enrollments: SyncEnrollment[]): Promise<void> => {
     await mkdir(historyRoot, { recursive: true });
     await writeFile(enrollmentsPath(historyRoot), JSON.stringify(enrollments), { mode: 0o600 });
     await writeAuthorizedKeys(enrollments);
+    publishRuntimeChange("hosts");
 };
 
 // Boot: re-derive the ephemeral authorized_keys from the store that outlived the container. Without this a

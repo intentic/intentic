@@ -63,6 +63,17 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     // One frame per landing, and a landing is minutes of work, so this window only ever coalesces the burst a
     // multi-repo land makes while writing ONE sentence, which is exactly one frame's worth of news.
     landings: 250,
+    /* A SOCKET OPENING OR CLOSING, three domains at the discrete window, and they belong there for the reason
+     * `panels` does rather than by analogy: connecting is one event, and a person is watching for it. A machine
+     * coming up fires attach, then its hello's announce, then its describe, three publishes for one arrival,
+     * which is exactly the burst this window exists to fold into a single frame.
+     *
+     * The ceiling matters more than the floor here. These publish from a hub whose heartbeat drops a silent
+     * connection, so a laptop flapping on bad wifi reconnects on its own backoff, and the window is what keeps
+     * that from billing every open tab a capability read per flap. */
+    hosts: 250,
+    webext: 250,
+    runners: 250,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();
@@ -168,9 +179,13 @@ const ACTIVITY_BUCKET_MS = 10_000;
 export const paneFingerprint = (stdout: string): string =>
     [...paneStates(stdout)]
         .map(([name, { live, exitCode, activityAt, liveCommand }]) =>
-            [name, live ? "live" : "dead", exitCode ?? "", Math.floor(activityAt / ACTIVITY_BUCKET_MS), foreground(liveCommand) === undefined ? "" : "busy"].join(
-                "\t",
-            ),
+            [
+                name,
+                live ? "live" : "dead",
+                exitCode ?? "",
+                Math.floor(activityAt / ACTIVITY_BUCKET_MS),
+                foreground(liveCommand) === undefined ? "" : "busy",
+            ].join("\t"),
         )
         .toSorted()
         .join("\n");

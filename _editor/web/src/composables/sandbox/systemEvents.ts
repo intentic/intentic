@@ -10,6 +10,7 @@ import { queryClient } from "../queryPersistence";
 import { throttleTrailing } from "../throttleTrailing";
 import { setPresenceUsers } from "../usePresence";
 import { markWorkspaceChanged, worktreeMovedRecently } from "../workspace/useWorkspaceLive";
+import { emitRuntimeChanged } from "./runtimeEvents";
 import { resetWorkspaceScopedState } from "./sandboxScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "./useDaemonBoot";
@@ -141,6 +142,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             for (const key of staleRuntimeQueryKeys(event.domains)) {
                 void queryClient.invalidateQueries({ queryKey: key });
             }
+            /* THE SAME FRAME, ANNOUNCED, for the readers an invalidation can never reach, exactly as the
+             * workspace batch below is announced for the rail badges. The pairing cards (a computer, a browser,
+             * a desktop sync enrolling) hold plain refs rather than queries, so evicting a cache entry moves
+             * nothing on them; this is what lets those three stop polling. */
+            emitRuntimeChanged(event.domains);
             return;
         case `reposChanged`:
             // The rail's panel list is derived from the repo set. The watcher never sees .git paths, so no
