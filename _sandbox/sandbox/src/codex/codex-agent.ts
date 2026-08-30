@@ -3,7 +3,7 @@ import { createRequest } from "../agent/agent-requests.js";
 import type { AgentRequest } from "../agent/agent.js";
 import { splitAttachments, withFileNote } from "../agent/attachment-note.js";
 import { unsentParameterFrame } from "../agent/error-frames.js";
-import { isUnsentParameterRefusalText } from "../agent/failure-sentences.js";
+import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../agent/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../agent/plan-emulation.js";
 import { toolCategoryOf, workspacePath } from "../agent/tool-calls.js";
 import { openBrowserSession } from "../browser/browser-sessions.js";
@@ -303,6 +303,21 @@ const codexNotice = (message: string): AgentEvent | undefined => {
     return CODEX_ADVISORY.test(message) ? { kind: "error", code: "codex-advisory", message } : undefined;
 };
 
+/* THE PROVIDER SAID NO BECAUSE OF HOW MUCH HAS BEEN ASKED OF IT, the same condition grok-agent.ts reads for
+ * the other OpenCode adapter. Worth telling apart from every other failure because the recovery is nothing but
+ * time: coded, the chat shows it as a muted "wait and retry" notice with the reset instant, the daemon holds
+ * the turn for a press, and auto-continue schedules at the reset rather than firing three 5-second retries into
+ * a closed window.
+ *
+ * It reads MORE wordings than the shared mentionsSpentAllowance does, and for the reason grok-agent.ts gives:
+ * "rate limit" is deliberately absent from that helper because it appears in the transient retries the CLI is
+ * still working through, but here it cannot: Codex's own retry loop (core/src/responses_retry.rs) is spent by
+ * the time a turn.failed or top-level error reaches this line, so a refusal here is the last word rather than a
+ * stage of one. */
+const RATE_LIMITED = /rate.?limit|resource.?exhausted|too many requests|\b429\b/i;
+
+const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
+
 /* WHAT A TERMINAL CODEX FAILURE IS CODED AS, for both channels that can carry one (turn.failed and the
  * top-level error, plus the process-exit wrapper below).
  *
@@ -315,6 +330,13 @@ const codexNotice = (message: string): AgentEvent | undefined => {
 const codexFailureFrame = (event: Extract<AgentEvent, { kind: "error" }>): AgentEvent => {
     if (isUnsentParameterRefusalText(event.message)) {
         return unsentParameterFrame(event.message);
+    }
+    // A spent allowance, coded so the client treats it as a muted notice with a reset countdown and the daemon
+    // holds the turn for a press, the same path Claude and Grok rate-limit frames already take. Without this,
+    // the error goes out uncoded, the client shows a red line, and auto-continue fires the 5s ladder into a
+    // closed window.
+    if (isRateLimited(event.message)) {
+        return { ...event, code: "rate_limit" as const };
     }
     // Tag a rejected/unusable model so the client reloads the live catalog and drops the bad pinned model,
     // mirroring Grok's grok-model-invalid (OpenAI names no alternatives, so there's nothing to re-prompt with

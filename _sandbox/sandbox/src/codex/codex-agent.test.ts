@@ -494,7 +494,13 @@ test("a compaction doesn't stand in for the real failure when the turn then dies
 
 test("turn failures and thrown runners become error events followed by done", async () => {
     const failing = fakeCodexRunner([{ type: "turn.failed", error: { message: "usage limit reached" } }]);
-    expect(await collect(createTestAgent(failing.runner), request)).toEqual([{ kind: "error", message: "usage limit reached" }, { kind: "done" }]);
+    // A spent-allowance message is coded rate_limit so the client treats it as a muted notice with a reset
+    // countdown rather than a red crash line, and auto-continue schedules at the reset instead of retrying
+    // every 5 seconds into a closed window.
+    expect(await collect(createTestAgent(failing.runner), request)).toEqual([
+        { kind: "error", code: "rate_limit", message: "usage limit reached" },
+        { kind: "done" },
+    ]);
 
     const throwing: CodexRunner = async function* () {
         yield { type: "thread.started", thread_id: "thr-4" } as CodexEvent;
