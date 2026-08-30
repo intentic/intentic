@@ -889,6 +889,7 @@
     [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-link)) {
         --ui-button-tone: var(--color-content);
     }
+
     [data-skin="sanctum"]
         .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn, .p-button-success):where(
             :not(.p-button-text, .p-button-outlined, .p-button-link)
@@ -902,6 +903,24 @@
         ):enabled:hover {
         background-color: color-mix(in oklab, var(--ui-button-tone) 20%, var(--color-card));
         border-color: color-mix(in oklab, var(--ui-button-tone) 44%, transparent);
+    }
+
+    /* ── THE NEUTRAL TIER'S RIM IS DRAWN AT ITS OWN NUMBER, AND HAS TO BE ────────────────────────────────
+     * The four tiers above share one formula and one percentage, which is right for a formula and wrong for a
+     * PERCENTAGE, because the tones are not equally bright. `danger`, `warn` and `success` mix a mid-lightness
+     * hue; `secondary`'s tone is `--color-content`, the cream this whole skin writes in and the lightest colour
+     * in the palette. The same 30% therefore draws the loudest edge on the screen around the QUIETEST tier —
+     * reported as the neutral buttons "standing off too much", and correctly: on a card full of dark plates the
+     * brightest line in view belonged to the button that is supposed to recede.
+     *
+     * 16% rest / 28% hover puts its rim at about the weight the status tiers' already have, so a row of mixed
+     * buttons reads as one set of objects rather than as one outlined button beside three filled ones. The
+     * fill is untouched: it is what says "this is a control", and it was never the thing that shouted. */
+    [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-outlined, .p-button-link)) {
+        border-color: color-mix(in oklab, var(--ui-button-tone) 16%, transparent);
+    }
+    [data-skin="sanctum"] .p-button-secondary:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):enabled:hover {
+        border-color: color-mix(in oklab, var(--ui-button-tone) 28%, transparent);
     }
 
     /* Hover raises the light on the stone and leaves the cutting alone: a carved letter does not go pale when
@@ -1014,37 +1033,39 @@
             0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
 
-    /* ── AND WHEN IT CANNOT BE PRESSED IT IS THE SAME PLATE, UNCUT AND UNLIT ──────────────────────────────
-     * A disabled button here loses its lift and its contact shadow and sits flush in the surface with the
-     * shadow turned INWARD; the face goes flat (no tooth, no pitting) and the label loses its lit lip, because
-     * an incision is something somebody cut and this plate was never finished.
+    /* ── AND WHEN IT CANNOT BE PRESSED IT IS A BLANK SUNK INTO THE WALL ──────────────────────────────────
+     * A disabled button here loses its lift, its contact shadow and its edge, and sits flush in the surface
+     * with the shadow turned INWARD; the face goes flat (no tooth, no pitting) and the label loses its lit lip,
+     * because an incision is something somebody cut and this plate was never finished.
      *
-     * IT USED TO GO BLACK, AND THAT WAS THE FAULT WORTH FIXING. The committing button is a pale limestone
-     * plaque (#b3a794); disabled, it was #38342e — the WALL's own value. So the one control on a form that a
-     * person is waiting to be able to press was not a dimmed version of anything: it was a dark rectangle where
-     * a pale object had been, and the honest reading of it is that the button is gone. Reported exactly that
-     * way, from a sign-up form's Invite button sitting disabled until the email validates.
+     * IT WENT ROUND TWICE, AND BOTH FAULTS ARE WORTH KEEPING WRITTEN DOWN. First it was #38342e — the WALL's
+     * own value — against a live plaque of pale limestone, so the one control on a form that a person is
+     * waiting to be able to press was a dark rectangle where a pale object had been, and read as GONE rather
+     * than as unavailable. The fix for that was to keep each tier's own material and take 28% of its light off:
+     * stone stayed stone, bronze stayed bronze. That was worse. A pale plate is this skin's single loudest
+     * "press me" signal — nothing else on the window is pale — so a slightly dimmer pale plate is a button that
+     * looks pressable and is not, which is the more expensive of the two mistakes.
      *
-     * SO A DISABLED PLATE KEEPS ITS OWN MATERIAL AND LOSES 28% OF ITS LIGHT. Stone stays stone (#9a9083),
-     * bronze stays bronze (#b8996f), each a measured 27.7% under its live face — the same proportion for both,
-     * so the two plaques stay siblings when neither can be pressed. The ink softens with them and lands at
-     * 4.9:1 and 5.2:1, against the live plates' 7.6:1 and 8.9:1: legible, and visibly with less to say.
+     * SO THE MATERIAL IS THE THING THAT GOES. There is one disabled surface for every filled tier, and it is
+     * not a plaque at all: a recess, cut to three quarters of the neutral plate's light (#2c2824 against the
+     * live secondary's ~#332f2a) and still clearly above the card it sits on, with no rim and no face. Losing
+     * the RIM is what makes it unmistakable — every live tier in this skin draws a hairline, so a filled box
+     * without one is a shape nothing live can wear. That was the other half of the report: that a disabled
+     * control was hard to tell from a quiet one, which it was, because the two differed only by a few per cent
+     * of fill and a few per cent of edge.
      *
-     * WHAT THE DARK PLATE IS STILL FOR: the tiers that are dark when live — secondary, danger, warn, success.
-     * One ground for all four, because a disabled `danger` must not still be red. Its ink is #a89d8c and that
-     * is a correction too — the four hand-mixed tones this replaces measured 3.0 to 3.3:1 while the comment
-     * above them claimed 4.5, which is what happens when four blocks each carry their own numbers.
+     * The ink is #948b7c, 4.35:1 on that ground against the live neutral label's 10.5:1 — under half the
+     * contrast, which is the signal, and still a word rather than a smudge.
      *
-     * The shape is four MUTUALLY EXCLUSIVE selectors re-pointing the app's own `--ui-button-off-*` contract
-     * (tokens.css), not four copies of the rule. Nothing here depends on source order, and a fifth tier gets
-     * three values rather than a block. */
-    /* IT RESTATES THE PLATE, AND THAT IS A SPECIFICITY FACT RATHER THAN A DUPLICATION. The app's own disabled
-       rule (primeng.css) paints from these same three variables at one class plus `:disabled`, and this skin's
-       LIVE tier rules are later in the same layer — `.p-button.p-button-success` is two classes and wins
-       outright. Measured, not assumed: the success plaque stayed weathered-green while disabled, which is a
-       button that cannot be pressed and does not say so. Restating the four properties here, still read from
-       the variables, puts the whole family back on one answer. */
+     * IT RESTATES THE PLATE, AND THAT IS A SPECIFICITY FACT RATHER THAN A DUPLICATION. The app's own disabled
+     * rule (primeng.css) paints from these same three variables at one class plus `:disabled`, and this skin's
+     * LIVE tier rules are later in the same layer — `.p-button.p-button-success` is two classes and wins
+     * outright. Measured, not assumed: the success plaque stayed weathered-green while disabled, which is a
+     * button that cannot be pressed and does not say so. */
     [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):disabled:not(.p-button-loading) {
+        --ui-button-off-fill: #2c2824;
+        --ui-button-off-line: transparent;
+        --ui-button-off-content: #948b7c;
         background-color: var(--ui-button-off-fill);
         background-image: none;
         border-color: var(--ui-button-off-line);
@@ -1053,53 +1074,6 @@
         box-shadow:
             inset 0 1px 2px rgba(0, 0, 0, 0.5),
             inset 0 -1px 0 rgba(255, 250, 238, 0.05);
-    }
-
-    /* The committing tier: stone, uncut. */
-    [data-skin="sanctum"]
-        .p-button:where(
-            :not(
-                    .p-button-secondary,
-                    .p-button-info,
-                    .p-button-contrast,
-                    .p-button-text,
-                    .p-button-outlined,
-                    .p-button-link,
-                    .p-button-danger,
-                    .p-button-warn,
-                    .p-button-success,
-                    .ui-button-loud
-                )
-        ):disabled:not(.p-button-loading) {
-        --ui-button-off-fill: #9a9083;
-        --ui-button-off-line: rgba(44, 36, 24, 0.45);
-        --ui-button-off-content: #2a231a;
-    }
-
-    /* The money tier: bronze, uncast. */
-    [data-skin="sanctum"] .p-button.ui-button-loud:disabled:not(.p-button-loading) {
-        --ui-button-off-fill: #b8996f;
-        --ui-button-off-line: rgba(70, 50, 25, 0.45);
-        --ui-button-off-content: #382a1c;
-    }
-
-    /* The landing tier: stained stone, unweathered. THIS SKIN HAS THREE PLAQUES, not two — bare stone commits,
-       stained stone writes to a branch, cast bronze spends money — so `success` belongs up here with them and
-       not down with the dark tiers, however the app's own scheme groups it. Same 27% drop as its siblings. */
-    [data-skin="sanctum"] .p-button.p-button-success:disabled:not(.p-button-loading) {
-        --ui-button-off-fill: #8f9f8a;
-        --ui-button-off-line: rgba(26, 40, 28, 0.45);
-        --ui-button-off-content: #232e25;
-    }
-
-    /* Everything that is dark while it is live stays dark, in one ground rather than one per tone. */
-    [data-skin="sanctum"]
-        .p-button:where(.p-button-secondary, .p-button-info, .p-button-contrast, .p-button-danger, .p-button-warn):where(
-            :not(.p-button-text, .p-button-outlined, .p-button-link)
-        ):disabled:not(.p-button-loading) {
-        --ui-button-off-fill: #3a352e;
-        --ui-button-off-line: rgba(0, 0, 0, 0.45);
-        --ui-button-off-content: #a89d8c;
     }
 
     /* The quiet tiers have no plate to sink; the app's base rule already keeps them transparent, so this is the

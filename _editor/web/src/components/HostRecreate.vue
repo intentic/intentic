@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { Button, ui, Code, commandLang, ConfirmDialog, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
+import {
+    Button,
+    ui,
+    Code,
+    commandLang,
+    ConfirmDialog,
+    MachineRunLog,
+    Notice,
+    type NoticeModel,
+    SegmentedControl,
+    useOsPreference,
+} from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
@@ -179,6 +190,7 @@ const command = computed(() => {
         <template v-if="hostId">
             <Button
                 :label="running ? `${action} running…` : `${action} now`"
+                size="small"
                 class="self-start"
                 :severity="action === `Download` ? `secondary` : undefined"
                 :loading="running"
@@ -209,7 +221,9 @@ const command = computed(() => {
                 @confirm="execute"
             >
                 <p>{{ confirmBody }}</p>
-                <p class="mt-3 text-xs text-muted">Only the sandbox restarts — nothing else on that computer is touched. Your files (in /work) are kept.</p>
+                <p class="mt-3 text-xs text-muted">
+                    Only the sandbox restarts — nothing else on that computer is touched. Your files (in /work) are kept.
+                </p>
             </ConfirmDialog>
         </template>
 
@@ -221,7 +235,12 @@ const command = computed(() => {
              machine can run as it stands. A button that quietly performed the whole update instead would be
              the worst possible outcome of clicking the safe option. -->
         <template v-else-if="desktop && action !== `Download`">
-            <Button :label="`${action} now`" class="self-start" @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))">
+            <Button
+                :label="`${action} now`"
+                size="small"
+                class="self-start"
+                @click="openDesktopLink(desktopRecreateLink(slug, hash, action === `Roll back`))"
+            >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
             <p class="text-2xs text-subtle">Runs here, on this computer. {{ cost }}</p>

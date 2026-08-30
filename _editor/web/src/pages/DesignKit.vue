@@ -586,8 +586,9 @@ const pickedTier = ref(`collaborator`);
                     </table>
                 </div>
                 <p class="max-w-read text-2xs text-subtle">
-                    Disabled is a flat plate, not a fade — a 0.6 fade of a 10% tint is a 6% tint, and the control disappears. Working keeps the tier
-                    it had: a button that repaints itself as unavailable the instant it is pressed is answering the wrong question.
+                    Disabled is a flat plate with no rim, not a fade — a 0.6 fade of a 10% tint is a 6% tint and the control disappears, and every
+                    live tier here draws a hairline, so a filled box without one is a shape nothing live can wear. Working keeps the tier it had: a
+                    button that repaints itself as unavailable the instant it is pressed is answering the wrong question.
                 </p>
 
                 <!-- ── AND THE FOUR CONTROLS THAT ARE NOT IT ────────────────────────────────────────────

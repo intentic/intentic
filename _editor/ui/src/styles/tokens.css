@@ -159,18 +159,33 @@
      * there is the general rule: hold the SHAPE and drop only the contrast, or a disabled control reads as a
      * control that is missing.
      *
-     * So a disabled button is a flat neutral plate: the same box, the same hairline weight, one ground for
-     * every tier — a disabled `danger` must not still be red, because a red thing that cannot be pressed is
-     * just an alarm nobody can answer. The label lands on `muted`, which is a body-text role and clears 4.5:1
-     * on both schemes, so the word stays readable rather than becoming a grey smudge you lean in at.
+     * So a disabled button is a flat neutral plate: the same box, one ground for every tier — a disabled
+     * `danger` must not still be red, because a red thing that cannot be pressed is just an alarm nobody can
+     * answer.
+     *
+     * IT LOSES ITS RIM, AND THAT IS THE PART THAT DOES THE WORK. The first cut of this kept the hairline and
+     * only dropped the fill and the label a step, and the report was exactly right: it still looked pressable,
+     * and it was hard to tell apart from the quiet neutral tier. Of course it was — a fill a few per cent
+     * below `secondary`'s and a rim a few per cent below `secondary`'s is a description of `secondary`.
+     *
+     * EVERY LIVE TIER IN THIS SYSTEM DRAWS AN EDGE. Accent, secondary, danger, warn, success and loud all
+     * carry a 1px hairline; the two that do not (`text`, `link`) have no fill either. So a filled box with NO
+     * edge is a shape nothing live can wear, and it reads as unavailable before the eye has read a colour. The
+     * border is still declared, at `transparent`: the box keeps its exact size, so a control does not move by
+     * two pixels when it goes off.
+     *
+     * The fill goes UNDER the quietest live tier for the same reason (4% against `secondary`'s 8%) — a
+     * disabled control that is brighter than an enabled one is the fault this replaces, measured on Sanctum
+     * where the disabled ground had ended up a full step above the live neutral plate. And the label drops to
+     * `subtle`, the dimmest text role there is, which is the semantics exactly and still lands ~4.4:1.
      *
      * THREE VARIABLES RATHER THAN A BLOCK OF DECLARATIONS, because the skins have to be able to answer this in
      * their own material — Sanctum sinks the plate into the wall, and can do it by re-pointing these instead of
      * copying the rule per tier, which is what it used to do (four near-identical blocks, four hand-mixed hexes
      * that could drift from each other and did). */
-    --ui-button-off-fill: color-mix(in srgb, var(--color-content) 5%, transparent);
-    --ui-button-off-line: color-mix(in srgb, var(--color-content) 12%, transparent);
-    --ui-button-off-content: var(--color-muted);
+    --ui-button-off-fill: color-mix(in srgb, var(--color-content) 4%, transparent);
+    --ui-button-off-line: transparent;
+    --ui-button-off-content: var(--color-subtle);
 
     /* AND THE ONE FADE THAT IS STILL RIGHT, for the controls the design system does not paint: a list row, a
      * tile, a menu line, a form field. There is no plate to repaint on those — a row's ground is the panel's,

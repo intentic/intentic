@@ -39,7 +39,7 @@ const title = useScopeTitle();
                 <Icon name="check-square" />
                 See its changes
             </Button>
-            <Button severity="secondary" @click="workspaceAgent = undefined">
+            <Button size="small" severity="secondary" @click="workspaceAgent = undefined">
                 <Icon name="folder" class="text-[0.7rem]" />
                 Back to the shared workspace
             </Button>

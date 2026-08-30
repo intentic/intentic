@@ -36,7 +36,7 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and fifteen others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and sixteen others, and the notes are kept at the top of the file:
 
 - **A skin that says `.p-button` has said it about the tiers that are meant to have no chrome.** Both skins
   wrote their plate — a border colour, a bevel, a drop shadow, a wash, a hover glow — against every `.p-button`
@@ -44,13 +44,20 @@ Sanctum has paid for that rule and fifteen others, and the notes are kept at the
   out as outlined boxes. It reached the whole of `<SandboxVerbs>`, which is the Start/Stop/… cluster on every
   machine row. Reported as the app having border weights nobody had chosen. Both skins exclude the borderless
   variants now, spelled with `:where()` so the exclusion costs no specificity.
-- **A disabled control has to stay recognisably the same object.** Sanctum painted a disabled committing button
-  at the *wall's own value*, against a live plaque of pale limestone — so the one action on a form, sitting
-  disabled until its field validated, read as a dark rectangle where a pale object had been, i.e. as gone
-  rather than as unavailable. A disabled plate keeps its own material and loses 28% of its light now: stone
-  stays stone, bronze stays bronze, the ink softens with them. And it is driven by re-pointing the app's
-  `--ui-button-off-*` variables rather than by a block per tier, which is what had let four hand-mixed tones
-  drift to 3.0–3.3:1 under a comment claiming 4.5.
+- **A disabled control is told apart by what it LACKS, not by how dark it is.** This one went round twice.
+  Sanctum first painted a disabled committing button at the *wall's own value*, against a live plaque of pale
+  limestone, so the one action on a form read as gone rather than as unavailable. The obvious correction — keep
+  each tier's material and take 28% of its light off — was worse: a pale plate is this skin's single loudest
+  "press me" signal, so a slightly dimmer pale plate is a button that looks pressable and is not. What settled
+  it was dropping the material entirely and dropping the RIM: one recess, cut under the neutral plate, with no
+  edge. Every live tier here draws a hairline, so a filled box without one is a shape nothing live can wear.
+  It is driven by re-pointing the app's `--ui-button-off-*` variables rather than by a block per tier, which is
+  what had let four hand-mixed tones drift to 3.0–3.3:1 under a comment claiming 4.5.
+- **One percentage across four tones is four different weights.** `secondary`, `danger`, `warn` and `success`
+  shared a border formula at 30% of the tier's tone — but `secondary`'s tone is `--color-content`, the lightest
+  colour in the palette, so the quietest tier was drawing the brightest edge on the screen. Reported as the
+  neutral buttons standing off too much. A shared formula is right; a shared percentage across unequal
+  lightnesses is not.
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material, the
   line weights and the type, because those survive being shrunk. The site's turned corner is therefore drawn in

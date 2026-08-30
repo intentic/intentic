@@ -42,6 +42,9 @@
  *      the half of "size is the surface's answer" that can be decided from the markup. What a row EXPANDS to
  *      show is deliberately not this — an edit form's footer nested in a list is a page, and gets the page's
  *      size. The other half of the rule — a page or a dialog taking the default — is what is left over.
+ *   7. TWO <Button> SIBLINGS IN ONE ELEMENT AT DIFFERENT SIZES. A row of controls is one surface and takes
+ *      one size; a 26px control beside a 38px one is what "the buttons are different sizes" looks like when
+ *      somebody reports it. Direct siblings only, so a dialog's footer and its body may still differ.
  *   6. A RETIRED SPELLING: `outlined`, `raised`, `rounded` as <Button> props, and `severity="warning"`.
  *      PrimeVue 4 emits `p-button-warn`, so `warning` falls through every exclusion list in primeng.css and
  *      paints in the BRAND colour — which is what happened to the app's one warning button, for as long as
@@ -160,8 +163,40 @@ const waived = (path, key) => {
 for (const path of tracked) {
     const source = readFileSync(`${root}/${path}`, `utf8`);
     const scan = blank(source);
-    const stack = [];
+    const stack = [{ name: `#file`, attrs: ``, buttons: [] }];
     const inDense = () => stack.some((frame) => DENSE.has(frame.name)) && stack.some((frame) => frame.cluster);
+
+    /* ── 9 · TWO BUTTONS SIDE BY SIDE AT DIFFERENT HEIGHTS ────────────────────────────────────────────────
+     * Closing an element is where its own children are finally all known, so the sibling check runs there.
+     * DIRECT siblings only, and that narrowness is the whole reason the rule is safe: a dialog's footer and
+     * its body are two surfaces and may legitimately differ, but a `justify-end` row holding a Cancel and a
+     * Save is one row, and a 26px control beside a 38px one in it is the thing a reader actually notices.
+     * `ui-button-loud` is exempt — the money tier is a rank, not a size, and being bigger is part of it. */
+    const closed = (frame) => {
+        const sizes = new Set(frame.buttons.filter((b) => !b.loud && b.size !== `dynamic`).map((b) => b.size));
+        if (sizes.size < 2) {
+            return;
+        }
+        for (const button of frame.buttons) {
+            findings.push({
+                at: button.at,
+                why: `<Button> siblings inside one <${frame.name}> disagree about size (${[...sizes].join(` + `)}): a row of controls is one surface, so it takes one size — \`size="small"\` on a dense one, the default on a page or a dialog`,
+            });
+        }
+    };
+
+    /* A <template v-if>/<template v-for> DRAWS NOTHING, so the buttons inside one are the parent's siblings on
+     * screen and have to be folded up rather than judged as their own row. A named slot is the opposite: it is
+     * somebody else's surface, and gets checked as one. */
+    const unwind = (open) => {
+        const frame = stack[open];
+        if (frame.name === `template` && !/(?:^|\s)(?:#|v-slot)/u.test(frame.attrs)) {
+            stack[open - 1].buttons.push(...frame.buttons);
+        } else {
+            closed(frame);
+        }
+        stack.length = open;
+    };
 
     let match;
     TAG.lastIndex = 0;
@@ -169,8 +204,8 @@ for (const path of tracked) {
         const [, closing, name, attrs, selfClosing] = match;
         if (closing !== ``) {
             const open = stack.findLastIndex((frame) => frame.name === name);
-            if (open !== -1) {
-                stack.length = open;
+            if (open > 0) {
+                unwind(open);
             }
             continue;
         }
@@ -255,6 +290,12 @@ for (const path of tracked) {
         }
 
         if (name === `Button`) {
+            stack.at(-1).buttons.push({
+                at: where,
+                size: /size="small"/u.test(attrs) ? `small` : /(?:^|\s):size=/u.test(attrs) ? `dynamic` : `default`,
+                loud: /ui-button-loud/u.test(classes),
+            });
+
             // ── 4 · a call site restating the tier's own geometry
             if (classes !== `` && TIER_GEOMETRY.test(classes) && !waived(path, classes)) {
                 findings.push({
@@ -282,7 +323,7 @@ for (const path of tracked) {
         }
 
         if (selfClosing === `` && !VOID.has(name)) {
-            stack.push({ name, cluster: name === `template` && ROW_CLUSTER.test(attrs) });
+            stack.push({ name, attrs, cluster: name === `template` && ROW_CLUSTER.test(attrs), buttons: [] });
         }
     }
 }

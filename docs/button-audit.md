@@ -8,7 +8,7 @@ The trigger was a report, with screenshots: *at least a few different intensitie
 inside, as well as very different button sizing.* All of it was reproducible, and none of it was anybody being
 careless. It is what happens when the cheapest way to get a button is to type one.
 
-**Everything below has been acted on.** Each section states what was wrong and what replaced it. Six of the
+**Everything below has been acted on.** Each section states what was wrong and what replaced it. 10 of the
 findings were user-visible defects rather than untidiness and are marked ⚑.
 
 ---
@@ -93,12 +93,21 @@ version of anything: it was a dark rectangle where a pale object had been. That 
 **Now.** One contract, three variables (`--ui-button-off-*` in `tokens.css`), which the skins re-point rather
 than re-implement:
 
-- A disabled button is a **flat plate**: the same box, the same hairline weight, one neutral ground for every
-  tier — a disabled `danger` must not still be red. The label lands on `muted`, which clears 4.5:1 on both
-  schemes.
-- Under Sanctum a disabled plate keeps **its own material and loses 27.7% of its light**: stone stays stone
-  (`#9a9083`, 4.9:1), bronze stays bronze (`#b8996f`, 5.2:1), the same proportion for both. The dark tiers
-  share one ground at 4.6:1.
+- A disabled button is a **flat plate with no rim**, and the rim is the part that does the work. Every live
+  tier here draws a 1px hairline; the two that do not (`text`, `link`) have no fill either. So a filled box
+  with no edge is a shape nothing live can wear. The border is still declared, at `transparent`, so the box
+  does not change size when it goes off.
+- Its fill sits **under** the quietest live tier (4% against `secondary`'s 8%) and the label drops to
+  `subtle`. One neutral ground for every tier — a disabled `danger` must not still be red.
+- Under Sanctum it is a recess at three quarters of the neutral plate's light (`#2c2824`), ink `#948b7c` at
+  4.35:1 against the live neutral label's 10.5:1.
+
+  ⚑ This took two passes, and both failures are worth recording. The first kept each tier's own material and
+  took 28% of its light off — stone stayed stone, bronze stayed bronze. That was *worse*: a pale plate is
+  Sanctum's single loudest "press me" signal, so a slightly dimmer pale plate is a button that looks
+  pressable and is not. The second fault was in the flat scheme and in Sanctum both: a disabled plate whose
+  fill and rim were each a few per cent under `secondary`'s **is** `secondary`, which is why it was hard to
+  tell a disabled control from a quiet one.
 - The borderless tiers keep having no chrome. A control that *gains* an edge by becoming unavailable is
   answering the wrong question.
 - ⚑ **`loading` is excluded.** PrimeVue reports a Button as disabled while it is loading (`disabled || loading`),
@@ -136,13 +145,36 @@ is the same lesson one control over, and `_tools/scripts/row-tiers.mjs` records 
   cluster, a card's action strip, a toolbar, a section header, a chat notice.
 - no `size` — the 38px control, for a button standing on its own in a **page** or a **dialog**.
 
-The half of that which can be decided from markup is enforced: a `<Button>` in a row's `#control`, `#actions`,
-`#meta` or `#lead` must be `small`. What a row *expands* to show is deliberately exempt — an edit form's footer
-nested in a list is a page, and gets a page's size.
+Two halves of that are decidable from markup and are enforced. A `<Button>` in a row's `#control`, `#actions`,
+`#meta` or `#lead` must be `small` — what a row *expands* to show is deliberately exempt, since an edit form's
+footer nested in a list is a page and gets a page's size. And **direct siblings must agree**: a 26px control
+beside a 38px one in one `justify-end` row is what "the buttons are different sizes" looks like when somebody
+reports it. A dialog's footer and its body are two surfaces and may still differ.
+
+⚑ `HostRecreate` — the sandbox's Update / Download / Rebuild / **Roll back** button — was drawing at the
+default size inside cards whose other controls are all compact, and its two branches disagreed with each other
+besides. No check can see that one: the component's own template contains no surface, so the size is a
+judgement about every place it is mounted. If a component's whole job is to be dropped into a card, its
+controls are the card's.
 
 ---
 
-## 5. Colours the theme could not reach
+## 5. One tier's rim was drawn at the wrong number
+
+⚑ Sanctum gives `secondary`, `danger`, `warn` and `success` one formula and one percentage for their border:
+30% of the tier's tone. That is right for a formula and wrong for a percentage, because the tones are not
+equally bright — the three status tiers mix a mid-lightness hue, and `secondary`'s tone is `--color-content`,
+the cream the whole skin writes in and the lightest colour in the palette. The same 30% therefore drew the
+loudest edge on the screen around the **quietest** tier: reported as the neutral buttons standing off too much,
+and on a card of dark plates the brightest line in view belonged to the button that is meant to recede.
+
+It has its own number now, 16% at rest and 28% on hover, which lands its rim at about the weight the status
+tiers' already carry. The fill is untouched: that is what says "this is a control", and it was never the thing
+that shouted.
+
+---
+
+## 6. Colours the theme could not reach
 
 ⚑ Four controls pinned themselves to one step of the palette with `bg-primary-600` + `text-white`: the
 human-help hand-back button (twice), the browser "driving" toggle, and a menu row's active highlight. The
@@ -154,7 +186,7 @@ list in the app highlights with.
 
 ---
 
-## 6. Retired spellings that had grown back
+## 7. Retired spellings that had grown back
 
 - `:outlined="true"` survived at one call site (`AgentCard`), wearing five `!`-overrides
   (`!px-2 !py-0.5 !text-2xs !text-muted hover:!text-content`) — a whole visual tier written out in `!`
@@ -190,9 +222,10 @@ a toolbar glyph.
 ## What keeps it
 
 `pnpm check:buttons` (`_tools/scripts/button-tiers.mjs`), in the shape of `check:rows` and wired into
-`pnpm check`. It refuses eight things: a bare `<button>` drawn as an action button; a hand-drawn pill; a
-hand-sized icon affordance; a hand-written disabled fade; a hardcoded solid accent; a `<Button>` that overrides
-its own tier's geometry; a `<Button>` in a row cluster that is not `small`; and a retired spelling.
+`pnpm check`. It refuses nine things: a bare `<button>` drawn as an action button; a hand-drawn pill;
+a hand-sized icon affordance; a hand-written disabled fade; a hardcoded solid accent; a `<Button>` that
+overrides its own tier's geometry; a `<Button>` in a row cluster that is not `small`; two `<Button>` siblings
+that disagree about size; and a retired spelling.
 
 Two decisions in it are worth knowing, because they are what make a rule this broad safe to run over an app
 this size:

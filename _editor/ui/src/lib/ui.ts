@@ -63,9 +63,16 @@ import { twMerge } from "tailwind-merge";
  *     modal's footer, an empty state's one call to action, a settings card's primary. Room around it is what
  *     makes it the default size rather than a large one.
  *
- * `check:buttons` enforces exactly that and nothing subtler, because the version of this rule that asks a
- * reader to judge "is this dense?" is the version that drifted: <RowGroup>'s density taxonomy is the same
- * lesson one control over, and the note at the top of _tools/scripts/row-tiers.mjs is what it cost.
+ * `check:buttons` enforces the two halves of that a machine can actually see — a button in a row's own control
+ * cluster is `small`, and DIRECT SIBLINGS AGREE — and nothing subtler, because the version of this rule that
+ * asks a reader to judge "is this dense?" is the version that drifted: <RowGroup>'s density taxonomy is the
+ * same lesson one control over, and the note at the top of _tools/scripts/row-tiers.mjs is what it cost.
+ *
+ * A COMPONENT THAT IS ALWAYS PUT ON A CARD IS ON A CARD, and no check can see that — <HostRecreate> draws the
+ * sandbox's update/rollback button and its own template has no surface in it, so its size is a judgement its
+ * author has to make about every place it is mounted. It was the default for a while, next to a card full of
+ * compact controls, and read as one button that had been left big. If a component's whole job is to be dropped
+ * into a card, its controls are the card's.
  *
  * ── AND THE FOUR THINGS THAT ARE NOT THE ACTION BUTTON ────────────────────────────────────────────────────────
  *
