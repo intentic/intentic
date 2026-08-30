@@ -1,4 +1,4 @@
-import type { Advisory, Bundle, DeadCode, Duplication, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas/maintenance.js";
+import type { Advisory, Bundle, DeadCode, Duplication, MutationScore, OutdatedPackage, ProbeFacts, ProbeId, UiScan } from "../schemas/maintenance.js";
 import type { IdiomRule } from "./stack.js";
 import {
     BYPASS_PATTERN,
@@ -227,6 +227,103 @@ const parseJscpd = (stdout: string): ProbeFacts | undefined => {
     return { id: `jscpd`, duplication };
 };
 
+/* WHAT THE SUITE WOULD NOTICE IF THE CODE BROKE, from Stryker's report.
+ *
+ * The report is the cross-tool "mutation testing report schema": `files` maps a path to `{ mutants: [{ mutatorName,
+ * replacement, location.start.line, status }] }`. Statuses are Killed, Survived, NoCoverage, Timeout, CompileError,
+ * RuntimeError, Ignored, Pending.
+ *
+ * THE ARITHMETIC IS STRYKER'S, NOT OURS, and that is a deliberate constraint rather than laziness. A timeout counts
+ * as DETECTED (a mutant that hangs the suite is one the suite noticed) and NoCoverage counts as UNDETECTED (nothing
+ * ran, so nothing could have caught it). Both are counter-intuitive enough to be worth restating here, and both are
+ * what the tool's own score means — a row that recomputed them differently would be quietly arguing with the
+ * evidence printed underneath it.
+ *
+ * `Pending` is treated as inconclusive rather than dropped: an interrupted incremental run leaves them, and
+ * counting them either way would move the score for a reason that has nothing to do with the tests. */
+const SURVIVOR_SAMPLE = 8;
+const DETECTED = new Set([`Killed`, `Timeout`]);
+const UNDETECTED = new Set([`Survived`, `NoCoverage`]);
+
+type Survivor = MutationScore["survivors"][number];
+
+// One file's mutant list, or nothing. Every shape this cannot recognise reads as "no mutants here" rather than
+// throwing: a report with one malformed entry is still worth the rest of its numbers.
+const mutantsOf = (raw: unknown): readonly Record<string, unknown>[] => {
+    if (typeof raw !== `object` || raw === null) {
+        return [];
+    }
+    const mutants = (raw as Record<string, unknown>)[`mutants`];
+    return Array.isArray(mutants) ? mutants.filter((entry): entry is Record<string, unknown> => typeof entry === `object` && entry !== null) : [];
+};
+
+const lineOf = (mutant: Record<string, unknown>): number => {
+    const location = mutant[`location`];
+    const start = typeof location === `object` && location !== null ? (location as Record<string, unknown>)[`start`] : undefined;
+    const line = typeof start === `object` && start !== null ? (start as Record<string, unknown>)[`line`] : undefined;
+    return typeof line === `number` ? line : 0;
+};
+
+const survivorOf = (file: string, mutant: Record<string, unknown>): Survivor => ({
+    file,
+    line: lineOf(mutant),
+    mutator: asString(mutant[`mutatorName`]) ?? `?`,
+    // An empty replacement is meaningful — the mutator deleted the expression — so it is rendered as the removal
+    // it is rather than left blank for a reader to puzzle over.
+    replacement: asString(mutant[`replacement`]) ?? `(removed)`,
+});
+
+interface Tally {
+    killed: number;
+    survived: number;
+    inconclusive: number;
+    readonly survivors: Survivor[];
+}
+
+const tallyMutants = (files: Record<string, unknown>): Tally => {
+    const tally: Tally = { killed: 0, survived: 0, inconclusive: 0, survivors: [] };
+    for (const [file, raw] of Object.entries(files)) {
+        for (const mutant of mutantsOf(raw)) {
+            const status = asString(mutant[`status`]) ?? ``;
+            if (DETECTED.has(status)) {
+                tally.killed++;
+                continue;
+            }
+            // Anything that is neither detected nor undetected never got a verdict — it would not compile, or the
+            // configuration ignored it. Counting it either way would move the score for a reason that has nothing
+            // to do with the tests.
+            if (!UNDETECTED.has(status)) {
+                tally.inconclusive++;
+                continue;
+            }
+            tally.survived++;
+            tally.survivors.push(survivorOf(file, mutant));
+        }
+    }
+    return tally;
+};
+
+const parseMutation = (stdout: string): ProbeFacts | undefined => {
+    const files = asObject(stdout)?.[`files`];
+    // No `files` key at all means this is not a mutation report. An EMPTY one is a real answer (nothing was
+    // mutated) and a missing one is a parse failure, and the runner has to be able to tell them apart.
+    if (typeof files !== `object` || files === null || Array.isArray(files)) {
+        return undefined;
+    }
+    const tally = tallyMutants(files as Record<string, unknown>);
+    const valid = tally.killed + tally.survived;
+    const mutation: MutationScore = {
+        // Nothing to mutate scores 100 rather than NaN: there is no undetected fault in it, which is the honest
+        // reading and the one that keeps the chore quiet instead of dividing by zero.
+        score: valid === 0 ? 100 : Math.round((tally.killed / valid) * 100),
+        killed: tally.killed,
+        survived: tally.survived,
+        inconclusive: tally.inconclusive,
+        survivors: tally.survivors.slice(0, SURVIVOR_SAMPLE),
+    };
+    return { id: `mutation`, mutation };
+};
+
 /* THE UI SWEEP. The only probe here whose command is COMPOSED rather than written out, because its subject is a
  * table (stack.ts) that will grow and a hand-written command would be a second copy of it going stale.
  *
@@ -370,6 +467,9 @@ const parseBundle = (stdout: string): ProbeFacts | undefined => {
 // immediately after, never something to keep, the cached ProbeResult is the artefact that survives. The same
 // path the scheduled form of this chore uses (chores.ts), so a workspace running both keeps one copy.
 const JSCPD_DIR = `/tmp/intentic-chore-jscpd`;
+// Where Stryker's json reporter writes, which is its own default and not configurable per run on the CLI. Read
+// from the repo directory the probe runs in, like jscpd's report above.
+const MUTATION_REPORT = `reports/mutation/mutation.json`;
 
 export const PROBES: readonly ProbeSpec[] = [
     {
@@ -429,6 +529,38 @@ export const PROBES: readonly ProbeSpec[] = [
             `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
             `cat ${JSCPD_DIR}/jscpd-report.json 2>/dev/null`,
         parse: parseJscpd,
+    },
+    {
+        id: `mutation`,
+        title: `Test strength`,
+        measures: `how much of the code could break with every test still green`,
+        /* THE MOST EXPENSIVE PROBE HERE, and the tier does not really capture it: this runs the suite once per
+         * injected fault. `--incremental` is what makes it liveable — Stryker keeps a result file and re-runs only
+         * the mutants whose code or tests changed, so the first run costs what a full run costs and every one
+         * after it costs the diff. The monthly TTL is set against the FIRST run, not the incremental ones.
+         *
+         * Opt-in per repository, by the presence of a `stryker.conf.json`, and that is the load-bearing part of
+         * the design rather than a convenience. This monorepo has 65 packages with their own vitest configs and no
+         * root suite; mutating all of them unasked would be hours of CPU nobody agreed to spend. A repo says which
+         * code is worth the measurement by writing that file, which is also where `mutate` narrows the scope. */
+        tier: 2,
+        ttlMs: 30 * DAY_MS,
+        timeoutMs: 90 * 60_000,
+        /* Two conditions, and the config is the one that matters: Stryker being installed says the tool COULD run,
+         * the config says somebody decided it should. Without the second this would report "unavailable" on every
+         * repo that merely shares this monorepo's lockfile.
+         *
+         * The repo's OWN Stryker, never a floating one, for a reason measured rather than assumed: under
+         * `pnpm dlx` the plugin loader resolves from the working directory and finds nothing — "Cannot find
+         * TestRunner plugin \"vitest\". In fact, no TestRunner plugins were loaded" — and the runner has to agree
+         * with the vitest the repo actually runs. Same argument as knip above. */
+        available: `{ test -f stryker.conf.mjs || test -f stryker.conf.json; } && pnpm exec stryker --version >/dev/null 2>&1`,
+        unavailable: `no stryker config in this repo`,
+        // `|| true` for the same reason the others carry it: Stryker exits non-zero when the score is under its
+        // own threshold, which is an opinion about the number, not a failure to produce one. The judgement is the
+        // chore's, made from the score, and the runner decides by whether the parser recognised the report.
+        command: `pnpm exec stryker run --reporters json --incremental >/dev/null 2>&1 || true; cat ${MUTATION_REPORT} 2>/dev/null`,
+        parse: parseMutation,
     },
     {
         id: `ui`,

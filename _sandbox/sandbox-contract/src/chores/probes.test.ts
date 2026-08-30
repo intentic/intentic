@@ -179,6 +179,71 @@ describe(`jscpd`, () => {
     });
 });
 
+/* The mutation report is the cross-tool "mutation testing report schema", and the whole risk in this parser is
+ * the arithmetic rather than the shape: two of the eight statuses land on the counter-intuitive side, and getting
+ * either one backwards produces a number that looks plausible and is wrong. So the statuses are tested by name. */
+describe(`mutation`, () => {
+    const report = (...mutants: readonly Record<string, unknown>[]) =>
+        JSON.stringify({
+            schemaVersion: `2.0`,
+            files: { "src/digest.ts": { language: `typescript`, source: `…`, mutants } },
+        });
+    const mutant = (status: string, line = 1) => ({
+        id: `${status}-${line}`,
+        mutatorName: `ConditionalExpression`,
+        replacement: `false`,
+        location: { start: { line, column: 1 }, end: { line, column: 9 } },
+        status,
+    });
+
+    test(`counts Killed and Timeout as caught, Survived and NoCoverage as missed`, () => {
+        // Stryker's own arithmetic, restated as a test because both halves read backwards at a glance: a mutant
+        // that HANGS the suite was noticed by it, and a mutant nothing ran cannot have been.
+        const facts = parse(`mutation`, report(mutant(`Killed`), mutant(`Timeout`), mutant(`Survived`), mutant(`NoCoverage`)));
+        expect(facts).toMatchObject({ id: `mutation`, mutation: { killed: 2, survived: 2, score: 50 } });
+    });
+
+    test(`leaves mutants that never got a verdict out of the score entirely`, () => {
+        // One caught, one missed, and three with no answer: the score is 50%, not 20% and not 80%. Folding the
+        // undecided into either column is the mistake this pins.
+        const facts = parse(`mutation`, report(mutant(`Killed`), mutant(`Survived`), mutant(`CompileError`), mutant(`RuntimeError`), mutant(`Ignored`)));
+        expect(facts).toMatchObject({ id: `mutation`, mutation: { killed: 1, survived: 1, inconclusive: 3, score: 50 } });
+    });
+
+    test(`names each survivor with the change that went unnoticed`, () => {
+        const facts = parse(`mutation`, report(mutant(`Survived`, 43)));
+        expect(facts).toMatchObject({
+            mutation: { survivors: [{ file: `src/digest.ts`, line: 43, mutator: `ConditionalExpression`, replacement: `false` }] },
+        });
+    });
+
+    // A mutator that DELETES an expression reports an empty replacement, which would otherwise render as a blank
+    // in the panel and read as a missing field rather than as the removal it is.
+    test(`renders a deleted expression as a removal rather than as nothing`, () => {
+        const facts = parse(`mutation`, report({ ...mutant(`Survived`), replacement: `` }));
+        expect(facts).toMatchObject({ mutation: { survivors: [{ replacement: `(removed)` }] } });
+    });
+
+    test(`a run with nothing to mutate is 100%, not a division by zero`, () => {
+        expect(parse(`mutation`, JSON.stringify({ schemaVersion: `2.0`, files: {} }))).toMatchObject({
+            mutation: { score: 100, killed: 0, survived: 0 },
+        });
+    });
+
+    // The distinction the runner depends on: an empty `files` map is a real measurement, a MISSING one is output
+    // this parser did not understand, and reporting the second as a clean 100% is the one answer it must never give.
+    test(`output without a files map is a failure, not a clean repository`, () => {
+        expect(parse(`mutation`, JSON.stringify({ schemaVersion: `2.0` }))).toBeUndefined();
+        expect(parse(`mutation`, ``)).toBeUndefined();
+        expect(parse(`mutation`, JSON.stringify({ files: [] }))).toBeUndefined();
+    });
+
+    test(`survives a malformed mutant without losing the rest of the file's numbers`, () => {
+        const facts = parse(`mutation`, report(mutant(`Killed`), { nonsense: true }, mutant(`Survived`)));
+        expect(facts).toMatchObject({ mutation: { killed: 1, survived: 1, inconclusive: 1 } });
+    });
+});
+
 /* The UI sweep is the one probe whose output we produce ourselves, which removes the "their JSON moved" failure
  * and replaces it with a worse one: a command of eleven piped ripgreps in which any single stage can silently
  * contribute nothing. The marker line is what tells those two apart, and most of what is below is about it. */

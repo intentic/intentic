@@ -581,6 +581,9 @@ const honoured = (
          * building one unconditionally is an object, while the cost of branching here would be a second place
          * that has to agree with agent.ts about what "off" means. */
         dependencyFreshness: settings.dependencyFreshness,
+        // The differential re-run behind agent-test-strength.ts. Nothing to bind here beyond the flag: the hook
+        // resolves the package and the baseline from `workspaceRoot`, which is set a few lines above.
+        testFaultDetection: settings.testFaultDetection,
         freshnessResolver: createFreshnessResolver({ cacheDir: statePath(services.workspace.root, ".intentic/local/cache/", "freshness") }),
         // Lazy: the tree is walked on the first pin a turn actually sees, and never on a turn that touches no
         // manifest, so building this eagerly here costs nothing.

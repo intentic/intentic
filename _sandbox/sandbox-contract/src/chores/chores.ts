@@ -430,6 +430,70 @@ const duplication: Chore = {
     done: `Done when every clone in the report has either a named extraction or a one-line reason it should stay.`,
 };
 
+/* TEST STRENGTH. The one chore whose evidence is about the tests rather than the code, and it exists because
+ * nothing else in this workspace can produce it.
+ *
+ * A green suite is not evidence that the code is checked. Coverage says a line RAN; it cannot say an assertion
+ * depended on what the line produced. The gap between those two is where a model's tests live: they execute
+ * everything and assert almost nothing, and every gate here says yes to them — they type-check, they lint, they
+ * pass.
+ *
+ * MEASURED IN THIS REPOSITORY, on sandbox-contract's own chore module: 109 hand-written tests, and 16 of 58
+ * injected faults survived. The one worth reading is in `bucketOf`, whose comment in digest.ts argues at length
+ * that the zero boundary is load-bearing. Move that boundary and the suite stays green, because the test holding
+ * it is written relationally — `expect(bucketOf(0)).not.toBe(bucketOf(1))` — and with the boundary moved the two
+ * values are still different. The careful, un-brittle assertion is precisely the one that cannot see the change.
+ *
+ * THE FLOOR IS LOW ON PURPOSE. 60% is where Stryker's own default report turns red, and it is far under what a
+ * well-tested module scores, because this chore is looking for suites that are decorative rather than suites that
+ * are imperfect. A threshold near the good number would badge every honest package in the repo, which is how a
+ * maintenance surface teaches people to ignore it. */
+const MUTATION_FLOOR = 60;
+
+const testStrength: Chore = {
+    id: `test-strength`,
+    title: `Strengthen tests that would not notice a bug`,
+    icon: `list-check`,
+    description: `Whether the suite would actually fail if the code broke, which is a different question from whether it passes.`,
+    kind: `accruing`,
+    criterion: `Stryker's mutation score for the repo is under ${MUTATION_FLOOR}%.`,
+    stance: `act`,
+    needs: [`mutation`],
+    // Quarterly rather than monthly: a mutation score moves when tests are rewritten, which is not a weekly event,
+    // and the probe behind it is the most expensive one here.
+    cadenceMs: 90 * DAY_MS,
+    assess: (context) => {
+        const facts = factsOf(context, `mutation`);
+        if (facts === undefined || facts.mutation.score >= MUTATION_FLOOR) {
+            return undefined;
+        }
+        const { score, killed, survived, survivors } = facts.mutation;
+        return {
+            headline: `${survived} injected faults went unnoticed, ${score}% of them caught`,
+            // The survivors themselves, not the score. A percentage is a mood; a named line with the change that
+            // nothing objected to is a morning's work with the answer already in it.
+            detail: survivors.map((one) => `${one.file}:${one.line} · ${one.mutator} → ${one.replacement} · survived`),
+            /* Bucketed, via the same helper the other counting chores use, so ordinary drift does not read as
+             * news: a score moving 54 → 55 is not a thing to interrupt anyone about. The survivors' IDENTITIES
+             * ride along, so a NEW weak spot appearing speaks even while the number holds steady — which is the
+             * case that matters, because that is a test somebody just wrote. */
+            digest: digestOf(`bucket:${bucketOf(100 - score)}`, ...survivors.map((one) => `${one.file}:${one.line}`).toSorted()),
+            severity: `info`,
+            why:
+                `Stryker caught ${killed} of ${killed + survived} injected faults in ${repoLabel(context.repo)} (${score}%), under the ${MUTATION_FLOOR}% floor. ` +
+                `Code that can be changed with every test still green: ${survivors.map((one) => `${one.file}:${one.line} (${one.mutator} → ${one.replacement})`).join(`; `)}.`,
+        };
+    },
+    diagnosis: `Tests that run the code without checking what it produced pass whether or not the code is right, and no other check in this repository can tell the difference.`,
+    goal:
+        `Take the survivors one at a time and, for each, decide which of two things it is. Either the mutation changes behaviour somebody ` +
+        `depends on, in which case add the assertion that would have failed — usually at a BOUNDARY, and usually exact where the existing ` +
+        `test was relational: pinning \`bucketOf(0)\` to its value catches what \`not.toBe(bucketOf(1))\` cannot. Or it is an equivalent ` +
+        `mutant, code whose change genuinely cannot be observed, in which case say so and leave it. Do not chase the percentage: adding an ` +
+        `assertion nobody needs to satisfy a number is exactly the ceremony this is meant to detect.`,
+    done: `Done when every named survivor has either a new assertion that fails without the change, or a one-line note saying why it cannot be observed.`,
+};
+
 /* DOCUMENTATION. The evidence is a package with no README, which IS its architecture document in this
  * workspace, so this is a stat on the package directory rather than a lookup in a parallel tree. It sounds like
  * a coverage statistic
@@ -1205,6 +1269,7 @@ const BOOK: readonly Chore[] = [
     dependencies,
     deadCode,
     complexity,
+    testStrength,
     bundleWeight,
     frameworkIdiom,
     documentation,

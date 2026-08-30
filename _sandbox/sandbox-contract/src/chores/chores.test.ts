@@ -19,7 +19,7 @@ describe(`the chore book's order`, () => {
         // The sort cannot drop an entry, but a future refactor to a filter-into-groups could, so the count is
         // pinned to the ids rather than to a number, which says which one went missing.
         expect(new Set(CHORES.map((chore) => chore.id)).size).toBe(CHORES.length);
-        expect(CHORES.length).toBe(17);
+        expect(CHORES.length).toBe(18);
     });
 
     it(`says "surveying" exactly when a chore is a survey`, () => {

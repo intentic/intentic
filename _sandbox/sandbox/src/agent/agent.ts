@@ -42,6 +42,7 @@ import { depsNoticeHooks } from "./agent-deps.js";
 import type { FreshnessResolver } from "../dependencies/registry-freshness.js";
 import type { WorkspacePins } from "../dependencies/workspace-pins.js";
 import { freshnessHooks } from "./agent-freshness.js";
+import { testStrengthHooks } from "./agent-test-strength.js";
 import { searchNoticeHooks } from "./agent-search.js";
 import type { DependencyIssue } from "../workspace/reconcile-deps.js";
 import { editDiagnosticsHooks } from "./agent-diagnostics.js";
@@ -115,6 +116,10 @@ export interface AgentRequest {
     // What this workspace already pins, so a new package taking the catalog's version is not reported as
     // stale. Bound while planning, for the same reason as the resolver: the workspace root is still known.
     readonly workspacePins?: WorkspacePins;
+    /* Whether a test the agent just wrote is re-run against the code as it was before this turn
+     * (agent-test-strength.ts). One boolean rather than a mode: there is only one question to ask, and the answer
+     * is either wanted or it is not. False ⇒ no hook is wired and no suite is ever run. */
+    readonly testFaultDetection?: boolean;
     // Every image-scoped install this turn attempts, classified, for the runtime-install ledger behind the
     // environment drift sweep (environment/runtime-installs.ts). Silent: nothing about it reaches the model.
     readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
@@ -673,6 +678,11 @@ const baseOptions = (
              * about whether the version in it is the version the registry actually has. Mode "off" or no
              * resolver ⇒ no hook is wired and nothing is fetched. */
             freshnessHooks(request.dependencyFreshness, request.freshnessResolver, request.workspacePins),
+            /* The test just written, re-run against the code as it was before this turn (agent-test-strength.ts).
+             * Sits with the freshness check because they are the same posture from two directions: both know
+             * something the model cannot see about work it has just done, both hand it over as a fact, and
+             * neither refuses. Off ⇒ no hook, and no suite is ever run. */
+            testStrengthHooks(request.testFaultDetection, request.workspaceRoot),
             // The outbound sniffer's enforcing half: classified provider calls (a discord curl) are checked against
             // the owner's action rules BEFORE they run, and hooks fire even under bypassPermissions, which is what
             // makes this hold for unattended automation turns. No rules ⇒ no hook (turn-plan forwards none).

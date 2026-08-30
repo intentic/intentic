@@ -14,7 +14,13 @@
     // Enumerating also pins the rule set across oxlint upgrades, so a bump cannot silently change what an agent
     // is being told to do mid-task.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "vitest"],
+    // `jest` is here for ONE rule oxlint ships only in that namespace — no-restricted-matchers, the single
+    // configurable lever over which assertions are allowed (see the test-assertion block below). Oxlint's
+    // vitest plugin is largely the jest plugin under another name, so enabling both DOUBLE-REPORTS every rule
+    // that exists in each: measured, 288 + 127 valid-expect, 88 + 88 require-to-throw-message, 33 + 33
+    // no-conditional-expect. Every jest twin of a vitest rule this file already decided about is therefore
+    // switched off next to that decision, and the vitest copy stays the one that speaks.
+    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "vitest", "jest"],
     "categories": {
         "correctness": "error",
         "suspicious": "error",
@@ -160,6 +166,54 @@
         "vitest/no-focused-tests": "error",
         "vitest/no-disabled-tests": "error",
         "vitest/no-identical-title": "error",
+
+        // ── What an assertion is allowed to be ───────────────────────────────────────────────────────────
+        // The only part of test QUALITY a linter can actually decide, and it is worth being precise about why
+        // it is this small.
+        //
+        // Brittleness is not visible in an AST. A 22-key `toEqual` is the correct assertion when the shape IS
+        // the contract (secret-inventory.integration.test.ts) and an over-specification when it is not, and
+        // the two are byte-identical. Every rule that promises otherwise was measured against this repo and
+        // sampled at its own call sites: `prefer-strict-equal` (5,701 hits) makes tests MORE brittle by
+        // pinning undefined keys and class identity; `prefer-called-with` (48) couples an assertion to exact
+        // arguments; `prefer-expect-assertions` (10,710) is ceremony. None of them is on, and the reason is
+        // not the backlog — it is that satisfying them produces worse tests.
+        //
+        // What IS decidable is the opposite: an assertion that cannot fail. `toBeDefined` passes for `0`,
+        // `""`, `false` and every object ever constructed; it is what a model writes when it does not know
+        // what the value should be. That is a shape, and a shape is something a linter can see.
+        //
+        // The ban list lives in .oxlintrc.agent.json, not here: 326 sites (toBeDefined 254, toHaveBeenCalled
+        // 48, toBeTruthy 18, toBeFalsy 5, resolves.not.toThrow 1) is a backlog, and a red standard is one
+        // agents learn to disable. Here it carries only the matchers with ZERO hits, which is a floor rather
+        // than a demand: this repo has no snapshot tests at all, and the cheapest way for a model to make a
+        // failing assertion pass is to record the failure as the expectation.
+        "jest/no-restricted-matchers": [
+            "error",
+            {
+                "toMatchSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
+                "toMatchInlineSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
+                "toMatchFileSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate."
+            }
+        ],
+        // Belt and braces on the same zero: if a snapshot ever does land, it cannot be a 200-line one that
+        // nobody reads and everybody re-records. maxSize is lines.
+        "jest/no-large-snapshots": ["error", { "maxSize": 12 }],
+        // ── The jest twins, off ──────────────────────────────────────────────────────────────────────────
+        // Each of these is the same rule as the `vitest/` entry decided elsewhere in this file, in the other
+        // namespace. Leaving them on reports every finding twice and puts two identical diagnostics on one
+        // line, which is how a fix loop starts oscillating. The vitest copy wins in every pair, because that
+        // is the framework this repo actually runs.
+        "jest/valid-expect": "off", // twin of vitest/valid-expect, off above — 288
+        "jest/require-to-throw-message": "off", // twin, off above — 88
+        "jest/no-conditional-expect": "off", // twin, off above — 33
+        "jest/valid-title": "off", // twin, off above — 8
+        "jest/no-commented-out-tests": "off", // twin, off above — 2
+        "jest/expect-expect": "off", // twin of the configured vitest/expect-expect below — 8
+        "jest/no-focused-tests": "off", // twin of the enabled vitest rule above
+        "jest/no-disabled-tests": "off", // twin
+        "jest/no-identical-title": "off", // twin
+        "jest/no-standalone-expect": "off", // twin
 
         // ── Type honesty (no checker needed) ─────────────────────────────────────────────────────────────
         "typescript/no-empty-object-type": "error",

@@ -21,7 +21,36 @@
         // The hook compares against HEAD by rule AND message, and the message carries the number ("has a
         // complexity of 188"). So editing an already-complex function is silent while its complexity holds
         // steady, and reports the moment the edit pushes it higher. The ratchet only turns one way.
-        "complexity": ["error", { "max": 10 }]
+        "complexity": ["error", { "max": 10 }],
+
+        /* ASSERTIONS THAT CANNOT FAIL, held against new tests only. 326 sites here today, which is why this
+         * is on the authoring side of the line rather than in the root config.
+         *
+         * This is the whole of what a linter can honestly say about test quality, and it is the UNDER-specified
+         * half. The over-specified half — a 22-key `toEqual`, an exact 80-char string, `toHaveBeenCalledTimes(2)`
+         * — is not detectable, because those are the CORRECT assertion whenever the shape is the contract, and
+         * every site sampled in this repo was exactly that. See the block in .oxlintrc.json for the measurements.
+         *
+         * Whether a test that clears this bar actually detects a fault is a different question, and not one any
+         * linter answers. Two things answer it: the per-edit check behind the `testFaultDetection` setting, which
+         * asks whether the test would have passed before the change it tests, and the `test-strength` chore,
+         * which mutates the source and counts what the suite notices.
+         *
+         * The `help` text is the point of the rule, not decoration: oxlint prints it under the diagnostic, and it
+         * is the only part an agent can act on. "Use of `toBeDefined` is disallowed" alone teaches nothing. */
+        "jest/no-restricted-matchers": [
+            "error",
+            {
+                "toMatchSnapshot": "A snapshot records what the code DOES; a test says what it must do. Assert the fields the behaviour is about.",
+                "toMatchInlineSnapshot": "A snapshot records what the code DOES; a test says what it must do. Assert the fields the behaviour is about.",
+                "toMatchFileSnapshot": "A snapshot records what the code DOES; a test says what it must do. Assert the fields the behaviour is about.",
+                "toBeDefined": "Passes for 0, \"\", false and every object ever constructed, so it will never fail. Assert what the value IS.",
+                "toBeTruthy": "Passes for any non-empty string, any object, any non-zero number. Assert the value, not its truthiness.",
+                "toBeFalsy": "Passes for 0, \"\", null, undefined and NaN alike, which are rarely interchangeable. Assert the one you mean.",
+                "toHaveBeenCalled": "Says a call happened, not that it was the right one. Use toHaveBeenCalledWith, or assert the effect the call had.",
+                "resolves.not.toThrow": "Only says the promise settled. Assert the value it resolved to."
+            }
+        ]
     },
     "ignorePatterns": [
         "**/node_modules",

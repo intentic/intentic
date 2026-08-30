@@ -4,18 +4,23 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useDraft } from "../../../composables/useDraft";
 import { NAMED_RULES } from "../../../composables/sandbox/rules";
 import { useRules } from "../../../composables/sandbox/useRules";
+import { useSandboxSettings } from "../../../composables/sandbox/useSandboxSettings";
 
-/* WHAT PROVES THE WORK. Three checks with nothing in common but that question: two the daemon asks of a turn
- * that is trying to finish, and one the workspace runs at the last moment before code leaves the machine.
+/* WHAT PROVES THE WORK. Five checks with nothing in common but that question: three the daemon asks of a turn
+ * that is trying to finish, one it asks the moment a test is written, and one the workspace runs at the last
+ * moment before code leaves the machine.
  *
- * THE TWO DAEMON CHECKS READ OPPOSITE HALVES OF THE SAME TURN, which is why they are two switches and not one.
- * "Verify before finishing" weighs what was WRITTEN against what was run; a deletion satisfies it trivially and
- * always will. "Check what it deleted" weighs what was REMOVED against what the repository's history says about
- * those lines, and it is the only thing here that can speak about a change which type-checks, keeps the suite
- * green, and reads in review as the diff getting shorter.
+ * THE TWO DELETION/EDIT CHECKS READ OPPOSITE HALVES OF THE SAME TURN, which is why they are two switches and not
+ * one. "Verify before finishing" weighs what was WRITTEN against what was run; a deletion satisfies it trivially
+ * and always will. "Check what it deleted" weighs what was REMOVED against what the repository's history says
+ * about those lines, and it is the only thing here that can speak about a change which type-checks, keeps the
+ * suite green, and reads in review as the diff getting shorter.
  *
- * ALL THREE ARE RULES (composables/sandbox/useRules.ts), written by these rows rather than by the general add
- * flow below them. The rows stay because they are the ones people ask for by name, and a switch reads better
+ * "Test what the change did" is the third of that family and the only one that doubts a GREEN check rather than
+ * a missing one: a test can pass, prove nothing, and satisfy every other row on this page.
+ *
+ * FOUR OF THE FIVE ARE RULES (composables/sandbox/useRules.ts), written by these rows rather than by the general
+ * add flow below them. The rows stay because they are the ones people ask for by name, and a switch reads better
  * than a form, but there is nothing behind them the table cannot express, which is why outgrowing any of them
  * (a second command before a push, a check that only applies to one repo) needs no new setting.
  *
@@ -23,6 +28,12 @@ import { useRules } from "../../../composables/sandbox/useRules";
  * group, because that session is an agent run like the Fix button on a red pipeline and a Maintenance chore. */
 
 const { settings, byId, upsert, remove, setEnabled } = useRules();
+
+/* The fourth check is a SETTING rather than a rule, and the difference is not cosmetic: the three below all fire
+ * at a moment the rules table can name (`turn.ending`, `push.starting`), while this one fires after a single tool
+ * call and needs the tool's input to know which file was written. There is no moment to select on, so there is
+ * nothing for a rule to express. */
+const { settings: sandboxSettings, patch } = useSandboxSettings();
 
 const verify = () => byId(NAMED_RULES.verify);
 const removals = () => byId(NAMED_RULES.removals);
@@ -176,6 +187,38 @@ const savePrepush = (): void => {
                     :disabled="settings === undefined"
                     @update:model-value="setViewing"
                 />
+            </template>
+        </Row>
+
+        <!-- Test what the change did: after the assistant writes a test, it is re-run against the code as it was
+             before this turn, and reported if it still passes — because a test that passes without the change
+             does not test the change, and will stay green when that behaviour breaks. Nothing else on this page
+             can see that: it type-checks, it lints, and the suite is green.
+
+             LAST OF THE SWITCHES rather than beside the two it reads like, because the three above are rules
+             standing at `turn.ending` and this one is a setting that fires per tool call. Keeping the rules
+             contiguous is also what lets the tests above address them by position.
+
+             It reports rather than blocks, because two honest cases pass it: a test written before its
+             implementation, and a refactor, where the test passing either way is the point. Off by default like
+             its neighbours, and off runs no suite at all. -->
+        <Row
+            icon="list-check"
+            title="Test what the change did"
+            description="Re-run a new test against the old code, and say so if it still passes."
+        >
+            <template #control>
+                <ToggleSwitch
+                    :model-value="sandboxSettings?.testFaultDetection ?? false"
+                    :disabled="sandboxSettings === undefined"
+                    @update:model-value="(value: boolean) => patch({ testFaultDetection: value })"
+                />
+            </template>
+            <template #below>
+                <p v-if="sandboxSettings?.testFaultDetection === true" class="text-2xs text-muted">
+                    Runs the package's suite for that one file, once per test written. Only source changed in the same package is reverted:
+                    a sibling package is imported as its built output, where there is nothing to swap.
+                </p>
             </template>
         </Row>
 

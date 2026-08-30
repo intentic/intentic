@@ -10,14 +10,14 @@ weighs against everything else in its context; a failing rule is a fact it has t
 
 | | what it is | run by |
 |---|---|---|
-| `/.oxlintrc.json` | the whole standard — 258 rules, green on main | `pnpm lint`, editors, the stop gate |
+| `/.oxlintrc.json` | the whole standard — 264 rules, green on main | `pnpm lint`, editors, the stop gate |
 | `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
 | `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — declared, awaiting first install |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
 
-The root config is what main satisfies. The agent config is what code written from here on is held to: it
-currently carries one rule, cyclomatic `complexity: 10`, which 737 existing functions across 517 files exceed —
-too many to gate on and far too many to exempt by path. The edit hook applies it to files an agent touches and
+The root config is what main satisfies. The agent config is what code written from here on is held to: cyclomatic
+`complexity: 10`, which 737 existing functions across 517 files exceed — too many to gate on and far too many to
+exempt by path — and the assertion ban list below, whose 326 sites are the same kind of backlog. The edit hook applies it to files an agent touches and
 reports only what an edit made WORSE, so the ratchet turns one way without anyone having to schedule the
 refactor first.
 
@@ -111,6 +111,49 @@ value-safe.** `appendChild()` returns the node it appended; `append()` returns u
 rewrite as a plain `--fix`, and it silently broke two call sites that used the return value — caught by tsc,
 not by the linter. The edit hook applies `--fix` without showing the agent what it changed, so a fix that can
 alter a value is the one kind this setup must not carry.
+
+## Test assertions, and the half of it a linter cannot see
+
+The only part of test QUALITY that is executable, and it is worth being exact about how small that part is.
+
+**Brittleness is not in the AST.** A 22-key `toEqual` is the correct assertion when the shape IS the contract
+and an over-specification when it is not, and the two are byte-identical. Every candidate rule was measured
+across the repo and sampled at its own call sites before being rejected — the same test everything in the
+section above had to pass:
+
+| rule | hits | why not |
+|---|---|---|
+| `jest/prefer-expect-assertions` | 10,710 | ceremony |
+| `vitest/require-test-timeout` | 10,664 | already solved better, by kind-based budgets in `_tools/testing` |
+| `jest/prefer-strict-equal` | 5,701 | pushes the WRONG way — `toStrictEqual` pins undefined keys and class identity |
+| `vitest/no-conditional-in-test` | 1,199 | outlaws table-driven tests, like `no-conditional-expect` above |
+| `jest/prefer-called-with` | 48 | couples an assertion to exact arguments |
+
+Sampled sites for the "brittle" shapes were correct tests in every case: `acp-bridge/src/translate.test.ts`
+asserts a 13-key object because that shape is the function's whole contract, and
+`_tools/base/src/async.test.ts` asserts `toHaveBeenCalledTimes(2)` because that IS what `SingleFlight`
+promises.
+
+**What is decidable is the opposite: an assertion that cannot fail.** `toBeDefined` passes for `0`, `""`,
+`false` and every object ever constructed. That is a shape. `jest/no-restricted-matchers` carries the ban list,
+and the `help` text on each entry is the rule rather than decoration — oxlint prints it under the diagnostic and
+it is the only part an agent can act on.
+
+The list is split the way everything else here is. The root config carries only the matchers with ZERO hits
+(the three snapshot forms — this repo has no snapshot tests and pinning that at zero is a floor, not a demand).
+The agent config carries the rest: `toBeDefined` 254, `toHaveBeenCalled` 48, `toBeTruthy` 18, `toBeFalsy` 5,
+`resolves.not.toThrow` 1.
+
+`jest` is enabled as a plugin for this one rule, which oxlint ships in that namespace only. Oxlint's vitest
+plugin is largely the jest plugin renamed, so enabling both double-reports every rule that exists in each —
+measured, 288 + 127 `valid-expect`, 88 + 88 `require-to-throw-message`. Every jest twin is explicitly off next
+to the vitest decision it duplicates.
+
+**Neither half says whether a test detects a fault.** That question is answered by running the code broken and
+watching, which is two other things: the `testFaultDetection` setting, which re-runs a new test against the code
+as it was before the turn, and the `test-strength` chore, which mutates the source and counts what the suite
+notices. Measured on `sandbox-contract`'s chore module — 109 tests, every line covered — 16 of 58 mutants
+survived.
 
 ## Conflicts, and how they are resolved
 

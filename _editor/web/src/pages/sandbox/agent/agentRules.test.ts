@@ -4,6 +4,11 @@
 // RULES, not switches sitting beside a table that happens to agree with them. If that is true then a toggle and
 // the list below it can never disagree, and a user who outgrows a row can read back exactly what it wrote.
 //
+// "Test what the change did" is the one switch on the tab that is NOT a rule, and it is last in the group for
+// that reason — the rules stay contiguous, which is also what lets the tests below address them by position. It
+// gets a test of its own at the end, holding the other half of the claim: that it writes a SETTING and leaves
+// the rules table untouched.
+//
 // It is only true if each row writes the rule it claims to. Mounted rather than projected because what is under
 // test is the round trip a person actually performs: press the switch, read what the settings object now holds
 //, and the write happens in the component's own handler.
@@ -113,6 +118,20 @@ test(`"Look at what it changed" writes the view-ledger rule beside the other two
     expect(ruleById(`verify-ui-edits`)?.enabled).toBe(true);
     expect(ruleById(`verify-edits`)).toBeUndefined();
     expect(ruleById(`verify-removals`)).toBeUndefined();
+});
+
+test(`"Test what the change did" writes a setting and leaves the rules table alone`, async () => {
+    const host = mount(AgentChecks);
+
+    // The fourth switch, and the only one in the group that is not a rule: it fires after a single tool call
+    // rather than at a moment the rules table can name, so there is nothing for a rule to express. Both halves
+    // are worth pinning — that the flag is written, and that nothing was appended to `rules` on the way past,
+    // which is what a copy-paste from the three rows above would have done.
+    toggleAt(host, 3).click();
+    await Promise.resolve();
+
+    expect(settings.value.testFaultDetection).toBe(true);
+    expect(settings.value.rules ?? []).toEqual([]);
 });
 
 test(`switching it back off disables the rule rather than losing where the user put it`, async () => {

@@ -13,7 +13,7 @@ import { WorkspaceHotspotSchema, WorkspaceKeyModuleSchema } from "./codebase-hea
  *   signals  things the daemon already knows, the resident iq index's health ranking, the package manifests it
  *            reads for the dependency graph, its own node version. Recomputed per request; all of it is cheap. */
 
-export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle"] as const;
+export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle", "mutation"] as const;
 export const ProbeIdSchema = z.enum(PROBE_IDS);
 export type ProbeId = z.infer<typeof ProbeIdSchema>;
 // One dependency the registry has moved past. `kind` is the SEMVER distance, which is the whole reason this is
@@ -165,6 +165,55 @@ export const BundleSchema = z.object({
         .describe("What is in it, piece by piece."),
 });
 export type Bundle = z.infer<typeof BundleSchema>;
+/* WHAT THE SUITE WOULD NOTICE IF THE CODE BROKE. Coverage says a line ran; this says an assertion depended on it.
+ *
+ * The distinction is the whole reason this probe exists, and it is not theoretical here. Measured on
+ * sandbox-contract's chore module — 109 hand-written tests, every line covered — 16 of 58 mutants survived, and
+ * one of them flips the zero boundary in `bucketOf` that digest.ts's own comment argues is load-bearing. The test
+ * that was supposed to hold it (`expect(bucketOf(0)).not.toBe(bucketOf(1))`) is written in the careful,
+ * deliberately un-brittle style, and that is exactly why it cannot see the change: with the boundary moved the two
+ * values are still different, so the assertion still passes.
+ *
+ * That is the failure this measures and nothing else in the repository can. A linter sees the assertion's shape,
+ * not its power; a coverage report sees the line, not whether anything checked it. Only killing the code and
+ * watching what the suite says distinguishes a test from a test-shaped thing.
+ *
+ * SURVIVORS, NOT JUST A SCORE. A percentage is a mood; `bucketOf: count <= 0 → count < 0 survives` is a morning's
+ * work with the answer already in it. The score decides whether the chore speaks, the survivors are what makes it
+ * worth speaking about. */
+export const MutationScoreSchema = z.object({
+    score: z
+        .number()
+        .describe("The share of injected faults the suite caught. Not a coverage figure: coverage says a line ran, this says an assertion depended on it."),
+    killed: z.number().int().nonnegative().describe("Faults the suite caught."),
+    survived: z.number().int().nonnegative().describe("Faults it did not: code that can be broken with every test still green."),
+    /* Mutants that never got a verdict: ones that would not compile, and ones the configuration ignored. Kept
+     * apart from both counts above, and OUT of the score, because an unmeasured mutant is not evidence either
+     * way — the same conflation `unavailable` exists to prevent one level up.
+     *
+     * A timeout is deliberately NOT here. Stryker counts it as detected, on the reasoning that a mutant which
+     * hangs the suite is one the suite noticed, and this follows Stryker's arithmetic rather than inventing a
+     * second definition of the same word: the number on the row has to mean what the tool that produced it
+     * means, or the row is quietly arguing with its own evidence. */
+    inconclusive: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("Faults it never got a verdict on, because they would not compile or were configured out. Left out of the score entirely, since neither answer is known."),
+    /* The worst offenders, named. Capped, and the cap is the point: a survivor list is only useful while it is
+     * short enough to act on, and the rest are still there on the next run. */
+    survivors: z
+        .array(
+            z.object({
+                file: z.string().describe("Where it is."),
+                line: z.number().int().nonnegative().describe("Which line."),
+                mutator: z.string().describe("What was changed, in the mutation tool's own vocabulary."),
+                replacement: z.string().describe("What it became, so a reader can judge whether it matters without opening the file."),
+            }),
+        )
+        .describe("The surviving faults themselves. A percentage is a mood; a named line with the change that went unnoticed is a morning's work."),
+});
+export type MutationScore = z.infer<typeof MutationScoreSchema>;
 /* One probe's cached result. The three states are deliberately distinct, because a panel that collapses them
  * lies about the most important case:
  *   ok           the tool ran and reported. `facts` carries its findings, including "nothing found", which is
@@ -187,6 +236,7 @@ export const ProbeFactsSchema = z.discriminatedUnion("id", [
     z.object({ id: z.literal("jscpd"), duplication: DuplicationSchema }),
     z.object({ id: z.literal("ui"), scan: UiScanSchema }),
     z.object({ id: z.literal("bundle"), bundle: BundleSchema }),
+    z.object({ id: z.literal("mutation"), mutation: MutationScoreSchema }),
 ]);
 export type ProbeFacts = z.infer<typeof ProbeFactsSchema>;
 export const ProbeResultSchema = z.object({

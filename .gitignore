@@ -58,6 +58,16 @@ Thumbs.db
 # runner whose workspace survives between jobs.
 /.release-cut
 
+# The config agent-test-strength.ts generates next to a package's own, to re-run one test with the turn's
+# changed source served from HEAD. Written and removed inside a single hook call, so this only ever matches if
+# the process died between the two — at which point it is a stray file to overwrite, not a change to review.
+.intentic-head.vitest.config.mts
+
+# Stryker's sandbox and incremental state, behind the `test-strength` chore. Configured to /tmp in
+# stryker.conf.mjs; named here as well because a run given no config writes them into the repo.
+/.stryker-tmp
+/reports/mutation
+
 # intentic dogfood / demo (local only)
 /.intentic
 /intent

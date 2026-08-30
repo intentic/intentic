@@ -305,6 +305,15 @@ reports the profile.
   and the only opinion in the feature: it supplies the NAME of a replacement, while whether the incumbent is
   actually finished stays a registry measurement, so an entry that stops being true stops being said. Off by
   default (`dependencyFreshness`); off wires no hook and contacts nothing.
+- [src/agent/agent-test-strength.ts](src/agent/agent-test-strength.ts): whether a test the agent just wrote would
+  have passed BEFORE the change it tests. A test that passes against the old code does not test the new code, and
+  nothing else in the loop can see it: it type-checks, it lints, the suite is green. The hook re-runs the one file
+  with the turn's changed source served from HEAD through a vite `load` hook, so the working tree is never written
+  over — a check that reverted files in place would trade a whole turn's work for a lint-grade signal the first
+  time it died between the revert and the restore. Same package only, because a sibling package resolves to its
+  built output where there is nothing to swap. It reports and never blocks, for a reason that is not timidity: a
+  test written before its implementation and a pure refactor both pass this honestly. Off by default
+  (`testFaultDetection`); off wires no hook and runs no suite.
 - [src/extensions/extension-updates.ts](src/extensions/extension-updates.ts): the update lifecycle for git-installed
   extensions: the periodic registry comparison (update badges, blocked-listing advisories that pull the switch), the
   official-registry admission check (an unaudited sha never becomes an install or update offer),
