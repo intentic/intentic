@@ -1508,13 +1508,8 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  that started this redesign: a panel showing one collapsed repo and then two thirds of a column
                  of nothing, with no sentence anywhere claiming that the nothing was the answer rather than a
                  list still loading. The rows below are about the REPOS (their branch, their sync state); this
-                 is about the TREE, which is what the panel is named after and what the reader came to check.
-                 The onboarding half stays for a workspace with no repos, where it is the only text on screen. -->
-            <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">
-                No uncommitted changes.<template v-if="scannable.length === 0 && unscannable.length === 0">
-                    Edits by you or the agent show up here to review, commit, or discard.</template
-                >
-            </p>
+                 is about the TREE, which is what the panel is named after and what the reader came to check. -->
+            <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
 
             <!-- Repos git refused to scan. Same row rhythm as a real group: the repo still gets its name on a
                  row, because dropping it from the list is the silent disappearance this reports instead: with
