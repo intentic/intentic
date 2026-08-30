@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { couldBeOnThisMachine, type Endpoint, selectEndpoint, settledEndpoint } from "./endpoint";
+import { couldBeOnThisMachine, type Endpoint, probeEndpoint, sandboxIdOf, selectEndpoint, settledEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
 import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "./streamBudget";
 import { useSandbox } from "./useSandbox";
@@ -211,6 +211,44 @@ const demote = (sandboxId: string): void => {
     endpoints.value = rest;
 };
 
+/* DEMOTE ONLY IF THE SHORTCUT IS ACTUALLY GONE, for the caller that cannot tell the difference on its own.
+ *
+ * A BROKEN STREAM IS NOT A BROKEN TRANSPORT, and conflating them is what makes a window flap. The liveness
+ * stream tears down for reasons that have nothing to do with the address it is on: the daemon misses a few
+ * heartbeats because it is busy (its watchdog is 10s against a ~2s beat, and a sandbox running agents does
+ * thousands of git operations a minute), a turn saturates it, an upload blocks the loop. Every one of those
+ * threw, and every throw demoted the loopback and moved the whole window to the tunnel — which reaches THE
+ * SAME BUSY DAEMON, one internet round trip further away, so the stream breaks again there, and the window
+ * spends its life alternating between an address that answers in milliseconds and one that answers in
+ * seconds or 502s. From the outside that is a workspace flickering between "connected" and "busy" for no
+ * visible reason, with the network panel showing h2 and tunnel requests interleaved.
+ *
+ * So the shortcut is asked before it is abandoned. `probeEndpoint` is the same identity-checked /health the
+ * resolver qualifies with, bounded and cheap (single-digit milliseconds on a loopback that is up), so the
+ * question costs nothing next to the reconnect that is happening anyway. It answers ⇒ the address is fine and
+ * the failure belongs to the stream, so the caller retries where it is. It does not ⇒ this is one of the
+ * causes demotion was written for (docker restarted, the machine slept, the browser moved networks) and the
+ * fallback is exactly right.
+ *
+ * Returns whether it demoted, because the caller's next move differs: a demotion is a retarget (reconnect at
+ * once against a new address), a refusal is an ordinary failure (back off, retry the same one). */
+const demoteIfUnreachable = async (sandboxId: string): Promise<boolean> => {
+    const endpoint = endpoints.value[sandboxId];
+    const sandbox = active.value;
+    const token = sandbox?.token;
+    if (endpoint === undefined || token === undefined || token === ``) {
+        // Nothing resolved to check, or no token to check it against: keep the old unconditional behaviour
+        // rather than inventing a verdict from missing evidence.
+        demote(sandboxId);
+        return true;
+    }
+    if (await probeEndpoint(endpoint, await sandboxIdOf(token))) {
+        return false;
+    }
+    demote(sandboxId);
+    return true;
+};
+
 // Re-open the question of the shortcut for a sandbox: a switch away and back is the user's own "try again"
 // for one demoted earlier in the session, and the machine they are on may have changed since. Only the
 // demotion is cleared, an endpoint already resolved and working is left exactly as it is, so a switch costs
@@ -220,5 +258,5 @@ const reset = (sandboxId: string): void => {
 };
 
 export function useEndpoint() {
-    return { daemonBase, usingLocal, degradedTransport, resolve, demote, reset };
+    return { daemonBase, usingLocal, degradedTransport, resolve, demote, demoteIfUnreachable, reset };
 }

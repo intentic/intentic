@@ -36,7 +36,7 @@ import { uuid } from "../uuid";
 const WATCHDOG_MS = 10_000;
 
 const { daemonUrl, connection, activeSandboxId, refresh } = useSandbox();
-const { daemonBase, usingLocal, resolve: resolveEndpoint, demote: demoteEndpoint, reset: resetEndpoint } = useEndpoint();
+const { daemonBase, usingLocal, resolve: resolveEndpoint, demoteIfUnreachable, reset: resetEndpoint } = useEndpoint();
 const { invalidateSession } = useSandboxSession();
 
 let running = false;
@@ -218,12 +218,17 @@ const attempt = async (): Promise<void> => {
             signalConnection({ kind: `retargeted` });
             return;
         }
-        // The shortcut stopped answering (docker restarted, the machine slept, this browser moved to another
-        // network than the container). The tunnel is known-good, so this is a repair rather than an outage:
-        // fall back and retry AT ONCE instead of backing off against an address we have just abandoned. The
-        // retarget check above already excluded a deliberate abort, so reaching here means it really failed.
-        if (usingLocal.value) {
-            demoteEndpoint(sandboxId);
+        /* The shortcut MAY have stopped answering (docker restarted, the machine slept, this browser moved to
+         * another network than the container), in which case the tunnel is known-good and falling back is a
+         * repair rather than an outage: retry AT ONCE instead of backing off against an address just
+         * abandoned. The retarget check above already excluded a deliberate abort.
+         *
+         * But a stream that broke is not proof the address is gone, and assuming it was is what made a busy
+         * sandbox flap between the two. So the shortcut is probed before it is dropped (useEndpoint), and when
+         * it still answers this falls through to the ordinary failure path below: back off and reconnect on
+         * the address that is demonstrably fine, instead of retargeting onto a slower one that reaches the
+         * very same daemon. */
+        if (usingLocal.value && (await demoteIfUnreachable(sandboxId))) {
             signalConnection({ kind: `retargeted` });
             return;
         }
