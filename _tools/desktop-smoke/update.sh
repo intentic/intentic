@@ -120,8 +120,9 @@ AFTER_EXPECTED="$(hash_of /artifacts/to.AppImage)"
     exit 1
 }
 
-# THE BANNER, REDUCED TO WHAT IT DOES. The real one is a Vue component that appears when the app tells the page
-# an update is downloaded and navigates to `intentic://update` when pressed (web/src/shell/AppUpdateNotice.vue).
+# THE BANNER, REDUCED TO WHAT IT DOES. The real one is a card in the notification lane that appears when the app
+# tells the page an update is downloaded and navigates to `intentic://update` when pressed
+# (web/src/composables/notificationSources.ts, drawn by web/src/shell/NotificationHost.vue).
 # Standing the hosted SPA up in here would test Vue; what needs testing is that a NAVIGATION from this window
 # is honoured while the same link from the OS handler is not. So the page waits for `press` to appear beside it
 # — same origin, so no CORS — and then navigates, which is the button reduced to its one effect.
