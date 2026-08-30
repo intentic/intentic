@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { dotOfType, linkifyNoteRefs, toneOfType } from "./knowledgeNote.js";
+import { dotOfType, iconOfType, linkifyNoteRefs, toneOfType } from "./knowledgeNote.js";
 
 const decorate = (html: string, links: Record<string, string> = {}): HTMLDivElement => {
     const holder = document.createElement(`div`);
@@ -97,5 +97,27 @@ describe(`dotOfType`, () => {
 
     it(`still marks a note with no kind, in the neutral role`, () => {
         expect(dotOfType(undefined)).toBe(`bg-subtle`);
+    });
+});
+
+describe(`iconOfType`, () => {
+    it(`maps the starter vocabulary to distinct icons`, () => {
+        expect(iconOfType(`person`)).toBe(`user`);
+        expect(iconOfType(`project`)).toBe(`folder`);
+        expect(iconOfType(`decision`)).toBe(`check-square`);
+        expect(iconOfType(`vocabulary`)).toBe(`sitemap`);
+    });
+
+    it(`matches kinds case-insensitively`, () => {
+        expect(iconOfType(`Person`)).toBe(`user`);
+    });
+
+    it(`falls back to file for an unlisted kind`, () => {
+        expect(iconOfType(`something-nobody-predicted`)).toBe(`file`);
+    });
+
+    it(`uses file when there is no kind`, () => {
+        expect(iconOfType(undefined)).toBe(`file`);
+        expect(iconOfType(``)).toBe(`file`);
     });
 });

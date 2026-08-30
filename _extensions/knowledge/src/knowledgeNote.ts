@@ -1,6 +1,8 @@
 /* What a note looks like in the browser: the wiki links in its prose turned into things you can click, and the
- * small vocabulary of colour the list and the pane share. Pure apart from the DOM the decorator is handed,
- * unit-tested in knowledgeNote.test.ts. */
+ * small vocabulary of colour and icon the list and the pane share. Pure apart from the DOM the decorator is
+ * handed, unit-tested in knowledgeNote.test.ts. */
+
+import type { IconName } from "@intentic/extension-ui";
 
 // `[[target]]` / `[[target|what to call it]]`. The same syntax the knowledge base engine reads, and the same one the
 // memory notes already use between themselves.
@@ -105,3 +107,27 @@ const TONE_DOTS: Record<Tone, string> = {
 };
 
 export const dotOfType = (type: string | undefined): string => TONE_DOTS[toneOfType(type)];
+
+/* ONE ICON PER STARTER KIND, and `file` for everything else.
+ *
+ * Icons carry meaning a coloured dot cannot: `person` and `project` are different shapes before you read a
+ * word. The starter vocabulary's kinds each get one; an owner's custom kinds fall back to the same note glyph
+ * the pane uses, rather than guessing at a silhouette nobody agreed on. Matching is case-insensitive because
+ * the vocabulary note lists lowercase kinds and frontmatter sometimes does not. */
+const TYPE_ICONS: Record<string, IconName> = {
+    person: `user`,
+    project: `folder`,
+    company: `globe`,
+    decision: `check-square`,
+    meeting: `users`,
+    term: `book`,
+    source: `link`,
+    vocabulary: `sitemap`,
+};
+
+export const iconOfType = (type: string | undefined): IconName => {
+    if (type === undefined || type === ``) {
+        return `file`;
+    }
+    return TYPE_ICONS[type.toLowerCase()] ?? `file`;
+};

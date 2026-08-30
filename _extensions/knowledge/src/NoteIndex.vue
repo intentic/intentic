@@ -2,6 +2,7 @@
 import { Icon, type NavGroup, NavRail, Row, SkeletonRows, useLoadingReveal } from "@intentic/extension-ui";
 import { computed, nextTick, watch } from "vue";
 import type { SearchHit } from "./contract";
+import { iconOfType } from "./knowledgeNote";
 
 /* WHICH NOTE: the search's answers, as the thing you pick from.
  *
@@ -28,7 +29,10 @@ import type { SearchHit } from "./contract";
  * hand-roll had. Measured on a real knowledge base that turned 52px of row height into a column of slabs where
  * the name was the smallest thing on each row, and the kind was already said twice (a dot and the word
  * "decision"). The hub section menu beside this pane is title-only rows at the same density; this index now
- * matches it, and the note's own header carries kind, path and date when somebody opens one. */
+ * matches it, and the note's own header carries kind, path and date when somebody opens one.
+ *
+ * THE KIND IS AN ICON (see iconOfType), the same vocabulary the hub menu uses for its rows: a shape you can
+ * scan for, not a second line of text. Custom kinds the vocabulary has not named yet fall back to `file`. */
 
 const { hits, selected, isLoading } = defineProps<{
     hits: readonly SearchHit[];
@@ -64,6 +68,7 @@ const REASON: Record<string, string> = { alias: `matched an alias`, tag: `matche
 interface NoteRow {
     readonly path: string;
     readonly title: string;
+    readonly icon: ReturnType<typeof iconOfType>;
     // Present only when the search found something the title cannot say: a snippet, or why an alias/tag hit.
     readonly detail: string | undefined;
 }
@@ -72,6 +77,7 @@ const rows = computed<NoteRow[]>(() =>
     hits.map((hit) => ({
         path: hit.path,
         title: hit.title,
+        icon: iconOfType(hit.type),
         detail: hit.snippet ?? REASON[hit.matched],
     })),
 );
@@ -117,6 +123,7 @@ watch(
                 as="button"
                 density="dense"
                 class="rounded-lg"
+                :icon="row.icon"
                 :selected="row.path === selected"
                 @click="emit(`pick`, row.path)"
             >
