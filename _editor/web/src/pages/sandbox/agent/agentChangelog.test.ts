@@ -61,7 +61,7 @@ afterEach(() => {
 const toggleAt = (host: HTMLElement, index: number): HTMLElement => {
     const switches = [...host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)];
     const control = switches[index];
-    expect(control, `expected a switch at index ${index}`).toBeDefined();
+    expect(control, `expected a switch at index ${index}`).toEqual(expect.any(Object));
     return control as HTMLElement;
 };
 

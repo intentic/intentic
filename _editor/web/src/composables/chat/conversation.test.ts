@@ -1990,7 +1990,7 @@ describe(`Conversation`, () => {
         expect(notice.text).toContain(`being renewed`);
         // The spinner: the line declares which wait it describes, and the conversation says the wait is on.
         expect(notice.noticeWait).toBe(`credentialRenewal`);
-        expect(conversation.failures.credentialRenewal.value).toBeDefined();
+        expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toBeNull();
         // Not a reauth: the account is fine, and lighting its badge would send the user to fix nothing.
         expect(providerAccounts.value[`claude`]?.some((account) => account.needsReauth === true)).not.toBe(true);
@@ -2008,7 +2008,7 @@ describe(`Conversation`, () => {
                 sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
             );
             await conversation.send(`refactor the store`, settings);
-            expect(conversation.failures.credentialRenewal.value).toBeDefined();
+            expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
 
             // What the daemon started a moment later: the same request, behind the note saying why it re-ran:
             // and a run of its OWN, because resuming starts a turn rather than reviving the one that died. That
@@ -2047,7 +2047,7 @@ describe(`Conversation`, () => {
             sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
         );
         await conversation.send(`hello`, settings);
-        expect(conversation.failures.credentialRenewal.value).toBeDefined();
+        expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
 
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `back` }, { kind: `done` }]));
         await conversation.send(`again`, settings);
@@ -2104,7 +2104,7 @@ describe(`Conversation`, () => {
         expect(conversation.messages.value.at(-1)?.role).toBe(`notice`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.failures.outageResume.value).toBeUndefined();
-        expect(loadTrialStatusMock).toHaveBeenCalled();
+        expect(loadTrialStatusMock).toHaveBeenCalledTimes(1);
     });
 
     /* THE PRESS THAT COMPOUNDED ITSELF. A refused turn hands the words back to the queue, and the queue flushes
@@ -3252,7 +3252,7 @@ describe(`the transcript's clock`, () => {
             ]),
         );
         await conversation.send(`first`, settings);
-        expect(conversation.session.value).toBeDefined();
+        expect(conversation.session.value).toEqual(expect.any(Object));
 
         const user = conversation.messages.value[0];
         expect(user).toMatchObject({ role: `user`, checkpointId: `cp-1`, rewindIndex: 0 });
@@ -3286,7 +3286,7 @@ describe(`the transcript's clock`, () => {
 
         // A transcript cut against a workspace that never moved is the one state with no way back.
         expect(conversation.messages.value).toHaveLength(before);
-        expect(conversation.session.value).toBeDefined();
+        expect(conversation.session.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
 });
@@ -3325,7 +3325,7 @@ describe(`Conversation editing a sent message`, () => {
         // for anything at all: there is nothing yet to undo.
         expect(conversation.draft.value).toBe(`frist`);
         expect(conversation.messages.value).toEqual(before);
-        expect(conversation.session.value).toBeDefined();
+        expect(conversation.session.value).toEqual(expect.any(Object));
         expect(sandboxRequestMock).not.toHaveBeenCalled();
     });
 
@@ -3397,7 +3397,7 @@ describe(`Conversation editing a sent message`, () => {
         expect(await conversation.submitEdit(`try again`)).toBe(false);
 
         expect(conversation.messages.value).toEqual(before);
-        expect(conversation.editing.value).toBeDefined();
+        expect(conversation.editing.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
 
@@ -3409,7 +3409,7 @@ describe(`Conversation editing a sent message`, () => {
     it(`disarms when the transcript underneath it is replaced wholesale`, async () => {
         const conversation = await settled(`c-edit-replaced`);
         conversation.beginEdit(conversation.messages.value[0]!);
-        expect(conversation.editing.value).toBeDefined();
+        expect(conversation.editing.value).toEqual(expect.any(Object));
 
         // A different record, whose first message carries the id the edit was armed on.
         conversation.restoreMessages([{ role: `user`, text: `a different conversation entirely` }]);
@@ -3448,7 +3448,7 @@ describe(`Conversation placeAsAgent`, () => {
             sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `done` }, { kind: `done` }]),
         );
         await conversation.send(`first`, settings);
-        expect(conversation.session.value).toBeDefined();
+        expect(conversation.session.value).toEqual(expect.any(Object));
 
         sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
         expect(await conversation.placeAsAgent(`I checked the tests.`)).toBe(true);
@@ -3472,7 +3472,7 @@ describe(`Conversation placeAsAgent`, () => {
         expect(await conversation.placeAsAgent(`planted`)).toBe(false);
 
         expect(conversation.messages.value).toHaveLength(before);
-        expect(conversation.session.value).toBeDefined();
+        expect(conversation.session.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
 

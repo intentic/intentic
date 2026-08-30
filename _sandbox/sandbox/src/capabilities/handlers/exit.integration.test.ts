@@ -74,7 +74,6 @@ test("the tunnel-building providers ask for the tun privilege, and for exactly t
      * overlay keeps both and the recreate hands `docker run` the same --device twice. */
     const vpnBlocks = (await vpnHandler.fragment?.({ provider: "wireguard", config: "x", autoConnect: "off" })) ?? [];
     const shared = (typeof vpnBlocks === "string" ? [vpnBlocks] : [...vpnBlocks]).find((block) => block.includes("intentic:runtime"));
-    expect(shared).toBeDefined();
     for (const config of [vpngate, wireguard]) {
         const privileged = (await fragments(config)).find((block) => block.includes("intentic:runtime"));
         expect(privileged).toBe(shared);

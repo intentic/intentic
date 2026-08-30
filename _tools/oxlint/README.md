@@ -15,9 +15,9 @@ weighs against everything else in its context; a failing rule is a fact it has t
 | `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — declared, awaiting first install |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
 
-The root config is what main satisfies. The agent config is what code written from here on is held to: cyclomatic
-`complexity: 10`, which 737 existing functions across 517 files exceed — too many to gate on and far too many to
-exempt by path — and the assertion ban list below, whose 326 sites are the same kind of backlog. The edit hook applies it to files an agent touches and
+The root config is what main satisfies. The agent config is what code written from here on is held to: it
+currently carries one rule, cyclomatic `complexity: 10`, which 737 existing functions across 517 files exceed —
+too many to gate on and far too many to exempt by path. The edit hook applies it to files an agent touches and
 reports only what an edit made WORSE, so the ratchet turns one way without anyone having to schedule the
 refactor first.
 
@@ -134,15 +134,31 @@ asserts a 13-key object because that shape is the function's whole contract, and
 `_tools/base/src/async.test.ts` asserts `toHaveBeenCalledTimes(2)` because that IS what `SingleFlight`
 promises.
 
-**What is decidable is the opposite: an assertion that cannot fail.** `toBeDefined` passes for `0`, `""`,
-`false` and every object ever constructed. That is a shape. `jest/no-restricted-matchers` carries the ban list,
-and the `help` text on each entry is the rule rather than decoration — oxlint prints it under the diagnostic and
-it is the only part an agent can act on.
+**What is decidable is the opposite: an assertion that cannot fail.** `toBeDefined` says only "not undefined";
+`toBeTruthy` passes for any non-empty string and every object ever constructed. That is a shape.
+`jest/no-restricted-matchers` carries the ban list, and the `help` text on each entry is the rule rather than
+decoration — oxlint prints it under the diagnostic and it is the only part an agent can act on.
 
-The list is split the way everything else here is. The root config carries only the matchers with ZERO hits
-(the three snapshot forms — this repo has no snapshot tests and pinning that at zero is a floor, not a demand).
-The agent config carries the rest: `toBeDefined` 254, `toHaveBeenCalled` 48, `toBeTruthy` 18, `toBeFalsy` 5,
-`resolves.not.toThrow` 1.
+It is in the ROOT config, green, with no backlog. It started at 328 sites (`toBeDefined` 254,
+`toHaveBeenCalled` 46, `toBeTruthy` 18, `toBeFalsy` 5, `resolves.not.toThrow` 1) and every one was given the
+assertion it should have had. How, in case the next sweep is tempted to do it by hand:
+
+- Most `toBeDefined` sites were a **narrowing guard** with the real assertion on the next line, using `!`.
+  Those collapse into one `toMatchObject` — shorter, and it cannot pass on undefined either.
+- The rest were rewritten **from the type**: strip `undefined` off what the checker already knows and assert
+  the arm that is left (`expect.any(String)`, `Array`, `Function`, …). "Not undefined" and "is a string" fail
+  on the same value; the second also fails on the wrong shape. A ~90-line codemod over a `ts.Program` did 144
+  of them and declined the ones where the remaining type was not one thing.
+- `expect(bag[key]).toBeDefined()` became `expect(Object.keys(bag)).toContain(key)`, which prints the keys
+  that ARE there rather than the word "undefined".
+- `toHaveBeenCalled` became `toHaveBeenCalledTimes(n)` or `…With(…)`. Watch the negation: `.not.toHaveBeenCalled()`
+  is a *strong* assertion and must not be swept up with it — `.not.toHaveBeenCalledTimes(1)` passes when the spy
+  was called twice.
+
+**Three of them found real bugs**, which is the argument for the rule in one line: a `features` set that
+arrives as an array and would have satisfied any presence check as `{}`; a rank test that computed a baseline,
+never compared against it, and so never made the claim in its own name; and a `window.open` spy never cleared
+between tests, so half a suite's counts depended on file order.
 
 `jest` is enabled as a plugin for this one rule, which oxlint ships in that namespace only. Oxlint's vitest
 plugin is largely the jest plugin renamed, so enabling both double-reports every rule that exists in each —

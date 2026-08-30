@@ -160,7 +160,7 @@ it(`drops the button once the work is in the workspace`, () => {
 // this agent's children. That is what lets it be hovered, copied and Ctrl/⌘-clicked into its own tab.
 it(`counts the agents it started while its first turn is still running`, () => {
     const chip = [...mount(delegating()).querySelectorAll(`a`)].find((link) => link.textContent?.trim() === `8 / 8`);
-    expect(chip).toBeDefined();
+    expect(chip).toEqual(expect.any(Object));
 });
 
 /* THE CARD THE BOARD COULD DO NOTHING WITH. A refused send leaves a conversation the daemon never registered,
@@ -380,7 +380,7 @@ it(`withdraws it while a turn is in flight, with the readout it belongs to`, () 
 // The exception to this card's rule about the archive. Every other press is withheld there so that filing
 // something away is not undone by housekeeping; this is the press that KEEPS it filed away.
 it(`keeps it on an archived card, the one press that stops one waking back onto the board`, () => {
-    expect(stopWatchButton(mount(watching({ archivedAt: 5 })))).toBeDefined();
+    expect(stopWatchButton(mount(watching({ archivedAt: 5 })))).toEqual(expect.any(Object));
 });
 
 /* WHERE THE WORK IS HAPPENING, on the card, and only when that is somewhere other than here. A fleet places

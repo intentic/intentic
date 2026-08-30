@@ -123,8 +123,8 @@ it(`names what this chat is pointed at, and pitches nothing`, () => {
     expect(element.textContent).not.toContain(`Try free with Google`);
     expect(buttonNamed(element, `Continue with Google`)).toBeUndefined();
     // What is offered instead: the list, plus this provider's own sign-in for whoever pointed the chat here.
-    expect(buttonNamed(element, `Choose a model`)).toBeDefined();
-    expect(buttonNamed(element, `Connect Claude subscription`)).toBeDefined();
+    expect(buttonNamed(element, `Choose a model`)).toEqual(expect.any(Object));
+    expect(buttonNamed(element, `Connect Claude subscription`)).toEqual(expect.any(Object));
 });
 
 /* THE GAP THAT PUT A WALL IN FRONT OF EVERY NEW USER. The account reads come back off the daemon in one hop;
@@ -174,7 +174,7 @@ it(`runs the sign-in in place, and puts the line back when it is abandoned`, asy
     const element = mount();
 
     buttonNamed(element, `Connect Claude subscription`)!.click();
-    expect(startConnect).toHaveBeenCalled();
+    expect(startConnect).toHaveBeenCalledTimes(1);
 
     nativeConnectFlow.value = { provider: `claude`, url: `https://claude.ai/oauth`, code: `` };
     await nextTick();

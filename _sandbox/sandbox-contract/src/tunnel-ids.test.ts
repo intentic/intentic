@@ -42,7 +42,9 @@ test("slots are not derivable from the sandbox id: only from the token behind it
     expect(portSlotsFromToken(OTHER)).not.toEqual(portSlotsFromToken(TOKEN));
     // No slot leaks the id it will be paired with in `port-<slot>-<sandboxId>`.
     const id = sandboxIdFromToken(TOKEN);
-    expect(id).toBeDefined();
+    // Load-bearing, and not merely tidy: `not.toContain(undefined)` is true of every slot list ever produced,
+    // so without a real id the leak check below would pass on a function that had stopped deriving one at all.
+    expect(id).toEqual(expect.any(String));
     expect(portSlotsFromToken(TOKEN)).not.toContain(id);
     // And none of them is the old fixed alphabet, which is what made the hostnames guessable.
     expect(portSlotsFromToken(TOKEN).some((slot) => slot.length === 1)).toBe(false);

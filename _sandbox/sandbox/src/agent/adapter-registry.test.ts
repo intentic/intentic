@@ -24,10 +24,7 @@ test("every provider × harness pair resolves to an adapter for its declared run
     for (const provider of PROVIDERS) {
         for (const harness of HARNESSES) {
             const adapter = adapterFor(provider.value, harness.value);
-            expect(adapter, `${provider.value}/${harness.value}`).toBeDefined();
-            // Not merely "an adapter": the one the contract says serves this pair. A table that resolved every
-            // pair to the same arm would pass a mere existence check and route every turn to Claude.
-            expect(adapter.runtime, `${provider.value}/${harness.value}`).toBe(capabilitiesOf(provider.value, harness.value).runtime);
+            expect(adapter).toMatchObject({ runtime: capabilitiesOf(provider.value, harness.value).runtime });
         }
     }
 });
@@ -115,7 +112,7 @@ test("a fully unconfigured sandbox reports every runtime unavailable, each namin
     for (const runtime of ["claude-code", "codex", "opencode", "acp", "pi"]) {
         const health = await healthOf(runtime);
         expect(health.state, runtime).toBe("unavailable");
-        expect(health.detail, runtime).toBeTruthy();
+        expect(health.detail, runtime).toEqual(expect.stringMatching(/\S/));
     }
 });
 

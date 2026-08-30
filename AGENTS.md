@@ -104,6 +104,8 @@ rules are about what a test stands the code up with, not about how it asserts.
   `expect(bucketOf(0)).not.toBe(bucketOf(1))` cannot see that boundary move, because with it moved the two values
   still differ. `expect(bucketOf(0)).toBe(-1)` catches it. Measured: 16 of 58 injected faults survive that
   module's 109 tests. An exact value at the edge is not brittleness, it is the assertion.
-- An assertion that cannot fail is worse than no test – `toBeDefined()` passes for `0`, `""`, `false` and every
-  object ever constructed. `.oxlintrc.agent.json` rejects that family with a reason attached to each; if one is
-  genuinely right somewhere, say why rather than reaching past it.
+- An assertion that cannot fail is worse than no test – `toBeDefined()` says only "not undefined", and the type
+  already knows what it is instead: assert that (`expect.any(String)`, `toMatchObject({…})`, or
+  `Object.keys(bag)` contains the key, which prints what IS there when it fails). `.oxlintrc.json` rejects that
+  family with a reason attached to each and has no backlog; if one is genuinely right somewhere, say why rather
+  than reaching past it.

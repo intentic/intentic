@@ -59,7 +59,7 @@ test("a notification is delivered and answered 202 with no body", async () => {
     const mcp = vi.fn(async () => undefined);
     const response = await post(routeFor({ mcp }), { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(response.status).toBe(202);
-    expect(mcp).toHaveBeenCalled();
+    expect(mcp).toHaveBeenCalledTimes(1);
 });
 
 /* The behaviour this route exists to get right: laptops sleep, and a sleeping laptop is a normal state. As a
@@ -114,7 +114,7 @@ test("a tool call on an asleep machine is not answered locally", async () => {
         throw new Error("is not connected right now");
     });
     await post(routeFor({ online: false, mcp }), { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "describe" } });
-    expect(mcp).toHaveBeenCalled();
+    expect(mcp).toHaveBeenCalledTimes(1);
 });
 
 test("the optional server→client stream is refused honestly rather than left open", async () => {

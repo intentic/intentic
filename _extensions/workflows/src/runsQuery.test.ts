@@ -77,9 +77,11 @@ describe(`the Workflows tile`, () => {
 
         const registered = views[0];
         expect(registered?.id).toBe(`workflows`);
-        await vi.waitFor(() => expect(registered?.badge?.(tile)).toBeDefined());
+        // Waiting for the BADGE THIS TEST IS ABOUT rather than for any badge at all: polled separately, the
+        // wait can be satisfied by a first, empty badge and the assertion after it read a value that was
+        // already stale. One expression settles and asserts the same thing.
         // `neutral`: a run working is an inventory, not a debt. It seats the tile without asking to be cleared.
-        expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tone: `neutral`, tooltip: `1 running` });
+        await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tone: `neutral`, tooltip: `1 running` }));
         // The badge and the page read ONE entry: the poll fills what the view then paints from.
         expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
         expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });

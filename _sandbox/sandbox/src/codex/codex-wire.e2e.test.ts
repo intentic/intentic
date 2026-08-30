@@ -287,7 +287,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
                         sessionId = event.sessionId;
                     }
                 }
-                expect(sessionId, "a fresh turn must publish the thread it started").toBeDefined();
+                expect(sessionId, "a fresh turn must publish the thread it started").toEqual(expect.any(String));
 
                 const before = model.requests.length;
                 // Spread rather than assigned, because `exactOptionalPropertyTypes` makes an explicit

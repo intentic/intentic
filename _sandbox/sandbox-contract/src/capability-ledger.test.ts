@@ -111,8 +111,14 @@ describe("a descriptive claim reaches the user", () => {
     const DIMINISHED: Partial<Record<keyof AgentCapabilities, unknown>> = { secrets: "none" };
 
     it.each(fieldsWhere("descriptive"))("%s puts its own sentence in the picker when the runtime lacks it", (field) => {
-        const floor = typeof CEILING[field] === "boolean" ? false : DIMINISHED[field];
-        expect(floor, `${field} is descriptive and not a boolean: add its weakest value to DIMINISHED above`).toBeDefined();
+        const boolean = typeof CEILING[field] === "boolean";
+        // A boolean's floor is `false` and needs no entry; every other descriptive field has to name its own.
+        // Asserted against the KEYS of DIMINISHED so the failure prints the floors that do exist, which is what
+        // tells "this field was never added" apart from "this field was renamed and its entry left behind".
+        expect(boolean ? [field] : Object.keys(DIMINISHED), `${field} is descriptive and not a boolean: add its weakest value to DIMINISHED above`).toContain(
+            field,
+        );
+        const floor = boolean ? false : DIMINISHED[field];
 
         const lacking: AgentCapabilities = { ...CEILING, [field]: floor };
 

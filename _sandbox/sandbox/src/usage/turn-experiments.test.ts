@@ -213,7 +213,7 @@ test("no waiting estimate once the resolution is already good enough", async () 
 // Nothing to wait for once the delta is published: the field is the withheld state's own explanation.
 test("a resolved delta carries no waiting estimate", async () => {
     const { output } = await readTurnExperiments(storeOf(terseArms(40, 40, 800, 1200)), {});
-    expect(output?.metrics[0].deltaPct).toBeDefined();
+    expect(output?.metrics[0].deltaPct).toEqual(expect.any(Number));
     expect(output?.metrics[0].controlTurnsNeeded).toBeUndefined();
 });
 
@@ -275,5 +275,5 @@ test("turns written before outcome was recorded still count", async () => {
     const without = await readTurnExperiments(storeOf(terseArms(MIN_ARM_TURNS, MIN_ARM_TURNS, 800, 1000)), {});
 
     expect(without.output).toEqual(withOutcome.output);
-    expect(without.output).toBeDefined();
+    expect(without.output).toEqual(expect.any(Object));
 });

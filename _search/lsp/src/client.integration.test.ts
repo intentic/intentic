@@ -37,8 +37,7 @@ test("files from two projects are grouped, checked apart, and answered together"
     const clean = join(dir, "two", "b.ts");
     writeFileSync(clean, "export const ok = true;\n");
     const report = await diagnose({ files: [broken, clean] });
-    expect(report).toBeDefined();
-    expect(report!.unavailable).toEqual([]);
+    expect(report).toMatchObject({ unavailable: [] });
     expect(report!.diagnostics.map((d) => d.file)).toEqual([broken]);
 });
 
@@ -55,8 +54,7 @@ test("concurrent asks about one project each get their own file's answer", async
     });
     const reports = await Promise.all(files.map((file) => diagnose({ files: [file] })));
     for (const [i, report] of reports.entries()) {
-        expect(report).toBeDefined();
-        expect(report!.unavailable).toEqual([]);
+        expect(report).toMatchObject({ unavailable: [] });
         if (files[i]!.endsWith("c.ts")) {
             expect(report!.diagnostics.map((d) => d.code)).toEqual([2322]);
         } else {
@@ -71,8 +69,7 @@ test("a refusal reaches every asker of the project as per-file unavailability", 
     const file = join(dir, "a.ts");
     writeFileSync(file, "export {};\n");
     const report = await diagnose({ files: [file] });
-    expect(report).toBeDefined();
-    expect(report!.diagnostics).toEqual([]);
+    expect(report).toMatchObject({ diagnostics: [] });
     expect(report!.unavailable).toHaveLength(1);
     expect(report!.unavailable[0]).toMatchObject({ file });
 });

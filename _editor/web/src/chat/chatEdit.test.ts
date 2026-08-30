@@ -239,7 +239,7 @@ it(`refuses to spend an edit on an empty box`, async () => {
     await settle();
 
     expect(submitEdit).not.toHaveBeenCalled();
-    expect(conversation.editing.value).toBeDefined();
+    expect(conversation.editing.value).toEqual(expect.any(Object));
 });
 
 /* THE COMPOSER CANNOT PROMISE TWO THINGS AT ONCE. The agent's voice and the run-through badge's picks answer

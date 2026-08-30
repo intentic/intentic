@@ -18,7 +18,7 @@ test("an ask lands on the session and reads back for the banner", () => {
 
     // Settled by id, so a stale settle can never take down a newer ask on the same session.
     clearTerminalHelp("r-not-this-one");
-    expect(terminalHelpFor("agent-he1p0001")).toBeDefined();
+    expect(terminalHelpFor("agent-he1p0001")).toEqual(expect.any(Object));
     clearTerminalHelp("r1");
     expect(terminalHelpFor("agent-he1p0001")).toBeUndefined();
 });

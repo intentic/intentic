@@ -101,17 +101,19 @@ test("the default template is three steps and no completion scaffolding", () => 
  * independent check so a clean turn or an unverified test claim cannot finish the graph by itself. */
 test("the scored template separates blind evaluation from checked synthesis", () => {
     const scored = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `two-models-scored`)?.workflow;
-    expect(scored, `the gallery lost the template that demonstrates outputs and checks`).toBeDefined();
     const attempts = scored?.steps.filter((step) => step.id.startsWith(`attempt-`)) ?? [];
 
     const evaluation = scored?.steps.find((step) => step.id === `evaluate`);
     expect(evaluation?.output.kind).toBe(`json`);
-    expect(evaluation?.agent).toBeDefined();
+    /* Named, and named as a string. The two `not.toBe` lines below need that stated separately: with no agent
+     * at all, `undefined !== attempts[0]?.agent` is true whenever the attempts DO have one, so blindness here
+     * reads as the independence the test is about. */
+    expect(evaluation?.agent).toEqual(expect.any(String));
     expect(evaluation?.agent).not.toBe(attempts[0]?.agent);
     expect(evaluation?.agent).not.toBe(attempts[1]?.agent);
 
     const synthesis = scored?.steps.find((step) => step.id === `synthesise`);
-    expect(synthesis?.agent).toBeDefined();
+    expect(synthesis?.agent).toEqual(expect.any(String));
     expect(synthesis?.output.kind).not.toBe(`none`);
     expect(synthesis?.checks.length).toBeGreaterThan(0);
     expect(synthesis?.needs).toEqual(expect.arrayContaining([`attempt-a`, `attempt-b`, `evaluate`]));
@@ -171,7 +173,6 @@ test("attempts that race each other are given the identical task: only the model
  * (gate.routes.ts calls a one-step workflow naming its only step the intended small case). */
 test("the release-gate template ships wired: one step, gate on its required verdict", () => {
     const gated = WORKFLOW_TEMPLATES.find(({ workflow }) => workflow.id === `release-gate`)?.workflow;
-    expect(gated, `the gallery lost the card that teaches CI wiring`).toBeDefined();
     expect(gated?.steps).toHaveLength(1);
     expect(gated?.gate?.step).toBe(gated?.steps[0]?.id);
     expect(gated?.gate?.pass.length).toBeGreaterThan(0);

@@ -24,7 +24,7 @@ const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect 
 describe(`artSrc`, () => {
     it(`turns a drawn mark into a data URI an <img> will load`, () => {
         const src = artSrc(MARK);
-        expect(src).toBeDefined();
+        expect(src).toEqual(expect.any(String));
         expect(src).toMatch(/^data:image\/svg\+xml,/u);
     });
 
@@ -37,12 +37,12 @@ describe(`artSrc`, () => {
     });
 
     it(`accepts a document that opens with a prolog or a comment, which exported files do`, () => {
-        expect(artSrc(`<?xml version="1.0"?>${MARK}`)).toBeDefined();
-        expect(artSrc(`<!-- drawn by hand -->${MARK}`)).toBeDefined();
+        expect(artSrc(`<?xml version="1.0"?>${MARK}`)).toEqual(expect.any(String));
+        expect(artSrc(`<!-- drawn by hand -->${MARK}`)).toEqual(expect.any(String));
     });
 
     it(`accepts surrounding whitespace, which JSON-embedded documents collect`, () => {
-        expect(artSrc(`\n  ${MARK}\n`)).toBeDefined();
+        expect(artSrc(`\n  ${MARK}\n`)).toEqual(expect.any(String));
     });
 
     for (const [label, value] of [

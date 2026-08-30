@@ -123,7 +123,7 @@ test("the language and the clock belong to the same place", async () => {
     };
     for (const owner of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
         const device = await browserFingerprint(tempRoot(), owner);
-        expect(zones[device.locale]).toBeDefined();
+        expect(zones[device.locale]).toEqual(expect.any(String));
         expect(device.timezoneId.startsWith(zones[device.locale] as string)).toBe(true);
         // navigator.languages must lead with the very locale the context is set to, or the header and the
         // property contradict each other.
@@ -139,7 +139,7 @@ test("the GPU is one a Linux desktop could actually report", async () => {
     for (const owner of ["a", "b", "c", "d", "e", "f", "g", "h"]) {
         const device = await browserFingerprint(tempRoot(), owner);
         const make = /^Google Inc\. \((?<make>Intel|AMD|NVIDIA)\)$/.exec(device.webglVendor)?.groups?.["make"];
-        expect(make).toBeDefined();
+        expect(make).toEqual(expect.any(String));
         expect(device.webglRenderer.startsWith(`ANGLE (${make as string},`)).toBe(true);
         expect(device.webglRenderer).not.toContain("SwiftShader");
         // deviceMemory is quantised and capped at 8 by the spec, so anything above it is impossible rather

@@ -93,7 +93,6 @@ test("the fusion multipliers toggle one at a time; all three off is deterministi
 test("pack: top natural-language groups carry the enclosing symbol body as contiguous lines; off keeps sparse hits", async () => {
     const packed = await engineWith().run(request("q", "how are widgets built for the registry?"));
     const top = packed.result.groups[0];
-    expect(top).toBeDefined();
     // The slice is a contiguous run of lines = a code slice, not isolated matches. Anchors beyond the packed
     // symbol may follow it as pointers, so contiguity is asserted over the prefix, not the whole group.
     const lines = top!.hits.map((hit) => hit.line);

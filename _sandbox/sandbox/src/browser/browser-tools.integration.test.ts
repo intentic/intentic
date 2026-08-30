@@ -209,7 +209,7 @@ test("a browser capability mounts the ONE routed server before anyone has logged
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts["reddit"]).toBe("reddit");
     // The passkey store is armed from the first page: a sign-UP is exactly when the account enrolls its key.
-    expect(passkeys["reddit"]).toBeDefined();
+    expect(Object.keys(passkeys)).toContain("reddit");
 });
 
 test("a login in progress suppresses that account's server (the profile is locked)", async () => {
@@ -275,7 +275,7 @@ test("an identity-born account routes to its identity's browser", async () => {
     expect(Object.keys(servers).toSorted()).toEqual(["browser", "web"]);
     expect(accounts).toEqual({ main: "main", "reddit-main": "main" });
     // One profile owner, one debugging port: the observer's map is per owner, not per account.
-    expect(ports["main"]).toBeDefined();
+    expect(Object.keys(ports)).toContain("main");
     expect(ports["reddit-main"]).toBeUndefined();
 });
 

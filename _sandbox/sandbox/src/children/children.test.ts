@@ -458,7 +458,6 @@ describe("the shell door's arming", () => {
         const calls: string[] = [];
         armSupervisor("conv-armed", supervisor((prompt) => calls.push(prompt)));
         const armed = supervisorFor("conv-armed");
-        expect(armed).toBeDefined();
         await armed?.spawn({ prompt: "go" });
         expect(calls).toEqual(["go"]);
     });

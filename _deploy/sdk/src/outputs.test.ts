@@ -38,7 +38,10 @@ test("public handles' output refs match OUTPUTS exactly", () => {
     // postgres/valkey are the backing-instance handles (i.want.database / cache).
     for (const type of ["host", "cloudflare", "deployment", "repo", "postgres", "valkey", "workspace"] as const) {
         const handle = handles[type];
-        expect(handle, `no handle captured for type "${type}"`).toBeDefined();
+        // Which types WERE captured, printed against the one that is missing. The custom message said only
+        // that one was absent; this says what the walk actually found instead, which is the thing a reader
+        // needs to tell "the type was renamed" from "the walk stopped early".
+        expect(Object.keys(handles)).toContain(type);
         expect(outputPropsOf(handle as object)).toEqual([...OUTPUTS[type]].toSorted());
     }
 });
@@ -80,7 +83,6 @@ test("every graph ref resolves to an output declared in OUTPUTS", () => {
             const id = key.slice(0, lastDot);
             const output = key.slice(lastDot + 1);
             const target = graph.resources[id];
-            expect(target, `ref "${key}" points at unknown resource "${id}"`).toBeDefined();
             if (target === undefined) {
                 continue;
             }

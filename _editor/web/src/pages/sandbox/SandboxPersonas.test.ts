@@ -186,7 +186,7 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
     await type(nameField(el), name);
     buttonLabelled(el, `Create`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 
@@ -195,7 +195,7 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
 const openTab = async (el: HTMLElement, label: string): Promise<void> => {
     const tab = await vi.waitFor(() => {
         const found = [...el.querySelectorAll(`[role="tab"]`)].find((entry) => (entry.textContent ?? ``).trim() === label);
-        expect(found, `no tab labelled ${label}`).toBeDefined();
+        expect(found, `no tab labelled ${label}`).toEqual(expect.any(Object));
         return found!;
     });
     tab.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
@@ -296,7 +296,7 @@ it(`asks only for a name, then opens the card it made`, async () => {
 
     await type(nameField(el), `Work`);
     buttonLabelled(el, `Create`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `work`, label: `Work`, capabilities: [] });
 
     // …and now it is open, on the card that was just made.
@@ -418,8 +418,8 @@ it(`fences a card to a folder chosen from the workspace tree`, async () => {
     await openFolderPicker(el, `Only these folders`);
 
     // The workspace's folders, and only those: the file is not an answer to "where", and the ignored dir is noise.
-    expect(folderRow(`docs`)).toBeDefined();
-    expect(folderRow(`app`)).toBeDefined();
+    expect(folderRow(`docs`)).toEqual(expect.any(Object));
+    expect(folderRow(`app`)).toEqual(expect.any(Object));
     expect(folderRow(`README.md`)).toBeUndefined();
     expect(folderRow(`node_modules`)).toBeUndefined();
 
@@ -500,7 +500,7 @@ it(`renames a persona on Enter, keeping the rest of its card`, async () => {
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Name"]`)!;
     await type(field, `Work crew`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew`, capabilities: [`reddit-work`, `x-company`] });
 });
 
@@ -530,7 +530,7 @@ it(`saves an open card as soon as a switch is flipped, with no Save button`, asy
     const runCommands = [...el.querySelectorAll(`input[type="checkbox"]`)];
     expect(runCommands.length).toBeGreaterThan(0);
     toggleSwitch(el, `Run commands`);
-    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].powers).toMatchObject({ shell: false });
 });
 
@@ -625,7 +625,7 @@ it(`drops an account when its chip is clicked`, async () => {
     await openCard(el, `work`);
     byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
     // No Save to press: dropping the chip IS the change, and the card writes itself.
-    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].capabilities).toEqual([`x-company`]);
 });
 
@@ -656,7 +656,7 @@ it(`stores nothing about the prompt for a card that follows the sandbox`, async 
     await openTab(el, `What it may do`);
     toggleSwitch(el, `Run commands`);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].systemPromptMode).toBeUndefined();
 });
 
@@ -669,7 +669,7 @@ it(`stores the base a card was given one of its own`, async () => {
     // The picker is the sandbox's own three words plus the one only a card can give.
     await openTab(el, `Claude`);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalled(), { timeout: 2000 });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].systemPromptMode).toBe(`claude`);
 });
 

@@ -70,8 +70,8 @@ test(`a subscription minted for a key the daemon no longer holds is replaced, no
     const push = usePushNotifications();
     await push.enable();
 
-    expect(stale.unsubscribe).toHaveBeenCalled();
-    expect(manager.subscribe).toHaveBeenCalled();
+    expect(stale.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(manager.subscribe).toHaveBeenCalledTimes(1);
     expect(sandboxJson).toHaveBeenCalledWith(`/push/subscribe`, expect.objectContaining({ body: expect.stringContaining(`/fresh`) }));
     expect(push.state.value).toBe(`on`);
 });

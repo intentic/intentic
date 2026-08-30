@@ -204,7 +204,7 @@ test.each(Object.entries(SAMPLES).flatMap(([kind, samples]) => samples.map((samp
 // install path depends on, with the two fields that were missing named outright.
 test("an extension's registry and tier stay in the manifest: they are catalogue facts, not credentials", () => {
     const sample = SAMPLES.extension[0];
-    expect(sample).toBeDefined();
+    expect(sample).toEqual(expect.any(Object));
     const { values } = partitionSecretValues(sample as Capability, new Map());
     expect(Object.keys(values)).toEqual(["token"]);
 });

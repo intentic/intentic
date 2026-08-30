@@ -97,7 +97,7 @@ test("a pack naming an architecture branches on the one it is building for", asy
 test("pack pins are in lockstep with the daemon's own dependency versions", async () => {
     const pin = (content: string, pattern: RegExp): string => {
         const match = pattern.exec(content);
-        expect(match?.[1], `no pin matching ${String(pattern)}`).toBeDefined();
+        expect(match?.[1], `no pin matching ${String(pattern)}`).toEqual(expect.any(String));
         return match![1]!;
     };
     const version = (pkg: string): string => JSON.parse(readFileSync(join(sandboxRoot, "node_modules", pkg, "package.json"), "utf8")).version;
@@ -132,7 +132,7 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
 test("a provider CLI present on this machine reports the version its pack pins", async () => {
     const pinOf = async (pack: string, pattern: RegExp): Promise<string> => {
         const match = pattern.exec((await readPack(pack))!.content);
-        expect(match?.[1], `no pin matching ${String(pattern)} in the ${pack} pack`).toBeDefined();
+        expect(match?.[1], `no pin matching ${String(pattern)} in the ${pack} pack`).toEqual(expect.any(String));
         return match![1]!;
     };
     // `--version` output with the surrounding words dropped: codex answers "codex-cli 0.147.0", opencode answers

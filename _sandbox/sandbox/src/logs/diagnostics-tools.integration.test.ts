@@ -48,7 +48,6 @@ const call = async (deps: DiagnosticsToolDeps, name: string, args: Record<string
         _registeredTools: Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>;
     };
     const registered = registry["_registeredTools"][name];
-    expect(registered, `no tool named ${name}`).toBeDefined();
     const result = (await registered?.handler(args, {})) as { content: { text: string }[] };
     return result.content.map((part) => part.text).join("\n");
 };

@@ -70,7 +70,7 @@ test("a start that outruns the budget refuses the browser instead of stalling th
 
     // Released by the budget, not by the start: the driver is still parked at this point.
     expect(waited).toBeLessThan(3_000);
-    expect(bound).toBeDefined();
+    expect(bound).toEqual(expect.any(Object));
     expect(bound).toHaveProperty("refusal");
     // A refusal, never an exit: the caller must have nothing it could hand to a browser.
     expect(bound).not.toHaveProperty("exit");

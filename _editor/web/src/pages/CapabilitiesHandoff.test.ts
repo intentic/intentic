@@ -160,7 +160,7 @@ const mount = (): HTMLElement => {
 // what it does is dispatch this.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(add).toHaveBeenCalled());
+    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 
@@ -212,7 +212,7 @@ it(`does not open the sign-in window when the browser is still waiting on a rebu
     // link beside them is the way to the screen that carries the remedy. They used to be one sentence inside
     // the link, which is why this asserted the anchor's text.
     const link = [...el.querySelectorAll(`a`)].find((anchor) => anchor.getAttribute(`href`) === `/sandbox/environment`);
-    expect(link).toBeDefined();
+    expect(link).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`rebuild the sandbox to install the browser`);
 });
 
@@ -224,7 +224,7 @@ it(`returns to the catalog when the capability came back active`, async () => {
     await submitForm(el);
 
     expect(el.querySelector(`[data-browser]`)).toBeNull();
-    expect(push).toHaveBeenCalled();
+    expect(push).toHaveBeenCalledTimes(1);
 });
 
 // A connected account is not finished with. The row that offers a re-log-in also offers the browser ITSELF:

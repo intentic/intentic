@@ -73,7 +73,7 @@ test("absent account and model stay absent rather than becoming an explicit unde
     await store.record(turn());
 
     const [row] = await store.rollup({});
-    expect(row).toBeDefined();
+    expect(row).toEqual(expect.any(Object));
     expect("account" in (row ?? {})).toBe(false);
     expect("model" in (row ?? {})).toBe(false);
     // Unattributed turns still count toward provider totals: the spend happened.

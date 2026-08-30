@@ -10,7 +10,6 @@ const patch = [`@@ -1,4 +1,4 @@`, ` one`, `-two`, `+TWO`, ` three`, ` four`, `@@
 
 test(`rebuilds both sides and numbers every line the way the file does`, () => {
     const sides = patchedSides(patch);
-    expect(sides).toBeDefined();
     // The two regions, with a marker holding them apart: they are 115 lines apart in the real file.
     expect(sides?.before.split(`\n`)).toEqual([`one`, `two`, `three`, `four`, PATCH_GAP, `a`, `c`, `d`]);
     expect(sides?.after.split(`\n`)).toEqual([`one`, `TWO`, `three`, `four`, PATCH_GAP, `a`, `b`, `c`, `d`]);

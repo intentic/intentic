@@ -34,8 +34,7 @@ it(`binds the chat pop-out to F9 and names it for the direction the press will t
     const app = mountShell();
     const entry = commands.value.find((candidate) => candidate.command === `chat.toggleFloating`);
 
-    expect(entry).toBeDefined();
-    expect(entry!.title).toBe(`Move Chat into New Window`);
+    expect(entry).toMatchObject({ title: `Move Chat into New Window` });
     // The same words the strip's menu row and the button's tooltip use, and the chord all three now teach.
     expect(commandShortcut(`chat.toggleFloating`)).toBe(`F9`);
 

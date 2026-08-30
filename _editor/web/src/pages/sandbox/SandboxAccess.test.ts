@@ -112,7 +112,6 @@ it(`hands the owner the link when the email did not carry it`, async () => {
     expect(shown()).toContain(`https://localhost:47145/invite/tok`);
 
     const copy = [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Copy link`);
-    expect(copy, `no Copy link button`).toBeDefined();
     copy?.click();
     await nextTick();
     expect(writeText).toHaveBeenCalledWith(`https://localhost:47145/invite/tok`);

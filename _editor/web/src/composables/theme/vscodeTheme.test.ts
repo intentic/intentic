@@ -72,6 +72,6 @@ describe(`vscodeThemeToTokens`, () => {
         // All 13 identity tokens are present even with no source colors.
         expect(Object.keys(result.tokens)).toHaveLength(13);
         expect(result.tokens[`--color-canvas`]).toBe(`#ffffff`);
-        expect(result.tokens[`--color-content`]).toBeDefined();
+        expect(Object.keys(result.tokens)).toContain(`--color-content`);
     });
 });

@@ -22,7 +22,9 @@ const put = async (path: string, content: string): Promise<void> => {
 
 const call = async (path: string, init?: RequestInit): Promise<Response> => {
     const response = await handler(new Request(`http://sandbox${path}`, init));
-    expect(response, `nothing served ${path}`).toBeDefined();
+    // What the handler owes is a Response, not merely something. Saying so catches the route that returns a
+    // bare body or a thenable as clearly as the one that returns nothing, and names the path either way.
+    expect(response, `nothing served ${path}`).toBeInstanceOf(Response);
     return response!;
 };
 

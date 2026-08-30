@@ -633,5 +633,8 @@ describe("the free-trial key pool", () => {
 });
 
 it(`the Prisma import stays referenced, so createApp's error mapping narrows on the same class app.test.ts uses`, () => {
-    expect(Prisma).toBeDefined();
+    // The MEMBER app.test.ts actually spends (`Prisma.DbNull`), not the namespace object. A namespace that
+    // resolved to an empty module would satisfy "defined" and still take the error mapping down with it, which
+    // is the whole failure this guard exists to notice.
+    expect(Prisma.DbNull).toBeInstanceOf(Object);
 });

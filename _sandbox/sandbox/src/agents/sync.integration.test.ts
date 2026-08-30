@@ -399,7 +399,7 @@ const midTurnDrift = async (): Promise<{ work: string; worktrees: AgentWorktrees
 test("without the last-moment rebase, a land refuses over main-line movement it never touched", async () => {
     const { work, worktrees, base } = await midTurnDrift();
     const outcome = await landAgent(worktrees, entryOf(base));
-    expect(outcome.landed).toBeFalsy();
+    expect(outcome.landed).toBe(false);
     // `diverged` is the tell: not "you both edited this line" but "the tree moved under the patch".
     expect(outcome.conflicts?.[0]?.paths).toEqual([{ path: "app.ts", reason: "diverged" }]);
     // The user's tree is untouched by the refusal: all of it or none.

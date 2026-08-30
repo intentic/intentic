@@ -304,7 +304,7 @@ test(`a skill the reader owns offers delete under its editor`, async () => {
     await settle();
 
     // The editor is what opened, and the delete sits below it rather than instead of it.
-    expect(button(host, `Save changes`)).toBeDefined();
+    expect(button(host, `Save changes`)).toEqual(expect.any(Object));
     button(host, `Delete this skill`)?.click();
     await nextTick();
     expect(removeMutate).not.toHaveBeenCalled();

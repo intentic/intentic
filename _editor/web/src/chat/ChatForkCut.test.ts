@@ -220,7 +220,7 @@ describe(`the fork cut`, () => {
         await openMenu(element);
 
         expect(row(`Edit`)).toBeUndefined();
-        expect(row(`Fork`)).toBeDefined();
+        expect(row(`Fork`)).toEqual(expect.any(Object));
     });
 
     // The composer is already holding it, and a menu offering to start what is running is a menu describing a
@@ -235,7 +235,7 @@ describe(`the fork cut`, () => {
         app?.unmount();
         const other = mount(0);
         await openMenu(other);
-        expect(row(`Edit`)).toBeDefined();
+        expect(row(`Edit`)).toEqual(expect.any(Object));
     });
 
     // Anywhere else that row would be a second name for the cut the mark already is.
@@ -268,7 +268,7 @@ describe(`the fork cut`, () => {
 
         row(`Rewind`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         await nextTick();
-        expect(row(`Click again`)).toBeDefined();
+        expect(row(`Click again`)).toEqual(expect.any(Object));
 
         vi.advanceTimersByTime(4000);
         await nextTick();

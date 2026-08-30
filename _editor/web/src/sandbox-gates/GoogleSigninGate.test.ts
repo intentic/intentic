@@ -81,7 +81,7 @@ it(`hands sign-in to the real browser inside the desktop app`, async () => {
     await mount();
     buttonSaying(`Continue with Google in your browser`)?.click();
 
-    expect(signInThroughBrowser).toHaveBeenCalled();
+    expect(signInThroughBrowser).toHaveBeenCalledTimes(1);
 });
 
 it(`never renders Google's own button inside the desktop app`, async () => {
@@ -96,6 +96,6 @@ it(`never renders Google's own button inside the desktop app`, async () => {
 it(`keeps Google's own button in an ordinary browser`, async () => {
     await mount();
 
-    expect(renderButton).toHaveBeenCalled();
+    expect(renderButton).toHaveBeenCalledTimes(1);
     expect(buttonSaying(`Continue with Google in your browser`)).toBeUndefined();
 });

@@ -82,7 +82,7 @@ it(`asks for a task rather than for a sign-in, even with nothing connected`, asy
     // Nor the subscription row that came with it: what a chat can send with is answered in the model picker.
     expect(starterNamed(board, `Claude`)).toBeUndefined();
     // And something to press: the build ladder, since this mount has no repositories.
-    expect(starterNamed(board, BUILD_IDEAS[0]!.label)).toBeDefined();
+    expect(starterNamed(board, BUILD_IDEAS[0]!.label)).toEqual(expect.any(Object));
 
     // THE COMPOSER IS GONE. There is one composer in this product and it is the chat's; a second one here could
     // not even send, because a fresh sandbox has nothing connected yet.
@@ -124,7 +124,7 @@ it(`offers building on an empty workspace, and nothing that points at code which
 
     // And the build ladder is, from the board's own source (buildIdeas.ts).
     for (const example of BUILD_IDEAS) {
-        expect(starterNamed(board, example.label)).toBeDefined();
+        expect(starterNamed(board, example.label)).toEqual(expect.any(Object));
     }
 });
 
@@ -149,7 +149,6 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     await nextTick();
 
     const starter = starterNamed(board, `Explain this codebase`);
-    expect(starter).toBeDefined();
 
     const before = useChat().conversations.value.length;
     starter!.click();

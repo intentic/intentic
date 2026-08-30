@@ -73,6 +73,6 @@ describe(`the published shape of @intentic/extension-ui`, () => {
      * "normally" is not what the correctness of a published artifact rests on. */
     test(`builds itself at pack time, so a tarball cannot ship without its dist`, () => {
         expect(manifest.scripts[`prepack`]).toBe(manifest.scripts[`build`]);
-        expect(manifest.scripts[`build`]).toBeDefined();
+        expect(Object.keys(manifest.scripts)).toContain(`build`);
     });
 });

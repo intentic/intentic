@@ -88,5 +88,5 @@ test("the failed report names its reason", async () => {
 
     expect(reports.at(-1)?.outcome).toBe(`failed`);
     expect(reports.at(-1)?.reason).toContain(`usage limit`);
-    expect(reports.at(-1)?.finishedAt).toBeDefined();
+    expect(reports.at(-1)?.finishedAt).toEqual(expect.any(Number));
 });

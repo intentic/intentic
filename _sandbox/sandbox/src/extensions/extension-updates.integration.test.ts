@@ -102,7 +102,7 @@ test("discover → preview → apply → revert: the whole update lifecycle over
     const row = listed.extensions.find((extension) => extension.id === "demo");
     expect(row?.update?.ref).toBe(author.v2);
     expect(row?.updatePolicy).toEqual({ updates: "notify", advisories: "auto-disable" });
-    expect(listed.updatesCheckedAt).toBeDefined();
+    expect(listed.updatesCheckedAt).toEqual(expect.any(String));
 
     // PREVIEW. The staged read names exactly the power the new manifest grew by.
     const preview = await client.extensions.updatePreview({ id: "demo" });

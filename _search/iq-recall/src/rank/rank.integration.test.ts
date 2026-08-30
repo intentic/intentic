@@ -68,8 +68,9 @@ test("file overlap lifts the score when caller passes known-relevant files", () 
     const without = matchSessions(db, "improve the token rotation");
     const withFiles = matchSessions(db, "improve the token rotation", { files: ["src/auth/token.ts", "src/auth/login.ts"] });
     const scoreOf = (matches: typeof without): number => matches.find((match) => match.sessionId === SESSION_A)!.score;
-    expect(scoreOf(withFiles)).toBeGreaterThan(0);
-    expect(withFiles.find((match) => match.sessionId === SESSION_A)).toBeDefined();
+    // LIFTS, which is the comparison the test is named for and the one it was not making: `without` was
+    // computed and never read, so a scorer that ignored `files` entirely passed here.
+    expect(scoreOf(withFiles)).toBeGreaterThan(scoreOf(without));
 });
 
 test("the days window drops old sessions entirely", () => {

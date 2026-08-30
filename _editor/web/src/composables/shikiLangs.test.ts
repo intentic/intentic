@@ -33,7 +33,7 @@ test(`the overlay's instructions and comments come out as distinct colours`, asy
     // An instruction keyword is split into its OWN span, which is the whole difference from the plain <pre>
     // fallback: uncoloured, `FROM intentic/sandbox:latest` is a single undivided text run.
     const colourOf = (token: string): string | undefined => new RegExp(`color:(#[0-9A-F]{6})[^"]*">${token}<`).exec(html)?.[1];
-    expect(colourOf(`FROM`)).toBeDefined();
+    expect(colourOf(`FROM`)).toEqual(expect.any(String));
     expect(colourOf(`ENV`)).toBe(colourOf(`FROM`));
     // And a comment is a different colour again: one shade for everything would still be "no highlighting".
     expect(html).toMatch(/color:(#[0-9A-F]{6})[^"]*"># the Environment card/);

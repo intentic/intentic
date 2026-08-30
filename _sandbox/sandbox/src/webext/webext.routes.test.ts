@@ -146,7 +146,7 @@ test("a notification is delivered and answered 202 with no body", async () => {
     const mcp = vi.fn(async () => undefined);
     const response = await post(routeFor({ mcp }), { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(response.status).toBe(202);
-    expect(mcp).toHaveBeenCalled();
+    expect(mcp).toHaveBeenCalledTimes(1);
 });
 
 test("the optional server→client stream is refused honestly rather than left open", async () => {

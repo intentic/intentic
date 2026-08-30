@@ -162,7 +162,9 @@ describe(`WORKSPACE_STATE_FILES`, () => {
         // the difference visible at review time.
         for (const file of WORKSPACE_STATE_FILES) {
             if (file.invalidates.length === 0) {
-                expect(file.why, `${file.path} invalidates nothing and must say why`).toBeTruthy();
+                // A string with something in it. Truthiness would accept the number 1 or an object, and the
+                // failure this guards against — a `why` left blank to quiet the check — reads as whitespace.
+                expect(file.why, `${file.path} invalidates nothing and must say why`).toEqual(expect.stringMatching(/\S/));
             } else {
                 expect(file.why, `${file.path} invalidates queries, so \`why\` is dead weight`).toBeUndefined();
             }

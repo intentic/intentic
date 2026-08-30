@@ -32,7 +32,7 @@ const directives = nginxConf
 
 const valueOf = (header: string): string => {
     const line = directives.find((directive) => directive.toLowerCase().startsWith(`add_header ${header.toLowerCase()} `));
-    expect(line, `nginx.conf sets no ${header}`).toBeDefined();
+    expect(line, `nginx.conf sets no ${header}`).toEqual(expect.any(String));
     return /"([^"]*)"/.exec(line ?? ``)?.[1] ?? ``;
 };
 

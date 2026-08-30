@@ -73,7 +73,7 @@ const ruleById = (id: string): Rule | undefined => settings.value.rules.find((ru
 const toggleAt = (host: HTMLElement, index: number): HTMLElement => {
     const switches = [...host.querySelectorAll(`[role="switch"], input[type="checkbox"]`)];
     const control = switches[index];
-    expect(control, `expected a switch at index ${index}`).toBeDefined();
+    expect(control, `expected a switch at index ${index}`).toEqual(expect.any(Object));
     return control as HTMLElement;
 };
 
@@ -162,7 +162,7 @@ test(`switching it back off disables the rule rather than losing where the user 
 test(`the pre-push command box writes a command rule, and emptying it takes the rule away`, async () => {
     const host = mount(AgentChecks);
     const input = host.querySelector(`input[aria-label="Pre-push check command"]`) as HTMLInputElement;
-    expect(input).toBeTruthy();
+    expect(input).toEqual(expect.any(HTMLElement));
 
     input.value = `pnpm test`;
     input.dispatchEvent(new Event(`input`));
@@ -228,7 +228,7 @@ test(`the general list shows every rule EXCEPT the four with a row of their own`
 const typeInto = async (host: HTMLElement, label: string, value: string): Promise<void> => {
     // Textarea as well as input: what you tell the assistant is a paragraph, and the form types it in one.
     const field = host.querySelector(`input[aria-label="${label}"], textarea[aria-label="${label}"]`) as HTMLInputElement | HTMLTextAreaElement;
-    expect(field, `expected a field labelled ${label}`).toBeTruthy();
+    expect(field, `expected a field labelled ${label}`).toEqual(expect.any(HTMLElement));
     field.value = value;
     field.dispatchEvent(new Event(`input`));
     await Promise.resolve();
@@ -236,7 +236,7 @@ const typeInto = async (host: HTMLElement, label: string, value: string): Promis
 
 const clickText = async (host: HTMLElement, text: string): Promise<void> => {
     const target = [...host.querySelectorAll(`button, [role="button"]`)].find((element) => element.textContent?.includes(text));
-    expect(target, `expected something clickable saying "${text}"`).toBeTruthy();
+    expect(target, `expected something clickable saying "${text}"`).toEqual(expect.any(HTMLElement));
     (target as HTMLElement).click();
     await Promise.resolve();
 };
@@ -337,11 +337,11 @@ test(`editing a rule rewrites its words and keeps its id and its switch`, async 
 
     // The row's menu teleports out of the component, so the item is found on the document.
     const actions = host.querySelector(`button[aria-label="Rule actions"]`) as HTMLButtonElement;
-    expect(actions, `expected a row menu`).toBeTruthy();
+    expect(actions, `expected a row menu`).toEqual(expect.any(HTMLElement));
     actions.click();
     await Promise.resolve();
     const edit = [...document.body.querySelectorAll(`a`)].find((item) => item.textContent?.includes(`Edit`));
-    expect(edit, `expected an Edit item`).toBeTruthy();
+    expect(edit, `expected an Edit item`).toEqual(expect.any(HTMLElement));
     (edit as HTMLElement).click();
     await Promise.resolve();
 

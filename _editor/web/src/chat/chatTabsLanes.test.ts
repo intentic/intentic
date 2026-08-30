@@ -242,7 +242,7 @@ it(`clears the whole lane from its header, whatever the window is showing`, asyn
     const el = await mountList();
     openFinished(10);
     await settle();
-    expect(clearButton(el)).toBeDefined();
+    expect(clearButton(el)).toEqual(expect.any(Object));
 
     clearButton(el)?.click();
 

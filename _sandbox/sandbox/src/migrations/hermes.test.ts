@@ -84,10 +84,10 @@ test("skills: flattened, baked names renamed, descriptions defaulted", () => {
     const { planned } = planHermes(fixture());
     expect(byId(planned, "skill:weather")?.apply).toMatchObject({ target: "skill", skill: { name: "weather", description: "Fetch the forecast." } });
     // Nested skill keeps its own directory's name, as Hermes' own migrations flatten.
-    expect(byId(planned, "skill:nested")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("skill:nested");
     // `lsp` is a baked tool here: the import must not claim its switch.
     expect(byId(planned, "skill:lsp")).toBeUndefined();
-    expect(byId(planned, "skill:lsp-imported")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("skill:lsp-imported");
 });
 
 test("secrets: every .env key is offered, only credential-shaped ones recommended, auth.json api_key joins", () => {
@@ -133,7 +133,7 @@ test("cron: valid jobs from config.yaml and cron/ become held-for-approval autom
         target: "automation",
         automation: { trigger: { kind: "schedule", cron: "0 9 * * *" }, requireApproval: true, enabled: true },
     });
-    expect(byId(planned, "automation:hermes-water-plants")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("automation:hermes-water-plants");
     expect(refused.some((line) => line.includes("daily digest"))).toBe(false);
     expect(refused.some((line) => line.includes("broken"))).toBe(true);
 });
@@ -159,7 +159,7 @@ test("a home with an unreadable config still plans the files, refusing the confi
     const files = fixture();
     files.set("config.yaml", Buffer.from("model: [unclosed"));
     const { planned, refused } = planHermes(files);
-    expect(byId(planned, "memory:soul")).toBeDefined();
-    expect(byId(planned, "skill:weather")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("memory:soul");
+    expect(planned.map((entry) => entry.item.id)).toContain("skill:weather");
     expect(refused.some((line) => line.includes("not readable as YAML"))).toBe(true);
 });

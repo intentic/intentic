@@ -130,7 +130,7 @@ describe(`in the desktop app's own window`, () => {
 
             // The ONE thing this window can complete. A surface that offers anything else offers a dead end,
             // however convincing its button looks.
-            expect(signInThroughBrowser, `${name} never reached the browser hand-off`).toHaveBeenCalled();
+            expect(signInThroughBrowser, `${name} never reached the browser hand-off`).toHaveBeenCalledTimes(1);
         });
     }
 });
@@ -140,7 +140,7 @@ describe(`in an ordinary browser`, () => {
         it(`${name} puts Google's own button up and never mentions the app hand-off`, async () => {
             const el = await mount(component);
 
-            expect(renderButton, `${name} showed no Google button where one works`).toHaveBeenCalled();
+            expect(renderButton, `${name} showed no Google button where one works`).toHaveBeenCalledTimes(1);
             expect(signInThroughBrowser, `${name} sent an ordinary browser to the desktop app`).not.toHaveBeenCalled();
             expect(el.textContent).not.toContain(`in your browser`);
         });

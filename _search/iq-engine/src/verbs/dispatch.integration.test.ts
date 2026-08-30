@@ -115,7 +115,10 @@ test("the sweep, not ripgrep's own ignore handling: decides what find can match"
 test("cursor: truncated result resumes exactly with --after", async () => {
     const first = await engine.run(request({ verb: "find", query: "widget", render: { budget: 120 } }));
     expect(first.result.truncated).toBe(true);
-    expect(first.result.cursor).toBeDefined();
+    // The shape render/cursor.ts documents and the resume below has to be able to decode: an 8-hex spool id
+    // followed by a base36 group offset. "Not undefined" would pass on a cursor from a different encoding
+    // entirely, and the resume would then fail somewhere less obvious than here.
+    expect(first.result.cursor).toMatch(/^[0-9a-f]{8}[0-9a-z]+$/);
 
     const next = await engine.run(request({ verb: "find", query: "widget", render: { budget: 4000, after: first.result.cursor! } }));
     expect(next.exitCode).toBe(0);
@@ -154,7 +157,8 @@ test("a ceilinged list page and the page after it are one continuous result", as
     const first = await engine.run(request({ verb: "find", query: "widget", options: { literal: true }, render: { budget: 1500, list: page } }));
     expect(first.result.groups).toHaveLength(1);
     expect(first.result.truncated).toBe(true);
-    expect(first.result.cursor).toBeDefined();
+    // The encoding render/cursor.ts documents: an 8-hex spool id and a base36 group offset.
+    expect(first.result.cursor).toMatch(/^[0-9a-f]{8}[0-9a-z]+$/);
     // The scan stopped early, so the counts beside it are floors and say so through the same flag a per-file
     // cap sets. A panel renders this as "N+".
     expect(first.result.partial).toBe(true);

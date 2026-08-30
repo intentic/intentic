@@ -75,8 +75,7 @@ test("a shell step takes the flat exec_command form when the request offers it",
         const request = { model: "fake", tools: [{ type: "function", name: "exec_command" }], input: [] };
         const { text } = await post(model.baseUrl, "/v1/responses", request);
         const item = sentItems(text).find((frame) => frame["type"] === "function_call");
-        expect(item).toBeDefined();
-        expect(item!["name"]).toBe("exec_command");
+        expect(item).toMatchObject({ name: "exec_command" });
         expect(JSON.parse(String(item!["arguments"]))).toEqual({ cmd: "/bin/ls -la" });
     } finally {
         await model.close();
@@ -92,8 +91,7 @@ test("a shell step falls back to the exec script form when only the custom tool 
         };
         const { text } = await post(model.baseUrl, "/v1/responses", request);
         const item = sentItems(text).find((frame) => frame["type"] === "custom_tool_call");
-        expect(item).toBeDefined();
-        expect(item!["name"]).toBe("exec");
+        expect(item).toMatchObject({ name: "exec" });
         expect(String(item!["input"])).toContain(`tools.exec_command({cmd: "/bin/ls -la"})`);
     } finally {
         await model.close();
@@ -109,8 +107,7 @@ test("an execScript step escapes the command into valid JavaScript", async () =>
     try {
         const { text } = await post(model.baseUrl, "/v1/responses", body([]));
         const item = sentItems(text).find((frame) => frame["type"] === "custom_tool_call");
-        expect(item).toBeDefined();
-        expect(item!["name"]).toBe("exec");
+        expect(item).toMatchObject({ name: "exec" });
         expect(String(item!["input"])).toBe(String.raw`const r = await tools.exec_command({cmd: "/bin/echo \"quoted\""}); text(r);`);
         // The escaped source is still valid JavaScript: what the isolate is handed must parse.
         expect(() => new Function(`return async () => { ${String(item!["input"])} }`)).not.toThrow();

@@ -77,7 +77,9 @@ describe(`routeShapes`, () => {
     it(`changes the fingerprint when a field is added`, () => {
         const before = routeShapes(shaped(z.object({ a: z.string() })))[`vpn.list`];
         const after = routeShapes(shaped(z.object({ a: z.string(), b: z.number() })))[`vpn.list`];
-        expect(before).toBeDefined();
+        // A fingerprint is a string, and saying so is what makes the line below mean something: with `before`
+        // undefined and `after` a real shape, "they differ" is true for the wrong reason.
+        expect(before).toEqual(expect.any(String));
         expect(after).not.toBe(before);
     });
 
@@ -99,7 +101,7 @@ describe(`routeShapes`, () => {
         const one = z.object({ a: z.string().default(`x`) });
         const asOutput = routeShapes(shaped(one))[`vpn.list`];
         const asInput = routeShapes({ vpn: { list: oc.route({ method: "GET", path: "/vpn" }).input(one) } })[`vpn.list`];
-        expect(asOutput).toBeDefined();
+        expect(asOutput).toEqual(expect.any(String));
         expect(asInput).not.toBe(asOutput);
     });
 

@@ -89,7 +89,6 @@ test("an author env var overrides an injected binding var (binding spread before
         ],
     };
     const deployment = nodesById(intent).get("app.prod");
-    expect(deployment).toBeDefined();
     expect((deployment!.inputs["env"] as Record<string, unknown>)["DATABASE_URL"]).toBe("postgres://custom");
 });
 

@@ -51,7 +51,7 @@ test("a file tool outside them is refused, and told where it may work", async ()
  * comparison. Getting this wrong grants a whole sibling repo. */
 test("a sibling folder sharing a prefix is not inside the limit", async () => {
     const hooks = personaScopeHooks(scopeFor({ workspace: { folders: ["apps/web"] } })!);
-    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web2/main.ts" })).toBeDefined();
+    expect(await attempt(hooks, "Read", { file_path: "/work/apps/web2/main.ts" })).toEqual(expect.any(String));
 });
 
 /* Paths outside the workspace are a different question, answered by the container. Judging them here would

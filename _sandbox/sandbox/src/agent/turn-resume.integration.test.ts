@@ -108,7 +108,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         agent: "codex",
         harness: "native",
     });
-    expect(started).toBeDefined();
+    expect(started).toEqual(expect.any(Object));
     await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
     // The user row is stamped with when it was sent; this suite is about which rows a settled turn records, so
     // it asserts the shape and lets the clock be a number.
@@ -449,8 +449,8 @@ test("an outage costs ONE turn per window however many conversations are strande
     expect(prompts).toHaveLength(1);
     expect(pendingOutageFailure("herd-1")).toBeUndefined();
     // And the ones that did not go are still remembered, in order, for the windows after this.
-    expect(pendingOutageFailure("herd-2")).toBeDefined();
-    expect(pendingOutageFailure("herd-4")).toBeDefined();
+    expect(pendingOutageFailure("herd-2")).toEqual(expect.any(Object));
+    expect(pendingOutageFailure("herd-4")).toEqual(expect.any(Object));
     for (const id of ["herd-2", "herd-3", "herd-4"]) {
         clearPendingResume(id);
     }
@@ -484,7 +484,7 @@ test("with the toggle off the turn is remembered, not resumed: turning it on arm
     await scheduler.tick(retryAt);
     await settle("toggle-1");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure("toggle-1")).toBeDefined();
+    expect(pendingOutageFailure("toggle-1")).toEqual(expect.any(Object));
 
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, resumeAfterOutage: true });
@@ -510,7 +510,7 @@ test("a conversation armed on its own resumes while the sandbox default leaves t
     expect(prompts).toHaveLength(1);
     // The unarmed conversation is still remembered: its own offer still arms it, but nothing fired for it,
     // and, just as importantly, it never spent the breaker's window on its way to not firing.
-    expect(pendingOutageFailure("own-quiet")).toBeDefined();
+    expect(pendingOutageFailure("own-quiet")).toEqual(expect.any(Object));
     // The pending map is process-wide, so a turn left stranded here would be picked up by the next test's pass.
     clearPendingResume("own-quiet");
 });
@@ -529,7 +529,7 @@ test("a conversation that opted out stays stopped even though the sandbox defaul
     await scheduler.tick(retryAt);
     await settle("own-off");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure("own-off")).toBeDefined();
+    expect(pendingOutageFailure("own-off")).toEqual(expect.any(Object));
     clearPendingResume("own-off");
 });
 
@@ -587,7 +587,7 @@ test("one provider's outage never gates a conversation on another", async () => 
     // The Codex conversation has nothing to wait for: its provider never failed.
     expect(prompts).toHaveLength(1);
     expect(pendingOutageFailure("iso-codex")).toBeUndefined();
-    expect(pendingOutageFailure("iso-claude")).toBeDefined();
+    expect(pendingOutageFailure("iso-claude")).toEqual(expect.any(Object));
     clearPendingResume("iso-claude");
 });
 
@@ -1110,7 +1110,7 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
     const turns: AgentTurn[] = [];
     recordLimitFailure({ input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true }, sessionId: "s-void", ran: false });
 
-    expect(await fireLimitResume(services, heldWake(turns), "lim-1")).toBeDefined();
+    expect(await fireLimitResume(services, heldWake(turns), "lim-1")).toEqual(expect.any(Object));
     await settle("lim-1");
 
     expect(turns).toHaveLength(1);

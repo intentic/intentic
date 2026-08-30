@@ -62,7 +62,7 @@ it(`renders it in an ordinary browser`, async () => {
     const rendered = await renderButton(document.createElement(`div`), true);
 
     expect(rendered).toBe(true);
-    expect(gisRenderButton).toHaveBeenCalled();
+    expect(gisRenderButton).toHaveBeenCalledTimes(1);
 });
 
 it(`raises the sign-in gate at once inside the desktop app rather than waiting out the silent timer`, async () => {

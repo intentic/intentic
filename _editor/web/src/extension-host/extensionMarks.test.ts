@@ -62,7 +62,7 @@ describe(`first-party extension marks`, () => {
          * choice, and the Extensions tab is where it shows: one row in a column of marks wearing two grey
          * letters reads as the one that failed to load. */
         it(`declares a mark: ${dir}`, () => {
-            expect(manifest.art ?? manifest.logo ?? manifest.icon).toBeDefined();
+            expect(manifest.art ?? manifest.logo ?? manifest.icon).toEqual(expect.any(String));
         });
 
         /* Artwork that would not survive the gate is worse than none: it falls back silently, so the author sees
@@ -73,7 +73,7 @@ describe(`first-party extension marks`, () => {
             if (manifest.art === undefined) {
                 return;
             }
-            expect(artSrc(manifest.art), `contributes art that is not a drawable SVG document`).toBeDefined();
+            expect(artSrc(manifest.art), `contributes art that is not a drawable SVG document`).toEqual(expect.any(String));
         });
     }
 });

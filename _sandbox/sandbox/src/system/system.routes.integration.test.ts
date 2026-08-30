@@ -339,7 +339,7 @@ test("a sandbox on intentic's own fabric enrolls for sync like every other one",
     expect(enrolled.status).toBe(200);
     // The credential, and no address: the agent reaches this sandbox at the URL it already holds.
     const body = (await enrolled.json()) as { syncToken?: string; mode?: string };
-    expect(body.syncToken).toBeDefined();
+    expect(body.syncToken).toEqual(expect.any(String));
     expect(body.mode).toBe("sync");
 });
 

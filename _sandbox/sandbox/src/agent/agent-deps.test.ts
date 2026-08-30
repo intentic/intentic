@@ -75,7 +75,7 @@ test("a scoped subpath import is answered for by its package", async () => {
 test("the reason is given once per package, not stapled to every retry", async () => {
     const { probe } = treeMissing(["vue"]);
     const hooks = depsNoticeHooks(probe, true);
-    expect(context(await fire(hooks, `Cannot find module 'vue'`))).toBeDefined();
+    expect(context(await fire(hooks, `Cannot find module 'vue'`))).toEqual(expect.any(String));
     expect(await fire(hooks, `Cannot find module 'vue'`)).toEqual({});
 });
 

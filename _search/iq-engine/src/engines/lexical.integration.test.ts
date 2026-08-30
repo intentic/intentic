@@ -35,7 +35,6 @@ test("spans index the string, not its bytes: a match after an em dash lands on t
     const hits = await search("hardware", { literal: true });
     const line = hits.find((hit) => hit.line === 2);
     const span = line?.spans?.[0];
-    expect(span).toBeDefined();
     expect(line?.text.slice(span?.start, span?.end)).toBe("hardware");
 });
 

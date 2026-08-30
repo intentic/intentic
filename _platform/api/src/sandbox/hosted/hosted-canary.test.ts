@@ -115,7 +115,7 @@ describe(`the provisioning canary`, () => {
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(false);
         expect(result.detail).toContain(`never checked in`);
-        expect(prisma.sandbox.delete).toHaveBeenCalled();
+        expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
     it(`fails, and still cleans up, when the provider refuses to build at all`, async () => {
@@ -124,7 +124,7 @@ describe(`the provisioning canary`, () => {
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(false);
         expect(result.detail).toContain(`no capacity`);
-        expect(prisma.sandbox.delete).toHaveBeenCalled();
+        expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
     it(`does nothing at all when it is switched off, or the lane is`, async () => {

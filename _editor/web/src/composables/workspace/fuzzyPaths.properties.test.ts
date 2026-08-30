@@ -95,7 +95,7 @@ describe(`fuzzyScore`, () => {
         assert(
             property(pathArb, (path) => {
                 const score = fuzzyScore(path, path);
-                expect(score).toBeDefined();
+                expect(score).toEqual(expect.any(Number));
                 expect(Number.isFinite(score!)).toBe(true);
                 expect(score!).toBeGreaterThan(0);
             }),

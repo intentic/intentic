@@ -40,7 +40,6 @@ test("a report is batched, then posted with the page's route and build", async (
 
     expect(fetched).toHaveLength(1);
     const posted = fetched[0];
-    expect(posted).toBeDefined();
     expect((posted?.body as { events: unknown[] } | undefined)?.events[0]).toMatchObject({
         level: `error`,
         event: `vue.render`,
@@ -102,7 +101,12 @@ test("reporting cannot throw, whatever it is handed", async () => {
 
     // Called from an error handler: a reporter that throws turns one bug into two.
     expect(() => reportClient(`window.error`, `x`, { fields: circular as never })).not.toThrow();
-    await expect(vi.advanceTimersByTimeAsync(5_000)).resolves.not.toThrow();
+    await vi.advanceTimersByTimeAsync(5_000);
+    /* AND THE REPORT IS DROPPED, not sent half-formed. `resolves.not.toThrow` never said which of those
+     * happened — it was satisfied by the flush settling at all — so what the reporter actually does with an
+     * unserialisable payload was untested either way. It discards it: the queue drains, nothing is posted, and
+     * the caller's own error is still the only one anybody has to deal with. */
+    expect(fetched).toHaveLength(0);
 });
 
 test("an empty queue posts nothing", async () => {

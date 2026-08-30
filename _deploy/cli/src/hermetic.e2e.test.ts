@@ -172,7 +172,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             resources: Record<string, { dependsOn: string[]; readyWhen?: unknown }>;
         };
         for (const id of [HOST, FORGEJO, RUNNER, KOMODO, TUNNEL, deploymentId("app", "production")]) {
-            expect(artifact.resources[id], `derived node ${id}`).toBeDefined();
+            expect(Object.keys(artifact.resources)).toContain(id);
         }
         expect(artifact.resources[FORGEJO]?.dependsOn).toEqual([HOST]);
         expect(artifact.resources[FORGEJO]?.readyWhen).toEqual({
@@ -205,8 +205,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect((await sshRun(`wget -q -T 10 -O /dev/null http://${internalIp}:${KOMODO_PORT}`)).code).toBe(0);
 
         const generated = await readGeneratedSecrets(targetDir);
-        expect(generated["FORGEJO_ADMIN_PASSWORD"]).toBeTruthy();
-        expect(generated["KOMODO_ADMIN_PASSWORD"]).toBeTruthy();
+        // Non-empty and whitespace-free each, and DIFFERENT from one another. The last of those is the one worth
+        // having: one secret generated once and written under two names satisfies "both are truthy" perfectly.
+        expect(generated["FORGEJO_ADMIN_PASSWORD"]).toMatch(/^\S+$/);
+        expect(generated["KOMODO_ADMIN_PASSWORD"]).toMatch(/^\S+$/);
+        expect(generated["FORGEJO_ADMIN_PASSWORD"]).not.toBe(generated["KOMODO_ADMIN_PASSWORD"]);
     }, 900_000);
 
     it("a second targeted apply is all-noop", async () => {
@@ -227,12 +230,17 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         await intentic("deploy", "adopt", "--artifact", artifactPath, "--baseUrl", baseUrl);
 
         const creds = { baseUrl, user: adminUsername, password };
-        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toBeDefined();
-        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "desired-state" })).toBeDefined();
+        // The repo that came back is the repo that was asked for: `findRepo` answering with SOMETHING says
+        // nothing about which of the two it found, and these two calls differ only in that name.
+        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "intent" })).toMatchObject({ name: "intent" });
+        expect(await forgejoApi.findRepo({ ...creds, owner: adminUsername, name: "desired-state" })).toMatchObject({ name: "desired-state" });
         const onMain = { ...creds, owner: adminUsername, branch: "main" };
-        expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: "deploy.config.ts" })).toBeDefined();
-        expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: INTENT_WORKFLOW_PATH })).toBeDefined();
-        expect(await forgejoApi.readFile({ ...onMain, name: "desired-state", path: APPLY_WORKFLOW_PATH })).toBeDefined();
+        // A file that exists reads back as text. `expect.any(String)` fails on the undefined a missing path
+        // returns, and unlike a bare presence check it also rejects a client that answered with a buffer or a
+        // parsed object, which is what a wire change here would actually look like.
+        expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: "deploy.config.ts" })).toEqual(expect.any(String));
+        expect(await forgejoApi.readFile({ ...onMain, name: "intent", path: INTENT_WORKFLOW_PATH })).toEqual(expect.any(String));
+        expect(await forgejoApi.readFile({ ...onMain, name: "desired-state", path: APPLY_WORKFLOW_PATH })).toEqual(expect.any(String));
 
         // Actions secrets landed on both repos (list via the raw API: the provider client only writes).
         const listSecrets = async (name: string): Promise<string[]> => {
@@ -288,7 +296,6 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             () => undefined,
             (thrown: unknown) => thrown as Error,
         );
-        expect(error, "apply must fail on the blocked readiness gate").toBeDefined();
         const output = error?.message ?? "";
         expect(output).toContain(`readiness check timed out after 15000ms for http://${internalIp}:${FORGEJO_PORT} (resource "${FORGEJO}")`);
         expect(output).toContain("--- readiness diagnostics: root@");

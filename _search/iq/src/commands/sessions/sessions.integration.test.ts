@@ -157,7 +157,10 @@ test("sessions fork --dry-run reports without writing; real fork materializes a 
     const real = await invoke(["sessions", "fork", SESSION_A, "--at", "0"]);
     expect(real.exitCode).toBe(0);
     const forkedId = /claude --resume (\S+)/.exec(real.out)?.[1];
-    expect(forkedId).toBeDefined();
+    // A NEW id, which is the whole of what forking means. Merely having captured something would hold just as
+    // well for a command that printed the original session back and wrote nothing.
+    expect(forkedId).not.toBe(SESSION_A);
+    expect(forkedId).toMatch(/^\S+$/);
     expect(existsSync(`${projectsDir}/${forkedId}.jsonl`)).toBe(true);
 });
 

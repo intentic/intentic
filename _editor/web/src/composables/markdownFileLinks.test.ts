@@ -46,7 +46,6 @@ describe(`file mentions in agent prose`, () => {
     it(`linkifies a path in backticks: the form agents reach for most`, () => {
         const html = renderMarkdown("See the `src/chat/useChat.ts` singleton.");
         const link = linkTo(html, `src/chat/useChat.ts`);
-        expect(link).toBeDefined();
         // The inline-code styling survives: the anchor goes INSIDE the <code>, not around it.
         expect(link?.closest(`code`)).not.toBeNull();
     });
@@ -151,21 +150,21 @@ describe(`file mentions in agent prose`, () => {
 describe(`references inside a previewed document`, () => {
     it(`resolves a relative reference against the document's own directory`, () => {
         const html = renderIn(`docs/`, `see [b](./b.md) and docs/deep/c.md`);
-        expect(linkTo(html, `docs/b.md`)).toBeDefined();
-        expect(linkTo(html, `docs/docs/deep/c.md`)).toBeDefined();
+        expect(linkTo(html, `docs/b.md`)).toEqual(expect.any(Object));
+        expect(linkTo(html, `docs/docs/deep/c.md`)).toEqual(expect.any(Object));
     });
 
     it(`walks ../ back up out of the document's directory`, () => {
-        expect(linkTo(renderIn(`docs/guides/`, `[root](../../README.md)`), `README.md`)).toBeDefined();
+        expect(linkTo(renderIn(`docs/guides/`, `[root](../../README.md)`), `README.md`)).toEqual(expect.any(Object));
     });
 
     it(`leaves a root-level document's references alone`, () => {
-        expect(linkTo(renderIn(``, `[arch](./ARCHITECTURE.md)`), `ARCHITECTURE.md`)).toBeDefined();
+        expect(linkTo(renderIn(``, `[arch](./ARCHITECTURE.md)`), `ARCHITECTURE.md`)).toEqual(expect.any(Object));
     });
 
     it(`does not re-root an absolute container path against the document`, () => {
         queryData = [{ root: WORKSPACE_ROOT, tree: [] }];
-        expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toBeDefined();
+        expect(linkTo(renderIn(`docs/`, `/work/src/foo.ts`), `src/foo.ts`)).toEqual(expect.any(Object));
     });
 });
 

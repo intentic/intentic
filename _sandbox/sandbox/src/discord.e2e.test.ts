@@ -147,7 +147,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     it("the composed whisper overlay builds and its whisper-cli transcribes real speech with the tiny.en model", async () => {
         const environment = (await (await fetch(`${base}/environment`)).json()) as { approved?: { content: string; hash: string } };
-        expect(environment.approved).toBeDefined();
+        expect(environment.approved).toEqual(expect.any(Object));
         const approved = environment.approved as { content: string; hash: string };
         expect(hasValidBase(approved.content)).toBe(true);
         expect(approved.content).toContain("whisper-cli");

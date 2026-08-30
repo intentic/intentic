@@ -130,7 +130,7 @@ test("download resolves through the listing, so a name cannot walk onto another 
     const name = await startExport(exportServices(source.work, source.history), { secrets: false, now: 1_700_000_000_000 });
     await settled(source.history, name);
 
-    expect(await openExport(source.history, name)).toBeDefined();
+    expect(await openExport(source.history, name)).toEqual(expect.any(Object));
     // Neither a traversal nor a real file outside the export directory is reachable by naming it.
     expect(await openExport(source.history, "../session-secret")).toBeUndefined();
     expect(await openExport(source.history, "session-secret")).toBeUndefined();

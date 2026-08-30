@@ -30,9 +30,9 @@ it(`offers every way of getting code in while the workspace is empty`, () => {
 
     expect(el.textContent).toContain(`Get your code in`);
     // All three doors: a repository, this machine's files, and the agent for everything else.
-    expect(buttonSaying(el, `Clone a repository`)).toBeDefined();
-    expect(buttonSaying(el, `Upload files or a folder`)).toBeDefined();
-    expect(buttonSaying(el, `Ask an agent to fetch it`)).toBeDefined();
+    expect(buttonSaying(el, `Clone a repository`)).toEqual(expect.any(Object));
+    expect(buttonSaying(el, `Upload files or a folder`)).toEqual(expect.any(Object));
+    expect(buttonSaying(el, `Ask an agent to fetch it`)).toEqual(expect.any(Object));
     // The promise that makes people willing to put code here at all survives the rebuild.
     expect(el.textContent).toContain(`Files stay on your sandbox machine`);
 });

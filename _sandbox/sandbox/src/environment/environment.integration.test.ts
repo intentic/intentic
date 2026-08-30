@@ -150,7 +150,7 @@ test("propose → approve stores the custom section and recomposes; applied deri
     expect(state.proposal).toEqual({ content: CUSTOM, hash });
     expect(state.custom).toEqual({ content: CUSTOM, hash });
     // The approved file is the daemon-composed artifact: pinned base + the custom section verbatim (trimmed).
-    expect(state.approved).toBeDefined();
+    expect(state.approved).toEqual(expect.any(Object));
     expect(hasValidBase(state.approved!.content)).toBe(true);
     expect(state.approved!.content).toContain("# ---- custom (owner-approved) ----");
     expect(state.approved!.content).toContain(CUSTOM.trim());
@@ -193,14 +193,14 @@ test("reject deletes the proposal and leaves the approved custom section untouch
     const state = await readEnvironment(services);
     expect(state.proposal).toBeUndefined();
     expect(state.custom).toEqual({ content: CUSTOM, hash: sha256Hex(CUSTOM) });
-    expect(state.approved).toBeDefined();
+    expect(state.approved).toEqual(expect.any(Object));
 });
 
 test("compose folds a capability's fragment (install + runtime directives) into a valid overlay", async () => {
     const services = stubServices("", [vpn("office")]);
     const hash = await composeEnvironment(services);
     const approved = await services.files.read(approvedPath(services));
-    expect(approved).toBeDefined();
+    expect(approved).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(approved!));
     expect(hasValidBase(approved!)).toBe(true);
     expect(approved).toContain("wireguard-tools");
@@ -245,7 +245,7 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
     const overlayBuilt = stubServices("deadbeef");
     const hash = await composeEnvironment(overlayBuilt);
     const bare = await overlayBuilt.files.read(approvedPath(overlayBuilt));
-    expect(bare).toBeDefined();
+    expect(bare).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(bare!));
     expect(hasValidBase(bare!)).toBe(true);
     expect(bare).not.toContain("# ---- custom");
@@ -362,7 +362,7 @@ test("rejecting an AUTO-drafted step tombstones its tool; an agent's draft is on
     await rejectEnvironment(services);
     const { installs } = await services.runtimeInstalls.read();
     // The machine is told to stop repeating itself; the agent remains free to ask again.
-    expect(installs.find((entry) => entry.tool === "nsis")?.declinedAt).toBeDefined();
+    expect(installs.find((entry) => entry.tool === "nsis")?.declinedAt).toEqual(expect.any(Number));
     expect((await readEnvironment(services)).proposal).toBeUndefined();
 });
 

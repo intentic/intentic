@@ -179,7 +179,7 @@ it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
     const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
-    expect(continueButton()).toBeDefined();
+    expect(continueButton()).toEqual(expect.any(Object));
 
     conversation.draft.value = `actually, run the tests first`;
     await settle();
@@ -199,7 +199,6 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
     await mountPanel();
 
     const arm = button(`Auto-continue`);
-    expect(arm).toBeDefined();
     arm!.click();
     await settle();
 
@@ -207,7 +206,7 @@ it(`offers to keep continuing by itself, and says so once it is on`, async () =>
     expect(composerText()).toContain(`Auto-continue is on`);
     // The offer is not repeated once taken: the armed strip is where the state and the way out of it live now.
     expect(button(`Auto-continue`)).toBeUndefined();
-    expect(continueButton()).toBeDefined();
+    expect(continueButton()).toEqual(expect.any(Object));
 
     button(`Turn off`)!.click();
     await settle();
@@ -229,7 +228,7 @@ it(`keeps the armed line up on a chat with nothing to continue`, async () => {
 
     expect(continueButton()).toBeUndefined();
     expect(composerText()).toContain(`Auto-continue is on`);
-    expect(button(`Turn off`)).toBeDefined();
+    expect(button(`Turn off`)).toEqual(expect.any(Object));
 });
 
 /* A SPENT ALLOWANCE WITH NOTHING HELD: the daemon has no copy of the refused turn (it restarted, or the refusal
@@ -278,7 +277,7 @@ it(`offers a held allowance the press straight away, and re-runs the turn instea
     continueButton()!.click();
     await settle();
 
-    expect(rerun).toHaveBeenCalled();
+    expect(rerun).toHaveBeenCalledTimes(1);
     // The whole point: nothing was said. A message here is the pile this replaces, one row per press.
     expect(enqueue).not.toHaveBeenCalled();
 });
@@ -321,7 +320,7 @@ it(`carries the outage in the same strip, with the way out of its automatic retr
     await mountPanel();
 
     expect(composerText()).toContain(`picks it back up by itself`);
-    expect(button(`Stop`)).toBeDefined();
+    expect(button(`Stop`)).toEqual(expect.any(Object));
     // Nothing offers to arm a SECOND automation over a turn something is already bringing back.
     expect(button(`Auto-continue`)).toBeUndefined();
     expect(continueButton()?.disabled).toBe(false);
@@ -335,7 +334,7 @@ it(`offers to keep the chat going when nothing is retrying the outage`, async ()
     await mountPanel();
 
     expect(composerText()).toContain(`nothing is retrying it`);
-    expect(button(`Keep this chat going`)).toBeDefined();
+    expect(button(`Keep this chat going`)).toEqual(expect.any(Object));
     expect(continueButton()?.disabled).toBe(false);
 });
 

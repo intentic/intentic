@@ -317,7 +317,7 @@ describe(`streaming a document with a figure in it`, () => {
         const before = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nStill wri`);
         const after = stream.render(`Intro.\n\n${DIAGRAM}\n\nAfter.\n\nStill writing here`);
         const figure = before.find((part) => part.kind === `figure`);
-        expect(figure).toBeDefined();
+        expect(figure).toEqual(expect.any(Object));
         expect(after.find((part) => part.kind === `figure`)).toBe(figure);
     });
 

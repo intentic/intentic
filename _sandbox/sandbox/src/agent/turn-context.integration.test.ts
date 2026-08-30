@@ -80,10 +80,10 @@ test("a follow-up that points back at the last turn is not a query, however it i
  * message that starts by pointing back and then asks something real is a real question. The cost of keeping
  * those is that pure anaphora with enough words gets through too, and nothing lexical tells the two apart. */
 test("a resumptive opener still retrieves once the message carries its own question", () => {
-    expect(retrievalQueryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toBeDefined();
-    expect(retrievalQueryOf("how are branch points counted when the hotspots verb ranks a file?")).toBeDefined();
+    expect(retrievalQueryOf("Also, how does the scheduler decide which pending automation wakes a sandbox first?")).toEqual(expect.any(String));
+    expect(retrievalQueryOf("how are branch points counted when the hotspots verb ranks a file?")).toEqual(expect.any(String));
     // An interrogative frame is nearly all stopwords: two content words is a real question and must survive.
-    expect(retrievalQueryOf("how do we rotate credentials?")).toBeDefined();
+    expect(retrievalQueryOf("how do we rotate credentials?")).toEqual(expect.any(String));
 });
 
 test("a slash command is a command, not a question", () => {
@@ -93,7 +93,6 @@ test("a slash command is a command, not a question", () => {
 test("a long prompt is searched by its opening, cut at a word boundary", () => {
     const prompt = `${"why does the retry backoff double ".repeat(20)}end`;
     const query = retrievalQueryOf(prompt);
-    expect(query).toBeDefined();
     expect(query!.length).toBeLessThanOrEqual(400);
     // Never mid-identifier: the cut lands on a space in the original, so the last thing the engine sees is a
     // whole word.
@@ -103,7 +102,6 @@ test("a long prompt is searched by its opening, cut at a word boundary", () => {
 
 test("the note carries the answer, names the query it ran, and says it is not the user's words", async () => {
     const note = await noteOf(answering(), "how does the daemon decide which runtime serves a turn?");
-    expect(note).toBeDefined();
     expect(note!.startsWith(TURN_CONTEXT_NOTE_HEADER)).toBe(true);
     expect(note).toContain("Not the user's words");
     expect(note).toContain(`iq "how does the daemon decide which runtime serves a turn?"`);
@@ -213,7 +211,7 @@ test("against a real index: the note answers the question, and restore still giv
         await iq.warm();
         const prompt = "how do we rotate credentials?";
         const note = await noteOf({ iq, logger: { warn: () => {}, debug: () => {} } as unknown as Pick<Logger, "warn" | "debug"> }, prompt);
-        expect(note).toBeDefined();
+        expect(note).toEqual(expect.any(String));
         expect(note).toContain("auth.ts:1");
         expect(note).toContain("refreshSessionToken");
         expect(stripTurnPreamble(withTurnPreamble([note!], prompt))).toBe(prompt);

@@ -45,7 +45,6 @@ test("creates the repo when missing, commits a dirty tree, adds the public origi
     // with the tunnel down or before public DNS exists.
     expect(calls).toContainEqual(["/w/intent", "remote", "add", "origin", "https://git.example.com/intentic/intent.git"]);
     const push = calls.find((c) => c.includes("push"));
-    expect(push).toBeDefined();
     expect(push).toContain("http://127.0.0.1:9999/intentic/intent.git");
     // Credentials ride only on the push command's http.extraHeader, never in the remote url.
     expect(push?.some((arg) => arg.startsWith("http.extraHeader=AUTHORIZATION: basic "))).toBe(true);

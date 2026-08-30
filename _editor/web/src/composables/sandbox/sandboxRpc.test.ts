@@ -131,7 +131,7 @@ it(`sends the correlation header once the daemon advertises the route that ships
     const sent = fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER);
     // The value is the join key the daemon echoes onto its own `http.request` line: what matters is that it is
     // there and distinct per call, never its shape.
-    expect(sent).toBeTruthy();
+    expect(sent).toEqual(expect.stringMatching(/\S/));
     await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).not.toBe(sent);
     resetDaemonRoutes();

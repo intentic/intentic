@@ -9,7 +9,7 @@ import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowser
 
 const open = (sessionId: string, server: string): string => {
     const name = openBrowserSession({ sessionId, server, port: 1 });
-    expect(name).toBeDefined();
+    expect(name).toEqual(expect.any(String));
     return name as string;
 };
 
@@ -25,7 +25,7 @@ test("a help request lands on the account's running browser and lists for the ba
 
         // Settled by id, so a stale settle can never take down a newer request on the same session.
         clearBrowserHelp("r-not-this-one");
-        expect(listBrowserSessions().find((session) => session.name === name)?.help).toBeDefined();
+        expect(listBrowserSessions().find((session) => session.name === name)?.help).toEqual(expect.any(Object));
         clearBrowserHelp("r1");
         expect(listBrowserSessions().find((session) => session.name === name)?.help).toBeUndefined();
     } finally {

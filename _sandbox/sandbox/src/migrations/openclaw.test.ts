@@ -95,8 +95,8 @@ test("detect answers for an openclaw home and stays quiet elsewhere", () => {
 test("memory: four bootstrap fences, a curated block with the newest 14 diary days, the whole diary as files", () => {
     const { planned } = planOpenclaw(fixture());
     expect(byId(planned, "memory:soul")?.apply).toMatchObject({ target: "memory", fence: "intentic:imported-openclaw:soul" });
-    expect(byId(planned, "memory:identity")).toBeDefined();
-    expect(byId(planned, "memory:agents")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("memory:identity");
+    expect(planned.map((entry) => entry.item.id)).toContain("memory:agents");
     const memories = byId(planned, "memory:memories");
     const body = memories?.apply.target === "memory" ? memories.apply.body : "";
     expect(body).toContain("Pretzel");
@@ -114,7 +114,7 @@ test("skills: the workspace copy outranks the managed one, which is refused by n
     const { planned, refused } = planOpenclaw(fixture());
     const weather = byId(planned, "skill:weather");
     expect(weather?.apply.target === "skill" ? weather.apply.skill.body : "").toContain("wttr.in");
-    expect(byId(planned, "skill:timers")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("skill:timers");
     expect(refused.some((line) => line.includes("skills/weather/SKILL.md") && line.includes("higher-precedence"))).toBe(true);
 });
 
@@ -167,7 +167,7 @@ test("mcp servers become capabilities; loose notes ride to imports/; the bootstr
         target: "capability",
         capability: { kind: "mcp", config: { url: "https://mcp.linear.app/sse", token: "lin_x" } },
     });
-    expect(byId(planned, "file:BOOT.md")).toBeDefined();
+    expect(planned.map((entry) => entry.item.id)).toContain("file:BOOT.md");
     expect(byId(planned, "file:BOOTSTRAP.md")).toBeUndefined();
 });
 

@@ -34,8 +34,8 @@ describe(`acquireStreamSlot`, () => {
 
     it(`admits up to capacity and parks the rest`, async () => {
         setStreamCapacity(() => 2);
-        expect(await take()).toBeDefined();
-        expect(await take()).toBeDefined();
+        expect(await take()).toEqual(expect.any(Function));
+        expect(await take()).toEqual(expect.any(Function));
 
         let third = false;
         void take().then(() => (third = true));
@@ -51,7 +51,7 @@ describe(`acquireStreamSlot`, () => {
 
         first?.();
         await queued;
-        expect(second).toBeDefined();
+        expect(second).toEqual(expect.any(Function));
     });
 
     it(`serves the newest waiter first: the conversation the user just acted on`, async () => {
@@ -81,7 +81,7 @@ describe(`acquireStreamSlot`, () => {
         first?.();
         first?.();
         // A double release that decremented twice would let TWO streams past a capacity of one.
-        expect(await take()).toBeDefined();
+        expect(await take()).toEqual(expect.any(Function));
         let extra = false;
         void take().then(() => (extra = true));
         await Promise.resolve();
@@ -98,7 +98,7 @@ describe(`acquireStreamSlot`, () => {
 
         // The abandoned waiter must not still be holding a place in the queue: the next taker gets the slot.
         held?.();
-        expect(await take()).toBeDefined();
+        expect(await take()).toEqual(expect.any(Function));
     });
 
     it(`refuses an already-aborted caller before it opens anything`, async () => {
@@ -116,11 +116,10 @@ describe(`acquireStreamSlot`, () => {
         setStreamCapacity(() => Number.POSITIVE_INFINITY);
         const controller = new AbortController();
         const release = await take(controller.signal);
-        expect(release).toBeDefined();
 
         controller.abort();
         release?.();
         setStreamCapacity(() => 1);
-        expect(await take()).toBeDefined();
+        expect(await take()).toEqual(expect.any(Function));
     });
 });

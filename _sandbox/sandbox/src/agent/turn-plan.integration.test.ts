@@ -121,10 +121,10 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
     const request = (plan as { request: AgentRequest }).request;
 
     expect(request.prompt).toBe("do the thing");
-    expect(request.sdkServers?.["deps"]).toBeDefined();
+    expect(Object.keys(request.sdkServers ?? {})).toContain("deps");
     // And the daemon's own records, so the answer to "why did that fail" is a tool call rather than a rebuild
     // of the instrumentation (logs/diagnostics-tools.ts).
-    expect(request.sdkServers?.["diagnostics"]).toBeDefined();
+    expect(Object.keys(request.sdkServers ?? {})).toContain("diagnostics");
     // The daemon-side readers still have to be able to find the real tree: an isolated turn's cwd names its
     // worktree, where every dependency directory is an empty mount point.
     expect(request.workspaceRoot).toBe(root);

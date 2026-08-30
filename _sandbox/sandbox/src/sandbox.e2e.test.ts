@@ -154,7 +154,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         expect(enroll.status).toBe(200);
         // The credential the agent presents for everything it does: including the SSH transport it serves on
         // loopback. No address comes back: the sandbox is reached at the URL the agent already has.
-        expect(((await enroll.json()) as { syncToken?: string }).syncToken).toBeDefined();
+        expect(((await enroll.json()) as { syncToken?: string }).syncToken).toEqual(expect.any(String));
         expect((await inContainer("cat", "/root/.ssh/authorized_keys")).output.trim()).toBe(laptop.public.trim());
 
         const status = (await (await fetch(`${base}/system/sync`)).json()) as { enrolled: boolean; syncingFrom?: string; available?: boolean };
@@ -203,7 +203,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const token = automations.find((automation) => automation.id === "e2e-approval")?.trigger;
         expect(token?.kind).toBe("event");
         const fireToken = token?.kind === "event" ? token.token : undefined;
-        expect(fireToken).toBeDefined();
+        expect(fireToken).toEqual(expect.any(String));
 
         // Wrong token is refused; the real token fires and the wake is HELD, not run: the whole trigger path
         // asserted without an agent turn.
@@ -307,7 +307,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         ).toBe(true);
 
         const environment = (await (await fetch(`${base}/environment`)).json()) as { approved?: { content: string; hash: string } };
-        expect(environment.approved).toBeDefined();
+        expect(environment.approved).toEqual(expect.any(Object));
         const approved = environment.approved as { content: string; hash: string };
         // The compose contract recreate.sh trusts: pinned base, daemon-owned fragment, runtime directives, hash.
         expect(hasValidBase(approved.content)).toBe(true);

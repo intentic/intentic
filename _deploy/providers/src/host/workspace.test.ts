@@ -100,7 +100,9 @@ test("apply forwards the agent tools as base64 INTENTIC_AGENT_TOOLS + stamps the
     await createWorkspaceProvider(ssh.executor).apply({ ...inputs, tools: [TOOL] }, undefined, ctx());
     const run = ssh.commands.find((c) => c.includes("docker run")) ?? "";
     const encoded = /-e INTENTIC_AGENT_TOOLS=(\S+)/.exec(run)?.[1];
-    expect(encoded).toBeDefined();
+    // Base64, which is the whole reason this variable exists: the tools ride encoded so their quotes and
+    // newlines never meet a shell. A raw JSON blob here would satisfy "something was captured" and fail in use.
+    expect(encoded).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
     // The value round-trips: base64 → JSON → the resolved tools the agent connects to.
     expect(JSON.parse(Buffer.from(encoded as string, "base64").toString("utf8"))).toEqual([TOOL]);
     expect(/--label intentic\.tools=\S+/.test(run)).toBe(true);
@@ -121,7 +123,10 @@ test("diff updates when the agent tools change (digest drift), and is noop again
     // The digest apply stamps on the container is exactly what diff treats as a noop (no needless recreate).
     await provider.apply(withTools, undefined, ctx());
     const digest = /--label intentic\.tools=(\S+)/.exec(ssh.commands.find((c) => c.includes("docker run")) ?? "")?.[1];
-    expect(digest).toBeDefined();
+    // A non-empty token. The empty-string case is the one that matters: the line below feeds this straight back
+    // into `diff`, and an empty digest against an empty stored label compares equal, so the noop it asserts
+    // would hold for a container that was stamped with nothing at all.
+    expect(digest).toMatch(/^\S+$/);
     expect(provider.diff(withTools, { outputs: {}, detail: { image: IMAGE, tools: digest as string } })).toEqual({ action: "noop" });
 });
 

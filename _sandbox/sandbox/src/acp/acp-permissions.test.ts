@@ -133,7 +133,6 @@ test("a held class raises a permission card and the call runs when the user allo
     const pending = decidePermission(call, "execute", false, gate, (event) => events.push(event as { kind: string; requestId?: string }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const card = events.find((event) => event.kind === "permission");
-    expect(card).toBeDefined();
     expect(resolveRequest({ kind: "permission", requestId: card?.requestId ?? "", decision: "once" })).toBe(true);
     expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
     // The card owes the stream its resolution frame, on this transport exactly as on the Claude one.

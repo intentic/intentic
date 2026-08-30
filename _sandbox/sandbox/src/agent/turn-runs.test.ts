@@ -152,7 +152,7 @@ describe(`turn runs`, () => {
             await vi.waitFor(() => expect(turnRunOf(`c-retain`)!.done).toBe(true));
 
             vi.advanceTimersByTime(45_000);
-            expect(turnRunOf(`c-retain`)).toBeDefined();
+            expect(turnRunOf(`c-retain`)).toEqual(expect.any(Object));
             vi.advanceTimersByTime(20_000);
             expect(turnRunOf(`c-retain`)).toBeUndefined();
         } finally {

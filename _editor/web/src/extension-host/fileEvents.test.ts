@@ -96,6 +96,6 @@ it(`keeps going when a listener throws`, () => {
 
     emitFilesChanged([`${STATE_DIR}/config/drafts/one.json`]);
 
-    expect(after).toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
     thrower.mockRestore();
 });

@@ -8,8 +8,7 @@ describe("the Obsidian capability card", () => {
     const card = manifest.contributes?.capabilities?.find((entry) => entry.id === "obsidian");
 
     it("is declared, as a cli capability", () => {
-        expect(card).toBeDefined();
-        expect(card?.kind).toBe("cli");
+        expect(card).toMatchObject({ kind: "cli" });
     });
 
     it("asks for the four things the connection needs, and hides the key", () => {

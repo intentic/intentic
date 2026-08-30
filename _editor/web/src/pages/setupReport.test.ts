@@ -41,7 +41,7 @@ describe(`setupReportView`, () => {
             `done`,
         ];
         for (const stage of stages) {
-            expect(setupReportView(report({ stage })).stage, stage).toBeTruthy();
+            expect(setupReportView(report({ stage })).stage, stage).toEqual(expect.stringMatching(/\S/));
         }
     });
 });

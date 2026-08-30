@@ -73,7 +73,7 @@ describe(`chordFromEvent`, () => {
 
     it(`round-trips through matchesChord`, () => {
         const chord = chordFromEvent(keydown({ key: `j`, metaKey: true, altKey: true }), true);
-        expect(chord).toBeDefined();
+        expect(chord).toEqual(expect.any(String));
         expect(matchesChord(chord!, keydown({ key: `j`, metaKey: true, altKey: true }), true)).toBe(true);
     });
 

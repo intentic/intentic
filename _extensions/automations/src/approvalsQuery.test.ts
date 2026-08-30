@@ -75,8 +75,9 @@ describe(`the Automations tile`, () => {
         const registered = views[0];
         expect(registered?.id).toBe(`automations`);
         // The poll reads on start, so the tile can be seated on its first render rather than five minutes in.
-        await vi.waitFor(() => expect(registered?.badge?.(tile)).toBeDefined());
-        expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tooltip: `1 waiting for a yes` });
+        // Settling on the badge's CONTENT, not on its existence: polled separately, the wait could be satisfied
+        // by a first, empty badge and the assertion after it read a value that had already moved on.
+        await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 1, tooltip: `1 waiting for a yes` }));
         // Warming the entry the badge already filled: the page opens on the queue rather than on a spinner.
         expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `automation-approvals`] });
     });

@@ -81,7 +81,7 @@ it(`refuses to name a side when only the payloads disagree`, () => {
 
 it(`keeps the warning to the problem, impact, and fixes`, () => {
     const agentRoute = Object.keys(SHAPES).find((name) => name.startsWith(`agent.`));
-    expect(agentRoute).toBeDefined();
+    expect(agentRoute).toEqual(expect.any(String));
     setDaemonRoutes(LEVEL, reshaped(agentRoute!));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Agent may show blank values or fail to save.`);

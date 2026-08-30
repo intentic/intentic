@@ -64,7 +64,6 @@ describe(`brand mark colours`, () => {
     for (const [slug, hex] of Object.entries(CATALOG)) {
         it(`clears the separation bar in both schemes: ${slug}`, () => {
             const palette = brandPalette(hex);
-            expect(palette).toBeDefined();
             expect(lightnessSeparation(palette?.markDark ?? ``, palette?.plateDark ?? ``)).toBeGreaterThanOrEqual(MIN_SEPARATION_DARK);
             expect(lightnessSeparation(palette?.markLight ?? ``, palette?.plateLight ?? ``)).toBeGreaterThanOrEqual(MIN_SEPARATION_LIGHT);
             expect(contrastRatio(palette?.markDark ?? ``, palette?.plateDark ?? ``)).toBeGreaterThanOrEqual(MIN_CONTRAST);

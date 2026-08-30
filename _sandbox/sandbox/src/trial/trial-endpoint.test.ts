@@ -53,7 +53,7 @@ describe("the free-trial endpoint", () => {
         // openai protocol, so it rides the translator's compat list like any user-configured endpoint, which is
         // what buys the trial the whole existing turn path.
         expect(trial?.config).toMatchObject({ baseUrl: `https://platform.test/trial/v1`, protocol: `openai`, apiKey: `tok` });
-        expect(await store.get(TRIAL_ENDPOINT_ID)).toBeDefined();
+        expect(await store.get(TRIAL_ENDPOINT_ID)).toEqual(expect.any(Object));
     });
 
     /* THE TRANSLATOR IS THE CONSUMER OF THIS URL, and it is a Go binary that verifies certificates. A platform on

@@ -158,7 +158,7 @@ const mount = async (): Promise<HTMLElement> => {
     app.mount(el);
     // The mount read (list + the hosted offer) and the create it decides on are several awaits deep: a
     // macrotask flushes the whole chained sequence where a fixed count of ticks kept going stale.
-    await vi.waitFor(() => expect(list).toHaveBeenCalled());
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     await nextTick();
@@ -298,7 +298,7 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     expect(el.textContent).not.toContain(`Connect it by domain`);
     // …and once it does answer, the page is itself again.
     answer([]);
-    await vi.waitFor(() => expect(create).toHaveBeenCalled());
+    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve));
     await nextTick();
     expect(el.querySelector(`[role="radiogroup"]`)).not.toBeNull();
@@ -364,7 +364,7 @@ it(`defaults a fresh sandbox to the reader's own computer, with hosted available
     // Clicking the hosted rung reveals the commitment and Start my machine
     hostedRung!.click();
     await nextTick();
-    expect(buttonLabelled(`Start my machine`)).toBeDefined();
+    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`don't back it up`);
 
     buttonLabelled(`Start my machine`)!.click();
@@ -386,7 +386,7 @@ it(`defaults a phone to the hosted rung when one is offered`, async () => {
     expect(hostedRung?.getAttribute(`aria-checked`)).toBe(`true`);
     // The rung is described, never taken: nothing is provisioned until the button under it is pressed.
     expect(hostedProvision).not.toHaveBeenCalled();
-    expect(buttonLabelled(`Start my machine`)).toBeDefined();
+    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
     // No credential ask on a phone's first frame: the cloud rung is one tap away, never the opener.
     expect(el.textContent).not.toContain(`Private key`);
 });
@@ -450,7 +450,7 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     desktopInstaller.mockReturnValue({ platform: `windows`, label: `Windows`, href: `https://intentic.dev/desktop/windows` });
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(linkLabelled(`Download for Windows`)).toBeDefined());
+    await vi.waitFor(() => expect(linkLabelled(`Download for Windows`)).toEqual(expect.any(Object)));
     expect(linkLabelled(`Download for Windows`)!.getAttribute(`href`)).toBe(`https://intentic.dev/desktop/windows`);
     // Nothing about a terminal on the first frame, not the paste instruction, not the `sudo` switch.
     expect(el.textContent).not.toContain(`Paste it into a terminal`);
@@ -497,7 +497,7 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
     // The way out is the same button, now saying what pressing it would be.
-    expect(buttonLabelled(`Try again`)).toBeDefined();
+    expect(buttonLabelled(`Try again`)).toEqual(expect.any(Object));
 });
 
 // A hosted sandbox resumed mid-boot (the tab closed during "starting") continues as the hosted story it is:
@@ -654,7 +654,7 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
     addressOffer.mockResolvedValueOnce({ enabled: false });
     hostedOffer.mockResolvedValueOnce({ enabled: true, remaining: 1 });
     const el = await mount();
-    expect(buttonLabelled(`Start my machine`)).toBeDefined();
+    expect(buttonLabelled(`Start my machine`)).toEqual(expect.any(Object));
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
 });

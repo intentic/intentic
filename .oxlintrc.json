@@ -183,17 +183,34 @@
         // `""`, `false` and every object ever constructed; it is what a model writes when it does not know
         // what the value should be. That is a shape, and a shape is something a linter can see.
         //
-        // The ban list lives in .oxlintrc.agent.json, not here: 326 sites (toBeDefined 254, toHaveBeenCalled
-        // 48, toBeTruthy 18, toBeFalsy 5, resolves.not.toThrow 1) is a backlog, and a red standard is one
-        // agents learn to disable. Here it carries only the matchers with ZERO hits, which is a floor rather
-        // than a demand: this repo has no snapshot tests at all, and the cheapest way for a model to make a
-        // failing assertion pass is to record the failure as the expectation.
+        /* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one.
+         * It started in .oxlintrc.agent.json (toBeDefined 254, toHaveBeenCalled 46, toBeTruthy 18, toBeFalsy 5,
+         * resolves.not.toThrow 1) and moved here once every site had been given the assertion it should have
+         * had. What the sweep actually produced, in case the next one is tempted to do it by hand:
+         *
+         *   - Most `toBeDefined` sites were a NARROWING GUARD with the real assertion on the next line. Those
+         *     collapse into one `toMatchObject`, which is shorter and cannot pass on undefined either.
+         *   - The rest were rewritten from the TYPE: strip `undefined` off what the checker already knows and
+         *     assert the arm that is left (`expect.any(String)`, `Array`, `Function`, …). "Not undefined" and
+         *     "is a string" fail on exactly the same value, and the second one also fails on the wrong shape.
+         *   - `expect(bag[key]).toBeDefined()` became `expect(Object.keys(bag)).toContain(key)`, which prints
+         *     the keys that ARE there instead of the word "undefined".
+         *
+         * Three of them found real bugs, which is the argument for the rule in one line: a `features` set that
+         * arrives as an array and would have satisfied any presence check as `{}`; a rank test that computed an
+         * unused baseline and so never made the comparison its name promised; and a window.open spy that was
+         * never cleared between tests, so half a suite's counts depended on file order. */
         "jest/no-restricted-matchers": [
             "error",
             {
                 "toMatchSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
                 "toMatchInlineSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
-                "toMatchFileSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate."
+                "toMatchFileSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
+                "toBeDefined": "Says only 'not undefined'. The type already knows what it is instead — assert that: expect.any(String), toMatchObject({…}), or Object.keys(bag) toContain the key.",
+                "toBeTruthy": "Passes for any non-empty string, any object, any non-zero number. Assert the value, not its truthiness.",
+                "toBeFalsy": "Passes for 0, \"\", null, undefined and NaN alike, which are rarely interchangeable. Assert the one you mean.",
+                "toHaveBeenCalled": "Says a call happened, not that it was the right one, and not that it happened once. Use toHaveBeenCalledWith or toHaveBeenCalledTimes.",
+                "resolves.not.toThrow": "Only says the promise settled. Assert the value it resolved to, or the effect it had."
             }
         ],
         // Belt and braces on the same zero: if a snapshot ever does land, it cannot be a 200-line one that

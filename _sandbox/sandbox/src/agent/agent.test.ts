@@ -326,7 +326,7 @@ test("every turn wires the ui ask server, the AskUserQuestion alias, and the per
     // The autonomous posture is the one the composer defaults away from plan mode into: it used to get no
     // question tool at all, which is why the model fell back to prose options.
     await collect(request, capture);
-    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
+    expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
     // Two aliases now: the ask card's, and the JS execution backend's plain name (execution/js-tool.ts).
     expect(captured.at(-1)?.toolAliases).toEqual({ AskUserQuestion: "mcp__ui__ask", Code: "mcp__code__run" });
     expect(captured.at(-1)?.canUseTool).toBeTypeOf("function");
@@ -349,7 +349,7 @@ test("the code server rides the jsExecution field: present with a plan, absent w
 
     const jsExecution = { cwd: WORKSPACE_ROOT, env: {}, readRoots: [WORKSPACE_ROOT], writeRoots: [WORKSPACE_ROOT], allowSpawn: true };
     await collect({ ...request, jsExecution }, capture);
-    expect(captured.at(-1)?.mcpServers?.["code"]).toBeDefined();
+    expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("code");
 });
 
 test("the request's tools become remote http MCP servers alongside the ui server, in every mode", async () => {
@@ -363,11 +363,11 @@ test("the request's tools become remote http MCP servers alongside the ui server
 
     await collect({ ...request, tools }, capture);
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
-    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
+    expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
 
     await collect({ ...request, permissionMode: "plan" as const, tools }, capture);
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
-    expect(captured.at(-1)?.mcpServers?.["ui"]).toBeDefined();
+    expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
     expect(captured.at(-1)?.permissionMode).toBe("plan");
     // The flag rides every launch: it legalises bypassPermissions without activating it, and a plan turn
     // NEEDS it: approval setModes to POST_PLAN_MODE, which the CLI refuses on a session launched without it.
@@ -1808,7 +1808,9 @@ const askTool = (options: Options): ((args: unknown) => Promise<unknown>) => {
         _registeredTools: Record<string, { handler: (args: unknown, extra: unknown) => Promise<unknown> }>;
     };
     const registered = registry?.["_registeredTools"]?.["ask"];
-    expect(registered, "no ask tool on the ui server").toBeDefined();
+    // Named against the tools that ARE registered, so a rename shows up as the list it is missing from rather
+    // than as a TypeError on the line below.
+    expect(Object.keys(registry?.["_registeredTools"] ?? {}), "no ask tool on the ui server").toContain("ask");
     return (args) => registered!.handler(args, {});
 };
 

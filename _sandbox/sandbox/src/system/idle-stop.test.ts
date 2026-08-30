@@ -60,7 +60,7 @@ describe("startIdleStop", () => {
         expect(stop).not.toHaveBeenCalled();
         turns = 0;
         await minutes(2);
-        expect(stop).toHaveBeenCalled();
+        expect(stop).toHaveBeenCalledTimes(1);
         dispose();
     });
 
@@ -72,7 +72,7 @@ describe("startIdleStop", () => {
         expect(stop).not.toHaveBeenCalled();
         watchers = 0;
         await minutes(2);
-        expect(stop).toHaveBeenCalled();
+        expect(stop).toHaveBeenCalledTimes(1);
         dispose();
     });
 

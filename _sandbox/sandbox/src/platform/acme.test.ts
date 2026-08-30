@@ -167,12 +167,10 @@ it("identifies by jwk until the account exists, then by kid: never both", async 
     const ca = fakeCa();
     await run(ca);
     const [first, ...rest] = ca.seen;
-    expect(first).toBeDefined();
-    expect(first!.url).toBe("https://ca.test/new-account");
+    expect(first).toMatchObject({ url: "https://ca.test/new-account" });
     expect(first!.header["kid"]).toBeUndefined();
     // A jwk header carrying `d` would hand the CA our private key.
     const jwk = first!.header["jwk"] as Record<string, unknown> | undefined;
-    expect(jwk).toBeDefined();
     expect(jwk!["d"]).toBeUndefined();
     for (const request of rest) {
         expect(request.header["kid"], `${request.url} should identify by kid`).toBe("https://ca.test/account/1");

@@ -113,7 +113,6 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     // The host only answers the daemon: the same request straight to the host's port, without the proxy's
     // header, is refused: loopback is container-shared and the auth gate lives daemon-side.
     const target = backend.proxyTarget();
-    expect(target).toBeDefined();
     const direct = await fetch(`http://127.0.0.1:${target!.port}/x/acme.echo/ping`);
     expect(direct.status).toBe(401);
 

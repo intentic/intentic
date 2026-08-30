@@ -225,7 +225,7 @@ describe("the verify-removals built-in", () => {
 
     test("no rule reading it ⇒ no snapshot hook, so no file is read on any edit", () => {
         expect(turnEndingHooks([VERIFY]).PreToolUse).toBeUndefined();
-        expect(turnEndingHooks([REMOVALS]).PreToolUse).toBeDefined();
+        expect(turnEndingHooks([REMOVALS]).PreToolUse).toEqual(expect.any(Array));
     });
 
     test("a defended line that went is put back in front of the turn", async () => {
@@ -315,8 +315,8 @@ describe("the follow-up budget", () => {
     test("at most two asks per turn: the third stop is silent", async () => {
         const hooks = armed([VERIFY]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        expect(await stop(hooks)).toBeDefined();
-        expect(await stop(hooks)).toBeDefined();
+        expect(await stop(hooks)).toEqual(expect.any(String));
+        expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();
     });
 
@@ -334,7 +334,7 @@ describe("the follow-up budget", () => {
         const first = await stop(hooks);
         expect(first).toContain("no check has passed");
         expect(first).toContain("Update the changelog.");
-        expect(await stop(hooks)).toBeDefined();
+        expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();
     });
 });

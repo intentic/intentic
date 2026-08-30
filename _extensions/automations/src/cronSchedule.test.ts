@@ -34,7 +34,9 @@ describe(`cronOf`, () => {
         ];
         for (const state of states) {
             const cron = cronOf(state);
-            expect(cron).toBeDefined();
+            // Five whitespace-separated fields, which is what a cron expression IS. The round-trip below would
+            // also catch a malformed one, but only after parseCron had already decided what to do with it.
+            expect(cron).toMatch(/^\S+ \S+ \S+ \S+ \S+$/);
             expect(parseCron(cron ?? ``)).toEqual(state);
         }
     });

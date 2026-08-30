@@ -198,7 +198,7 @@ const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
 // settle lands on top of what the test wrote. On a loaded CI runner that is exactly what happened: the aged
 // lastAt was replaced by a fresh one, the thread read as live, and the "fresh conversation" assertion failed.
 const settledThread = async (services: Services, key: string): Promise<void> => {
-    await eventually(async () => expect((await services.threadSessions.get(key, CHANNEL_SESSION_TTL_MS, Date.now()))?.sessionId).toBeDefined());
+    await eventually(async () => expect((await services.threadSessions.get(key, CHANNEL_SESSION_TTL_MS, Date.now()))?.sessionId).toEqual(expect.any(String)));
 };
 
 test("a follow-up message in the same channel reuses the conversation and resumes its session", async () => {

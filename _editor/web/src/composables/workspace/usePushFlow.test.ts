@@ -170,7 +170,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     expect(suggestion.composeSession).toHaveBeenCalledWith(
         expect.objectContaining({ model: `claude:claude-sonnet-4-5`, effort: `high`, isolated: true }),
     );
-    expect(flow.proposedFix.value).toBeDefined();
+    expect(flow.proposedFix.value).toEqual(expect.any(Object));
 
     const { usePushFlow } = await import(`./usePushFlow`);
     expect(usePushFlow().question.value).toEqual(flow.question.value);
@@ -248,7 +248,7 @@ test(`a push waits for a git action the user started while the suite ran`, async
     git.actionBusy.value = false;
     await flush();
     expect(git.syncAll).toHaveBeenCalledWith(PUSH);
-    expect(flow.pushed.value).toBeDefined();
+    expect(flow.pushed.value).toEqual(expect.any(Object));
 });
 
 // Nothing leaves the machine on a pull-only sync, so there is nothing to check, and the outcome is still

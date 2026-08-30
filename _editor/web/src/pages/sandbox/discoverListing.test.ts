@@ -56,7 +56,7 @@ describe(`what a registry row becomes against this sandbox`, () => {
     });
 
     test(`a blocked row with no stated reason still says something`, () => {
-        expect(listingState(entry({ trust: `blocked` }), []).reason).toBeTruthy();
+        expect(listingState(entry({ trust: `blocked` }), []).reason).toEqual(expect.stringMatching(/\S/));
     });
 
     test(`an official row with no current security admission cannot be installed`, () => {
@@ -80,7 +80,7 @@ describe(`what a registry row becomes against this sandbox`, () => {
     test(`every state that cannot be acted on explains itself`, () => {
         const dead = [entry({ trust: `blocked` }), entry({ install: undefined }), entry({ install: { url: `https://x/y.git` } })];
         for (const row of dead) {
-            expect(listingState(row, []).reason).toBeTruthy();
+            expect(listingState(row, []).reason).toEqual(expect.stringMatching(/\S/));
         }
     });
 });

@@ -182,7 +182,9 @@ for (const svc of cases) {
         const ssh = fakeSsh({ healthy: true });
         expect(await svc.make(ssh.executor).apply(svc.inputs, undefined, ctx())).toEqual(svc.outputs);
         const compose = ssh.commands.find((c) => c.includes(`cat > /opt/intentic/${svc.kind}/compose.yaml`));
-        expect(compose).toBeDefined();
+        // A command, as text. The loop below is a no-op for a service that declares no images, so without this
+        // the whole compose write could be missing and the test would still pass.
+        expect(compose).toEqual(expect.any(String));
         for (const image of Object.values(svc.images)) {
             expect(compose).toContain(image);
         }
@@ -190,7 +192,8 @@ for (const svc of cases) {
             expect(ssh.commands.some((c) => c.includes(`cat > /opt/intentic/${svc.kind}/${file}`))).toBe(true);
         }
         const env = ssh.commands.find((c) => c.includes(`test -f /opt/intentic/${svc.kind}/.env`));
-        expect(env).toBeDefined();
+        // Same reason as the compose write above: a service with no declared env keys skips the loop entirely.
+        expect(env).toEqual(expect.any(String));
         for (const key of svc.envKeys) {
             expect(env).toContain(key);
         }

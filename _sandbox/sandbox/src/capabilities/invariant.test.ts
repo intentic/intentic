@@ -40,7 +40,7 @@ test("the value is never in the message: a diagnostic that prints the token has 
         () => undefined,
         (error: unknown) => (error as Error).message,
     );
-    expect(caught).toBeDefined();
+    expect(caught).toEqual(expect.any(String));
     expect(caught).not.toContain("mcp_live_token");
     expect(caught).toContain("token");
 });

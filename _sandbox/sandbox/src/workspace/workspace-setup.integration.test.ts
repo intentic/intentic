@@ -82,7 +82,7 @@ test("the marker on disk is what separates ready from needs-setup", async () => 
     await write(root, "app/package.json");
     await write(root, "app/pnpm-lock.yaml", "");
     const [project] = await discoverProjects(root);
-    expect(project).toBeDefined();
+    expect(project).toEqual(expect.any(Object));
     expect(await stateOf(root, project!, processes(), installed)).toBe("needs-setup");
     await mkdir(join(root, "app/node_modules"), { recursive: true });
     expect(await stateOf(root, project!, processes(), installed)).toBe("ready");

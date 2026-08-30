@@ -59,8 +59,7 @@ afterAll(async () => {
 test("a .git pointer file is a repo boundary: the workspace root's own churn reaches the hotspot ranking", async () => {
     const health = await engine.health({ scope: { repo: "" }, limit: 10 });
     const gateFile = health.hotspots.find((file) => file.path === "gate.ts");
-    expect(gateFile).toBeDefined();
-    expect(gateFile!.commits).toBe(2);
+    expect(gateFile).toMatchObject({ commits: 2 });
     expect(gateFile!.complexity).toBeGreaterThan(0);
     // The score IS the product: the panel plots it, so it must not be a rank in disguise.
     expect(gateFile!.score).toBe(gateFile!.commits * gateFile!.complexity);

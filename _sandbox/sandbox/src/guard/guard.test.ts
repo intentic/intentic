@@ -56,14 +56,14 @@ describe("session.start", () => {
     test("requireApproval holds with no auto-run, even when a countdown is also configured", () => {
         const verdict = guard(sessionStart, { source: "schedule", admission: allowAll, requireApproval: true, holdForSeconds: 30 });
         expect(verdict).toMatchObject({ effect: "hold" });
-        expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+        expect(verdict).not.toHaveProperty("autoRunAfterS");
     });
 
     test("a floor hold is 'ask me': no auto-run countdown either", () => {
         const admission = { ...allowAll, listener: "hold" as const };
         const verdict = guard(sessionStart, { source: "listener", admission, holdForSeconds: 30 });
         expect(verdict).toMatchObject({ effect: "hold" });
-        expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+        expect(verdict).not.toHaveProperty("autoRunAfterS");
     });
 
     test("a pure countdown hold carries its auto-run window", () => {
@@ -104,7 +104,7 @@ describe("command.run", () => {
     // A hold here is a real ask, so it must never carry the countdown that would turn it into "unless I'm slow".
     test("a hold carries no auto-run window", () => {
         const verdict = guard(commandRun, { commandClass: "secrets.access", rules: { "secrets.access": "hold" } });
-        expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+        expect(verdict).not.toHaveProperty("autoRunAfterS");
     });
 
     test("the reason says what the command would do, not which settings key matched", () => {
@@ -178,7 +178,7 @@ describe("command.run", () => {
         // A hold is a real ask here too, so it must not carry the countdown that turns it into "unless I'm slow".
         test("the floor's hold carries no auto-run window", () => {
             const verdict = guard(commandRun, { commandClass: "secrets.access", rules: {}, outsideSource: "web" });
-            expect("autoRunAfterS" in verdict && verdict.autoRunAfterS).toBeFalsy();
+            expect(verdict).not.toHaveProperty("autoRunAfterS");
         });
     });
 });

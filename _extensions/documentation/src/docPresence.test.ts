@@ -50,7 +50,9 @@ beforeEach(() => {
 });
 
 test(`reads the documented repo's index and map, and asks the undocumented one for neither`, async () => {
-    await vi.waitFor(() => expect(documentAt(`web`)).toBeDefined());
+    // Settling on the entry the repo's own map produces, not on any entry at all: the presence store fills in
+    // stages, and a wait that any first value satisfies can hand the assertions below a half-built tree.
+    await vi.waitFor(() => expect(documentAt(`web`)).toEqual({ oneLiner: ``, draft: false }));
     expect(asked.filter((route) => route.startsWith(`web/`))).toEqual([`web/docs/architecture/index.json`, `web/docs/architecture/repo.json`]);
     // The whole point: not one read against a repo that documents nothing. Its staged tree is still listed.
     expect(asked.filter((route) => route.startsWith(`api/`))).toEqual([]);
@@ -58,7 +60,9 @@ test(`reads the documented repo's index and map, and asks the undocumented one f
 });
 
 test(`the documented repo's packages and map land on the tree, and the undocumented one's draft still does`, async () => {
-    await vi.waitFor(() => expect(documentAt(`web`)).toBeDefined());
+    // Settling on the entry the repo's own map produces, not on any entry at all: the presence store fills in
+    // stages, and a wait that any first value satisfies can hand the assertions below a half-built tree.
+    await vi.waitFor(() => expect(documentAt(`web`)).toEqual({ oneLiner: ``, draft: false }));
     expect(documentAt(`web/src/pricing`)).toEqual({ oneLiner: `What a plan costs, and why.`, draft: false });
     expect(documentAt(`web`)).toEqual({ oneLiner: ``, draft: false });
     // Nothing published, a draft staged: the row says draft, which is what the tab it opens will say too.

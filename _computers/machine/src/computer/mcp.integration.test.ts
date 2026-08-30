@@ -83,7 +83,6 @@ test("tools/list publishes each tool's argument schema, which is the one an arri
         expect(entry.inputSchema, entry.name).toHaveProperty("properties");
     }
     const logs = response.result.tools.find((entry) => entry.name === "sandbox_logs");
-    expect(logs).toBeDefined();
     const lines = (logs?.inputSchema["properties"] as { lines: { maximum: number; description: string } } | undefined)?.lines;
     // The ceiling the model is told is the ceiling it is held to, below: one number, not two.
     expect(lines?.maximum).toBe(2000);
@@ -150,7 +149,9 @@ test("trash moves the file somewhere recoverable instead of deleting it", async 
     const trashed = await call("trash_file", { path }, scopes({ roots: root }));
     expect(trashed.isError).toBe(false);
     const moved = /to (.+?)\. It is recoverable/.exec(trashed.text)?.[1];
-    expect(moved).toBeDefined();
+    // An absolute path, which is the claim the message makes ("to <path>. It is recoverable") and the part a
+    // reader of that message would act on. A bare "it is not undefined" would pass on a relative fragment.
+    expect(moved).toMatch(/^\//);
     expect(await readFile(moved ?? "", "utf8")).toBe("keep me");
 });
 

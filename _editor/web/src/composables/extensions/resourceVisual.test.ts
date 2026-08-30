@@ -53,8 +53,8 @@ describe(`groupAccent`, () => {
     it(`covers every resource group with a frame + bar`, () => {
         for (const group of ResourceGroupSchema.options) {
             const accent = groupAccent(group);
-            expect(accent.frame).toBeTruthy();
-            expect(accent.bar).toBeTruthy();
+            expect(accent.frame).toEqual(expect.stringMatching(/\S/));
+            expect(accent.bar).toEqual(expect.stringMatching(/\S/));
         }
     });
 });

@@ -71,7 +71,7 @@ test("a prompt round-trips, and emptying it removes the file rather than storing
     // the editor does not open showing an unsaved change it cannot explain.
     expect(await readPersonaPrompt(root, "studio")).toBe("You write release notes.");
     // Writing a prompt brings the kit into existence, so the loader will read the skills beside it.
-    expect(await personaKitPlugin(root, "studio")).toBeDefined();
+    expect(await personaKitPlugin(root, "studio")).toEqual(expect.any(String));
 
     await removePersonaPrompt(root, "studio");
     // Absent, not empty: "custom with nothing written" is one state, which personaPrompt falls back from.

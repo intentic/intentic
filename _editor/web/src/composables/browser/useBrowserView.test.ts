@@ -110,7 +110,7 @@ test("select-all reaches the page instead of the app around it", async () => {
     const chord = press(`a`, { ctrl: true });
     view.onKeyDown(chord);
     expect(wire()).toContainEqual({ type: `key`, key: `a`, ctrl: true });
-    expect(chord.preventDefault).toHaveBeenCalled();
+    expect(chord.preventDefault).toHaveBeenCalledTimes(1);
 });
 
 test("nothing is typed into a browser the user is only watching", async () => {

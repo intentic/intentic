@@ -112,7 +112,7 @@ test("a non-browser install is told nothing", async () => {
 
 test("the browser notice is told once per turn", async () => {
     const hooks = installSteeringHooks();
-    expect(context(await fire(hooks, "npx playwright install chromium"))).toBeDefined();
+    expect(context(await fire(hooks, "npx playwright install chromium"))).toEqual(expect.any(String));
     expect(await fire(hooks, "npx playwright install firefox")).toEqual({});
 });
 
@@ -195,6 +195,6 @@ test("a substring match does not count as the command naming the tool", async ()
 
 test("the missing-tool notice is told once per turn", async () => {
     const hooks = installSteeringHooks();
-    expect(context(await firePost(hooks, "lsof -i :3000", "bash: lsof: command not found"))).toBeDefined();
+    expect(context(await firePost(hooks, "lsof -i :3000", "bash: lsof: command not found"))).toEqual(expect.any(String));
     expect(await firePost(hooks, "tree -L 2", "bash: tree: command not found")).toEqual({});
 });

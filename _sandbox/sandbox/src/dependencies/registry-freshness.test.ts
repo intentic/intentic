@@ -47,7 +47,7 @@ test.each(["1.2.3-rc.1", "2.0.0-beta"])("a prerelease is not what latest means t
 });
 
 test.each(["1.2", "1.2.3", "24.18.0"])("a version with or without a patch reads: %s", (version) => {
-    expect(parseVersion(version)).toBeDefined();
+    expect(parseVersion(version)).toEqual(expect.any(Object));
 });
 
 test.each(["latest", "*", "", "vNext"])("something that is not a version reads as nothing: %s", (version) => {

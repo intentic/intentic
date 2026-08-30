@@ -118,8 +118,10 @@ describe(`invite routes`, () => {
         // refused", which is where three rounds of "why is it failing" came from: the answer existed the
         // whole time, in a console on somebody else's machine.
         expect(result.reason).toContain(`422`);
-        // And it is still an incident on the server even though the request succeeded.
-        expect(logger.error).toHaveBeenCalled();
+        // And it is still an incident on the server even though the request succeeded. What was logged matters
+        // as much as that something was: the recipient and the provider's own error are the two things the
+        // console needs to be worth reading, and a bare "error was called" survives losing either.
+        expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.anything() }), expect.stringContaining(`invite email refused`));
         vi.unstubAllGlobals();
     });
 

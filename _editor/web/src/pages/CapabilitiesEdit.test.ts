@@ -116,7 +116,7 @@ const start = (editing: string | undefined): HTMLElement => {
 // it does is dispatch this.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(add).toHaveBeenCalled());
+    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 

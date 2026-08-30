@@ -60,8 +60,16 @@ test("an index built over there is searchable from here", async () => {
  * rather than a comment: asking for BM25 alone has to arrive as BM25 alone. */
 test("a per-call feature set crosses as a set, not as an empty object", async () => {
     const outcome = await engine.run(request({ verb: "q", query: "widget registry", features: new Set(["bm25"]) }));
-    // The run's provenance: every stage the engine knows about MINUS the one that was asked for.
-    expect(outcome.result.features).toBeDefined();
+    /* The run's provenance: every stage the engine knows about MINUS the one that was asked for.
+     *
+     * Asserted as an ARRAY, which is what actually crosses the host boundary — the field is declared
+     * `ReadonlySet<Feature>` and arrives here as a list. That gap is worth knowing about and is not this
+     * test's to close; what matters is that the assertion describes the value that really turns up.
+     *
+     * A collection type, rather than a presence check, because the failure this whole test exists for is the
+     * set arriving as `{}` — and `{}` is perfectly defined. `toContain("semantic")` below would have caught
+     * it too, one line later and blaming the wrong stage. */
+    expect(outcome.result.features).toEqual(expect.any(Array));
     expect(outcome.result.features).not.toContain("bm25");
     expect(outcome.result.features).toContain("semantic");
 });

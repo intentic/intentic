@@ -109,7 +109,7 @@ test("apply does not clobber an existing Dockerfile", async () => {
     );
     await provider.apply(inputs, undefined, ctx());
     expect(commits["Dockerfile"]).toBeUndefined();
-    expect(commits[WORKFLOW_PATH]).toBeDefined();
+    expect(Object.keys(commits)).toContain(WORKFLOW_PATH);
 });
 
 test("diff is noop when the committed workflow matches desired, update when it differs", async () => {

@@ -366,8 +366,10 @@ describe("the free providers", () => {
         // empty headline or a dangling sentence in front of the user who has connected nothing.
         for (const provider of FREE_PROVIDERS) {
             const access = accessFor(provider);
-            expect(access?.requirement).toBeTruthy();
-            expect(access?.runs).toBeTruthy();
+            // Both are sentences the gate PUTS ON SCREEN, so what they have to be is text with something in
+            // it. Truthiness passes a whitespace-only string, which renders as the empty headline this is about.
+            expect(access?.requirement).toEqual(expect.stringMatching(/\S/));
+            expect(access?.runs).toEqual(expect.stringMatching(/\S/));
         }
     });
 });

@@ -77,8 +77,10 @@ describe(`linkifyNoteRefs`, () => {
 describe(`toneOfType`, () => {
     it(`gives every kind a colour, the same one every time`, () => {
         expect(toneOfType(`person`)).toBe(toneOfType(`person`));
-        // Any word the owner's vocabulary happens to use gets one: there is no list to fall off.
-        expect(toneOfType(`something-nobody-predicted`)).toBeTruthy();
+        // Any word the owner's vocabulary happens to use gets one: there is no list to fall off. Asserted as a
+        // non-blank tone name rather than as "not neutral", because `neutral` is in the palette and an
+        // unpredicted word is entitled to hash onto it.
+        expect(toneOfType(`something-nobody-predicted`)).toEqual(expect.stringMatching(/\S/));
     });
 
     it(`leaves a note with no kind uncoloured`, () => {

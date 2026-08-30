@@ -147,7 +147,7 @@ it(`renders Google's own button rather than the redirect`, async () => {
 
     await mount();
 
-    expect(renderButton).toHaveBeenCalled();
+    expect(renderButton).toHaveBeenCalledTimes(1);
     expect(redirectButton()).toBeUndefined();
 });
 
@@ -157,7 +157,7 @@ it(`falls back to the redirect when Google's script never arrives`, async () => 
 
     await mount();
 
-    expect(redirectButton()).toBeDefined();
+    expect(redirectButton()).toEqual(expect.any(Object));
     expect(signInWithGoogleCredential).not.toHaveBeenCalled();
 });
 
@@ -168,7 +168,7 @@ it(`falls back to the redirect when the platform refuses a token Google signed`,
 
     // A platform that will not take it (an older self-hosted build, a client-id mismatch) says NOTHING about
     // whether the sandbox will, so the user gets the other way in rather than a dead page.
-    expect(redirectButton()).toBeDefined();
+    expect(redirectButton()).toEqual(expect.any(Object));
     expect(el.textContent).toContain(`Continue with Google below instead`);
     expect(push).not.toHaveBeenCalled();
 });
@@ -183,8 +183,8 @@ it(`always offers a way in that does not depend on Google's embedded button`, as
 
     // The ways that button can fail silently (a blocked frame, a popup policy) are invisible from this page,
     // and each of them looks like a sign-in page that simply does nothing.
-    expect(escape).toBeDefined();
-    expect(signInWithGoogle).toHaveBeenCalled();
+    expect(escape).toEqual(expect.any(Object));
+    expect(signInWithGoogle).toHaveBeenCalledTimes(1);
 });
 
 /* THE THIRD STEP HAS TO DESCRIBE THE FLOW THIS VISITOR WILL ACTUALLY BE GIVEN.

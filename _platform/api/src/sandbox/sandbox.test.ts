@@ -202,7 +202,9 @@ describe(`sandbox routes`, () => {
         expect(minted.hostname).toBe(`${sandboxSubdomain(sandboxIdFromToken(`tok`)!)}.sbx.test`);
         // The account token is cached on the row: a second mint reuses it rather than growing a second grant.
         const cached = update.mock.calls.find((entry) => (entry[0] as { data: Record<string, unknown> }).data[`zrokToken`] !== undefined);
-        expect(cached).toBeDefined();
+        // The write happened AND it carried a token. `find` returning something only says a call matched the
+        // predicate; naming the shape is what would catch a token written as null or as an empty string.
+        expect(cached?.[0]).toMatchObject({ data: { zrokToken: expect.any(String) } });
         const stored = JSON.parse((update.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
         expect(stored[`ZROK_TOKEN`]).toBe(`acct-9`);
         expect(stored[`ZROK_NAMESPACE`]).toBe(`ns-1`);

@@ -18,8 +18,7 @@ describe(`code chores come from the book`, () => {
     test(`every chore the book says is worth running unattended has a template`, () => {
         for (const chore of scheduled) {
             const template = shelf.find((entry) => entry.id === chore.id);
-            expect(template, chore.id).toBeDefined();
-            expect(template?.title).toBe(chore.title);
+            expect(template).toMatchObject({ title: chore.title });
             expect(template?.description).toBe(chore.description);
             expect(template?.guard).toBe(chore.automation?.guard);
             expect(template?.trigger).toEqual({ kind: `schedule`, cron: chore.automation?.cron });

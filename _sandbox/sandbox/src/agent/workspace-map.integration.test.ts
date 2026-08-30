@@ -204,7 +204,6 @@ test("the note holds its budget by shedding detail, and says how much it shed", 
 
     const note = workspaceMapNote({ root, cwd: root });
 
-    expect(note).toBeDefined();
     expect(note?.length).toBeLessThanOrEqual(2_800);
     // What was dropped is counted out loud: the list must never merely stop.
     expect(note).toMatch(/not listed|and \d+ more/);

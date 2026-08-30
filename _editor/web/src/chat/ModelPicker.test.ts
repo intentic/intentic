@@ -129,7 +129,6 @@ it(`carries the way out to the accounts page, and drops it while searching`, asy
     const element = mount();
 
     const door = [...element.querySelectorAll(`a`)].find((link) => link.textContent?.includes(`All AI accounts`));
-    expect(door).toBeDefined();
     expect(door?.getAttribute(`href`)).toBe(`/sandbox/agent`);
 
     // Searching turns the panel into one flat result set, where a standing footer reads as a result.

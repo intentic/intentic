@@ -616,7 +616,9 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const summary = await call(sandboxRoutes.hostedRelease, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
         expect(summary.hosted).toBeNull();
         expect(calls.filter((entry) => entry.method === `DELETE`)).toHaveLength(1);
-        expect(machineDelete).toHaveBeenCalled();
+        // Once, to match the single provider DELETE above. Releasing twice would leave the row gone and the
+        // second call racing whatever claimed the name next, and "it was called" cannot see that.
+        expect(machineDelete).toHaveBeenCalledTimes(1);
 
         const live = fakePrisma({
             sandbox: { findFirst: vi.fn().mockResolvedValue({ ...ownedRow, lastSeenAt: new Date() }) },

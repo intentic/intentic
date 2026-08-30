@@ -93,7 +93,6 @@ it(`draws a refusal under the account it names, not over the provider heading al
     const el = mount([claudeAccount({}), claudeAccount({ id: `acc-2`, label: `second@example.com` })]);
 
     const refusal = [...el.querySelectorAll(`p`)].find((line) => /Refused its credential/.test(line.textContent ?? ``));
-    expect(refusal).toBeDefined();
     // Inside its own account's block, and that block is the refused one, not a sibling, and not the group.
     const block = refusal?.closest(`div.flex.flex-col`);
     expect(block?.textContent).toContain(`second@example.com`);
@@ -169,7 +168,6 @@ it(`caps the names rather than growing a column again, and says how many it held
 
     expect(alarm(el)?.textContent?.trim()).toBe(`Sign-in expired · 15`);
     const more = [...el.querySelectorAll(`button`)].find((button) => /\+3 more/.test(button.textContent ?? ``));
-    expect(more).toBeDefined();
     expect(el.textContent).not.toContain(`account-14@example.com`);
 
     // A cap, not a ceiling: the rest are one click away, in place.

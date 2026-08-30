@@ -53,7 +53,7 @@ describe(`initAnalytics`, () => {
 
         user.value = null;
         await nextTick();
-        expect(posthog.reset).toHaveBeenCalled();
+        expect(posthog.reset).toHaveBeenCalledTimes(1);
     });
 
     /* The desktop app loads THIS SPA, so without a client tag on every event an app user and a browser user are

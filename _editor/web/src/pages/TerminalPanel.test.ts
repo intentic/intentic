@@ -104,7 +104,7 @@ const openPanel = async (sessions: Listed[]) => {
 // command has to appear for a screen reader: the pulsing dot beside it says nothing out loud.
 const closeButton = (host: HTMLElement, label: string): HTMLElement => {
     const found = [...host.querySelectorAll(`[aria-label]`)].find((el) => (el.getAttribute(`aria-label`) ?? ``).startsWith(label));
-    expect(found, `no close button labelled ${label}`).toBeDefined();
+    expect(found, `no close button labelled ${label}`).toEqual(expect.any(Object));
     return found as HTMLElement;
 };
 const dialogText = (): string => document.body.textContent ?? ``;
@@ -136,11 +136,10 @@ test(`cancelling leaves the session alone`, async () => {
     closeButton(host, `Kill terminal`).click();
     await nextTick();
     const cancel = [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Cancel`));
-    expect(cancel).toBeDefined();
     cancel?.click();
     await nextTick();
     expect(killed).toEqual([]);
-    expect(closeButton(host, `Kill terminal, running vitest`)).toBeDefined();
+    expect(closeButton(host, `Kill terminal, running vitest`)).toEqual(expect.any(Object));
 });
 
 // And confirming still kills: a guard that made the action hard to complete would just be a worse ×.
@@ -159,5 +158,5 @@ test(`confirming kills it`, async () => {
 test(`the strip says what a busy terminal is running`, async () => {
     const { host } = await openPanel([busy(`web-aaa`, `pnpm build`), idle(`web-bbb`)]);
     expect(host.textContent).toContain(`pnpm build`);
-    expect(closeButton(host, `Kill terminal, running pnpm build`)).toBeDefined();
+    expect(closeButton(host, `Kill terminal, running pnpm build`)).toEqual(expect.any(Object));
 });

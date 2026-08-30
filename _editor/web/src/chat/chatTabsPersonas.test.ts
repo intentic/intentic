@@ -168,7 +168,6 @@ it("says nothing about a persona that holds no accounts", async () => {
     withPersonas([{ id: `fresh`, label: `Fresh`, capabilities: [] }]);
     const el = await mountList();
     const row = rowFor(el, `Fresh`);
-    expect(row).toBeDefined();
     expect(row?.textContent).not.toContain(`No accounts`);
     expect(row?.textContent).not.toContain(`can't post`);
     expect(row?.querySelector(`.text-warning`)).toBeNull();
@@ -251,7 +250,7 @@ it("offers a new chat as that persona once its existing ones are on screen", asy
  * to list, so what the group holds is the offer to start one. */
 it("opens a chatless persona onto the offer to start its first chat", async () => {
     const el = await mountList();
-    expect(disclosureFor(el, `Work`)).toBeDefined();
+    expect(disclosureFor(el, `Work`)).toEqual(expect.any(Object));
     disclosureFor(el, `Work`)?.click();
     await settle();
     expect(sessionRows(el)).toEqual([]);
@@ -379,6 +378,5 @@ it("says nothing about what a persona runs on until it has a chat", async () => 
     withPersonas([{ id: `fresh`, label: `Fresh`, capabilities: [] }]);
     const el = await mountList();
     const row = rowFor(el, `Fresh`);
-    expect(row).toBeDefined();
     expect(row?.textContent).not.toContain(`Claude`);
 });

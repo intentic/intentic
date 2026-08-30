@@ -91,7 +91,7 @@ const pickFile = async (el: HTMLElement): Promise<void> => {
     const field = fileField(el);
     Object.defineProperty(field, `files`, { value: [new File([`x`], `logo.png`, { type: `image/png` })], configurable: true });
     field.dispatchEvent(new Event(`change`));
-    await vi.waitFor(() => expect(update).toHaveBeenCalled());
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
 };
 
 beforeEach(() => {
@@ -151,7 +151,7 @@ it(`goes straight to the file dialog when there is no logo yet`, () => {
     const el = mount(sandboxRow());
     const opened = vi.spyOn(fileField(el), `click`);
     logoTile(el).click();
-    expect(opened).toHaveBeenCalled();
+    expect(opened).toHaveBeenCalledTimes(1);
     expect([...document.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Remove logo`))).toBe(false);
 });
 
@@ -206,7 +206,7 @@ it(`takes a logo back off with an explicit null`, async () => {
     tile.click();
     const remove = await vi.waitFor(() => {
         const button = removeRow();
-        expect(button).toBeDefined();
+        expect(button).toEqual(expect.any(Object));
         return button!;
     });
     remove.click();

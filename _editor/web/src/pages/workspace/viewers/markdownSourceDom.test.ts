@@ -114,7 +114,6 @@ describe(`caret offsets`, () => {
         const element = buildBlockElement(source);
         for (let offset = 0; offset <= source.length; offset += 1) {
             const at = caretAtOffset(element, offset);
-            expect(at, `no caret position for offset ${offset}`).toBeDefined();
             expect(offsetOfCaret(element, at!.node, at!.offset), `offset ${offset} did not round-trip`).toBe(offset);
         }
     });
@@ -122,7 +121,6 @@ describe(`caret offsets`, () => {
     test(`an offset past the end lands at the end rather than nowhere`, () => {
         const element = buildBlockElement(`short`);
         const at = caretAtOffset(element, 999);
-        expect(at).toBeDefined();
         expect(offsetOfCaret(element, at!.node, at!.offset)).toBe(5);
     });
 

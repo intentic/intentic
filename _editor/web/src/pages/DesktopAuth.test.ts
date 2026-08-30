@@ -195,7 +195,6 @@ it(`always offers Google's own page while the embedded button is up`, async () =
     await nextTick();
 
     const escape = [...el.querySelectorAll(`button`)].find((node) => node.textContent?.includes(`Google's own page`));
-    expect(escape).toBeDefined();
 
     escape?.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
     await nextTick();
@@ -233,7 +232,7 @@ it(`asks the platform for a credential it cannot be holding`, async () => {
 
     await mount();
 
-    expect(refresh).toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledTimes(1);
     expect(googleIdToken).not.toHaveBeenCalled();
 });
 
@@ -247,7 +246,7 @@ it(`leaves a signed-in browser on the account it is already using`, async () => 
     await mount();
 
     expect(signInWithGoogleCredential).not.toHaveBeenCalled();
-    expect(handoff).toHaveBeenCalled();
+    expect(handoff).toHaveBeenCalledTimes(1);
 });
 
 it(`asks Google for nothing when the link is missing its handoff values`, async () => {

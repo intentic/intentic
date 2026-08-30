@@ -39,7 +39,7 @@ test("the stale-only notice (the shape this workspace itself produces) strips li
         },
     ]);
 
-    expect(stale).toBeDefined();
+    expect(stale).toEqual(expect.any(String));
     expect(stale).not.toContain(SETUP_NOTICE_HEADER);
     expect(stripTurnPreamble(withTurnPreamble([stale ?? ""], `Say "hello"`))).toBe(`Say "hello"`);
 });

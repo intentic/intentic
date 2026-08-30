@@ -452,7 +452,7 @@ test("archiving a named agent asks nothing of the rest of the fleet; clearing th
     probe.mockClear();
     await client.agents.archive({});
 
-    expect(probe).toHaveBeenCalled();
+    expect(probe).toHaveBeenCalledTimes(1);
     expect((await client.agents.archived()).agents.map((agent) => agent.id)).toEqual(["conv2", "conv1"]);
 });
 

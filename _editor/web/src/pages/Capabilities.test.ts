@@ -130,7 +130,7 @@ it(`reads a dropped configuration and lists its connections, with nothing to pas
     importForticlient.mockResolvedValue([connection(), connection({ id: `warszawa`, label: `ZTM Warszawa`, port: 10443 })]);
     const el = mount();
 
-    expect(dropZone(el)).toBeDefined();
+    expect(dropZone(el)).toEqual(expect.any(Object));
     // The paste lane is GONE, not merely deprioritised: a textarea left beside the zone is the step this
     // change exists to remove, quietly still on offer.
     expect(importBlock(el).querySelector(`textarea`)).toBeNull();

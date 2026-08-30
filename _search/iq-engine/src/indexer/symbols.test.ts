@@ -100,9 +100,10 @@ test("Vue SFC extraction: script-block symbols land on their real file lines", (
 
 test("Vue SFC extraction: script-setup locals are indexed but not exported", () => {
     const byName = new Map(extractSymbols("app/Widget.vue", "vue", VUE).map((symbol) => [symbol.name, symbol]));
-    // Indexed, so `iq def barOf` finds it inside the component…
-    expect(byName.get("barOf")).toBeDefined();
-    expect(byName.get("pick")).toBeDefined();
+    // Indexed, so `iq def barOf` finds it inside the component… asserted against the whole extracted set, so a
+    // failure prints the names that WERE found, which is the difference between "the extractor skipped this
+    // one" and "the extractor read the block under a different name".
+    expect([...byName.keys()]).toEqual(expect.arrayContaining(["barOf", "pick"]));
     // …but a component's locals are not its API, and claiming otherwise turns every large component into a fake
     // hub in the map's reference graph (`step`, `busy`, `error` match everywhere).
     expect(byName.get("barOf")?.exported).toBe(false);

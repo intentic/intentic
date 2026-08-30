@@ -202,7 +202,6 @@ it(`groups by the packages of the agent's own tree, not the workspace's`, async 
     queryClient.setQueryData(WORKSPACE_MODULES.of(), { repos: [{ repo: `root`, modules: [] }] });
     const el = await mount(MODULES);
     const heading = packageHeading(el, `@shop/auth`);
-    expect(heading).toBeDefined();
     expect(heading.querySelector(`[data-icon="box"]`)).not.toBeNull();
     // Named above, so the rows under it are the files alone rather than repeated `src/auth/` prefixes.
     expect(rowFor(el, `src/auth/session.ts`).textContent).not.toContain(`src/auth`);

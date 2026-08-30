@@ -49,7 +49,8 @@ test("a definition rides as base64 in SANDBOX_DEFINITION_SEED, so its quotes and
     const toml = 'schemaVersion = 1\n[[repositories]]\nid = "app"\nremote = "https://example.com/app.git"\n';
     const argv = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1", definition: toml });
     const stamped = argv.find((entry) => entry.startsWith("SANDBOX_DEFINITION_SEED="));
-    expect(stamped).toBeDefined();
+    // The decode below is the assertion, and it already cannot pass on a missing entry: `?? ""` decodes to the
+    // empty string, which is not the toml. A presence check in front of it added nothing.
     expect(Buffer.from((stamped ?? "").slice("SANDBOX_DEFINITION_SEED=".length), "base64").toString("utf8")).toBe(toml);
     // And absent means absent: no empty var for the daemon to misread as a seed.
     expect(sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" }).some((entry) => entry.includes("SANDBOX_DEFINITION_SEED"))).toBe(false);

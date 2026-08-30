@@ -264,7 +264,7 @@ describe(`the window with the app in it`, () => {
         receiveMainWindowNote({ kind: `errand`, to: id, errand: FILE });
 
         expect(show).toHaveBeenCalledWith(FILE);
-        expect(focus).toHaveBeenCalled();
+        expect(focus).toHaveBeenCalledTimes(1);
         leave();
     });
 

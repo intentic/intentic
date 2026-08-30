@@ -96,7 +96,7 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     const { history, calls, setTree } = await fakeHistory();
 
     const first = await history.snapshot("turn");
-    expect(first).toBeDefined();
+    expect(first).toEqual(expect.any(String));
     const commitCalls = () => calls.filter((call) => call.includes("commit-tree"));
     expect(commitCalls()).toHaveLength(1);
     expect(commitCalls()[0]).not.toContain("-p");
@@ -108,7 +108,7 @@ test("snapshot commits parentless first, skips an unchanged tree, then parents o
     expect(commitCalls()).toHaveLength(1);
 
     setTree("tree-2");
-    expect(await history.snapshot("interval")).toBeDefined();
+    expect(await history.snapshot("interval")).toEqual(expect.any(String));
     expect(commitCalls()).toHaveLength(2);
     expect(commitCalls()[1]?.join(" ")).toContain("-p c1");
 });
@@ -131,7 +131,7 @@ test("groups are cached between reads and recomputed only after a changed snapsh
 
     // A snapshot that changes the tree invalidates the cache; the next read re-runs `git log`.
     setTree("tree-2");
-    expect(await history.snapshot("interval")).toBeDefined();
+    expect(await history.snapshot("interval")).toEqual(expect.any(String));
     await history.list();
     expect(logCount()).toBe(afterFirst + 1);
 });
@@ -197,17 +197,17 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
 
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
     const first = await history.snapshot("user");
-    expect(first).toBeDefined();
+    expect(first).toEqual(expect.any(String));
 
     // A hidden interval capture lands between the two visible checkpoints: the turn's diff must span it.
     await writeFile(join(work, "hello.txt"), "two\n");
     const hidden = await history.snapshot("interval");
-    expect(hidden).toBeDefined();
+    expect(hidden).toEqual(expect.any(String));
 
     await writeFile(join(work, "later.txt"), "junk\n");
     await writeFile(join(intent, "deploy.config.ts"), "v2\n");
     const second = await history.snapshot("turn", "  Fix the\n\tgreeting  ");
-    expect(second).toBeDefined();
+    expect(second).toEqual(expect.any(String));
 
     // Interval captures stay off the timeline and aren't addressable; the turn carries its sanitized label.
     const listed = await history.list();
@@ -252,7 +252,7 @@ test("integration: a nested repo scopes under its slash id and restores after de
 
     const history = createWorkspaceHistory({ workspace: workspacePaths(work), historyRoot, logger });
     const first = await history.snapshot("user");
-    expect(first).toBeDefined();
+    expect(first).toEqual(expect.any(String));
     // One filesystem entry per scope: the slash is URI-encoded in the bare dir name.
     expect(existsSync(join(historyRoot, "scopes", "clients%2Ffoo.git"))).toBe(true);
 

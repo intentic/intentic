@@ -100,7 +100,6 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
 
         // What the SDK does: the PreToolUse hook fires with the tool name and session id, THEN the tool runs.
         const hook = browserSessionHooks(ports).PreToolUse?.[0]?.hooks[0];
-        expect(hook).toBeDefined();
         const input = { hook_event_name: "PreToolUse", tool_name: "mcp__web__browser_navigate", session_id: SESSION_ID, tool_input: { url } };
         await hook?.(input as never, "t1", { signal: new AbortController().signal });
 
@@ -113,7 +112,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
 
         // The daemon's own attach sees the page the MCP created, and can stream it.
         const context = await browserSessionContext(SESSION);
-        expect(context).toBeDefined();
+        expect(context).toEqual(expect.any(Object));
         const formats: string[] = [];
         const screencast = await startScreencast(context!, (frame) => {
             formats.push(frame.format);
@@ -152,7 +151,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
         // Every listed page can be bound: that round trip (list an id → get a Page back) is the whole
         // contract the view's tab strip rests on.
         for (const page of twoTabs?.pages ?? []) {
-            expect(browserSessionPage(SESSION, page.id)).toBeDefined();
+            expect(browserSessionPage(SESSION, page.id)).toEqual(expect.any(Object));
         }
         expect(browserSessionPage(SESSION, "p-nope")).toBeUndefined();
 
@@ -160,7 +159,7 @@ test("the agent's browser is listed, watchable, and closable while the MCP drive
          * this the strip would be a lie: you would click a page, the agent would open another, and you would
          * silently be watching something you never chose. */
         const pinTarget = browserSessionPage(SESSION, twoTabs?.pages[0]?.id ?? "");
-        expect(pinTarget).toBeDefined();
+        expect(pinTarget).toEqual(expect.any(Object));
         const pinnedCast = await startScreencast(context!, () => {});
         try {
             await pinnedCast.bind(pinTarget!, true);

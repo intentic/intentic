@@ -74,7 +74,6 @@ test("vectors survive the index being dropped and refill without touching the mo
     insertChunks(first, texts);
     const { embedder, embedded } = countingEmbedder();
     const cache = openVectorCache(cachePath, "fake");
-    expect(cache).toBeDefined();
     expect(await embedPending(first, embedder, cache)).toBe(0);
     expect(embedded).toEqual(texts);
     const original = storedVectors(first);
@@ -148,7 +147,6 @@ test("a corrupt cache file is dropped and reopened empty", async () => {
     await mkdir(join(root, "corrupt"), { recursive: true });
     await writeFile(cachePath, "this is not a database");
     const cache = openVectorCache(cachePath, "fake");
-    expect(cache).toBeDefined();
     const blob = new Uint8Array(4).fill(9);
     cache!.put(new Map([["h", blob]]));
     expect(cache!.get(["h"]).size).toBe(1);

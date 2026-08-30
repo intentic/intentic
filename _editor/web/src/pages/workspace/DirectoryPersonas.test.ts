@@ -87,7 +87,7 @@ it(`saves a new persona that starts in the clicked folder`, async () => {
     await nextTick();
     await type(`Refactor crew`);
     buttonLabelled(`Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toMatchObject({
         id: `refactor-crew`,
         label: `Refactor crew`,
@@ -105,7 +105,7 @@ it(`asks for a name and nothing else, and commits no powers`, async () => {
     expect(text()).not.toContain(`Run commands`);
     await type(`Docs bot`);
     buttonLabelled(`Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0].powers).toBeUndefined();
 });
 
@@ -130,8 +130,8 @@ it(`lists every persona starting in this folder and no others`, async () => {
     ];
     mount(`intentic/_editor`);
     await nextTick();
-    expect(byAriaLabel(`Edit docs-bot`)).toBeDefined();
-    expect(byAriaLabel(`Edit refactor-crew`)).toBeDefined();
+    expect(byAriaLabel(`Edit docs-bot`)).toEqual(expect.any(Object));
+    expect(byAriaLabel(`Edit refactor-crew`)).toEqual(expect.any(Object));
     expect(byAriaLabel(`Edit deep`)).toBeUndefined();
     expect(byAriaLabel(`Edit elsewhere`)).toBeUndefined();
 });
@@ -155,7 +155,7 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     await nextTick();
     await type(`Docs crew`);
     buttonLabelled(`Save`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
         // The id is frozen: automations pin to it, so a rename changes the label only.
         id: `docs-bot`,
@@ -182,7 +182,7 @@ it(`keeps the powers of a bounded card`, async () => {
     await nextTick();
     expect(text()).toContain(`Run commands`);
     buttonLabelled(`Save`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0].powers).toEqual({
         files: `read`,
         shell: false,
@@ -225,7 +225,7 @@ it(`points an existing persona at this folder, keeping everything else about it`
     byAriaLabel(`Start Docs bot here`)!.click();
     await nextTick();
     buttonLabelled(`Start here`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
         id: `docs-bot`,
         label: `Docs bot`,
@@ -250,7 +250,7 @@ it(`offers a persona that starts nowhere, and says so`, async () => {
     // Nothing is being taken away, so there is no move to warn about.
     expect(text()).not.toContain(`This moves it`);
     buttonLabelled(`Start here`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalled());
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `free-agent`, capabilities: [], workspace: { startIn: `docs` } });
 });
 
@@ -280,7 +280,7 @@ it(`does not offer a persona that already starts here`, async () => {
     await nextTick();
     buttonLabelled(`Use one I already have`)!.click();
     await nextTick();
-    expect(byAriaLabel(`Start elsewhere here`)).toBeDefined();
+    expect(byAriaLabel(`Start elsewhere here`)).toEqual(expect.any(Object));
     expect(byAriaLabel(`Start docs-bot here`)).toBeUndefined();
 });
 

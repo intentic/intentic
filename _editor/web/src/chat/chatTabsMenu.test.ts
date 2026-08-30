@@ -65,6 +65,10 @@ beforeAll(() => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
+    // `open` is hoisted once for the module and stands in for window.open, so without this its calls accumulate
+    // across tests and every count assertion below reads whatever ran before it. The `.not.toHaveBeenCalled()`
+    // in the menu test was only true because it happened to run first.
+    open.mockClear();
     resetChat();
     await nextTick();
     await openSheet();
@@ -113,7 +117,7 @@ const labelOf = (item: HTMLElement): string => item.querySelector(`a > span.flex
 const labels = (): string[] => menuRows().map(labelOf);
 const row = (label: string): HTMLElement => {
     const found = menuRows().find((item) => labelOf(item) === label);
-    expect(found, `menu row "${label}" among [${labels()}]`).toBeDefined();
+    expect(found, `menu row "${label}" among [${labels()}]`).toEqual(expect.any(Object));
     return found!;
 };
 const clickRow = async (label: string): Promise<void> => {
@@ -228,7 +232,7 @@ it(`offers the card-less rows from the bar's own menu instead of popping out on 
     // The pop-out row still pops out: the menu is a step in front of the gesture, not a replacement for it.
     await openBarMenu();
     await clickRow(`Move chat into new window`);
-    expect(open).toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
 });
 
 /* THE POP-OUT'S OWN BUTTON, beside the ✚ / history pair. The action had no visible control at all: it lived
@@ -245,7 +249,7 @@ it(`moves the chat into its own window from the strip's own button`, async () =>
     button!.click();
     await flush();
 
-    expect(open).toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
 });
 
 /* The ✚ and history buttons are siblings of the tab scroll box: they stay put while the tabs scroll, so the

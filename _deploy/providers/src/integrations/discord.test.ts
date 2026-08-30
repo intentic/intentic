@@ -71,7 +71,6 @@ test("read returns observed state when guild + channels + webhooks exist", async
     const provider = createDiscordProvider(api);
     const result = await provider.read(baseInputs, ctx);
 
-    expect(result).toBeDefined();
     expect(result!.outputs["guildId"]).toBe(GUILD_ID);
     expect(result!.outputs["reconcileWebhook"]).toBe("https://discord.com/api/webhooks/wh-reconcile/tok-r");
     expect(result!.outputs["appWebhook:my-app"]).toBe("https://discord.com/api/webhooks/wh-app/tok-a");

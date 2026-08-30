@@ -12,7 +12,6 @@ test("symbol-aligned chunks carry path § name prefix and the preceding doc line
     const symbols = extractSymbols("a/widget.ts", "ts", TS);
     const chunks = chunkFile("a/widget.ts", symbols, TS);
     const create = chunks.find((chunk) => chunk.text.includes("§ createWidget"));
-    expect(create).toBeDefined();
     expect(create!.text).toContain("// Builds one widget.");
     expect(create!.startLine).toBe(1);
 });

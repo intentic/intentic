@@ -79,7 +79,6 @@ test("a packed home is read bounded (sessions and databases never held), rebased
     expect(archive.skipped.some((entry) => entry.includes("sessions"))).toBe(true);
     expect(archive.skipped.some((entry) => entry.includes("state.db"))).toBe(true);
     const files = rebaseArchive(archive.files, "config.yaml");
-    expect(files).toBeDefined();
     expect(files?.has("SOUL.md")).toBe(true);
     expect([...(files?.keys() ?? [])].some((path) => path.includes("sessions"))).toBe(false);
 

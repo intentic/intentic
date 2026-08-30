@@ -418,7 +418,7 @@ test("a step queued behind maxParallel never opens a loop once the run is stoppe
     expect(await services.loops.get(queued?.conversationId ?? "")).toBeUndefined();
     expect(queued?.detail).toBe("The run was stopped before this step started.");
     // The step that DID run still opened its loop: the guard must not swallow work that was already going.
-    expect(await services.loops.get(settled?.steps[0]?.conversationId ?? "")).toBeDefined();
+    expect(await services.loops.get(settled?.steps[0]?.conversationId ?? "")).toEqual(expect.any(Object));
 });
 
 test("a resumed run replays the steps that already finished instead of paying for them again", async () => {
