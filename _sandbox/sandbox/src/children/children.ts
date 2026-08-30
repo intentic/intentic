@@ -1,14 +1,14 @@
 import type { AgentEvent, AgentHarness, AgentProvider, AgentTurn, AskQuestion } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { resolveRequest } from "../agent/agent-requests.js";
+import { createRequest, resolveRequest } from "../agent/agent-requests.js";
 import { steerTurn } from "../agent/agent-steering.js";
 import { childSpawn } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../guard/turn-taint.js";
 import { noteChildWork } from "../agent/child-verification.js";
 import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "../agent/subagents.js";
-import { startTurnRun } from "../agent/turn-runs.js";
+import { startTurnRun, turnRunOf } from "../agent/turn-runs.js";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { credentialsTravel, placeFanOut } from "../runners/runner-scheduler.js";
@@ -287,13 +287,24 @@ const runChildTurn = (
 
 /* THE OWNER'S RULE AND THE TAINT FLOOR, consulted before every supervisor mutation — spawn, follow-up send,
  * steer, answer — because each one is the parent's judgment reaching a child that spends the owner's
- * accounts, and each door (harness tool, Cursor tool, CLI route) lands here. A HOLD cannot park (a call may
- * arrive from a shell whose turn already ended, with nobody to raise a card to), so it translates into a
- * refusal that names the owner, outbound.send's own shape. */
+ * accounts, and each door (harness tool, Cursor tool, CLI route) lands here.
+ *
+ * A HOLD ASKS, AND ONLY REFUSES WHERE THERE IS NOBODY TO ASK. It used to refuse unconditionally, on the
+ * grounds that a call may arrive from a shell whose turn has already ended with nobody to raise a card to.
+ * That is true of SOME doors and was applied to all of them, which made the commonest case by far — a live,
+ * watched turn calling the supervision tool, with the owner sitting right there — indistinguishable from the
+ * detached one: the model got a sentence telling it to go and ask in chat, the owner got nothing at all, and
+ * the only way through was for the human to notice the refusal in a transcript and write an action rule.
+ *
+ * `commandRun` has always drawn this line properly for shell commands (a hold parks on a card; an unattended
+ * turn gets the refusal and is told not to retry) and the wallet's payment offer does the same from a ROUTE,
+ * which is the shape this needed: `turnRunOf` is what answers "is there a live stream to raise a card in",
+ * and its absence is the real unattended case rather than a guess about which door was used. */
 const admitSupervision = async (
     services: Services,
     parent: string,
     provider: string,
+    move: SupervisionMove,
 ): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
     const settings = await services.sandboxSettings.get();
     const outsideSource = conversationTaintSource(parent);
@@ -306,7 +317,79 @@ const admitSupervision = async (
         return { ok: false, message: `Refused: ${verdict.reason}.` };
     }
     if (verdict.effect === "hold") {
-        return { ok: false, message: `Held for the owner: ${verdict.reason}. Ask them in chat; they can also set the agents.spawn action rule.` };
+        return askOwner(services, parent, provider, move, verdict.reason);
+    }
+    return { ok: true };
+};
+
+// Which supervisor move is being held, so the card names what it would actually do. A card reading "start an
+// agent" over a call that only answers a question the child already asked is a card that gets denied for the
+// wrong reason.
+type SupervisionMove = "spawn" | "send" | "answer";
+const MOVE_TITLE: Readonly<Record<SupervisionMove, string>> = {
+    spawn: "Start a child agent",
+    send: "Send this to a child agent",
+    answer: "Answer a child agent",
+};
+const MOVE_BUTTON: Readonly<Record<SupervisionMove, string>> = { spawn: "Start it", send: "Send it", answer: "Answer it" };
+
+/* How long a held supervisor call waits for an answer before giving up. The payment offer's own window, and
+ * for its reason: long enough that somebody who stepped away can still come back to it, short enough that a
+ * dead client does not hold a tool call open for the rest of the turn. */
+const SUPERVISION_DEADLINE_MS = 10 * 60_000;
+
+/* Raise the card and wait, or say why it could not be raised.
+ *
+ * THE REFUSALS ARE THREE DIFFERENT THINGS and are worded as three, because the model's next move differs and
+ * because putting words in the owner's mouth is the specific failure to avoid: nobody to ask, asked and
+ * nobody answered, asked and told no. Only the last one is the owner declining. */
+const askOwner = async (
+    services: Services,
+    parent: string,
+    provider: string,
+    move: SupervisionMove,
+    reason: string,
+): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
+    const run = turnRunOf(parent);
+    if (run === undefined || run.done) {
+        // The genuinely unattended door: a detached `agents` shell, or a turn that has already ended. There is
+        // no stream to draw a card in, so this is where the old sentence still belongs.
+        return {
+            ok: false,
+            message:
+                `Held for the owner: ${reason}. This call arrived outside a live turn, so there was nowhere to ask them. ` +
+                `Ask in chat; they can also set the agents.spawn action rule.`,
+        };
+    }
+    const { id, wait } = createRequest(
+        "permission",
+        { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
+        parent,
+    );
+    /* No `alwaysLabel`: the schema says to send one only when an "always" has something to remember, and
+     * nothing here persists a grant. Offering a button whose answer is silently downgraded to "once" would be
+     * the card lying about what it did. */
+    const raised: AgentEvent = {
+        kind: "permission",
+        requestId: id,
+        toolName: "agents.spawn",
+        title: `${MOVE_TITLE[move]} on ${provider}?`,
+        displayName: MOVE_BUTTON[move],
+        reason,
+    };
+    run.push(raised);
+    services.agents.observe(parent, raised);
+    const { reply, resolved } = await wait(AbortSignal.timeout(SUPERVISION_DEADLINE_MS));
+    // Every parked card owes the stream its resolution frame: it is what stops a client rendering the card as
+    // live, and the only honest account of how long the call was parked.
+    run.push(resolved);
+    services.agents.observe(parent, resolved);
+    if (reply.decision === "deny") {
+        // Told apart the payment offer's way: a resolved frame carrying no reply is the deadline or a dead
+        // client, and reading that as "declined" would put a refusal in the owner's mouth they never gave.
+        return resolved.reply === undefined
+            ? { ok: false, message: `Nobody answered the request to ${move === "spawn" ? "start" : move} a child agent, so it did not run. Carry on without it and say what you left undone.` }
+            : { ok: false, message: `The owner declined this. Do not retry: carry on with what you can do without it, and say plainly what you left undone.` };
     }
     return { ok: true };
 };
@@ -368,7 +451,7 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     }
     const provider = spec.provider ?? "claude";
     const harness = spec.harness ?? "native";
-    const allowed = await admitSupervision(services, parent.conversationId, provider);
+    const allowed = await admitSupervision(services, parent.conversationId, provider, "spawn");
     if (!allowed.ok) {
         return allowed;
     }
@@ -468,7 +551,7 @@ export const sendToChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude");
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude", "send");
     if (!allowed.ok) {
         return allowed;
     }
@@ -545,7 +628,7 @@ export const answerChild = async (
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
-    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude");
+    const allowed = await admitSupervision(services, parent.conversationId, kid.spec.provider ?? "claude", "answer");
     if (!allowed.ok) {
         return allowed;
     }

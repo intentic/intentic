@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "../agent/subagents.js";
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";
-import { createRequest } from "../agent/agent-requests.js";
+import { createRequest, resolveRequest } from "../agent/agent-requests.js";
+import { startTurnRun, turnRunOf } from "../agent/turn-runs.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../guard/turn-taint.js";
 import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
 
@@ -59,6 +60,9 @@ const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeR
         }),
         agents: unstubbed<Services["agents"]>("agents", {
             inFlightByRunner: () => new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
+            // A held supervisor call raises a card and mirrors it here, which is what lights the fleet's
+            // "needs you" lane; the tests only care that it is reachable.
+            observe: () => {},
         }),
     });
 
@@ -655,5 +659,88 @@ describe("placing a child on the fleet", () => {
 
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {
         expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", on: "here" })).toBeUndefined();
+    });
+});
+
+/* WHERE A HOLD IS ASKED RATHER THAN REFUSED, which is the difference between a rule the owner can answer and a
+ * sentence the model reads out to nobody.
+ *
+ * The floor fires on exactly the same input in both cases; what changes is whether there is a live turn to draw
+ * a card in. Every other test in this file runs without one, which is why they all see the refusal — that is
+ * the detached `agents` shell, and it is still correct there. */
+describe("a held supervisor call asks the owner where there is one to ask", () => {
+    // A parent turn that stays open for as long as the test needs, so `turnRunOf` finds a live stream. The
+    // real pump, not a stand-in: a card raised into anything else would prove nothing about the wiring.
+    const liveParent = (): { release: () => void } => {
+        let release = (): void => {};
+        const held = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        // eslint-disable-next-line require-yield
+        const forever: TurnFn = async function* pump() {
+            await held;
+        };
+        startTurnRun(forever, { conversationId: parent.conversationId, prompt: "parent" } as AgentTurn & { conversationId: string });
+        return { release };
+    };
+
+    // The card's requestId, off the parent's own frame log: exactly what a client would answer with.
+    const cardOn = async (): Promise<string> => {
+        const run = turnRunOf(parent.conversationId);
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+            const card = run?.events.find((event) => event.kind === "permission");
+            if (card !== undefined) {
+                return (card as { requestId: string }).requestId;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        throw new Error("no permission card was raised on the parent's turn");
+    };
+
+    it("raises a card on the parent's turn and runs the spawn once it is allowed", async () => {
+        const live = liveParent();
+        try {
+            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+            const requestId = await cardOn();
+            // The card names the move and the provider, so answering it is not a guess about what it would do.
+            const card = turnRunOf(parent.conversationId)?.events.find((event) => event.kind === "permission");
+            expect(card).toMatchObject({ toolName: "agents.spawn", title: "Start a child agent on claude?", displayName: "Start it" });
+            // No always-allow offered, because nothing here would remember one.
+            expect(card).not.toHaveProperty("alwaysLabel");
+
+            expect(resolveRequest({ kind: "permission", requestId, decision: "once" })).toBe(true);
+            const result = await spawning;
+            expect(result.ok).toBe(true);
+            if (result.ok) {
+                await settled(result.id);
+            }
+            // The stream gets its resolution frame, which is what stops a client drawing the card as live.
+            expect(turnRunOf(parent.conversationId)?.events.some((event) => event.kind === "resolved")).toBe(true);
+        } finally {
+            live.release();
+        }
+    });
+
+    it("a denial refuses the spawn and tells the model not to retry", async () => {
+        const live = liveParent();
+        try {
+            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+            const requestId = await cardOn();
+            resolveRequest({ kind: "permission", requestId, decision: "deny" });
+            const result = await spawning;
+            expect(result).toMatchObject({ ok: false, message: expect.stringContaining("declined") });
+            expect(result.ok === false && result.message).toContain("Do not retry");
+        } finally {
+            live.release();
+        }
+    });
+
+    /* THE ONE THE OLD CODE GOT RIGHT AND MUST KEEP GETTING RIGHT: a call with no live turn behind it (a
+     * backgrounded `agents` shell, a turn that has already ended) has nowhere to draw a card, so it still
+     * refuses — and now says which of the two situations it is in. */
+    it("with no live turn there is nowhere to ask, and it says so", async () => {
+        const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
+        expect(held).toMatchObject({ ok: false, message: expect.stringContaining("outside a live turn") });
+        expect(held.ok === false && held.message).toContain("agents.spawn action rule");
     });
 });

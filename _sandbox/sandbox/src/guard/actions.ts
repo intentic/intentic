@@ -186,9 +186,14 @@ export interface ChildSpawnInput {
  * mutation (children/children.ts), which is what makes the rule bind on every door at once — the harness
  * tools, Cursor's custom tools, and the `agents` CLI all land on the same consult.
  *
- * A "hold" cannot park here (a spawn may arrive from a shell whose turn has already ended, with nobody to
- * raise a card to), so the service translates it into a refusal that names the owner — outbound.send's own
- * shape, where the held form of the action is "ask the owner in chat".
+ * A "hold" ASKS. The service raises a permission card on the parent's own turn and waits (children/children.ts
+ * askOwner), which is commandRun's shape rather than outbound.send's, and for commandRun's reason: there is no
+ * held form of a spawn the way a draft is the held form of a send — there is the child or there is not.
+ *
+ * It refuses only where there is genuinely nobody to ask, and that is decided by looking rather than guessing:
+ * a live turn run for the parent conversation is a stream to draw a card in, and its absence is the detached
+ * `agents` shell or a turn that has already ended. This used to refuse unconditionally on the grounds that the
+ * detached case exists, which made the common case (a watched turn, the owner right there) unanswerable.
  *
  * THE TAINT FLOOR rides this action too, and for the wallet's reason: a child spends the owner's connected
  * accounts on the parent's say-so, and a parent that has read a hostile page is exactly the judgment that
