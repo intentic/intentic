@@ -804,8 +804,10 @@ const act = async (group: MachineSandboxGroup, verb: SandboxVerb): Promise<void>
         busy.value = undefined;
         return;
     }
+    // The question is the dialog's title and the consequence its message — the two slots a native dialog has,
+    // and the same split the web tab's ConfirmDialog renders as header and body.
     const asked = sandboxVerbPrompt(verb, group.title);
-    if (asked !== undefined && !(await confirm(asked, { title: group.title, kind: `warning`, okLabel: VERB_LABEL[verb] }))) {
+    if (asked !== undefined && !(await confirm(asked.body, { title: asked.header, kind: `warning`, okLabel: VERB_LABEL[verb] }))) {
         return;
     }
     // A pane holding the log this row printed a moment ago is about a container that is now being changed.

@@ -2,6 +2,7 @@
 import { type Computer, type MachineSandboxOp, type MachineWatcher, watcherStalled } from "@intentic/sandbox-contract";
 import {
     Button,
+    ConfirmDialog,
     groupNeedsAttention,
     InfoHint,
     MachineDetail,
@@ -22,6 +23,7 @@ import {
     type StatusVariant,
     type TallyItem,
     timeAgo,
+    VERB_LABEL,
 } from "@intentic/ui";
 import { noticeFrom, useNow } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
@@ -434,28 +436,65 @@ const runningVerb = (computer: Computer, group: MachineSandboxGroup): SandboxVer
 // which can only ever help, and not `logs`, which changes nothing at all.
 const SEVERING = new Set<MachineSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`]);
 
-const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): Promise<void> => {
+/* THE STOP-MOMENT, in the app's own dialog rather than the browser's confirm(): a native popup captioned
+ * "localhost says" is the wrong voice for "delete this workspace", and it cannot separate the question from
+ * its consequences the way ConfirmDialog's header/body/footer does. The pending click parks here until the
+ * dialog answers; everything the dialog says derives from it, so cancel is one assignment. */
+const confirmingAct = ref<{ computer: Computer; group: MachineSandboxGroup; op: SandboxVerb } | undefined>();
+const actPrompt = computed(() => {
+    const pending = confirmingAct.value;
+    if (pending === undefined) {
+        return undefined;
+    }
+    const asked = sandboxVerbPrompt(pending.op, pending.group.title);
+    return {
+        // A verb with no prompt of its own only reaches this dialog by severing (stop/restart on the sandbox
+        // serving this page), so the fallback header still asks a real question.
+        header: asked?.header ?? `${VERB_LABEL[pending.op as Exclude<SandboxVerb, `logs`>]} ${pending.group.title}?`,
+        body: asked?.body,
+        // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and
+        // "this also closes the page you are on" are two different things to know, and the second never
+        // cancels the first.
+        severing: isSelf(pending.computer, pending.group) && SEVERING.has(pending.op),
+        // `logs` never confirms (no prompt, never severing), so the label indexes safely past it.
+        label: VERB_LABEL[pending.op as Exclude<SandboxVerb, `logs`>],
+        destructive: pending.op === `remove`,
+    };
+});
+const confirmAct = (): void => {
+    const pending = confirmingAct.value;
+    confirmingAct.value = undefined;
+    if (pending !== undefined) {
+        void runAct(pending.computer, pending.group, pending.op);
+    }
+};
+
+const act = (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): void => {
     if (computer.hostId === undefined || group.sandbox === undefined || busy.value !== undefined) {
         return;
     }
-    const key = rowKey(computer, group);
     // The log button is a toggle: a pane the reader opened is theirs to close, and re-reading is the same click
     // again rather than a second control beside it.
-    if (op === `logs` && openLog.value === key) {
+    if (op === `logs` && openLog.value === rowKey(computer, group)) {
         openLog.value = undefined;
         // The result line goes with the pane it described. Left behind, `The last 200 lines from "…"` floats
         // under a row with no lines anywhere near it, which reads as something the view failed to finish.
         actionDone.value = undefined;
         return;
     }
-    const slug = group.sandbox.slug;
-    const asked = sandboxVerbPrompt(op, group.title);
-    // The self-warning rides the confirmation rather than replacing it: "this deletes everything" and "this also
-    // closes the page you are on" are two different things to know, and the second never cancels the first.
-    const severing = isSelf(computer, group) && SEVERING.has(op) ? `\n\nThis is the sandbox you are using right now, this page will lose it.` : ``;
-    if ((asked !== undefined || severing !== ``) && !globalThis.confirm(`${asked ?? `${group.title}: ${op}?`}${severing}`)) {
+    if (sandboxVerbPrompt(op, group.title) !== undefined || (isSelf(computer, group) && SEVERING.has(op))) {
+        confirmingAct.value = { computer, group, op };
         return;
     }
+    void runAct(computer, group, op);
+};
+
+const runAct = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): Promise<void> => {
+    if (computer.hostId === undefined || group.sandbox === undefined || busy.value !== undefined) {
+        return;
+    }
+    const key = rowKey(computer, group);
+    const slug = group.sandbox.slug;
     busy.value = `${key}:${op}`;
     actionError.value = undefined;
     actionDone.value = undefined;
@@ -747,5 +786,21 @@ const act = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVe
 
         <DesktopSyncCard :highlight="highlight" />
         <BridgeTokensCard />
+
+        <!-- Red only for removal: the swaps commit the sandbox to another image and keep its files, and a
+             danger button on those would say "this deletes something", which is the one thing they do not. -->
+        <ConfirmDialog
+            :open="confirmingAct !== undefined"
+            :header="actPrompt?.header ?? ``"
+            :confirm-label="actPrompt?.label ?? `Continue`"
+            :destructive="actPrompt?.destructive === true"
+            @cancel="confirmingAct = undefined"
+            @confirm="confirmAct"
+        >
+            <p v-if="actPrompt?.body !== undefined">{{ actPrompt.body }}</p>
+            <p v-if="actPrompt?.severing === true" class="mt-3 text-xs text-warning">
+                This is the sandbox you are using right now — this page will lose it.
+            </p>
+        </ConfirmDialog>
     </div>
 </template>

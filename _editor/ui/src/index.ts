@@ -107,7 +107,7 @@ export {
 // The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
 // Here because the desktop manager and the web Computers tab render the same row and had drifted apart.
 export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
-export { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, sandboxVerbPrompt, VERB_LABEL } from "./components/sandboxVerbs.js";
+export { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, sandboxVerbPrompt, type SandboxVerbPrompt, VERB_LABEL } from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported

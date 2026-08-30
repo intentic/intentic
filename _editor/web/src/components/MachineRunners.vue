@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { Computer } from "@intentic/sandbox-contract";
-import { Button, MachineRunLog, Notice, type NoticeModel, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, MachineRunLog, Notice, type NoticeModel, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "../composables/sandbox/useRunners";
 
@@ -72,11 +72,32 @@ const sync = async (id: string): Promise<void> => {
 /* A NAME THAT READS AS A PLACE. It is what the placement picker shows and what the machine files the
  * container under, so it is asked for rather than generated: "rog" beats "runner-8f3a1c" in a menu you pick
  * from every day. Lowercase letters, digits and dashes, which is what `ic` accepts. */
+// A removal parks here until the app's own dialog answers — the browser's confirm() this replaces spoke in
+// the wrong voice ("localhost says") and could not separate the question from what survives it (everything).
+const confirmingRemove = ref<string | undefined>();
+const removeHeader = computed(() => `Remove runner "${confirmingRemove.value ?? ``}"?`);
+
 const run = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
     if (computer.hostId === undefined || busy.value !== undefined) {
         return;
     }
-    if (op === "remove" && !globalThis.confirm(`Remove runner "${name}" from ${computer.label}?\n\nIts work lives in this sandbox's git, so nothing is lost with it.`)) {
+    if (op === "remove") {
+        confirmingRemove.value = name;
+        return;
+    }
+    await execute(op, name);
+};
+
+const removeConfirmed = async (): Promise<void> => {
+    const name = confirmingRemove.value;
+    confirmingRemove.value = undefined;
+    if (name !== undefined) {
+        await execute("remove", name);
+    }
+};
+
+const execute = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
+    if (computer.hostId === undefined || busy.value !== undefined) {
         return;
     }
     busy.value = name;
@@ -208,5 +229,19 @@ const add = async (): Promise<void> => {
         />
         <Notice v-if="failure" :of="failure" />
         <p v-else-if="done" class="mt-1 text-xs text-muted">{{ done }}</p>
+
+        <ConfirmDialog
+            :open="confirmingRemove !== undefined"
+            :header="removeHeader"
+            confirm-label="Remove"
+            confirm-icon="trash"
+            @cancel="confirmingRemove = undefined"
+            @confirm="removeConfirmed"
+        >
+            <p>
+                The runner comes off {{ computer.label }}. Its work lives in this sandbox's git, so nothing is lost with it — and you can make a new
+                one here any time.
+            </p>
+        </ConfirmDialog>
     </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { MachineSandboxOp } from "@intentic/sandbox-contract";
-import { Button, ui, Code, commandLang, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
+import { Button, ui, Code, commandLang, ConfirmDialog, MachineRunLog, Notice, type NoticeModel, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { manageMachineSandbox, useHostRunning } from "../composables/sandbox/useComputers";
@@ -85,23 +85,47 @@ const done = ref<string | undefined>(undefined);
 
 /* Recreating THIS sandbox ends this page's connection to it, every time: that is what recreating means, and it
  * is why the command this replaces was always run somewhere else. Said before it starts rather than discovered
- * when the page goes quiet.
+ * when the page goes quiet — in the app's own ConfirmDialog, not the browser's confirm(): a native popup
+ * captioned "localhost says" is the wrong voice for a question this product is asking, and its text cannot be
+ * shaped (see below for why the shape matters).
  *
  * `Download` is asked nothing, because it takes nothing: it never touches the container, so there is no
  * interruption to warn about and an abandoned one costs only bandwidth. A confirmation on it would be a dialog
  * whose honest text is "this changes nothing, proceed?", and it would make the safe option feel like the
  * dangerous one, which is the exact opposite of why it is offered. */
-const runOnMachine = async (): Promise<void> => {
-    const id = hostId.value;
-    if (id === undefined || running.value) {
+const confirming = ref(false);
+
+const runOnMachine = (): void => {
+    if (hostId.value === undefined || running.value) {
         return;
     }
-    if (
-        props.action !== `Download` &&
-        !globalThis.confirm(
-            `${props.action} this sandbox?\n\nIt restarts on that computer, so this page loses it for about half a minute. Your files are kept.`,
-        )
-    ) {
+    if (props.action === `Download`) {
+        void execute();
+        return;
+    }
+    confirming.value = true;
+};
+
+/* WHAT THE DIALOG SAYS. The confirm() this replaces opened with "It restarts on that computer" — which real
+ * readers parsed as "that computer restarts", a far bigger thing to be asked to agree to than what happens.
+ * So every sentence here keeps the SANDBOX as its subject, and the computer appears exactly once, in the
+ * fixed line underneath, to say it is left alone. */
+const confirmHeader = computed(() => (props.action === `Roll back` ? `Roll this sandbox back?` : `${props.action} this sandbox?`));
+const confirmBody = computed(() => {
+    if (props.action === `Roll back`) {
+        return `Your sandbox restarts onto the image it ran before its last update — about half a minute of downtime, then this page reconnects on its own.`;
+    }
+    if (props.ready === true) {
+        return `The update is already downloaded, so this is just the restart: your sandbox is down for about half a minute, then this page reconnects on its own.`;
+    }
+    const work = props.action === `Rebuild` ? `Your environment is rebuilt first` : `The update is downloaded and built first`;
+    return `${work} — your sandbox keeps working through that — and then your sandbox restarts for about half a minute, after which this page reconnects on its own.`;
+});
+
+const execute = async (): Promise<void> => {
+    confirming.value = false;
+    const id = hostId.value;
+    if (id === undefined || running.value) {
         return;
     }
     running.value = true;
@@ -172,6 +196,21 @@ const command = computed(() => {
             />
             <Notice v-if="failure" :of="failure" />
             <p v-else-if="done" class="text-2xs text-muted">{{ done }}</p>
+
+            <!-- Not destructive: every one of these commits the sandbox to another image and keeps its files,
+                 and a red button here would say "this deletes something", which is the one thing it does not. -->
+            <ConfirmDialog
+                :open="confirming"
+                :header="confirmHeader"
+                :confirm-label="`${action} now`"
+                confirm-icon="bolt"
+                :destructive="false"
+                @cancel="confirming = false"
+                @confirm="execute"
+            >
+                <p>{{ confirmBody }}</p>
+                <p class="mt-3 text-xs text-muted">Only the sandbox restarts — nothing else on that computer is touched. Your files (in /work) are kept.</p>
+            </ConfirmDialog>
         </template>
 
         <!-- The desktop deep link carries all three swaps, rollback included: the app's own manager row offers

@@ -44,19 +44,41 @@ export const VERB_LABEL: Record<Exclude<SandboxVerb, `logs`>, string> = {
     remove: `Remove`,
 };
 
-/* THE SENTENCE EACH DESTRUCTIVE-ENOUGH VERB ASKS BEFORE IT RUNS, in one place because the two apps used to ask
- * differently about the same thing, one named what is lost, the other named the slug and stopped there.
+/* THE SENTENCES EACH DESTRUCTIVE-ENOUGH VERB ASKS BEFORE IT RUNS, in one place because the two apps used to
+ * ask differently about the same thing, one named what is lost, the other named the slug and stopped there.
+ * Structured as a question and its consequence because the two land in different slots: the web tab's
+ * ConfirmDialog takes a header and body, and the desktop app's native dialog takes a title and message —
+ * one `\n\n`-joined string forced both to re-split it or render it wrong.
+ *
+ * Every consequence keeps the SANDBOX as its subject. "It restarts on that computer" read to real people as
+ * "that computer restarts", which is a much bigger thing to be asked to agree to than what happens.
  *
  * Only the three that are hard or slow to undo ask at all: start, stop, restart and a log tail are all undone by
  * doing the opposite, and a confirmation on those is a click tax that teaches people to dismiss dialogs. */
-export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): string | undefined => {
+export interface SandboxVerbPrompt {
+    /** The question, naming the sandbox: a dialog header, or a native dialog's title. */
+    readonly header: string;
+    /** What agreeing does, and what survives it: the dialog's prose. */
+    readonly body: string;
+}
+
+export const sandboxVerbPrompt = (verb: SandboxVerb, name: string): SandboxVerbPrompt | undefined => {
     switch (verb) {
         case `remove`:
-            return `Remove ${name}?\n\nThis deletes it and everything in it: its files and its history, from that computer. This cannot be undone.`;
+            return {
+                header: `Remove ${name}?`,
+                body: `This deletes the sandbox and everything in it — its files and its history — from that computer. This cannot be undone.`,
+            };
         case `update`:
-            return `Update ${name}?\n\nIt restarts onto the newest image and is unavailable for a few minutes. Its files are kept.`;
+            return {
+                header: `Update ${name}?`,
+                body: `The sandbox restarts onto the newest image and is unavailable while that happens — seconds if the update is already downloaded, a few minutes if not. Its files are kept.`,
+            };
         case `rollback`:
-            return `Roll ${name} back?\n\nIt returns to the image it ran before its last update. Its files are kept.`;
+            return {
+                header: `Roll ${name} back?`,
+                body: `The sandbox restarts onto the image it ran before its last update. Its files are kept.`,
+            };
         default:
             return undefined;
     }
