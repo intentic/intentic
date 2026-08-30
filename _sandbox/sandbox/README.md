@@ -278,24 +278,22 @@ reports the profile.
   identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
   **definition** is the declarable half of the same thing as a `sandbox.toml`: the workspace itself by remote,
   repositories by remote, connections by shape, secret NAMES, agent settings, the overlay as source — derived
-  from the live manifests on every export (and never read back from a file), applied preview-first through the
-  same native write paths the UI uses, and diffable against the running sandbox for drift. One copy of that
-  derivation lives at the workspace root as `sandbox.toml` (`definition-file.ts`), written on boot and on a
-  five-minute patrol, skipped when the bytes are unchanged, and carrying a managed header no other copy gets:
-  it is what lets the agent inside the sandbox read what the sandbox is, and what gives `git log` an answer for
-  when a capability appeared. `[workspace]` is what makes the
-  sandbox's own way of working travel: `/work` is itself a repo (the `root` scope), tracking exactly the
-  owner's authored content, so publishing it turns notes, skills, personas, automations, designs and drafts
-  from bundle-only bytes into one reference. The bundle manifest embeds the definition (one schema, two doors),
-  and applying a definition keeps the consent model: the overlay lands as a proposal at the approval gate,
-  capabilities arrive unauthenticated, credentials never ride along, and the three things a checked-out
+  from the live manifests on every export (never stored, and the daemon keeps no copy in the workspace),
+  applied preview-first through the same native write paths the UI uses, and diffable against the running
+  sandbox for drift. The owner downloads it from the Environment tab and keeps it wherever a definition belongs
+  to them: committed beside a project, handed to somebody else, applied to an empty sandbox. `[workspace]` is
+  what makes the sandbox's own way of working travel: `/work` is itself a repo (the `root` scope), tracking
+  exactly the owner's authored content, so publishing it turns notes, skills, personas, automations, designs
+  and drafts from bundle-only bytes into one reference. The bundle manifest embeds the definition (one schema,
+  two doors), and applying a definition keeps the consent model: the overlay lands as a proposal at the approval
+  gate, capabilities arrive unauthenticated, credentials never ride along, and the three things a checked-out
   workspace could do by itself (an approved overlay, enabled automations, workspace extensions) arrive switched
-  off with the report naming each one. A runner can stamp
-  `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition` option) and an empty workspace boots pre-shaped — the
-  fleet door. This sandbox's own runners are the first fleet through it: `runner-up` ships a settings-only
-  definition plus the approved overlay with its pinning hash (approval by provenance — this owner already
-  reviewed those bytes, and a runner has no owner of its own), so a runner starts as this sandbox's twin, and
-  the definition machinery is also what itemizes runner drift and fixes the settings half over the live link.
+  off with the report naming each one. A runner can stamp `SANDBOX_DEFINITION_SEED` (sandbox-run's `definition`
+  option) and an empty workspace boots pre-shaped — the fleet door. This sandbox's own runners are the first
+  fleet through it: `runner-up` ships a settings-only definition plus the approved overlay with its pinning
+  hash (approval by provenance — this owner already reviewed those bytes, and a runner has no owner of its
+  own), so a runner starts as this sandbox's twin, and the definition machinery is also what itemizes runner
+  drift and fixes the settings half over the live link.
 
 ## Key files
 

@@ -241,23 +241,6 @@ const cancel = (): Promise<void> =>
                         </p>
                     </template>
                 </Row>
-
-                <!-- THE DEFINITION AS A FILE, which is the answer to "where do I actually read this". The card
-                     had one door and it was a download: the agent working in this sandbox could not read what
-                     the sandbox is, and neither could anyone who wanted the shape in a diff rather than in a
-                     browser. The daemon keeps `sandbox.toml` at the root now (portability/definition-file.ts),
-                     so the honest thing for this card to do is point at it.
-
-                     A <RouterLink> around the row rather than <Row>'s own `href`, which the component is
-                     explicit about: `href` renders a new-tab anchor, and this is in-app navigation. -->
-                <RouterLink to="/workspace/sandbox.toml" class="block">
-                    <Row interactive chevron icon="file-edit">
-                        <template #title><span class="block truncate font-mono text-2xs">sandbox.toml</span></template>
-                        <template #description>
-                            Kept at the workspace root and rewritten when this sandbox changes. Commit it to diff your environment over time.
-                        </template>
-                    </Row>
-                </RouterLink>
             </RowGroup>
 
             <div v-if="plan === undefined" class="flex flex-wrap items-center gap-2">

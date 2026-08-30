@@ -44,7 +44,6 @@ import { reconcileSkills } from "./settings/skills.js";
 import { composeEnvironment } from "./environment/environment.js";
 import { applyDefinitionItems } from "./portability/apply-definition.js";
 import { parseDefinitionToml } from "./portability/definition.js";
-import { convergeDefinitionFile } from "./portability/definition-file.js";
 import { sweepStaleExports } from "./portability/exports.js";
 import { queueVerify, type VerifyDeps } from "./workspace/verify-deps.js";
 import { type Config, loadConfig } from "./env.config.js";
@@ -116,7 +115,6 @@ const BOOT_STEPS = [
     { key: "definitionSeed", label: "Seeding the sandbox definition" },
     { key: "agentsRegistry", label: "Loading conversations" },
     { key: "skills", label: "Converging agent skills" },
-    { key: "definitionFile", label: "Writing sandbox.toml" },
     { key: "baseline", label: "Taking the workspace baseline" },
     { key: "staleSessions", label: "Sweeping stale sessions" },
     { key: "agentToken", label: "Writing the agent token" },
@@ -681,21 +679,6 @@ const main = async (): Promise<void> => {
             .catch((error: unknown) => logger.warn({ err: error }, "skill reconcile failed"));
     });
 
-    /* `sandbox.toml` at the workspace root: what this sandbox IS, as the file the format was designed to be
-     * (portability/definition-file.ts). Here for the same two orderings the skills step above is here for, and
-     * they are the whole reason this is a boot step rather than only a sweep: AFTER definitionSeed, so a seeded
-     * sandbox writes the shape it actually arrived with rather than the empty one it booted as, and BEFORE the
-     * baseline commit, so a fresh sandbox commits the file instead of opening its Changes review on a phantom
-     * add nobody made. */
-    await boot.step("definitionFile", async () => {
-        if (!role.roots || !traits.ownsWorkspaceConfig) {
-            return;
-        }
-        await convergeDefinitionFile(services).catch((error: unknown) =>
-            logger.warn({ err: error }, "sandbox.toml not written, the Environment tab's definition is unaffected"),
-        );
-    });
-
     // Baseline "Initialize workspace" commit, taken once on a fresh sandbox now that the daemon's /work-owned
     // files exist, so the Changes review starts with zero pending changes.
     await boot.step("baseline", async () => {
@@ -853,35 +836,6 @@ const main = async (): Promise<void> => {
     const saidSweep = setInterval(backfillSaid, 600_000);
     saidSweep.unref();
     shutdown.push(() => clearInterval(saidSweep));
-
-    /* KEEP `sandbox.toml` LEVEL WITH THE SANDBOX, on the invariant sweep's cadence.
-     *
-     * A patrol rather than a hook on each of the fifteen places that can change a sandbox's shape — a capability
-     * connecting, a repo arriving, a secret being named, the overlay being approved, a setting moving. Hanging a
-     * write off every one of them is the arrangement where the sixteenth writer, added next month, silently does
-     * not, and the file starts lying with nothing to say it has. One patrol cannot drift that way, and the cost
-     * of the choice is bounded and stated: the file can be up to five minutes behind.
-     *
-     * Nearly free in steady state. The derivation is deterministic and the converge compares before it writes,
-     * so a sweep over an unchanged sandbox reads the manifests, builds a string, finds it identical and stops:
-     * no write, no watcher event, no pending change in the Changes review.
-     *
-     * Guarded exactly like the boot step that seeds the file, because it is the same write: a role that does not
-     * own this workspace's config gets no unasked-for writes into it.
-     *
-     * `unref` so it never keeps the process up on its own, like every other patrol here. */
-    const definitionSweep =
-        role.roots && traits.ownsWorkspaceConfig
-            ? setInterval(() => {
-                  void convergeDefinitionFile(services).catch((error: unknown) => logger.warn({ err: error }, "sandbox.toml sweep failed"));
-              }, 300_000)
-            : undefined;
-    definitionSweep?.unref();
-    shutdown.push(() => {
-        if (definitionSweep !== undefined) {
-            clearInterval(definitionSweep);
-        }
-    });
 
     /* The worktree sweeps, DETACHED: archive entries whose checkout vanished, prune orphaned dirs and stale
      * admin entries, park the branches of off-board agents. This is the spawn-heaviest part of a boot (git per

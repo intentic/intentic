@@ -1003,8 +1003,8 @@ const syncSummary = computed<string>(() => {
  *
  * THE PANEL NO LONGER HOLDS THE WAIT. It states it: while the flow runs, the strip below the sync bar says what
  * stage it is at and offers the two things worth offering mid-run (stop the suite, watch it). The decision a red
- * verdict needs is raised ABOVE the router (shell/PushNotice.vue), because by then the user is usually somewhere
- * else, which is the whole permission this design grants them. */
+ * verdict needs is raised ABOVE the router (composables/notificationSources.ts), because by then the user is
+ * usually somewhere else, which is the whole permission this design grants them. */
 
 /* --- THE WAIT, DRAWN TO SCALE ---------------------------------------------------------------------------------
  * How far through the suite is, against how long it usually takes: usePushFlow remembers the last run that
@@ -1355,7 +1355,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              control that should report: it says the stage, the clock and the scale, and offers the only two
              things worth offering mid-run (stop the suite, go and watch it).
              No verdict here, because a verdict that needs answering is raised above the router where the user
-             can actually be found (shell/PushNotice.vue), and no output, because the output is the terminal's
+             can actually be found (composables/notificationSources.ts), and no output, because the output is the terminal's
              (composables/terminal/useTerminalPanel.ts). Every sync failure renders on its own repo row below,
              each filed per repo, so this block carries no errors either.
              THE HINT IS A LINE ON A PHONE AND A HOVER ON A DESKTOP, the same decision the two form factors have
