@@ -299,6 +299,25 @@ test("a panel opened FOR a session that doesn't exist yet waits for it instead o
     expect(tabs.activeName.value).toBeUndefined();
 });
 
+/* THE SAME GUARANTEE WHEN THE REQUEST LANDS DURING MOUNT. The panel is opened before its target used to be
+ * published, so its first list could already be in flight when Push asked to focus `job-checks`. `focus`
+ * recorded the standing wait correctly, but `attach` only consulted its mount-time `awaited` argument after
+ * the list returned and opened a `web-*` shell over it. That shell is the stray "1" the user saw instead of
+ * the checks. */
+test("a focus request that arrives while an empty panel attaches suppresses its automatic shell", async () => {
+    const { tabs, attach, names, holdNextList } = panel([]);
+    const release = holdNextList();
+    const attaching = attach();
+
+    await tabs.focus(`job-checks`);
+    expect(tabs.pending.value).toBe(`job-checks`);
+
+    release();
+    await attaching;
+
+    expect(names()).toEqual([]);
+});
+
 test("an empty panel opened with no session in mind still opens a shell", async () => {
     const { attach, names } = panel([]);
 

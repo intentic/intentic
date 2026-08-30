@@ -122,8 +122,13 @@ export const clearTerminalRequest = (): void => {
 export function useTerminalPanel() {
     const layout = useLayout();
     const openFocused = (name: string, about?: Omit<TerminalRequest, `name`>): void => {
-        layout.setTerminalOpen(true);
+        // Publish WHY the panel is opening before opening it. Vue normally batches these writes, but the panel
+        // can already be mounting (a restored open state, another window-state edge), and its attach path has a
+        // real empty-panel default: create shell "1". Giving the target the earlier state transition makes a
+        // mount observe the request immediately; useTerminal's live `pending` guard covers one already awaiting
+        // its first list.
         requested.value = { name, ...about };
+        layout.setTerminalOpen(true);
     };
     // Deliberately does NOT open the panel: a closed panel lists the session anyway on its next open, an open
     // panel relists in place (keeping the active tab).

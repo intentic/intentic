@@ -544,6 +544,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // the focus request that brought the panel up). It suppresses the empty-panel shell: that session's tab is
     // seconds away, and spawning a `web-*` shell to fill the gap puts a stray "1" beside the tab the user
     // actually asked for, plus a real tmux session behind it, for every Start on an otherwise-empty panel.
+    // `pending` is the same fact arriving AFTER mount but before the first list settles. The decision to create
+    // is made after that await, so it must read the live wait as well as the mount-time argument: otherwise a
+    // Push that lands in that window records `job-checks` correctly and then has this stale decision open "1"
+    // over it anyway.
     const attach = async (el: HTMLElement, awaited?: string): Promise<boolean> => {
         container = el;
         /* A REFUSED FIRST LIST IS NOT THIS CALL'S TO THROW, and swallowing it here is the fix for the worst
@@ -569,7 +573,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         if (container !== el || !listed) {
             return false;
         }
-        if (order.value.length === 0 && awaited === undefined && source.create !== undefined) {
+        if (order.value.length === 0 && awaited === undefined && pending.value === undefined && source.create !== undefined) {
             newTab();
             return true;
         }
