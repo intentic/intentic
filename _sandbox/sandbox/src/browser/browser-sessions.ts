@@ -161,8 +161,16 @@ const watchPage = (record: BrowserSessionRecord, page: Page): void => {
     const entry: PageRecord = { id: `p${record.nextPageId}`, page, url: page.url(), title: undefined, closed: false };
     record.nextPageId += 1;
     record.pages.set(entry.id, entry);
-    // A logged-in browser's page gets the platform's passkey plugged in the moment the observer sees it,
-    // best-effort, because a page that closed under the arm is a page nobody will run a ceremony on.
+    /* A logged-in browser's page gets the platform's passkey plugged in the moment the observer sees it,
+     * best-effort, because a page that closed under the arm is a page nobody will run a ceremony on.
+     *
+     * THE CATCH IS LOSSY AND THIS MODULE HAS NO LOGGER TO MAKE IT OTHERWISE. armPasskeys rejects for two very
+     * different reasons now: a page that went away (nothing to say) and a stored credential Chromium refused to
+     * take back, which is an account whose security key silently will not work. The guided-login path reports
+     * the second (browser-profile.ts logs it); on this path it is dropped, so a key that stops answering here
+     * still has to be diagnosed from the browser rather than read off a log. Threading the daemon's logger down
+     * to the hook factory is what would close that, and it is the reason this comment exists rather than a
+     * bare `catch(() => undefined)` that reads like there is nothing to lose. */
     if (record.passkeyStore !== undefined && record.context !== undefined) {
         void armPasskeys(record.context, page, record.passkeyStore).catch(() => undefined);
     }
