@@ -246,15 +246,26 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                      a disclosure nobody finds; the verbs keep their own hit areas outside it, so opening a row
                      and acting on one are never the same click.
 
-                     NOT A <DisclosureRow>, AND ON PURPOSE. Thirteen expandable rows across the app moved onto
-                     that component; these did not, because they are not list rows. A block here is a REPORT
-                     ENTRY inside a card that already owns the padding and draws the dividers, set at `py-0.5`
-                     against the component's tightest tier of `py-2`, with no open wash of its own. Fitting it
-                     would take two escape hatches — drop the padding, drop the tint — and an escape hatch is
-                     how the next fourteen spellings start. What this DOES take from there is the spelling:
-                     `chevron-right` + `rotate-90` at `text-2xs text-subtle`, `aria-expanded` + `aria-controls`,
-                     and the opened block indented to the chevron's own column. Change those here only by
-                     changing them there first. -->
+                     NOT A <DisclosureRow>, AND ON PURPOSE — but the reason is the TIER, not the spelling.
+                     Fourteen expandable rows across the app moved onto that component, the Computers tab's
+                     machine rows among them. These did not, because a block here is a REPORT ENTRY INSIDE one
+                     of those rows rather than an entry in a list: it is set at `py-0.5` against the
+                     component's tightest tier, and the surface under it is already an open row's.
+
+                     WHICH IS ALSO WHY IT TAKES NO OPEN WASH, and that is the one question this file gets
+                     asked. Every list in the hub lights an opened row `bg-content/6`, and the tier ABOVE this
+                     one does too, so an open sandbox here is already sitting on that wash — a second one
+                     inside it is a tint on a tint, and by the time a reader has a machine and two of its
+                     sandboxes unfolded, most of the card is washed and the wash has stopped meaning "open".
+                     These rows also unfold THEMSELVES (a contested port, a dead tunnel, the sandbox you are
+                     reading this in), so the state a wash would mark is the one they arrive in. What says a
+                     row is open is what a report can afford: the chevron's angle, the block indented to its
+                     column, and the folded line's summary giving way to the facts in full.
+
+                     What this DOES take from <DisclosureRow> is the spelling: `chevron-right` + `rotate-90`
+                     at `text-2xs text-subtle`, `aria-expanded` + `aria-controls`, the chevron and the row's
+                     own mark as ONE hit area, and the opened block indented to the chevron's own column.
+                     Change those here only by changing them there first. -->
                 <div class="flex min-w-0 items-center gap-x-2">
                     <button
                         type="button"

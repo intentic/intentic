@@ -451,6 +451,31 @@ it(`folds a computer to a line that counts what is under it`, async () => {
     expect(text).toContain(`1 needs attention`);
 });
 
+/* AN OPEN COMPUTER LIGHTS UP, THE WAY EVERY OTHER LIST IN THE HUB DOES, and that is what this pins: the tab
+ * was reported as the one place where opening a row changed nothing but the arrow. Its machine rows were
+ * hand-rolled, so they had none of <DisclosureRow>'s wash; they are that component now, and `bg-content/6` is
+ * the app's one open tint rather than this file's idea of one.
+ *
+ * The `aria-controls` half rides along because the hand-rolled row never had it: `aria-expanded` alone tells a
+ * screen reader a row is open and never says what opened, which is the half of the disclosure contract a
+ * fourteenth spelling loses. Pinned as "the id resolves to an element" rather than as a string, since the id
+ * itself is Vue's. */
+it(`lights an open computer the way the rest of the hub does, and names the block it opened`, async () => {
+    const el = mount([busyMachine()]);
+    // The one machine with a report opens itself, so the wash is on screen before anything is pressed.
+    const washed = (): Element[] => [...el.querySelectorAll(`[class*="bg-content/6"]`)];
+    expect(washed()).toHaveLength(1);
+    expect(washed()[0]?.textContent ?? ``).toContain(`radarsu-rog`);
+
+    const toggle = disclosures(el).find((button) => (button.textContent ?? ``).includes(`radarsu-rog`));
+    expect(toggle?.getAttribute(`aria-expanded`)).toBe(`true`);
+    expect(el.querySelector(`#${toggle?.getAttribute(`aria-controls`) ?? `none`}`)).not.toBeNull();
+
+    // And goes out with it: a wash that outlived the open row would be a selection nobody made.
+    await openRow(el, `radarsu-rog`);
+    expect(washed()).toHaveLength(0);
+});
+
 /* THE FILTER. Twelve rows and no search meant looking for a port number was reading. It narrows MACHINES and
  * unfolds what matched rather than hiding rows inside a machine: a contended port is explained by naming the
  * sandbox that took it, and filtering that sandbox away would cut the link the explanation depends on. */

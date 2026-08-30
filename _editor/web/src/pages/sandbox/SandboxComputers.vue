@@ -3,6 +3,7 @@ import { type Computer, type MachineSandboxOp, type MachineWatcher, watcherStall
 import {
     Button,
     ConfirmDialog,
+    DisclosureRow,
     groupNeedsAttention,
     InfoHint,
     MachineDetail,
@@ -581,79 +582,83 @@ const runAct = async (computer: Computer, group: MachineSandboxGroup, op: Sandbo
                 No computer is paired with this sandbox yet. Enable desktop sync below to work on it from your own editor, or add a Linux/Windows PC
                 from Capabilities to let the agent work there.
             </RowNote>
-            <!-- ONE GUTTER PER COMPUTER. The mark sits in a column of its own and everything else: the name,
-                 the facts, the machine's whole sandbox list: starts at the same x beside it, so three computers
-                 read as three entries rather than as nine indents. That column is the machine's and only the
-                 machine's, which is what lets the rail below run down it: nothing at any other tier is ever
-                 drawn there, so the left edge of this list enumerates the COMPUTERS and nothing else. -->
-            <div v-for="row in shown" :key="row.computer.key">
-                <!-- WHO THIS IS, AND WHETHER ANYTHING UNDER IT WANTS YOU: the whole of a machine until it is
-                     asked for. An offline computer used to cost a full block, a gutter and a 14px name to say
-                     nothing was there; three of them pushed the machine you came for off the screen.
-                     The name and the chevron are one hit area, so the disclosure is the row rather than a 12px
-                     glyph beside it. A machine with no report never expands: there is nothing behind it. -->
-                <component
-                    :is="expandable(row) ? `button` : `div`"
-                    :type="expandable(row) ? `button` : undefined"
-                    :aria-expanded="expandable(row) ? machineOpen(row) : undefined"
-                    class="flex w-full items-center gap-2.5 px-4 py-3 text-left"
-                    :class="expandable(row) ? `group/machine cursor-pointer` : ``"
-                    @click="expandable(row) ? toggleMachine(row) : undefined"
-                >
-                    <Icon
-                        v-if="expandable(row)"
-                        name="chevron-right"
-                        class="shrink-0 text-2xs text-subtle transition-transform group-hover/machine:text-muted"
-                        :class="machineOpen(row) ? `rotate-90` : undefined"
-                        aria-hidden="true"
-                    />
-                    <!-- The glyph keeps the chevron's column on a row that has no chevron, so a list of live and
-                         offline machines reads down one edge rather than two. -->
-                    <span v-else class="w-[0.6rem] shrink-0"></span>
-                    <!-- THE MARK OF A COMPUTER, IN A WELL OF ITS OWN, and it is the tier's own badge rather than
-                         decoration: a sandbox row under it is marked by a 6px dot, so the two can no longer be
-                         told apart only by a name two pixels larger. It also gives the rail below a column to
-                         hang in, which is the whole of the alignment. -->
-                    <span class="flex size-5 shrink-0 items-center justify-center rounded-md bg-content/10 text-content">
+            <!-- ONE COMPUTER, ONE ROW, AND IT IS THE APP'S ROW.
+                 A MACHINE IS A LIST ROW; A SANDBOX UNDER IT IS A REPORT ENTRY. That is the whole of why the
+                 wash lands on this tier and stops here. This row is one of a card's entries, the same as an
+                 extension, a secret or a persona, so it opens the way those do; the rows inside it are a
+                 <MachineDetail> report on an already-open row, and a second wash inside the first is one
+                 tint on top of another rather than a second answer to "which of these did I open". See that
+                 component, which states the same rule from its own side.
+
+                 It was hand-rolled here until it was reported as exactly what it was — the one list in the
+                 hub that stopped lighting up when you opened it. Rebuilt on <DisclosureRow>, that difference
+                 goes, and four smaller ones with it: `px-4 py-3` against the tier's `px-4 py-2.5`, `gap-2.5`
+                 against `gap-3`, a 20px mark against the list's 22, and an `aria-expanded` with no
+                 `aria-controls` under it, which is a row that tells a screen reader it is open and never says
+                 what it opened. A press that drags (selecting a path out of an open row) also stops closing
+                 the row, because the component measures that and this file never did. -->
+            <DisclosureRow
+                v-for="row in shown"
+                :key="row.computer.key"
+                :open="expandable(row) ? machineOpen(row) : true"
+                :disabled="!expandable(row)"
+                @update:open="toggleMachine(row)"
+            >
+                <!-- THE MARK OF A COMPUTER, IN A WELL OF ITS OWN, and it is the tier's own badge rather than
+                     decoration: a sandbox row under it is marked by a 6px dot, so the two can no longer be
+                     told apart only by a name two pixels larger. Sized from the tier rather than typed, which
+                     is the same rule the marks on every other list in the app now follow — this one said
+                     `size-5` beside their 22 — and the offset the block below is railed at is measured off
+                     this cluster rather than guessed at, so the two cannot drift apart. -->
+                <template #lead="{ mark }">
+                    <!-- A machine with no report never expands, and <DisclosureRow> drops the chevron on a row
+                         with nothing behind it. This keeps that column, so a list of live and offline machines
+                         still reads down one edge rather than two. -->
+                    <span v-if="!expandable(row)" class="w-[0.6rem] shrink-0" aria-hidden="true"></span>
+                    <span
+                        class="flex shrink-0 items-center justify-center rounded-md bg-content/10 text-content"
+                        :style="{ width: `${mark}px`, height: `${mark}px` }"
+                    >
                         <Icon name="desktop" class="text-xs" />
                     </span>
-                    <span class="min-w-0 truncate text-sm font-semibold text-content">{{ row.computer.label }}</span>
-                    <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line because it
-                         is the fact that tells two rows apart at a glance, and the one the rows were missing:
-                         three machines used to differ only by the word somebody typed when they added them:
-                         and two of them can genuinely carry the same name. -->
-                    <span v-if="osLabel(row.computer)" class="shrink-0 truncate text-xs text-muted" :title="osTitle(row.computer)">
-                        {{ osLabel(row.computer) }}
-                    </span>
-                    <!-- WHAT THE FOLDED LINE STILL ANSWERS: how much is under here, and whether any of it wants
-                         something. Hidden while the machine is open, where every row states its own. -->
-                    <span v-if="!machineOpen(row)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
-                        <span v-for="fact in row.facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
-                        <span v-for="warning in row.warnings" :key="warning" class="truncate text-2xs text-warning">{{ warning }}</span>
-                        <span v-if="lastSeenNote(row.computer)" class="shrink-0 text-2xs text-subtle">{{ lastSeenNote(row.computer) }}</span>
-                    </span>
-                    <StatusBadge
-                        :variant="tone(row.computer)"
-                        size="xs"
-                        :dot="true"
-                        :label="label(row.computer)"
-                        class="shrink-0"
-                        :class="machineOpen(row) ? `ml-auto` : ``"
-                    />
-                </component>
+                </template>
 
-                <!-- Everything else about this machine, HANGING OFF ITS MARK rather than indented under its name.
-                     The rail is the same one the Plan limits panel draws under a provider, for the same reason:
-                     this list nests three tiers deep (computer, sandbox, the sandbox's own facts) and had one
-                     stroke for all of them, so an expanded machine's contents ran to the bottom of the card with
-                     nothing saying where its territory ended. The line under the mark says exactly that, and it
-                     is the only thing on this column, so reading down the left edge gives you the COMPUTERS. -->
-                <div v-if="machineOpen(row) || !expandable(row)" class="flex gap-2.5 px-4 pb-4">
-                    <span class="w-[0.6rem] shrink-0" aria-hidden="true"></span>
-                    <!-- Pulled up into the header's own bottom padding so the line starts at the mark rather
-                         than a row below it. -->
-                    <span class="-mt-2 flex w-5 shrink-0 justify-center" aria-hidden="true"><span class="w-px bg-line-strong"></span></span>
-                    <div class="flex min-w-0 flex-1 flex-col gap-3">
+                <template #title>
+                    <span class="flex min-w-0 items-center gap-2.5">
+                        <!-- Semibold against the tier's own medium: this row is the top of three nested tiers
+                             and has to outrank the sandbox names inside it, which are a size down already. -->
+                        <span class="min-w-0 truncate font-semibold">{{ row.computer.label }}</span>
+                        <!-- WHICH COMPUTER THIS IS. Beside the name rather than down in the detail line because
+                             it is the fact that tells two rows apart at a glance, and the one the rows were
+                             missing: three machines used to differ only by the word somebody typed when they
+                             added them: and two of them can genuinely carry the same name. -->
+                        <span v-if="osLabel(row.computer)" class="shrink-0 truncate text-xs font-normal text-muted" :title="osTitle(row.computer)">
+                            {{ osLabel(row.computer) }}
+                        </span>
+                    </span>
+                </template>
+
+                <!-- WHAT THE FOLDED LINE STILL ANSWERS: how much is under here, and whether any of it wants
+                     something. Hidden while the machine is open, where every row states its own. Facts rather
+                     than actions, badge included: a press on any of them opens the row like the rest of it,
+                     which is what `#meta` means and what a hand-written `ml-auto` cluster had to be told. -->
+                <template #meta>
+                    <template v-if="!machineOpen(row)">
+                        <span v-for="fact in row.facts" :key="fact" class="shrink-0">{{ fact }}</span>
+                        <span v-for="warning in row.warnings" :key="warning" class="truncate text-warning">{{ warning }}</span>
+                        <span v-if="lastSeenNote(row.computer)" class="shrink-0">{{ lastSeenNote(row.computer) }}</span>
+                    </template>
+                    <StatusBadge :variant="tone(row.computer)" size="xs" :dot="true" :label="label(row.computer)" class="shrink-0" />
+                </template>
+
+                <!-- Everything else about this machine, RAILED OFF ITS OWN HEADER rather than indented under
+                     it. This list nests three tiers deep (computer, sandbox, the sandbox's own facts) and had
+                     one stroke for all of them, so an expanded machine's contents ran to the bottom of the
+                     card with nothing saying where its territory ended. The rail says exactly that, and it is
+                     the component's rather than this file's: the indent is measured off the toggle cluster
+                     above, so it cannot go stale the next time a mark or a chevron changes size. -->
+                <template #below>
+                    <div class="flex flex-col gap-3">
                         <!-- WHAT IT IS AND HOW THIS SANDBOX REACHES IT, on one line. Two facts of two kinds, so the
                          doors keep a shape of their own: they are the difference between a machine that syncs
                          your files and one the agent can run commands on, and a reader scanning three computers
@@ -777,8 +782,8 @@ const runAct = async (computer: Computer, group: MachineSandboxGroup, op: Sandbo
                          sandbox created, and the list of them is this side's own knowledge. -->
                         <MachineRunners :computer="row.computer" />
                     </div>
-                </div>
-            </div>
+                </template>
+            </DisclosureRow>
             <!-- A filter that matched nothing says so where the rows would have been, rather than leaving a
                  group that looks like it has lost its contents. -->
             <RowNote v-if="shown.length === 0 && sorted.length > 0" variant="empty"> No computer or sandbox here matches "{{ query }}". </RowNote>
