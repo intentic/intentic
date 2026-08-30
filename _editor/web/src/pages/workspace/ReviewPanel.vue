@@ -1083,18 +1083,18 @@ const outgoing = computed<"flow" | "offer" | undefined>(() =>
 const barCovers = (repo: RepoChanges): boolean =>
     outgoing.value !== undefined && changes.count.value === 0 && syncRepos.value.length === 1 && syncRepos.value[0]!.repo === repo.repo;
 
-/* ONE RULE, AT THE BOTTOM OF THE STACK. Up to three blocks sit above the list (record, send, filter) and each
- * used to draw a full-width border of its own. On a clean tree with a run in flight that read as a rule under
- * the mode switch, a rule under "Checking · 18s", and then a rule under every repo row below: four lines in a
- * hundred pixels, at two different strengths, none of which was about the thing being looked at.
+/* THIS PANEL DRAWS NO HORIZONTAL RULES AT ALL, and that is the whole of the rule budget it gets.
  *
- * So the blocks are ONE stack now, told apart by their own padding, and the last one present carries the
- * single rule that says where the chrome stops and the list begins. It is the only horizontal line this panel
- * draws, which is also what makes it readable as a boundary rather than as more chrome. */
-const headerFoot = computed<"commit" | "outgoing" | "origins" | undefined>(() =>
-    legend.value.agents.length > 0 ? `origins` : outgoing.value !== undefined ? `outgoing` : changes.count.value > 0 ? `commit` : undefined,
-);
-
+ * The column it lives in already has ONE line: the bottom edge of the mode switch above it, which is the app's
+ * bar rule and runs unbroken across the window (`.view-header`, styles.css). Everything this panel used to add
+ * was a second, third and fourth line under it — one per block (record, send, filter), then a half-strength
+ * hairline under every repo row. On a clean tree with a run in flight that was four lines in a hundred pixels,
+ * at three different weights, none of them about the thing being looked at, and the topmost of them boxing the
+ * Push button in on both sides forty pixels apart.
+ *
+ * So the blocks are one stack, told apart by their own padding, and the boundary between the chrome and the
+ * list is the air between them. A control with an edge of its own (the commit box's field, the Push button)
+ * carries the contrast a rule was being asked for; the repo rows carry theirs as a tint under the pointer. */
 // One click, every repo that has remote work: git can't span remotes, so the composable fans it out into one
 // real sync per repo (pull what's behind, then push/publish what's ahead), each failure landing on its own row.
 const doSync = (): void =>
@@ -1153,7 +1153,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- Commit box (VSCode places it at the top). It records the index: staging is the selection. -->
-        <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2" :class="headerFoot === `commit` && `border-b border-line`">
+        <div v-if="changes.count.value > 0" class="flex shrink-0 flex-col gap-1.5 p-2">
             <!-- A textarea, not an input: the release-note trailer a session's landed sentence carries lives
                  under the subject, and a message the user writes by hand may have a body of its own. Enter
                  breaks the line; Ctrl/Cmd+Enter still commits, as the placeholder says. One row to start with:
@@ -1364,7 +1364,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         <div
             v-if="outgoing !== undefined"
             class="relative flex shrink-0 items-center gap-1.5 px-2 py-1.5"
-            :class="headerFoot === `outgoing` && `border-b border-line`"
             v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
         >
             <template v-if="outgoing === `flow`">
@@ -1449,11 +1448,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              first half of; a session with no such sentence just filters. And a chip whose session
              has not finished wears a leading dot, because a count from a session still running is an instalment
              rather than a total, and every other reading on this panel silently assumes a total. -->
-        <div
-            v-if="legend.agents.length > 0"
-            class="flex shrink-0 flex-wrap items-center gap-1 px-2 py-1.5"
-            :class="headerFoot === `origins` && `border-b border-line`"
-        >
+        <div v-if="legend.agents.length > 0" class="flex shrink-0 flex-wrap items-center gap-1 px-2 py-1.5">
             <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">From</span>
             <button
                 v-for="entry in legend.agents"

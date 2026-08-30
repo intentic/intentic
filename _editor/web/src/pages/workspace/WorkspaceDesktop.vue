@@ -742,7 +742,14 @@ const endResize = (event: PointerEvent): void => {
                 <!-- Files and Changes are the primary modes; automatic restore history is deliberately quieter.
                      One column, one resize handle: review/history never steal width from the diff view in the
                      main area. The controls sit ON the sidebar they switch. -->
-                <div class="view-header flex items-center gap-1 px-1.5">
+                <!-- `border-b border-line` because every other bar in this app has it (the main area's below,
+                     the chat's tab strip, an agent's detail header) and this one did not: the class fixes the
+                     HEIGHT so the line runs unbroken across the window, and the border is each bar's to draw.
+                     Without it this column's bar had no bottom edge at all in the stock theme, and under a skin
+                     it showed only the drop shadow meant to sit UNDER that edge — half the weight of every
+                     other rule on screen, which is what made the panel's own line below look like it belonged
+                     to a different design. -->
+                <div class="view-header flex items-center gap-1 border-b border-line px-1.5">
                     <SegmentedControl v-model="sidebarMode" size="xs" :options="sidebarModeOptions" />
                     <span class="flex-1"></span>
                     <button
