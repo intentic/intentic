@@ -2,12 +2,14 @@ import { rm } from "node:fs/promises";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { reconcileResidency } from "../resident.js";
-import { auditPath, configPath, type HostLink, readLinks, removeLinks, upsertLink } from "./config.js";
+import { auditPath, configPath, type HostLink, readLinks, readPrepareUpdates, removeLinks, upsertLink, writePrepareUpdates } from "./config.js";
 
 /* `intentic-machine computer`, the half of the agent that lets an intentic sandbox work on this computer.
  *
  *   setup      redeem the sandbox's one-time pairing, then connect and stay connected at every login.
  *   uninstall  disconnect, forget the credential. Leaves the audit log behind, on purpose.
+ *   updates    the background-download switch: whether this machine keeps its sandboxes' next update
+ *              downloaded so applying one is a short restart (on by default; auto-prepare.ts).
  *
  * The connection loop itself is the shared resident loop (`intentic-machine run`, ../resident.ts), which also
  * serves the sync half. There is no OAuth here and no browser: everything trusts the pairing token the owner
@@ -182,4 +184,43 @@ export const computerUninstall = async (out: Log, sandbox?: string): Promise<voi
     out(`Your record of what this agent did stays at ${auditPath}.`);
 };
 
-export const computerCommands = { setup, uninstall };
+/* The background-download switch. Flags rather than a positional, the group's own precedent (`uninstall
+ * --sandbox`): a bare word that flips a machine-wide behaviour is the wrong thing to be able to type by
+ * accident, and `--off` states its direction. With neither flag it reports, which is also how the owner of a
+ * machine they didn't configure finds out what it is doing. */
+interface UpdatesFlags {
+    readonly on: boolean;
+    readonly off: boolean;
+}
+
+const updates = buildCommand<UpdatesFlags>({
+    docs: { brief: "Keep each sandbox's next update downloaded in the background, so applying it is a short restart (on by default)" },
+    parameters: {
+        flags: {
+            on: { kind: "boolean", brief: "Download updates in the background (the default)" },
+            off: { kind: "boolean", brief: "Stop downloading updates in the background" },
+        },
+    },
+    async func(this: CommandContext, flags: UpdatesFlags) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        if (flags.on && flags.off) {
+            throw new Error("--on and --off contradict each other: pass one.");
+        }
+        if (!flags.on && !flags.off) {
+            out(
+                (await readPrepareUpdates())
+                    ? "On: this machine downloads each sandbox's next update in the background, so applying one is a restart of about half a minute. Turn it off with --off."
+                    : "Off: updates are downloaded only when you take one, which makes updating a wait of minutes. Turn background downloads back on with --on.",
+            );
+            return;
+        }
+        await writePrepareUpdates(flags.on);
+        /* Restart the loop rather than waiting for its next tick to notice: "off" typed on a metered
+         * connection means NOW, and the fresh loop re-reads the switch before it touches anything. The same
+         * reconcile every setup runs, so it also repairs a stale login entry while it is at it. */
+        await reconcileResidency(out);
+        out(flags.on ? "Background update downloads are on for this machine's sandboxes." : "Background update downloads are off. The update card in your sandbox still downloads and applies on demand.");
+    },
+});
+
+export const computerCommands = { setup, uninstall, updates };

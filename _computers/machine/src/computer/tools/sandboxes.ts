@@ -92,8 +92,17 @@ const docker = async (args: readonly string[]): Promise<string> => {
     return stdout;
 };
 
-const fleet = async (): Promise<MachineSandbox[]> =>
+// Exported for the auto-prepare tick (../auto-prepare.ts), the machine's own reader of its fleet: one
+// producer of "what runs on me", whoever is asking.
+export const fleet = async (): Promise<MachineSandbox[]> =>
     sandboxesFrom(rowsFrom(await docker(["ps", "-a", "--filter", `name=^${PREFIX}`, "--format", "{{json .}}"])));
+
+/* WHICH SLUGS AN `ic` FLOW IS TOUCHING RIGHT NOW, in this process. The background auto-prepare tick reads it
+ * so a timer never starts a pull under an update someone is watching stream; the flows below write it. Only
+ * advisory, and only one-way on purpose: a PERSON's click is never made to wait on the timer's work — the
+ * flows race benignly (docker serialises the layer pulls, and ic's already-current check clears a staged
+ * record the click made stale), so the set exists to keep the timer polite, not to lock anything. */
+export const icInFlight = new Set<string>();
 
 // The answer is the JSON itself: the daemon's Computers view reads it verbatim (machine-reports.ts), and a model
 // reads keys as well as prose. One producer for both is what stops the tab and the tool from drifting.
@@ -273,8 +282,10 @@ export const runnerFlow = async (
 /* An `ic` run, narrated as it goes. Every line it prints is handed to `onLine` the moment it arrives, which is
  * what lets the browser show progress on an operation that takes minutes, and the same lines are collected for
  * the callers that want one answer at the end (an MCP tool result). Both streams go to one place on purpose:
- * `ic` writes progress to stdout and diagnostics to stderr, and the failure detail is always in the second. */
-const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
+ * `ic` writes progress to stdout and diagnostics to stderr, and the failure detail is always in the second.
+ * Exported for the auto-prepare tick, which is the fifth caller of `ic` and must not become the second
+ * implementation of finding and running it. */
+export const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
     const candidates = icCandidates(process.platform, homedir());
     const lines: string[] = [];
     const emit = (chunk: string): void => {
@@ -327,7 +338,14 @@ export const swapSandbox = async (
     // round trip, the argument was already wrong when it arrived.
     const args = icSwapArgs(swap, slug, hash);
     await find(slug);
-    const { code, output } = await runIc(args, onLine);
+    icInFlight.add(slug);
+    let run: { code: number; output: string };
+    try {
+        run = await runIc(args, onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+    const { code, output } = run;
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this computer.\n\n${output}`);
     }
@@ -343,9 +361,15 @@ export const swapSandbox = async (
 export const removeSandbox = async (slug: string, scopes: HostScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxRemove");
     await find(slug);
-    const { code, output } = await runIc(icRemoveArgs(slug), onLine);
-    if (code !== 0) {
-        throw new Error(`That removal failed on this computer.\n\n${output}`);
+    icInFlight.add(slug);
+    let run: { code: number; output: string };
+    try {
+        run = await runIc(icRemoveArgs(slug), onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+    if (run.code !== 0) {
+        throw new Error(`That removal failed on this computer.\n\n${run.output}`);
     }
     return `Removed sandbox "${slug}" and everything in it.`;
 };

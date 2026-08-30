@@ -28,7 +28,11 @@ once, here, in Rust: a single static binary with no runtime to ship.
 - `ic sandbox prepare`, the same flow stopped before the container is touched: pull the next image, rebuild
   the approved environment on it, record what was built, and leave the sandbox running what it was running.
   A later `update` recognises the staged build and swaps straight onto it, which is what turns an update from
-  an unbounded wait into a restart of seconds. Safe to run at any moment, and free to abandon.
+  an unbounded wait into a restart of seconds. Safe to run at any moment, and free to abandon. `--auto` is
+  the machine agent's background tick speaking (`@intentic/machine` runs it on a timer): same flow, with the
+  judgement calls a timer must not make softened into skips — a pinned or locally-built sandbox is left
+  alone, low disk means "not now" instead of a warning scrolled past, and a container parked by an
+  interrupted recreate is never un-parked unattended.
 - `ic sandbox list / remove`: what is on this machine, and its careful removal (named volumes included).
 - `ic runner up / list / remove`, RUNNERS: sandbox-image containers that belong to a parent sandbox instead
   of a person, executing turns it dispatches. `up` is `sandbox connect` minus the platform — the same

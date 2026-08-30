@@ -94,6 +94,11 @@ enum SandboxCommand {
         /// Prepare a release channel other than the one this sandbox follows — preparing does NOT move it
         #[arg(long)]
         channel: Option<String>,
+        /// Unattended mode (the machine agent's background tick): skip sandboxes a background download
+        /// must not track (pinned or locally-built images), treat low disk as "not now" rather than
+        /// proceeding, and never un-park a half-finished recreate
+        #[arg(long)]
+        auto: bool,
     },
     /// Rebuild the owner-approved environment overlay (the Environment card's flow)
     Rebuild {
@@ -202,7 +207,11 @@ fn main() {
             SandboxCommand::Update { slug, channel } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Update { channel }, slug)
             }
-            SandboxCommand::Prepare { slug, channel } => sandbox::recreate::prepare(slug, channel),
+            SandboxCommand::Prepare {
+                slug,
+                channel,
+                auto,
+            } => sandbox::recreate::prepare(slug, channel, auto),
             SandboxCommand::Rebuild { slug, hash } => {
                 sandbox::recreate::run(sandbox::recreate::Mode::Rebuild { hash }, Some(slug))
             }
@@ -325,15 +334,45 @@ mod tests {
         // place; an argument that binds differently between them would download for one channel and swap
         // onto another.
         let Ok(Cli {
-            command: Command::Sandbox(SandboxCommand::Prepare { slug, channel }),
+            command: Command::Sandbox(SandboxCommand::Prepare {
+                slug,
+                channel,
+                auto,
+            }),
         }) = parse(&["sandbox", "prepare", "abc123", "--channel", "beta"])
         else {
             panic!("prepare did not parse")
         };
         assert_eq!(slug.as_deref(), Some("abc123"));
         assert_eq!(channel.as_deref(), Some("beta"));
+        assert!(!auto, "a hand-typed prepare must not be unattended");
         assert!(parse(&["sandbox", "prepare", "abc123", "--channel"]).is_err());
         assert!(parse(&["sandbox", "prepare", "extra", "extra2"]).is_err());
+    }
+
+    #[test]
+    fn auto_is_a_bare_flag_on_prepare_and_nowhere_else() {
+        // The machine agent's background tick builds this exact command line (@intentic/machine's
+        // auto-prepare). `--auto` softens refusals into skips, so a verb that ACCEPTED it while ignoring it
+        // would run unattended with the attended flow's behaviour — worse than a parse error.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Prepare { slug, auto, .. }),
+        }) = parse(&["sandbox", "prepare", "abc123", "--auto"])
+        else {
+            panic!("prepare --auto did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc123"));
+        assert!(auto);
+        assert!(parse(&["sandbox", "update", "abc123", "--auto"]).is_err());
+        // A bare flag must not swallow the slug beside it: flag-first is how a generated argv often lands.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Prepare { slug, auto, .. }),
+        }) = parse(&["sandbox", "prepare", "--auto", "abc123"])
+        else {
+            panic!("prepare --auto <slug> did not parse")
+        };
+        assert_eq!(slug.as_deref(), Some("abc123"));
+        assert!(auto);
     }
 
     #[test]

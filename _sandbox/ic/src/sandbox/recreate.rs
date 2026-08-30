@@ -74,16 +74,22 @@ enum Reach {
 }
 
 pub fn run(mode: Mode, slug: Option<String>) -> Result<()> {
-    recreate(mode, slug, Reach::Applied)
+    recreate(mode, slug, Reach::Applied, false)
 }
 
 /// `ic sandbox prepare` — the pull and the overlay rebuild, taken off the click. Runs against a live sandbox
 /// that keeps serving throughout, and leaves the container untouched whether it succeeds or fails.
-pub fn prepare(slug: Option<String>, channel: Option<String>) -> Result<()> {
-    recreate(Mode::Update { channel }, slug, Reach::Staged)
+///
+/// `auto` is the machine agent's background tick speaking (@intentic/machine runs this on a timer so the
+/// update card can offer a half-minute restart without anyone clicking Download first). Same flow, three
+/// softened edges, each because nobody is watching: a pinned or locally-built sandbox is skipped rather than
+/// offered the channel it deliberately left, low disk is "not now" rather than a warning scrolled past, and
+/// a container parked mid-recreate is left exactly where a person's interrupted command left it.
+pub fn prepare(slug: Option<String>, channel: Option<String>, auto: bool) -> Result<()> {
+    recreate(Mode::Update { channel }, slug, Reach::Staged, auto)
 }
 
-fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
+fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Result<()> {
     if !docker::cli_present() {
         bail!("docker is required — run this on the machine that runs the sandbox.");
     }
@@ -104,6 +110,14 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
                 "sandbox container {container} does not exist on this machine — re-run connect first."
             );
         }
+        // Un-parking a half-finished recreate restarts a container somebody's interrupted command chose to
+        // stop, and a background tick has no idea why it was interrupted. A person's next prepare/update
+        // restores it; auto leaves the machine exactly as it found it and says which command to reach for.
+        if auto {
+            bail!(
+                "sandbox {slug} was left parked by an interrupted recreate — run `ic sandbox update {slug}` yourself to put it back."
+            );
+        }
         println!("intentic: restoring the sandbox an interrupted recreate left parked…");
         docker::quiet(&["rename", &parked, &container]);
         docker::quiet(&["start", &container]);
@@ -120,6 +134,14 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
             ),
             checks::Outcome::Warn { problem } => {
                 println!("intentic: {problem}");
+                /* A person reading this warning can weigh it; a timer cannot, and "proceed" from a timer is
+                 * how a machine that was merely getting full gets filled. Not a failure — the tick simply
+                 * tries again later, when the disk may have room — so this exits 0 rather than teaching the
+                 * machine agent's backoff that preparing is broken here. */
+                if auto {
+                    println!("intentic: skipping this background download — the space above is a person's call. `ic sandbox prepare {slug}` still takes it by hand.");
+                    return Ok(());
+                }
             }
             _ => {}
         }
@@ -158,6 +180,21 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach) -> Result<()> {
      * local resolution, still un-moved this side of the pull. */
     let current_base = container_env(&container, "SANDBOX_BASE_IMAGE");
     let sandbox_image = container_env(&container, "SANDBOX_IMAGE");
+
+    /* AN UNATTENDED PREPARE ONLY TRACKS THE OFFICIAL REGISTRY. A sandbox on a locally-built image, a pinned
+     * build, or a rollback pin left the channel on purpose, and staging `:{channel}` for it would light the
+     * "update ready" card on a box whose owner chose to be elsewhere — then a click would move it there. A
+     * person typing `prepare` gets what they asked for, as ever; the timer skips, exits 0, and says why.
+     * (An explicit SANDBOX_IMAGE on this process outranks the skip for the same reason it outranks the
+     * channel: the caller named an exact image, which is no longer a guess.) */
+    if auto
+        && image_override.is_none()
+        && !follows_registry(current_base.as_deref(), sandbox_image.as_deref())
+    {
+        println!("intentic: sandbox {slug} runs a pinned or locally-built image — background downloads don't apply to it.");
+        return Ok(());
+    }
+
     let old_base_id = if current_base.is_none() || current_base == sandbox_image {
         docker::inspect(&container, "{{.Image}}")
     } else {
@@ -872,6 +909,26 @@ fn restore_parked(container: &str, parked: &str, slug: &str, saved: &record::Cha
     println!("intentic: the previous sandbox container was restored and is starting again.");
 }
 
+/// Whether this container follows the official registry — the question an UNATTENDED prepare asks before
+/// touching anything. Judged from the run contract's own stamps (index.ts writes both at `docker run`; the
+/// agent can write neither): the base the overlay extends when the container is an overlay build, else the
+/// image it was run from. Pure, because a wrong answer here is silent in both directions — a skipped stock
+/// sandbox never gets its background download, and a tracked dev sandbox gets an "update ready" card that
+/// would move it onto :stable.
+///
+/// A rollback pin reads as off-registry ON PURPOSE: a rolled-back sandbox is a person mid-decision, and the
+/// next release is theirs to take by hand (the update card still offers it — this only stops the download
+/// from happening behind their back). Their next update puts the base back on the registry, and the timer
+/// resumes with it. A container carrying neither stamp predates the run contract; a background job does not
+/// guess about a box it cannot classify.
+fn follows_registry(current_base: Option<&str>, sandbox_image: Option<&str>) -> bool {
+    current_base.or(sandbox_image).is_some_and(|followed| {
+        followed
+            .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
+            .is_some_and(|tag| !tag.is_empty())
+    })
+}
+
 fn container_env(container: &str, name: &str) -> Option<String> {
     let env = docker::container_env_nul(container).ok()?;
     let text = String::from_utf8_lossy(&env);
@@ -992,6 +1049,44 @@ mod tests {
             ..prepared("stable", "sha256:new", None)
         };
         assert!(staged_still_fits(&unknown_base, "stable", None, None));
+    }
+
+    #[test]
+    fn only_a_sandbox_on_the_official_registry_is_tracked_unattended() {
+        // The stock shape: base and image are the same registry ref.
+        assert!(follows_registry(
+            Some("ghcr.io/intentic/sandbox:stable"),
+            Some("ghcr.io/intentic/sandbox:stable")
+        ));
+        // An overlay build: the image is local, the base it extends is the registry's.
+        assert!(follows_registry(
+            Some("ghcr.io/intentic/sandbox:stable"),
+            Some("intentic-sandbox-env-abc:0123456789ab")
+        ));
+        // Any channel counts — following beta is still following the registry.
+        assert!(follows_registry(Some("ghcr.io/intentic/sandbox:beta"), None));
+    }
+
+    #[test]
+    fn a_pinned_dev_or_rolled_back_sandbox_is_left_alone_unattended() {
+        // The dev loop: staging :stable here would light an "update ready" card whose click moves a
+        // deliberately-local sandbox onto the release it is dogfooding ahead of.
+        assert!(!follows_registry(
+            Some("intentic-sandbox:dev"),
+            Some("intentic-sandbox:dev")
+        ));
+        // A rollback pin: the owner just fled the current release; the next one is theirs to take by hand.
+        assert!(!follows_registry(
+            Some("intentic-sandbox-rollback-abc:0123456789ab"),
+            None
+        ));
+        // A custom registry, and a bare tag with no registry at all.
+        assert!(!follows_registry(Some("registry.example.com/sandbox:v1"), None));
+        assert!(!follows_registry(None, Some("my-own-build:latest")));
+        // Neither stamp: a container older than the run contract — unclassifiable, so untouched.
+        assert!(!follows_registry(None, None));
+        // The registry name alone, with no tag, names nothing pullable.
+        assert!(!follows_registry(Some("ghcr.io/intentic/sandbox:"), None));
     }
 
     #[test]

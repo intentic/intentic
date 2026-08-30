@@ -48,12 +48,27 @@ export interface HostLink {
  * grant. */
 export interface HostConfigFile {
     readonly links: readonly HostLink[];
+    /* Whether this machine keeps its sandboxes' next update downloaded in the background (auto-prepare.ts),
+     * so applying one is a half-minute restart instead of a wait of minutes. Absent means ON: the download
+     * touches no container and `ic sandbox prepare` already declines on low disk, so the default costs
+     * nothing worth asking about — and a setting that had to be discovered to start working would leave the
+     * update card quoting minutes on every machine whose owner never found it. */
+    readonly prepareUpdates?: boolean;
 }
 
 export const readHostConfig = async (): Promise<HostConfigFile> => JSON.parse(await readFile(configPath, "utf8")) as HostConfigFile;
 
 export const writeHostConfig = async (config: HostConfigFile): Promise<void> =>
     await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
+
+// Read-modify-write for every writer below: each of them used to rebuild the file from `links` alone, which
+// was correct while links were the whole file and silently drops every OTHER field the moment there is one.
+const updateHostConfig = async (mutate: (config: HostConfigFile) => HostConfigFile): Promise<HostConfigFile> => {
+    const config = (await readHostConfig().catch(() => undefined)) ?? { links: [] };
+    const next = mutate(config);
+    await writeHostConfig(next);
+    return next;
+};
 
 // Every link, or none at all when nothing has ever been connected — the shape callers actually want, so that
 // "this computer is connected to nothing" and "there is no config file" stop being two cases at every call site.
@@ -64,30 +79,37 @@ export const readLinks = async (): Promise<readonly HostLink[]> => (await readHo
  * computer is re-enrolled. Keyed on the url, which is the one field of a link that is the sandbox's identity
  * rather than something either side chose. */
 export const upsertLink = async (link: HostLink): Promise<readonly HostLink[]> => {
-    const kept = (await readLinks()).filter((existing) => existing.sandboxUrl !== link.sandboxUrl);
-    const links = [...kept, link];
-    await writeHostConfig({ links });
-    return links;
+    const updated = await updateHostConfig((config) => ({
+        ...config,
+        links: [...config.links.filter((existing) => existing.sandboxUrl !== link.sandboxUrl), link],
+    }));
+    return updated.links;
 };
 
 // Forget one sandbox, or all of them. Returns what was actually dropped so the caller can say so by name.
 export const removeLinks = async (sandboxUrl?: string): Promise<readonly HostLink[]> => {
     const links = await readLinks();
     const dropped = sandboxUrl === undefined ? links : links.filter((link) => link.sandboxUrl === sandboxUrl);
-    await writeHostConfig({ links: links.filter((link) => !dropped.includes(link)) });
+    await updateHostConfig((config) => ({ ...config, links: config.links.filter((link) => !dropped.some((gone) => gone.sandboxUrl === link.sandboxUrl)) }));
     return dropped;
 };
 
 // Persist the scopes one sandbox just pushed, leaving every other link alone. Best-effort by design: the live
 // grant is already in memory and enforcing, so failing to write the cache must never drop the connection.
 export const rememberScopes = async (sandboxUrl: string, scopes: HostScopes): Promise<void> => {
-    const links = await readLinks();
-    const at = links.findIndex((link) => link.sandboxUrl === sandboxUrl);
-    // A push from a sandbox this computer does not answer to is dropped rather than written: it can only be a
-    // link that was disconnected while its socket was still closing, and re-adding it here would undo that.
-    const link = links[at];
-    if (link === undefined) {
-        return;
-    }
-    await writeHostConfig({ links: links.with(at, { ...link, scopes }) }).catch(() => undefined);
+    await updateHostConfig((config) => {
+        const at = config.links.findIndex((link) => link.sandboxUrl === sandboxUrl);
+        // A push from a sandbox this computer does not answer to is dropped rather than written: it can only
+        // be a link that was disconnected while its socket was still closing, and re-adding it would undo that.
+        const link = config.links[at];
+        return link === undefined ? config : { ...config, links: config.links.with(at, { ...link, scopes }) };
+    }).catch(() => undefined);
+};
+
+// The background-download switch, read where the resident loop starts its tick and written by the `updates`
+// command. Absent (or an unreadable file) reads as ON — see the field's note above.
+export const readPrepareUpdates = async (): Promise<boolean> => (await readHostConfig().catch(() => undefined))?.prepareUpdates !== false;
+
+export const writePrepareUpdates = async (on: boolean): Promise<void> => {
+    await updateHostConfig((config) => ({ ...config, prepareUpdates: on }));
 };

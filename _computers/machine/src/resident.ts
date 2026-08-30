@@ -13,6 +13,7 @@ import {
     writeSecretFile,
 } from "@intentic/local-agent";
 import { MACHINE_AUTOSTART } from "./autostart.js";
+import { startAutoPrepare } from "./computer/auto-prepare.js";
 import { readLinks } from "./computer/config.js";
 import { connect } from "./computer/connection.js";
 import { baseDir, runLogPath, runPidPath } from "./config.js";
@@ -118,6 +119,13 @@ export const reconcileResidency = async (log: Log): Promise<void> => {
     }
 };
 
+/* The computer half's background tick: keep each local sandbox's next update downloaded
+ * (computer/auto-prepare.ts), so the update card offers a half-minute restart instead of minutes. Gated on
+ * links because a link is how a machine that hosts sandboxes presents — the sync half alone may be mirroring
+ * a sandbox that runs somewhere else entirely, and a docker poll there would be a question about containers
+ * that aren't. */
+const computerTick = (links: number, log: Log): { stop: () => void } | undefined => (links > 0 ? startAutoPrepare(log) : undefined);
+
 /* The foreground loop itself, what a supervisor (systemd, launchd, the Windows launcher stub) runs, and what
  * `run --foreground` shows live.
  *
@@ -152,7 +160,9 @@ export const runForeground = async (log: Log): Promise<void> => {
     // The computer half: one outbound socket per linked sandbox, each with its own token, grant and retry loop.
     // There is nothing to multiplex and nothing shared but this log.
     const connections = links.map((link) => connect(link, MACHINE_VERSION, log));
+    const autoPrepare = computerTick(links.length, log);
     const shutdown = (signal: NodeJS.Signals): void => {
+        autoPrepare?.stop();
         for (const connection of connections) {
             connection.stop();
         }
@@ -173,6 +183,8 @@ export const runForeground = async (log: Log): Promise<void> => {
         halves.push(runMirrorWatch(log));
     }
     await Promise.all(halves);
+    // Every half ended on its own; a timer must not be what keeps a process alive that has nothing to serve.
+    autoPrepare?.stop();
 
     /* Every half has ended on its own (no signal): the sync half ran out of pairings, and there were no links to
      * hold the process. Whether the login entry goes too is re-read rather than remembered — a `setup` may have

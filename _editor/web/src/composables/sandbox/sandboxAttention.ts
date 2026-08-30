@@ -67,11 +67,44 @@ export interface SandboxAttentionItem {
     // Set only where the amount is the message: how many secrets are missing decides how long the errand is.
     // The others are one click each, so a number beside them would be read in the unit this one established.
     readonly count?: number;
+    /* WHETHER THIS NOTE MAY WEAR THE CHIP WHEN NO DEBT DOES — a narrow, deliberate bend of "notes never
+     * badge". The rule exists because a badge that stays lit for a standing condition teaches the reader to
+     * stop chasing badges; a note may set this only when acting on it is one click and seconds, so the badge
+     * it earns clears as fast as a debt's would. Today exactly one note qualifies: a staged update, whose
+     * whole point (the machine downloaded it in the background so the owner wouldn't have to find a button)
+     * is defeated if the fact stays invisible until someone already knows to open the hub. Meaningless on a
+     * `needs`, which badges anyway. */
+    readonly badges?: boolean;
 }
+
+/* The update, in the two shapes it now comes in. Merely AVAILABLE stays the quiet note it always was: the
+ * machine's background download (auto-prepare on the host agent) makes this state brief wherever a computer
+ * is connected, and nothing about it is quick to act on yet. Once it is STAGED the fact changes character —
+ * the download already happened, applying it is one click and a half-minute restart on the hub card — and
+ * that is the one note allowed to badge the chip (`badges` above): the whole point of downloading in the
+ * background was that the owner should not have to already know to go looking. */
+const updateItems = (available: boolean, staged: boolean): SandboxAttentionItem[] => {
+    if (!available) {
+        return [];
+    }
+    if (staged) {
+        return [
+            {
+                icon: `arrow-circle-up`,
+                tone: `info`,
+                message: `A sandbox update is ready to apply — a restart of about half a minute`,
+                to: `/sandbox`,
+                kind: `note`,
+                badges: true,
+            },
+        ];
+    }
+    return [{ icon: `arrow-circle-up`, tone: `info`, message: `A new sandbox version is available`, to: `/sandbox`, kind: `note` }];
+};
 
 export function useSandboxAttention() {
     const { pending, proposal } = useEnvironment();
-    const { updateAvailable } = useSandboxVersion();
+    const { updateAvailable, updateStaged } = useSandboxVersion();
     const { missingRequiredCount } = useMissingSecretCount();
     const { stoppedOn, contendedPorts } = useSyncHealth();
 
@@ -168,17 +201,8 @@ export function useSandboxAttention() {
                       kind: `note` as const,
                   },
               ]),
-        ...(updateAvailable.value
-            ? [
-                  {
-                      icon: `arrow-circle-up` as const,
-                      tone: `info` as const,
-                      message: `A new sandbox version is available`,
-                      to: `/sandbox`,
-                      kind: `note` as const,
-                  },
-              ]
-            : []),
+        // The update note, split by whether it is already downloaded — updateItems above says why.
+        ...updateItems(updateAvailable.value, updateStaged.value),
     ]);
 
     /* THE TWO LISTS THE SURFACES ACTUALLY RENDER. `items` stays the declaration, one place, worst-first, and
@@ -191,18 +215,24 @@ export function useSandboxAttention() {
      * message, its glyph otherwise, and every debt's sentence in the tooltip, which is the only place a second
      * pending item is sayable without a second badge.
      *
-     * Read off `needs`, not `items`, so the chip cannot wear a number for something nobody owes. The notes are
-     * still in the popover under it; they simply do not summon anyone to open it. */
+     * Read off `needs` first, so the chip cannot wear a number for something nobody owes; a note that earned
+     * the right (`badges`, and today that is only a staged update) shows only when every debt is clear, in its
+     * own quieter tone, and its tooltip carries just its own sentence — the debts' joined tooltip belongs to
+     * the debts. The rest of the notes are still in the popover; they simply do not summon anyone to open it. */
     const badge = computed<ViewBadge | undefined>(() => {
         const [head] = needs.value;
-        if (head === undefined) {
+        if (head !== undefined) {
+            return {
+                ...(head.count === undefined ? { mark: head.icon } : { count: head.count }),
+                tone: head.tone,
+                tooltip: needs.value.map((item) => item.message).join(` · `),
+            };
+        }
+        const ready = notes.value.find((item) => item.badges === true);
+        if (ready === undefined) {
             return undefined;
         }
-        return {
-            ...(head.count === undefined ? { mark: head.icon } : { count: head.count }),
-            tone: head.tone,
-            tooltip: needs.value.map((item) => item.message).join(` · `),
-        };
+        return { mark: ready.icon, tone: ready.tone, tooltip: ready.message };
     });
 
     // No `items`: a surface that rendered the undivided list would be the heading bug back again, so the only way

@@ -18,6 +18,11 @@ The **computer half** (`src/computer/`, the machine side of the `host` capabilit
   recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release.
 - Enforce the owner's scopes **here**, never in the sandbox, and append every call to an audit log that
   survives uninstall.
+- Keep each local sandbox's **next update downloaded** (`src/computer/auto-prepare.ts`): a background tick
+  runs `ic sandbox prepare <slug> --auto` every few hours, so the web app's update card offers a half-minute
+  restart instead of minutes of pulling. On by default; the switch is `intentic-machine computer updates
+  --off` (cached in `computer.json`). Nothing in any sandbox can start or steer the tick — a sandbox only
+  learns the outcome through the staged marker `ic` writes, the way it always has.
 
 The **sync half** (`src/sync/`, the machine side of desktop sync):
 
@@ -44,9 +49,10 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall`, `sync setup|pause|resume|uninstall`, shared `run|status|version|upgrade|uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|uninstall`, shared `run|status|version|upgrade|uninstall`.
 - [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.
+- [src/computer/auto-prepare.ts](src/computer/auto-prepare.ts) — the background update-download tick; the judgement about *what* to download stays in `ic sandbox prepare --auto`, on purpose.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/computer/policy.ts](src/computer/policy.ts) — what the sandbox is permitted to do here; the security surface.
 - [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.

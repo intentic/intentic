@@ -100,3 +100,19 @@ test("the credential file is written so only this user can read it", async () =>
         links: [expect.objectContaining({ sandboxUrl: "https://one.example" })],
     });
 });
+
+test("the background-download switch defaults to on, and survives every link writer", async () => {
+    /* The regression this pins is the same one the file's header pins for links: a writer that rebuilds the
+     * file from the piece it knows about drops every piece it doesn't. The switch is the first field to share
+     * the file with `links`, so each of the three link writers gets to prove it passes the setting through. */
+    expect(await config.readPrepareUpdates()).toBe(true);
+    await config.writePrepareUpdates(false);
+    await config.upsertLink(link("https://four.example", "laptop"));
+    expect(await config.readPrepareUpdates()).toBe(false);
+    await config.rememberScopes("https://four.example", scopes("on"));
+    expect(await config.readPrepareUpdates()).toBe(false);
+    await config.removeLinks("https://four.example");
+    expect(await config.readPrepareUpdates()).toBe(false);
+    await config.writePrepareUpdates(true);
+    expect(await config.readPrepareUpdates()).toBe(true);
+});
