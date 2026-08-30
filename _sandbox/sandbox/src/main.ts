@@ -362,7 +362,7 @@ const main = async (): Promise<void> => {
      * moment 8787 spoke TLS, while the browser needs TLS or Safari refuses the address as mixed content.
      *
      * The certificate is whatever is already on disk, issuance is a CA validating DNS, far slower than a boot
-     * should wait, so it happens in the background and lands at the next restart.
+     * should wait, so it happens in the background and is handed to the listener the moment it lands.
      *
      * BOTH protocols, on this one port, chosen per connection by sniffing the first byte (loopback-listener.ts).
      * The certified address is a public name and costs a public DNS lookup, so serving TLS *instead of* plain
@@ -385,10 +385,18 @@ const main = async (): Promise<void> => {
           });
     shutdown.push(() => localServer?.close());
     if (localServer !== undefined) {
-        logger.info({ port: config.local.port, tls: localServer.tls, hostname: localCertificate?.hostname }, "loopback listener ready");
+        logger.info({ port: config.local.port, tls: localServer.tls(), hostname: localCertificate?.hostname }, "loopback listener ready");
     }
-    // Obtain/renew in the background. Never rejects: a sandbox with no certificate is a working sandbox.
-    const localCertRenewal = role.container && traits.extraListeners ? startLocalCertificateRenewal(config, logger) : undefined;
+    /* Obtain/renew in the background, and give the listener what comes back rather than waiting for a restart
+     * to read it off disk. Never rejects: a sandbox with no certificate is a working sandbox, just one whose
+     * shortcut is plain HTTP/1.1, which is the transport the editor has to ration connections on. */
+    const localCertRenewal =
+        role.container && traits.extraListeners
+            ? startLocalCertificateRenewal(config, logger, (certificate) => {
+                  localServer?.useCertificate(certificate);
+                  logger.info({ hostname: certificate.hostname }, "loopback listener is serving TLS");
+              })
+            : undefined;
     shutdown.push(() => localCertRenewal?.stop());
 
     // The preview proxy: preview-<panel>-<id>.<zone>, port-<slot>-<id>.<zone> and public-<slot>-<id>.<zone>

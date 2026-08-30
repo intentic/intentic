@@ -83,10 +83,11 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
         if (apiToken === `` || zone === ``) {
             return;
         }
-        /* The record sweep: the loopback pair (`local-<id>` A + its ACME TXT) of sandboxes that no longer
-         * exist, plus any CNAME left pointing at a Cloudflare tunnel from before the migration. Nothing
-         * creates tunnel records any more, so this is now a shrinking cleanup rather than a standing defence
-         * against the per-zone quota, but the `total` it logs is still the number to watch. */
+        /* The record sweep: every per-sandbox loopback A record (one wildcard answers for all of them now),
+         * the ACME TXT of any sandbox that no longer exists, and any CNAME left pointing at a Cloudflare
+         * tunnel from before the migration. Nothing creates any of those any more, so this is a shrinking
+         * cleanup rather than a standing defence against the per-zone quota, but the `total` it logs is still
+         * the number to watch: a full zone stops loopback certificates being issued at all. */
         try {
             const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
             const liveSandboxIds = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));

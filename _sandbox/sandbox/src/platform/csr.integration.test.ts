@@ -29,12 +29,12 @@ const openssl = (csr: Uint8Array, name: string): string => {
 };
 
 it("produces a request openssl parses and whose self-signature verifies", () => {
-    const dump = openssl(buildCsr(key, ["local-0f310c3c4db4.intentic.dev"]), "one");
+    const dump = openssl(buildCsr(key, ["0f310c3c4db4.local.intentic.dev"]), "one");
     expect(dump).toMatch(/(?:Certificate request self-signature verify OK|verify OK)/);
     expect(dump).toContain("id-ecPublicKey");
     expect(dump).toContain("ecdsa-with-SHA256");
     // The SAN is the whole identity of the request: an empty subject is deliberate, not an omission.
-    expect(dump).toContain("DNS:local-0f310c3c4db4.intentic.dev");
+    expect(dump).toContain("DNS:0f310c3c4db4.local.intentic.dev");
     expect(dump).toMatch(/Subject:\s*$/m);
 });
 
@@ -56,7 +56,7 @@ it("refuses to build a request that identifies nothing", () => {
 });
 
 it("base64url-encodes without padding, as ACME's finalize expects", () => {
-    const encoded = base64Url(buildCsr(key, ["local-0f310c3c4db4.intentic.dev"]));
+    const encoded = base64Url(buildCsr(key, ["0f310c3c4db4.local.intentic.dev"]));
     expect(encoded).not.toContain("=");
     expect(encoded).not.toContain("+");
     expect(encoded).not.toContain("/");

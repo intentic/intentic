@@ -6,6 +6,7 @@ import { markWorkspaceChanged } from "../workspace/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "./connection";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "./sandboxRpc";
 import { useSandboxSession } from "./sandboxSession";
+import { acquireStreamSlot } from "./streamBudget";
 import { applySystemEvent } from "./systemEvents";
 import { sandboxQueryPredicate } from "./systemEventRouting";
 import { resetDaemonBoot } from "./useDaemonBoot";
@@ -106,24 +107,48 @@ const retargetedDuring = (base: string | undefined): boolean => daemonBase.value
 const stream = async (sandboxId: string): Promise<void> => {
     controller = new AbortController();
     watchdogTripped = false;
-    // Armed before the connect, not just after: a hung connect (a dead tunnel that neither answers nor
-    // refuses) must not leave the optimistic paint up, the watchdog trips it and aborts.
-    armWatchdog();
-    // Per-CONNECTION presence id, never reused across attempts: the daemon keys this tab's roster entry by it,
-    // so a lingering old connection's teardown can only ever remove its own entry, never this one's.
-    const clientId = uuid();
-    const frames = await sandboxRpc.system.events({ clientId }, { signal: controller.signal });
-    signalConnection({ kind: `opened` });
-    armWatchdog();
-    // The daemon just registered this connection's blank roster entry, announce the tab's current activity.
-    presenceStreamOpened(clientId);
-    // Reconnect recovery: refetch the tree on every (re)connect, since file changes during a disconnect carried
-    // no frame. Empty paths = "just refetch" (no per-file re-read/highlight, we don't know what was missed).
-    markWorkspaceChanged([]);
-    for await (const frame of frames) {
-        signalConnection({ kind: `frame` });
+    /* A permit, because this stream holds a whole CONNECTION for the life of the window and a browser has six
+     * per origin on http/1.1. It used to take one off the books entirely, so the two the budget held back for
+     * ordinary requests were really one, and a second window of this app (a popped-out chat is a real window
+     * running its own copy, floating.ts) took that one too: every request in both windows then queued behind
+     * streams until something ended. Unbounded, so this resolves on the spot, wherever the transport
+     * multiplexes. See streamBudget.ts, including what happens to the window that does not fit. */
+    const slot = await acquireStreamSlot(`events`, controller.signal);
+    if (slot === undefined) {
+        return;
+    }
+    try {
+        // Armed before the connect, not just after: a hung connect (a dead tunnel that neither answers nor
+        // refuses) must not leave the optimistic paint up, the watchdog trips it and aborts.
         armWatchdog();
-        applySystemEvent(frame, sandboxId);
+        // Per-CONNECTION presence id, never reused across attempts: the daemon keys this tab's roster entry by
+        // it, so a lingering old connection's teardown can only ever remove its own entry, never this one's.
+        const clientId = uuid();
+        const frames = await sandboxRpc.system.events({ clientId }, { signal: controller.signal });
+        signalConnection({ kind: `opened` });
+        armWatchdog();
+        // The daemon just registered this connection's blank roster entry, announce the tab's current activity.
+        presenceStreamOpened(clientId);
+        // Reconnect recovery: refetch the tree on every (re)connect, since file changes during a disconnect
+        // carried no frame. Empty paths = "just refetch" (no per-file re-read/highlight, we don't know what was
+        // missed).
+        markWorkspaceChanged([]);
+        for await (const frame of frames) {
+            signalConnection({ kind: `frame` });
+            armWatchdog();
+            /* Re-ask where this sandbox is best reached, which is nearly always a comparison and a return
+             * (useEndpoint decides when an answer is stale, and only ONE of the three ever is). It is here, on
+             * the heartbeat, rather than only per connect attempt, because the case it exists for never
+             * reconnects: a window that opened before the sandbox had a certificate qualified plain http, and
+             * a healthy stream then runs for hours without giving anyone another chance to notice that h2
+             * arrived a minute later. A promotion changes the base, and the watch at the bottom retargets. */
+            void resolveEndpoint().catch(() => undefined);
+            applySystemEvent(frame, sandboxId);
+        }
+    } finally {
+        // However this attempt ended, opened, refused, torn or aborted, the connection is done and the next
+        // window's stream may have it. The backoff between attempts is deliberately spent WITHOUT a permit.
+        slot();
     }
 };
 

@@ -1,6 +1,15 @@
-import { localDaemonUrl, localDaemonUrlInsecure } from "@intentic/sandbox-run";
+import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 import { expect, it, vi } from "vitest";
-import { candidatesFor, couldBeOnThisMachine, probeEndpoint, sandboxIdOf, selectEndpoint } from "./endpoint";
+import {
+    candidatesFor,
+    couldBeOnThisMachine,
+    localDaemonUrl,
+    probeEndpoint,
+    PROMOTION_INTERVAL_MS,
+    sandboxIdOf,
+    selectEndpoint,
+    settledEndpoint,
+} from "./endpoint";
 
 const TUNNEL = `https://sandbox-abc.example.com`;
 const ZONE = `example.com`;
@@ -33,6 +42,12 @@ it(`orders candidates certified, plain, tunnel: the last one always dialable`, a
     expect(withToken[0]?.base).toBe(localDaemonUrl(id, ZONE));
     expect(withToken[1]?.base).toBe(localDaemonUrlInsecure(id));
     expect(withToken[2]?.base).toBe(TUNNEL);
+    /* A label DEEPER than the sandbox's own hostname, and this is the assertion that keeps it there: a DNS
+     * wildcard matches exactly one label, so `<id>.local.<zone>` is what lets one `*.local.<zone>` record
+     * answer for every sandbox there will ever be. Flatten it back to `local-<id>.<zone>` and each sandbox
+     * needs a record of its own again, which is what filled the zone's quota and took the certified shortcut
+     * (and with it h2, and with it the workspace) down. */
+    expect(new URL(withToken[0]!.base).hostname).toBe(`${id}.local.${ZONE}`);
     // Both loopback forms are the SAME published port: one mapping, and what the daemon serves decides.
     expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[1]!.base).port);
 
@@ -149,7 +164,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     // A daemon serving the shortcut in plain http (no certificate yet) fails the https probe and passes the
     // next one: the browsers that allow loopback http are accelerated without waiting on issuance.
     const httpOnly = vi.fn(async (input: string | URL | Request) => {
-        if (String(input).startsWith(`https://local-`)) {
+        if (String(input).startsWith(localDaemonUrl(id, ZONE)!)) {
             throw new TypeError(`Failed to fetch`);
         }
         return health(id);
@@ -169,4 +184,32 @@ it(`selects the shortcut when it answers as us, and always resolves to something
             }),
         ),
     ).toEqual({ kind: `tunnel`, base: TUNNEL });
+});
+
+/* THE ANSWER THAT EXPIRES, and why exactly one of the three does.
+ *
+ * A window that opens before its sandbox has a certificate qualifies plain http, and h2 arrives a minute
+ * later. Without an expiry that window holds HTTP/1.1 — six connections per origin, the cap the stream budget
+ * exists to ration — for as long as it stays open, which on a healthy stream is hours. It is the ordinary
+ * experience of opening a sandbox you just created, not a corner case. */
+it(`keeps the tunnel and the certified shortcut for good, and only ages out the plain one`, () => {
+    const now = 1_000_000;
+    const stale = now - PROMOTION_INTERVAL_MS - 1;
+    for (const kind of [`tunnel`, `local`] as const) {
+        // Nothing better exists to promote to, so re-probing could only cost a request and a permission prompt.
+        expect(settledEndpoint({ kind, base: TUNNEL }, stale, now)).toBe(true);
+    }
+    expect(settledEndpoint({ kind: `local-insecure`, base: TUNNEL }, stale, now)).toBe(false);
+    // Inside the interval it stands: the certificate does not arrive faster for being asked about twice.
+    expect(settledEndpoint({ kind: `local-insecure`, base: TUNNEL }, now - 1, now)).toBe(true);
+});
+
+it(`treats an undated answer as fresh rather than expired`, () => {
+    // "Just now" is the safe reading: aging out an answer on evidence that does not exist would re-probe on
+    // every frame, and the interval costs at most one round of staleness.
+    expect(settledEndpoint({ kind: `local-insecure`, base: TUNNEL }, undefined, 1_000_000)).toBe(true);
+});
+
+it(`has nothing to say about a sandbox with no answer yet: that is the probe's job`, () => {
+    expect(settledEndpoint(undefined, undefined, 1_000_000)).toBe(false);
 });

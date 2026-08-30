@@ -1,7 +1,7 @@
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { trackPerf } from "../perf";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
-import { sandboxAuthenticatedFetch } from "./sandboxAuthFetch";
+import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { useSandboxSession } from "./sandboxSession";
 import { currentSandboxTarget } from "./sandboxTarget";
 
@@ -25,7 +25,10 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
         if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
-        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target);
+        /* The headers deadline, minus the calls that send a body up: their headers cannot arrive until the
+         * upload finishes, and a bundle restore is gigabytes (BundleCard). Decided here because this is the
+         * last place the body is still the thing the caller passed rather than a stream. */
+        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, !uploadsBody(init?.body));
     });
 }
 

@@ -37,7 +37,7 @@ vi.mock("node:dns/promises", () => {
     return { Resolver };
 });
 
-const RECORD = "_acme-challenge.local-0f310c3c4db4.intentic.dev";
+const RECORD = "_acme-challenge.0f310c3c4db4.local.intentic.dev";
 
 beforeEach(() => {
     dns.ns.clear();
@@ -53,9 +53,12 @@ it("asks the zone's own nameservers, found by walking up from the record", async
     dns.txt.set("10.0.0.1", [["published"]]);
     dns.txt.set("10.0.0.2", [["published"]]);
     expect(await resolveTxtAuthoritatively(RECORD)).toEqual(["published"]);
-    // UP from the full name: a leaf carries no NS records of its own, and walking down from the root would
-    // stop at the TLD's nameservers, which know the delegation rather than what is inside it.
-    expect(dns.nsQueries).toEqual([RECORD, "local-0f310c3c4db4.intentic.dev", "intentic.dev"]);
+    /* UP from the full name, one label at a time: a leaf carries no NS records of its own, and walking down
+     * from the root would stop at the TLD's nameservers, which know the delegation rather than what is inside
+     * it. Four steps rather than three because the loopback name gained a label (`<id>.local.<zone>`, so that
+     * one wildcard record can answer for every sandbox), which is exactly the kind of change a walk written to
+     * a fixed depth would have broken on. */
+    expect(dns.nsQueries).toEqual([RECORD, "0f310c3c4db4.local.intentic.dev", "local.intentic.dev", "intentic.dev"]);
 });
 
 it("reports only what EVERY nameserver serves, so a half-propagated zone reads as not yet published", async () => {

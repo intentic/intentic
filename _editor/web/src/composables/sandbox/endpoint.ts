@@ -1,5 +1,5 @@
-import { zoneFromUrl } from "@intentic/sandbox-contract";
-import { localDaemonUrl, localDaemonUrlInsecure } from "@intentic/sandbox-run";
+import { localHostname, zoneFromUrl } from "@intentic/sandbox-contract";
+import { localDaemonPort, localDaemonUrlInsecure } from "@intentic/sandbox-run";
 import { sha256Hex } from "../workspace/contentHash";
 
 /* WHICH ADDRESS THIS BROWSER DIALS TO REACH THE ACTIVE DAEMON, pure, so the whole selection policy is
@@ -35,7 +35,7 @@ const PROBE_TIMEOUT_MS = 1500;
  * address that works from anywhere); the other two are the same loopback port, differing only in what the
  * daemon managed to serve on it.
  *
- * `local` is HTTPS on `local-<id>.<zone>`, a public name resolving to 127.0.0.1, the only form EVERY browser
+ * `local` is HTTPS on `<id>.local.<zone>`, a public name resolving to 127.0.0.1, the only form EVERY browser
  * accepts. `local-insecure` is plain http on 127.0.0.1; the mixed-content spec calls loopback
  * potentially-trustworthy so Chrome and Firefox take it, and Safari does not (WebKit 171934), which is
  * precisely why the certified form is tried first.
@@ -44,7 +44,7 @@ const PROBE_TIMEOUT_MS = 1500;
  * loopback-listener.ts). That is what makes the second one worth probing rather than a form that stopped
  * existing the moment issuance landed. It also makes it the candidate that survives an outage: `local` is a
  * PUBLIC name, so reaching it costs a DNS lookup on the public internet, while `local-insecure` needs no name
- * at all. When the owner's connection drops, the tunnel goes with it and `local-<id>` stops resolving; plain
+ * at all. When the owner's connection drops, the tunnel goes with it and `<id>.local.<zone>` stops resolving; plain
  * loopback is then the only thing still standing between the browser and a daemon on the same machine. */
 export type EndpointKind = "local" | "local-insecure" | "tunnel";
 
@@ -87,6 +87,16 @@ export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "cloud" | "hosted
  * id off the URL would compute a port nothing is listening on. */
 export const sandboxIdOf = async (connectToken: string): Promise<string> => (await sha256Hex(connectToken)).slice(0, 12);
 
+/* The certified loopback address: the daemon's own name (@intentic/sandbox-contract, where the whole hostname
+ * family lives, and where the wildcard that resolves it is documented) on the port its container published
+ * (@intentic/sandbox-run, which owns the derivation because it is what passes `-p` to docker).
+ *
+ * Composed here, in the module that DIALS it, rather than in either of those packages: it is the one address
+ * that needs both, and neither package should have to depend on the other to spell it. Undefined where there
+ * is no zone to certify under, which is a normal state, not a failure (see candidatesFor). */
+export const localDaemonUrl = (sandboxId: string, zone: string | undefined): string | undefined =>
+    zone === undefined || zone === `` ? undefined : `https://${localHostname(sandboxId, zone)}:${localDaemonPort(sandboxId)}`;
+
 // The addresses worth trying for a sandbox, best first. Without a connect token there is no id, hence no
 // derivable port and no local candidate at all, and a sandbox on a machine the platform placed elsewhere has
 // nothing to reach for either, so both collapse to the tunnel being the only way in. The certified form leads;
@@ -106,6 +116,34 @@ export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> =>
         { kind: `local-insecure`, base: localDaemonUrlInsecure(id) },
         tunnel,
     ];
+};
+
+/* IS THE ANSWER A WINDOW IS HOLDING STILL THE BEST ONE AVAILABLE, or is it the kind that goes stale?
+ *
+ * Two of the three are final. The tunnel always works, and the certified shortcut is the best address there
+ * is, so a window holding either has nothing to gain from asking again. `local-insecure` is the odd one out,
+ * because it is not really an answer to "where is this daemon" — it is the answer to "where is this daemon
+ * REACHABLE FROM HERE YET", and yet is the whole problem. Issuance is a CA validating DNS, tens of seconds at
+ * best, and a sandbox that has just been created has no certificate at all. So the ordinary sequence is: a
+ * window opens, the certified name does not resolve, plain http qualifies, and the certificate lands a minute
+ * later.
+ *
+ * Nothing re-asked. That window then spent the rest of its life on HTTP/1.1 with six connections per origin,
+ * against a daemon that had been speaking h2 almost the whole time — and a healthy stream never reconnects, so
+ * "the rest of its life" is hours. It is not a corner case either: it is what happens every single time
+ * somebody opens a sandbox they just made.
+ *
+ * Hence provisional, and re-probed on an interval. The cost is one /health per minute against a name that
+ * either resolves or does not, and only while a window is on the transport it would rather leave. */
+export const PROMOTION_INTERVAL_MS = 60_000;
+
+export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: number | undefined, now: number): boolean => {
+    if (endpoint === undefined) {
+        return false;
+    }
+    // No stamp is read as "just now" rather than "forever ago": an answer nobody dated cannot be aged out on
+    // evidence that does not exist, and the next probe is one interval away at worst.
+    return endpoint.kind !== `local-insecure` || now - (resolvedAt ?? now) < PROMOTION_INTERVAL_MS;
 };
 
 /* Does this address reach the daemon we mean? Unauthenticated (/health is exempt from the daemon's gate), so

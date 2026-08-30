@@ -331,7 +331,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     /* The LOOPBACK CERTIFICATE's DNS relay, kept through the tunnel migration because it is not a tunnel: a
      * sandbox on the same machine as the browser is reached at 127.0.0.1, and that address still needs a real
-     * certificate (`local-<id>.<zone>`, an unproxied A record plus the ACME TXT of one order). The daemon
+     * certificate (`<id>.local.<zone>`, an unproxied A record plus the ACME TXT of one order). The daemon
      * drives its own issuance and holds the key; it relays here for these two records only, because on the
      * platform's zone it has no token of its own. This is the whole of what Cloudflare still does for a
      * sandbox: DNS, never traffic. Authenticated by the connect token like /sandbox/announce. */
@@ -359,7 +359,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         }
         const hostname = localHostname(sandboxId, zone);
         try {
-            await ensureLocalDnsRecord(apiToken, zone, hostname);
+            await ensureLocalDnsRecord(apiToken, zone);
             await setAcmeChallenge(apiToken, zone, `_acme-challenge.${hostname}`, challenge as string | undefined);
             return c.json({ ok: true, hostname });
         } catch (error) {

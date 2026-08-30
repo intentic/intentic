@@ -131,7 +131,7 @@ test("a WebSocket still upgrades, over the http/1.1 connection allowHTTP1 keeps 
 
 /* THE SAME PORT ALSO ANSWERS PLAIN HTTP, and that is the half that survives the internet going away.
  *
- * The TLS side above is reachable only as `local-<id>.<zone>`, a PUBLIC name: the browser has to resolve it
+ * The TLS side above is reachable only as `<id>.local.<zone>`, a PUBLIC name: the browser has to resolve it
  * before it can use any of it. This one is reachable as `http://127.0.0.1:<port>` and needs no name at all,
  * which is why it is the candidate that still works when the owner's connection drops, when public DNS is
  * unreachable, or when the zone's record has gone missing. Serving TLS *instead of* it once a certificate
@@ -150,8 +150,44 @@ test("a listener with no certificate still serves plain HTTP, the state every sa
         certificate: undefined,
     });
     const barePort = await bare.listening;
-    expect(bare.tls).toBe(false);
+    expect(bare.tls()).toBe(false);
     const response = await fetch(`http://127.0.0.1:${barePort}/ping`);
     expect(await response.text()).toBe("pong");
     bare.close();
+});
+
+/* THE CERTIFICATE ARRIVES AFTER THE LISTENER DOES, always, and this is the seam that lets it matter.
+ *
+ * Issuance is a CA validating DNS: tens of seconds at best, and a fresh sandbox has no certificate at all. The
+ * listener therefore boots plain and is handed one later. When it could not be, that "later" was the next
+ * restart, so a new sandbox served its shortcut over HTTP/1.1, six connections per origin, for its entire
+ * first life, and h2, the thing that stops the workspace freezing, was something a sandbox grew into only if
+ * somebody happened to restart it. */
+test("a certificate handed over after boot is served without restarting the listener", async () => {
+    const later = createLoopbackListener({
+        fetch: app.fetch,
+        port: 0,
+        hostname: "127.0.0.1",
+        sockets: new WebSocketServer({ noServer: true }) as unknown as WebSocketServerLike,
+        certificate: undefined,
+    });
+    const laterPort = await later.listening;
+    expect(later.tls()).toBe(false);
+
+    later.useCertificate({ certificate: readFileSync(join(dir, "cert.pem"), "utf8"), privateKey: readFileSync(join(dir, "key.pem"), "utf8") });
+    expect(later.tls()).toBe(true);
+
+    // h2 specifically, not merely "TLS answered": the multiplexing is the entire reason the certified address
+    // is worth having, so a handover that produced an http/1.1 TLS server would pass a weaker assertion.
+    const handover = connect(`https://127.0.0.1:${laterPort}`, { rejectUnauthorized: false });
+    const negotiated = await new Promise<string>((resolve) => {
+        handover.once("connect", () => resolve("h2"));
+        handover.once("error", (error: Error) => resolve(`error: ${error.message}`));
+    });
+    handover.close();
+    expect(negotiated).toBe("h2");
+
+    // And the plain half is untouched by the handover: the DNS-free candidate must not be traded away for h2.
+    expect(await (await fetch(`http://127.0.0.1:${laterPort}/ping`)).text()).toBe("pong");
+    later.close();
 });

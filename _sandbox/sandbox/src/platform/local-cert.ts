@@ -11,9 +11,11 @@ import { postToPlatform } from "./platform-client.js";
 /* THE LOOPBACK CERTIFICATE, what lets a browser on this machine reach the daemon without Cloudflare.
  *
  * The shortcut needs HTTPS (Safari refuses http loopback from an HTTPS page as mixed content), HTTPS needs a
- * certificate, and a certificate needs a name a public CA will sign. `local-<id>.<zone>` is that name: a real
- * DNS record under the sandbox's zone that resolves to 127.0.0.1. The key is generated here and never leaves;
- * the platform is asked only to write two DNS records it alone has the token for (POST /sandbox/local-dns).
+ * certificate, and a certificate needs a name a public CA will sign. `<id>.local.<zone>` is that name, and it
+ * resolves to 127.0.0.1 under ONE wildcard record for the whole zone, so a sandbox asking for a certificate
+ * costs the zone nothing permanent (@intentic/sandbox-contract localHostname says what that bought). The key
+ * is generated here and never leaves; the platform is asked only for the DNS it alone holds the token for
+ * (POST /sandbox/local-dns: the wildcard, asserted, and this order's own challenge).
  *
  * FAILURE IS ORDINARY AND MUST BE QUIET. No zone, no platform, an own-Cloudflare sandbox, a CA that is down, a
  * rate limit, in every case the daemon serves the loopback listener in plain HTTP instead, the browser's
@@ -113,7 +115,7 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
         /* A CERTIFICATE ON DISK IS NOT A NAME THAT RESOLVES, and conflating the two is how the shortcut dies
          * quietly for months.
          *
-         * `local-<id>.<zone>` needs two things: a certificate, which lives here and lasts 90 days, and an A
+         * `<id>.local.<zone>` needs two things: a certificate, which lives here and lasts 90 days, and an A
          * record pointing at 127.0.0.1, which lives in the platform's zone and is written as a side effect of
          * asking for that certificate. So a valid certificate used to mean this function returned before ever
          * mentioning DNS, and the record was re-asserted only when the certificate was next reissued.
@@ -160,8 +162,9 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
 
 /* The certificate to serve the loopback listener with RIGHT NOW: whatever is already on disk, without waiting
  * on the network. Issuance is slow (a CA validating DNS takes tens of seconds) and the listener must be up
- * long before that, so boot reads, `startLocalCertificateRenewal` issues, and a newly-issued certificate is
- * picked up at the next restart, the sandbox is serving plain HTTP in the meantime, not nothing. */
+ * long before that, so boot reads and `startLocalCertificateRenewal` issues, the sandbox serving plain HTTP in
+ * the meantime rather than nothing. What issuance produces is handed to the listener as it lands (`onIssued`),
+ * so the wait is for the CA and not for the next restart. */
 export const readLocalCertificate = (config: Config): LocalCertificate | undefined => {
     const hostname = localCertHostname(config);
     return hostname === undefined ? undefined : readUsable(config, hostname, Date.now());
@@ -170,8 +173,19 @@ export const readLocalCertificate = (config: Config): LocalCertificate | undefin
 /* Keep the certificate fresh in the background: once at boot (which is what issues the first one), then on a
  * cadence that depends on how the last attempt went, daily when there is a certificate to renew, far sooner
  * when there is none to serve. Never rejects: a sandbox whose certificate cannot be obtained is a working
- * sandbox on plain HTTP. */
-export const startLocalCertificateRenewal = (config: Config, logger: Logger): { stop: () => void } => {
+ * sandbox on plain HTTP.
+ *
+ * `onIssued` receives every certificate this loop is satisfied with, including the one already on disk (which
+ * the caller is by definition already serving, and re-offering costs nothing next to the branch that would
+ * have to work out whether it was new). It used to receive nothing at all: the loop wrote the file and the
+ * listener read that file once, at boot, so a sandbox's FIRST certificate did not take effect until something
+ * restarted the daemon. A fresh sandbox has no certificate, which made "serves its shortcut over plain HTTP/1.1
+ * until further notice" the normal state of every new sandbox rather than a brief window at boot. */
+export const startLocalCertificateRenewal = (
+    config: Config,
+    logger: Logger,
+    onIssued: (certificate: LocalCertificate) => void,
+): { stop: () => void } => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
     const schedule = (delay: number): void => {
@@ -184,7 +198,18 @@ export const startLocalCertificateRenewal = (config: Config, logger: Logger): { 
     };
     function attempt(): void {
         void ensureLocalCertificate(config, logger)
-            .then(() => schedule(CHECK_INTERVAL_MS))
+            .then((certificate) => {
+                // A handover that throws must not be read as a failed issuance: the certificate is on disk and
+                // good, and re-running the CA over a listener's bad day would spend a rate limit on nothing.
+                if (certificate !== undefined) {
+                    try {
+                        onIssued(certificate);
+                    } catch (error: unknown) {
+                        logger.warn({ err: error }, "the loopback listener refused the certificate, it will serve plain http until restart");
+                    }
+                }
+                schedule(CHECK_INTERVAL_MS);
+            })
             .catch((error: unknown) => {
                 logger.warn({ err: error }, "the loopback certificate is unavailable, this sandbox serves its shortcut over plain http");
                 schedule(RETRY_INTERVAL_MS);

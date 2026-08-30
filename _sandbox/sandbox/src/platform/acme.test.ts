@@ -13,7 +13,7 @@ import { obtainCertificate } from "./acme.js";
 
 const PEM = "-----BEGIN CERTIFICATE-----\nleaf\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nissuer\n-----END CERTIFICATE-----\n";
 const TOKEN = "challenge-token";
-const HOST = "local-0f310c3c4db4.intentic.dev";
+const HOST = "0f310c3c4db4.local.intentic.dev";
 
 interface Seen {
     readonly url: string;

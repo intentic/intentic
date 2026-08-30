@@ -7,7 +7,7 @@ import type { Hono } from "hono";
 /* THE LOOPBACK LISTENER SPEAKS BOTH PROTOCOLS ON ONE PORT, and that is what makes the shortcut survive the
  * network going away.
  *
- * The browser has two ways to reach a sandbox on its own machine (editor endpoint.ts): `https://local-<id>.
+ * The browser has two ways to reach a sandbox on its own machine (editor endpoint.ts): `https://<id>.local.
  * <zone>:<port>`, a public name whose A record points at 127.0.0.1, and `http://127.0.0.1:<port>`, which the
  * mixed-content spec calls potentially-trustworthy so Chrome and Firefox accept it from an HTTPS page. It
  * probes both. Only one port is ever published to the host, so both land HERE.
@@ -17,7 +17,7 @@ import type { Hono } from "hono";
  * failure. The certified name is a PUBLIC name, so reaching it costs a DNS lookup on the public internet,
  * and the moment issuance succeeded the DNS-free candidate stopped answering. A sandbox one loopback hop from
  * the browser was then reachable only via a name the internet had to resolve: when the owner's connection
- * dropped, `local-<id>` stopped resolving, `127.0.0.1` had nothing listening for plain HTTP, and the tunnel
+ * dropped, `<id>.local.<zone>` stopped resolving, `127.0.0.1` had nothing listening for plain HTTP, and the tunnel
  * was gone with the connection. Three dead candidates, a healthy daemon, and the editor showing "connecting".
  *
  * So the two are offered TOGETHER and the client picks per connection. The first byte says which: a TLS
@@ -56,8 +56,17 @@ export interface LoopbackListenerOptions {
 
 export interface LoopbackListener {
     readonly close: () => void;
-    // What the port ended up able to speak, for the boot log. `tls` false is a normal state, not a degraded one.
-    readonly tls: boolean;
+    // What the port can speak RIGHT NOW, for the boot log and for the renewal loop to check its work. `tls`
+    // false is a normal state, not a degraded one.
+    readonly tls: () => boolean;
+    /* Take (or replace) the certificate without restarting anything.
+     *
+     * Issuance takes a CA tens of seconds to validate DNS, so the listener has to be up long before it can
+     * land: boot reads whatever is on disk and this is how the answer arrives afterwards. Without it a
+     * sandbox's FIRST certificate did nothing until the next restart, and since a fresh sandbox has no
+     * certificate at all, that meant every new sandbox served its shortcut in plain HTTP/1.1 for as long as it
+     * stayed up. Renewal has the same shape and the same fix. */
+    readonly useCertificate: (certificate: LoopbackCertificate) => void;
     // The port actually bound, which is the requested one everywhere except a test that asked for 0. Resolves
     // when the socket is accepting, so a caller that must not race the first connection can await it.
     readonly listening: Promise<number>;
@@ -120,35 +129,42 @@ export const createLoopbackListener = (options: LoopbackListenerOptions): Loopba
     // answers when the machine is offline.
     const plain = createAdaptorServer({ fetch, hostname, websocket: { server: sockets } });
 
-    /* The TLS half, present only with a certificate on disk.
+    /* The TLS half, present only once there is a certificate to serve it with.
      *
      * HTTP/2, and that is not a performance nicety, it is what stops the workspace freezing. A browser allows
-     * SIX concurrent HTTP/1.1 connections per origin, and this app holds LONG-LIVED ones: `/events` forever,
-     * plus an `/agent/attach` for every conversation with a live turn. Four or five running agents consume
+     * SIX concurrent HTTP/1.1 connections per origin, and this app holds LONG-LIVED ones: `/events` for every
+     * window, plus an `/agent/attach` for every conversation with a live turn. Four or five of those consume
      * every slot and the next ordinary read simply queues in the browser until a stream ends, which presents
      * as "the sandbox froze" with a silent, healthy log. One h2 connection carries ~100 streams instead.
      *
      * `allowHTTP1` is required rather than tidy: WebSocket has no h2 form here (node does not advertise the
      * extended-CONNECT setting RFC 8441 needs), so the browser opens a separate http/1.1 connection for the
      * terminal, which this accepts, and whose `upgrade` event still reaches the `ws` server. */
-    const secure =
-        certificate === undefined
-            ? undefined
-            : createAdaptorServer({
-                  fetch,
-                  hostname,
-                  websocket: { server: sockets },
-                  createServer: createSecureServer,
-                  serverOptions: {
-                      cert: certificate.certificate,
-                      key: certificate.privateKey,
-                      allowHTTP1: true,
-                      // Node's default session memory (10MB) is a budget shared by every stream on the
-                      // connection, which is now ALL of them, including transcript replays that arrive in
-                      // multi-megabyte bursts. Exceeding it kills the whole workspace's connection at once.
-                      maxSessionMemory: 128,
-                  },
-              });
+    const tlsServer = (loaded: LoopbackCertificate): ServerType =>
+        createAdaptorServer({
+            fetch,
+            hostname,
+            websocket: { server: sockets },
+            createServer: createSecureServer,
+            serverOptions: {
+                cert: loaded.certificate,
+                key: loaded.privateKey,
+                allowHTTP1: true,
+                // Node's default session memory (10MB) is a budget shared by every stream on the connection,
+                // which is now ALL of them, including transcript replays that arrive in multi-megabyte bursts.
+                // Exceeding it kills the whole workspace's connection at once.
+                maxSessionMemory: 128,
+            },
+        });
+
+    /* Mutable, because a certificate can arrive (or be replaced) while this is serving, and rebuilding the
+     * listener to take one would drop every connection on the port to gain a protocol.
+     *
+     * A replaced server is kept rather than closed: the sockets it is already serving are mid-request, and
+     * `close()` on an http2 server waits for them anyway. It stops receiving NEW connections the moment the
+     * reference moves, drains on its own, and is closed for real at shutdown. */
+    let secure: ServerType | undefined = certificate === undefined ? undefined : tlsServer(certificate);
+    const superseded: ServerType[] = [];
 
     /* The port itself is a bare TCP listener: neither backing server binds, they are fed sockets. That is why
      * both can own the same port without either knowing the other exists. */
@@ -179,12 +195,22 @@ export const createLoopbackListener = (options: LoopbackListenerOptions): Loopba
     router.listen(port, hostname);
 
     return {
-        tls: secure !== undefined,
+        tls: (): boolean => secure !== undefined,
         listening,
+        useCertificate: (loaded: LoopbackCertificate): void => {
+            const previous = secure;
+            secure = tlsServer(loaded);
+            if (previous !== undefined) {
+                superseded.push(previous);
+            }
+        },
         close: (): void => {
             router.close();
             plain.close();
             secure?.close();
+            for (const drained of superseded) {
+                drained.close();
+            }
         },
     };
 };

@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
-import { couldBeOnThisMachine, type Endpoint, selectEndpoint } from "./endpoint";
+import { couldBeOnThisMachine, type Endpoint, selectEndpoint, settledEndpoint } from "./endpoint";
 import { shortcutAnswer, useLocalShortcut } from "./localShortcut";
-import { setStreamCapacity, streamCapacity } from "./streamBudget";
+import { setStreamCapacity, setStreamOverflow, setStreamScope, streamPermits } from "./streamBudget";
 import { useSandbox } from "./useSandbox";
 
 /* THE TRANSPORT half of "where is the sandbox", as a module-level singleton, the counterpart to
@@ -86,22 +86,49 @@ const usingLocal = computed(() => {
     return kind === `local` || kind === `local-insecure`;
 });
 
-/* How many long-lived streams this tab may hold at once, which only the TRANSPORT can answer, h2 multiplexes
+/* How many long-lived streams this ORIGIN may hold at once, which only the TRANSPORT can answer, h2 multiplexes
  * them onto one connection, plain http/1.1 spends a whole connection each and a browser has six per origin.
  * Read live (not snapshotted) because the endpoint resolves in the background and can change under a stream
- * that is already open, which is this module's whole design. See streamBudget.ts for what happens without it. */
-setStreamCapacity(() => {
+ * that is already open, which is this module's whole design. See streamBudget.ts for what happens without it.
+ *
+ * All three hooks are wired here because this module is the only one that knows the transport: how many permits
+ * there are, which socket pool they ration (the base, so two windows on two sandboxes ration separately), and
+ * what to do with a window that does not fit. */
+setStreamCapacity((stream) => {
     const id = activeSandboxId.value;
-    return streamCapacity(id === undefined ? undefined : endpoints.value[id]?.kind);
+    return streamPermits(id === undefined ? undefined : endpoints.value[id]?.kind, stream);
+});
+setStreamScope(() => daemonBase.value ?? `unaddressed`);
+/* A window with more streams than the shortcut can carry leaves the shortcut. Demotion is the repair that
+ * already exists for "this address stopped working for us", and it is the right one here: the tunnel speaks h2,
+ * so every queued stream opens at once, and the backoff hands the shortcut back once this window has fewer
+ * streams to hold. Nothing is torn down, the streams retarget with the base (see useSandboxLiveness). */
+setStreamOverflow(() => {
+    const id = activeSandboxId.value;
+    if (id !== undefined && endpoints.value[id] !== undefined) {
+        demote(id);
+    }
 });
 
-/* Qualify the active sandbox's fastest working address. Safe to call on every reconnect: it returns
- * immediately once the sandbox has a resolved endpoint, and coalesces concurrent callers. */
+// When each sandbox's current answer was arrived at, so a provisional one can be aged out (endpoint.ts's
+// `settledEndpoint` owns the rule). Cleared with the answer itself, never read for anything else.
+const resolvedAt = new Map<string, number>();
+
+/* Qualify the active sandbox's fastest working address. Safe to call on every reconnect AND on every frame:
+ * it returns immediately once the sandbox has an answer worth keeping, and coalesces concurrent callers. */
 const resolve = async (): Promise<void> => {
     const id = activeSandboxId.value;
     const url = daemonUrl.value;
     const sandbox = active.value;
-    if (id === undefined || sandbox === undefined || url === undefined || url === `` || endpoints.value[id] !== undefined || demotionHolds(id, Date.now())) {
+    const now = Date.now();
+    if (
+        id === undefined ||
+        sandbox === undefined ||
+        url === undefined ||
+        url === `` ||
+        settledEndpoint(endpoints.value[id], resolvedAt.get(id), now) ||
+        demotionHolds(id, now)
+    ) {
         return;
     }
     /* Nothing to qualify: the platform put this sandbox's machine somewhere this browser demonstrably is not
@@ -131,6 +158,9 @@ const resolve = async (): Promise<void> => {
         // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
         // we probed FOR, never under whatever is active now, is what keeps it off the wrong sandbox.
         if (!demotionHolds(id, Date.now())) {
+            // Stamped even when the answer is the same one: a re-probe that found the certificate still
+            // missing has to buy another interval, or the next frame would probe again immediately.
+            resolvedAt.set(id, Date.now());
             endpoints.value = { ...endpoints.value, [id]: endpoint };
         }
     })().finally(() => resolving.delete(id));
@@ -146,6 +176,7 @@ const demote = (sandboxId: string): void => {
     demoted.set(sandboxId, { at: Date.now(), streak: (demoted.get(sandboxId)?.streak ?? 0) + 1 });
     const rest = { ...endpoints.value };
     delete rest[sandboxId];
+    resolvedAt.delete(sandboxId);
     endpoints.value = rest;
 };
 

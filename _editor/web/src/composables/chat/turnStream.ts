@@ -112,13 +112,13 @@ export const followRun = async (
         if (controller.signal.aborted) {
             return attached;
         }
-        /* A slot for this attach, because it is about to hold a whole CONNECTION open for as long as the
+        /* A permit for this attach, because it is about to hold a whole CONNECTION open for as long as the
          * turn runs. A browser allows six per origin on http/1.1, so without a budget four or five
-         * streaming agents leave the tab unable to make an ordinary request at all, see streamBudget.ts.
-         * Unbounded (so this resolves on the spot) wherever the transport multiplexes, which is h2 on the
-         * certified loopback and on the tunnel. Undefined means this conversation was aborted while
-         * queued. */
-        const slot = await acquireStreamSlot(controller.signal);
+         * streaming agents leave every window of this app unable to make an ordinary request at all, see
+         * streamBudget.ts. Unbounded (so this resolves on the spot) wherever the transport multiplexes,
+         * which is h2 on the certified loopback and on the tunnel. Undefined means this conversation was
+         * aborted while queued. */
+        const slot = await acquireStreamSlot(`attach`, controller.signal);
         if (slot === undefined) {
             return attached;
         }

@@ -9,7 +9,7 @@ import { base64Url, buildCsr } from "./csr.js";
  * P1363 form JOSE requires (node's default is DER, which is the same length and silently wrong here) and the
  * JWK thumbprint the key authorization is built from.
  *
- * DNS-01 rather than HTTP-01 because the name being certified, local-<id>.<zone>, resolves to 127.0.0.1.
+ * DNS-01 rather than HTTP-01 because the name being certified, <id>.local.<zone>, resolves to 127.0.0.1.
  * There is no address on the public internet for a CA to reach, so proving control has to happen in the zone,
  * which is why the challenge is published through a caller-supplied hook: the sandbox holds no token for the
  * zone on the intentic path and relays to the platform, while nothing here needs to know which it is.

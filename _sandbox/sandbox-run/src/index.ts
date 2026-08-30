@@ -353,16 +353,13 @@ const LOCAL_PORT_SPAN = 4000;
 // Deterministic, so a recreate lands on the same port and the browser can derive it without being told.
 export const localDaemonPort = (sandboxId: string): number => LOCAL_PORT_BASE + (Number.parseInt(sandboxId.slice(0, 6), 16) % LOCAL_PORT_SPAN);
 
-/* The two addresses that port can answer on, best first, what the browser probes.
+/* The plain address that port answers on, which needs no name and therefore nothing from outside this file.
  *
- * HTTPS when the daemon has obtained a certificate for `local-<id>.<zone>` (a public name resolving to
- * 127.0.0.1). Every browser accepts that, including Safari, which refuses http loopback from an HTTPS page as
- * mixed content. Plain http is the fallback the daemon serves before a certificate exists, or forever if
- * issuance is unavailable, the mixed-content spec calls loopback potentially-trustworthy, so Chrome and
- * Firefox take it. Neither is assumed: the browser tries both and the daemon's identity decides. */
-export const localDaemonUrl = (sandboxId: string, zone: string | undefined): string | undefined =>
-    zone === undefined || zone === "" ? undefined : `https://local-${sandboxId}.${zone}:${localDaemonPort(sandboxId)}`;
-
+ * Its certified sibling, `https://<id>.local.<zone>:<port>`, is composed where it is DIALLED (the editor's
+ * endpoint.ts) rather than here, because it is the one address that needs two things this package must not
+ * hold together: this port, and the loopback HOSTNAME, which belongs to @intentic/sandbox-contract with the
+ * rest of the name family. Spelling the name here instead cost a package a dependency it has no other use for,
+ * and the copy it saved went stale the moment the hostname changed shape. */
 export const localDaemonUrlInsecure = (sandboxId: string): string => `http://127.0.0.1:${localDaemonPort(sandboxId)}`;
 
 // --- The run ------------------------------------------------------------------------------------------

@@ -70,10 +70,17 @@ export const configSchema = z.object({
             from: z.string().default(``), // EMAIL_FROM
         })
         .prefault({}),
-    // Intentic-OWNED Cloudflare token + zone. DNS ONLY since the tunnel fabric moved in-house (zrok above).
-    // What is left of it: the loopback certificate's `local-<id>` records (the daemon relays for them, having
-    // no token for this zone) and the daily sweep that clears their residue. No tunnels, no per-sandbox
-    // records, nothing against the per-zone quota. Unset ⇒ the loopback-certificate path is simply off.
+    /* Intentic-OWNED Cloudflare token + zone. DNS ONLY since the tunnel fabric moved in-house (zrok above).
+     * What is left of it: the loopback certificate's `*.local.<zone>` wildcard and the per-order ACME
+     * challenge beside it (the daemon relays for both, having no token for this zone), plus the daily sweep
+     * that clears the residue of everything this platform used to mint here.
+     *
+     * "Nothing against the per-zone quota" is now true and was not before: a sandbox used to leave a
+     * `local-<id>` A record behind forever, that was the last per-sandbox record anywhere in this zone after
+     * the zrok move, and enough of them filled the zone and stopped issuance for everyone. DNS-ONLY is also
+     * literal, the sweep may not call anything but /dns_records, or a narrowed token kills it.
+     *
+     * Unset ⇒ the loopback-certificate path is simply off. */
     intenticCloudflare: z
         .object({
             apiToken: z.string().default(``).meta({ secret: true }), // INTENTIC_CLOUDFLARE_API_TOKEN

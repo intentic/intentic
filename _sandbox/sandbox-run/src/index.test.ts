@@ -3,7 +3,6 @@ import {
     HEALTH,
     LOCAL_SANDBOX_MEMORY,
     localDaemonPort,
-    localDaemonUrl,
     localDaemonUrlInsecure,
     localSandboxMemory,
     OPTIONAL_DIRECTIVES,
@@ -298,12 +297,10 @@ test("the loopback port is derived from the id alone: the browser computes the s
     // Stable across calls (a recreate must land on the port the browser is already probing) and inside the
     // quiet band: above what dev servers claim, below Linux's ephemeral floor.
     expect(localDaemonPort("0f310c3c4db4")).toBe(localDaemonPort("0f310c3c4db4"));
-    // HTTPS on a public name that resolves to loopback: the only shape Safari will accept. Same port either
-    // way: one published mapping, and what the daemon serves on it decides which of the two answers.
-    expect(localDaemonUrl("0f310c3c4db4", "intentic.dev")).toBe(`https://local-0f310c3c4db4.intentic.dev:${localDaemonPort("0f310c3c4db4")}`);
+    // The plain form needs no name and so lives here. Its certified sibling is composed where it is dialled
+    // (the editor's endpoint.ts), off this same port: one published mapping, and what the daemon serves on it
+    // decides which of the two answers.
     expect(localDaemonUrlInsecure("0f310c3c4db4")).toBe(`http://127.0.0.1:${localDaemonPort("0f310c3c4db4")}`);
-    // No zone ⇒ no name a CA could certify ⇒ no https candidate to offer.
-    expect(localDaemonUrl("0f310c3c4db4", undefined)).toBeUndefined();
     for (const id of ["0f310c3c4db4", "abc123def456", "000000000000", "ffffffffffff"]) {
         expect(localDaemonPort(id)).toBeGreaterThanOrEqual(28000);
         expect(localDaemonPort(id)).toBeLessThan(32000);
