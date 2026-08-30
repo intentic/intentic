@@ -196,12 +196,27 @@
 
     position: absolute;
     inset: 0;
+    /* IT MUST BE THE LAST THING THE PLATE PAINTS, and that is what `z-index` is doing here rather than any
+     * question of layering over the page. The scrim above is an `::after`, which the spec generates as the
+     * element's LAST child, so at `z-index: auto` it paints over this div however the markup is ordered — and
+     * the scrim is built from `rgba(9, 6, 4, …)`, a black two levels DARKER than the canvas. On the door that
+     * is invisible, because the plate is the full height of the screen and its floor is the page's floor. On a
+     * page that caps the plate to a band it was a full-bleed horizontal seam exactly at `--plate-reach`: flat
+     * #090604 above it, flat #0c0907 below, the two meeting on a hard line with the veil's canvas buried under
+     * the darker wash. Painted last, this ends on the canvas colour and the plate's bottom edge is invisible
+     * because there is nothing left to disagree with. `.entry-plate` is itself a stacking context (positioned,
+     * `z-index: -1`), so the 1 is scoped to the scenery and cannot climb over the page.
+     *
+     * `min(…, 100%)` on the closing stops keeps that true even if a screen asks the veil to hold past the
+     * bottom of the plate: the canvas then lands exactly on the edge instead of the gradient being cut
+     * mid-ramp, which is the same seam again with an extra step in it. */
+    z-index: 1;
     background: linear-gradient(
         180deg,
         transparent 0,
         transparent var(--veil-clear),
         rgba(12, 9, 7, 0.72) calc(var(--veil-clear) + (var(--veil-hold) - var(--veil-clear)) * 0.55),
-        var(--canvas) var(--veil-hold),
+        var(--canvas) min(var(--veil-hold), 100%),
         var(--canvas) 100%
     );
 }

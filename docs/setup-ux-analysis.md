@@ -371,6 +371,15 @@ Two mechanical notes worth keeping, because each cost a wrong turn:
   than either whole one. The square corner is drawn where these screens draw a frame *by hand*;
   nested controls keep their own rounding, exactly as the door already composes Google's rounded
   button inside its square socket.
+- **The veil has to be the last thing the plate paints.** It shipped cut in half for a day: a
+  full-bleed horizontal seam at exactly `--plate-reach`, flat `#090604` above it and flat
+  `#0c0907` below. The veil was already closing to the canvas well above that line — but the
+  scrim over the art is an `::after`, which the spec generates as the element's *last* child, so
+  at `z-index: auto` it painted over the veil however the markup was ordered, and its
+  `rgba(9, 6, 4, …)` floor is two levels darker than the canvas. The door never showed it because
+  its plate is the full height of the screen: its floor *is* the page's floor, so there was
+  nothing below to disagree with. Three luminance levels is invisible in a diff, invisible in a
+  code review, and unmistakable on a good monitor.
 
 Not changed, and not by accident: not a word of copy, not one control, not one lane, not one
 default. The decisions recorded above all still hold — this is the same page, in the stone the
