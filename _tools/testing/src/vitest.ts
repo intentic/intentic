@@ -26,9 +26,18 @@ const INTEGRATION_TESTS = ["./**/*.integration.test.{ts,mjs}", "./**/*.e2e.test.
 // stops running the ones that aren't in it.
 const ALL_TESTS = ["./**/*.test.{ts,mjs}"];
 
-// Not test files, whatever they are named. Stating `exclude` at all replaces vitest's defaults, so the
-// build outputs and the package store have to be named here or a project walks into them.
-const NOT_TESTS = ["**/node_modules/**", "**/dist/**", "**/.cache/**", "**/.turbo/**", "**/out-tsc/**"];
+/* Not test files, whatever they are named. Stating `exclude` at all replaces vitest's defaults, so the build
+ * outputs and the package store have to be named here or a project walks into them.
+ *
+ * `deploy/` is the one that is not obviously an output: `pnpm deploy --prod ./deploy` (docker-release.sh)
+ * stages a flat, symlink-free copy of a package there, tests and all, with its OWN node_modules. Vitest
+ * therefore collected every suite twice, and the copy failed where the original could not: a `--prod` tree
+ * ships no `src/`, so the `@intentic-app/src` / `@intentic/src` conditions these projects resolve under (see
+ * _platform/api/vitest.config.ts) find nothing, and three suites died at import with a missing module naming
+ * a path inside the artifact. It is gitignored, so it exists only where somebody has built an image, which is
+ * exactly the CI runner that then reported the red — a failure in a directory nobody edited, on a shared
+ * self-hosted workspace where the artifact outlives the job that made it. */
+const NOT_TESTS = ["**/node_modules/**", "**/dist/**", "**/deploy/**", "**/.cache/**", "**/.turbo/**", "**/out-tsc/**"];
 
 /* In-memory work only, and therefore the suite whose ceiling is PURELY a hang detector: nothing here waits on
  * anything, so whatever a test spends it spends on a core.

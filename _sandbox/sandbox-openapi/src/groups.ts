@@ -369,7 +369,7 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         label: "Issues",
         summary: "Bugs your own users hit, grouped, and putting an agent on one",
         description:
-            "The owner's side of the bug intake, and the counterpart to the pipelines group: an inbox of failures with one route that hands a failure to an agent rather than to you. Reports arrive at the public /intake/… endpoints from the reporter embedded on your sites, and the daemon groups them by fingerprint, so a crash that hit a thousand browsers is one row with a count. These routes read that inbox, move a row between open, resolved and ignored, start a turn on one, throw one away, and answer which sites have actually loaded the reporter. Nothing here creates an issue.",
+            "The owner's side of the bug intake, and the counterpart to the pipelines group: an inbox of failures with one route that hands a failure to an agent rather than to you. Reports arrive at the public /intake/… endpoints from the reporter embedded on your sites — a separate prefix precisely because any browser on the internet can reach those and none of these — and the daemon groups them by fingerprint, so a crash that hit a thousand browsers is one row with a count. These routes read that inbox, move a row between open, resolved and ignored, start a turn on one, throw one away, and answer which sites have actually loaded the reporter. Nothing here creates an issue.",
     },
 
     // ── The sandbox itself ────────────────────────────────────────────────────────────────────────────
