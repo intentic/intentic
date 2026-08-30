@@ -80,11 +80,17 @@ const toggle = (id: string, open: boolean): void => {
 
 const discarding = ref<IssueSummary | undefined>(undefined);
 
-const act = (work: () => Promise<unknown>): void => void run(work);
+/* Every triage gesture is one mutation and one sentence to show if it fails. The sentence is required by
+ * `run` and belongs here rather than at the throw site: the daemon can say a request 404'd, only this page
+ * knows the owner was trying to reopen a bug. */
+const act = (work: () => Promise<unknown>, wrote: string): void =>
+    void run(async () => {
+        await work();
+    }, wrote);
 
 const forget = (issue: IssueSummary): void => {
     discarding.value = undefined;
-    act(() => remove.mutateAsync(issue.id));
+    act(() => remove.mutateAsync(issue.id), `Could not forget that issue.`);
 };
 
 /* Opening the run an agent is already on, rather than starting a second one. A bug being worked on has a
@@ -140,14 +146,14 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                         label="Investigate"
                                         size="small"
                                         :disabled="investigate.isPending.value"
-                                        @click="act(() => investigate.mutateAsync(issue.id))"
+                                        @click="act(() => investigate.mutateAsync(issue.id), `Could not put an agent on that issue.`)"
                                     />
                                     <Button
                                         label="Resolve"
                                         size="small"
                                         severity="secondary"
                                         :disabled="setStatus.isPending.value"
-                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }))"
+                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }), `Could not resolve that issue.`)"
                                     />
                                     <Button
                                         label="Ignore"
@@ -155,7 +161,7 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                         severity="secondary"
                                         text
                                         :disabled="setStatus.isPending.value"
-                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `ignored` }))"
+                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `ignored` }), `Could not ignore that issue.`)"
                                     />
                                 </template>
                             </template>
@@ -187,7 +193,7 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                     size="small"
                                     severity="secondary"
                                     :disabled="setStatus.isPending.value"
-                                    @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }))"
+                                    @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `resolved` }), `Could not resolve that issue.`)"
                                 />
                             </template>
                             <template #below><IssueEvidence :issue="issue" /></template>
@@ -213,7 +219,7 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                         severity="secondary"
                                         text
                                         :disabled="setStatus.isPending.value"
-                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `open` }))"
+                                        @click="act(() => setStatus.mutateAsync({ id: issue.id, status: `open` }), `Could not reopen that issue.`)"
                                     />
                                     <Button label="Forget" size="small" severity="danger" text @click="discarding = issue" />
                                 </template>

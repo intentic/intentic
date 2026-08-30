@@ -97,10 +97,23 @@ const setup = async (automation: Automation) => {
     return { services, appends, issues };
 };
 
-// The wake is started detached (the reporting page may be seconds from unloading and has nothing to wait on),
-// so a test that asserts on it has to let that microtask chain drain first.
-const settled = async (): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+/* The wake is started detached (the reporting page may be seconds from unloading and has nothing to wait on),
+ * so a test that asserts on it has to let that chain drain first.
+ *
+ * IT IS A CHAIN OF FILE WRITES, NOT A MICROTASK HOP — a thread session opened, a run noted, an approval or a
+ * fire — so a fixed sleep is a race the machine wins whenever it is busy, and a suite running every other
+ * package beside it is exactly that machine. Wait for the thing that was expected to happen instead, up to a
+ * deadline generous enough that only a real hang reaches it. Where the assertion is that NOTHING woke there is
+ * no condition to wait for, and a short drain is the whole of what can be asked. */
+const DRAIN_MS = 50;
+const SETTLE_DEADLINE_MS = 5_000;
+const settled = async (until?: () => boolean | Promise<boolean>): Promise<void> => {
+    for (let waited = 0; waited < SETTLE_DEADLINE_MS; waited += 5) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (until === undefined ? waited >= DRAIN_MS : await until()) {
+            return;
+        }
+    }
 };
 
 test("a report from an allowed site is stored, grouped, and answered immediately", async () => {
@@ -114,7 +127,7 @@ test("a report from an allowed site is stored, grouped, and answered immediately
     expect(body.ok).toBe(true);
     // The short reference a reporter can be given, and the id of the group it landed in.
     expect(body.id).toMatch(/^[0-9a-f]{16}$/);
-    await settled();
+    await settled(() => turns.length === 1);
 
     expect(await issues.read(body.id)).toMatchObject({ count: 1, kind: "crash", origin: ORIGIN, release: "a1b2c3d", automationId: "bugs" });
     expect(appends[0]).toMatchObject({ provider: "issues", direction: "in", type: "issue.new" });
@@ -128,7 +141,7 @@ test("the brief the agent gets separates what we recorded from what a stranger's
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns), issues);
     await post(app, "bugs", { report: crash({ release: "a1b2c3d", url: "https://shop.example/checkout" }) });
-    await settled();
+    await settled(() => turns.length === 1);
 
     expect(turns).toHaveLength(1);
     const prompt = turns[0]?.prompt ?? "";
@@ -156,7 +169,11 @@ test("a crash loop is one issue with a count, and wakes only on the escalation s
         // A different client each time: 25 separate browsers hitting the same bug, which is what a real loop is.
         const res = await post(app, "bugs", { clientId: `browser-${n}` });
         id = ((await res.json()) as { id: string }).id;
-        await settled();
+        /* Each wake has to finish before the next report lands: `noteRun` stamps the count the wake was decided
+         * at, and that stamp is the escalation rule's only memory. The step it fires on is the rule under test,
+         * so it is spelled out here rather than read back off the issue — one for the fresh group, then one per
+         * ten arrivals after it. */
+        await settled(() => turns.length === 1 + Math.floor(n / 10));
     }
     expect((await issues.read(id))?.count).toBe(25);
     // Once when it was new, then at +10 and +20. Three, not twenty-five.
@@ -173,7 +190,8 @@ test("ids inside a message do not split one bug into many", async () => {
     const app = appFor(services, fakeWake(turns), issues);
     for (const order of [8813, 9204, 1001]) {
         await post(app, "bugs", { report: crash({ message: `Failed to load /api/orders/${order}` }) });
-        await settled();
+        // Only the first arrival is new, so one wake covers all three: after it, this returns on the first tick.
+        await settled(() => turns.length === 1);
     }
     expect((await issues.list()).issues).toHaveLength(1);
     expect(turns).toHaveLength(1);
@@ -185,9 +203,9 @@ test("written reports never group, so nobody's words are swallowed by a count", 
     const { services, issues } = await setup(intake("bugs"));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns), issues);
-    for (const who of ["ann", "bo"]) {
+    for (const [index, who] of ["ann", "bo"].entries()) {
         await post(app, "bugs", { report: { kind: "report", message: "Feedback", description: "the button does nothing", reporter: { name: who } } });
-        await settled();
+        await settled(() => turns.length === index + 1);
     }
     const { issues: rows } = await issues.list();
     expect(rows).toHaveLength(2);
@@ -276,7 +294,7 @@ test("a trigger narrowed to crashes still records what people write in", async (
     expect(turns).toEqual([]);
 
     await post(app, "bugs", {});
-    await settled();
+    await settled(() => turns.length === 1);
     expect((await issues.list()).issues).toHaveLength(2);
     expect(turns).toHaveLength(1);
 });
@@ -297,7 +315,9 @@ test("the admission floor holds the wake, with the issue's own brief on the card
     const app = appFor(held, fakeWake(turns), issues);
 
     expect((await post(app, "bugs", {})).status).toBe(200);
-    await settled();
+    // Waiting on the CARD rather than on a drain is also what makes the line under it mean anything: the wake
+    // has demonstrably reached its decision, and the decision was to park rather than to run.
+    await settled(async () => (await held.approvals.list()).length === 1);
     expect(turns).toEqual([]);
 
     const pending = await held.approvals.list();

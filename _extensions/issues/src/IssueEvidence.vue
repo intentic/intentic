@@ -59,7 +59,7 @@ const reporter = computed(() => {
 
         <section v-if="context.length > 0 || sample.userAgent !== undefined">
             <h3 :class="ui.sectionLabel(`mb-1`)">Where</h3>
-            <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+            <dl class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-sm">
                 <template v-if="sample.url !== undefined">
                     <dt class="text-muted">Page</dt>
                     <dd class="min-w-0 break-all">{{ sample.url }}</dd>

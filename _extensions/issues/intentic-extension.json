@@ -11,7 +11,8 @@
     "permissions": {
         "sandbox": [
             "GET /issues",
-            "POST /issues/*",
+            "POST /issues/*/status",
+            "POST /issues/*/investigate",
             "DELETE /issues/*",
             "GET /issues/installs/*",
             "GET /automations",
