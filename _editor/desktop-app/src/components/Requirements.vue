@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button } from "@intentic/ui";
+import { Button, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import type { Requirement, RequirementAction, RequirementProgress } from "../desktop";
 
@@ -145,12 +145,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
                              remedy: the remedy describes what will happen, and it already is. -->
                         <p v-if="stateOf(requirement.id)?.detail" class="text-2xs text-subtle">{{ stateOf(requirement.id)?.detail }}</p>
                         <p v-else-if="requirement.remedy" class="text-2xs text-subtle">{{ requirement.remedy }}</p>
-                        <button
-                            v-if="requirement.detail"
-                            type="button"
-                            class="mt-1 text-2xs text-link hover:underline"
-                            @click="toggle(requirement.id)"
-                        >
+                        <button v-if="requirement.detail" type="button" :class="ui.linkButton(`mt-1 text-2xs`)" @click="toggle(requirement.id)">
                             {{ opened[requirement.id] ? `Hide the steps` : `Show me how` }}
                         </button>
                     </div>
@@ -197,12 +192,7 @@ const needsAdmin = computed(() => props.requirements.some((requirement) => requi
              offered a cloud machine and a hosted one all along; the app hid them on the argument that "this
              computer" is the whole point of being here: true until this computer cannot, and then it is a
              dead end. One quiet line, under the loud default. -->
-        <button
-            v-if="!busy"
-            type="button"
-            class="flex items-center gap-2 self-start text-2xs text-muted hover:text-content"
-            @click="emit(`elsewhere`)"
-        >
+        <button v-if="!busy" type="button" :class="ui.textAction(`text-2xs`)" @click="emit(`elsewhere`)">
             <Icon name="cloud" class="shrink-0" />
             <span>Not on this computer? Run it in the cloud instead</span>
         </button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/extension-ui";
+import { Button, Icon } from "@intentic/extension-ui";
 import { onBeforeUnmount, ref, watch } from "vue";
 
 /* PDF preview: the browser's own PDF plugin, via <object>. No renderer is bundled, every browser this app
@@ -36,13 +36,7 @@ onBeforeUnmount(revoke);
     <object v-if="url" :data="url" type="application/pdf" class="h-full w-full">
         <div class="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
             <p class="text-sm">This PDF can't be displayed inline.</p>
-            <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-xs text-content hover:bg-overlay"
-                @click="$emit(`download`)"
-            >
-                <Icon name="download" class="text-xs" /> Download
-            </button>
+            <Button severity="secondary" @click="$emit(`download`)"> <Icon name="download" class="text-xs" /> Download </Button>
         </div>
     </object>
 </template>

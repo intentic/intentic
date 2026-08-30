@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, useDevice } from "@intentic/ui";
+import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, ref, watch } from "vue";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
@@ -331,16 +331,18 @@ const endResize = (event: PointerEvent): void => {
                  it always had to be: the panel saying what is moving it, and the × that ends it. Above the
                  panes rather than inside one: the run owns all of the columns, not the focused one. -->
             <div v-if="barRun" class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
-                <button
+                <Button
                     v-if="shownRun && !showingGraph"
-                    type="button"
-                    class="flex h-6 shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    class="shrink-0"
                     v-tooltip.bottom="`Back to the diagram: every step of this run`"
                     aria-label="Back to the run's diagram"
                     @click="showRun(shownRun.runId, `graph`)"
                 >
                     <Icon name="arrow-left" class="text-2xs" />
-                </button>
+                </Button>
                 <Icon v-else name="sitemap" class="shrink-0 text-2xs text-link" />
                 <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ barRun.workflow.name }}</span>
                 <span class="shrink-0 text-2xs text-subtle"
@@ -348,7 +350,7 @@ const endResize = (event: PointerEvent): void => {
                 >
                 <button
                     type="button"
-                    class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton(`rounded`)"
                     v-tooltip.bottom="`Leave the run: the chats stay open`"
                     aria-label="Leave the run"
                     @click="closeRun()"

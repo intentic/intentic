@@ -31,7 +31,6 @@ const desktop = computed(() => desktopVersion() !== undefined);
  * reader whose card has no button: a Mac, or the cloud lane, where the app is nothing to do with the machine
  * being set up but is still the thing that will manage it afterwards. */
 const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?: boolean }>();
-
 </script>
 
 <template>
@@ -58,22 +57,10 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         <div v-if="!desktop && downloads" class="flex flex-col gap-2 border-t border-line pt-3">
             <p class="text-xs text-subtle">Or use the desktop app</p>
             <div class="grid grid-cols-2 gap-2">
-                <Button
-                    as="a"
-                    :href="DESKTOP_DOWNLOADS.windows"
-                    label="Windows"
-                    severity="secondary"
-                    class="transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:bg-overlay/60 hover:shadow-sm"
-                >
+                <Button as="a" :href="DESKTOP_DOWNLOADS.windows" label="Windows" severity="secondary">
                     <template #icon><Icon name="download" /></template>
                 </Button>
-                <Button
-                    as="a"
-                    :href="DESKTOP_DOWNLOADS.linuxAppImage"
-                    label="Linux"
-                    severity="secondary"
-                    class="transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:bg-overlay/60 hover:shadow-sm"
-                >
+                <Button as="a" :href="DESKTOP_DOWNLOADS.linuxAppImage" label="Linux" severity="secondary">
                     <template #icon><Icon name="download" /></template>
                 </Button>
             </div>

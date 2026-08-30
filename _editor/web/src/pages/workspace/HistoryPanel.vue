@@ -3,7 +3,7 @@ import type { SnapshotChange, SnapshotTrigger, WorkspaceSnapshot } from "@intent
 import { ref } from "vue";
 import { diffRawUrls } from "../../composables/workspace/diffRaw";
 import { useHistory } from "../../composables/workspace/useHistory";
-import { ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
+import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "./workspaceTabs";
 
@@ -146,19 +146,13 @@ const confirmRestore = (id: string): void => {
                                 >Rewrite all files to this restore point? Files created after it are removed; git branches and secrets are untouched.
                                 Open chats working here are told the files moved.</span
                             >
-                            <button
-                                type="button"
-                                class="rounded border border-danger/50 px-2 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
-                                @click="confirmRestore(snapshot.id)"
-                            >
-                                Restore
-                            </button>
-                            <button type="button" class="text-2xs text-muted hover:text-content" @click="confirmRestoreId = undefined">Cancel</button>
+                            <Button size="small" severity="danger" @click="confirmRestore(snapshot.id)"> Restore </Button>
+                            <Button size="small" severity="secondary" :text="true" label="Cancel" @click="confirmRestoreId = undefined" />
                         </template>
-                        <button
+                        <Button
                             v-else
-                            type="button"
-                            class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-11 max-md:px-3 max-md:text-xs"
+                            size="small"
+                            severity="secondary"
                             :disabled="busy"
                             @click="confirmRestoreId = snapshot.id"
                             v-tooltip.right="
@@ -166,7 +160,7 @@ const confirmRestore = (id: string): void => {
                             "
                         >
                             <Icon name="history" class="mr-1 text-2xs" />Restore
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

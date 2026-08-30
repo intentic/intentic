@@ -561,8 +561,13 @@
     /* A plaque nobody may press is a plaque with the light off it — not a faded one. `disabled:opacity` alone
        leaves a bronze bar still reading as the brightest thing on the card, and dimming only the FILL leaves
        it in a cream-bright frame, which is the same claim made by the edge instead of the face. The rule goes
-       back to plain gold with the body, so the whole object is unlit at once. */
-    .entry .p-button:disabled {
+       back to plain gold with the body, so the whole object is unlit at once.
+
+       `:not(.p-button-loading)` for the same reason the app's own rule carries it (primeng.css): PrimeVue counts
+       a loading button as disabled, so without this the sign-in plaque went unlit the instant it was pressed —
+       the one moment a person is looking at it to find out whether the press landed. A working plaque stays lit
+       and spins. */
+    .entry .p-button:disabled:not(.p-button-loading) {
         background-image: none;
         background-color: rgba(30, 22, 15, 0.8);
         color: var(--ink-subtle);

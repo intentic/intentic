@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, useDevice, vAction } from "@intentic/ui";
+import { Button, Icon, useDevice } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useAgents } from "../composables/agents/useAgents";
@@ -113,57 +113,57 @@ const autoContinueLine = computed(() =>
         <Icon :name="ready ? `pause` : `clock`" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ line }}</span>
         <!-- The way back out of the automation, in the surface that armed it. -->
-        <button
+        <Button
             v-if="outage?.automatic !== undefined"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link disabled:opacity-50"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
             :disabled="!reachable || arming"
             v-tooltip.top="'Stop this chat picking the turn back up by itself'"
-            v-action="() => setOutageResume(false)"
+            @click="() => setOutageResume(false)"
         >
             Stop
-        </button>
+        </Button>
         <!-- ...and into it. The words are what the press DOES ("this chat", "keep going") rather than the name
              of a setting: the old copy admitted the blast radius in a parenthesis, which is exactly the place
              nobody reads before pressing, and the honest fix was to make the press smaller. -->
-        <button
+        <Button
             v-else-if="outage !== undefined"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link disabled:opacity-50"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
             :disabled="!reachable || arming"
             v-tooltip.top="'Keep trying this turn until the provider answers'"
-            v-action="() => setOutageResume(true)"
+            @click="() => setOutageResume(true)"
         >
             Keep this chat going
-        </button>
+        </Button>
         <!-- The standing version of the press, offered where the wish for it happens: reading this line for the
              third time in half an hour. Only while it is OFF; armed, the strip below carries both the state and
              the way out of it. Absent while the daemon is already retrying: two automations on one stopped turn
              is the thing this whole state exists to prevent. -->
-        <button
+        <Button
             v-if="!autoContinue && outage?.automatic === undefined"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link disabled:opacity-50"
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="shrink-0"
             :disabled="!reachable"
             v-tooltip.top="'Keep pressing Continue for me whenever a turn stops short'"
             @click="setAutoContinue(true)"
         >
             Auto-continue
-        </button>
+        </Button>
         <!-- The press itself. Present but inert while the pick-up is still waiting on an instant it named: a
              button that disappears until the reset takes the promise with it, and the promise is the point.
              The key is named ON the button rather than in a tooltip, because a pointer that has travelled here
              has already spent what the shortcut would have saved; the composer's hint slot says the same thing
              one line below, for the reader who hasn't moved yet. -->
-        <button
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-            :disabled="!reachable || !ready"
-            v-tooltip.top="continueHint"
-            @click="emit(`continue`)"
-        >
+        <Button size="small" :text="true" class="shrink-0" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="emit(`continue`)">
             Continue<span v-if="!mobile && ready" class="font-normal text-subtle"> · Enter</span>
-        </button>
+        </Button>
     </div>
     <!-- WHAT AN ARMED CHAT LOOKS LIKE WHILE IT WAITS ON ITSELF. On screen for as long as the automation is,
          because a switch with no off is a trap. -->
@@ -173,13 +173,8 @@ const autoContinueLine = computed(() =>
     >
         <Icon name="repeat" class="shrink-0" />
         <span class="min-w-0 flex-1">{{ autoContinueLine }}</span>
-        <button
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-            v-tooltip.top="'Stop continuing this chat by itself'"
-            @click="setAutoContinue(false)"
-        >
+        <Button size="small" :text="true" class="shrink-0" v-tooltip.top="'Stop continuing this chat by itself'" @click="setAutoContinue(false)">
             Turn off
-        </button>
+        </Button>
     </div>
 </template>

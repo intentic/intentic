@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FilterBar, Row, RowGroup, RowNote, ui } from "@intentic/ui";
+import { Button, FilterBar, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { commands } from "../../composables/commands/useCommands";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../composables/commands/keybindings";
@@ -110,13 +110,7 @@ onUnmounted(stopRecording);
 <template>
     <div class="flex flex-col gap-3">
         <div v-if="hasAnyOverride" class="flex justify-end">
-            <button
-                type="button"
-                class="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-content"
-                @click="resetKeymap()"
-            >
-                Reset all
-            </button>
+            <Button size="small" severity="secondary" class="shrink-0" @click="resetKeymap()"> Reset all </Button>
         </div>
 
         <FilterBar v-model="query" placeholder="Filter commands…" :count="rows.length" />

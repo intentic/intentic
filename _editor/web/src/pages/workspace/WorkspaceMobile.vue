@@ -12,6 +12,7 @@ import {
     SegmentedControl,
     useLoadingReveal,
     iconForEntry,
+    ui,
 } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -319,23 +320,13 @@ const onPick = (event: Event): void => {
                 class="bg-card"
             >
                 <template #lead>
-                    <button
-                        type="button"
-                        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
-                        aria-label="Back"
-                        @click="router.back()"
-                    >
+                    <button type="button" :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)" aria-label="Back" @click="router.back()">
                         <Icon name="arrow-left" class="text-lg" />
                     </button>
                 </template>
             </DiffToolbar>
             <div v-else class="flex h-12 shrink-0 items-center gap-1 border-b border-line bg-card px-1">
-                <button
-                    type="button"
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
-                    aria-label="Back"
-                    @click="router.back()"
-                >
+                <button type="button" :class="ui.iconButton(`h-11 w-11 rounded-lg active:bg-overlay`)" aria-label="Back" @click="router.back()">
                     <Icon name="arrow-left" class="text-lg" />
                 </button>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ fileName(openPath ?? "") }}</span>
@@ -379,8 +370,7 @@ const onPick = (event: Event): void => {
                 <WorkspaceScopeChip />
                 <button
                     type="button"
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
-                    :class="segment === 'history' ? 'bg-overlay text-content' : 'text-muted'"
+                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, segment === `history` ? `bg-overlay text-content` : ``)"
                     :aria-pressed="segment === 'history'"
                     aria-label="Restore points"
                     @click="segment = 'history'"
@@ -393,8 +383,9 @@ const onPick = (event: Event): void => {
                 <button
                     v-if="segment === 'files' && !contentMode"
                     type="button"
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors active:bg-overlay"
-                    :class="layout.showIgnored.value || layout.hideTests.value ? 'text-link' : 'text-muted'"
+                    :class="
+                        ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`, layout.showIgnored.value || layout.hideTests.value ? `text-link` : ``)
+                    "
                     aria-label="Filter what the explorer lists"
                     @click="filterSheet = true"
                 >
@@ -404,7 +395,7 @@ const onPick = (event: Event): void => {
                      no longer carries a header row (and its own refresh) of its own. -->
                 <button
                     type="button"
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
+                    :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
                     @click="segment === 'changes' ? changes.refresh() : refetch()"
                     aria-label="Refresh"
                     :disabled="segment === 'changes' ? changes.actionBusy.value || changes.loading.value : busy || isLoading"
@@ -488,8 +479,8 @@ const onPick = (event: Event): void => {
                     <span class="flex-1"></span>
                     <button
                         type="button"
-                        class="flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-2xs font-medium text-muted transition-colors active:bg-overlay"
-                        :class="{ 'bg-primary-600/15 text-link': search.includeIgnored.value }"
+                        class="ui-chip h-8 shrink-0 gap-1 px-2 font-medium"
+                        :class="search.includeIgnored.value ? `ui-chip-on` : ``"
                         :aria-pressed="search.includeIgnored.value"
                         @click="search.includeIgnored.value = !search.includeIgnored.value"
                     >
@@ -502,7 +493,7 @@ const onPick = (event: Event): void => {
                 <div v-if="dir !== '' && !contentMode" class="flex h-11 shrink-0 items-center gap-1 border-b border-line px-1">
                     <button
                         type="button"
-                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors active:bg-overlay"
+                        :class="ui.iconButton(`h-10 w-10 rounded-lg active:bg-overlay`)"
                         aria-label="Up one directory"
                         @click="openDir(parentDir(dir))"
                     >

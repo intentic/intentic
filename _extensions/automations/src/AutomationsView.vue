@@ -430,7 +430,7 @@ const toggleDetail = (id: string): void => {
                         v-for="recipe in availableChores"
                         :key="recipe.id"
                         type="button"
-                        :class="ui.addTile(`bg-card px-2.5 py-1.5 disabled:cursor-default disabled:opacity-50`)"
+                        :class="ui.addTile(`bg-card px-2.5 py-1.5`)"
                         :disabled="enabling !== undefined"
                         v-tooltip.top="recipe.description"
                         v-action="() => enableChore(recipe)"

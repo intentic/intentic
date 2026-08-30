@@ -39,14 +39,10 @@ const title = useScopeTitle();
                 <Icon name="check-square" />
                 See its changes
             </Button>
-            <button
-                type="button"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-                @click="workspaceAgent = undefined"
-            >
+            <Button severity="secondary" @click="workspaceAgent = undefined">
                 <Icon name="folder" class="text-[0.7rem]" />
                 Back to the shared workspace
-            </button>
+            </Button>
         </div>
     </div>
 </template>

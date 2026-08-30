@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow } from "@intentic-app/api-contract";
-import { formatBytes, vAction } from "@intentic/ui";
+import { Button, formatBytes, vAction } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../composables/workspace/fileWindow";
@@ -160,36 +160,42 @@ watch(
             <span class="shrink-0">Read-only: {{ position }}</span>
             <span v-if="error" class="min-w-0 flex-1 truncate text-danger">{{ error }}</span>
             <span v-else class="flex-1"></span>
-            <button
+            <Button
                 v-if="!atEnd"
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="shrink-0"
                 :disabled="busy"
-                v-action="loadMore"
+                @click="loadMore"
                 v-tooltip.bottom="`Read the next ${formatBytes(Math.min(remaining, FILE_WINDOW_BYTES))}`"
             >
                 <Icon :name="busy ? `spinner` : `download`" :spin="busy" class="text-[0.7rem]" /> Load more
-            </button>
-            <button
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-overlay hover:text-content"
+            </Button>
+            <Button
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="shrink-0"
                 :class="following ? `text-primary-500` : ``"
-                v-action="toggleFollow"
+                @click="toggleFollow"
                 v-tooltip.bottom="'Jump to the end and append new lines as they are written'"
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> Follow
-            </button>
+            </Button>
             <!-- Only when a download would actually work: /workspace/raw serves to RAW_MAX_BYTES and 413s above
                  it, and a button whose whole job is to fail is worse than no button: reading is covered here. -->
-            <button
+            <Button
                 v-if="size <= RAW_MAX_BYTES"
-                type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-overlay hover:text-content"
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="shrink-0"
                 @click="emit(`download`)"
                 v-tooltip.bottom="'Download the whole file'"
             >
                 <Icon name="download" class="text-[0.7rem]" /> Download
-            </button>
+            </Button>
         </div>
         <div class="min-h-0 flex-1">
             <CodeView ref="view" :path="path" :code="seed" :lang="lang" />

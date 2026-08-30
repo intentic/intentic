@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, timeAgo } from "@intentic/ui";
+import { Icon, timeAgo, ui } from "@intentic/ui";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { laneOfRun, runningTitles, spentOn } from "../composables/agents/useWorkflowRuns";
@@ -131,7 +131,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 aria-label="Stop this workflow run"
                 v-tooltip.top="`Stop the run: its steps are cut off where they are and nothing new starts.`"
                 :disabled="stopping"
-                class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle hover:bg-danger/10 hover:text-danger`)"
                 @click.stop="emit(`stop`)"
             >
                 <Icon :name="stopping ? `spinner` : `stop`" :spin="stopping" class="text-2xs" />

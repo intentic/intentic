@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, timeAgo } from "@intentic/ui";
+import { Button, Icon, timeAgo } from "@intentic/ui";
 import type { AutomationApproval } from "@intentic/sandbox-contract";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import OriginMark from "../components/OriginMark.vue";
@@ -65,24 +65,26 @@ const autoRunLabel = computed(() => {
                  under a thumb. `touch-target` grows the tappable box to 44px on a coarse pointer without
                  touching the pill, so the card keeps its density on a desk. `gap-2` on the row is what keeps
                  the two overlays from meeting in the middle: a mis-tap here runs an automation. -->
-            <button
-                type="button"
+            <Button
+                size="small"
+                severity="danger"
+                :text="true"
+                class="shrink-0"
                 aria-label="Reject this held wake"
                 v-tooltip.top="`Drop it: the wake never runs, the automation stays as it is`"
-                class="touch-target shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold text-subtle transition-colors hover:bg-danger/10 hover:text-danger"
                 @click.stop="emit(`reject`)"
             >
                 Reject
-            </button>
-            <button
-                type="button"
+            </Button>
+            <Button
+                size="small"
+                class="shrink-0"
                 aria-label="Approve this held wake"
                 v-tooltip.top="`Run it now, with exactly what fired: the session lands on this board`"
-                class="touch-target shrink-0 rounded bg-primary-600/15 px-1.5 py-0.5 text-2xs font-semibold text-link transition-colors hover:bg-primary-600/25"
                 @click.stop="emit(`approve`)"
             >
                 Approve
-            </button>
+            </Button>
         </div>
     </div>
 </template>

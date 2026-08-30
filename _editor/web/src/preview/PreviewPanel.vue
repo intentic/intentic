@@ -11,6 +11,7 @@ import {
     SegmentedControl,
     StatusBadge,
     type StatusVariant,
+    ui,
 } from "@intentic/ui";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
@@ -297,12 +298,7 @@ const startHint = computed<string | undefined>(() => {
                     @keydown.esc.prevent="addressOpen = false"
                 />
                 <Button label="Go" size="small" :disabled="addressDraft.trim().length === 0" @click="commitAddress" />
-                <button
-                    type="button"
-                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                    aria-label="Cancel"
-                    @click="addressOpen = false"
-                >
+                <button type="button" :class="ui.iconButton(`h-8 w-8`)" aria-label="Cancel" @click="addressOpen = false">
                     <Icon name="times" />
                 </button>
             </template>
@@ -327,7 +323,7 @@ const startHint = computed<string | undefined>(() => {
                      that is exactly the state where a typed address is the only preview there can be. -->
                 <button
                     type="button"
-                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton(`h-8 w-8`)"
                     aria-label="Preview another address"
                     v-tooltip.bottom="'Preview another address'"
                     @click="openAddress"
@@ -367,7 +363,7 @@ const startHint = computed<string | undefined>(() => {
                 <button
                     v-if="previewSrc"
                     type="button"
-                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton(`h-8 w-8`)"
                     aria-label="Reload the preview"
                     v-tooltip.bottom="'Reload'"
                     @click="reload"
@@ -377,7 +373,7 @@ const startHint = computed<string | undefined>(() => {
                 <button
                     v-if="target.session"
                     type="button"
-                    class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton(`h-8 w-8`)"
                     aria-label="Open this dev server's terminal"
                     v-tooltip.bottom="'Terminal'"
                     @click="terminal.openFocused(target.session!)"
@@ -395,7 +391,7 @@ const startHint = computed<string | undefined>(() => {
                         :href="target.url"
                         target="_blank"
                         rel="noopener"
-                        class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                        :class="ui.iconButton(`h-8 w-8`)"
                         :aria-label="`Open ${target.label} in a new tab`"
                         v-tooltip.bottom="'Open in new tab'"
                     >
@@ -409,7 +405,7 @@ const startHint = computed<string | undefined>(() => {
                  promise entirely: the press opens a separate OS window, it does not grow this one. -->
             <button
                 type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                :class="ui.iconButton(`h-8 w-8`)"
                 :aria-label="floats ? `Dock the preview back` : `Move the preview into its own window`"
                 v-tooltip.bottom="floats ? 'Dock back' : 'Move into new window'"
                 @click="togglePreviewFloating()"

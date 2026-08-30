@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ui } from "@intentic/ui";
 import { namesThinking } from "@intentic/sandbox-contract";
 import type { DescribedPin } from "../../../composables/chat/modelPins";
 import ProviderLogo from "../../../chat/ProviderLogo.vue";
@@ -58,7 +59,7 @@ const emit = defineEmits<{ promote: [number]; remove: [number] }>();
             </span>
             <button
                 type="button"
-                class="shrink-0 rounded p-1 text-subtle transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-30"
+                :class="ui.iconButton(`h-auto w-auto shrink-0 rounded p-1 text-subtle`)"
                 :disabled="entry.index === 0"
                 @click="emit(`promote`, entry.index)"
                 v-tooltip.top="'Try this one earlier'"

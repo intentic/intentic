@@ -8,8 +8,13 @@
      reader nothing they can act on and has spent the row's most valuable line doing it.
 
      Shared by both groups (the user's own services and the sandbox's internals) because a row that means the
-     same thing should look the same; `muted` only drops the emphasis of the action button, since nobody is
-     hunting for a Preview button next to the sandbox's own plumbing.
+     same thing should look the same — and it now means that literally. There used to be a `muted` prop whose
+     entire job was to swap this row's action from the accent tier to the neutral one for the internals group,
+     which made "Preview" the only word in the app rendered as two different buttons on one screen: a pale
+     committing plaque three rows above a dark secondary one, same label, same verb, same consequence. The
+     de-emphasis that prop existed for is already stated where it belongs, on the group (`opacity-70` in
+     PortsView), so the row's own controls do not have to say it a second time in a vocabulary that is supposed
+     to mean rank.
 
      THE EVIDENCE OPENS FROM A CHEVRON ON THE LEFT, like every other expandable row in the app. It used to open
      from an `(i)` in the TRAILING cluster that turned into a `chevron-up`, and that was wrong three times over:
@@ -25,7 +30,7 @@ import type { PortSummary } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 import SharePreview from "./SharePreview.vue";
 
-const { entry, muted = false, busy = false } = defineProps<{ entry: PortSummary; muted?: boolean; busy?: boolean }>();
+const { entry, busy = false } = defineProps<{ entry: PortSummary; busy?: boolean }>();
 const emit = defineEmits<{ preview: []; stop: []; terminal: [session: string] }>();
 
 /* WHOSE IS IT, as a glyph: the fastest form of the answer, and the one that survives a reader skimming the
@@ -120,14 +125,10 @@ const details = computed<string[][]>(() => [
             <Button v-if="entry.forwarded" label="Stop" size="small" severity="secondary" :disabled="busy" @click="emit(`stop`)">
                 <template #icon><Icon name="stop" /></template>
             </Button>
-            <Button
-                v-else-if="entry.forwardable"
-                label="Preview"
-                size="small"
-                v-bind="muted ? { severity: `secondary` } : {}"
-                :disabled="busy"
-                @click="emit(`preview`)"
-            >
+            <!-- SECONDARY, LIKE THE STOP BESIDE IT AND LIKE EVERY OTHER ROW ACTION IN THE APP. The accent tier
+                 is the action a SCREEN exists to collect — one or two per page — and this is one verb on one
+                 line of a list that can run to twenty. -->
+            <Button v-else-if="entry.forwardable" label="Preview" size="small" severity="secondary" :disabled="busy" @click="emit(`preview`)">
                 <template #icon><Icon name="play" /></template>
             </Button>
             <span v-else class="shrink-0 text-2xs text-subtle" v-tooltip.bottom="'Bound to a loopback alias the preview proxy cannot reach.'">

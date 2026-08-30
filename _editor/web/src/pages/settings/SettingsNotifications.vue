@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Row, RowGroup } from "@intentic/ui";
+import { Button, Row, RowGroup } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { usePushNotifications } from "../../composables/usePushNotifications";
@@ -57,20 +57,9 @@ const status = computed(() => {
                 <Row icon="bolt" title="Notify this device" :description="status">
                     <template #control><ToggleSwitch :model-value="enabled" :disabled="!canToggle" @update:model-value="toggle" /></template>
                 </Row>
-                <Row
-                    v-if="enabled"
-                    icon="send"
-                    title="Send a test"
-                >
+                <Row v-if="enabled" icon="send" title="Send a test">
                     <template #control>
-                        <button
-                            type="button"
-                            class="rounded-md border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                            :disabled="busy"
-                            @click="sendTest"
-                        >
-                            Send test
-                        </button>
+                        <Button size="small" severity="secondary" :disabled="busy" @click="sendTest"> Send test </Button>
                     </template>
                 </Row>
             </RowGroup>

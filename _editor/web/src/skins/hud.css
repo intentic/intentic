@@ -416,16 +416,25 @@
 
     /* Buttons keep their tinted-fill recipe — that is the app's own language and the skin has no quarrel with
      * it. What changes is what the tint sits ON: a faint vertical gradient so the fill has a direction, a lit
-     * border, and a glow that arrives under the pointer. */
+     * border, and a glow that arrives under the pointer.
+     *
+     * `text` and `link` are excluded from all of it, the same exclusion Sanctum's plate carries and for the same
+     * reason: those two tiers are defined as having no chrome, so a wash, a lit rule and a halo on hover are
+     * three properties the app has said they must not have. Left in, a Cancel beside a Save was a second lit box
+     * — which is how a screen ends up with border weights nobody chose. `:where()` so the exclusion is free and
+     * the tier rules below still outrank this. */
     [data-skin="hud"] .p-button {
-        background-image: linear-gradient(180deg, color-mix(in oklab, var(--color-primary-100) 8%, transparent), transparent 70%);
         transition:
             box-shadow 0.16s ease-out,
             background-color 0.16s ease-out,
             border-color 0.16s ease-out;
     }
 
-    [data-skin="hud"] .p-button:enabled:hover {
+    [data-skin="hud"] .p-button:where(:not(.p-button-text, .p-button-link)) {
+        background-image: linear-gradient(180deg, color-mix(in oklab, var(--color-primary-100) 8%, transparent), transparent 70%);
+    }
+
+    [data-skin="hud"] .p-button:where(:not(.p-button-text, .p-button-link)):enabled:hover {
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--hud-glow)) 55%, transparent);
         box-shadow:
             inset 0 0 12px color-mix(in oklab, var(--ui-button-tone, var(--hud-glow)) 18%, transparent),

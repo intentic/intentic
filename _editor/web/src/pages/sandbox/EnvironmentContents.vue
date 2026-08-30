@@ -326,12 +326,8 @@ const countLabel = (group: ContentsGroup): string => `${group.items.length} ${gr
                             :key="item.id"
                             type="button"
                             :disabled="item.purpose === undefined"
-                            class="inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-2xs transition-colors enabled:cursor-pointer"
-                            :class="
-                                picked === item.id
-                                    ? `ui-row-select-on text-content`
-                                    : `bg-content/5 text-muted enabled:hover:bg-content/10 enabled:hover:text-content`
-                            "
+                            class="ui-chip py-1 pl-1 pr-2.5"
+                            :class="picked === item.id ? `ui-chip-on` : ``"
                             @click="pick(item.id)"
                         >
                             <BrandMark :size="18" :name="item.name" :logo="environmentVisual(item).logo" :icon="environmentVisual(item).icon" />

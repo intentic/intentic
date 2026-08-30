@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { ImageViewState } from "./imageView.js";
+import { ui } from "../lib/ui.js";
 
 /* THE ONE SURFACE THAT SHOWS A PICTURE: the file viewer's images, the SVG preview and both sides of a binary
  * diff all render through here, so zoom, pan and the transparency checkerboard behave identically wherever an
@@ -360,7 +361,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 <span v-if="showDimensions" class="px-1.5 tabular-nums text-subtle">{{ natural.w }} × {{ natural.h }}</span>
                 <button
                     type="button"
-                    class="flex h-5 w-5 items-center justify-center rounded text-sm leading-none transition-colors hover:bg-overlay hover:text-content disabled:opacity-30 disabled:hover:bg-transparent"
+                    :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(-1) === undefined"
                     v-tooltip.top="'Zoom out (−)'"
                     aria-label="Zoom out"
@@ -377,7 +378,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 </span>
                 <button
                     type="button"
-                    class="flex h-5 w-5 items-center justify-center rounded text-sm leading-none transition-colors hover:bg-overlay hover:text-content disabled:opacity-30 disabled:hover:bg-transparent"
+                    :class="ui.iconButton(`h-5 w-5 rounded text-sm leading-none`)"
                     :disabled="nextStop(1) === undefined"
                     v-tooltip.top="'Zoom in (+)'"
                     aria-label="Zoom in"
@@ -389,7 +390,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 <span class="mx-0.5 h-3.5 w-px bg-line"></span>
                 <button
                     type="button"
-                    class="flex h-5 items-center rounded px-1.5 transition-colors hover:bg-overlay hover:text-content disabled:opacity-30 disabled:hover:bg-transparent"
+                    :class="ui.iconButton(`h-5 w-auto rounded px-1.5`)"
                     :disabled="fitted"
                     v-tooltip.top="'Fit to the pane (0)'"
                     @mousedown.prevent
@@ -399,7 +400,7 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
                 </button>
                 <button
                     type="button"
-                    class="flex h-5 items-center rounded px-1.5 tabular-nums transition-colors hover:bg-overlay hover:text-content disabled:opacity-30 disabled:hover:bg-transparent"
+                    :class="ui.iconButton(`h-5 w-auto rounded px-1.5 tabular-nums`)"
                     :disabled="atNatural"
                     v-tooltip.top="'Actual size (1)'"
                     @mousedown.prevent

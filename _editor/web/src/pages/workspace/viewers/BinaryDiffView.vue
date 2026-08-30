@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatBytes, ImageView, type ImageViewState, isRenderableImage, useDevice } from "@intentic/ui";
+import { Button, formatBytes, ImageView, type ImageViewState, isRenderableImage, useDevice, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { sandboxBlob } from "../../../composables/sandbox/sandboxClient";
@@ -233,7 +233,7 @@ const panes = computed(() =>
                     <button
                         v-if="pane.side.url"
                         type="button"
-                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
+                        :class="ui.iconButton(`h-5 w-5 rounded`)"
                         @click="download(pane.side, pane.label.toLowerCase())"
                         v-tooltip.bottom="`Download the ${pane.label.toLowerCase()} version`"
                         :aria-label="`Download the ${pane.label.toLowerCase()} version of ${filename}`"
@@ -262,15 +262,10 @@ const panes = computed(() =>
                     <div v-else class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                         <Icon name="box" class="text-3xl text-subtle" />
                         <p class="max-w-sm text-xs text-muted">Binary file: no preview for this type.</p>
-                        <button
-                            v-if="pane.side.url"
-                            type="button"
-                            class="inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
-                            @click="download(pane.side, pane.label.toLowerCase())"
-                        >
+                        <Button v-if="pane.side.url" severity="secondary" @click="download(pane.side, pane.label.toLowerCase())">
                             <Icon name="download" class="text-xs" />
                             Download
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

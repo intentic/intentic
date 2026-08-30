@@ -1,9 +1,15 @@
 /* HOW A HAND-STYLED CONTROL LOOKS WHILE THE WORK BEHIND IT IS STILL RUNNING — the raw-element half of the
  * press lock (lib/pressAction.ts sets these attributes, lib/pressLock.ts decides when).
  *
- * The design system's button dims through PrimeVue's own disabled opacity, so a `v-action` element borrows the
- * same token rather than picking a second number: a dimmed menu item and a dimmed button must be the same
- * amount of dimmed, or the app has two ideas of "not right now".
+ * IT IS A FADE, AND IT IS THE ONLY FADE LEFT. A disabled <Button> is no longer dimmed — it is repainted as a
+ * flat plate (see `--ui-button-off-*` in tokens.css), because 0.6 of a 10% tint is a 6% tint and the control
+ * disappears. This is the other case and it wants the opposite treatment: a press lock lasts a beat, and it
+ * lands on somebody else's element with somebody else's classes, so there is nothing here to repaint. Dimming
+ * is what you do when you cannot know what you are dimming.
+ *
+ * `--ui-press-dim` rather than `--p-disabled-opacity`, which is what it used to borrow: that tied "this row is
+ * busy" to "this button is unavailable", and the moment the second stopped being an opacity the first would
+ * have silently become `opacity: 1`, i.e. no lock at all.
  *
  * WHAT IS DELIBERATELY ABSENT IS A SPINNER. This is somebody else's element with somebody else's classes on
  * it, and a spinner needs either a positioning context it may not have or a box of its own that would shove
@@ -12,7 +18,7 @@
  * wait is long enough to be worth saying so. */
 @layer components {
     [data-press] {
-        opacity: var(--p-disabled-opacity, 0.6);
+        opacity: var(--ui-press-dim);
         /* Not `pointer-events: none`: that hands the click to whatever sits underneath, which on a dense row
            is another control. The press is already refused in JS; this only stops it looking pressable. */
         cursor: default;
@@ -32,7 +38,7 @@
 @keyframes ui-press-breathe {
     0%,
     100% {
-        opacity: var(--p-disabled-opacity, 0.6);
+        opacity: var(--ui-press-dim);
     }
     50% {
         opacity: 1;

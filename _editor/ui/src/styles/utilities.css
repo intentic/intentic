@@ -76,13 +76,20 @@
      * is the case that caught it: hung in the transcript's right margin (`absolute` + `bottom-0`), it came out
      * relatively positioned, which drops an element back into the flow — so the mark left the margin and
      * appeared UNDER the answer, in a zero-height strip it then overflowed. At zero specificity any position
-     * utility on the element wins, and a control with none still gets its containing block. */
-    :where(.touch-target) {
+     * utility on the element wins, and a control with none still gets its containing block.
+     *
+     * `.ui-chip` IS NAMED HERE RATHER THAN ASKED TO WEAR THE CLASS, because a chip is ~24px of ink by
+     * definition and every one of them therefore needs this — which makes "remember to add touch-target" a
+     * hundred per cent failure waiting on somebody's memory. The alternative was a second copy of the overlay
+     * inside `.ui-chip`, i.e. two implementations of one idea, which is the thing this file exists to stop.
+     * Anything else that is unconditionally thumb-sized belongs on these two selectors too. */
+    :where(.touch-target, .ui-chip) {
         position: relative;
     }
 
     @media (pointer: coarse) {
-        .touch-target::after {
+        .touch-target::after,
+        .ui-chip::after {
             content: "";
             position: absolute;
             top: 50%;
@@ -172,6 +179,89 @@
     .ui-row-select-horizontal.ui-row-select-on,
     .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
         box-shadow: none;
+    }
+
+    /* ── THE CHIP — A PILL THAT CARRIES A STATE, WHICH IS WHY IT IS NOT A BUTTON ──────────────────────────
+     * A filter you can switch on, a lane you can narrow to, an origin you can isolate, a handoff mode. The
+     * shape says "one of a set" and the fill says "this one is on"; a <Button> says neither, because a button's
+     * tiers are RANKS and a chip has no rank — six of them side by side are equals.
+     *
+     * IT IS HERE BECAUSE IT WAS EVERYWHERE ELSE. Twenty-one of these were hand-written across the chat strip,
+     * the review panel, the usage pages, the workflow designer and the browser board, in six geometries
+     * (`px-1.5 py-px` through `px-3 py-1.5`), and the ON state was spelled four ways — `bg-primary-600/15
+     * text-link`, `bg-link/10 border-link`, `bg-primary-600/25 ring-1`, and a bare `text-link`. The one that
+     * mattered is that some of them said "on" with a FILL and some with a BORDER, so a screen carrying both
+     * had two chips lit in two different languages.
+     *
+     * SAME ON-TINT AS `ui-row-select`, deliberately: a chosen chip and a chosen row are the same claim about
+     * the same accent, and a reader who has learned one has learned the other. The border is stated at rest
+     * (transparent) rather than added when lit, so lighting one cannot shift the row it sits in by two pixels.
+     *
+     * GEOMETRY IS THE CALLER'S TO NARROW, not to invent: utilities sit in a later layer, so `class="ui-chip
+     * px-2 py-px"` still works for the tight inline band inside a notice. What a caller cannot do by accident
+     * is disagree about the radius, the tone, the hover or what ON looks like. */
+    .ui-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: calc(var(--spacing) * 1.5);
+        border: 1px solid transparent;
+        border-radius: 9999px;
+        padding-block: var(--spacing);
+        padding-inline: calc(var(--spacing) * 2.5);
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        white-space: nowrap;
+        color: var(--color-muted);
+        background: color-mix(in srgb, var(--color-content) 6%, transparent);
+        cursor: pointer;
+        transition:
+            background-color 0.12s,
+            color 0.12s,
+            border-color 0.12s;
+    }
+
+    .ui-chip:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-content) 11%, transparent);
+        color: var(--color-content);
+    }
+
+    .ui-chip:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 1px var(--color-primary-500);
+    }
+
+    /* After the hover, for the same reason the row's on-tint is: a chip that forgets it is lit the moment you
+       point at it is the chip you are most likely to be pointing at. */
+    .ui-chip-on,
+    .ui-chip-on:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+        border-color: color-mix(in srgb, var(--color-primary-500) 30%, transparent);
+        color: var(--color-link);
+    }
+
+    /* One disabled answer for every pressable thing in the kit — the button's, read from the same three
+       variables (tokens.css), so a dimmed chip and a dimmed button cannot drift apart. */
+    .ui-chip:disabled {
+        background: var(--ui-button-off-fill);
+        border-color: var(--ui-button-off-line);
+        color: var(--ui-button-off-content);
+        cursor: default;
+    }
+
+    /* ── "NOT RIGHT NOW", FOR THE CONTROLS THE KIT DOES NOT PAINT ─────────────────────────────────────────
+     * A <Button> and a chip go to a flat plate, because the design system knows exactly what they are made of.
+     * A list row, a card tile, a menu line and a form field are not that: a row's ground belongs to the panel
+     * it sits in, and a tile's fill is already carrying its own meaning. There is nothing to repaint, so the
+     * honest instrument is the one those call sites reached for on their own — dim the whole object.
+     *
+     * The point of the class is not the fade, it is that there is ONE of it. See `--ui-off-dim`.
+     *
+     * `:disabled` AND `aria-disabled`, because half of these are rows rendered as <div>s or <a>s, where the
+     * DOM attribute does not exist and the ARIA one is the only truthful signal. */
+    .ui-off:disabled,
+    .ui-off[aria-disabled="true"] {
+        opacity: var(--ui-off-dim);
+        cursor: default;
     }
 }
 

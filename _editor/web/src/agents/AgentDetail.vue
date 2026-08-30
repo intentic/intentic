@@ -316,7 +316,7 @@ const confirmDiscard = async (): Promise<void> => {
                 <button
                     ref="menuAnchor"
                     type="button"
-                    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                    :class="ui.iconButton(`h-7 w-7`)"
                     :aria-expanded="menuOpen"
                     @click="menuOpen = !menuOpen"
                     v-tooltip.bottom="'Session actions'"

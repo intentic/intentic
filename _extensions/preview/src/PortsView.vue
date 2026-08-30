@@ -138,7 +138,6 @@ const openTerminal = (session: string): void => host().terminal.open(session);
                 v-for="entry in systemPorts"
                 :key="entry.port"
                 :entry="entry"
-                muted
                 :busy="busy !== undefined"
                 @preview="openPreview(entry.port)"
                 @stop="stop(entry.port)"

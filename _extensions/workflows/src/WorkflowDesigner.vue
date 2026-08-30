@@ -226,12 +226,8 @@ const commit = async (): Promise<void> => {
                                 ? `A new session knows only what the step before it declared: the only honest way to review work. Carrying on keeps the agent, its thread and its working tree.`
                                 : `Only a step with exactly one predecessor can carry a session on.`
                         "
-                        class="cursor-pointer rounded-full border px-2 py-0.5 text-2xs disabled:cursor-default disabled:opacity-40"
-                        :class="
-                            pickedStep.handoff === `continue`
-                                ? `border-link bg-link/10 text-link`
-                                : `border-line text-subtle hover:border-line-strong`
-                        "
+                        class="ui-chip px-2 py-0.5"
+                        :class="pickedStep.handoff === `continue` ? `ui-chip-on` : ``"
                         :disabled="pickedStep.needs.length !== 1"
                         @click="flipHandoff()"
                     >

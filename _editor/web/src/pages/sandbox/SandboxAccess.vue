@@ -379,15 +379,7 @@ const revoke = async (target: string): Promise<void> => {
                             :disabled="busy"
                             @click="resend(member.email)"
                         />
-                        <Button
-                            size="small"
-                            severity="danger"
-                            :text="true"
-                            :rounded="true"
-                            :disabled="busy"
-                            aria-label="Revoke access"
-                            @click="revoke(member.email)"
-                        >
+                        <Button size="small" severity="danger" :text="true" :disabled="busy" aria-label="Revoke access" @click="revoke(member.email)">
                             <template #icon><Icon name="times" /></template>
                         </Button>
                     </template>

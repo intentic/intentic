@@ -99,7 +99,7 @@ const logoFailed = reactive(new Set<string>());
                     v-for="dep in resource.dependsOn"
                     :key="dep"
                     type="button"
-                    class="rounded-full bg-subtle/10 px-2 py-0.5 font-mono text-2xs text-content transition-colors hover:bg-subtle/20"
+                    class="ui-chip px-2 py-0.5 font-mono text-content"
                     @click="selectedId = dep"
                 >
                     {{ dep }}
@@ -113,7 +113,7 @@ const logoFailed = reactive(new Set<string>());
                     v-for="dep in requiredBy"
                     :key="dep"
                     type="button"
-                    class="rounded-full bg-subtle/10 px-2 py-0.5 font-mono text-2xs text-content transition-colors hover:bg-subtle/20"
+                    class="ui-chip px-2 py-0.5 font-mono text-content"
                     @click="selectedId = dep"
                 >
                     {{ dep }}

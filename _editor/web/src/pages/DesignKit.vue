@@ -166,6 +166,24 @@ const filter = ref(``);
 const prose = ref(`A paragraph typed into the writing field.`);
 const source = ref(`export const greet = (who: string): string => \`hello \${who}\`;\n`);
 
+/* THE BUTTON'S WHOLE VOCABULARY, as data, so the gallery below is a MATRIX rather than a row of examples that
+ * happens to be missing the state somebody is about to get wrong. The order is the ranking: read it top to
+ * bottom and the page tells you which button a screen should collect its press on.
+ *
+ * The first four are RANKS, at most one loud per page. The last three are TONES — what kind of thing the press
+ * does — and any of them can wear any rank, which is why they are listed after rather than beside. `warn` is
+ * spelled `warn` and not `warning`: PrimeVue 4 renamed it, and the old spelling silently paints in the brand
+ * colour instead of amber. */
+const BUTTON_TIERS = [
+    { name: `Loud`, spelling: `class="ui-button-loud"`, props: { class: `ui-button-loud` } },
+    { name: `Accent`, spelling: `<Button>`, props: {} },
+    { name: `Boring`, spelling: `severity="secondary"`, props: { severity: `secondary` } },
+    { name: `Quiet`, spelling: `:text="true"`, props: { severity: `secondary`, text: true } },
+    { name: `Danger`, spelling: `severity="danger"`, props: { severity: `danger` } },
+    { name: `Warn`, spelling: `severity="warn"`, props: { severity: `warn` } },
+    { name: `Success`, spelling: `severity="success"`, props: { severity: `success` } },
+];
+
 const COUNTS = [
     { label: `running`, value: 3, variant: `success` as StatusVariant },
     { label: `stopped`, value: 1, variant: `neutral` as StatusVariant },
@@ -533,17 +551,60 @@ const pickedTier = ref(`collaborator`);
             <!-- ── CONTROLS ──────────────────────────────────────────────────────────────────────────── -->
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Controls</h2>
+
+                <!-- ── THE BUTTON, WHOLE ────────────────────────────────────────────────────────────────
+                     Every tier in every state, in one grid, because that is the only way the differences
+                     are checkable. The five-button row this replaces showed the tiers at REST and nothing
+                     else, which is exactly the gap the audit fell into: a screen carried a disabled accent
+                     button that read as a dead box, and a `text` button that had grown a border under one
+                     skin, for as long as nobody put them side by side.
+                     Read it DOWN for rank (which button is louder) and ACROSS for state. If two cells in a
+                     column look alike, the vocabulary has lost a distinction. -->
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[34rem] border-separate border-spacing-x-3 border-spacing-y-2 text-left">
+                        <thead>
+                            <tr class="text-2xs uppercase tracking-wide text-subtle">
+                                <th class="font-medium">Tier</th>
+                                <th class="font-medium">Default (page, dialog)</th>
+                                <th class="font-medium">Small (rows, toolbars)</th>
+                                <th class="font-medium">Disabled</th>
+                                <th class="font-medium">Working</th>
+                            </tr>
+                        </thead>
+                        <tbody class="align-middle">
+                            <tr v-for="tier in BUTTON_TIERS" :key="tier.name">
+                                <td class="whitespace-nowrap text-2xs text-muted">
+                                    <span class="font-medium text-content">{{ tier.name }}</span>
+                                    <span class="ml-1 font-mono text-3xs text-subtle">{{ tier.spelling }}</span>
+                                </td>
+                                <td><Button v-bind="tier.props" label="Land now" /></td>
+                                <td><Button v-bind="tier.props" label="Land now" size="small" /></td>
+                                <td><Button v-bind="tier.props" label="Land now" size="small" :disabled="true" /></td>
+                                <td><Button v-bind="tier.props" label="Land now" size="small" :loading="true" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="max-w-read text-2xs text-subtle">
+                    Disabled is a flat plate, not a fade — a 0.6 fade of a 10% tint is a 6% tint, and the control disappears. Working keeps the tier
+                    it had: a button that repaints itself as unavailable the instant it is pressed is answering the wrong question.
+                </p>
+
+                <!-- ── AND THE FOUR CONTROLS THAT ARE NOT IT ────────────────────────────────────────────
+                     Each is here beside the button on purpose: the reason a hand-styled `<button>` gets
+                     written is that somebody could not see what the alternative was. -->
+                <div class="flex flex-wrap items-center gap-4">
+                    <button type="button" :class="ui.iconButton()"><Icon name="cog" class="text-xs" /></button>
+                    <button type="button" :class="ui.linkButton()">ui.linkButton — will navigate</button>
+                    <button type="button" :class="ui.textAction()"><Icon name="eye" />ui.textAction — acts in place</button>
+                    <button type="button" class="ui-chip"><Icon name="filter" />ui-chip</button>
+                    <button type="button" class="ui-chip ui-chip-on"><Icon name="filter" />ui-chip-on</button>
+                    <button type="button" class="ui-chip" disabled><Icon name="filter" />disabled</button>
+                    <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
+                </div>
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button label="Primary" />
-                    <Button label="Secondary" severity="secondary" />
-                    <Button label="Danger" severity="danger" />
-                    <Button label="Small" size="small" />
-                    <Button label="Text" :text="true" severity="secondary" />
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />
                     <PageAction label="Quiet" icon="cog" quiet />
-                    <button type="button" :class="ui.linkButton()">ui.linkButton</button>
-                    <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
-                    <button type="button" :class="ui.iconButton()"><Icon name="cog" class="text-xs" /></button>
                 </div>
                 <div class="grid max-w-read-lg gap-3 md:grid-cols-2">
                     <label class="ui-field">

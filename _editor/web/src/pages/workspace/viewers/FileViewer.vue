@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic-app/api-contract";
-import { CopyButton, useDevice } from "@intentic/ui";
+import { Button, CopyButton, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { sandboxBlob, SandboxHttpError } from "../../../composables/sandbox/sandboxClient";
@@ -431,13 +431,13 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="canHideComments"
                 type="button"
-                class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'bg-primary-600/15 text-link': hideFileComments }"
+                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium"
+                :class="hideFileComments ? `ui-chip-on` : ``"
                 :aria-pressed="hideFileComments"
                 @click="toggleHideFileComments()"
                 v-tooltip.bottom="hideFileComments ? 'Comments hidden, click to show them' : 'Hide comments, read the code alone'"
             >
-                <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-[0.7rem]" />
+                <Icon :name="hideFileComments ? 'eye-slash' : 'eye'" class="text-2xs" />
                 <span class="max-md:hidden">Comments</span>
             </button>
             <!-- The chip in the tab row says the view is showing an agent's copy; this file is one that copy
@@ -466,33 +466,39 @@ const onEditorSave = (value: string): void =>
                     <Icon name="circle-fill" class="text-[0.4rem]" />
                 </span>
                 <template v-if="editingText">
-                    <button
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:cursor-not-allowed disabled:opacity-40"
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        class="shrink-0"
                         :disabled="!dirtyThis"
                         @click="saveNow()"
                         v-tooltip.bottom="'Save (Ctrl+S)'"
                     >
                         <Icon name="save" class="text-[0.7rem]" /> Save
-                    </button>
-                    <button
-                        type="button"
-                        class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    </Button>
+                    <Button
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        class="shrink-0"
                         @click="setEditMode(false)"
                         v-tooltip.bottom="'Back to preview (keeps unsaved edits)'"
                     >
                         <Icon name="eye" class="text-[0.7rem]" /> Preview
-                    </button>
+                    </Button>
                 </template>
-                <button
+                <Button
                     v-else
-                    type="button"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                    size="small"
+                    severity="secondary"
+                    :text="true"
+                    class="shrink-0"
                     @click="setEditMode(true)"
                     v-tooltip.bottom="'Edit all files'"
                 >
                     <Icon name="pencil" class="text-[0.7rem]" /> Edit
-                </button>
+                </Button>
             </template>
         </FileBreadcrumb>
 
@@ -500,13 +506,9 @@ const onEditorSave = (value: string): void =>
         <div v-if="staleOnDisk" class="flex shrink-0 items-center gap-2 border-b border-warning/40 bg-warning/10 px-3 py-1.5 text-2xs text-warning">
             <Icon name="exclamation-triangle" class="text-[0.7rem]" />
             <span class="flex-1">This file changed on disk. Your unsaved edits are preserved.</span>
-            <button
-                type="button"
-                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-warning transition-colors hover:bg-warning/20"
-                @click="reloadFromDisk"
-            >
+            <Button size="small" severity="warn" :text="true" @click="reloadFromDisk">
                 <Icon name="refresh" class="text-[0.7rem]" /> Reload from disk
-            </button>
+            </Button>
         </div>
 
         <div class="relative min-h-0 flex-1">

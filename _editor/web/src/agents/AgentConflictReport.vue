@@ -134,14 +134,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
             <span class="flex-1"></span>
             <!-- Desktop already has the conversation on screen in the docked chat; only on mobile is it a mode
                  this view has to be switched into. -->
-            <button
-                v-if="mobile"
-                type="button"
-                class="whitespace-nowrap rounded px-1.5 py-0.5 text-2xs font-medium text-link transition-colors hover:bg-overlay"
-                @click="emit('chat')"
-            >
-                Watch
-            </button>
+            <Button v-if="mobile" size="small" :text="true" class="whitespace-nowrap" @click="emit('chat')"> Watch </Button>
             <Button v-if="streaming" size="small" severity="secondary" label="Stop" :class="INLINE" @click="emit('stop')" />
             <span v-if="streaming" class="text-2xs text-subtle">The conflict stays exactly as it is.</span>
         </div>

@@ -83,7 +83,7 @@ const commit = (value: string): void => {
     <button
         v-else
         type="button"
-        class="flex cursor-pointer items-center gap-1.5 transition-colors hover:text-content"
+        :class="ui.textAction()"
         v-tooltip.top="at === undefined ? `Posts as soon as the publisher picks it up, click to pick a date` : formatTimestamp(at)"
         @click="editing = true"
     >

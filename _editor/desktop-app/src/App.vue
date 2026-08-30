@@ -980,14 +980,10 @@ onUnmounted(() => {
                      on a window-filling screen it reads as "close Intentic", which is the one thing it does
                      not do: it steps back to the workspace and nothing else, and the install carries on,
                      being a process on this machine rather than something this window is holding up. -->
-                    <button
-                        type="button"
-                        class="-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-2xs text-subtle hover:bg-canvas hover:text-content"
-                        v-action="dismissSetup"
-                    >
+                    <Button size="small" severity="secondary" :text="true" class="-my-1 shrink-0" @click="dismissSetup">
                         <Icon name="arrow-up-right" />
                         <span>Back to your workspace</span>
-                    </button>
+                    </Button>
                 </div>
                 <!-- The code this window came back to is older than the platform will accept. Said plainly, with
                  the one thing that fixes it, instead of letting the run fail at the claim with something that
@@ -1140,14 +1136,16 @@ onUnmounted(() => {
                         </h2>
                         <p v-if="syncSetup.dir" class="break-all font-mono text-2xs text-subtle">{{ syncSetup.dir }}</p>
                     </div>
-                    <button
+                    <Button
                         v-if="syncSetup.error"
-                        type="button"
-                        class="-my-1 shrink-0 rounded-md px-2 py-1 text-2xs text-subtle hover:bg-surface hover:text-content"
-                        v-action="() => (syncSetup = undefined)"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        class="-my-1 shrink-0"
+                        @click="() => (syncSetup = undefined)"
                     >
                         Dismiss
-                    </button>
+                    </Button>
                 </div>
                 <Notice v-if="syncSetup.error" tone="danger" class="text-2xs">{{ syncSetup.error }}</Notice>
                 <MachineRunLog

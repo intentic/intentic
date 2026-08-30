@@ -249,12 +249,7 @@ const shellCaveat = computed(
                             :key="item.id"
                             type="button"
                             :aria-pressed="granted(group.key, item.id)"
-                            :class="[
-                                `cursor-pointer rounded-lg border px-2.5 py-1 text-xs transition-colors`,
-                                granted(group.key, item.id)
-                                    ? `border-link bg-link/10 font-medium text-content`
-                                    : `border-line text-muted hover:border-line-strong hover:bg-overlay`,
-                            ]"
+                            :class="[`ui-chip px-2.5 py-1 text-xs`, granted(group.key, item.id) ? `ui-chip-on font-medium` : ``]"
                             @click="toggleGrant(group.key, item.id, group.kind)"
                         >
                             {{ item.label }}

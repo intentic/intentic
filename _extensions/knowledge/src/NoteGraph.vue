@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DagGraph, type DagEdge, type DagNode, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
+import { Button, DagGraph, type DagEdge, type DagNode, Icon, StatusBadge, type StatusVariant } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { toneOfType } from "./knowledgeNote";
 import { useGraph } from "./useKnowledge";
@@ -123,14 +123,15 @@ const openSelected = (): void => {
                 <div class="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2 text-2xs text-subtle">
                     <span v-if="graph?.omitted" class="rounded bg-surface/80 px-1.5 py-0.5">{{ graph.omitted }} more not shown</span>
                     <span v-else></span>
-                    <button
+                    <Button
                         v-if="selected && selected !== graph?.focus"
-                        type="button"
-                        class="pointer-events-auto rounded bg-surface/90 px-2 py-1 text-xs text-link hover:underline"
+                        size="small"
+                        severity="secondary"
+                        class="pointer-events-auto"
                         @click="openSelected"
                     >
                         Open this note
-                    </button>
+                    </Button>
                 </div>
             </template>
         </DagGraph>

@@ -164,7 +164,7 @@ const remove = (path: string): void => {
                 v-for="path in picked"
                 :key="path"
                 type="button"
-                class="group flex cursor-pointer items-center gap-1.5 rounded-md border border-link bg-link/10 py-0.5 pl-1.5 pr-1 text-xs transition-colors hover:border-danger"
+                class="ui-chip ui-chip-on group py-0.5 pl-1.5 pr-1 text-xs hover:border-danger"
                 :aria-label="`Remove ${path}`"
                 @click="remove(path)"
             >

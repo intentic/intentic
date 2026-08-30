@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
+import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, ref, watch } from "vue";
@@ -764,16 +764,18 @@ const closeTab = (event: Event, id: string): void => {
                      offering it above a lane reading "1 of 12" is offering a bulk action whose scope is not
                      the one on screen. -->
                 <template #actions>
-                    <button
+                    <Button
                         v-if="lane.key === 'finished' && !filtering"
-                        type="button"
+                        size="small"
+                        severity="secondary"
+                        :text="true"
+                        class="shrink-0"
                         :aria-label="`Close all ${lanes.finished.length} finished chats`"
                         v-tooltip.bottom="`Close all ${lanes.finished.length}: they stay in Past chats`"
-                        class="shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                         @click="emit('close', finishedTabs())"
                     >
                         Clear
-                    </button>
+                    </Button>
                 </template>
                 <!-- THE LANE'S WORKFLOW RUNS, above its chats and dashed like their card on the board: a run
                      is the container of several of the rows beneath it, not one of them. Clicking one is the

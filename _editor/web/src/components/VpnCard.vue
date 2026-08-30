@@ -175,7 +175,7 @@ const caption = computed(() =>
                         <button
                             v-else-if="wantsCode(link.id)"
                             type="button"
-                            class="inline-flex w-fit items-center gap-1 text-2xs text-link hover:underline"
+                            :class="ui.linkButton(`gap-1 text-2xs`)"
                             @click="
                                 otpFor = link.id;
                                 otp = ``;

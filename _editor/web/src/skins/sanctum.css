@@ -701,18 +701,32 @@
      * warm rule, which is the same description as a card, a field, a chip and a panel edge — so a screenful of
      * controls had nothing in it that looked like a thing you press, and the whole app read as one weight. No
      * fill GRADIENT still: the tint is the meaning, and a sheen over it makes the label's ground uneven. A
-     * uniform tooth and a one-pixel bevel do not. */
+     * uniform tooth and a one-pixel bevel do not.
+     *
+     * THE BORDERLESS TIERS ARE EXCLUDED, and leaving them in is what put a fourth border weight on every screen.
+     * `text` and `link` are defined by the app as "no chrome at all" — a Cancel, a Dismiss, an inline escape
+     * hatch, and the whole of <SandboxVerbs>, which is the Start/Stop/… cluster on every machine row. This rule
+     * named `.p-button` with no exclusion, so all three properties landed on them: PrimeVue's transparent border
+     * came back as a gold hairline, and the bevel and the drop gave a control that is meant to be a WORD the
+     * silhouette of a plate. The reported symptom was the app having several border intensities that nobody had
+     * chosen; this was one of them, and it was the one the design system believed it had already ruled out.
+     *
+     * Spelled with `:where()` so it costs no specificity: the tier rules below are `.p-button:where(:not(…))` at
+     * one class, and a base rule that outranked them would take the plaque's own bevel with it. */
     [data-skin="sanctum"] .p-button {
+        transition:
+            box-shadow 0.18s ease-out,
+            background-color 0.18s ease-out,
+            border-color 0.18s ease-out;
+    }
+
+    [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)) {
         background-image: var(--sanctum-tooth);
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 24%, transparent);
         box-shadow:
             inset 0 1px 0 rgba(240, 214, 168, 0.08),
             inset 0 -1px 0 rgba(0, 0, 0, 0.3),
             0 1px 2px rgba(0, 0, 0, 0.4);
-        transition:
-            box-shadow 0.18s ease-out,
-            background-color 0.18s ease-out,
-            border-color 0.18s ease-out;
     }
 
     /* ── THE COMMITTING BUTTON IS A CARVED STONE PLAQUE ───────────────────────────────────────────────────
@@ -843,7 +857,10 @@
             0 2px 5px -2px rgba(0, 0, 0, 0.6);
     }
 
-    [data-skin="sanctum"] .p-button:enabled:hover {
+    /* Same exclusion as the base plate, and for the same reason one rule up: a tier with no chrome at rest must
+       not grow a rule and a bevel the moment a pointer crosses it. Its hover is the app's own — a wash of
+       `content` behind the word — and that is all it should ever be. */
+    [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):enabled:hover {
         border-color: color-mix(in oklab, var(--ui-button-tone, var(--sanctum-gold)) 42%, transparent);
         box-shadow:
             inset 0 1px 0 rgba(240, 214, 168, 0.16),
@@ -997,11 +1014,48 @@
             0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
 
-    /* ── AND WHEN IT CANNOT BE PRESSED IT IS A PLATE STILL IN THE WALL ────────────────────────────────────
-     * A disabled button in this skin loses its lift and its contact shadow, becoming an uncut blank sunk flush
-     * into the surface with the shadow turned INWARD. It overrides the app's generic `opacity: 0.6` so that
-     * dark text or pale stone does not turn into an illegible muddy wash: the label stays crisp in a dedicated
-     * muted tone (~4.5:1 contrast against the sunken ground), and the object unmistakably reads as unavailable. */
+    /* ── AND WHEN IT CANNOT BE PRESSED IT IS THE SAME PLATE, UNCUT AND UNLIT ──────────────────────────────
+     * A disabled button here loses its lift and its contact shadow and sits flush in the surface with the
+     * shadow turned INWARD; the face goes flat (no tooth, no pitting) and the label loses its lit lip, because
+     * an incision is something somebody cut and this plate was never finished.
+     *
+     * IT USED TO GO BLACK, AND THAT WAS THE FAULT WORTH FIXING. The committing button is a pale limestone
+     * plaque (#b3a794); disabled, it was #38342e — the WALL's own value. So the one control on a form that a
+     * person is waiting to be able to press was not a dimmed version of anything: it was a dark rectangle where
+     * a pale object had been, and the honest reading of it is that the button is gone. Reported exactly that
+     * way, from a sign-up form's Invite button sitting disabled until the email validates.
+     *
+     * SO A DISABLED PLATE KEEPS ITS OWN MATERIAL AND LOSES 28% OF ITS LIGHT. Stone stays stone (#9a9083),
+     * bronze stays bronze (#b8996f), each a measured 27.7% under its live face — the same proportion for both,
+     * so the two plaques stay siblings when neither can be pressed. The ink softens with them and lands at
+     * 4.9:1 and 5.2:1, against the live plates' 7.6:1 and 8.9:1: legible, and visibly with less to say.
+     *
+     * WHAT THE DARK PLATE IS STILL FOR: the tiers that are dark when live — secondary, danger, warn, success.
+     * One ground for all four, because a disabled `danger` must not still be red. Its ink is #a89d8c and that
+     * is a correction too — the four hand-mixed tones this replaces measured 3.0 to 3.3:1 while the comment
+     * above them claimed 4.5, which is what happens when four blocks each carry their own numbers.
+     *
+     * The shape is four MUTUALLY EXCLUSIVE selectors re-pointing the app's own `--ui-button-off-*` contract
+     * (tokens.css), not four copies of the rule. Nothing here depends on source order, and a fifth tier gets
+     * three values rather than a block. */
+    /* IT RESTATES THE PLATE, AND THAT IS A SPECIFICITY FACT RATHER THAN A DUPLICATION. The app's own disabled
+       rule (primeng.css) paints from these same three variables at one class plus `:disabled`, and this skin's
+       LIVE tier rules are later in the same layer — `.p-button.p-button-success` is two classes and wins
+       outright. Measured, not assumed: the success plaque stayed weathered-green while disabled, which is a
+       button that cannot be pressed and does not say so. Restating the four properties here, still read from
+       the variables, puts the whole family back on one answer. */
+    [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):disabled:not(.p-button-loading) {
+        background-color: var(--ui-button-off-fill);
+        background-image: none;
+        border-color: var(--ui-button-off-line);
+        color: var(--ui-button-off-content);
+        text-shadow: none;
+        box-shadow:
+            inset 0 1px 2px rgba(0, 0, 0, 0.5),
+            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+    }
+
+    /* The committing tier: stone, uncut. */
     [data-skin="sanctum"]
         .p-button:where(
             :not(
@@ -1016,52 +1070,42 @@
                     .p-button-success,
                     .ui-button-loud
                 )
-        ):disabled {
-        color: #8c8375;
-        text-shadow: none;
-        background-color: #38342e;
-        background-image: none;
-        border-color: rgba(0, 0, 0, 0.45);
-        opacity: 1;
-        box-shadow:
-            inset 0 1px 2px rgba(0, 0, 0, 0.5),
-            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+        ):disabled:not(.p-button-loading) {
+        --ui-button-off-fill: #9a9083;
+        --ui-button-off-line: rgba(44, 36, 24, 0.45);
+        --ui-button-off-content: #2a231a;
     }
-    [data-skin="sanctum"] .p-button.p-button-success:where(:not(.p-button-text, .p-button-outlined, .p-button-link)):disabled {
-        color: #7d8a77;
-        text-shadow: none;
-        background-color: #2e3830;
-        background-image: none;
-        border-color: rgba(0, 0, 0, 0.45);
-        opacity: 1;
-        box-shadow:
-            inset 0 1px 2px rgba(0, 0, 0, 0.5),
-            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+
+    /* The money tier: bronze, uncast. */
+    [data-skin="sanctum"] .p-button.ui-button-loud:disabled:not(.p-button-loading) {
+        --ui-button-off-fill: #b8996f;
+        --ui-button-off-line: rgba(70, 50, 25, 0.45);
+        --ui-button-off-content: #382a1c;
     }
-    [data-skin="sanctum"] .p-button.ui-button-loud:disabled {
-        color: #8c7d68;
-        text-shadow: none;
-        background-color: #383024;
-        background-image: none;
-        border-color: rgba(70, 50, 25, 0.4);
-        opacity: 1;
-        box-shadow:
-            inset 0 1px 2px rgba(0, 0, 0, 0.5),
-            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+
+    /* The landing tier: stained stone, unweathered. THIS SKIN HAS THREE PLAQUES, not two — bare stone commits,
+       stained stone writes to a branch, cast bronze spends money — so `success` belongs up here with them and
+       not down with the dark tiers, however the app's own scheme groups it. Same 27% drop as its siblings. */
+    [data-skin="sanctum"] .p-button.p-button-success:disabled:not(.p-button-loading) {
+        --ui-button-off-fill: #8f9f8a;
+        --ui-button-off-line: rgba(26, 40, 28, 0.45);
+        --ui-button-off-content: #232e25;
     }
+
+    /* Everything that is dark while it is live stays dark, in one ground rather than one per tone. */
     [data-skin="sanctum"]
-        .p-button:where(.p-button-secondary, .p-button-danger, .p-button-warn):where(
+        .p-button:where(.p-button-secondary, .p-button-info, .p-button-contrast, .p-button-danger, .p-button-warn):where(
             :not(.p-button-text, .p-button-outlined, .p-button-link)
-        ):disabled {
-        color: #8a7c68;
-        background-color: color-mix(in oklab, var(--ui-button-tone) 4%, var(--color-card));
-        border-color: rgba(201, 160, 92, 0.08);
-        opacity: 1;
-        box-shadow: none;
+        ):disabled:not(.p-button-loading) {
+        --ui-button-off-fill: #3a352e;
+        --ui-button-off-line: rgba(0, 0, 0, 0.45);
+        --ui-button-off-content: #a89d8c;
     }
-    [data-skin="sanctum"] .p-button:where(.p-button-text, .p-button-outlined, .p-button-link):disabled {
-        color: #8a7c68;
-        opacity: 1;
+
+    /* The quiet tiers have no plate to sink; the app's base rule already keeps them transparent, so this is the
+       ink alone — one step brighter than the old #8a7c68, which sat at 3.7:1 on a card. */
+    [data-skin="sanctum"] .p-button:where(.p-button-text, .p-button-link):disabled:not(.p-button-loading) {
+        --ui-button-off-content: #9c9182;
     }
 
     /* ── THE LOUD BUTTON, AS THE SITE'S OWN GOLD PLATE ────────────────────────────────────────────────────

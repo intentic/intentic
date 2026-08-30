@@ -464,7 +464,7 @@ onMounted(() => {
                             role="option"
                             :aria-selected="row.index === activeIndex"
                             :aria-label="rowAriaLabel(row.entry)"
-                            class="ui-row-select flex w-full items-center gap-2 px-3 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
+                            class="ui-row-select ui-off flex w-full items-center gap-2 px-3 py-1.5 text-left max-md:min-h-11"
                             :class="{ 'ui-row-select-on': row.index === activeIndex, 'opacity-60': isLocked(row.entry) }"
                             :disabled="isDisabled(row.entry)"
                             @click="pick(row.entry)"

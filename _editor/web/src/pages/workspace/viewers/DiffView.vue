@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
             <button
                 v-if="changeless === `comments`"
                 type="button"
-                class="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-card/95 px-3 py-1 text-2xs text-muted shadow-sm backdrop-blur transition-colors hover:text-content"
+                class="ui-chip pointer-events-auto gap-1.5 border-line bg-card/95 px-3 py-1 shadow-sm backdrop-blur"
                 @click="toggleShowComments()"
             >
                 <Icon name="eye-slash" class="text-2xs" />

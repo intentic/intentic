@@ -1301,17 +1301,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         An agent is editing {{ atRisk.join(`, `) }} right now. "{{ commitLabel }}" records
                         {{ atRisk.length === 1 ? `it` : `them` }} mid-write.
                     </p>
-                    <button
+                    <Button
                         v-if="unaffected.length > 0"
-                        type="button"
-                        class="mt-1 inline-flex items-center whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                        size="small"
+                        severity="secondary"
+                        class="mt-1 whitespace-nowrap"
                         :disabled="!commitReady"
-                        v-action="() => runCommit(unaffected)"
+                        @click="() => runCommit(unaffected)"
                         v-tooltip.right="`Commits ${unaffected.map((group) => group.repo).join(`, `)}`"
                     >
                         <Icon name="check" class="mr-1 text-2xs" />Commit
                         {{ unaffected.length === 1 ? unaffected[0]!.repo : `the other ${unaffected.length} repos` }}
-                    </button>
+                    </Button>
                 </div>
             </div>
             <!-- A session whose work this commit records is STILL GOING. Not the race the strip above warns
@@ -1399,15 +1400,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      outcome, hence the tooltip. It wears this panel's secondary-button shape (Publish, Abort)
                      rather than the bare muted word it used to be: sitting at the end of a status line at the
                      same weight as the status, nothing about it said it could be pressed. -->
-                <button
+                <Button
                     v-if="pushFlow.stage.value === `checking`"
-                    type="button"
-                    class="shrink-0 whitespace-nowrap rounded border border-line px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content max-md:min-h-8"
+                    size="small"
+                    severity="secondary"
+                    class="shrink-0 whitespace-nowrap"
                     @click="pushFlow.stopChecks"
                     v-tooltip.top="'Stop the checks. The push stays waiting on your answer'"
                 >
                     Stop
-                </button>
+                </Button>
             </template>
             <template v-else>
                 <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
@@ -1456,7 +1458,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="flex min-w-0 max-w-full items-center gap-1 rounded-full py-px pl-1 pr-1.5 text-2xs transition-opacity"
+                class="ui-chip min-w-0 max-w-full gap-1 py-px pl-1 pr-1.5 transition-opacity"
                 :class="[
                     originHue(entry.id).chip,
                     originFilter === entry.id ? 'shrink' : 'shrink-0',
@@ -1489,7 +1491,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
             <button
                 v-if="legend.yours > 0"
                 type="button"
-                class="flex shrink-0 items-center gap-1 rounded-full bg-overlay px-1.5 py-px text-2xs text-muted transition-opacity"
+                class="ui-chip shrink-0 gap-1 px-1.5 py-px transition-opacity"
                 :class="originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : ''"
                 @click="toggleOrigin(YOURS)"
                 v-tooltip.right="'Your own edits, the terminal, a main-tree chat'"
@@ -1613,16 +1615,17 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                         <!-- Publish keeps its word where the pills stay numeric: a branch with no upstream is a
                              one-off state most people meet rarely, and "↑3" would not tell them the push also
                              has to CREATE the branch on the remote. -->
-                        <button
+                        <Button
                             v-if="unpublished(group)"
-                            type="button"
-                            class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded border border-line px-1.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                            size="small"
+                            severity="secondary"
+                            class="shrink-0 whitespace-nowrap"
                             :disabled="changes.actionBusy.value || pushFlow.running.value"
                             @click="askPushRepo(group)"
                             v-tooltip.top="'Push and start tracking this branch on the remote'"
                         >
                             <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
-                        </button>
+                        </Button>
                         <button
                             v-else-if="ahead(group) > 0"
                             type="button"
@@ -1705,15 +1708,16 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                             {{ group.operation }} began.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        class="shrink-0 rounded border border-warning/50 px-1.5 py-0.5 text-2xs text-warning transition-colors hover:bg-warning/10 disabled:opacity-40"
+                    <Button
+                        size="small"
+                        severity="warn"
+                        class="shrink-0"
                         :disabled="changes.actionBusy.value"
                         @click="changes.abortOperation(group.repo)"
                         v-tooltip.top="'A restore point is saved first, so this is reversible from Restore points'"
                     >
                         Abort
-                    </button>
+                    </Button>
                 </div>
 
                 <!-- NOTHING UNDER A REPO WITH NOTHING IN IT. This block used to render on every expanded repo,
@@ -1867,7 +1871,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                          informative; the row's own colours are the data. -->
                                     <button
                                         type="button"
-                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-subtle transition-colors hover:bg-overlay hover:text-content disabled:opacity-40 group-hover/file:text-muted max-md:h-8 max-md:w-8"
+                                        :class="ui.iconButton(`h-5 w-5 rounded text-subtle group-hover/file:text-muted max-md:h-8 max-md:w-8`)"
                                         :disabled="changes.actionBusy.value"
                                         v-action="() => stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
@@ -1888,7 +1892,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                          move Discard somewhere the reader has to learn about. -->
                                     <button
                                         type="button"
-                                        class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover/file:opacity-100 disabled:opacity-40 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100"
+                                        :class="
+                                            ui.iconButton(
+                                                `h-5 w-5 rounded opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100`,
+                                            )
+                                        "
                                         :disabled="changes.actionBusy.value"
                                         @click="askDiscardRow({ repo: group.repo, side: section.side, path: change.path }, change)"
                                         v-tooltip.top="'Discard'"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, Icon, Markdown, ResponsiveOverlay, useNarrow } from "@intentic/ui";
+import { Button, ui, Icon, Markdown, ResponsiveOverlay, useNarrow } from "@intentic/ui";
 import { type MarkdownDecorator, offsetOfLine } from "@intentic/ui/markdown";
 import { computed, ref, watch } from "vue";
 import { fileLinkDecorator } from "../../../composables/renderMarkdown";
@@ -183,11 +183,13 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
             <!-- The section the reader is in. A button rather than a label because the list behind it is what
                  they want next often enough to be worth the press, and on a pane too narrow to dock the rail,
                  this is the only way to it. -->
-            <button
+            <Button
                 v-if="current !== undefined"
                 ref="opener"
-                type="button"
-                class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="min-w-0"
                 v-tooltip.bottom="'Outline'"
                 @click="overlayOpen = !overlayOpen"
             >
@@ -195,7 +197,7 @@ watch([() => current.value === undefined, () => path], () => (overlayOpen.value 
                 <!-- Narrower here than it was on a bar of its own, and it has to be: this now shares a row with
                      the tab strip. The glyph alone still opens the outline, which is the control's whole job. -->
                 <span class="max-w-32 truncate max-md:hidden">{{ current }}</span>
-            </button>
+            </Button>
 
             <button
                 v-if="dockable"

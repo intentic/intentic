@@ -11,6 +11,7 @@ import {
     StatusBadge,
     type StatusVariant,
     useNoteDraft,
+    ui,
 } from "@intentic/extension-ui";
 import { computed, ref, toRef } from "vue";
 import { linkifyNoteRefs, toneOfType } from "./knowledgeNote";
@@ -204,7 +205,11 @@ const onProseClick = (event: MouseEvent): void => {
                     <button v-if="link.path" type="button" class="text-link hover:underline" @click="emit(`open`, link.path)">
                         {{ link.title }}
                     </button>
-                    <span v-else class="text-subtle underline decoration-dotted underline-offset-2" :title="`No note for &quot;${link.title}&quot; yet`">
+                    <span
+                        v-else
+                        class="text-subtle underline decoration-dotted underline-offset-2"
+                        :title="`No note for &quot;${link.title}&quot; yet`"
+                    >
                         {{ link.title }}
                     </span>
                 </span>
@@ -219,7 +224,7 @@ const onProseClick = (event: MouseEvent): void => {
                 </span>
                 <!-- "Everything about this note" is a different question from "what links to it", and it is the one
                  a reader asks next: it re-aims the list beside the pane. -->
-                <button type="button" class="ml-auto shrink-0 text-2xs text-link hover:underline" @click="emit(`filter`, path)">
+                <button type="button" :class="ui.linkButton(`ml-auto shrink-0 text-2xs`)" @click="emit(`filter`, path)">
                     Show these in the list
                 </button>
             </div>

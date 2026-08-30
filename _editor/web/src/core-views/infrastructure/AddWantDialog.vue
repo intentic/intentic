@@ -148,7 +148,7 @@ const submit = async (): Promise<void> => {
     <Modal v-model:open="visible" size="md" header="Add" @hide="reset">
         <!-- STEP 2: the picked want's form. -->
         <template v-if="selected">
-            <button type="button" class="mb-3 inline-flex items-center gap-1 text-xs text-muted hover:text-content" @click="selected = undefined">
+            <button type="button" :class="ui.textAction(`mb-3 gap-1`)" @click="selected = undefined">
                 <Icon name="arrow-left" class="text-2xs" /> Back
             </button>
 
@@ -245,7 +245,7 @@ const submit = async (): Promise<void> => {
                         v-for="candidate in workspaceApps"
                         :key="`${candidate.repo}--${candidate.app}`"
                         type="button"
-                        class="flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay disabled:cursor-default disabled:opacity-60 disabled:hover:border-line disabled:hover:bg-card"
+                        class="ui-off flex items-start gap-3 rounded-lg border border-line bg-card p-3 text-left transition-colors hover:border-line-strong hover:bg-overlay disabled:hover:border-line disabled:hover:bg-card"
                         :disabled="declaredApps.has(candidate.app)"
                         v-action="() => pick({ kind: `app`, ...candidate })"
                     >

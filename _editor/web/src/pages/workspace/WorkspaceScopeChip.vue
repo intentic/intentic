@@ -82,8 +82,8 @@ const items = computed<MenuItem[]>(() => [
     <template v-if="workspaceAgent !== undefined">
         <button
             type="button"
-            class="flex h-6 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-2xs transition-colors"
-            :class="broken ? `bg-warning/15 text-warning hover:bg-warning/25` : `bg-primary-600/15 text-link hover:bg-primary-600/25`"
+            class="ui-chip h-6 shrink-0 px-1.5"
+            :class="broken ? `bg-warning/15 text-warning hover:bg-warning/25` : `ui-chip-on`"
             aria-haspopup="menu"
             :aria-label="hint"
             v-tooltip.bottom="hint"

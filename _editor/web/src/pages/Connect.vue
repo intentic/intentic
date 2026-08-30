@@ -97,7 +97,7 @@ const switchAccount = async (): Promise<void> => {
                     Signed in as <span class="font-medium text-content">{{ user.email }}</span
                     >. Sending you back to your agent.
                 </p>
-                <Button label="Use a different account" severity="secondary" text class="mt-6 px-0" @click="switchAccount" />
+                <Button label="Use a different account" severity="secondary" text class="-ml-3 mt-6" @click="switchAccount" />
             </template>
 
             <template v-else>

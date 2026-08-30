@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { Button, Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { isTrialProvider, TRIAL_NOTICE } from "@intentic/sandbox-contract";
@@ -125,15 +125,16 @@ const activeAccountReauth = computed(() => {
     >
         <Icon name="box" class="shrink-0" />
         <span class="min-w-0 flex-1">Archived: off the agents board. Sending a message puts it back.</span>
-        <button
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
+        <Button
+            size="small"
+            :text="true"
+            class="shrink-0"
             :disabled="!reachable || busyIds.includes(activeArchived.id)"
             v-tooltip.top="'Put this agent back on the board now'"
             @click="restore([activeArchived.id])"
         >
             Restore
-        </button>
+        </Button>
     </div>
     <ChatAccountPanel />
     <!-- THE TRIAL'S STANDING DISCLOSURE. The picker says it once, at the moment of choosing; this says it for as
@@ -150,15 +151,9 @@ const activeAccountReauth = computed(() => {
     >
         <Icon name="sparkles" class="shrink-0 text-link" :class="trialSpent ? `` : `mt-0.5`" />
         <span class="min-w-0 flex-1">{{ trialNotice }}</span>
-        <button
-            v-if="trialHealthIssue"
-            type="button"
-            class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15 disabled:opacity-50"
-            :disabled="!reachable || streaming"
-            v-action="retryTrial"
-        >
+        <Button v-if="trialHealthIssue" size="small" :text="true" class="shrink-0" :disabled="!reachable || streaming" @click="retryTrial">
             Retry
-        </button>
+        </Button>
         <!-- The door the account gate used to hold, here for as long as this strip is standing in its place:
              spent, the list is where every other way to send is, and it costs nothing to look at. -->
         <ChatChooseModelButton v-if="trialSpent" />

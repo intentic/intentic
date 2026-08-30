@@ -291,7 +291,7 @@ onMounted(async () => {
                                     :href="app.previewUrl"
                                     target="_blank"
                                     rel="noopener"
-                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                                    :class="ui.iconButton(`h-8 w-8`)"
                                     :aria-label="`Open ${app.app} preview in a new tab`"
                                     v-tooltip.top="'Open preview'"
                                 >
@@ -299,7 +299,7 @@ onMounted(async () => {
                                 </a>
                                 <button
                                     type="button"
-                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                                    :class="ui.iconButton(`h-8 w-8`)"
                                     :aria-label="`Open ${app.app} terminal`"
                                     v-tooltip.top="'Terminal'"
                                     @click="openFocused(sessionOf(app.app))"

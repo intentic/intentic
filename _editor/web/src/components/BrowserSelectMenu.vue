@@ -114,8 +114,8 @@ watch(
             :aria-selected="index === menu.selected"
             :data-active="index === active"
             :disabled="option.disabled"
-            class="block w-full cursor-default px-3 py-1 text-left whitespace-nowrap disabled:opacity-40"
-            :class="index === active ? 'bg-primary-600 text-white' : 'hover:bg-hover'"
+            class="ui-row-select ui-off block w-full cursor-default px-3 py-1 text-left whitespace-nowrap"
+            :class="index === active ? `ui-row-select-on` : ``"
             @mousemove="active = index"
             @click.stop="emit('pick', index)"
         >

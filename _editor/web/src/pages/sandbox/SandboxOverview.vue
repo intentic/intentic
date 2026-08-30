@@ -298,11 +298,7 @@ const save = async (): Promise<void> => {
                                     <template v-if="editing">
                                         <button
                                             type="button"
-                                            :class="
-                                                ui.iconButton(
-                                                    `h-8 w-8 text-subtle hover:text-success disabled:cursor-not-allowed disabled:opacity-40`,
-                                                )
-                                            "
+                                            :class="ui.iconButton(`h-8 w-8 text-subtle hover:text-success`)"
                                             :disabled="busy || !canSave"
                                             aria-label="Save sandbox name"
                                             v-tooltip.bottom="`Save · Enter`"
@@ -312,7 +308,7 @@ const save = async (): Promise<void> => {
                                         </button>
                                         <button
                                             type="button"
-                                            :class="ui.iconButton(`h-8 w-8 text-subtle disabled:cursor-not-allowed disabled:opacity-40`)"
+                                            :class="ui.iconButton(`h-8 w-8 text-subtle`)"
                                             :disabled="busy"
                                             aria-label="Cancel rename"
                                             v-tooltip.bottom="`Cancel · Esc`"

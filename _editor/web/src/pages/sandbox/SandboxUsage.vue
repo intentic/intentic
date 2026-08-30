@@ -195,12 +195,7 @@ const hasSpend = computed(() => current.value.length > 0);
             <SegmentedControl v-model="preset" :options="RANGE_PRESETS" />
             <span class="h-4 w-px bg-line" />
             <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" />
-            <button
-                v-if="agentFilter !== undefined"
-                type="button"
-                class="flex cursor-pointer items-center gap-1 rounded-full bg-overlay px-2 py-0.5 text-2xs text-muted hover:text-content"
-                @click="clearAgentFilter"
-            >
+            <button v-if="agentFilter !== undefined" type="button" class="ui-chip gap-1 px-2 py-0.5" @click="clearAgentFilter">
                 <Icon name="sliders-h" />{{ agentTitle(agentFilter) }}<Icon name="times" />
             </button>
             <button
@@ -460,12 +455,7 @@ const hasSpend = computed(() => current.value.length > 0);
                             Show table
                             <span class="text-2xs text-subtle">{{ tableRows.length }} rows · {{ formatCompact(totals.turns) }} turns</span>
                         </button>
-                        <button
-                            type="button"
-                            class="flex cursor-pointer items-center gap-1 text-2xs text-link hover:underline"
-                            :disabled="tableRows.length === 0"
-                            @click="exportCsv"
-                        >
+                        <button type="button" :class="ui.linkButton(`gap-1 text-2xs`)" :disabled="tableRows.length === 0" @click="exportCsv">
                             <Icon name="download" />Export CSV
                         </button>
                     </div>

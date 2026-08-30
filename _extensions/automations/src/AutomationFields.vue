@@ -799,7 +799,7 @@ const setProvider = (provider: string): void => {
                         min="0"
                         step="10"
                         class="w-20 font-mono"
-                        :class="ui.input(`disabled:cursor-default disabled:opacity-40`)"
+                        :class="ui.input()"
                         :disabled="form.requireApproval"
                         aria-label="Seconds to hold each run before it starts"
                     />

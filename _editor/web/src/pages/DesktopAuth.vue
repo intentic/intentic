@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, useTheme, Notice, type NoticeModel, vAction } from "@intentic/ui";
+import { Button, useTheme, Notice, type NoticeModel, vAction, ui } from "@intentic/ui";
 import { noticeFrom, noticeOf } from "@intentic/ui/async";
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
@@ -257,7 +257,7 @@ onMounted(() => void hand());
                 <button
                     v-if="googleReady"
                     type="button"
-                    class="w-full text-center text-xs text-subtle transition-colors hover:text-content"
+                    :class="ui.textAction(`w-full justify-center text-center text-subtle`)"
                     v-action="useGooglesOwnPage"
                 >
                     Trouble signing in? Use Google's own page.
@@ -271,9 +271,7 @@ onMounted(() => void hand());
                  arrival. Same pair the login screen offers, for the same failure. -->
             <div v-if="error || stage === `done`" class="flex flex-wrap items-center gap-3">
                 <Button :label="error ? `Try again` : `Send it again`" severity="secondary" :loading="working" @click="hand" />
-                <button v-if="error" type="button" class="text-xs text-subtle transition-colors hover:text-content" v-action="useGooglesOwnPage">
-                    Use Google's own page.
-                </button>
+                <button v-if="error" type="button" :class="ui.textAction(`text-subtle`)" v-action="useGooglesOwnPage">Use Google's own page.</button>
             </div>
 
             <p class="border-t border-line pt-3 text-2xs text-subtle">

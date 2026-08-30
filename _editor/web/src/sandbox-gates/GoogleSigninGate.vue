@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, useTheme, vAction } from "@intentic/ui";
+import { Button, useTheme, vAction, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "../composables/useAuth";
@@ -92,9 +92,7 @@ const backToSetup = async (): Promise<void> => {
                 <!-- color-scheme:light matches Google's light-scheme button iframe so the browser paints no
                      opaque (white) canvas behind it; the button stays dark via its theme param. -->
                 <div v-else ref="btn" class="mt-2 flex justify-center" style="color-scheme: light"></div>
-                <button type="button" class="mt-1 text-xs text-subtle transition-colors hover:text-content" v-action="backToSetup">
-                    Back to setup
-                </button>
+                <button type="button" :class="ui.textAction(`mt-1 text-subtle`)" v-action="backToSetup">Back to setup</button>
             </div>
         </div>
     </div>

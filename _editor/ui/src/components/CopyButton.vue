@@ -77,16 +77,10 @@ const copy = async (): Promise<void> => {
         <Icon :name="copied ? 'check' : 'copy'" :class="[stretch ? `` : `text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
     </Button>
-    <button
-        v-else-if="label"
-        ref="root"
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-md border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:border-line-strong hover:text-content"
-        v-action="copy"
-    >
+    <Button v-else-if="label" ref="root" size="small" severity="secondary" @click="copy">
         <Icon :name="copied ? 'check' : 'copy'" :class="[`text-2xs`, copied ? `text-success` : ``]" />
         {{ copied ? `Copied` : label }}
-    </button>
+    </Button>
     <button v-else ref="root" type="button" aria-label="Copy" :class="ui.iconButton(`text-subtle`)" v-action="copy">
         <Icon class="text-2xs" :name="copied ? 'check' : 'copy'" :class="copied ? 'text-success' : ''" />
     </button>

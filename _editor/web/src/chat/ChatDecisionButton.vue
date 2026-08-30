@@ -53,7 +53,7 @@ const { tone, icon, to } = defineProps<{
         :to="to"
         size="small"
         :severity="tone === `primary` ? undefined : `secondary`"
-        class="font-semibold max-md:h-11 max-md:px-5"
+        class="ui-button-thumb"
     >
         <Icon v-if="icon" :name="icon" />
         <slot />

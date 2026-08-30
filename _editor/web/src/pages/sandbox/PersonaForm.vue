@@ -168,7 +168,7 @@ const folderBound = computed(() => draft.folders.length > 0);
                             v-for="mark in pickedMarks"
                             :key="mark.id"
                             type="button"
-                            class="group flex cursor-pointer items-center gap-1.5 rounded-lg border border-link bg-link/10 py-1 pl-1.5 pr-2 text-xs transition-colors hover:border-danger"
+                            class="ui-chip ui-chip-on group py-1 pl-1.5 pr-2 text-xs hover:border-danger"
                             :aria-label="`Stop speaking through ${mark.id}`"
                             @click="toggleAccount(mark.id)"
                         >

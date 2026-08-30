@@ -79,7 +79,7 @@ const TEXT = { comfortable: `text-sm`, compact: `text-xs`, dense: `text-2xs` } a
     <button
         v-else-if="variant === `action`"
         type="button"
-        class="ui-row-select group flex w-full cursor-pointer items-center text-left disabled:cursor-not-allowed disabled:opacity-50"
+        class="ui-row-select ui-off group flex w-full cursor-pointer items-center text-left"
         :class="[ROW_TIERS[tier].pad, ROW_TOGGLE_GAPS[tier], TEXT[tier]]"
         :disabled="disabled"
         @click="(event: MouseEvent) => emit(`click`, event)"

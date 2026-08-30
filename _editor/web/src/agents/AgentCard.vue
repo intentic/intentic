@@ -663,13 +663,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- No resting glyph: the line it sits on already leads with this exact one, and the pair read
                      as a stutter across six words. The spinner is the exception: that one is not decoration
                      but the press reporting itself, and it only exists while the round trip is out. -->
-                <Button
-                    size="small"
-                    severity="secondary"
-                    :outlined="true"
-                    class="shrink-0 whitespace-nowrap !px-2 !py-0.5 !text-2xs !text-muted hover:!text-content"
-                    @click.stop="emit('reland')"
-                >
+                <Button size="small" severity="secondary" :text="true" class="shrink-0 whitespace-nowrap" @click.stop="emit('reland')">
                     <Icon v-if="relanding" name="spinner" spin class="text-2xs" />{{ relanding ? "Landing…" : "Land again" }}
                 </Button>
             </div>
@@ -850,16 +844,18 @@ const grab = (event: PointerEvent): void => {
                              refuse it to keep a filed-away agent from being pulled back onto the board by a
                              press meant as housekeeping; this one is the only press that PREVENTS that, and an
                              armed watch is precisely what drags an archived card back into a lane. -->
-                        <button
-                            type="button"
+                        <Button
+                            size="small"
+                            severity="secondary"
+                            :text="true"
+                            class="shrink-0"
                             aria-label="Stop watching"
                             v-tooltip.top="'Stop watching, this conversation stays put'"
-                            class="touch-target shrink-0 rounded px-1 text-2xs font-medium text-muted transition-opacity hover:bg-overlay hover:text-content"
                             :class="mobile ? 'opacity-60' : 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100'"
                             @click.stop="emit(`unwatch`)"
                         >
                             Stop
-                        </button>
+                        </Button>
                     </span>
 
                     <!-- WHAT IT IS DOING AND HOW LONG IT HAS BEEN AT IT, at the end of the line the settled

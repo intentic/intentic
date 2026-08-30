@@ -213,7 +213,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
                 <Icon name="spinner" spin class="shrink-0 text-link" />
                 <span class="text-content">
                     {{ activeRun.mapDone ? `Documenting packages` : `Reading the repository and drawing its map` }}
-                   : {{ activeRun.done }}<span v-if="activeRun.total !== undefined"> of {{ activeRun.total }}</span> written
+                    : {{ activeRun.done }}<span v-if="activeRun.total !== undefined"> of {{ activeRun.total }}</span> written
                 </span>
                 <div class="ml-auto flex items-center gap-1">
                     <Button
@@ -256,12 +256,7 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
              Above the prose rather than inside it: it belongs to the pane's frame, and a control that scrolls away
              with the document is one the reader loses exactly when they want it. -->
         <template #detail="{ compact }">
-            <button
-                v-if="compact && page !== undefined"
-                type="button"
-                class="mb-2 flex shrink-0 cursor-pointer items-center gap-1.5 self-start text-xs text-muted transition-colors hover:text-content"
-                @click="openPage(undefined)"
-            >
+            <button v-if="compact && page !== undefined" type="button" :class="ui.textAction(`mb-2 shrink-0`)" @click="openPage(undefined)">
                 <Icon name="arrow-left" class="text-2xs" />
                 Contents
             </button>
@@ -275,8 +270,8 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
                 <div :class="ui.emptyState()">
                     <p class="text-sm">{{ label }} has no documentation yet.</p>
                     <p class="mt-1 text-xs text-muted">
-                        One agent will map the repository: its components, its vocabulary, what to read first, and then a further agent documents
-                        each package. You review the result before anything is committed.
+                        One agent will map the repository: its components, its vocabulary, what to read first, and then a further agent documents each
+                        package. You review the result before anything is committed.
                     </p>
                     <Button size="small" label="Generate documentation" class="mt-3" @click="generateOpen = true" />
                 </div>

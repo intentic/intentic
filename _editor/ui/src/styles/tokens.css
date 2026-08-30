@@ -150,6 +150,46 @@
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);
 
+    /* ── WHAT "NOT RIGHT NOW" LOOKS LIKE, ONCE, FOR EVERY BUTTON IN THE APP ───────────────────────────────
+     * A disabled control was a FADE: PrimeVue's `opacity: 0.6` over whatever the tier had painted. That is the
+     * wrong instrument for this design system specifically, and the reason is arithmetic rather than taste.
+     * Every tier here is a TINT — `color-mix(… 10%, transparent)` — so 0.6 of a 10% wash is a 6% wash, which on
+     * canvas is nothing at all: the fill and the hairline both vanish and what is left is a dim word floating
+     * where a button was. The switch had this exact bug and was fixed the same way (theme.ts), and the note
+     * there is the general rule: hold the SHAPE and drop only the contrast, or a disabled control reads as a
+     * control that is missing.
+     *
+     * So a disabled button is a flat neutral plate: the same box, the same hairline weight, one ground for
+     * every tier — a disabled `danger` must not still be red, because a red thing that cannot be pressed is
+     * just an alarm nobody can answer. The label lands on `muted`, which is a body-text role and clears 4.5:1
+     * on both schemes, so the word stays readable rather than becoming a grey smudge you lean in at.
+     *
+     * THREE VARIABLES RATHER THAN A BLOCK OF DECLARATIONS, because the skins have to be able to answer this in
+     * their own material — Sanctum sinks the plate into the wall, and can do it by re-pointing these instead of
+     * copying the rule per tier, which is what it used to do (four near-identical blocks, four hand-mixed hexes
+     * that could drift from each other and did). */
+    --ui-button-off-fill: color-mix(in srgb, var(--color-content) 5%, transparent);
+    --ui-button-off-line: color-mix(in srgb, var(--color-content) 12%, transparent);
+    --ui-button-off-content: var(--color-muted);
+
+    /* AND THE ONE FADE THAT IS STILL RIGHT, for the controls the design system does not paint: a list row, a
+     * tile, a menu line, a form field. There is no plate to repaint on those — a row's ground is the panel's,
+     * and a tile's fill is carrying its own meaning — so dimming the whole object is the honest instrument, and
+     * `.ui-off` (styles/utilities.css) is where it is spelled.
+     *
+     * IT IS A NUMBER BECAUSE IT HAS TO BE ONE NUMBER. The tree had four — 30, 40, 50 and 60 per cent, across 38
+     * call sites — chosen by whoever was in the file, so two disabled controls on one dialog faded by different
+     * amounts and the difference read as one of them being MORE unavailable than the other. Half is the middle
+     * of what was already there and keeps `muted` text legible on both schemes. */
+    --ui-off-dim: 0.5;
+
+    /* THE TRANSIENT DIM, which is a different thing from the above and now says so. `v-action` fades a
+     * hand-styled control for the moment its press is still being answered (press.css); that IS a fade, because
+     * it is a beat long and lands on an element whose styling the design system does not own. It read
+     * `--p-disabled-opacity` before, which quietly tied "this row is busy" to "this button is unavailable" —
+     * two states that have no reason to move together, and one of which has just stopped being an opacity. */
+    --ui-press-dim: 0.6;
+
     /* Tooltip box (see tooltip.css). 17rem is measured, not guessed: across the app's longest labels it is the
      * cap with BOTH the least ink and the fewest lines. Narrower (PrimeVue's old 12.5rem default) wraps the
      * same sentence into a five-line column tall enough to cover the control it describes; wider only

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SearchBar, useDevice, vAction } from "@intentic/ui";
+import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import UsageRing from "../components/UsageRing.vue";
@@ -183,7 +183,7 @@ const pickAccount = (id: string): void => {
                  honest one: this account cannot be read right now, whatever its ring still says. -->
             <button
                 type="button"
-                class="flex items-center gap-1 text-2xs text-subtle hover:text-content"
+                :class="ui.textAction(`gap-1 text-2xs text-subtle`)"
                 :disabled="measuring"
                 v-tooltip.top="`Re-measure every account's plan limits now`"
                 :aria-label="remeasureLabel"

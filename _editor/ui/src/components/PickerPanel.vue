@@ -156,7 +156,7 @@ onMounted(() => {
                     type="button"
                     role="option"
                     :aria-selected="row.option.value === selectedValue"
-                    class="ui-row-select flex w-full gap-2 px-3 text-left disabled:cursor-default disabled:opacity-40 max-md:min-h-11"
+                    class="ui-row-select ui-off flex w-full gap-2 px-3 text-left max-md:min-h-11"
                     :class="[
                         { 'ui-row-select-on': row.index === activeIndex },
                         hinted ? `items-start py-2` : `items-center py-1.5`,

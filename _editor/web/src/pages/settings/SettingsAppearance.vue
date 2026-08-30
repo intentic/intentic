@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    Button,
     ColorPicker,
     Row,
     RowGroup,
@@ -247,14 +248,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
         <RowGroup label="Theme import">
             <Row icon="palette" title="Import a VSCode theme">
                 <template #control>
-                    <button
-                        v-if="importedTheme"
-                        type="button"
-                        class="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:text-content"
-                        @click="clearImportedTheme()"
-                    >
-                        Remove
-                    </button>
+                    <Button v-if="importedTheme" size="small" severity="secondary" @click="clearImportedTheme()"> Remove </Button>
                 </template>
                 <template #below>
                     <p v-if="importedTheme" class="mb-2 inline-flex items-center gap-1.5 text-xs text-muted">
@@ -272,14 +266,7 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                         {{ importError }}
                     </div>
                     <div class="mt-2 flex justify-end">
-                        <button
-                            type="button"
-                            class="rounded-md bg-primary-600/15 px-3 py-1 text-xs font-medium text-link transition-colors hover:bg-primary-600/25 disabled:opacity-40"
-                            :disabled="themeJson.trim().length === 0"
-                            @click="applyImport()"
-                        >
-                            Apply theme
-                        </button>
+                        <Button size="small" :disabled="themeJson.trim().length === 0" @click="applyImport()"> Apply theme </Button>
                     </div>
                 </template>
             </Row>

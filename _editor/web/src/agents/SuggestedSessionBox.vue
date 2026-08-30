@@ -92,7 +92,7 @@ onMounted(() => {
 
             <button
                 type="button"
-                class="composer-ghost ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium text-link disabled:opacity-40 max-md:h-11"
+                class="composer-ghost ui-off ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium text-link max-md:h-11"
                 :disabled="!canStart"
                 v-tooltip.top="'Ctrl+Enter'"
                 @click="start"

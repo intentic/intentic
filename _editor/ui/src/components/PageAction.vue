@@ -90,7 +90,7 @@ const tooltip = computed(() => {
         :is="href === undefined ? `button` : `a`"
         v-if="iconOnly"
         :type="href === undefined ? `button` : undefined"
-        :class="ui.iconButton(`h-8 w-8 text-base disabled:pointer-events-none disabled:opacity-40`)"
+        :class="ui.iconButton(`h-8 w-8 text-base disabled:pointer-events-none`)"
         :disabled="disabled"
         :aria-label="label"
         v-tooltip.bottom="tooltip"

@@ -84,8 +84,8 @@ const LAYOUT_OPTIONS: { label: string; value: DiffLayout }[] = [
              and not one more glyph: "Comments" with an eye through it is readable at a glance as a state. -->
         <button
             type="button"
-            class="flex shrink-0 items-center justify-center gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:bg-overlay hover:text-content max-md:h-9 max-md:w-9"
-            :class="{ 'bg-primary-600/15 text-link': showComments }"
+            class="ui-chip shrink-0 justify-center gap-1 rounded-md px-1.5 py-0.5 font-medium max-md:h-9 max-md:w-9"
+            :class="showComments ? `ui-chip-on` : ``"
             :aria-pressed="showComments"
             v-tooltip.bottom="showComments ? 'Comments shown, click to diff the code alone' : 'Comments hidden, click to show them'"
             @click="toggleShowComments()"

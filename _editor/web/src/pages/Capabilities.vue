@@ -1287,7 +1287,7 @@ const submitLabel = computed(() => {
                     <div class="flex min-w-0 flex-1 flex-col @3xl:max-w-lg">
                         <!-- Back to the slice the card was picked out of, named: "All capabilities" was a lie the
                              moment the rail could be pointing at one category. -->
-                        <button type="button" class="mb-4 inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content" @click="back">
+                        <button type="button" :class="ui.textAction(`mb-4 gap-1`)" @click="back">
                             <Icon name="arrow-left" class="text-2xs" /> {{ activeScope.label }}
                         </button>
 
@@ -1579,11 +1579,7 @@ const submitLabel = computed(() => {
                                 @fix="applyUrlFix(field)"
                             />
                             <template v-if="advancedFields(selected).length > 0">
-                                <button
-                                    type="button"
-                                    class="inline-flex w-fit items-center gap-1 text-xs text-muted hover:text-content"
-                                    @click="advancedOpen = !advancedOpen"
-                                >
+                                <button type="button" :class="ui.textAction(`gap-1`)" @click="advancedOpen = !advancedOpen">
                                     <Icon :name="advancedOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" />
                                     {{ advancedLabel(selected) }}
                                     <span class="text-2xs text-subtle">{{ advancedFields(selected).length }}</span>

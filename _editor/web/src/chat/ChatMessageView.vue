@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type IconName, growTextarea, MarkdownFigure, useDevice } from "@intentic/ui";
+import { type IconName, growTextarea, MarkdownFigure, useDevice, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -858,7 +858,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <template v-if="errand">
             <button
                 type="button"
-                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-2xs"
+                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
                 :aria-expanded="errandOpen"
                 @click="errandOpen = !errandOpen"
             >
@@ -1292,7 +1292,6 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                             </div>
                         </div>
                     </div>
-
                 </div>
                 <!-- Moved into the shell's own answer row rather than sitting inside the options block, which
                      is where it used to be: every other card puts its answers behind the same rule, and a
@@ -1303,7 +1302,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     >
                     <!-- Dismissing ends the turn (see Conversation.cancelQuestion), which the label alone
                          does not say, so the tooltip does, before the click rather than after it. -->
-                    <ChatDecisionButton tone="secondary" :disabled="settling" v-tooltip.bottom="'Also stops the turn'" @click="cancelQuestion(message)"
+                    <ChatDecisionButton
+                        tone="secondary"
+                        :disabled="settling"
+                        v-tooltip.bottom="'Also stops the turn'"
+                        @click="cancelQuestion(message)"
                         >Dismiss</ChatDecisionButton
                     >
                 </template>
@@ -1312,13 +1315,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <!-- PROSE, at last matching the comment this card has carried all along: permissionTitle is a full
                  sentence ("This command would read credential material"), so it wraps at the body tier rather
                  than truncating a size up. -->
-            <ChatCard
-                v-if="message.permission"
-                icon="shield"
-                prose
-                :title="permissionTitle"
-                :status="permissionStatus(message.permission)"
-            >
+            <ChatCard v-if="message.permission" icon="shield" prose :title="permissionTitle" :status="permissionStatus(message.permission)">
                 <div class="flex flex-col gap-2 px-3.5 py-3">
                     <!-- THE SENTENCE FIRST when there is one (settings.explainCommands): what the program does
                          and what it is for, in the words the quick model wrote from the program text. It leads
@@ -1355,7 +1352,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <button
                             v-if="message.permission.explain"
                             type="button"
-                            class="flex items-center gap-1 self-start text-2xs text-muted hover:text-content"
+                            :class="ui.textAction(`gap-1 text-2xs`)"
                             :aria-expanded="commandOpen"
                             @click="commandOpen = !commandOpen"
                         >
@@ -1651,7 +1648,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <template v-if="message.notes?.length">
             <button
                 type="button"
-                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-2xs"
+                class="flex max-w-full items-center gap-2 self-start rounded-lg bg-overlay px-3 py-1.5 text-left text-2xs"
                 :aria-expanded="notesOpen"
                 @click="notesOpen = !notesOpen"
             >

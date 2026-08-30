@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { DagGraph, Icon } from "@intentic/extension-ui";
+import { Button, DagGraph, Icon } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { pipelineDag, type PipelineStage, stageOfNode } from "./pipelineDag";
 import { formatDuration, STATUS_TONE } from "./statusVisual";
@@ -155,23 +155,12 @@ const caption = computed(() => {
                 </div>
 
                 <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1">
-                    <button
-                        type="button"
-                        class="cursor-pointer rounded border border-line bg-canvas/90 px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                        v-tooltip.top="`Zoom out until the whole run is in frame`"
-                        @click="fitAll()"
-                    >
+                    <Button size="small" severity="secondary" v-tooltip.top="`Zoom out until the whole run is in frame`" @click="fitAll()">
                         Fit
-                    </button>
-                    <button
-                        v-if="!fill"
-                        type="button"
-                        class="cursor-pointer rounded border border-line bg-canvas/90 px-2 py-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
-                        v-tooltip.top="`Open the job graph full screen`"
-                        @click="$emit(`expand`)"
-                    >
+                    </Button>
+                    <Button v-if="!fill" size="small" severity="secondary" v-tooltip.top="`Open the job graph full screen`" @click="$emit(`expand`)">
                         <Icon name="expand" class="text-2xs" />
-                    </button>
+                    </Button>
                 </div>
             </template>
         </DagGraph>

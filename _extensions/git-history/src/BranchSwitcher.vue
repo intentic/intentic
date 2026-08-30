@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Popover, SearchBar, timeAgo, vAction } from "@intentic/extension-ui";
+import { Button, Icon, Popover, SearchBar, timeAgo, vAction, ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { useBranches } from "./useBranches.js";
 
@@ -87,9 +87,11 @@ const confirmDelete = async (name: string): Promise<void> => {
 
 <template>
     <div class="flex min-w-0 items-center">
-        <button
-            type="button"
-            class="inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-2xs text-subtle transition-colors hover:bg-overlay hover:text-content"
+        <Button
+            size="small"
+            severity="secondary"
+            :text="true"
+            class="min-w-0"
             v-tooltip.bottom="'Switch, create or delete a branch'"
             aria-label="Branch"
             @click="toggle"
@@ -99,7 +101,7 @@ const confirmDelete = async (name: string): Promise<void> => {
             <span v-if="current && current.behind > 0" class="shrink-0 text-muted">↓{{ current.behind }}</span>
             <span v-if="current && current.ahead > 0" class="shrink-0 text-muted">↑{{ current.ahead }}</span>
             <Icon name="chevron-down" class="shrink-0 text-4xs" />
-        </button>
+        </Button>
 
         <Popover ref="popover">
             <div class="flex w-72 flex-col gap-1.5">
@@ -151,8 +153,12 @@ const confirmDelete = async (name: string): Promise<void> => {
                             <button
                                 v-if="branch.local && !branch.local.current"
                                 type="button"
-                                class="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition-colors hover:bg-overlay hover:text-danger focus-visible:opacity-100 group-hover/row:opacity-100"
-                                :class="{ 'text-danger opacity-100': armedDelete === branch.name }"
+                                :class="
+                                    ui.iconButton(
+                                        `h-5 w-5 rounded opacity-0 hover:text-danger focus-visible:opacity-100 group-hover/row:opacity-100`,
+                                        armedDelete === branch.name ? `text-danger opacity-100` : ``,
+                                    )
+                                "
                                 :disabled="busy"
                                 @click="askDelete(branch.name)"
                                 v-tooltip.top="'Delete branch'"
@@ -166,14 +172,9 @@ const confirmDelete = async (name: string): Promise<void> => {
                                 {{ forceFor === branch.name ? "Unmerged, force delete?" : `Delete ${branch.name}?` }}
                             </span>
                             <button type="button" class="text-2xs text-muted hover:text-content" @click="armedDelete = undefined">Cancel</button>
-                            <button
-                                type="button"
-                                class="rounded border border-danger/50 px-1.5 py-0.5 text-2xs text-danger transition-colors hover:bg-danger/10"
-                                :disabled="busy"
-                                v-action="() => confirmDelete(branch.name)"
-                            >
+                            <Button size="small" severity="danger" :disabled="busy" @click="() => confirmDelete(branch.name)">
                                 {{ forceFor === branch.name ? "Force delete" : "Delete" }}
-                            </button>
+                            </Button>
                         </div>
                     </template>
                     <p v-if="shown.length === 0" class="px-1.5 py-2 text-2xs text-subtle">No branches match.</p>
@@ -199,14 +200,7 @@ const confirmDelete = async (name: string): Promise<void> => {
                             @keydown.enter="submitCreate"
                             @keydown.escape="creating = false"
                         />
-                        <button
-                            type="button"
-                            class="rounded border border-line px-2 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
-                            :disabled="busy || newName.trim() === ''"
-                            v-action="submitCreate"
-                        >
-                            Create
-                        </button>
+                        <Button size="small" severity="secondary" :disabled="busy || newName.trim() === ''" @click="submitCreate"> Create </Button>
                     </div>
                 </div>
             </div>

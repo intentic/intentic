@@ -327,7 +327,6 @@ onMounted(progress.recover);
                             size="small"
                             severity="danger"
                             :text="true"
-                            :rounded="true"
                             aria-label="Remove app"
                             @click="removeEntry(app.name)"
                         >
@@ -351,7 +350,7 @@ onMounted(progress.recover);
                         </div>
                         <p v-if="summary(tool)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(tool) }}</p>
                     </div>
-                    <Button size="small" severity="danger" :text="true" :rounded="true" aria-label="Remove service" @click="removeEntry(tool.name)">
+                    <Button size="small" severity="danger" :text="true" aria-label="Remove service" @click="removeEntry(tool.name)">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>
@@ -547,14 +546,7 @@ onMounted(progress.recover);
                         </div>
                         <p v-if="summary(entry)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(entry) }}</p>
                     </div>
-                    <Button
-                        size="small"
-                        severity="danger"
-                        :text="true"
-                        :rounded="true"
-                        aria-label="Remove server"
-                        @click="removingServer = entry.name"
-                    >
+                    <Button size="small" severity="danger" :text="true" aria-label="Remove server" @click="removingServer = entry.name">
                         <template #icon><Icon name="trash" /></template>
                     </Button>
                 </Card>

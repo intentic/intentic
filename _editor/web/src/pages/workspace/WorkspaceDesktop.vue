@@ -835,8 +835,12 @@ const endResize = (event: PointerEvent): void => {
                                     v-for="toggle in MATCH_TOGGLES"
                                     :key="toggle.label"
                                     type="button"
-                                    class="flex h-4 w-4 items-center justify-center rounded font-mono text-[0.6rem] leading-none text-subtle transition-colors hover:bg-overlay hover:text-content"
-                                    :class="{ 'bg-primary-600/20 text-link': toggle.state.value }"
+                                    :class="
+                                        ui.iconButton(
+                                            `h-4 w-4 rounded font-mono text-3xs leading-none text-subtle`,
+                                            toggle.state.value ? `bg-primary-600/20 text-link` : ``,
+                                        )
+                                    "
                                     :aria-pressed="toggle.state.value"
                                     v-tooltip.bottom="toggle.title"
                                     :aria-label="toggle.title"
@@ -924,7 +928,7 @@ const endResize = (event: PointerEvent): void => {
                         <button
                             v-if="!contentMode"
                             type="button"
-                            class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-muted transition-colors hover:text-content disabled:cursor-default disabled:opacity-40 disabled:hover:text-muted"
+                            :class="ui.iconButton(`h-auto w-auto shrink-0 rounded-md px-1.5 py-0.5 hover:bg-transparent`)"
                             :disabled="filter.trim() !== '' || expanded.size === 0"
                             v-tooltip.bottom="'Collapse all folders'"
                             aria-label="Collapse all folders"
@@ -999,7 +1003,7 @@ const endResize = (event: PointerEvent): void => {
                 <div class="view-header flex items-stretch border-b border-line bg-card">
                     <button
                         type="button"
-                        class="mx-1 flex h-7 w-7 shrink-0 items-center justify-center self-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
+                        :class="ui.iconButton(`mx-1 h-7 w-7 self-center`)"
                         @click="toggleSidebar()"
                         v-tooltip.bottom="explorerTooltip"
                         aria-label="Toggle explorer"

@@ -247,16 +247,18 @@ const frontDesk = computed(() => {
                  Run and Delete it is always visible rather than hover-revealed, and it sits before them because
                  installing is what you do first and most often. It also carries the install status, which is
                  the only place in the app that can say whether the paste worked. -->
-            <button
+            <Button
                 v-if="frontDesk"
-                type="button"
-                class="shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-2xs font-medium text-muted transition-colors hover:bg-overlay hover:text-content"
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="shrink-0"
                 :aria-label="`Install ${automation.id} on a website`"
                 v-tooltip.top="`Embed code & install status`"
                 @click="emit(`install`)"
             >
                 <Icon name="globe" class="mr-1 text-2xs" />Install
-            </button>
+            </Button>
 
             <!-- Edit. Hover-revealed like Run and Delete because reading the list is the common act, but it is
                  the one that was missing entirely: an automation could be made and deleted, never changed. -->

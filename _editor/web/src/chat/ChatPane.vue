@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Button, Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -1336,22 +1336,25 @@ watch(
                                 <!-- The way out that keeps the answer. Deliberately BEFORE Cancel: a user
                                      hesitating over this strip is weighing "do I really want to lose that", and
                                      the offer that answers it should be the one their eye reaches first. -->
-                                <button
-                                    type="button"
-                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-muted transition-colors hover:bg-primary-600/15 hover:text-link"
+                                <Button
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    class="shrink-0"
                                     v-tooltip.top="'Open a new chat from here with what you have typed: this one keeps its answer'"
                                     @click="forkInsteadOfEdit"
                                 >
                                     Keep both instead
-                                </button>
-                                <button
-                                    type="button"
-                                    class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
+                                </Button>
+                                <Button
+                                    size="small"
+                                    :text="true"
+                                    class="shrink-0"
                                     v-tooltip.top="'Leave everything as it is: nothing has been changed yet'"
                                     @click="cancelEdit"
                                 >
                                     Cancel
-                                </button>
+                                </Button>
                             </div>
                             <!-- The whole box changes standing when the agent's voice is armed (.composer-voice):
                                  being in this mode by accident is the one mistake worth paint, because the words
@@ -1370,12 +1373,8 @@ watch(
                                     <button
                                         v-if="editorTarget !== undefined"
                                         type="button"
-                                        class="flex items-center gap-1.5 rounded-lg border py-1.5 px-2 text-xs transition-colors"
-                                        :class="
-                                            includeEditorContext
-                                                ? 'border-primary-500 bg-primary-500/10 text-content'
-                                                : 'border-dashed border-line text-subtle hover:text-content'
-                                        "
+                                        class="ui-chip rounded-lg px-2 py-1.5 text-xs"
+                                        :class="includeEditorContext ? `ui-chip-on` : `border-dashed border-line`"
                                         @click="includeEditorContext = !includeEditorContext"
                                         :aria-pressed="includeEditorContext"
                                         aria-label="Attach editor context"

@@ -36,8 +36,21 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and thirteen others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and fifteen others, and the notes are kept at the top of the file:
 
+- **A skin that says `.p-button` has said it about the tiers that are meant to have no chrome.** Both skins
+  wrote their plate — a border colour, a bevel, a drop shadow, a wash, a hover glow — against every `.p-button`
+  with no exclusion, so `text` and `link`, the tiers the app defines as *nothing until you point at it*, came
+  out as outlined boxes. It reached the whole of `<SandboxVerbs>`, which is the Start/Stop/… cluster on every
+  machine row. Reported as the app having border weights nobody had chosen. Both skins exclude the borderless
+  variants now, spelled with `:where()` so the exclusion costs no specificity.
+- **A disabled control has to stay recognisably the same object.** Sanctum painted a disabled committing button
+  at the *wall's own value*, against a live plaque of pale limestone — so the one action on a form, sitting
+  disabled until its field validated, read as a dark rectangle where a pale object had been, i.e. as gone
+  rather than as unavailable. A disabled plate keeps its own material and loses 28% of its light now: stone
+  stays stone, bronze stays bronze, the ink softens with them. And it is driven by re-pointing the app's
+  `--ui-button-off-*` variables rather than by a block per tier, which is what had let four hand-mixed tones
+  drift to 3.0–3.3:1 under a comment claiming 4.5.
 - **Ornament on an edge becomes noise at UI size.** A carved arcade that reads as stone at 40px reads as a torn,
   dithered edge at 14px: and every panel in an app is a 14px edge. Character has to come from the material, the
   line weights and the type, because those survive being shrunk. The site's turned corner is therefore drawn in

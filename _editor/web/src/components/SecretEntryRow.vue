@@ -249,7 +249,7 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                     @saved="editing = false"
                     @cancel="editing = false"
                 />
-                <button type="button" class="self-start text-2xs text-link hover:underline" @click="multiline = !multiline">
+                <button type="button" :class="ui.linkButton(`text-2xs`)" @click="multiline = !multiline">
                     {{ multiline ? `Single-line value` : `Multi-line value (SSH key, PEM…)` }}
                 </button>
             </div>

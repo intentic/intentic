@@ -398,11 +398,7 @@ const run = async (model: PickedModel): Promise<void> =>
         <!-- ONE run's report, in place of the two lists. A back link rather than a tab: you are looking at
                      a thing, not filtering a list. -->
         <template v-if="openRun">
-            <button
-                type="button"
-                class="mb-4 flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-content"
-                @click="openRunId = undefined"
-            >
+            <button type="button" :class="ui.textAction(`mb-4`)" @click="openRunId = undefined">
                 <Icon name="arrow-left" />
                 All runs
             </button>

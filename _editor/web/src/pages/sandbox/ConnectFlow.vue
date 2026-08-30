@@ -289,12 +289,7 @@ watch(flow, (live) => {
             </div>
         </template>
         <template v-if="kind === `native`">
-            <button
-                v-if="!namingAccount"
-                type="button"
-                class="cursor-pointer self-start text-2xs text-subtle transition-colors hover:text-content"
-                @click="namingAccount = true"
-            >
+            <button v-if="!namingAccount" type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="namingAccount = true">
                 Name this account…
             </button>
             <input v-else v-model="connectLabel" name="accountLabel" placeholder="Account name" :class="ui.input(`min-w-0 py-1.5`)" />

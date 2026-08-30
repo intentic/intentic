@@ -113,7 +113,7 @@ const pick = (entry: RegistryEntry): void => {
                         v-for="entry in entries"
                         :key="entry.name"
                         type="button"
-                        class="flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay disabled:opacity-50"
+                        class="ui-off flex items-center gap-2 rounded-md bg-canvas px-2.5 py-1.5 text-left text-xs transition-colors enabled:hover:bg-overlay"
                         :disabled="blockedReason(entry) !== undefined"
                         @click="pick(entry)"
                     >

@@ -72,7 +72,9 @@ vi.mock("@intentic/ui", async () => {
                 return vue.h(`button`, { class: `copy-stub` });
             },
         }),
-        ui: { linkButton: (extra: string) => extra },
+        // The class recipes, as identity: this suite asserts on structure and text, never on the kit's own
+        // geometry, so a recipe only has to hand back whatever the call site passed it.
+        ui: { linkButton: (extra: string) => extra, textAction: (extra: string) => extra, iconButton: (extra: string) => extra },
         // Highlighting is asynchronous and dynamically imports a grammar chunk; in jsdom it never lands, and
         // the block is written to render plain-but-marked until it does. Answering undefined IS that path.
         useHighlighter: () => ({ tokenizeLine: async () => undefined }),
@@ -432,9 +434,7 @@ describe(`ChatMessageView permission card`, () => {
         expect(element.textContent).toContain(`Stopped for`);
         expect([...element.querySelectorAll(`code.chat-command-chip`)].map((chip) => chip.textContent)).toEqual([`.env.production`]);
 
-        const toggle = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) =>
-            button.textContent?.includes(`Show the command`),
-        );
+        const toggle = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Show the command`));
         expect(toggle?.getAttribute(`aria-expanded`)).toBe(`false`);
         toggle?.click();
         await nextTick();

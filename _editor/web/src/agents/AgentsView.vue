@@ -1114,13 +1114,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                  first screen that asks a question the user can answer beats one that asks them to go and buy
                  something, and what a chat can send with is answered where the model is chosen. -->
             <div v-if="!started && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
-                <button
-                    v-for="starter in starters"
-                    :key="starter.label"
-                    type="button"
-                    class="rounded-full border border-line px-2.5 py-1 text-2xs text-muted transition-colors hover:border-line-strong hover:bg-overlay hover:text-content"
-                    @click="composeAgent(starter.prompt)"
-                >
+                <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
                     {{ starter.label }}
                 </button>
             </div>
@@ -1172,7 +1166,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 type="button"
                                 aria-label="Back to finished agents"
                                 v-tooltip.bottom="'Back to finished'"
-                                class="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
+                                :class="ui.iconButton(`h-4 w-4 rounded`)"
                                 @click="toggleArchive"
                             >
                                 <Icon name="arrow-left" class="text-2xs" />
@@ -1200,12 +1194,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 type="button"
                                 :aria-label="`Open the archive (${archiveSize})`"
                                 v-tooltip.bottom="'Taken off the board: branches and conversations are kept'"
-                                class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs transition-colors"
-                                :class="
-                                    pulsing
-                                        ? 'bg-primary-600/25 text-link ring-1 ring-primary-500/50'
-                                        : 'text-muted hover:bg-overlay hover:text-content'
-                                "
+                                class="ui-chip shrink-0 gap-1 px-1 py-px"
+                                :class="pulsing ? `ui-chip-on ring-1 ring-primary-500/50` : ``"
                                 @click="toggleArchive"
                             >
                                 <Icon name="history" class="text-2xs" />{{ archiveSize }}
@@ -1213,16 +1203,18 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             <!-- Gone while filtering, for the reason the drag is (grabCard): "Clear" archives
                                  the WHOLE lane, and offering it above a lane showing "1 of 12" is offering a
                                  bulk action whose scope is not the one on screen. -->
-                            <button
+                            <Button
                                 v-if="clearable > 0 && !filtering"
-                                type="button"
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                class="shrink-0"
                                 aria-label="Archive every finished agent"
                                 v-tooltip.bottom="`Archive all ${clearable}: you can undo it`"
-                                class="touch-target shrink-0 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-overlay hover:text-content"
                                 @click="archive()"
                             >
                                 Clear
-                            </button>
+                            </Button>
                         </template>
                         <!-- The archive's own bulk exit, in the slot "Clear" occupies on the live lane: the
                              same position for the same kind of act, and the opposite weight. Danger only on
@@ -1233,17 +1225,19 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                              It counts CONVERSATIONS while the header above counts rows, and the difference is
                              the point: a workflow row is one thing to browse past and four transcripts to
                              destroy, and the number on an irreversible act is the cost, not the tidy view. -->
-                        <button
+                        <Button
                             v-if="lane.key === 'finished' && archiveOpen && archiveSize > 0 && !filtering"
-                            type="button"
+                            size="small"
+                            severity="danger"
+                            :text="true"
+                            class="shrink-0"
                             :aria-label="`Delete all ${archived.length} archived agents permanently`"
                             :disabled="purging"
                             v-tooltip.bottom="`Delete all ${archived.length} permanently: branches and all. This can't be undone.`"
-                            class="inline-flex shrink-0 items-center gap-1 rounded px-1 py-px text-2xs text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-40"
                             @click="pendingPurge = true"
                         >
                             <Icon :name="purging ? 'spinner' : 'trash'" :spin="purging" class="text-2xs" />Delete all
-                        </button>
+                        </Button>
                     </header>
                     <!-- The lane's HELD WAKES, first of all: a hold is the one row here that is WHOLLY waiting
                          on you: everything below it is at least running. Attention lane only (HeldWakeCard

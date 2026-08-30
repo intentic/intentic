@@ -783,11 +783,13 @@ const endResize = (event: PointerEvent): void => {
                                         </button>
                                         <button
                                             type="button"
-                                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content max-md:h-9 max-md:w-9"
                                             :class="
-                                                isViewed(file)
-                                                    ? 'text-success'
-                                                    : 'opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100'
+                                                ui.iconButton(
+                                                    `rounded max-md:h-9 max-md:w-9`,
+                                                    isViewed(file)
+                                                        ? `text-success`
+                                                        : `opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100`,
+                                                )
                                             "
                                             @click="toggleViewed(file)"
                                             v-tooltip.right="isViewed(file) ? 'Reviewed, click to unmark' : 'Mark as reviewed'"

@@ -608,18 +608,20 @@ const runPending = async (): Promise<void> => {
             <span class="flex-1"></span>
             <!-- Names the action it will undo, in git's own words on hover. Absent when there is nothing to walk
                  back: a fresh branch, a detached HEAD, or a halted operation (which ends by aborting instead). -->
-            <button
+            <Button
                 v-if="undo.label.value"
-                type="button"
-                class="shrink-0 rounded px-1.5 py-0.5 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40"
+                size="small"
+                severity="secondary"
+                :text="true"
+                class="shrink-0"
                 :disabled="undo.busy.value"
-                v-action="runUndo"
+                @click="runUndo"
                 v-tooltip.bottom="
                     `${undo.action.value?.description ?? ''}: moves ${undo.action.value?.branch ?? 'the branch'} back. A restore point is saved first.`
                 "
             >
                 <Icon name="undo" class="mr-0.5 text-3xs" />{{ undo.label.value }}
-            </button>
+            </Button>
             <Icon v-if="loading" name="spinner" class="shrink-0 text-2xs text-subtle" spin />
         </div>
 
@@ -642,15 +644,16 @@ const runPending = async (): Promise<void> => {
                 </p>
                 <p v-if="operation.actionError.value" class="text-2xs text-danger">{{ operation.actionError.value }}</p>
             </div>
-            <button
-                type="button"
-                class="shrink-0 rounded border border-warning/50 px-1.5 py-0.5 text-2xs text-warning transition-colors hover:bg-warning/10 disabled:opacity-40"
+            <Button
+                size="small"
+                severity="warn"
+                class="shrink-0"
                 :disabled="operation.busy.value"
                 @click="operation.abort()"
                 v-tooltip.bottom="'A restore point is saved first, so this is reversible from Restore points'"
             >
                 Abort
-            </button>
+            </Button>
         </div>
 
         <!-- The graph: one row per commit (a per-row SVG gutter drawing lanes/edges/node, then metadata). Click a

@@ -269,9 +269,7 @@ const pushToCi = async (): Promise<void> => {
                             <span v-if="newKey.length > 0 && !newKeyValid" class="text-2xs text-warning">
                                 Letters, digits and underscores; must not start with a digit.
                             </span>
-                            <button type="button" class="self-start text-2xs text-subtle transition-colors hover:text-content" @click="cancelAdd">
-                                Cancel
-                            </button>
+                            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" @click="cancelAdd">Cancel</button>
                         </div>
                     </RowNote>
                 </RowGroup>

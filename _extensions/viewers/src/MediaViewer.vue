@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, vAction } from "@intentic/extension-ui";
+import { Button, Icon, vAction } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { formatDuration, seekTargets, SPEEDS } from "./mediaControls";
 
@@ -382,13 +382,7 @@ watch(
         <div v-if="failed" class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <Icon name="exclamation-triangle" class="text-3xl text-subtle" />
             <p class="max-w-sm text-xs text-muted">This format can't be played in the browser. Download it to open in a media player.</p>
-            <button
-                type="button"
-                class="inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-xs text-content transition-colors hover:border-line-strong hover:bg-overlay"
-                @click="emit(`download`)"
-            >
-                <Icon name="download" class="text-xs" /> Download
-            </button>
+            <Button severity="secondary" @click="emit(`download`)"> <Icon name="download" class="text-xs" /> Download </Button>
         </div>
 
         <!-- Audio: the file itself is the subject, so it gets the pane. -->

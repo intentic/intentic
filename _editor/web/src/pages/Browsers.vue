@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
-import { AnchoredOverlay, CopyButton, Icon, ui, vAction } from "@intentic/ui";
+import { Button, AnchoredOverlay, CopyButton, Icon, ui, vAction } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import { activePageOf } from "../composables/browser/activePage";
@@ -317,8 +317,8 @@ watch(
                     <button
                         ref="switcherTrigger"
                         type="button"
-                        class="flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-2xs text-content transition-colors"
-                        :class="[sessions.length > 1 ? 'cursor-pointer hover:bg-overlay' : 'cursor-default', { 'bg-overlay': switcherOpen }]"
+                        class="ui-chip shrink-0 rounded-md px-1.5 py-1 text-content"
+                        :class="switcherOpen ? `ui-chip-on` : ``"
                         :aria-haspopup="sessions.length > 1 ? 'menu' : undefined"
                         :aria-expanded="sessions.length > 1 ? switcherOpen : undefined"
                         :disabled="sessions.length < 2"
@@ -375,8 +375,8 @@ watch(
                             :key="page.id"
                             type="button"
                             :data-selected="page.id === activePage?.id"
-                            class="flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-2xs transition-colors"
-                            :class="page.id === activePage?.id ? 'bg-primary-600/15 text-link' : 'text-muted hover:bg-overlay hover:text-content'"
+                            class="ui-chip min-w-0 shrink-0 rounded-md px-1.5 py-1"
+                            :class="page.id === activePage?.id ? `ui-chip-on` : ``"
                             v-tooltip.bottom="page.url"
                             @click="pickPage(page)"
                         >
@@ -413,12 +413,8 @@ watch(
                     <button
                         v-if="current?.running"
                         type="button"
-                        class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-2xs font-medium transition-colors"
-                        :class="
-                            view.driving.value
-                                ? 'bg-primary-600 text-white hover:opacity-90'
-                                : 'border border-line text-muted hover:border-line-strong hover:text-content'
-                        "
+                        class="ui-chip shrink-0 px-2 py-1 font-medium"
+                        :class="view.driving.value ? `ui-chip-on` : ``"
                         v-tooltip.bottom="
                             view.driving.value
                                 ? 'Stop sending your clicks and keystrokes to the agent\'s browser'
@@ -569,7 +565,7 @@ watch(
                             <button
                                 v-if="!helpOpen"
                                 type="button"
-                                class="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-full border border-warning-600/40 bg-card px-3 py-1.5 text-xs text-content shadow-lg transition-colors hover:bg-overlay"
+                                class="ui-chip pointer-events-auto gap-2 border-warning-600/40 bg-card px-3 py-1.5 text-xs text-content shadow-lg hover:bg-overlay"
                                 @click="helpOpen = true"
                             >
                                 <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
@@ -611,20 +607,10 @@ watch(
                                         class="min-w-40 flex-1 rounded border border-line bg-canvas px-2 py-1 text-xs text-content placeholder:text-subtle"
                                         @keydown.enter="resolveHelp(true)"
                                     />
-                                    <button
-                                        type="button"
-                                        class="shrink-0 cursor-pointer rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                                        v-action="() => resolveHelp(true)"
-                                    >
-                                        Done: hand back
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="shrink-0 cursor-pointer rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
-                                        v-action="() => resolveHelp(false)"
-                                    >
+                                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>
+                                    <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)">
                                         Can't help now
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         </template>
@@ -653,7 +639,7 @@ watch(
                             </div>
                             <button
                                 type="button"
-                                class="flex cursor-pointer items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-2xs text-content shadow-lg transition-colors hover:bg-overlay"
+                                class="ui-chip gap-2 border-line bg-card px-3 py-1 text-content shadow-lg hover:bg-overlay"
                                 :aria-expanded="queueOpen"
                                 @click="queueOpen = !queueOpen"
                             >

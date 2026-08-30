@@ -1195,20 +1195,8 @@ const endResize = (event: PointerEvent): void => {
                         class="min-w-40 flex-1 rounded border border-line bg-card px-2 py-1 text-xs text-content placeholder:text-subtle"
                         @keydown.enter="resolveHelp(true)"
                     />
-                    <button
-                        type="button"
-                        class="shrink-0 rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                        v-action="() => resolveHelp(true)"
-                    >
-                        Done: hand back
-                    </button>
-                    <button
-                        type="button"
-                        class="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted transition-colors hover:text-content"
-                        v-action="() => resolveHelp(false)"
-                    >
-                        Can't help now
-                    </button>
+                    <Button size="small" class="shrink-0" @click="() => resolveHelp(true)"> Done: hand back </Button>
+                    <Button size="small" severity="secondary" class="shrink-0" @click="() => resolveHelp(false)"> Can't help now </Button>
                 </div>
             </div>
             <!-- xterm sizes to this container; the session's fit observer keeps each cell filling its share of
@@ -1382,8 +1370,7 @@ const endResize = (event: PointerEvent): void => {
                         v-for="icon in TERMINAL_ICONS"
                         :key="icon"
                         type="button"
-                        class="flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-overlay hover:text-content"
-                        :class="{ 'bg-overlay text-content': terminalMeta(customize.name).icon === icon }"
+                        :class="ui.iconButton(`h-8 w-8`, terminalMeta(customize.name).icon === icon ? `bg-overlay text-content` : ``)"
                         :aria-label="icon"
                         @click="applyIcon(icon)"
                     >

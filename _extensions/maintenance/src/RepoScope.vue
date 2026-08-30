@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type ChoreVerdict, probeSpec } from "@intentic/sandbox-contract/chores";
-import { Icon, timeAgo } from "@intentic/extension-ui";
+import { Icon, timeAgo, ui } from "@intentic/extension-ui";
 import type { ProbeResult } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
 
@@ -133,7 +133,7 @@ const summary = computed(() => {
                      not reflow under the pointer that just pressed it, and so there is somewhere to look. -->
                 <button
                     type="button"
-                    class="shrink-0 cursor-pointer text-subtle hover:text-content disabled:cursor-default disabled:opacity-40"
+                    :class="ui.iconButton(`h-auto w-auto shrink-0 rounded-none p-0 text-subtle hover:bg-transparent`)"
                     :disabled="busy || entry.running"
                     :title="entry.running ? `Measuring ${entry.measures} now` : `Measure ${entry.measures} again now${entry.cost}`"
                     @click="emit(`refresh`, entry.probe.id)"
@@ -144,12 +144,7 @@ const summary = computed(() => {
         </div>
 
         <template v-if="summary !== ``">
-            <button
-                type="button"
-                class="flex cursor-pointer items-center gap-1.5 self-start text-2xs text-subtle hover:text-content"
-                :aria-expanded="open"
-                @click="open = !open"
-            >
+            <button type="button" :class="ui.textAction(`text-2xs text-subtle`)" :aria-expanded="open" @click="open = !open">
                 <Icon :name="open ? `chevron-down` : `chevron-right`" class="text-2xs" />
                 <span>{{ summary }}</span>
             </button>

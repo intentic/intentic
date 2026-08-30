@@ -216,6 +216,63 @@
         color: var(--color-fill-content);
     }
 
+    /* ── THE BUTTON A FINGER HAS TO FIND, on the surfaces where a finger is the only pointer ──────────────
+     * The compact control is 26px, which is right for a mouse and under every thumb guideline there is. Most of
+     * the app answers that with `touch-target` (styles/utilities.css): the HIT AREA grows to 44px and the drawn
+     * box does not move, so one layout serves both pointers. That trick is wrong in exactly one place — a ROW of
+     * choices with gaps between them, where a 44px invisible overlay on each swallows the gap and the midpoint
+     * between two answers stops belonging to either. A decision card is that: two or three answers side by side,
+     * and the press commits something.
+     *
+     * So there the BOX grows, on coarse pointers only, and it is a named tier rather than the pair of utilities
+     * it used to be (`max-md:h-11 max-md:px-5` at the call site). The name is what stops the next such button
+     * picking 2.5rem — which is the whole argument of this file, applied to the one case that needs its own
+     * answer.
+     *
+     * `pointer: coarse` rather than a width breakpoint, and that is a correction to what it replaced: a narrow
+     * DESKTOP window is not a thumb, and a tablet in landscape is. */
+    @media (pointer: coarse) {
+        .p-button.ui-button-thumb {
+            min-height: 2.75rem;
+            padding-inline: calc(var(--spacing) * 5);
+        }
+    }
+
+    /* ── A DISABLED BUTTON IS A FLAT PLATE, NOT A FADED ONE ───────────────────────────────────────────────
+     * Why an opacity was the wrong instrument for THIS system, and what the three variables are, is written
+     * where they are defined (tokens.css). What is here is the rule, and the two things it has to get right.
+     *
+     * IT NAMES `ui-button-loud` IN THE SELECTOR LIST. Every tier above paints through `.p-button:where(:not(…))`,
+     * which `:where()` keeps at one class, so a plain `.p-button:disabled` outranks all of them. The loud tier is
+     * the exception — it is `.p-button.ui-button-loud`, two classes, a tie this rule would lose half the time
+     * depending on where in the file somebody adds the next thing. Naming it is a third class and settles it, and
+     * it costs one selector rather than a comment asking the next reader not to reorder the file.
+     *
+     * IT EXCLUDES `loading`, WHICH IS THE ONE THAT WOULD HAVE SHIPPED. PrimeVue's Button reports itself disabled
+     * while it is loading (`disabled || loading`, Button.vue), so without the exclusion every button in the app
+     * would repaint itself as unavailable for the whole of the wait it just started — the exact moment a person
+     * is watching it to find out whether their press landed. A working button is the button it was, with a
+     * spinner in it. */
+    .p-button:disabled:not(.p-button-loading),
+    .p-button.ui-button-loud:disabled:not(.p-button-loading) {
+        opacity: 1;
+        background: var(--ui-button-off-fill);
+        background-image: none;
+        border-color: var(--ui-button-off-line);
+        color: var(--ui-button-off-content);
+        box-shadow: none;
+        cursor: default;
+    }
+
+    /* The borderless tiers keep having no chrome when they cannot be pressed: a plate appearing around a word
+     * that had none is a control GAINING an edge by becoming unavailable. Only the ink changes.
+     * `:where()` is free, so this lands at the same specificity as the rule above rather than beating it: it has
+     * to stay AFTER it, because in one layer at one weight source order is the whole of the answer. */
+    .p-button:where(.p-button-text, .p-button-link):disabled:not(.p-button-loading) {
+        background: transparent;
+        border-color: transparent;
+    }
+
     /* CHECKING A BOX SHOULD FEEL LIKE PRESSING SOMETHING. Aura transitions the box's colours and leaves the
      * tick to appear between two frames — correct, and completely flat: the one control whose whole job is to
      * acknowledge a click gives the least acknowledgement of any control in the app.
