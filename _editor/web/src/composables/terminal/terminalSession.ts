@@ -362,15 +362,15 @@ const observeHost = (s: TerminalSession): void => {
 
 // The terminal's type, stated at the app's base text size and converted on use, xterm paints its own glyphs
 // from a number, so it is one of the few things CSS does not carry along when that size changes.
-const FONT_PX = 13;
+const FONT_PX = 12;
 
-// Pre-measurement cell estimate (fontSize 13 JetBrains Mono ≈ 7.8×17 css px) for the SPAWN grid only, the
+// Pre-measurement cell estimate (fontSize 12 JetBrains Mono ≈ 7.2×16 css px) for the SPAWN grid only, the
 // first real fit corrects it by at most a row or two. Without it the PTY spawns at xterm's 80x24 default and
 // the immediate shrink to the panel's real grid banks the difference as BLANK lines in tmux's pane history;
 // every later grow (a maximized window) then resurrects them as junk rows above the prompt. Scaled with the font it
 // is an estimate OF, or the guess is wrong by the text size on every spawn.
-const EST_CELL_W = 7.8;
-const EST_CELL_H = 17;
+const EST_CELL_W = 7.2;
+const EST_CELL_H = 16;
 const estCell = (): { width: number; height: number } => {
     const factor = toScreenPx(FONT_PX) / FONT_PX;
     return { width: EST_CELL_W * factor, height: EST_CELL_H * factor };
