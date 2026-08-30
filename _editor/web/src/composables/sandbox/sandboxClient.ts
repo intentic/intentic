@@ -121,24 +121,24 @@ export async function sandboxUpload(path: string, body: Blob, opts?: { onProgres
             throw new DOMException(`Upload canceled`, `AbortError`);
         }
         // Per part, so a token can't expire mid-way through a huge multi-part file (getSessionToken caches/renews).
-        let token = await getSessionToken(target);
-        if (token === undefined) {
+        let bearer = await getSessionToken(target);
+        if (bearer === undefined) {
             throw new Error(`Sign in with Google to reach your sandbox.`);
         }
         const url = `${target.base}${path}&offset=${offset}`;
         const part = body.slice(offset, offset + CHUNK_BYTES);
         try {
-            await sendPart(url, part, offset, token, target.connectToken, opts);
+            await sendPart(url, part, offset, bearer.token, target.connectToken, opts);
         } catch (error) {
             if (!(error instanceof SandboxHttpError) || error.status !== 401) {
                 throw error;
             }
-            rejectSessionToken(target, token);
-            token = await getSessionToken(target);
-            if (token === undefined) {
+            rejectSessionToken(target, bearer);
+            bearer = await getSessionToken(target);
+            if (bearer === undefined) {
                 throw error;
             }
-            await sendPart(url, part, offset, token, target.connectToken, opts);
+            await sendPart(url, part, offset, bearer.token, target.connectToken, opts);
         }
     }
 }

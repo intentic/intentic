@@ -34,22 +34,24 @@ export const sandboxAuthenticatedFetch = async (request: Request, target = curre
     if (!belongsTo(request, target)) {
         throw new DOMException(`The selected sandbox changed while this request was signing in.`, `AbortError`);
     }
-    const token = await getSessionToken(target);
-    if (token === undefined) {
+    const bearer = await getSessionToken(target);
+    if (bearer === undefined) {
         throw new Error(`Sign in with Google to reach your sandbox.`);
     }
     // Clone before the first fetch consumes a body. The retry owns an independent branch of the same bytes.
     const retrySource = request.clone();
-    const response = await globalThis.fetch(authenticated(request, target, token));
+    const response = await globalThis.fetch(authenticated(request, target, bearer.token));
     if (response.status !== 401) {
         return response;
     }
 
-    rejectSessionToken(target, token);
+    // The refusal is attributed to the credential this request actually spent, not to whatever is on file by
+    // the time the answer lands: see SandboxBearer for what re-reading it cost.
+    rejectSessionToken(target, bearer);
     const replacement = await getSessionToken(target);
     if (replacement === undefined) {
         return response;
     }
     await response.body?.cancel().catch(() => undefined);
-    return globalThis.fetch(authenticated(retrySource, target, replacement));
+    return globalThis.fetch(authenticated(retrySource, target, replacement.token));
 };

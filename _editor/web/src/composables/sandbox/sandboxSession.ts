@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { SandboxSummary } from "@intentic-app/api-contract";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "../browserStorage";
 import { useGoogleIdentity } from "../useGoogleIdentity";
@@ -31,6 +31,24 @@ interface StoredSession {
     readonly email: string;
 }
 
+/* WHAT A CALLER PRESENTED, carried with the token rather than re-derived when it comes back refused.
+ *
+ * A 401 has to be attributed to the credential that earned it: a refused SESSION is re-established from the
+ * Google proof still in hand, a refused GOOGLE proof is thrown away so it cannot be replayed forever. The
+ * attribution used to be made by re-reading the stored session and comparing, which is a read of state the
+ * request does not own: a background renewal, or the other window's invalidate arriving over the channel,
+ * replaces it while the request is in flight, and the comparison then says "not the session" about a token
+ * that WAS the session. The refusal fell through to clearing the Google credential, which also turns off
+ * Google's automatic re-authentication, so the next daemon call could only come back as a visible sign-in
+ * gate. Two concurrent 401s on one session were enough on their own: the first invalidates, the second finds
+ * nothing on file and clears.
+ *
+ * So the caller says which one it spent. Nothing about the answer depends on what happened meanwhile. */
+export interface SandboxBearer {
+    readonly token: string;
+    readonly kind: "session" | "google";
+}
+
 const SESSION_KEY_PREFIX = `intentic.session.`;
 const storageKey = (sandboxId: string): string => `${SESSION_KEY_PREFIX}${sandboxId}`;
 
@@ -40,7 +58,7 @@ const EXPIRY_MARGIN_MS = 60_000;
 // session slides forever and only a return from a long absence re-proves identity.
 const RENEW_UNDER_MS = 7 * 24 * 60 * 60 * 1000;
 
-const { getIdToken, signedInEmail, clearCredential } = useGoogleIdentity();
+const { getIdToken, signedInEmail, clearCredential, cancelSignIn } = useGoogleIdentity();
 const { activeSandboxId } = useSandbox();
 
 // In-memory mirror of the persisted sessions (hydrated lazily per sandbox), so presentedEmail is reactive to
@@ -50,11 +68,22 @@ const sessions = ref<Record<string, StoredSession>>({});
 // stops re-probing on every call. Cleared per sandbox the moment a hello positively advertises the route.
 const unsupported = new Set<string>();
 // One in-flight establish per sandbox, so concurrent calls share a single Google mint + exchange.
-const inflight = new Map<string, Promise<string | undefined>>();
+const inflight = new Map<string, Promise<SandboxBearer | undefined>>();
 const renewing = new Set<string>();
-// Invalidates every async establishment/renewal already past an await. A late response may complete on the
-// wire, but it cannot write or return a credential after logout.
-let authGeneration = 0;
+/* Invalidates async establishment/renewal already past an await. A late response may complete on the wire, but
+ * it cannot write or return a credential after the thing that retired it.
+ *
+ * PER SANDBOX, and that is the whole point of the pair. A single counter meant one sandbox's 401 discarded a
+ * session another sandbox had just minted successfully — the exchange landed, the write was skipped, and the
+ * next call established all over again, which is a Google round trip whenever the ~1h proof has aged out. The
+ * global half stays for `clearSessions`, which retires every sandbox at once (a sign-out must reach a mint in
+ * flight for a sandbox nobody has named yet, so it cannot be a per-id bump). */
+let allGeneration = 0;
+const sandboxGenerations = new Map<string, number>();
+const generationOf = (sandboxId: string): string => `${allGeneration}.${sandboxGenerations.get(sandboxId) ?? 0}`;
+const retireGeneration = (sandboxId: string): void => {
+    sandboxGenerations.set(sandboxId, (sandboxGenerations.get(sandboxId) ?? 0) + 1);
+};
 
 type SessionMessage =
     | { readonly kind: `clear` }
@@ -147,9 +176,9 @@ const exchange = async (target: SandboxTarget, bearer: string): Promise<StoredSe
 // The sign-in moment: mint a Google proof (silent for a returning Google session; One Tap / the rendered
 // gate otherwise) and exchange it. Only an explicit 404 proves an old daemon needs the raw-token fallback;
 // network errors and malformed/non-2xx answers fail instead of silently changing credential modes.
-const establish = (target: SandboxTarget & { readonly sandboxId: string }): Promise<string | undefined> => {
-    const generation = authGeneration;
-    const pending = (async (): Promise<string | undefined> => {
+const establish = (target: SandboxTarget & { readonly sandboxId: string }): Promise<SandboxBearer | undefined> => {
+    const generation = generationOf(target.sandboxId);
+    const pending = (async (): Promise<SandboxBearer | undefined> => {
         let idToken = await getIdToken();
         if (idToken === undefined) {
             return undefined;
@@ -165,19 +194,19 @@ const establish = (target: SandboxTarget & { readonly sandboxId: string }): Prom
             }
             minted = await exchange(target, idToken);
         }
-        if (authGeneration !== generation) {
+        if (generationOf(target.sandboxId) !== generation) {
             return undefined;
         }
         if (minted === `unsupported`) {
             unsupported.add(target.sandboxId);
-            return idToken;
+            return { token: idToken, kind: `google` };
         }
         if (minted === `unauthorized`) {
             clearCredential();
             throw new Error(`The sandbox rejected your Google sign-in.`);
         }
         write(target.sandboxId, minted);
-        return minted.token;
+        return { token: minted.token, kind: `session` };
     })().finally(() => {
         if (inflight.get(target.sandboxId) === pending) {
             inflight.delete(target.sandboxId);
@@ -191,11 +220,11 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
     if (renewing.has(target.sandboxId)) {
         return;
     }
-    const generation = authGeneration;
+    const generation = generationOf(target.sandboxId);
     renewing.add(target.sandboxId);
     try {
         const minted = await exchange(target, sessionToken);
-        if (minted !== `unsupported` && minted !== `unauthorized` && generation === authGeneration) {
+        if (minted !== `unsupported` && minted !== `unauthorized` && generation === generationOf(target.sandboxId)) {
             write(target.sandboxId, minted);
         }
         // A failed renewal changes nothing: the current session keeps working until expiry, and a daemon that
@@ -205,12 +234,19 @@ const renew = async (target: SandboxTarget & { readonly sandboxId: string }, ses
     }
 };
 
+// The raw Google proof as a bearer, for the two callers that legitimately spend one: a daemon predating the
+// session exchange, and loopback mode, where there is no sandbox id to key a session by.
+const googleBearer = async (): Promise<SandboxBearer | undefined> => {
+    const token = await getIdToken();
+    return token === undefined ? undefined : { token, kind: `google` };
+};
+
 // The bearer for the active sandbox: a valid session (renewed in the background when due), or the freshly
 // established one, or, only for pre-session daemons, the raw Google ID token. Undefined
 // only when the user dismisses the sign-in gate.
-const getSessionToken = async (target = currentSandboxTarget()): Promise<string | undefined> => {
+const getSessionToken = async (target = currentSandboxTarget()): Promise<SandboxBearer | undefined> => {
     if (target === undefined || target.sandboxId === undefined) {
-        return getIdToken();
+        return googleBearer();
     }
     const sandboxId = target.sandboxId;
     const stored = sessions.value[sandboxId] ?? readStored(sandboxId);
@@ -221,20 +257,48 @@ const getSessionToken = async (target = currentSandboxTarget()): Promise<string 
         if (Date.now() >= stored.expiresAt - RENEW_UNDER_MS) {
             void renew({ ...target, sandboxId }, stored.token).catch(() => undefined);
         }
-        return stored.token;
+        return { token: stored.token, kind: `session` };
     }
     const advertises = activeSandboxId.value === sandboxId ? routeAdvertised(`system.session`) : undefined;
     if (advertises === false) {
-        return getIdToken();
+        return googleBearer();
     }
     if (advertises === true) {
         unsupported.delete(sandboxId);
     }
     if (unsupported.has(sandboxId)) {
-        return getIdToken();
+        return googleBearer();
     }
     return inflight.get(sandboxId) ?? establish({ ...target, sandboxId });
 };
+
+/* A SIGN-IN NOBODY IS WAITING FOR ANY MORE, settled the moment the user points the workspace somewhere else.
+ *
+ * Establishing a session for a sandbox starts a Google mint, and a mint shows Google's own UI and then, when
+ * that produces nothing within the guard, the app's full-screen gate. Neither is bound to the sandbox that
+ * asked: `needsSignIn` is one flag for the window. So a switch to a sandbox this browser has no session for
+ * raised a gate that outlived the switch BACK, and it arrived up to five seconds late, which is to say over a
+ * workspace whose credentials are perfectly good, with nothing on it to explain which machine it is about.
+ * Every window of the app does this at once, because the popped-out panels follow the active sandbox
+ * (pages/FloatingArea.vue), so the same prompt appeared on both screens.
+ *
+ * Fired only when WE have an establish parked for the sandbox being left, and never when the incoming one is
+ * parked too: a mint is one shared promise, so settling it for the outgoing sandbox would also settle the
+ * sign-in the user is about to need. Anything else awaiting that same mint (the setup wizard's own, in the
+ * window where both could be up) resolves empty and asks again when it next needs a credential, which is the
+ * behaviour a dismissed gate already has.
+ *
+ * This is the credential half of the sandbox re-scope, which the other self-scoping subsystems (the liveness
+ * stream, the extension host) do for their own state; sandboxScope.ts names all three. */
+watch(activeSandboxId, (id, previous) => {
+    if (previous === undefined || previous === id || !inflight.has(previous)) {
+        return;
+    }
+    if (id !== undefined && inflight.has(id)) {
+        return;
+    }
+    cancelSignIn();
+});
 
 // Drop the ACTIVE sandbox's session: the daemon rejected it (401, secret rotated, expiry raced) or the user
 // is switching Google accounts. The next call re-establishes from a fresh Google proof.
@@ -242,7 +306,7 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
     if (sandboxId === undefined) {
         return;
     }
-    authGeneration += 1;
+    retireGeneration(sandboxId);
     const rest = { ...sessions.value };
     delete rest[sandboxId];
     sessions.value = rest;
@@ -253,21 +317,28 @@ const invalidateSession = (sandboxId = activeSandboxId.value, broadcast = true):
     }
 };
 
-// A 401 names the exact bearer the daemon rejected. A session rejection keeps the Google proof available for
-// the one retry; a raw-Google rejection clears that proof so it cannot be replayed forever.
-const rejectSessionToken = (target: SandboxTarget, rejected: string): void => {
-    const sandboxId = target.sandboxId;
-    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
-    if (sandboxId !== undefined && stored?.token === rejected) {
-        invalidateSession(sandboxId);
+/* A 401 names the exact bearer the daemon rejected, and the bearer says which credential it is (SandboxBearer).
+ * A session rejection keeps the Google proof available for the one retry; a raw-Google rejection clears that
+ * proof so it cannot be replayed forever.
+ *
+ * The session is dropped only while the refused one is still what is on file. A background renewal, or the
+ * other window's invalidate arriving first, may already have replaced it, and retiring a successor nothing has
+ * rejected costs a round trip for no reason. */
+const rejectSessionToken = (target: SandboxTarget, rejected: SandboxBearer): void => {
+    if (rejected.kind === `google`) {
+        clearCredential();
         return;
     }
-    clearCredential();
+    const sandboxId = target.sandboxId;
+    const stored = sandboxId === undefined ? undefined : (sessions.value[sandboxId] ?? readStored(sandboxId));
+    if (sandboxId !== undefined && stored?.token === rejected.token) {
+        invalidateSession(sandboxId);
+    }
 };
 
 // Platform sign-out / account deletion: forget EVERY sandbox's session, alongside useAuth's clearCredential.
 const clearSessions = (broadcast = true): void => {
-    authGeneration += 1;
+    allGeneration += 1;
     sessions.value = {};
     renewing.clear();
     for (const key of storedKeys(SESSION_KEY_PREFIX)) {

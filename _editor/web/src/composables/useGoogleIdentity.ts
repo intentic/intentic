@@ -315,8 +315,14 @@ const renderButton = async (parent: HTMLElement, dark: boolean): Promise<boolean
     return true;
 };
 
-// User dismissed the gate without signing in: let the awaiting call resolve undefined (the caller surfaces
-// "sign in to reach your sandbox"), so nothing is trapped behind a modal.
+/* NOBODY IS WAITING FOR THIS SIGN-IN ANY MORE: let the awaiting call resolve undefined (the caller surfaces
+ * "sign in to reach your sandbox"), so nothing is trapped behind a modal.
+ *
+ * Two ways to reach that state, and the second is not a click. The user dismisses the gate; or the reason for
+ * the mint goes away underneath it, which is what a sandbox switch does to a session being established for the
+ * sandbox just left (sandboxSession's own watch). The guard above raises this gate up to five seconds after
+ * the call that wanted it, so without the second caller the overlay landed on whatever the user had moved on
+ * to, naming no machine and asking for a credential that screen did not need. */
 const cancelSignIn = (): void => {
     needsSignIn.value = false;
     settle?.(undefined);

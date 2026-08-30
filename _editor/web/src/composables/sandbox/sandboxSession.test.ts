@@ -16,35 +16,60 @@ import "./sandboxSession";
 const state = vi.hoisted(() => ({
     idToken: `id-token` as string | undefined,
     minted: 0,
+    // What the Google layer was ASKED to do with the credential: a session rejection must never reach either.
+    cleared: 0,
+    canceled: 0,
     advertised: undefined as boolean | undefined,
     sandboxId: `sb-1` as string | undefined,
+    /* A mint that does not resolve: what a real one does while Google's prompt (or the app's own gate) is up
+     * and the reader has not answered it. The state a switch has to be able to leave behind.
+     *
+     * Released in afterEach, because `load()` resets the module registry but the mocked useSandbox is
+     * evaluated once for the file: every previously-loaded copy of the module still watches that same ref, so
+     * a parked establish left in one of THEIR `inflight` maps answers the next test's switch as well. */
+    mintParks: false,
+    releaseMint: (): void => {},
+    // Points the workspace at another sandbox the way the switcher does, through the ref the module watches.
+    // Bound by the useSandbox mock's factory, which vitest evaluates once for the file.
+    select: (_id: string | undefined): void => {},
 }));
 
 vi.mock("../useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
         getIdToken: async () => {
             state.minted += 1;
-            return state.idToken;
+            if (!state.mintParks) {
+                return state.idToken;
+            }
+            return new Promise<string | undefined>((resolve) => {
+                state.releaseMint = () => resolve(undefined);
+            });
         },
         signedInEmail: { value: `google@x.com` },
-        clearCredential: vi.fn(),
+        clearCredential: () => {
+            state.cleared += 1;
+        },
+        cancelSignIn: () => {
+            state.canceled += 1;
+        },
     }),
 }));
-vi.mock("./useSandbox", () => ({
-    useSandbox: () => ({
-        active: {
-            get value() {
-                return state.sandboxId === undefined ? undefined : { id: state.sandboxId, token: `connect` };
-            },
-        },
-        activeSandboxId: {
-            get value() {
-                return state.sandboxId;
-            },
-        },
-        daemonUrl: { value: `https://daemon.test` },
-    }),
-}));
+// A real ref, not a getter: the module WATCHES the active sandbox (a switch settles a mint left parked for the
+// sandbox being left), and a watch source has to be one.
+vi.mock("./useSandbox", async () => {
+    const { computed, ref } = await vi.importActual<typeof import("vue")>(`vue`);
+    const activeSandboxId = ref(state.sandboxId);
+    state.select = (id) => {
+        activeSandboxId.value = id;
+    };
+    return {
+        useSandbox: () => ({
+            active: computed(() => (activeSandboxId.value === undefined ? undefined : { id: activeSandboxId.value, token: `connect` })),
+            activeSandboxId,
+            daemonUrl: { value: `https://daemon.test` },
+        }),
+    };
+});
 vi.mock("./useDaemonRoutes", () => ({ routeAdvertised: () => state.advertised }));
 
 // Storage stub for the node test environment: the standard Storage surface, backed by a Map.
@@ -82,17 +107,29 @@ beforeEach(() => {
     stubStorage();
     state.idToken = `id-token`;
     state.minted = 0;
+    state.cleared = 0;
+    state.canceled = 0;
     state.advertised = undefined;
     state.sandboxId = `sb-1`;
+    state.mintParks = false;
+    // The active-sandbox ref lives in the mock factory, which vitest evaluates once for the whole file, so it
+    // survives `load()`'s module reset: a test that switches sandboxes has to hand it back.
+    state.select(`sb-1`);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+    state.releaseMint();
+    state.releaseMint = () => {};
+    // One turn for the released establish to fall out of its module's `inflight`.
+    await new Promise((resolve) => setTimeout(resolve));
+    vi.unstubAllGlobals();
+});
 
 it(`serves a valid stored session with no Google mint and no network`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session());
     const fetchMock = vi.fn();
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    expect(await useSandboxSession().getSessionToken()).toBe(`sess-stored`);
+    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(state.minted).toBe(0);
 });
@@ -101,14 +138,14 @@ it(`establishes a session from a Google proof: one exchange, persisted, then ser
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse());
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    expect(await useSandboxSession().getSessionToken()).toBe(`sess-minted`);
+    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     // The exchange call: the daemon's session route, the Google bearer, the TOFU connect token.
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(`https://daemon.test/system/session`);
     expect(init.headers).toMatchObject({ authorization: `Bearer id-token`, "x-intentic-connect": `connect` });
     expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``)).toMatchObject({ token: `sess-minted`, email: `o@x.com` });
     // Steady state: the second call touches nothing.
-    expect(await useSandboxSession().getSessionToken()).toBe(`sess-minted`);
+    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(state.minted).toBe(1);
 });
@@ -119,8 +156,8 @@ it(`shares one in-flight establish across concurrent calls`, async () => {
     const { useSandboxSession } = await load();
     const { getSessionToken } = useSandboxSession();
     const [first, second] = await Promise.all([getSessionToken(), getSessionToken()]);
-    expect(first).toBe(`sess-minted`);
-    expect(second).toBe(`sess-minted`);
+    expect(first).toEqual({ token: `sess-minted`, kind: `session` });
+    expect(second).toEqual({ token: `sess-minted`, kind: `session` });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(state.minted).toBe(1);
 });
@@ -130,13 +167,13 @@ it(`falls back to the raw ID token on a 404 exchange and stops probing, until th
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken } = useSandboxSession();
-    expect(await getSessionToken()).toBe(`id-token`);
-    expect(await getSessionToken()).toBe(`id-token`);
+    expect(await getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
+    expect(await getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // The daemon was updated mid-session: a hello now advertises the route, so the exchange is retried.
     state.advertised = true;
     fetchMock.mockImplementation(async () => sessionResponse());
-    expect(await getSessionToken()).toBe(`sess-minted`);
+    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -154,7 +191,7 @@ it(`skips the exchange entirely when the daemon positively advertises no session
     const fetchMock = vi.fn();
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    expect(await useSandboxSession().getSessionToken()).toBe(`id-token`);
+    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `id-token`, kind: `google` });
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
@@ -163,7 +200,7 @@ it(`serves a session nearing expiry immediately and renews it in the background 
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-renewed`));
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
-    expect(await useSandboxSession().getSessionToken()).toBe(`sess-stored`);
+    expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.headers).toMatchObject({ authorization: `Bearer sess-stored` });
@@ -178,11 +215,11 @@ it(`re-establishes after an expired session, and after invalidateSession`, async
     vi.stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken, invalidateSession } = useSandboxSession();
-    expect(await getSessionToken()).toBe(`sess-minted`);
+    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     expect(state.minted).toBe(1);
     invalidateSession();
     expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
-    expect(await getSessionToken()).toBe(`sess-minted`);
+    expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     expect(state.minted).toBe(2);
 });
 
@@ -225,6 +262,113 @@ it(`resolves undefined when the user dismisses the sign-in gate. nothing to exch
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
+});
+
+/* WHAT A 401 IS ALLOWED TO COST. The daemon session is a per-sandbox credential and the Google proof is the
+ * ~1h thing that establishes it, so clearing the second is not a retry, it is a visible sign-in gate: the
+ * mint that follows has no cached token to serve and `clearCredential` has switched Google's automatic
+ * re-authentication off. A refused SESSION must therefore never reach it, however the refusals arrive. */
+it(`a rejected session never costs the Google proof, however many calls were holding it`, async () => {
+    localStorage.setItem(`intentic.session.sb-1`, session({ token: `sess-A` }));
+    const { useSandboxSession } = await load();
+    const { getSessionToken, rejectSessionToken } = useSandboxSession();
+    const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
+    const bearer = await getSessionToken(target);
+
+    // Two requests were in flight on the same session and the daemon refused both. The first drops it; the
+    // second finds nothing on file, which used to fall through to clearing Google.
+    rejectSessionToken(target, bearer!);
+    rejectSessionToken(target, bearer!);
+    expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
+    expect(state.cleared).toBe(0);
+});
+
+it(`…including when the other window's invalidate lands first`, async () => {
+    localStorage.setItem(`intentic.session.sb-1`, session({ token: `sess-A` }));
+    const { useSandboxSession } = await load();
+    const { getSessionToken, rejectSessionToken, invalidateSession } = useSandboxSession();
+    const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
+    const bearer = await getSessionToken(target);
+
+    invalidateSession(`sb-1`);
+    rejectSessionToken(target, bearer!);
+    expect(state.cleared).toBe(0);
+});
+
+it(`a rejected raw Google proof still clears it, so a dead token cannot be replayed forever`, async () => {
+    state.advertised = false;
+    const { useSandboxSession } = await load();
+    const { getSessionToken, rejectSessionToken } = useSandboxSession();
+    const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
+    const bearer = await getSessionToken(target);
+    expect(bearer).toEqual({ token: `id-token`, kind: `google` });
+
+    rejectSessionToken(target, bearer!);
+    expect(state.cleared).toBe(1);
+});
+
+// A session already superseded (a background renewal, the other window's write) was not the one refused, and
+// retiring its successor spends a round trip on a credential nothing has rejected.
+it(`a rejection that names a superseded session leaves the current one alone`, async () => {
+    localStorage.setItem(`intentic.session.sb-1`, session({ token: `sess-current` }));
+    const { useSandboxSession } = await load();
+    const { getSessionToken, rejectSessionToken } = useSandboxSession();
+    const target = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
+    await getSessionToken(target);
+
+    rejectSessionToken(target, { token: `sess-previous`, kind: `session` });
+    expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-current`);
+    expect(state.cleared).toBe(0);
+});
+
+// One sandbox's 401 used to discard a session ANOTHER sandbox had just minted, because the generation guard
+// was a single counter: the exchange landed, the write was skipped, and the next call established again.
+it(`invalidating one sandbox does not discard a session another sandbox just minted`, async () => {
+    let answer: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+        `fetch`,
+        vi.fn(
+            () =>
+                new Promise<Response>((resolve) => {
+                    answer = resolve;
+                }),
+        ),
+    );
+    const { useSandboxSession } = await load();
+    const { getSessionToken, invalidateSession } = useSandboxSession();
+    const pending = getSessionToken({ sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` });
+    await vi.waitFor(() => expect(answer).toBeTypeOf(`function`));
+
+    invalidateSession(`sb-2`);
+    answer?.(sessionResponse(`sess-sb1`));
+
+    await expect(pending).resolves.toEqual({ token: `sess-sb1`, kind: `session` });
+    expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-sb1`);
+});
+
+/* THE GATE MUST NOT OUTLIVE ITS REASON. Establishing a session parks on a Google mint, and the mint raises a
+ * window-wide overlay (immediately when Google skips the prompt, five seconds later otherwise). Switching away
+ * used to leave it standing over the sandbox the user moved TO — one that needs nothing — and every window of
+ * the app showed it at once, because the popped-out panels follow the active sandbox. */
+it(`a switch away settles the sign-in left parked for the sandbox being left`, async () => {
+    state.mintParks = true; // The establish is waiting on Google, which is what puts the gate up.
+    const { useSandboxSession } = await load();
+    void useSandboxSession().getSessionToken();
+    await vi.waitFor(() => expect(state.minted).toBe(1));
+
+    state.select(`sb-2`);
+    await vi.waitFor(() => expect(state.canceled).toBe(1));
+});
+
+it(`a switch with nothing parked leaves the sign-in alone`, async () => {
+    localStorage.setItem(`intentic.session.sb-1`, session());
+    vi.stubGlobal(`fetch`, vi.fn());
+    const { useSandboxSession } = await load();
+    await useSandboxSession().getSessionToken();
+
+    state.select(`sb-2`);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(state.canceled).toBe(0);
 });
 
 it(`presentedEmail names the session identity, falling back to the Google credential without one`, async () => {

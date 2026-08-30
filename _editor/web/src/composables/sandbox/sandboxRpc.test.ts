@@ -5,9 +5,10 @@ import { resetDaemonRoutes, setDaemonRoutes } from "./useDaemonRoutes";
 const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
 vi.mock("./sandboxSession", () => ({
     useSandboxSession: () => ({
-        getSessionToken: async () => authState.token,
-        rejectSessionToken: (_target: unknown, token: string) => {
-            authState.rejected.push(token);
+        // A bearer says WHICH credential it is, so a 401 can be attributed without re-reading storage.
+        getSessionToken: async () => ({ token: authState.token, kind: `session` }),
+        rejectSessionToken: (_target: unknown, bearer: { token: string }) => {
+            authState.rejected.push(bearer.token);
             authState.token = `replacement-token`;
         },
     }),

@@ -52,7 +52,9 @@ vi.mock("../sandbox/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-vi.mock("../sandbox/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => `session-token` }) }));
+vi.mock("../sandbox/sandboxSession", () => ({
+    useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
+}));
 
 const { askAgentToResolve, landAgent, startAgent } = await import("./agentActions");
 

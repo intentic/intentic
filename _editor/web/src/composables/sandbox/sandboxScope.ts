@@ -17,13 +17,15 @@ import { resetWorkspaceTreeState } from "../workspace/useWorkspaceTree";
  * chat, editor buffers, the shared file-action feedback, live outside the component tree and would otherwise
  * carry one sandbox's data onto the next. Reachable + the liveness stream are re-scoped in useSandboxLiveness.
  *
- * TWO SUBSYSTEMS RE-SCOPE THEMSELVES rather than being reset from here, and both are named so a reader looking
- * for the whole picture finds it: the liveness stream (useSandboxLiveness, above) and the EXTENSION HOST
- * (extension-host/useExtensionHost). The second is not a tidiness call, an extension's state is not this
- * app's to reset. What runs, what each one has read and what its rail tile is claiming are answers belonging
- * to the sandbox that was asked, so the host retires every activation and empties the extensions' own scope
- * (extension-api/scope.ts) before loading the new box's list. Importing that chain from here would also close
- * a cycle: the host reaches apiImpl, which reaches most of these composables.
+ * THREE SUBSYSTEMS RE-SCOPE THEMSELVES rather than being reset from here, and all three are named so a reader
+ * looking for the whole picture finds it: the liveness stream (useSandboxLiveness, above), the BROWSER→SANDBOX
+ * CREDENTIALS (sandboxSession, whose own watch settles a Google mint left parked for the outgoing sandbox, so
+ * its sign-in gate cannot land over the incoming one), and the EXTENSION HOST (extension-host/useExtensionHost).
+ * The last is not a tidiness call, an extension's state is not this app's to reset. What runs, what each one
+ * has read and what its rail tile is claiming are answers belonging to the sandbox that was asked, so the host
+ * retires every activation and empties the extensions' own scope (extension-api/scope.ts) before loading the
+ * new box's list. Importing that chain from here would also close a cycle: the host reaches apiImpl, which
+ * reaches most of these composables.
  *
  * This watch is registered at module scope (imported once from main.ts) rather than inside the shell on
  * purpose: the "add sandbox" flow changes the active sandbox while the shell is UNMOUNTED (on /setup), so a
