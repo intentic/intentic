@@ -44,7 +44,6 @@ import FileTabs from "./FileTabs.vue";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
-import UploadProgress from "./UploadProgress.vue";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";
 import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
 import WorkspaceScopeGone from "./WorkspaceScopeGone.vue";
@@ -62,7 +61,7 @@ import { CONTEXT_TARGET, HOISTED_CONTEXT } from "./viewerChrome";
 
 const layout = useLayout();
 const { tree, rootHidden, error, isLoading, refetch, entry, expanded, collapseAll, moveIntoMany, run, busy, actionError } = useWorkspaceTree();
-const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue, enqueueFromDataTransfer } = useUploadQueue();
+const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
 const { forget, dirtyPaths } = useEditBuffers();
 const changes = useChanges();
 // Every git repo under /work (root + nested). Marks the tree rows that get a git-history affordance, and feeds
@@ -1119,8 +1118,6 @@ const endResize = (event: PointerEvent): void => {
                     <span class="text-xs font-medium">Drop files to add to workspace root</span>
                 </div>
             </section>
-
-            <UploadProgress v-if="uploadScanning || uploadFiles.length > 0 || uploadSkipped !== undefined" />
         </div>
 
         <!-- Bottom terminal panel. v-if unmounts it when closed, but the tabs live in a module-level Map in

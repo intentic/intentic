@@ -21,6 +21,7 @@ import { sandboxJson, sandboxRequest } from "../sandbox/sandboxClient";
 import { nextTick } from "vue";
 import { Conversation } from "../chat/conversation";
 import { useChat } from "../chat/useChat";
+import { useNotifications } from "../notifications";
 import { queryClient } from "../queryPersistence";
 import { canArchive, FINISHED_WINDOW, type FleetAgent, resetAgents, resetArchive, setAgents, useAgents, windowFinished } from "./useAgents";
 
@@ -690,6 +691,9 @@ describe("archive", () => {
         // mockResolvedValueOnce/mockRejectedValueOnce still take precedence.
         post.mockReset().mockResolvedValue({} as never);
         resetAgents();
+        // The board reports into the app's one receipt channel (composables/notifications.ts), which no longer
+        // resets with the fleet: it is shared, and a desync clearing it would wipe whatever else is on screen.
+        useNotifications().dismissReceipt();
         useAgents().archived.value = [];
         const other = new Conversation();
         other.isolated.value = false;
@@ -697,7 +701,8 @@ describe("archive", () => {
     });
 
     it("moves what the daemon says moved, and keeps a way back without saying a word", async () => {
-        const { archive, notice, receipt, undoable, archivedFlash, lanes, archived } = useAgents();
+        const { archive, notice, undoable, archivedFlash, lanes, archived } = useAgents();
+        const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
         const flashes = archivedFlash.value;
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
@@ -778,14 +783,15 @@ describe("archive", () => {
 
         // "Nothing moved" is the case the optimistic removal got entirely wrong, so the board is put back whole.
         it("puts the whole lane back when nothing moved", async () => {
-            const { archive, lanes, receipt } = useAgents();
+            const { archive, lanes } = useAgents();
+            const { receipt } = useNotifications();
             setAgents([agent(`a`), agent(`b`)], 1);
             post.mockResolvedValueOnce({ moved: [], failed: [], rev: 2 } as never);
 
             await archive();
 
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
-            expect(receipt.value?.message).toContain(`Nothing to archive`);
+            expect(receipt.value?.title).toContain(`Nothing to archive`);
         });
 
         /* THE REPORT THIS PAIR EXISTS FOR. A refusal (a checkout whose repository was deleted, a locked one)
@@ -793,7 +799,8 @@ describe("archive", () => {
          * say so, about the very card still sitting in front of the user, on every press. The daemon now names
          * what it refused and why, and the strip that does not expire is where that belongs. */
         it("says why the daemon refused, instead of claiming there was nothing to archive", async () => {
-            const { archive, lanes, notice, receipt } = useAgents();
+            const { archive, lanes, notice } = useAgents();
+            const { receipt } = useNotifications();
             setAgents([agent(`a`)], 1);
             post.mockResolvedValueOnce({
                 moved: [],
@@ -847,30 +854,32 @@ describe("archive", () => {
     });
 
     it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
-        const { archive, receipt } = useAgents();
+        const { archive } = useAgents();
+        const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 3 } as never);
 
         await archive();
 
         expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ body: JSON.stringify({}) }));
-        expect(receipt.value?.message).toContain(`2 agents archived`);
-        expect(receipt.value?.undo).toBeTypeOf(`function`);
+        expect(receipt.value?.title).toContain(`2 agents archived`);
+        expect(receipt.value?.actions?.[0]?.run).toBeTypeOf(`function`);
     });
 
-    it("undo restores exactly what was archived, and takes the receipt with it", async () => {
-        const { archive, receipt, undoable, lanes, archived } = useAgents();
+    it("undo restores exactly what was archived, and reports that it did", async () => {
+        const { archive, undoable, lanes, archived } = useAgents();
+        const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
         post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 4 } as never);
         await archive();
 
         post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 5 } as never);
-        await receipt.value?.undo?.();
+        await receipt.value?.actions?.[0]?.run();
 
         expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`, `b`] }) }));
         expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         expect(archived.value).toEqual([]);
-        expect(receipt.value).toBeUndefined();
+        expect(receipt.value?.title).toBe(`2 agents back on the board`);
         expect(undoable.value).toEqual([]);
     });
 
@@ -941,19 +950,21 @@ describe("archive", () => {
     });
 
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {
-        const { archive, receipt } = useAgents();
+        const { archive } = useAgents();
+        const { receipt } = useNotifications();
         post.mockResolvedValueOnce({ moved: [], failed: [], rev: 10 } as never);
 
         await archive();
 
-        expect(receipt.value?.message).toContain(`Nothing to archive`);
-        expect(receipt.value?.undo).toBeUndefined();
+        expect(receipt.value?.title).toContain(`Nothing to archive`);
+        expect(receipt.value?.actions).toBeUndefined();
     });
 
     // A failure is the one thing here that must be read, so it lands on the strip that has no timer: never
     // on the receipt, which retires itself whether or not anyone looked.
     it("reports a failure on the persistent strip, without dropping any cards off the board", async () => {
-        const { archive, notice, receipt, lanes } = useAgents();
+        const { archive, notice, lanes } = useAgents();
+        const { receipt } = useNotifications();
         setAgents([agent(`a`)], 1);
         post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
@@ -1098,7 +1109,8 @@ describe("archive", () => {
         // The way back no longer hangs off the message offering it, which is what lets the message expire on
         // a timer, and lets the single-card archive have no message at all.
         it("keeps the undo after the receipt that announced it is gone", async () => {
-            const { archive, receipt, dismissReceipt, undoable } = useAgents();
+            const { archive, undoable } = useAgents();
+            const { receipt, dismissReceipt } = useNotifications();
             setAgents([agent(`a`), agent(`b`)], 1);
             post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 14 } as never);
             await archive();

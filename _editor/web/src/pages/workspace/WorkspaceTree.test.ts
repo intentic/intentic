@@ -46,7 +46,7 @@ const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
 const { resetWorkspaceTreeState } = await import("../../composables/workspace/useWorkspaceTree");
 const { queryClient } = await import("../../composables/queryPersistence");
 const { useLayout } = await import("../../composables/useLayout");
-const { useReceipts } = await import("../../composables/receipts");
+const { useNotifications } = await import("../../composables/notifications");
 
 const layout = useLayout();
 
@@ -406,7 +406,7 @@ describe(`empty folders (barren branches)`, () => {
     });
     afterEach(() => {
         vi.useRealTimers();
-        useReceipts().dismissReceipt();
+        useNotifications().dismissReceipt();
     });
 
     it(`stays quiet through the settle window, then collapses the chain into one dimmed row and names it`, async () => {
@@ -496,11 +496,11 @@ describe(`empty folders (barren branches)`, () => {
         expect(deletes.length).toBe(1);
         expect(String(deletes[0]?.init?.body)).toContain(`"web"`);
         // One branch fits a receipt and is the whole story.
-        const { receipt } = useReceipts();
-        expect(receipt.value?.message).toBe(`web / demo / assets removed`);
+        const { receipt } = useNotifications();
+        expect(receipt.value?.title).toBe(`web / demo / assets removed`);
 
         // Undo recreates the chain's deepest folder: recursive create rebuilds the exact shape.
-        await receipt.value?.undo?.();
+        await receipt.value?.actions?.[0]?.run();
         const creates = daemon.calls.filter((call) => call.path === `/workspace/dir`);
         expect(creates.length).toBe(1);
         expect(String(creates[0]?.init?.body)).toContain(`web/demo/assets`);
@@ -518,7 +518,7 @@ describe(`empty folders (barren branches)`, () => {
         await vi.advanceTimersByTimeAsync(1);
 
         // A receipt has no room to shade the halves differently, so it spells the whole path.
-        expect(useReceipts().receipt.value?.message).toBe(`src / old removed`);
+        expect(useNotifications().receipt.value?.title).toBe(`src / old removed`);
     });
 
     it(`keeps the count in the receipt when several branches go at once`, async () => {
@@ -529,7 +529,7 @@ describe(`empty folders (barren branches)`, () => {
         await vi.advanceTimersByTimeAsync(1);
 
         // A self-retiring pill is the wrong place for a list: naming them was the line's job, before the click.
-        expect(useReceipts().receipt.value?.message).toBe(`2 empty folders removed`);
+        expect(useNotifications().receipt.value?.title).toBe(`2 empty folders removed`);
         expect(daemon.calls.filter((call) => call.init?.method === `DELETE`).length).toBe(2);
     });
 
@@ -544,7 +544,7 @@ describe(`empty folders (barren branches)`, () => {
         await vi.advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
-        expect(useReceipts().receipt.value?.message).toBe(`web / demo / assets removed`);
+        expect(useNotifications().receipt.value?.title).toBe(`web / demo / assets removed`);
     });
 });
 

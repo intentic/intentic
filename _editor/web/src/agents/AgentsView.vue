@@ -97,8 +97,6 @@ const {
     archivedFlash,
     notice,
     dismissNotice,
-    receipt,
-    dismissReceipt,
     busyIds,
     agentById,
 } = useAgents();
@@ -435,20 +433,11 @@ const toggleArchive = async (): Promise<void> => {
     }
 };
 /* --- Saying that an archive happened -------------------------------------------------------------------- */
-// The receipt retires itself: an archive is not something the user has to acknowledge, and one more thing to
-// dismiss is precisely what made the strip it replaces feel like a toll. The window restarts on each new
-// receipt and PAUSES while the pointer is on the pill: vanishing under the cursor that came for its Undo
-// would fail the affordance at the only moment it is ever wanted. Timing lives here rather than in the store
-// so the fleet module stays a plain state container (and its unit tests stay timer-free).
-const RECEIPT_MS = 7_000;
-const receiptHovered = ref(false);
-let receiptTimer: ReturnType<typeof setTimeout> | undefined;
-watch([receipt, receiptHovered], () => {
-    clearTimeout(receiptTimer);
-    if (receipt.value !== undefined && !receiptHovered.value) {
-        receiptTimer = setTimeout(dismissReceipt, RECEIPT_MS);
-    }
-});
+// A sweep's receipt is raised by the store and drawn by the app's one notification lane
+// (shell/NotificationHost.vue), which is also where its dwell, its hover pause and its Undo now live. This
+// file used to keep a second copy of all three, and a second pill to draw them in, forty lines from the shared
+// one it had been cloned from.
+//
 // The ambient half of the report, and the whole of it for a single card: the archive counter is where the
 // cards went, so it is what acknowledges them. Long enough to catch the eye that was following the card out
 // of the lane, short enough that it reads as "that just moved" rather than as a new state.
@@ -634,16 +623,12 @@ onMounted(() => {
     ];
 });
 onUnmounted(() => {
-    clearTimeout(receiptTimer);
     clearTimeout(pulseTimer);
     clearTimeout(flashTimer);
     for (const disposable of boardCommands) {
         disposable.dispose();
     }
     boardCommands = [];
-    // The receipt is the board's, not the app's: leaving it set would float it over whatever surface the user
-    // came back to the board from.
-    dismissReceipt();
 });
 const LANES: readonly { key: FleetLane; label: string; dot: string; empty: string }[] = [
     { key: `attention`, label: `Attention`, dot: `bg-warning`, empty: `Nothing needs you right now.` },
@@ -1038,9 +1023,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
 };
 </script>
 <template>
-    <!-- `relative` positions the receipt inside the BOARD rather than the viewport, so the pill clears the
-         mobile tab bar and the docked terminal without either of them having to be measured. It is not a
-         containing block for the fixed drag ghost: only transforms and containment would be. -->
+    <!-- `relative` is the positioning context for the lane-drop affordances, not for any report: an archive's
+         receipt goes to the app's one notification lane, which is fixed to the viewport and clears the mobile
+         tab bar itself. This is not a containing block for the fixed drag ghost: only transforms and
+         containment would be. -->
     <div ref="boardEl" class="relative flex h-full min-h-0 flex-col">
         <!-- The bar WRAPS rather than shaving its contents: the filter field is permanent, and /agents lives in
              the shell's middle column, which the chat panel's drag handle squeezes to a few hundred pixels
@@ -1056,8 +1042,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
              own and the flanks keep the first one to themselves. -->
         <div class="flex min-h-[2.25rem] flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
-            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
-            </div>
+            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2"></div>
             <SearchBar
                 ref="filterField"
                 v-model="query"
@@ -1164,7 +1149,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                  The one exception is a query that matched NOTHING: there is no card left on the board to drag,
                  so the full height buys nothing and costs the miss its explanation, which would otherwise be
                  pushed to exactly the fold. -->
-            <div class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4" :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full']">
+            <div
+                class="grid gap-3.5 p-3.5 sm:gap-4 sm:p-4"
+                :class="[narrow ? 'content-start' : 'grid-cols-3 items-start lg:gap-6 lg:p-6', noMatches ? '' : 'h-full']"
+            >
                 <section
                     v-for="lane in LANES"
                     :key="lane.key"
@@ -1477,31 +1465,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </section>
             </div>
         </div>
-        <!-- The sweep's receipt. It OVERLAYS the board rather than sitting in the column, so the cards it is
-             reporting on don't move to make room for the report, and it expires, so acknowledging it is not
-             work. Hidden mid-drag: the discard target lands in the same place, and one of them is destructive.
-             The wrapper is inert; only the pill takes the pointer, or it would eat clicks on the lane under it. -->
-        <Transition name="receipt">
-            <div v-if="receipt !== undefined && !dragging" class="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-3">
-                <div
-                    class="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-line-strong bg-card py-1.5 pl-3 pr-2 text-2xs text-muted shadow-lg"
-                    @mouseenter="receiptHovered = true"
-                    @mouseleave="receiptHovered = false"
-                >
-                    <Icon name="box" class="shrink-0 text-2xs" />
-                    <span class="min-w-0 truncate">{{ receipt.message }}</span>
-                    <button
-                        v-if="receipt.undo !== undefined"
-                        type="button"
-                        class="shrink-0 rounded-full px-2 py-px font-semibold text-link transition-colors hover:bg-primary-600/15"
-                        v-tooltip.top="undoShortcut === undefined ? 'Put them back on the board' : `Put them back on the board (${undoShortcut})`"
-                        @click="receipt.undo"
-                    >
-                        Undo
-                    </button>
-                </div>
-            </div>
-        </Transition>
         <!-- Discard is destructive and has no lane of its own, so it only exists while a card is in flight. -->
         <div
             v-if="dragging"
@@ -1590,18 +1553,5 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     position: absolute;
     left: 0.5rem;
     right: 0.5rem;
-}
-/* The receipt rises into place and sinks out of it: the same direction both ways, so a pill that expires on
- * its own and one dismissed by an Undo read as the same object leaving. */
-.receipt-enter-active,
-.receipt-leave-active {
-    transition:
-        transform 200ms ease,
-        opacity 200ms ease;
-}
-.receipt-enter-from,
-.receipt-leave-to {
-    opacity: 0;
-    transform: translateY(0.5rem);
 }
 </style>

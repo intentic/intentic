@@ -418,9 +418,13 @@ const startHint = computed<string | undefined>(() => {
             </button>
         </div>
 
-        <!-- Errors overlay the top edge instead of pushing the preview around. -->
-        <div class="relative flex min-h-0 flex-1 flex-col">
-            <Notice v-if="actionError" :of="noticeOf(actionError)" class="absolute inset-x-3 top-3 z-10" />
+        <!-- An action that failed reports IN FLOW, at the top of the panel it failed in. It used to float over
+             the preview's top edge on an absolute offset of its own, which is the shape this app now reserves
+             for one thing only — the notification lane — and this is not one of its three kinds: it is a
+             view-local failure, it belongs beside the controls that raised it, and pushing the preview down by
+             two lines is a smaller imposition than covering the top of the page being previewed. -->
+        <div class="flex min-h-0 flex-1 flex-col">
+            <Notice v-if="actionError" :of="noticeOf(actionError)" class="mx-3 mt-3" />
 
             <!-- NOTHING TO PREVIEW. Only claimed once the lists have actually answered, and it always offers
                  the one preview that needs nothing discovered, which is an address the user knows themselves. -->

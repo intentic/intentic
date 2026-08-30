@@ -27,7 +27,7 @@ import { useWorkspaceRoute } from "../../composables/workspace/useWorkspaceRoute
 import { type SearchScope, useWorkspaceSearch } from "../../composables/workspace/useWorkspaceSearch";
 import { useWorkspaceTabs } from "../../composables/workspace/useWorkspaceTabs";
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
-import { useReceipts } from "../../composables/receipts";
+import { useNotifications } from "../../composables/notifications";
 import DiffToolbar from "./viewers/DiffToolbar.vue";
 import DiffSkeleton from "./viewers/DiffSkeleton.vue";
 import FileDiffPane from "./viewers/FileDiffPane.vue";
@@ -40,7 +40,6 @@ import { explorerShows } from "./explorerFilter";
 import FileViewer from "./viewers/FileViewer.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import ReviewPanel from "./ReviewPanel.vue";
-import UploadProgress from "./UploadProgress.vue";
 import WorkspaceScopeChip from "./WorkspaceScopeChip.vue";
 import { workspaceAgent } from "../../composables/workspace/workspaceScope";
 import WorkspaceSearchResults from "./WorkspaceSearchResults.vue";
@@ -80,8 +79,8 @@ const {
 const treeNotice = computed<NoticeModel | undefined>(() =>
     error.value === undefined ? undefined : { tone: `danger`, title: `Couldn't load your files.`, detail: error.value },
 );
-const { files: uploadFiles, scanning: uploadScanning, skippedNotice: uploadSkipped, enqueue } = useUploadQueue();
-const { say } = useReceipts();
+const { enqueue } = useUploadQueue();
+const { say } = useNotifications();
 // The open file lives in the URL path (`/workspace/<path>`), synced to the tabs singleton by useWorkspaceRoute;
 // this component keeps only the mobile-specific query state (`?dir=` browse location, `?diff=` diff view).
 const { tabs, activeId, activeTab, openLine, openFile, openAtLine, openDiff, fillDiff } = useWorkspaceTabs();
@@ -614,8 +613,6 @@ const onPick = (event: Event): void => {
                     </Button>
                 </div>
             </template>
-
-            <UploadProgress v-if="uploadScanning || uploadFiles.length > 0 || uploadSkipped !== undefined" />
         </template>
 
         <!-- The toolbar funnel's rows. A checked row draws its mark; the gutter holds the space either way, so

@@ -9,11 +9,7 @@ import { startBackgroundLoader, stopBackgroundLoader } from "../composables/pref
 import { startDraftingReceipts } from "../composables/workspace/draftingReceipts";
 import { reportIdle, reportSessionId, reportView } from "../composables/usePresence";
 import { useSandboxLiveness } from "../composables/sandbox/useSandboxLiveness";
-import LocalShortcutNotice from "./LocalShortcutNotice.vue";
-import SlowTransportNotice from "./SlowTransportNotice.vue";
 import PoppablePanels from "./PoppablePanels.vue";
-import PushNotice from "./PushNotice.vue";
-import ReceiptBar from "./ReceiptBar.vue";
 
 /* THE SIGNED-IN SESSION'S LIVE CONNECTION TO ITS SANDBOX, and the panels that connection feeds: mounted by
  * App.vue for as long as an account has a sandbox selected, and therefore ABOVE every route rather than inside
@@ -27,8 +23,12 @@ import ReceiptBar from "./ReceiptBar.vue";
  *
  * Presence rides the same lifetime, as it always has: it is this tab's claim about what its user is looking at,
  * which is as true on /setup as it is in the workspace, and it is only deliverable while the stream it is
- * reported over is open. So does the push notice, for the third variation of the same reason: the question it
- * asks outlives the view that asked for the push. */
+ * reported over is open.
+ *
+ * The floating notices this file used to mount — the push question, the receipt bar, the loopback offer, the
+ * degraded-transport card — are gone from here entirely. They are declared as state in
+ * composables/notificationSources.ts and drawn by the one lane in App.vue, which is what stopped four components
+ * with four different ideas about where a message goes from each picking a corner of the viewport. */
 
 const liveness = useSandboxLiveness();
 const route = useRoute();
@@ -78,22 +78,4 @@ startDraftingReceipts();
          panel is that window's whole content, and dragging one narrow must leave a chat in it rather than an
          empty rectangle (composables/floating.ts). -->
     <PoppablePanels v-if="!mobile || floatingWindowPanel !== undefined" />
-    <!-- A push that needs an answer, asked wherever the user has got to. It belongs to the session for the same
-         reason the stream does: the check that raises it takes minutes, the user was told to go and do something
-         else, and every route in the app is somewhere they might reasonably be when it lands. -->
-    <PushNotice />
-    <!-- The app's quiet channel: what just happened, retiring itself. One host above the router, for the same
-         reason the notice above has one: a completion reported from a dialog, a tree row or a settings card is
-         the same event to the user and must not depend on which view raised it. It is deliberately NOT cleared
-         on navigation: "3 files deleted" is still true on the next screen, and it is gone in seconds anyway. -->
-    <ReceiptBar />
-    <!-- The offer to reach this sandbox over the loopback shortcut, asked before the browser's own permission
-         dialog can ask it worse. Up here because the stream is: the probe that raises it runs on every connect,
-         and a connect happens on /setup and behind an invite link as readily as in the workspace. -->
-    <LocalShortcutNotice />
-    <!-- And the state that shortcut lands in when nothing else can be reached: HTTP/1.1, six connections for
-         the whole app. Beside the offer rather than in a settings panel, because its symptom (agents lagging,
-         reads that never arrive) is indistinguishable from the workspace being broken, and the cause is three
-         layers away from anything else on screen. -->
-    <SlowTransportNotice />
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
+import { Icon, Notice, PersonaFace, ResponsiveOverlay, growTextarea, useDevice, useLoadingReveal } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -1260,15 +1260,16 @@ watch(
                      where a full-width composer is a 150-character line with its Send button half a screen from
                      the text. -->
                 <div class="chat-footer sticky bottom-0 z-10 mx-auto flex w-full max-w-[51rem] flex-col gap-2 px-2 py-3">
-                    <p v-if="!reachable" class="px-1 text-2xs text-subtle">
-                        {{
-                            denied
-                                ? `Chat is unavailable: this Google account has no access to this sandbox.`
-                                : blocked
-                                  ? `Chat is available after this sandbox finishes setup.`
-                                  : `The sandbox is busy, keep typing. Send is available when it is ready.`
-                        }}
-                    </p>
+                    <!-- THE TWO STATES WHERE THERE IS NO COMPOSER TO EXPLAIN ITSELF, and only those two. A
+                         sandbox that is merely BUSY is not one of them: it says so once, in the app's
+                         notification lane, and what this pane owed its reader was never a second copy of that
+                         sentence in bare text above the box — it was why Send is dark, which is on Send
+                         (`sendHint`). Saying it in both places is how the app came to have a floating pill and a
+                         line of unstyled paragraph text making the same claim at the same moment.
+                         In flow rather than floating: this is about THIS pane, and a pane with two chats beside
+                         each other must be able to say it about one of them. -->
+                    <Notice v-if="denied" tone="danger">This Google account has no access to this sandbox, so chat is unavailable.</Notice>
+                    <Notice v-else-if="blocked" tone="info" icon="clock">Chat is available after this sandbox finishes setup.</Notice>
                     <template v-if="!blocked">
                         <!-- What this chat's standing is: archived, the account gate, the trial, a credential
                              that needs renewing, an outage picking the turn back up (ChatPaneNotices). -->

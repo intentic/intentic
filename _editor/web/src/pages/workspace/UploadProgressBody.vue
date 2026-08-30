@@ -1,14 +1,22 @@
 <script setup lang="ts">
+import { formatBytes } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, watch } from "vue";
 import { useUploadQueue } from "../../composables/workspace/useUploadQueue";
-import { formatBytes } from "@intentic/ui";
 
-// Non-blocking upload feedback, anchored bottom-right of the workspace body. Driven entirely by useUploadQueue:
-// the drop targets and the upload button all funnel through it, so a second drop mid-upload just appends here.
-// Narrates the whole lifecycle from the first interaction: Scanning the dropped folder → Uploading (aggregate
-// bytes + throughput + per-folder breakdown) → Done. Auto-dismisses on a clean finish; stays (with the failures
-// listed) when something fails.
+/* THE DETAIL UNDER AN IMPORT'S HEADLINE: the bar, the per-folder breakdown, the failures, the dependency offer.
+ *
+ * Which PHASE the import is in, and the one sentence naming it, are the notification's
+ * (composables/notificationSources.ts). What is here is everything that phase needs to show and cannot say in a
+ * string. That split is why this stopped being a panel that drew its own box in the bottom-right corner: it was
+ * the third component to claim that corner, drawn under the other two by nothing more principled than its
+ * z-index. Now it is one card in one lane, and the lane draws the box, the icon and the dismiss.
+ *
+ * THE RETIREMENT TIMERS STAY HERE, with the thing they are about. They are the queue's own etiquette rather than
+ * the lane's: a clean finish says so and goes, and a finish that started an install stays longer, because that
+ * line is news rather than an acknowledgement. A failure does not retire at all — it is the only state here the
+ * user might have to act on, and it waits for them. */
+
 const {
     files,
     bytesDone,
@@ -19,7 +27,6 @@ const {
     scannedCount,
     scanningName,
     skippedNotice,
-    skippedUnchanged,
     failedCount,
     doneCount,
     throughput,
@@ -33,6 +40,11 @@ const {
 } = useUploadQueue();
 
 const pct = computed(() => (bytesTotal.value === 0 ? 100 : Math.min(100, Math.round((bytesDone.value / bytesTotal.value) * 100))));
+
+// Shown for every phase that has bytes in flight or bytes that failed. A clean finish does not: its headline
+// already says the whole truth, and a full bar under "Uploaded 12 files" is a progress indicator for something
+// with no progress left to make.
+const breakdown = computed(() => files.value.length > 0 && !(finished.value && failedCount.value === 0));
 
 // One row per top-level dropped folder (root-level loose files group under "(files)"): scales to huge drops
 // where a flat per-file list would not.
@@ -59,7 +71,7 @@ const failures = computed(() => files.value.filter((file) => file.status === `fa
 // offer is shown for the WHOLE upload rather than as a dialog before it or a prompt after: the user keeps the
 // "drag it in and it just works" flow, and still has the entire upload to uncheck it before anything runs.
 // One line per project, since a drop can carry several; `evidence` names the file we read so the pick is
-// never opaque ("pnpm (pnpm-lock.yaml", or "npm) package.json (no lockfile)", which invites a correction).
+// never opaque ("pnpm · pnpm-lock.yaml", or "npm · package.json (no lockfile)", which invites a correction).
 const setupSummary = computed(() =>
     setupProjects.value.map((project) => ({
         dir: project.dir === `` ? `the workspace root` : project.dir,
@@ -71,7 +83,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 watch(
     [finished, installSettled],
     ([isFinished, isSettled]) => {
-        // Hold the panel until the install request has settled, so a clean finish can't vanish before saying
+        // Hold the card until the install request has settled, so a clean finish can't vanish before saying
         // what it kicked off. Longer once something started: that line is news, not just an acknowledgement.
         if (isFinished && failedCount.value === 0 && isSettled && installError.value === undefined) {
             timer = setTimeout(dismiss, installQueued.value.length > 0 ? 6000 : 3000);
@@ -93,89 +105,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="absolute bottom-3 right-3 z-30 w-80 rounded-md border border-line bg-card px-3 py-2 text-xs text-content shadow-lg">
-        <!-- Scanning phase: walking the dropped folder tree, before any upload can start -->
-        <div v-if="scanning" :class="files.length > 0 ? `mb-2 border-b border-line pb-2` : ``">
-            <div class="flex items-center gap-2">
-                <Icon name="spinner" class="text-sm text-muted" spin />
-                <span class="flex-1 font-medium">Scanning dropped folder… {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files` }}</span>
-                <button
-                    type="button"
-                    class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="dismiss"
-                    aria-label="Cancel"
-                >
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </div>
-            <p v-if="scanningName !== ``" class="mt-0.5 truncate text-2xs text-subtle">{{ scanningName }}</p>
-        </div>
+    <div class="text-xs text-content">
+        <!-- Still walking the dropped tree while files are already going up: the headline belongs to the upload
+             by then, so the scan reports itself here instead. -->
+        <p v-if="scanning && files.length > 0" class="mb-2 truncate border-b border-line pb-2 text-2xs text-subtle">
+            Scanning… {{ scannedCount }} {{ scannedCount === 1 ? `file` : `files`
+            }}<template v-if="scanningName !== ``"> · {{ scanningName }}</template>
+        </p>
+        <!-- Nothing sent yet: the headline carries the count, so all this adds is where the walk has got to. -->
+        <p v-else-if="scanning && scanningName !== ``" class="truncate text-2xs text-subtle">{{ scanningName }}</p>
 
-        <!-- Nothing to upload: only symlinks/special items (which Chrome won't expose) or an empty folder -->
-        <div v-if="skippedNotice !== undefined && files.length === 0" class="flex items-center gap-2">
-            <Icon name="info-circle" class="text-sm text-muted" />
-            <span class="flex-1 font-medium">
-                Nothing to upload<template v-if="skippedNotice > 0">
-                    , skipped {{ skippedNotice }} {{ skippedNotice === 1 ? `item` : `items` }} that couldn't be read (symlink or special
-                    file)</template
-                >
-            </span>
-            <button
-                type="button"
-                class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="dismiss"
-                aria-label="Dismiss"
-            >
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
-
-        <!-- Re-drop where every file was already identical on the sandbox (nothing to send) -->
-        <div v-if="files.length === 0 && skippedNotice === undefined && skippedUnchanged > 0" class="flex items-center gap-2">
-            <Icon name="check-circle" class="text-sm text-success" />
-            <span class="flex-1 font-medium"
-                >Already up to date, skipped {{ skippedUnchanged }} unchanged {{ skippedUnchanged === 1 ? `file` : `files` }}</span
-            >
-            <button
-                type="button"
-                class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
-                @click="dismiss"
-                aria-label="Dismiss"
-            >
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
-
-        <!-- Done, all succeeded -->
-        <template v-if="files.length === 0"></template>
-        <template v-else-if="finished && failedCount === 0">
-            <div class="flex items-center gap-2">
-                <Icon name="check-circle" class="text-sm text-success" />
-                <span class="font-medium">Uploaded {{ files.length }} {{ files.length === 1 ? `file` : `files` }}</span>
-            </div>
-        </template>
-
-        <!-- Uploading, or done with failures: both show the breakdown -->
-        <template v-else>
-            <div class="flex items-center gap-2">
-                <Icon name="spinner" v-if="!finished" class="text-sm text-muted" spin />
-                <Icon name="exclamation-triangle" v-else class="text-sm text-danger" />
-                <span class="flex-1 font-medium">
-                    <template v-if="!finished">Uploading {{ doneCount }} of {{ files.length }}</template>
-                    <template v-else>Uploaded {{ doneCount }} of {{ files.length }} · {{ failedCount }} failed</template>
-                    <template v-if="skippedUnchanged > 0"> · skipped {{ skippedUnchanged }} unchanged</template>
-                </span>
-                <button
-                    type="button"
-                    class="flex h-5 w-5 items-center justify-center rounded text-muted transition-colors hover:bg-overlay hover:text-content"
-                    @click="dismiss"
-                    :aria-label="finished ? `Dismiss` : `Cancel`"
-                >
-                    <Icon name="times" class="text-2xs" />
-                </button>
-            </div>
-
-            <div class="mt-2 h-1 overflow-hidden rounded bg-overlay">
+        <template v-if="breakdown">
+            <div class="h-1 overflow-hidden rounded bg-overlay">
                 <div class="h-full rounded bg-primary-500 transition-[width] duration-200" :style="{ width: `${pct}%` }"></div>
             </div>
             <div class="mt-1 flex items-center justify-between text-2xs text-subtle">
@@ -193,7 +134,7 @@ onBeforeUnmount(() => {
                 </li>
             </ul>
 
-            <!-- Failures spelled out (stays until dismissed) -->
+            <!-- Failures spelled out. This is the one phase that never retires itself. -->
             <ul v-if="failures.length > 0" class="scrollbar-thin mt-3 max-h-24 space-y-1 overflow-auto">
                 <li v-for="file in failures" :key="file.path" class="text-2xs text-danger" v-tooltip.left="file.error">
                     <span class="truncate">{{ file.path }}</span>

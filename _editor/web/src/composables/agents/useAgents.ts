@@ -7,6 +7,8 @@ import { invalidateAgentTranscript } from "../chat/agentTranscript";
 import { draftPreview, drawsChat, elsewhereDrafts } from "../chat/draftEcho";
 import { agentTabOf, type AgentTabSeed, useChat } from "../chat/useChat";
 import { summonChat } from "../chat/summon";
+import { commandShortcut } from "../commands/useCommands";
+import { useNotifications } from "../notifications";
 import { onScreen } from "../onScreen";
 import { queryClient } from "../queryPersistence";
 import { sandboxJson } from "../sandbox/sandboxClient";
@@ -251,7 +253,6 @@ const desync = (keepRoster: boolean): void => {
     appliedRev = -1;
     epoch += 1;
     undoable.value = [];
-    receipt.value = undefined;
     notice.value = undefined;
 };
 export const resetAgents = (): void => desync(false);
@@ -790,19 +791,26 @@ export const loadArchived = async (): Promise<void> => {
  *   · A FAILURE         → the persistent strip. An error has to be read, so it must not expire on a timer.
  *
  * None of them OWNS the undo. The way back is a fact about the store (`undoable`), so Mod+Z reaches the last
- * archive whether a receipt was ever raised or has long since faded. */
+ * archive whether a receipt was ever raised or has long since faded.
+ *
+ * THE RECEIPT IS THE APP'S, NOT THE BOARD'S. This module used to keep a second copy of the whole idea — its own
+ * `FleetReceipt` type, its own ref, and a pill in AgentsView with its own dwell timer and its own transition
+ * CSS — sitting forty lines from the shared one it was cloned from and drifting from it. There is one receipt
+ * channel now (composables/notifications.ts) and this reports into it like every other completion in the app. */
 
 // The board's must-read strip: an action that failed (a drop, an archive, a restore). No timer, an error the
-// user never saw is one that surprises them later.
+// user never saw is one that surprises them later. In flow, in the board's own column: it is about THIS view
+// and it waits to be read, which is the two things the floating lane is not for.
 const notice = ref<string | undefined>(undefined);
 
-// The self-retiring report a bulk archive raises. The VIEW owns its expiry (a hovered receipt must not vanish
-// under the cursor that came for its Undo), which also keeps this module timer-free.
-export interface FleetReceipt {
-    readonly message: string;
-    readonly undo?: () => Promise<void>;
-}
-const receipt = ref<FleetReceipt | undefined>(undefined);
+const { say } = useNotifications();
+
+// What the Undo beside a sweep's receipt says on hover. Mod+Z does the same thing from anywhere on the board,
+// and a user who learns it from the tooltip stops needing the button.
+const undoHint = (): string => {
+    const shortcut = commandShortcut(`agents.undoArchive`);
+    return shortcut === undefined ? `Put them back on the board` : `Put them back on the board (${shortcut})`;
+};
 
 // The ids an undo would put back. Consecutive archives MERGE: clicking down the Finished lane is one intent,
 // and a stack remembering only the newest press would silently drop the way back to everything before it,
@@ -844,10 +852,6 @@ const dismissNotice = (): void => {
     notice.value = undefined;
 };
 
-const dismissReceipt = (): void => {
-    receipt.value = undefined;
-};
-
 // Archive the named agents, or, with no ids, every finished agent that is archivable right now (the lane
 // header's "Clear"). The daemon answers with the agents that actually moved: "everything finished" cannot be
 // re-derived once the lane is empty, and the summaries are what the archive list renders.
@@ -887,7 +891,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
             // a refusal has already said its piece above, and it would be contradicted by it.
             restore();
             if (failed.length === 0) {
-                receipt.value = { message: `Nothing to archive, every finished agent is already off the board.` };
+                say(`Nothing to archive, every finished agent is already off the board.`);
             }
             return;
         }
@@ -929,7 +933,7 @@ const archive = async (ids?: readonly string[]): Promise<void> => {
         }
         if (sweep) {
             const count = undoable.value.length;
-            receipt.value = { message: `${count} agent${count === 1 ? `` : `s`} archived`, undo: undoArchive };
+            say(`${count} agent${count === 1 ? `` : `s`} archived`, undoArchive, undoHint());
         }
     } catch (error) {
         // The press failed, so the cards it took slide back into their lane, under the strip that says why.
@@ -958,7 +962,7 @@ const restore = async (ids: readonly string[]): Promise<void> => {
         // What is back on the board is no longer anyone's to undo, including when the user restored it card
         // by card from the archive view rather than through the undo itself.
         undoable.value = undoable.value.filter((id) => !back.has(id));
-        receipt.value = undefined;
+        say(`${back.size} agent${back.size === 1 ? `` : `s`} back on the board`);
         notice.value = undefined;
     } catch (error) {
         notice.value = errorMessage(error, `Couldn't restore that.`);
@@ -992,7 +996,7 @@ const purgeArchived = async (): Promise<void> => {
         useChat().closeTabs(gone);
         notice.value =
             removed.length < aimedAt ? `Deleted ${removed.length} of ${aimedAt} archived agents, the rest are still in use and stayed.` : undefined;
-        receipt.value = { message: `${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted` };
+        say(`${removed.length} archived agent${removed.length === 1 ? `` : `s`} deleted`);
     } catch (error) {
         notice.value = errorMessage(error, `Couldn't delete the archive.`);
     } finally {
@@ -1219,8 +1223,6 @@ export function useAgents() {
         archivedFlash,
         notice,
         dismissNotice,
-        receipt,
-        dismissReceipt,
         busyIds,
     };
 }

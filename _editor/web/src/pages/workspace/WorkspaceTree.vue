@@ -24,7 +24,7 @@ import { lensPersonaId, reachOf } from "../../composables/workspace/personaReach
 import { useWorkspaceTree } from "../../composables/workspace/useWorkspaceTree";
 import { usePersonas } from "../../composables/sandbox/usePersonas";
 import PresenceAvatars from "../../presence/PresenceAvatars.vue";
-import { useReceipts } from "../../composables/receipts";
+import { useNotifications } from "../../composables/notifications";
 import { PUBLIC_DIR, REFERENCE_DIR } from "@intentic/workspace-ignore/constants";
 import { dragOffer } from "./dragSource";
 import { filesToEntries } from "./dropEntries";
@@ -123,7 +123,7 @@ const {
 } = useWorkspaceTree();
 const layout = useLayout();
 const { enqueue, enqueueFromDataTransfer } = useUploadQueue();
-const { say } = useReceipts();
+const { say } = useNotifications();
 const { fileNesting } = useFileNesting();
 // Barren branches: folders holding nothing but empty folders (settled, so an agent mid-scaffold never
 // flickers the tree). Rows dim and collapse below; the sweep line names them and clears the whole set.

@@ -1,6 +1,6 @@
 import { computed, watch } from "vue";
 import { useAgents } from "../agents/useAgents";
-import { useReceipts } from "../receipts";
+import { useNotifications } from "../notifications";
 import { commitMessageOf, draftRunning } from "./changeOrigins";
 import { fillCommitMessage, namedAfter } from "./commitMessage";
 
@@ -44,7 +44,7 @@ const titleOf = (id: string): string => useAgents().fleet.value.find((agent) => 
 // Started once and never stopped, like the module-level watches in useChanges.ts: a report about the workspace
 // belongs to the session, not to whichever component happened to be mounted when the work landed.
 export const startDraftingReceipts = (): void => {
-    const { say } = useReceipts();
+    const { say } = useNotifications();
 
     watch(drafting, (now, was) => {
         const started = now.filter((agent) => !was.some((before) => before.id === agent.id));
