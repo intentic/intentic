@@ -52,18 +52,31 @@ const pathsFor = (config: Config): { dir: string; cert: string; key: string; acc
     return { dir, cert: join(dir, "fullchain.pem"), key: join(dir, "key.pem"), account: join(dir, "account-key.pem") };
 };
 
-// The name this sandbox's loopback listener is certified for, or undefined when it cannot have one, no
-// connect token (nothing to derive an id from) or no public URL to read a zone off (a loopback/dev daemon).
+/* THE NAME TO CERTIFY IS THE PLATFORM'S TO GIVE, not this daemon's to derive, because the platform is the one
+ * that owns the zone the record goes in.
+ *
+ * This used to read `<id>.local.<zoneFromUrl(publicUrl)>` — the zone of the sandbox's OWN public hostname. That
+ * is right only while the two zones happen to be the same one, and they stop being the same the moment a
+ * sandbox's reachability moves: on the zrok hub a sandbox answers at `sandbox-<id>.sbx.<zone>`, so this derived
+ * `<id>.local.sbx.<zone>` while the platform kept writing the wildcard and the ACME challenge under `<zone>`.
+ * The two names never meet, validation asks for a TXT at a name the platform never wrote, and issuance fails
+ * for every migrated sandbox — quietly, because a failed loopback certificate is a supported state that just
+ * drops the browser onto the plain HTTP/1.1 shortcut.
+ *
+ * So it is ASKED FOR instead. `POST /sandbox/local-dns` already answers with the hostname it just asserted the
+ * wildcard for; taking that answer makes the platform's zone the single source of the name, and a sandbox that
+ * changes public address keeps its certificate working without either side being taught about the other. */
 const localCertHostname = (config: Config): string | undefined => {
     const id = sandboxIdFromToken(config.connectToken);
     const zone = zoneFromUrl(config.sandbox.publicUrl);
     return id === undefined || zone === undefined ? undefined : localHostname(id, zone);
 };
 
-// The certificate on disk, if it is for the name we currently want and still has life in it. Anything else,
-// missing, unreadable, a different hostname (the sandbox moved zones), expiring, reads as "no certificate",
-// which is the signal to issue.
-const readUsable = (config: Config, hostname: string, now: number): LocalCertificate | undefined => {
+/* The certificate on disk, if it still has life in it and is for the name given. `hostname` undefined means
+ * "whatever this was issued for", which is what BOOT needs: the authoritative name comes from the platform and
+ * boot must not wait on a network call to serve TLS it already has. A certificate for a name that has since
+ * changed is caught by the renewal loop, which does know the answer, and replaced there. */
+const readUsable = (config: Config, hostname: string | undefined, now: number): LocalCertificate | undefined => {
     const paths = pathsFor(config);
     try {
         const certificate = readFileSync(paths.cert, "utf8");
@@ -71,6 +84,12 @@ const readUsable = (config: Config, hostname: string, now: number): LocalCertifi
         const parsed = new X509Certificate(certificate);
         if (Date.parse(parsed.validTo) - now < RENEW_BEFORE_MS) {
             return undefined;
+        }
+        // The subject's own CN when the caller has no name to check against: a certificate always knows what it
+        // is for, and reporting that is more honest than reporting a guess.
+        const own = /CN=([^\n,]+)/.exec(parsed.subject)?.[1];
+        if (hostname === undefined) {
+            return own === undefined ? undefined : { hostname: own, certificate, privateKey };
         }
         // checkHost covers the SAN properly, a substring match on the PEM would not.
         return parsed.checkHost(hostname) === undefined ? undefined : { hostname, certificate, privateKey };
@@ -95,20 +114,37 @@ const accountKeyOf = (config: Config): KeyObject => {
 
 // Ask the platform to write (or withdraw) the DNS-01 record. The hostname is derived platform-side from our
 // connect token, so this carries only the value, a sandbox cannot ask for records outside its own name.
-const relayChallenge = async (config: Config, value: string | undefined): Promise<void> => {
+// Returns the hostname the platform asserted the wildcard for, which is the name to certify (see
+// localCertHostname). Undefined from a platform too old to answer with one, where the derived name stands.
+const relayChallenge = async (config: Config, value: string | undefined): Promise<string | undefined> => {
     const { status, json } = await postToPlatform(config, "/sandbox/local-dns", value === undefined ? {} : { challenge: value });
     if (status < 200 || status >= 300) {
         const detail = (json as { error?: string } | undefined)?.error;
         throw new Error(`the platform refused the loopback DNS update${detail === undefined ? "" : `: ${detail}`}`);
     }
+    const answered = (json as { hostname?: unknown } | undefined)?.hostname;
+    return typeof answered === `string` && answered !== `` ? answered : undefined;
 };
 
 /* Obtain (or renew) the certificate. Returns undefined whenever the sandbox cannot or need not have one,
  * every branch is a normal state, never an error the caller has to handle. */
 const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<LocalCertificate | undefined> => {
-    const hostname = localCertHostname(config);
-    if (hostname === undefined || config.platform.url === "" || config.connectToken === "") {
+    const derived = localCertHostname(config);
+    if (derived === undefined || config.platform.url === "" || config.connectToken === "") {
         return undefined;
+    }
+    /* Assert the wildcard and learn the authoritative name in the SAME call, before anything is compared
+     * against it. It is one request either way (the record has to be re-asserted on every check regardless,
+     * see below), so asking costs nothing and settles which zone this certificate belongs in. */
+    const answered = await relayChallenge(config, undefined).catch((error: unknown) => {
+        logger.warn({ err: error, hostname: derived }, "could not reach the platform for the loopback DNS record");
+        return undefined;
+    });
+    const hostname = answered ?? derived;
+    if (answered !== undefined && answered !== derived) {
+        // Worth a line: it means this sandbox's public zone and its certificate's zone have parted company,
+        // which is exactly the case the derived name got wrong.
+        logger.info({ derived, hostname }, "the platform named a different loopback hostname; using its answer");
     }
     const existing = readUsable(config, hostname, Date.now());
     if (existing !== undefined) {
@@ -139,16 +175,13 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
     const paths = pathsFor(config);
     const certificateKey = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey;
     logger.info({ hostname }, "requesting the loopback certificate");
-    // Create the A record before the order: the CA does not resolve it, but the browser will the moment the
-    // certificate exists, and a name that certifies before it resolves is a shortcut that probes as dead.
-    await relayChallenge(config, undefined);
     const { certificate } = await obtainCertificate({
         directoryUrl: config.acmeDirectoryUrl === "" ? LETS_ENCRYPT_DIRECTORY : config.acmeDirectoryUrl,
         accountKey: accountKeyOf(config),
         certificateKey,
         hostnames: [hostname],
-        publishChallenge: async (_recordName, value) => relayChallenge(config, value),
-        removeChallenge: async () => relayChallenge(config, undefined),
+        publishChallenge: async (_recordName, value) => void (await relayChallenge(config, value)),
+        removeChallenge: async () => void (await relayChallenge(config, undefined)),
     });
     const privateKey = certificateKey.export({ type: "pkcs8", format: "pem" }).toString();
     mkdirSync(paths.dir, { recursive: true });
@@ -165,10 +198,11 @@ const ensureLocalCertificate = async (config: Config, logger: Logger): Promise<L
  * long before that, so boot reads and `startLocalCertificateRenewal` issues, the sandbox serving plain HTTP in
  * the meantime rather than nothing. What issuance produces is handed to the listener as it lands (`onIssued`),
  * so the wait is for the CA and not for the next restart. */
-export const readLocalCertificate = (config: Config): LocalCertificate | undefined => {
-    const hostname = localCertHostname(config);
-    return hostname === undefined ? undefined : readUsable(config, hostname, Date.now());
-};
+export const readLocalCertificate = (config: Config): LocalCertificate | undefined =>
+    // No name to check against on purpose: the authoritative one is the platform's and boot does not wait on
+    // the network to serve TLS it already holds. The certificate reports what it was issued for, and the
+    // renewal loop replaces it if that has since changed.
+    readUsable(config, undefined, Date.now());
 
 /* Keep the certificate fresh in the background: once at boot (which is what issues the first one), then on a
  * cadence that depends on how the last attempt went, daily when there is a certificate to renew, far sooner
