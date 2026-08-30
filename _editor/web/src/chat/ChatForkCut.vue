@@ -25,6 +25,14 @@ import { useAgents } from "../composables/agents/useAgents";
  * the mark cannot be clipped or push a horizontal scrollbar at any panel width: it simply gets narrower where
  * the pane is too tight to spare more.
  *
+ * AND IT IS THE GUTTER'S FULL WIDTH AND NO MORE, which is a rule about the neighbours rather than about this
+ * control. The gutter is the turn's CONTROL lane — this mark and the pencil opposite the prompt above it
+ * (ChatMessageView), each a glyph centred in a target one gutter wide — and a hidden run's count mark stands in
+ * the strip immediately past it (see .chat-run-mark in chat.css). The two lanes touch and never overlap, which
+ * is what keeps this mark off that pill on the turns where they land at the same height: an answer that is so
+ * far nothing but its calls puts the run's mark level with the close of the turn, which is exactly where this
+ * one hangs. Widening this target, or nudging it outward, walks it straight back into that pill.
+ *
  * The cut is a boundary, not a bubble: a fork keeps everything above the line and nothing below it. That is
  * what lets one affordance serve both readings users arrive with: "redo this prompt differently" and "carry on
  * from that answer another way" are the same boundary named from either side, so they are the same click.

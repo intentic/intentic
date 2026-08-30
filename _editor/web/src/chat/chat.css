@@ -81,7 +81,7 @@
    every reply.
    A pseudo-element rather than border-bottom because a border is a pixel of height appearing at the pin
    threshold, and any height change there yanks the transcript (see .chat-prompt-text) — and rather than a
-   box-shadow because a shadow follows the BORDER box, which in a wide pane reaches 3.75rem into the right
+   box-shadow because a shadow follows the BORDER box, which in a wide pane reaches 5.75rem into the right
    margin so run marks pass under it (see below): the hairline would run on past the column's edge, a divider
    ruling off empty air. The margin strip stays covered — the background is the band's own — only the line
    stops at the edge of the reading measure, which is what the inset in that container query is for. Gated
@@ -346,13 +346,37 @@
    the mark is inside it (one control, one hit target, whichever way it is drawn) and is positioned against it,
    so the way to close a run is the same mark that opened it, now beside the first call instead of above it.
 
-   The threshold is what the mark needs to clear the words: it reaches 3.5rem past the column's text edge, of
-   which the column's own 2.25rem inset pays most, leaving ~22px to find outside .chat-turns. 58rem of pane
-   gives ~48px each side — comfortably more, and short of it the mark simply stays on the line. */
+   THE MARGIN IS TWO LANES, AND WHICH ONE IS WHICH IS FIXED. The gutter — the strip flush to the text edge,
+   exactly --chat-gutter wide — belongs to the turn's CONTROLS: the pencil that reopens a prompt
+   (ChatMessageView) and the fork mark at the close of an answer (ChatForkCut), each one glyph centred in a
+   target the width of the gutter. This mark takes the strip PAST that, and begins where the controls' lane ends.
+
+   It used to be pinned by its RIGHT edge 3.5rem out, which left its left end a third of the way back inside the
+   controls' lane. That is invisible nearly always, because the two are anchored to different things and so
+   almost never come to the same height: the fork mark hangs off the BOTTOM of a turn, this one is pinned to the
+   top of the answer's first row. They meet when there is nothing between those two points — an answer that is
+   so far nothing but its calls — and then the fork glyph sat on the pill's left end and, being the higher layer,
+   punched a hole through its ring. Every turn that opens with a tool call passes through that state, and a cut
+   somebody has already forked from wears its mark lit rather than on hover, so it was not merely a hover artifact.
+
+   Pinning by the LEFT edge instead is what makes the boundary hold at any count: the pill grows OUTWARD as the
+   number of calls climbs instead of creeping back toward the words. That is the honest direction for a number
+   that counts up while the turn streams — the reading column's edge stays put, and the lane below it cannot be
+   encroached on by a run that happens to be three digits deep.
+
+   The threshold is what the two lanes need side by side, and it is measured against the SCROLLER'S CLIENT BOX
+   rather than the pane: .chat-scroller reserves its scrollbar on both edges (see it), which is ~10px a side that
+   the pane has and the marks may not use. So the room is (pane − both reservations − .chat-turns' 52.5rem) / 2,
+   plus the column's own 2.25rem inset, and what has to fit in it is the controls' 2.25rem plus the widest pill —
+   measured 3.3rem at three digits. 61rem clears that by a few px at both text sizes. 58rem, where this used to
+   switch over, is a whole pill short of it, and 60rem still shaves the right edge off a three-digit ring.
+   Under the threshold the mark stays on its line, INSIDE the column, where it cannot reach the gutter at all —
+   which is why the narrow rendering has never had this to fix, and why falling back to it costs nothing but the
+   wider look. */
 .chat-run-bar {
     padding-block: 0.125rem;
 }
-@container (min-width: 58rem) {
+@container (min-width: 61rem) {
     /* THE ROW HAS TO REACH THE MARGIN BEFORE THE MARK CAN STAND IN IT. Every message row is
        `content-visibility: auto` (see .chat-message — it is what keeps a long transcript's scrollbar honest),
        and that paints with containment: anything outside the row's own box is not clipped-with-a-scrollbar, it
@@ -360,9 +384,10 @@
        leaving the bare line the mark was the whole point of.
        So the row that carries a run grows outward by the mark's reach and gives the width straight back as
        padding. The content box does not move — the reading measure, the bubbles and the line are all exactly
-       where they were — but the clip edge now sits past the mark. A quarter-rem more than the mark asks for, so
-       the two are never flush at fractional zoom. Only rows that HAVE a mark pay it; nothing else in a turn is
-       drawn outside its row, so nothing else needs the room.
+       where they were — but the clip edge now sits past the mark: 5.75rem against the 5.55rem a three-digit pill
+       reaches, so the two are never flush at fractional zoom and a count one digit longer than anything real
+       still has room. Only rows that HAVE a mark pay it; nothing else in a turn is drawn outside its row, so
+       nothing else needs the room.
 
        VERTICALLY TOO, and for the same reason: a turn's calls are drawn above that turn's own words, so the bar
        is the first thing in its row — and the mark, being a badge on a hairline, stands ~7px past the bar at
@@ -371,18 +396,30 @@
        the height it did and the turns keep their spacing — and it is quoted deliberately over what the mark
        asks for, so tightening the bar again does not silently start slicing lids. */
     .chat-pane .chat-message:has(.chat-run-bar) {
-        margin-right: -3.75rem;
-        padding-right: 3.75rem;
+        margin-right: -5.75rem;
+        padding-right: 5.75rem;
         margin-block: -0.5rem;
         padding-block: 0.5rem;
     }
     .chat-pane .chat-run-bar {
         padding-block: 0.25rem;
     }
+    /* Left edge on the far side of the controls' gutter, right edge wherever the count leaves it: see the lane
+       rule above. `right` is deliberately not set — with both, the pill would be stretched to the outset rather
+       than sized by its contents, and the ring would run out past the number it is drawn around.
+       `max-content` is what makes that legal rather than merely intended. An absolute box with no `right` is
+       shrink-to-fit against the space LEFT of its containing block's far edge, and `left: 100%` leaves exactly
+       none of it — so the pill fell back to its min-content width. That is normally the whole string, but a
+       transcript inherits `overflow-wrap: anywhere` (see .chat-message, which needs it so a 64-char digest
+       cannot set the width of the panel), and `anywhere` makes every character a break opportunity that COUNTS
+       toward min-content. The count is the one number in the app made of nothing but characters that may break:
+       a 3-call run measured one glyph wide and 2.5 rows tall, the digits stacked down the pill. Sizing to
+       max-content takes the available width out of it entirely; the room to draw into is the row's own outset. */
     .chat-pane .chat-run-mark {
         position: absolute;
         top: 50%;
-        right: -3.5rem;
+        left: calc(100% + var(--chat-gutter));
+        width: max-content;
         translate: 0 -50%;
     }
     .chat-pane .chat-run-bar-open {
@@ -399,28 +436,23 @@
     }
     /* ...BUT ITS HAIRLINE MAY NOT FOLLOW IT OUT THERE. The line under a pinned prompt says "the surface ends
        here, what is cut below is passing under it", and it can only say that along the edge of the thing being
-       read: the band's padded box now runs 3.75rem into the margin, and an absolute inset of 0 spans padding
+       read: the band's padded box now runs 5.75rem into the margin, and an absolute inset of 0 spans padding
        and all — so the divider carried on past the column and ruled off a strip of empty air, which reads as a
        line that has slipped sideways rather than as an edge. It ends where the reading measure does; the strip
        beyond stays covered by the band's own background, which is what the width was for. */
     .chat-pane .chat-prompt-pinned::after {
-        right: 3.75rem;
+        right: 5.75rem;
     }
     /* ...AND THE PINNED PROMPT HAS TO REACH THE MARGIN TOO, or the marks do not pass under it. The band's
-       opaque rectangle stops at the column's own edge, while the rows carrying a mark now run 3.75rem wider —
+       opaque rectangle stops at the column's own edge, while the rows carrying a mark now run 5.75rem wider —
        so a turn scrolling beneath its pinned prompt slid its LINES out of sight on schedule and left every one
        of their marks stacked up in the strip beside the prompt, a column of pills attached to nothing. It reads
        as the turn's calls having come loose, which is exactly what it looks like and nothing like what happened.
        The same width, cancelled the same way, so the prompt's content box and its bubble do not move a pixel —
        only the surface that hides what passes under it gets as wide as the rows passing under it. */
     .chat-pane .chat-prompt {
-        margin-right: -3.75rem;
-        padding-right: 3.75rem;
-    }
-    /* ...but the edge the pin names ends at the column, where the reading does — the strip past it is cover,
-       not surface. */
-    .chat-pane .chat-prompt-pinned::after {
-        right: 3.75rem;
+        margin-right: -5.75rem;
+        padding-right: 5.75rem;
     }
 }
 /* HOW A RUN'S CALLS ARRIVE (the Transition in ChatToolRun). A single grid row taken from no height to its

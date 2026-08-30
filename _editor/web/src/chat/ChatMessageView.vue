@@ -976,7 +976,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                  gutter is the padding beyond it: one --chat-gutter of width drops the mark into precisely the
                  strip the fork mark stands in, and the pair measures to the same x. A margin on top of that:
                  even four pixels: spends room the column does not have and hangs the mark past the panel's own
-                 edge, which is why the fork mark carries none either.
+                 edge, which is why the fork mark carries none either. It is also the boundary a hidden run's
+                 count mark is positioned against — the gutter is the CONTROL lane, that pill takes the strip
+                 past it (see .chat-run-mark in chat.css) — so a mark here that reached wider than the gutter
+                 would be reaching into it.
 
                  It costs the row NO HEIGHT and no width: absolute, inside padding the column was already
                  carrying, opposite a clock in the left margin, so a prompt is exactly as tall with this control
