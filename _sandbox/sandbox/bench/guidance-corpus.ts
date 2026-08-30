@@ -189,6 +189,45 @@ const justUnderBashTimeout = (sleptSeconds: number, durationMs: number): { byArg
     byDuration: durationMs >= 105_000 && durationMs < 120_000 ? 1 : 0,
 });
 
+/* A TURN SENT AFTER A TOOL THAT IS NOT THERE, which is what the CHECKLIST_GUIDANCE figures below missed for two
+ * weeks. The deferred tools are named in the prompt and loaded on demand, so when the CLI stops shipping one the
+ * only trace is this sentence in a tool_result: the block keeps advertising it, the model keeps asking, and the
+ * call counts beside it just quietly go to zero. Counted here so the two read together. */
+const TOOL_SEARCH_MISS = "No matching deferred tools found";
+const CHECKLIST_VERB = /^Task(Create|Get|Update|List)$/;
+
+/* Which bucket a call falls in. "checklist" is a miss on a query that named nothing BUT checklist verbs, which
+ * is the harness's own doing: CHECKLIST_GUIDANCE sent the turn and the tools were not there. "other" is a miss
+ * on anything else, which is mostly the model guessing at an MCP name that is loaded rather than deferred, and
+ * nobody's bug. "" is every other call in the corpus, bucketed rather than branched on so the accounting costs
+ * the scan loop no decision of its own. */
+const deferredMissKind = (call: Call): string => {
+    if (call.name !== "ToolSearch" || !call.text.includes(TOOL_SEARCH_MISS)) {
+        return "";
+    }
+    const query = typeof call.input["query"] === "string" ? call.input["query"] : "";
+    // A keyword query ("+browser navigate") names no tool at all, so it can only be the second kind.
+    const asked = query.startsWith("select:")
+        ? query
+              .slice("select:".length)
+              .split(",")
+              .map((name) => name.trim())
+              .filter((name) => name !== "")
+        : [];
+    return asked.length > 0 && asked.every((name) => CHECKLIST_VERB.test(name)) ? "checklist" : "other";
+};
+
+/* THE FIGURES THAT TELL THE TWO ZEROS APART. A checklist the model declined to keep and a checklist the CLI
+ * stopped shipping both read as three zeros in the block below; only these separate them, and the second is the
+ * one that happened (see CHECKLIST_ENV in src/agent/agent.ts). Anything but 0 on the first line means turns are
+ * being sent after tools that do not exist, whatever the call counts beside it say. The second line is the model
+ * guessing at a name, mostly an MCP server that is loaded rather than deferred: noise, and here so a rise in the
+ * first cannot be waved away as more of it. */
+const emptySearchFigures = (tools: Record<string, number>, misses: Record<string, number>): Record<string, string | number> => ({
+    deadChecklistSearches: `${misses["checklist"] ?? 0} of ${tools["ToolSearch"] ?? 0} ToolSearch calls`,
+    otherEmptySearches: misses["other"] ?? 0,
+});
+
 // A Read's byte window, so a re-read can be told from a read of somewhere else in the same file. Claude Code's
 // own default cap when the model names neither bound.
 const DEFAULT_READ_LIMIT = 2000;
@@ -231,6 +270,9 @@ export const guidanceStats = (root: string) => {
     let sleptJustUnderByArgument = 0;
     let sleptJustUnderByDuration = 0;
     let watchStarts = 0;
+
+    // checklist: ToolSearch calls that came back empty, split by whose fault the emptiness is.
+    const deferredMisses: Record<string, number> = {};
 
     // context reuse
     let reads = 0;
@@ -314,6 +356,8 @@ export const guidanceStats = (root: string) => {
             if (call.name === "mcp__watch__start") {
                 watchStarts += 1;
             }
+
+            bump(deferredMisses, deferredMissKind(call));
 
             if (call.name === "Bash" && typeof call.input["command"] === "string") {
                 bash += 1;
@@ -439,6 +483,7 @@ export const guidanceStats = (root: string) => {
             TaskCreate: tools["TaskCreate"] ?? 0,
             TaskUpdate: tools["TaskUpdate"] ?? 0,
             TaskList: tools["TaskList"] ?? 0,
+            ...emptySearchFigures(tools, deferredMisses),
         },
     };
 };

@@ -49,11 +49,17 @@ const INTERACTIVE_GUIDANCE = [
     "When a request is large, risky, or underspecified, call EnterPlanMode first, investigate read-only, then ExitPlanMode to get your plan approved before changing anything.",
 ].join("\n\n");
 
-// The checklist tools are DEFERRED, the model is told their names but not their schemas, so it must call
-// ToolSearch before it can use one, and left to itself it never does: across a corpus of sandbox turns,
-// TaskCreate was called zero times while the harness fired its "task list is empty" reminder on a loop. That
-// silence costs the most exactly where it is worst, an unattended turn runs ~150 steps with no plan the
-// operator can watch and nothing holding the agent to it, so this is told on EVERY turn, attended or not.
+/* The checklist tools are DEFERRED, the model is told their names but not their schemas, so it must call
+ * ToolSearch before it can use one, and left to itself it never does: across a corpus of sandbox turns,
+ * TaskCreate was called zero times while the harness fired its "task list is empty" reminder on a loop. That
+ * silence costs the most exactly where it is worst, an unattended turn runs ~150 steps with no plan the
+ * operator can watch and nothing holding the agent to it, so this is told on EVERY turn, attended or not.
+ *
+ * THIS SENTENCE PROMISES TOOLS THE CLI DOES NOT SHIP BY DEFAULT ANY MORE, and the promise is kept in agent.ts
+ * rather than here. From 2.1.233 the Task verbs are gated off for every model this sandbox runs, so for two
+ * weeks the block sent each turn to ToolSearch for tools that were not there (259 dead-end calls, and the
+ * checklist itself gone from the operator's view). CHECKLIST_ENV is what puts them back; a turn composed
+ * without it should not be composed with this. */
 const CHECKLIST_GUIDANCE =
     "For any task worth more than a few steps, keep a checklist with the Task tools (load them with ToolSearch first: " +
     "`select:TaskCreate,TaskUpdate,TaskList`). Call TaskCreate once per step up front, TaskUpdate to move exactly one " +

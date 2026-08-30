@@ -4,7 +4,13 @@ import type { TodoItem } from "@intentic/sandbox-contract";
  *
  * Claude Code 2.1.220 DISABLED TodoWrite: its `isEnabled()` is `!tasksEnabled() && ...`, and tasks are on
  * unless CLAUDE_CODE_ENABLE_TASKS=false, so under the Agent SDK the checklist is TaskCreate/TaskUpdate/
- * TaskList, and a TodoWrite call never arrives. There is no structured SDK message for these (the
+ * TaskList, and a TodoWrite call never arrives.
+ *
+ * 2.1.233 then put a SECOND predicate in front of both halves, a model-version gate that hides the whole family
+ * from every model this sandbox runs, which is how this reducer came to receive nothing at all for two weeks
+ * rather than receiving TodoWrite instead. agent.ts pins it back on (CHECKLIST_ENV), so the paragraph above
+ * still describes what arrives here; without that pin, nothing does. There is no structured SDK message for
+ * any of it (the
  * SDKTask*Message family carries BACKGROUND agent tasks, subagent_type, output_file, not the checklist),
  * so the state lives only in the tool calls and their results, and this is where it gets reassembled.
  *

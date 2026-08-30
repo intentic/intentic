@@ -218,6 +218,26 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe("5");
 });
 
+/* THE OTHER HALF OF THE CHECKLIST IS THE PROMPT, which is why one test asserts both. Claude Code 2.1.233 hides
+ * the Task verbs (and TodoWrite with them) from every model this sandbox runs, while CHECKLIST_GUIDANCE keeps
+ * telling each turn to ToolSearch for them: 259 turns walked into "No matching deferred tools found" before
+ * anyone noticed, because each half looks correct on its own. Deleting either one alone has to fail here. */
+test("every turn pins the checklist tools on, and says so in the prompt it pins them for", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect(request, capture);
+    // Unconditional, unlike the ceilings above: the model-version gate they answer moves without warning, so a
+    // turn that says nothing is a turn with no checklist.
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_ENABLE_TODO_TOOLS"]).toBe("1");
+    // Which half of the family: Task*, the one the prompt names and task-checklist.ts can parse.
+    expect(captured.at(-1)?.env?.["CLAUDE_CODE_ENABLE_TASKS"]).toBe("1");
+    expect(captured.at(-1)?.systemPrompt as string).toContain("select:TaskCreate,TaskUpdate,TaskList");
+});
+
 /* The env token is a SNAPSHOT taken at spawn: a turn that outlives it, or one caught by an account-wide
  * revocation, which kills tokens that still look valid by the clock: used to die mid-work with
  * "Failed to authenticate. API Error: 401 ...". getOAuthToken is how the CLI asks for a replacement and

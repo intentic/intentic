@@ -458,6 +458,31 @@ const subagentEnv = (request: AgentRequest): Record<string, string> => ({
     ...opt("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH", request.subagentDepth?.toString()),
 });
 
+/* THE CHECKLIST TOOLS, PINNED ON, because the CLI turned them off underneath this harness.
+ *
+ * Claude Code 2.1.233 gates the whole checklist family behind a model-version table (opus ≥ 4-8, sonnet ≥ 5,
+ * fable ≥ 5, mythos ≥ 5): at or above that line TaskCreate/TaskGet/TaskUpdate/TaskList AND TodoWrite all answer
+ * isEnabled() false unless a remote gate is on, and it is off by default. Every model this sandbox runs is over
+ * the line, so on 2026-08-15, the day the pin moved off 2.1.220, the checklist tools stopped existing.
+ *
+ * Nothing announced it, and the failure was silent in the worst direction: the system prompt tells EVERY turn to
+ * load them (CHECKLIST_GUIDANCE), so the turns kept asking. 259 of them ran `ToolSearch
+ * select:TaskCreate,TaskUpdate,TaskList` into "No matching deferred tools found", against 237 that succeeded on
+ * 2.1.220, and TaskCreate calls fell from 1,551 to 47. There was no fallback either: TodoWrite is behind the
+ * same predicate, so a turn lost the checklist outright rather than dropping to the older tool, and the
+ * operator's task list (task-checklist.ts, the thing that makes a 150-step unattended run watchable) went blank.
+ *
+ * CLAUDE_CODE_ENABLE_TODO_TOOLS is the documented override for that gate; CLAUDE_CODE_ENABLE_TASKS picks which
+ * half of the family it turns on, Task* when true (the CLI's own default) and TodoWrite when false. BOTH are
+ * pinned, unlike the ceilings above, because neither is a tunable here: the prompt names the Task verbs and the
+ * checklist reducer parses their results, so a container that set either one to off would silently take the
+ * operator's task list with it. Measured against the pinned CLI on claude-opus-4-8, the turn's tool list goes
+ * from 21 tools with no checklist verb at all to 25 with the four Task verbs deferred behind ToolSearch. */
+const CHECKLIST_ENV: Record<string, string> = {
+    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+    CLAUDE_CODE_ENABLE_TASKS: "1",
+};
+
 // Combine hook sets, CONCATENATING the matchers registered for the same event. A plain object spread would
 // have the last contributor silently win the key, two producers of PreToolUse:Bash (the tmux wrapper and the
 // install steer) and only one of them would ever fire.
@@ -622,6 +647,9 @@ const baseOptions = (
             ...cleanerEnv(request),
             // How much this turn may delegate, only the ceilings the owner moved off the harness's own defaults.
             ...subagentEnv(request),
+            // The Task verbs the prompt advertises and the operator's task list is reassembled from, which the
+            // CLI now hides from every frontier model unless asked. Not a tunable: see CHECKLIST_ENV.
+            ...CHECKLIST_ENV,
             // Where bin/tmux-run must stand to talk to tmux, so the server it may have to START is the daemon's
             // and not this turn's (isolation.ts). Only for an anchored turn, the only one whose wrapper runs
             // inside a namespace at all.
