@@ -320,9 +320,11 @@ export const createAgentsRoutes = (services: Services) => {
          *
          * The disarm itself republishes the card (watchers.ts `discard` → the projection → a roster
          * broadcast), so by the time the summary below is read it has already lost its watches. */
-        stopWatching: i.stopWatching.handler(({ input }) => {
+        stopWatching: i.stopWatching.handler(async ({ input }) => {
             const entry = entryOf(input.id);
-            cancelWatchersFor(entry.id);
+            // Awaited: the disarm has to reach the watch journal too, or a container recreate moments after
+            // this press would restore at boot the very watch the user has just dismissed.
+            await cancelWatchersFor(entry.id);
             // Read back through `get` rather than off the live roster: an ARCHIVED conversation can hold armed
             // watches (archiving takes a card off the board, it does not disarm anything), and it is the one
             // that most needs this press, since its watch would wake it straight back onto the board.
@@ -481,7 +483,7 @@ export const createAgentsRoutes = (services: Services) => {
              * still exists. A watch outliving its conversation is not a stale readout, it is a timer that will
              * eventually try to start a turn on an id nothing answers to, hours after the user threw the agent
              * away. The registry can only forget the card's copy (see its `remove`); this is the disarm. */
-            cancelWatchersFor(entry.id);
+            await cancelWatchersFor(entry.id);
             // Resources first, worktree second: a shell or dev server the conversation left running must not
             // be mid-write in a tree that is being deleted under it (platform/reaper.ts).
             await services.reaper.reapConversation(entry.id, { force: true });
@@ -560,7 +562,7 @@ export const createAgentsRoutes = (services: Services) => {
             // conversation can be sitting on armed watches, and a timer that outlives the agent it belongs to
             // eventually tries to start a turn on an id nothing answers to.
             for (const summary of services.agents.listArchived()) {
-                cancelWatchersFor(summary.id);
+                await cancelWatchersFor(summary.id);
             }
             const removed = await purgeArchived(services);
             for (const run of (await services.workflowRuns.list()).filter((candidate) => candidate.archivedAt !== undefined)) {

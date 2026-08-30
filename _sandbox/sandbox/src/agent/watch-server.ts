@@ -134,22 +134,22 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                 {
                     watchId: z.string().min(1).optional().describe("The id to stop. Omit to list armed watches."),
                 },
-                (args) => {
+                async (args) => {
                     if (deps.conversationId === undefined) {
-                        return Promise.resolve(answer({ outcome: "none", watches: [] }));
+                        return answer({ outcome: "none", watches: [] });
                     }
                     if (args.watchId === undefined) {
-                        return Promise.resolve(answer({ outcome: "listed", watches: listWatchers(deps.conversationId) }));
+                        return answer({ outcome: "listed", watches: listWatchers(deps.conversationId) });
                     }
-                    const stopped = cancelWatcher(deps.conversationId, args.watchId);
-                    return Promise.resolve(
-                        stopped
-                            ? answer({ outcome: "stopped", watchId: args.watchId })
-                            : answer({
-                                  outcome: "unknown-watch",
-                                  note: "No armed watch of this conversation has that id, it may have fired, timed out, or been stopped already.",
-                              }),
-                    );
+                    // Awaited: the disarm reaches the watch journal as well as the timer, so a stop the agent
+                    // makes cannot be undone by a container recreate a moment later (agent/watch-journal.ts).
+                    const stopped = await cancelWatcher(deps.conversationId, args.watchId);
+                    return stopped
+                        ? answer({ outcome: "stopped", watchId: args.watchId })
+                        : answer({
+                              outcome: "unknown-watch",
+                              note: "No armed watch of this conversation has that id, it may have fired, timed out, or been stopped already.",
+                          });
                 },
             ),
         ],

@@ -1,6 +1,7 @@
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { memoryWatchJournal, type WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 import {
     armWatcher,
@@ -10,6 +11,7 @@ import {
     type CheckResult,
     listWatchers,
     MAX_PER_CONVERSATION,
+    restoreWatchers,
     startWatcherRuntime,
     type WatcherRuntime,
     type WatcherSpec,
@@ -25,27 +27,41 @@ interface Harness {
     readonly checks: string[];
     readonly steered: string[];
     readonly started: (AgentTurn & { conversationId: string })[];
+    // The environments checks actually ran with, so a test can assert what a restored watch was handed rather
+    // than only that it ran at all.
+    readonly checkEnvs: Readonly<Record<string, string>>[];
     steerAnswer: boolean;
     startAnswer: boolean;
     check: CheckResult;
+    // What the capability store would answer today. A restore reads it fresh, which is the whole reason no
+    // credential is journalled, so a test rotates a value here and asserts the new one reached the check.
+    env: Record<string, string>;
+    // Which conversations still exist. Emptied to model a card discarded while the daemon was down.
+    live: Set<string>;
+    journal: WatchJournal;
     stop: () => void;
 }
 
-const harnessOf = (over: Partial<Pick<Harness, "steerAnswer" | "startAnswer" | "check">> = {}): Harness => {
+const harnessOf = (over: Partial<Pick<Harness, "steerAnswer" | "startAnswer" | "check" | "env" | "journal">> = {}): Harness => {
     const harness: Harness = {
         checks: [],
         steered: [],
         started: [],
+        checkEnvs: [],
         steerAnswer: false,
         startAnswer: true,
         check: { exitCode: 1, output: "still waiting" },
+        env: {},
+        live: new Set(["conv-1", "conv-2", "conv-3"]),
+        journal: memoryWatchJournal(),
         stop: () => undefined,
         ...over,
     };
     const runtime: WatcherRuntime = {
         logger,
-        runCheck: (command) => {
+        runCheck: (command, options) => {
             harness.checks.push(command);
+            harness.checkEnvs.push(options.env);
             return Promise.resolve(harness.check);
         },
         steer: (_conversationId, text) => {
@@ -61,6 +77,9 @@ const harnessOf = (over: Partial<Pick<Harness, "steerAnswer" | "startAnswer" | "
             return Promise.resolve(harness.startAnswer);
         },
         sessionIdOf: () => "session-9",
+        journal: harness.journal,
+        envOf: () => Promise.resolve(harness.env),
+        conversationLive: (conversationId) => harness.live.has(conversationId),
     };
     harness.stop = startWatcherRuntime(runtime);
     return harness;
@@ -138,7 +157,7 @@ describe("watchers", () => {
     it("a stopped watch never wakes", async () => {
         const outcome = await armWatcher(specOf());
         const id = outcome.kind === "armed" ? outcome.id : "";
-        expect(cancelWatcher("conv-1", id)).toBe(true);
+        expect(await cancelWatcher("conv-1", id)).toBe(true);
         harness.check = { exitCode: 0, output: "done" };
         await vi.advanceTimersByTimeAsync(120_000);
         expect(harness.started).toHaveLength(0);
@@ -148,7 +167,7 @@ describe("watchers", () => {
     it("only the arming conversation may stop a watch", async () => {
         const outcome = await armWatcher(specOf());
         const id = outcome.kind === "armed" ? outcome.id : "";
-        expect(cancelWatcher("conv-other", id)).toBe(false);
+        expect(await cancelWatcher("conv-other", id)).toBe(false);
         expect(armedWatcherCount()).toBe(1);
     });
 
@@ -250,7 +269,7 @@ describe("watchers", () => {
             const first = await armWatcher(specOf({ note: "CI" }));
             await armWatcher(specOf({ note: "deploy" }));
             expect(watchProjection.of("conv-1")).toHaveLength(2);
-            cancelWatcher("conv-1", first.kind === "armed" ? first.id : "");
+            await cancelWatcher("conv-1", first.kind === "armed" ? first.id : "");
             expect(watchProjection.of("conv-1")?.map((entry) => entry.note)).toEqual(["deploy"]);
         });
 
@@ -261,7 +280,7 @@ describe("watchers", () => {
             await armWatcher(specOf({ note: "CI" }));
             await armWatcher(specOf({ note: "deploy" }));
             await armWatcher(specOf({ conversationId: "conv-2", note: "release" }));
-            expect(cancelWatchersFor("conv-1")).toBe(2);
+            expect(await cancelWatchersFor("conv-1")).toBe(2);
             expect(watchProjection.of("conv-1")).toEqual([]);
             expect(watchProjection.of("conv-2")).toHaveLength(1);
             expect(armedWatcherCount()).toBe(1);
@@ -270,8 +289,170 @@ describe("watchers", () => {
             expect(harness.started.filter((turn) => turn.conversationId === "conv-1")).toHaveLength(0);
         });
 
-        it("reports nothing disarmed when a conversation was watching nothing", () => {
-            expect(cancelWatchersFor("conv-3")).toBe(0);
+        it("reports nothing disarmed when a conversation was watching nothing", async () => {
+            expect(await cancelWatchersFor("conv-3")).toBe(0);
+        });
+    });
+
+    /* SURVIVING THE DAEMON, which for a watch is the ordinary case and not the edge one: its whole life
+     * happens between turns, and intentic recreates its own container on every update, every environment
+     * approval and every dev-sandbox.sh swap. The restart is modelled the way it actually happens, a SIGKILL:
+     * the runtime stops, every timer and every in-memory record goes with it, and the only thing that crosses
+     * into the next daemon is the journal on the history volume. */
+    describe("across a restart", () => {
+        /* Kill this daemon and boot the next one onto the same journal, which is the only thing that crosses.
+         * `harness` is reassigned so afterEach stops the live runtime rather than the dead one, `downSeconds`
+         * is how long the box was off (the clock moves while no timer can run, exactly as it does during a
+         * rebuild), and the trailing advance is a MICROTASK FLUSH, not a wait: a wake the pass decides on is
+         * delivered on a promise chain the pass deliberately does not await (one undeliverable report must not
+         * hold up restoring the other watches), so a test that asserted straight after the await would be
+         * counting ticks rather than behaviour. */
+        const restart = async (over: Partial<Pick<Harness, "check" | "env">> & { downSeconds?: number } = {}): Promise<void> => {
+            const { downSeconds, ...runtime } = over;
+            const { journal } = harness;
+            harness.stop();
+            if (downSeconds !== undefined) {
+                await vi.advanceTimersByTimeAsync(downSeconds * 1000);
+            }
+            harness = harnessOf({ journal, ...runtime });
+            await restoreWatchers();
+            await vi.advanceTimersByTimeAsync(0);
+        };
+
+        it("re-arms a watch the daemon died under, and it still fires", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            await restart();
+            expect(armedWatcherCount()).toBe(1);
+            // Still the agent's own check, on the agent's own cadence.
+            expect(harness.checks).toEqual(["ci-status --done"]);
+            harness.check = { exitCode: 0, output: "conclusion: success" };
+            await vi.advanceTimersByTimeAsync(10_000);
+            expect(harness.started).toHaveLength(1);
+            expect(harness.started[0]?.prompt).toContain("condition you were watching is now met");
+        });
+
+        /* THE LIKELIEST WAY A REBUILD ENDS, and the reason restore re-checks instead of only re-arming: the
+         * thing being watched is exactly the kind of thing that resolves while the container that was watching
+         * it is being recreated. CI going green during the rebuild must wake the agent at boot, not an
+         * interval later and not never. */
+        it("wakes immediately when the condition was met while the daemon was down", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            await restart({ check: { exitCode: 0, output: "conclusion: success" } });
+            expect(harness.started).toHaveLength(1);
+            expect(harness.started[0]?.prompt).toContain("condition you were watching is now met");
+            // Woken means over: nothing re-armed, nothing left on the card.
+            expect(armedWatcherCount()).toBe(0);
+            expect(watchProjection.of("conv-1")).toEqual([]);
+        });
+
+        /* THE ENDING THE OLD IN-MEMORY DESIGN OWED AND COULD NOT PAY, since the deadline died in the same
+         * record as the timer. It is worded as itself rather than as a timeout: the check stopped running
+         * partway through, which is a fact about us, not about the world. */
+        it("wakes with the restart ending when the deadline passed while the daemon was down", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 60 }));
+            // Down for longer than the watch had left.
+            await restart({ downSeconds: 120 });
+            expect(harness.started).toHaveLength(1);
+            const wake = harness.started[0] as AgentTurn & { conversationId: string };
+            expect(wake.prompt).toContain("deadline passed while the daemon was restarting");
+            expect(wake.prompt).toContain("re-checked once and the condition still does not hold");
+            expect(armedWatcherCount()).toBe(0);
+        });
+
+        // Both endings the agent was promised still hold after a restart, which is the invariant the whole
+        // journal exists for: no watch ends in silence.
+        it("still honours the deadline it was armed with, counted from the original arming", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            await restart();
+            await vi.advanceTimersByTimeAsync(600_000);
+            expect(harness.started).toHaveLength(1);
+            expect(harness.started[0]?.prompt).toContain("timed out");
+        });
+
+        /* NO CREDENTIAL CROSSES THE RESTART, only the names of the ones the arming turn had. The values come
+         * from the capability store as it stands at boot, so a token rotated while the daemon was down is
+         * picked up, and a capability CONNECTED while it was down is not quietly handed to a check nobody
+         * re-authorised, because its name was never in the arming turn's set. */
+        it("rebuilds the check's environment from live credentials, narrowed to the arming turn's keys", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600, env: { TOKEN_CI: "old-token", REGION: "eu" } }));
+            await restart({ env: { TOKEN_CI: "rotated-token", REGION: "eu", TOKEN_ADDED_LATER: "not-granted" } });
+            expect(harness.checkEnvs[0]).toEqual({ TOKEN_CI: "rotated-token", REGION: "eu" });
+        });
+
+        // A credential revoked while the daemon was down has no value to find, and the check runs without it
+        // rather than with a stale copy: the check failing honestly is the right outcome, and it is one the
+        // agent is told about, since the watch still ends in a wake either way.
+        it("drops a key whose credential is gone rather than resurrecting the old value", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600, env: { TOKEN_CI: "old-token" } }));
+            await restart({ env: {} });
+            expect(harness.checkEnvs[0]).toEqual({});
+        });
+
+        // The visible half: a conversation that was waiting on something before the restart must not read as
+        // finished after it, which is what the card said for every watch the old design lost.
+        it("puts the readout back on the card", async () => {
+            await armWatcher(specOf({ intervalSeconds: 30, timeoutSeconds: 600, note: "CI green on intentic/intentic" }));
+            await restart();
+            expect(watchProjection.of("conv-1")).toMatchObject([{ note: "CI green on intentic/intentic", intervalSeconds: 30 }]);
+        });
+
+        /* THE GHOST THIS FEATURE COULD HAVE INTRODUCED, and the reason every disarm awaits its journal drop:
+         * a watch the user or the agent stopped must not come back at boot wearing the note they dismissed. */
+        it("does not resurrect a watch that was stopped before the restart", async () => {
+            const outcome = await armWatcher(specOf({ timeoutSeconds: 600 }));
+            await cancelWatcher("conv-1", outcome.kind === "armed" ? outcome.id : "");
+            await restart({ check: { exitCode: 0, output: "done" } });
+            expect(armedWatcherCount()).toBe(0);
+            expect(harness.started).toHaveLength(0);
+        });
+
+        // Nor one that already ended on its own: one wake per watch is the promise, and a restart is not a
+        // second chance to keep it.
+        it("does not resurrect a watch that had already fired", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            harness.check = { exitCode: 0, output: "done" };
+            await vi.advanceTimersByTimeAsync(10_000);
+            expect(harness.started).toHaveLength(1);
+            await restart({ check: { exitCode: 0, output: "done" } });
+            expect(armedWatcherCount()).toBe(0);
+            expect(harness.started).toHaveLength(0);
+        });
+
+        /* A watch outliving its conversation is not a stale readout, it is a timer that will eventually try to
+         * start a turn on an id nothing answers to. agents.routes disarms on discard and purge; this is the
+         * crash that beat it there. */
+        it("drops a watch whose conversation did not survive, without waking anything", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            const { journal } = harness;
+            harness.stop();
+            harness = harnessOf({ journal, check: { exitCode: 0, output: "done" } });
+            harness.live.delete("conv-1");
+            await restoreWatchers();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(armedWatcherCount()).toBe(0);
+            expect(harness.started).toHaveLength(0);
+            // And it is gone for good: the next boot must not re-litigate it.
+            expect(await journal.list()).toHaveLength(0);
+        });
+
+        /* Ids are handed out by a counter that resets with the process, while restored watches keep the ids
+         * they were armed under, so `watch-1` can be taken before this daemon arms anything. Two watches
+         * sharing an id would make `watch stop` ambiguous and let one disarm the other. */
+        it("does not hand a new watch an id a restored one already holds", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600, note: "restored" }));
+            await restart();
+            const armed = await armWatcher(specOf({ timeoutSeconds: 600, note: "fresh" }));
+            expect(armedWatcherCount()).toBe(2);
+            expect(listWatchers("conv-1").map((watch) => watch.id)).toHaveLength(new Set(listWatchers("conv-1").map((w) => w.id)).size);
+            expect(armed.kind === "armed" ? armed.id : "").not.toBe("watch-1");
+        });
+
+        // The overwhelmingly common boot: nothing was armed, so the pass reads an empty journal and does
+        // nothing at all, including not asking the capability store for an environment it has no use for.
+        it("does nothing when nothing was armed", async () => {
+            await restart();
+            expect(armedWatcherCount()).toBe(0);
+            expect(harness.checks).toHaveLength(0);
         });
     });
 });

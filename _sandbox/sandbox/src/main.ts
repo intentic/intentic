@@ -12,7 +12,7 @@ import { startVanishedRepoSweep } from "./agents/vanished-repos.js";
 import { streamAgent } from "./agent/agent.routes.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "./agent/turn-resume.js";
 import { startVerifyNudges } from "./agent/verify-nudge.js";
-import { startWatchers } from "./agent/watchers.js";
+import { restoreWatchers, startWatchers } from "./agent/watchers.js";
 import { resumeWorkflowExecution } from "./workflows/workflow-runner.js";
 import { createAutomationsScheduler } from "./automations/scheduler.js";
 import { emitWorkspaceEvent } from "./automations/workspace-events.js";
@@ -1082,8 +1082,9 @@ const main = async (): Promise<void> => {
 
     // The condition watches (agent/watchers.ts): agent-armed checks the daemon polls between turns, waking the
     // arming conversation when one fires. Wired here because the wake is a turn and the turn generator cannot
-    // be imported from under turn-plan, where the arming tool lives. Stop drops every armed watch, a daemon on
-    // its way down cannot check anything, and the record honestly gone beats a timer into a dead process.
+    // be imported from under turn-plan, where the arming tool lives. Stop clears the timers and leaves the
+    // watch journal alone: a daemon on its way down cannot check anything, but what it was checking is exactly
+    // what the next one picks up (restoreWatchers, below).
     shutdown.push(startWatchers(services, streamAgent));
 
     /* The proof follow-up for every runtime without SDK Stop hooks (agent/verify-nudge.ts): a turn that changed
@@ -1155,6 +1156,18 @@ const main = async (): Promise<void> => {
     void resumeInterruptedTurns(services, streamAgent).catch((error: unknown) =>
         logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"),
     );
+
+    /* The same restart story for the condition watches (agent/watchers.ts), and the reason they need one is
+     * sharper than a turn's: a watch's whole life happens BETWEEN turns, so a rebuild lands in the middle of
+     * one far more often than it lands in the middle of a turn. The journal on /history holds every watch that
+     * was armed, so whatever survived to here is what the daemon died under. Each is RE-CHECKED once before
+     * anything is decided, since the thing being watched is exactly the kind of thing that resolves during a
+     * rebuild: a check that passes now wakes its conversation immediately, one whose deadline passed while we
+     * were down wakes with the restart ending, and the rest are re-armed with the time they have left.
+     * Ungated by autoResumeOnRestart, which is a policy about re-running the USER's turn and spending on it;
+     * putting back a watchdog the agent armed and then honouring the wake it was already promised is this
+     * daemon finishing its own sentence. Detached: a wake is a whole agent turn and must not hold up the boot. */
+    void restoreWatchers().catch((error: unknown) => logger.error({ err: error }, "armed condition watches could not be restored"));
 
     // The same restart story for loops and workflow runs, coordinated because every workflow step IS a loop.
     // Two independent passes can both claim the same persisted loop and race its conversation/worktree; the

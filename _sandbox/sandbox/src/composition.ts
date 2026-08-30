@@ -98,6 +98,7 @@ import { fileRunnersStore, type RunnersStore } from "./runners/runners-store.js"
 import { syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
 import { fileTurnJournal, type TurnJournal } from "./agent/turn-journal.js";
+import { fileWatchJournal, type WatchJournal } from "./agent/watch-journal.js";
 import { fileTurnAnchors, type TurnAnchors } from "./agent/turn-anchors.js";
 import type { Config } from "./env.config.js";
 import { createAgentsRegistry, type AgentsRegistry } from "./agents/agents-registry.js";
@@ -466,6 +467,14 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // daemon died under, which is what turn-resume re-runs. On the HISTORY volume: it holds full prompts, and
     // it must outlive the container recreates (rebuild, update, dev-sandbox.sh swap) that cause the deaths.
     readonly turnJournal: TurnJournal;
+    // What condition watches are armed right now (historyRoot/watches/, one file per armed watch). The turn
+    // journal's argument applied to the other thing that outlives a turn on purpose: a watch's whole life
+    // happens BETWEEN turns, so the container recreates that kill turns kill watches too, and held only in
+    // memory that death was silent, no fire and no timeout wake. Written when a watch arms, deleted the moment
+    // it ends for any reason a person or the agent chose, so whatever is here at boot is what the daemon died
+    // under, which is what agent/watchers.ts `restoreWatchers` re-checks and re-arms. Carries no credential:
+    // the check's env is re-derived at boot from the live capability store, see agent/watch-journal.ts.
+    readonly watchJournal: WatchJournal;
     // What each conversation message can be put back to (historyRoot/turn-anchors.json), a workspace
     // checkpoint for a main-tree turn, that conversation's own per-repo commits for an isolated one. Written at
     // every turn's start, read by the rewind route, by a fork asking for the files as they were, and by a
@@ -1287,6 +1296,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
         turnJournal,
+        // Beside the turn journal on the history volume, and for its reason: it has to outlive the container
+        // recreates (rebuild, update, dev-sandbox.sh swap) that are the commonest way an armed watch dies.
+        watchJournal: fileWatchJournal(join(config.historyRoot, "watches")),
         invariants,
         // The same instance the transcript reader holds, two would answer a read from a file the other had
         // already moved past, exactly the argument the chores store above makes.

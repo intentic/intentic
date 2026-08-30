@@ -37,6 +37,18 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // The fleet: every conversation card, its branch, its session ids, its standing.
     { path: "agents.json", portability: "carry" },
     { path: "turns/", portability: "carry" },
+    /* THE ARMED CONDITION WATCHES, one file per watch, put back at boot (agent/watchers.ts `restoreWatchers`).
+     *
+     * Carried for the reason loops.json is: an arrangement the agent entered into on the user's behalf and
+     * that is still outstanding travels with the conversation that is waiting on it, or a restored sandbox
+     * shows a card parked on a condition nothing will ever check. It can be carried safely because the journal
+     * holds no credential, only the NAMES of the environment its check ran with (agent/watch-journal.ts); the
+     * values are re-derived on the target from whatever capabilities it actually has, so a watch landing
+     * somewhere without them fails its check honestly and ends in a wake that says so, rather than arriving
+     * with a working copy of a token the bundle was never supposed to carry. A watch whose isolated checkout
+     * did not travel (those are `derived`) is dropped by the restore rather than re-armed against a tree that
+     * is not there. */
+    { path: "watches/", portability: "carry" },
     { path: "transcripts/", portability: "carry" },
     // What each message can be put back to, a workspace checkpoint, or an isolated conversation's own commits.
     // Carried WITH the transcripts and the scopes above, because it is the join between them: without it a

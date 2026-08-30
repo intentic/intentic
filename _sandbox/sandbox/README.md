@@ -75,6 +75,17 @@ reports the profile.
   starts working by itself hours later. A card carrying one sits in the board's Active lane and wears the
   press that ends it beside the readout that announces it (`agents.stopWatching`): the arrangement is one the
   agent entered into on the user's behalf, so the fact and the way out of it are the same line on the card.
+  A watch OUTLIVES THE DAEMON, which it has to, because its whole life happens between turns and intentic
+  recreates its own container on every update, every environment approval and every `dev-sandbox.sh` swap:
+  held only in memory it died silently, no fire and no timeout wake, since the deadline that owed the wake
+  died in the same record. So an armed watch is written to a journal on the history volume
+  (src/agent/watch-journal.ts) and put back at boot (src/agent/watchers.ts `restoreWatchers`), which re-checks
+  each one before deciding anything: a condition met during the rebuild wakes the conversation immediately, a
+  deadline that passed while the box was down wakes it with that ending said plainly, and the rest are
+  re-armed with the time they have left. The journal carries no credential, only the NAMES of the environment
+  the arming turn ran with; the values are re-derived from the live capability store
+  (src/capabilities/turn-env.ts), which reproduces the persona's withholding, picks up a rotated token, and
+  declines to hand back one that has since been revoked.
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
   screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
   first boot now seeds a one-page starter site as its own repo and starts its dev server

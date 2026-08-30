@@ -14,9 +14,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import { createOutboundSniffer } from "../activity/outbound.js";
 import { emitWorkspaceEvent } from "../automations/workspace-events.js";
-import { cliEnvOf } from "../capabilities/cli-env.js";
-import { extensionEnvOf } from "../extensions/extension-env.js";
-import { extensionBinDirsOf } from "../extensions/installed-extensions.js";
+import { turnCliEnv } from "../capabilities/turn-env.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
 import type { DependencyLandOrigin } from "../workspace/dependency-origin.js";
@@ -809,15 +807,11 @@ async function* runTurn(
     const mark = (stage: string): void => {
         preflightStages[stage] = Date.now() - preflightStart;
     };
-    // cli-kind capabilities contribute env vars (their stored credentials) so either agent's shell can run
-    // their CLI tools; extension `contributes.settings` with an `env` name inject theirs the same way.
-    const cliEnv = { ...(await cliEnvOf(services)), ...(await extensionEnvOf(services)) };
-    // Extensions that ship an agent CLI (contributes.bin, e.g. ext-discord's `discord-voice`) get their bin dir
-    // prepended to the turn's PATH, so the tool resolves by name in the agent's shell across every runtime.
-    const binDirs = await extensionBinDirsOf(services);
-    if (binDirs.length > 0) {
-        cliEnv["PATH"] = [...binDirs, process.env["PATH"] ?? ""].filter((entry) => entry !== "").join(":");
-    }
+    /* The shell environment this turn's capabilities and extensions contribute (capabilities/turn-env.ts).
+     * A shared function rather than three awaits inline, because restoring an armed condition watch at boot
+     * has to reproduce exactly this environment (agent/watchers.ts), and a second copy that drifted would
+     * only show itself hours after a restart, in a check that quietly stopped working. */
+    const cliEnv = await turnCliEnv(services);
     mark("env");
     // Attachments arrive workspace-relative; resolve to absolute paths for the provider and reject escapes.
     const attachmentPaths: string[] = [];

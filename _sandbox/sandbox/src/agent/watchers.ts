@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
+import { access } from "node:fs/promises";
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../automations/scheduler.js";
+import { turnCliEnv } from "../capabilities/turn-env.js";
 import type { Services } from "../composition.js";
 import { steerTurn } from "./agent-steering.js";
 import { startConversationTurn } from "./turn-resume.js";
+import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 
 /* "WAKE ME WHEN THE WORLD CHANGES", the daemon-owned condition watch that replaces hand-rolled polling loops.
@@ -30,9 +33,17 @@ import { watchProjection } from "./watch-state.js";
  * output, a watcher that goes quiet when its check breaks looks healthy while broken, so silence is never an
  * outcome. Between those two, exactly one wake per watch.
  *
- * IN-MEMORY, LIKE THE LOOPS' `running` MAP. A watch's env snapshot carries capability credentials (the check
- * that asks GitHub needs the token the turn had), and persisting those to disk to survive a daemon restart is
- * a worse trade than losing the watch, the timeout wake is the bounded loss, the credential file is not.
+ * LIVE IN MEMORY, ARMED ON DISK. The `records` map below is the only thing that checks anything; beside it,
+ * watch-journal.ts writes down what each armed watch IS, so a daemon that dies under one can put it back. The
+ * split exists because a restart is not an edge case here but the ordinary one: a watch's whole life happens
+ * between turns, and intentic recreates its own container on every update, every environment approval and
+ * every `dev-sandbox.sh` swap. Held only in memory, that death was the third ending this module says cannot
+ * exist, silent: nothing fired, and the deadline that owed the timeout wake died in the same record, so
+ * "the timeout wake is the bounded loss" was not true, the loss was total. What the journal deliberately does
+ * NOT hold is the check's environment, which is the turn's capability credentials; it keeps the variable
+ * NAMES and takes fresh values from the capability store at boot (see watch-journal.ts), so nothing
+ * perishable is snapshotted, the same contract agent/turn-journal.ts keeps for turns.
+ *
  * Armed watchers DO keep a hosted box alive (system/idle-stop.ts counts them), which is exactly what the noisy
  * tmux loop did by accident: a machine mid-watch is not idle. */
 
@@ -150,11 +161,32 @@ export interface WatcherRuntime {
     readonly steer: (conversationId: string, text: string) => boolean;
     readonly start: (turn: AgentTurn & { conversationId: string }) => Promise<boolean>;
     readonly sessionIdOf: (conversationId: string) => string | undefined;
+    // What an armed watch IS, on disk, so a daemon that dies under one can put it back (watch-journal.ts).
+    readonly journal: WatchJournal;
+    /* The environment a turn's check would run with TODAY, asked at restore rather than read off disk, so no
+     * credential is ever persisted. Narrowed to the arming turn's own key set by the restore, see below. */
+    readonly envOf: () => Promise<Record<string, string>>;
+    /* Whether the conversation a journalled watch would wake still exists and is not archived. A watch that
+     * outlives its conversation is not a stale readout, it is a timer that will eventually try to start a turn
+     * on an id nothing answers to, the same thing agents.routes disarms against on discard and purge. */
+    readonly conversationLive: (conversationId: string) => boolean;
 }
 
 let runtime: WatcherRuntime | undefined;
 const records = new Map<string, WatcherRecord>();
 let sequence = 0;
+
+/* The next free `watch-N`. A plain counter was enough while the map was the only record of anything, and is
+ * not now: the counter resets to zero on every boot while restored watches keep the ids they were armed
+ * under, so `watch-1` can already be taken before this process arms its first. The ids stay short because the
+ * agent types them back at us (`watch stop watch-3`), so the fix is to skip what is taken rather than to make
+ * them unguessable. */
+const nextId = (): string => {
+    do {
+        sequence += 1;
+    } while (records.has(`watch-${sequence}`));
+    return `watch-${sequence}`;
+};
 
 // Idle-stop's probe: a machine mid-watch is not idle, stopping it is how a watch silently never fires.
 export const armedWatcherCount = (): number => records.size;
@@ -172,12 +204,12 @@ export const listWatchers = (conversationId: string): WatcherSummary[] =>
         }));
 
 // Only a conversation's own watches answer to it, the same scoping rule subagent-wait holds.
-export const cancelWatcher = (conversationId: string, id: string): boolean => {
+export const cancelWatcher = async (conversationId: string, id: string): Promise<boolean> => {
     const record = records.get(id);
     if (record === undefined || record.spec.conversationId !== conversationId) {
         return false;
     }
-    discard(record);
+    await discard(record);
     return true;
 };
 
@@ -187,16 +219,19 @@ export const cancelWatcher = (conversationId: string, id: string): boolean => {
  * It is here rather than in the route because the records map is here: everything that ends a watch has to walk
  * the same `discard`, which is what clears the timer and republishes the card. Answers how many it took, so the
  * caller can tell "disarmed three" from "there was nothing armed" without reading the map itself. */
-export const cancelWatchersFor = (conversationId: string): number => {
+export const cancelWatchersFor = async (conversationId: string): Promise<number> => {
     // Snapshotted before the loop: `discard` deletes from the map being iterated.
     const own = [...records.values()].filter((record) => record.spec.conversationId === conversationId);
     for (const record of own) {
-        discard(record);
+        await discard(record);
     }
     return own.length;
 };
 
-const discard = (record: WatcherRecord): void => {
+/* STOP CHECKING, the in-memory half, and the ONLY half a daemon on its way down performs. Its counterpart
+ * `discard` also takes the watch off disk, and the difference between them is the whole restart feature: a
+ * shutdown that dropped the journal entry too would disarm precisely the watches it exists to bring back. */
+const forget = (record: WatcherRecord): void => {
     record.cancelled = true;
     if (record.timer !== undefined) {
         clearTimeout(record.timer);
@@ -204,6 +239,21 @@ const discard = (record: WatcherRecord): void => {
     }
     records.delete(record.id);
     publish(record.spec.conversationId);
+};
+
+/* THE WATCH IS OVER, for one of the four reasons that end one on purpose: it fired, it timed out, the agent
+ * stopped it, or the user did (directly, or by discarding the conversation under it).
+ *
+ * The journal drop is AWAITED by every caller rather than fired and forgotten, because the window it closes is
+ * one this feature would otherwise open by itself: the user presses stop, the container is recreated a second
+ * later, and a watch nobody wants comes back from the dead at boot, wearing the same note they just dismissed.
+ * A drop that finds no file is a no-op, so an already-journalless watch (the bench's, a restored one already
+ * taken) costs nothing here. */
+const discard = async (record: WatcherRecord): Promise<void> => {
+    forget(record);
+    await runtime?.journal.drop(record.id).catch((error: unknown) => {
+        runtime?.logger.error({ err: error, watch: record.id }, "watch: journal entry could not be dropped, a restart may re-arm it");
+    });
 };
 
 /* Tell the fleet card what this conversation is now parked on (watch-state.ts), on every transition and
@@ -227,6 +277,13 @@ const publish = (conversationId: string): void =>
             })),
     );
 
+/* THE ENDINGS THAT WAKE, and there are now three of them. `met` and `timeout` are the two the agent is
+ * promised when it arms; `restart-expired` is the one the world imposes, a deadline that passed while the
+ * daemon was not running. It is a separate word rather than a `timeout` with an asterisk because the two owe
+ * the agent different sentences: a timeout means the check ran to the deadline and never passed, which is
+ * evidence about the world, while this means the checking stopped, which is only evidence about us. */
+type WatchOutcome = "met" | "timeout" | "restart-expired";
+
 const elapsed = (record: WatcherRecord): string => {
     const seconds = Math.round((Date.now() - record.armedAt) / 1000);
     return seconds < 120 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
@@ -235,11 +292,17 @@ const elapsed = (record: WatcherRecord): string => {
 /* The wake's whole prompt. Written to be acted on, not admired: what was being watched, how it ended, and the
  * check's own last words, then one sentence telling the model this is the continuation it asked for. A timeout
  * says so in the first line, because "the condition never came" is a different next step than "it fired". */
-const report = (record: WatcherRecord, outcome: "met" | "timeout"): string => {
+const report = (record: WatcherRecord, outcome: WatchOutcome): string => {
     const head =
         outcome === "met"
-            ? `The condition you were watching is now met (check #${record.checks}, ${elapsed(record)} after arming).`
-            : `The watch timed out after ${elapsed(record)} without the condition being met, the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.`;
+            ? `The condition you were watching is now met (${elapsed(record)} after arming).`
+            : outcome === "timeout"
+              ? `The watch timed out after ${elapsed(record)} without the condition being met, the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.`
+              : /* The restart ending, said as itself rather than dressed up as a timeout: the deadline passed while
+                 * the daemon was down, so the check did NOT run for part of that window and "it never happened" is
+                 * more than this watch actually knows. The one thing it does know is that the condition does not
+                 * hold now, because restore re-checks before it says any of this. */
+                `The watch was armed ${elapsed(record)} ago and its deadline passed while the daemon was restarting, so it stopped being checked partway through. It has just been re-checked once and the condition still does not hold. Decide whether to re-arm it, investigate the check, or report back.`;
     const exit = record.last.exitCode === undefined ? "none (check was killed or failed to start)" : String(record.last.exitCode);
     return [
         `[watch ${record.id}] ${head}`,
@@ -255,7 +318,7 @@ const report = (record: WatcherRecord, outcome: "met" | "timeout"): string => {
  * turn live, a fresh one starts on the conversation, resuming its CURRENT provider session so the agent picks
  * the thread back up rather than meeting the task again. startConversationTurn answering undefined means a turn
  * is live but unsteerable, wait for it to end and try again. */
-const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: "met" | "timeout"): Promise<void> => {
+const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): Promise<void> => {
     const { conversationId } = record.spec;
     const message = report(record, outcome);
     for (let attempt = 0; attempt < DELIVER_ATTEMPTS; attempt += 1) {
@@ -291,9 +354,15 @@ const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: "me
     live.logger.error({ watch: record.id, conversationId, report: message }, "watch: report could not be delivered");
 };
 
-const fire = (live: WatcherRuntime, record: WatcherRecord, outcome: "met" | "timeout"): void => {
-    discard(record);
-    void deliver(live, record, outcome).catch((error: unknown) => live.logger.error({ err: error, watch: record.id }, "watch: delivery crashed"));
+/* END THE WATCH, THEN SAY SO, and strictly in that order: the journal entry goes BEFORE the report is
+ * delivered, never after. Delivery has its own durability (startConversationTurn journals the wake, so a
+ * daemon death between start and first frame re-runs it), so a crash mid-delivery loses nothing; a crash
+ * between a delivered report and an undropped journal entry, on the other hand, would re-arm at boot a watch
+ * the agent has already been woken for and wake it a second time. One wake per watch is the promise. */
+const fire = (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): void => {
+    void discard(record)
+        .then(() => deliver(live, record, outcome))
+        .catch((error: unknown) => live.logger.error({ err: error, watch: record.id }, "watch: delivery crashed"));
 };
 
 // One check, then the verdict: fire on 0, fire on the deadline, otherwise sleep an interval and go again. The
@@ -323,7 +392,8 @@ const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
         record.timer = undefined;
         void tick(live, record).catch((error: unknown) => {
             live.logger.error({ err: error, watch: record.id }, "watch: check crashed, watch dropped");
-            discard(record);
+            // Off disk too: a check that crashes the runner is not a watch a restart should faithfully re-arm.
+            void discard(record);
         });
     }, wait);
     // A watchdog must never hold the event loop open on its own (idle-stop's rule, same reason).
@@ -362,9 +432,8 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
     const intervalSeconds = clamp(Math.round(spec.intervalSeconds ?? DEFAULT_INTERVAL_S), MIN_INTERVAL_S, MAX_INTERVAL_S);
     const timeoutSeconds = clamp(Math.round(spec.timeoutSeconds ?? DEFAULT_TIMEOUT_S), MIN_TIMEOUT_S, MAX_TIMEOUT_S);
     const now = Date.now();
-    sequence += 1;
     const record: WatcherRecord = {
-        id: `watch-${sequence}`,
+        id: nextId(),
         spec,
         intervalMs: intervalSeconds * 1000,
         armedAt: now,
@@ -375,6 +444,23 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
         cancelled: false,
     };
     records.set(record.id, record);
+    /* Written down BEFORE the first timer is set, so the ordering that survives a crash is the safe one: an
+     * armed-and-journalled watch that never got its timer is restored at boot, while a timer that outran its
+     * journal entry would be a watch nothing could bring back, which is the bug this is fixing. */
+    await live.journal.record({
+        id: record.id,
+        conversationId: spec.conversationId,
+        command: spec.command,
+        note: spec.note,
+        intervalMs: record.intervalMs,
+        armedAt: record.armedAt,
+        deadlineAt: record.deadlineAt,
+        cwd: spec.cwd,
+        // Names, never values, see watch-journal.ts: the shape of the environment is what restores, its
+        // substance is asked of the capability store again.
+        envKeys: Object.keys(spec.env),
+        turn: spec.turn,
+    });
     schedule(live, record);
     // The card learns about the watch in the same breath the map does: this is the moment the conversation
     // stops being finished, and the board has to stop saying that it is.
@@ -383,15 +469,137 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
     return { kind: "armed", id: record.id, intervalSeconds, timeoutSeconds, firstCheck };
 };
 
-/* The runtime with the seams bound, exported for the tests, which stand fakes into every slot. The returned
- * stop drops every armed watch: a daemon on its way down cannot check anything, and the record honestly gone
- * beats a timer into a dead process. */
+/* PUT BACK WHAT THE DAEMON DIED UNDER, run once at boot, after the runtime is bound.
+ *
+ * Whatever is in the journal here is exactly the set of watches that were armed when this daemon's
+ * predecessor stopped existing, because every ending that is a DECISION (fired, timed out, stopped by the
+ * agent, stopped by the user, conversation discarded) takes the journal entry with it. No graceful shutdown is
+ * required, and none can be relied on: the killing signal is usually a SIGKILL from an outside `docker rm -f`,
+ * the same reasoning agents-store makes about its persisted `interrupted` status.
+ *
+ * EVERY ENTRY IS RE-CHECKED BEFORE ANYTHING IS DECIDED, which is the one thing this pass can do that a plain
+ * "re-arm the timers" could not. The world kept moving while the daemon was down, and the condition being
+ * watched is precisely the kind of thing that resolves during a rebuild: CI going green while the container
+ * that was watching it is being recreated is not a corner case, it is the likeliest way this ends. So a check
+ * that passes now wakes the conversation immediately, whatever the deadline says, and the agent gets its
+ * answer minutes after the restart instead of never.
+ *
+ * The pass is failure-per-entry, never failure-of-boot: one unreadable worktree or one check that hangs must
+ * not hold up the daemon's start, so entries are handled independently and their errors are logged. */
+export const restoreWatchers = async (): Promise<void> => {
+    const live = runtime;
+    if (live === undefined) {
+        return;
+    }
+    const entries = await live.journal.list();
+    if (entries.length === 0) {
+        return;
+    }
+    // Asked ONCE for the whole pass rather than per entry: it reads the capability store and every extension's
+    // settings, and every watch restoring in this pass wants the same answer.
+    const env = await live.envOf();
+    for (const entry of entries) {
+        try {
+            await restoreOne(live, entry, env);
+        } catch (error) {
+            live.logger.error({ err: error, watch: entry.id, conversationId: entry.conversationId }, "watch: could not be restored, dropping it");
+            await live.journal.drop(entry.id);
+        }
+    }
+};
+
+/* The journalled seed as the wake wants it. Zod gives every optional field an explicit `| undefined`, which
+ * under exactOptionalPropertyTypes is a different thing from the field being absent, and the difference is
+ * load-bearing downstream: `deliver` spreads this into an AgentTurn, where `account: undefined` would be a
+ * request to run on an account of that name rather than on the provider's first. So the fields are put back
+ * one conditional spread at a time, exactly as watch-server.ts assembled them. */
+const seedOf = (turn: JournalledWatch["turn"]): WatcherTurnSeed => ({
+    ...(turn.agent !== undefined ? { agent: turn.agent } : {}),
+    ...(turn.harness !== undefined ? { harness: turn.harness } : {}),
+    ...(turn.account !== undefined ? { account: turn.account } : {}),
+    ...(turn.model !== undefined ? { model: turn.model } : {}),
+    ...(turn.effort !== undefined ? { effort: turn.effort } : {}),
+    ...(turn.isolated === true ? { isolated: true } : {}),
+    ...(turn.unattended === true ? { unattended: true } : {}),
+});
+
+const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Record<string, string>): Promise<void> => {
+    const context = { watch: entry.id, conversationId: entry.conversationId, note: entry.note };
+    /* The two ways a watch can be stale rather than interrupted, both of which mean dropping it in silence is
+     * the honest answer: there is no longer anyone to wake, or nowhere to run the check. The conversation is
+     * gone or archived-and-purged (agents.routes disarms on discard and purge, so this is only the crash that
+     * beat it there), or the worktree it watched from has been landed and removed under it. */
+    if (!live.conversationLive(entry.conversationId)) {
+        live.logger.info(context, "watch: not restored, its conversation is gone");
+        await live.journal.drop(entry.id);
+        return;
+    }
+    if (
+        !(await access(entry.cwd).then(
+            () => true,
+            () => false,
+        ))
+    ) {
+        live.logger.info({ ...context, cwd: entry.cwd }, "watch: not restored, the tree it checked in is gone");
+        await live.journal.drop(entry.id);
+        return;
+    }
+    /* The environment, rebuilt rather than restored: fresh values from the live capability store, narrowed to
+     * the names the arming turn ran with. That reproduces the persona's withholding without knowing anything
+     * about personas (personaCliEnv only ever removes keys), drops a capability revoked while we were down,
+     * and declines to hand a check one connected while we were down, which nobody authorised it to have. */
+    const armedEnv = Object.fromEntries(entry.envKeys.filter((key) => env[key] !== undefined).map((key) => [key, env[key] as string]));
+    const check = await live.runCheck(entry.command, { cwd: entry.cwd, env: armedEnv });
+    const record: WatcherRecord = {
+        id: entry.id,
+        spec: {
+            conversationId: entry.conversationId,
+            command: entry.command,
+            note: entry.note,
+            cwd: entry.cwd,
+            env: armedEnv,
+            turn: seedOf(entry.turn),
+        },
+        intervalMs: entry.intervalMs,
+        // The ORIGINAL arm time, so the wake still says how long the agent has been waiting rather than how
+        // long ago the daemon came back.
+        armedAt: entry.armedAt,
+        deadlineAt: entry.deadlineAt,
+        checks: 1,
+        last: check,
+        timer: undefined,
+        cancelled: false,
+    };
+    // Held so `fire`'s discard has something to take off the card, and so the id is taken before nextId runs.
+    records.set(record.id, record);
+    if (check.exitCode === 0) {
+        live.logger.info(context, "watch: condition was met while the daemon was down, waking now");
+        fire(live, record, "met");
+        return;
+    }
+    if (Date.now() >= entry.deadlineAt) {
+        live.logger.info(context, "watch: deadline passed while the daemon was down, waking with the restart ending");
+        fire(live, record, "restart-expired");
+        return;
+    }
+    schedule(live, record);
+    // The card gets its readout back, which is the visible half of this whole pass: a conversation that was
+    // waiting on something before the restart must not read as finished after it.
+    publish(entry.conversationId);
+    live.logger.info({ ...context, secondsLeft: Math.round((entry.deadlineAt - Date.now()) / 1000) }, "watch: re-armed after restart");
+};
+
+/* The runtime with the seams bound, exported for the tests, which stand fakes into every slot.
+ *
+ * The returned stop clears every armed watch's TIMER and leaves its journal entry alone (`forget`, not
+ * `discard`), which is the difference a restart turns on: a daemon on its way down cannot check anything, but
+ * what it was checking is precisely what the next one has to pick up. */
 export const startWatcherRuntime = (live: WatcherRuntime): (() => void) => {
     runtime = live;
     return () => {
         // Deleting the entry being visited is safe under Map iteration.
         for (const record of records.values()) {
-            discard(record);
+            forget(record);
         }
         runtime = undefined;
     };
@@ -407,4 +615,11 @@ export const startWatchers = (services: Services, wake: WakeFn): (() => void) =>
         steer: steerTurn,
         start: async (turn) => (await startConversationTurn(services, wake, turn)) !== undefined,
         sessionIdOf: (conversationId) => services.agents.sessionIdOf(conversationId),
+        journal: services.watchJournal,
+        // The same function that builds a turn's shell environment, so a restored check cannot drift from what
+        // an arming turn would actually get (capabilities/turn-env.ts).
+        envOf: () => turnCliEnv(services),
+        // Archived counts as live: archiving takes a card off the board, it does not disarm anything, and a
+        // watch on an archived conversation is the one agents.routes goes out of its way to keep working.
+        conversationLive: (conversationId) => services.agents.entry(conversationId) !== undefined,
     });
