@@ -8,7 +8,7 @@ import { sandboxSpec, serializeSpec, type SandboxSpecDocument, type SpecOperatio
  * written down twice: that the generation is total, that it is grouped, and that it is deterministic. A route
  * added tomorrow is covered by these tests tomorrow.
  *
- * The one enumerated thing in the package — the 37 group paragraphs — is checked against the contract in both
+ * The one enumerated thing in the package — the 39 group paragraphs — is checked against the contract in both
  * directions, so prose cannot outlive the code it describes and code cannot arrive undescribed.
  */
 

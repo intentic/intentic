@@ -5,7 +5,10 @@ import { listSubagentSessions, resetSubagents, waitForSubagent } from "../agent/
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";
 import { createRequest, resolveRequest } from "../agent/agent-requests.js";
-import { startTurnRun, turnRunOf } from "../agent/turn-runs.js";
+// Two modules export a `TurnFn` and they are not the same shape: the loop pump's takes the services it runs
+// against, a run's takes only the turn. `fakeTurn` below is the pump's; the parent stream further down is a
+// run's, so it is imported under its own name rather than annotated with whichever was already in scope.
+import { startTurnRun, turnRunOf, type TurnFn as RunTurnFn } from "../agent/turn-runs.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../guard/turn-taint.js";
 import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
 
@@ -677,7 +680,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             release = resolve;
         });
         // eslint-disable-next-line require-yield
-        const forever: TurnFn = async function* pump() {
+        const forever: RunTurnFn = async function* pump() {
             await held;
         };
         startTurnRun(forever, { conversationId: parent.conversationId, prompt: "parent" } as AgentTurn & { conversationId: string });

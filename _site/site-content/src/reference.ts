@@ -12,7 +12,7 @@ import { type Book, type BookPage, type BookSection, bookDestinations, bookHref,
  * WHY IT IS ITS OWN BOOK RATHER THAN A SHELF INSIDE /developers. The prose page at /developers/http said, and
  * was right to say, that it would not enumerate the routes because "the enumeration is what dates fastest".
  * That argument holds against a hand-written enumeration and collapses against a generated one, so the
- * enumeration now exists — but it is 255 calls across 37 groups, which is larger than the entire authoring
+ * enumeration now exists — but it is 269 calls across 39 groups, which is larger than the entire authoring
  * book it would have been filed inside. A shelf that outweighs its book is a book.
  *
  * The reader is different too, which is the site's own test for where a cut goes. /docs is for somebody using

@@ -158,7 +158,7 @@ export const navEntries: NavEntry[] = [
      * extension. Filed as a row under Developers, the whole HTTP surface would have been announced only to
      * people who had already decided they were writing an extension.
      *
-     * It is also simply bigger than the book it would have joined: 255 calls across 37 groups, against eight
+     * It is also simply bigger than the book it would have joined: 269 calls across 39 groups, against eight
      * authored pages. A shelf that outweighs its book is a book.
      *
      * "API" is the accurate word here, and it is the word Developers gave up (see developers.ts): that book

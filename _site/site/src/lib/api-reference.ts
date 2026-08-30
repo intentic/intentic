@@ -72,7 +72,7 @@ const terse = (text: string | undefined): string | undefined => {
 };
 
 /* Loaded once for the whole build rather than once per page. Astro imports this module a single time and the
- * 37 group pages all await the same promise, so the generator runs once for 255 operations instead of 37
+ * 39 group pages all await the same promise, so the generator runs once for 269 operations instead of 39
  * times, which is the difference between a build step and a build problem. */
 let cached: Promise<SandboxSpecDocument> | undefined;
 const spec = (): Promise<SandboxSpecDocument> => (cached ??= sandboxSpec());

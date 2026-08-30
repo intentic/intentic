@@ -1,4 +1,4 @@
-/* THE 37 GROUPS OF THE DAEMON'S SURFACE, IN READING ORDER, each with the one line that says what it is FOR,
+/* THE 39 GROUPS OF THE DAEMON'S SURFACE, IN READING ORDER, each with the one line that says what it is FOR,
  * and the shelf it sits on.
  *
  * This is the only hand-written content in the generated document, and it is hand-written because it is the
@@ -17,7 +17,7 @@
  * COMPLETENESS IS GUARDED, NOT TRUSTED. The tests walk the contract and fail if a group here has no routes or
  * a group in the contract has no entry, so adding a contract file is a build error until it is described. That
  * is the repo's discovery-over-enumeration rule applied to the one enumerated list that has to exist: a list of
- * 37 prose paragraphs cannot be derived, but its AGREEMENT with the code can be.
+ * 39 prose paragraphs cannot be derived, but its AGREEMENT with the code can be.
  */
 
 /** The shelves the reference rail is built from, in reading order. */
@@ -362,6 +362,14 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Posts the agent has proposed, waiting for you to approve them",
         description:
             "The owner's side of the queue. The agent writes drafts directly; this is the inbox, the one call that covers approving, editing and retrying, and the deletion that is a rejection.",
+    },
+    {
+        name: "issues",
+        shelf: "ship",
+        label: "Issues",
+        summary: "Bugs your own users hit, grouped, and putting an agent on one",
+        description:
+            "The owner's side of the bug intake, and the counterpart to the pipelines group: an inbox of failures with one route that hands a failure to an agent rather than to you. Reports arrive at the public /intake/… endpoints from the reporter embedded on your sites, and the daemon groups them by fingerprint, so a crash that hit a thousand browsers is one row with a count. These routes read that inbox, move a row between open, resolved and ignored, start a turn on one, throw one away, and answer which sites have actually loaded the reporter. Nothing here creates an issue.",
     },
 
     // ── The sandbox itself ────────────────────────────────────────────────────────────────────────────
