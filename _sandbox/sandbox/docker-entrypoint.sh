@@ -80,6 +80,43 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
         zrok2 enable "$ZROK_TOKEN" --headless --description "${SANDBOX_NAME:-intentic-sandbox}" \
             >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || echo "zrok enable failed — see $HISTORY_ROOT/logs/zrok.log" >&2
     fi
+    # EVERY SHARE THIS ENVIRONMENT OWNS IS STALE THE MOMENT THIS SCRIPT RUNS, so they are all released before
+    # the agent comes up. This is the one place that can be systematic about it, and it has to be done here
+    # rather than at each bind site, because there are three of them (the daemon's own name below, plus preview
+    # and port names minted later by panels/preview-route.ts) and they all fail the same way.
+    #
+    # WHY THEY ARE STALE: a share lives on the hub, but the thing that SERVES it is a terminator — an open
+    # connection from this box into the overlay. A container recreate (`docker rm -f` + `docker run`, which is
+    # what every rebuild, update and provider change does) kills that connection without telling the hub, so
+    # the share survives, still holding its hostname, pointing at an egress that no longer exists. The hub then
+    # refuses to let the new agent bind the same name (409 shareConflict) while continuing to answer requests
+    # for it with a dial that can never succeed.
+    #
+    # The old behaviour treated that 409 as "already bound, nothing to do", which is why a rebuilt sandbox came
+    # up with NO share of its own and 502'd on every request — and since the sync transport rides that same
+    # address (platform/sync-ssh.ts), desktop sync died with it while the workspace still looked healthy over
+    # the loopback shortcut. Reclaiming one name at a time cannot fix that: the previews and ports hit it too.
+    #
+    # Deleting is safe precisely BECAUSE it is scoped to this environment: `zrok2 overview` lists only the
+    # account this box was enabled with, the agent recreates every share from its own registry moments later,
+    # and the names are deterministic, so what comes back is what was there. Failure is non-fatal — a hub that
+    # cannot be reached here leaves the binds below to retry, which is where they already were.
+    zrok_stale_tokens() {
+        # The overview is a box-drawn table: turn the rules into a plain delimiter, drop the padding, then take
+        # the share-token column of the Names rows. Those rows are `|<url>|<namespace>|<token>|<reserved>|...`,
+        # so the filter is: a URL with a dot in it, a namespace that is actually present, and a 12-character
+        # token. The namespace check is what keeps the Namespaces table above it out — its rows leave that
+        # column empty and would otherwise offer up the literal name "public" as a share to delete.
+        #
+        # `length()` rather than a `{12}` interval on purpose: the image's awk is busybox, whose default regex
+        # engine does not do interval expressions, and it fails by matching NOTHING rather than by erroring.
+        zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
+            | awk -F'|' '$2 ~ /\./ && $3 != "" && length($4) == 12 && $4 ~ /^[a-z0-9]+$/ { print $4 }'
+    }
+    for stale in $(zrok_stale_tokens); do
+        echo "releasing stale share $stale from a previous container" >> "$HISTORY_ROOT/logs/zrok.log"
+        zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+    done
     (
         while :; do
             zrok2 agent start >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
@@ -95,26 +132,14 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
             # Until the share is bound. The agent needs a moment to come up, so the loop is expected to fail a
             # few times first; what it must NOT do is give up when the name is taken.
             #
-            # "already in use" USED TO COUNT AS SUCCESS, on the reasoning that the holder is this sandbox's own
-            # share from a previous boot, so the address works either way. The first half is right and the
-            # second is not. A container recreate (`docker rm -f` + `docker run`, what every rebuild does)
-            # never releases anything: the hub keeps the old share, still holding the name, with a terminator
-            # pointing at an edge connection that died with the old container. So the new agent asks for its
-            # own hostname, is told 409 shareConflict, treats that as done, and the sandbox comes up with NO
-            # share of its own — reachable at an address whose only terminator is dead. Every request to it
-            # 502s, the daemon's own reachability probe says "not routing here yet" forever, and because the
-            # SYNC transport rides that same address (platform/sync-ssh.ts), desktop sync dies with it while
-            # the workspace itself still looks fine over the loopback shortcut. That is the whole failure, and
-            # it arrives on every rebuild.
+            # The sweep above should have made a 409 here impossible, so reaching this branch means the sweep
+            # could not run — the hub was unreachable at boot, or a share was minted between the two. It is the
+            # same reclaim, narrowed to the one name that matters most (this is the address the browser, the
+            # platform's reachability probe and desktop sync all use), and it exists so that a sweep which
+            # failed costs a slow start rather than a sandbox that is 502 until someone notices.
             #
-            # So a taken name is RECLAIMED instead. `zrok2 overview` is the only listing the account has, and
-            # it maps each name to the share token holding it; deleting that share frees the name for the bind
-            # on the next pass. Only ever this sandbox's OWN account is listed, so there is nothing here that
-            # could reach another sandbox's share.
-            #
-            # Bounded, because a reclaim that keeps failing is a different problem: after three tries the loop
-            # stops deleting and just keeps retrying the bind, so a hub that is merely slow is waited out
-            # rather than fought, and a delete/create fight can never run forever.
+            # Bounded at three: past that the loop stops deleting and just keeps retrying the bind, so a hub
+            # that is merely slow is waited out rather than fought, and a delete/create fight cannot run away.
             reclaims=0
             while :; do
                 zrok2 create name "$daemon_name" --namespace-token "$zrok_namespace" \
