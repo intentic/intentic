@@ -13,9 +13,11 @@
      remedy: put it in the layout, not over it (CredentialGuide reached the same conclusion for the capability
      forms). This is the third time, so the content moved out to where both surfaces can share it. -->
 <script setup lang="ts">
-import { Button, CopyButton } from "@intentic/ui";
+import { Button, Code, CopyButton, commandLang, useOsPreference } from "@intentic/ui";
 import { computed } from "vue";
 import { DESKTOP_DOWNLOADS, desktopVersion } from "../environments/desktop";
+
+const { cmdOs } = useOsPreference();
 
 // Read INSIDE the desktop app, this panel is being read in the very thing it offers to download, so the two
 // installers are hidden there. Nothing else about the panel changes: what the command does, and how to undo
@@ -30,18 +32,6 @@ const desktop = computed(() => desktopVersion() !== undefined);
  * being set up but is still the thing that will manage it afterwards. */
 const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?: boolean }>();
 
-/* WHICH UNDO TO OFFER, WHICH IS DECIDED BY WHICH INSTALL THE READER IS BEING GIVEN.
- *
- * This panel showed the `curl -fsSL https://intentic.dev/cleanup | sh` one-liner to everybody — including the
- * reader whose card leads with a Download button, on the page whose entire argument for that button is that an
- * installer arrives with the affordances a piped script does not: a publisher, a file, and an uninstaller. The
- * undo we then printed for them was a piped script. It is also simply the wrong instruction: what they will
- * have installed is an application, and the thing that removes it is the one Windows and their desktop already
- * offer, not a shell.
- *
- * `downloads` is already the "is the step an installer" switch (see above), so this reads off the same fact
- * rather than a second copy of it. The command stays for everyone whose install IS the command. */
-const appInstalled = computed(() => !downloads && !desktop.value);
 </script>
 
 <template>
@@ -114,19 +104,9 @@ const appInstalled = computed(() => !downloads && !desktop.value);
                 Removes all of it
                 <CopyButton :text="cleanup" class="-my-1 ml-auto" />
             </span>
-            <!-- An installer's undo is an uninstaller, and it is named FIRST for the reader who is being given
-                 an installer: the command below is still correct and still theirs if they want it, but leading
-                 a Windows reader with a pipe-to-shell is this panel answering a question they never asked in a
-                 dialect they were promised they would not need. Two sentences because it is two things: the
-                 app removes the sandbox (container and volumes with it), Windows removes the app. Neither does
-                 the other's job, and saying so is cheaper than a reader discovering it. -->
-            <p v-if="appInstalled">
-                Remove the sandbox on Intentic's <span class="text-content">This computer</span> screen — container and volumes with it — then
-                uninstall Intentic like any other app. Or, in a terminal:
-            </p>
-            <!-- break-words, not break-all: a phone splits this mid-URL otherwise ("https://intentic.de /
-                 v/cleanup"), when breaking at its spaces fits. -->
-            <code class="block break-words text-content">{{ cleanup }}</code>
+            <!-- Same highlighted block as the install command: the OS tab on the run step picks bash vs
+                 PowerShell, and this line tracks that choice via the parent's cleanup prop. -->
+            <Code :code="cleanup" :lang="commandLang(cmdOs)" :wrap="true" :copyable="false" />
         </div>
     </div>
 </template>

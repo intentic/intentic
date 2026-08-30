@@ -2495,8 +2495,8 @@ watch(commandReady, (ready) => {
                              that runs this is by construction not the one reading it.
                              Not on a phone: the line that opened this disclosure already said who copying is for,
                              and repeating it here would be the third sentence in a card about a fourth device. -->
-                                    <p v-if="!mobile" class="flex items-start gap-2.5 text-xs text-muted">
-                                        <Icon name="terminal" class="mt-0.5 shrink-0 text-link" />
+                                    <p v-if="!mobile" class="flex items-center gap-2.5 text-xs text-muted">
+                                        <Icon name="terminal" class="shrink-0 text-link" />
                                         <span class="min-w-0">
                                             <template v-if="desktop"
                                                 >Copy it, then paste it into a terminal on the machine that will host your sandbox.</template
@@ -2633,13 +2633,13 @@ watch(commandReady, (ready) => {
                                  report: a spinner beside "here is what broke" is the page contradicting itself. -->
                             <p
                                 v-if="reportFailures === null"
-                                class="flex items-start gap-2 text-xs"
+                                class="flex items-center gap-2 text-xs"
                                 :class="handoff === `claimed` ? `text-content` : `text-muted`"
                             >
                                 <Icon
                                     name="spinner"
                                     spin
-                                    class="mt-0.5 shrink-0"
+                                    class="shrink-0"
                                     :class="handoff === `claimed` ? `text-success` : handoff === `handed` ? `text-info` : `text-subtle`"
                                 />
                                 <span class="min-w-0">
