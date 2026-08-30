@@ -151,26 +151,42 @@ if [ -n "${ZROK_TOKEN:-}" ]; then
             #
             # Bounded at three: past that the loop stops deleting and just keeps retrying the bind, so a hub
             # that is merely slow is waited out rather than fought, and a delete/create fight cannot run away.
+            #
+            # THE VERDICT COMES FROM THE ATTEMPT, NEVER FROM THE LOG. zrok.log is one append-only file that the
+            # agent's own restart loop writes to every two seconds, so reading a window of it to learn what THIS
+            # bind just did is a race with two ways to lose: a chatty agent pushes the 409 out of the window and
+            # the name is never reclaimed (exactly the 502 this reclaim exists to prevent), while a 409 left by
+            # the PREVIOUS attempt still sitting inside it deletes the share the agent has meanwhile restored
+            # from its own registry — taking the address off the internet by our own hand. Capturing the
+            # command's own stderr is exact and immune to interleaving; the log still gets every line, staying
+            # the record rather than becoming the control flow.
             reclaims=0
             while :; do
                 zrok2 create name "$daemon_name" --namespace-token "$zrok_namespace" \
                     >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
-                if zrok2 share public "http://127.0.0.1:${SANDBOX_PORT:-8787}" --backend-mode proxy \
-                    --name-selection "$zrok_namespace:$daemon_name" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1; then
+                bind_status=0
+                bind_out="$(zrok2 share public "http://127.0.0.1:${SANDBOX_PORT:-8787}" --backend-mode proxy \
+                    --name-selection "$zrok_namespace:$daemon_name" 2>&1)" || bind_status=$?
+                printf '%s\n' "$bind_out" >> "$HISTORY_ROOT/logs/zrok.log"
+                if [ "$bind_status" -eq 0 ]; then
                     break
                 fi
-                if [ "$reclaims" -lt 3 ] && tail -n 20 "$HISTORY_ROOT/logs/zrok.log" 2>/dev/null | grep -q "already in use"; then
-                    reclaims=$((reclaims + 1))
-                    # The table is box-drawn: turn the rules into a plain delimiter, drop the padding, then the
-                    # row whose URL starts with our name yields the token of the share sitting on it.
-                    stale="$(zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
-                        | awk -F'|' -v n="$daemon_name" '$2 ~ ("^" n "\\.") { print $4; exit }')"
-                    if [ -n "$stale" ]; then
-                        echo "reclaiming '$daemon_name' from stale share $stale (attempt $reclaims)" \
-                            >> "$HISTORY_ROOT/logs/zrok.log"
-                        zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+                case "$bind_out" in
+                *"already in use"*)
+                    if [ "$reclaims" -lt 3 ]; then
+                        reclaims=$((reclaims + 1))
+                        # The table is box-drawn: turn the rules into a plain delimiter, drop the padding, then
+                        # the row whose URL starts with our name yields the token of the share sitting on it.
+                        stale="$(zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
+                            | awk -F'|' -v n="$daemon_name" '$2 ~ ("^" n "\\.") { print $4; exit }')"
+                        if [ -n "$stale" ]; then
+                            echo "reclaiming '$daemon_name' from stale share $stale (attempt $reclaims)" \
+                                >> "$HISTORY_ROOT/logs/zrok.log"
+                            zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
+                        fi
                     fi
-                fi
+                    ;;
+                esac
                 sleep 2
             done
         ) &

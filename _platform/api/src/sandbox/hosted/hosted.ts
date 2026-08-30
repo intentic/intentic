@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@intentic-app/prisma";
+import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
@@ -72,6 +72,31 @@ export const hostedInstanceId = (config: Config): string => {
 
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
+
+/* THIS SANDBOX ALREADY HAS A MACHINE, because a second provision for it committed first. Not a failure to
+ * show anybody: the reader asked for a machine and there is one, so the route answers with it.
+ *
+ * It exists because the alternative was measured and expensive. `hostedProvision` reads "does this sandbox
+ * have a machine" and then provisions, with no lock between the two, so two calls for one sandbox (a second
+ * tab, a retried request, the desktop app open beside the browser) both pass the check. `sandboxId` is unique
+ * on HostedMachine, so the loser's row-write is refused — and the claim loop below read that refusal as "this
+ * warm machine is bad, try the next one", so it branded, started and stranded EVERY ready machine in the
+ * caller's region, one candidate at a time, for a sandbox that already had its own. The region's stock was
+ * gone for the next arrival, several machines were running the same connect token until the pool's reconcile
+ * collected them, and the reader who lost the race was shown a gateway error while their machine booted. */
+export class HostedAlreadyProvisioned extends Error {}
+
+/* Did this sandbox get its machine from somewhere else while this call was building one?
+ *
+ * Asked of the DATABASE rather than read off the unique violation's `target`, which Prisma spells differently
+ * per database: HostedMachine has TWO unique columns and they mean opposite things here. `sandboxId` is
+ * another provision winning the race, which is terminal and answers with the winner's machine; `appName` is a
+ * pool app that some other row already adopted, which is one bad candidate and nothing more. Only the first
+ * may stop the claim loop, so the question is put to the column that decides it. */
+const alreadyProvisioned = async (prisma: PrismaClient, sandboxId: string, error: unknown): Promise<boolean> =>
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === `P2002` &&
+    (await prisma.hostedMachine.findUnique({ where: { sandboxId }, select: { id: true } })) !== null;
 
 export interface HostedProvisionArgs {
     readonly sandboxId: string;
@@ -201,6 +226,18 @@ const claimPoolMachine = async (
             ]);
             return { appName: row.appName, region: row.region };
         } catch (error) {
+            /* THE ONE FAILURE THAT MUST NOT MOVE TO THE NEXT CANDIDATE: this sandbox already has a machine, so
+             * every further candidate would be branded and stranded for nothing (see HostedAlreadyProvisioned).
+             * The machine this iteration branded holds no row, so the reconcile collects it, and the pool row it
+             * won stays `claimed` for the same pass — one machine spent on the race, never the region's stock. */
+            // oxlint-disable-next-line eslint/no-await-in-loop -- the loop is sequential by design; see above
+            if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
+                logger.warn(
+                    { app: row.appName, sandboxId: args.sandboxId },
+                    `hosted pool: this sandbox was provisioned concurrently; abandoning the claim rather than branding more stock`,
+                );
+                throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+            }
             logger.warn({ err: error, app: row.appName }, `hosted pool: claim failed; trying the next warm machine`);
         }
     }
@@ -247,6 +284,13 @@ export const provisionHosted = async (
         await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>
             logger.warn({ err: cleanupError, appName }, `hosted: cleanup after failed provision failed; orphaned for the reaper`),
         );
+        /* The claim loop's race, one step later: the row-write lost to a concurrent provision for this sandbox.
+         * The app this call built is unambiguously its own (a cold path that collided on the name would have
+         * failed at `createApp`, before this block) and has just been taken back down, so the winner's machine
+         * is the answer and there is nothing to report as a failure. */
+        if (await alreadyProvisioned(prisma, args.sandboxId, error)) {
+            throw new HostedAlreadyProvisioned(`this sandbox already has a machine`);
+        }
         throw error;
     }
 };
@@ -292,9 +336,12 @@ const REAP_MAX_SHARE = 0.25;
  *   • `mine`     every machine in it carries this platform's stamp: the sweep may judge it by our rows.
  *   • `theirs`   at least one machine names a different platform: another deployment sharing this org and
  *                credential is running it, and its rows are not ours to read. Destroying it is the outage.
- *   • `unknown`  nothing to go on, an app with no machines, or machines minted before the stamp existed.
- *                Unprovable is not the same as unwanted; the health sweep reports these for a human. */
-type AppOwner = "mine" | "theirs" | "unknown";
+ *   • `unknown`  machines minted before the stamp existed, so there is nothing to go on. Unprovable is not the
+ *                same as unwanted; the health sweep reports these for a human.
+ *
+ * An app with NO machines has no stamp to read either, and it answers `unknown` here — but the sweep does not
+ * leave it standing, because emptiness is itself the evidence (see `orphanVerdict`). */
+export type AppOwner = "mine" | "theirs" | "unknown";
 
 const appOwner = (machines: { metadata: Record<string, string> }[], instance: string): AppOwner => {
     const stamps = machines.map((machine) => machine.metadata[FLY_META_PLATFORM]).filter((stamp) => stamp !== undefined);
@@ -327,27 +374,61 @@ const appEvidence = async (
     }
 };
 
+/* WHY AN APP IS BEING LEFT STANDING, or `undefined` for one this platform may collect. The order is the
+ * argument:
+ *
+ *   1. `unreadable`  Fly would not answer about it. Not a verdict, and never spent as one.
+ *   2. `theirs`      a machine names another deployment. Checked before the clock, because this is the fact an
+ *                    operator most needs told (a second deployment on this org and credential is the CAUSE of
+ *                    the fleet-loss outage), and a young stranger is still a stranger.
+ *   3. `young`       inside the grace window: a cold provision is app → volume → machine → row, so for minutes
+ *                    a perfectly healthy signup owns Fly resources no row vouches for yet.
+ *   4. no machines   COLLECTABLE, and the case this ordering exists to add. An app with nothing in it has no
+ *                    stamp to read, so it used to answer `unknown` and be left standing FOREVER: nothing could
+ *                    ever prove it ours, the daily sweep logged it as unprovable every night, and the health
+ *                    watch counted it as a stranger every fifteen minutes, which mailed the admins about a
+ *                    fleet-loss that had not happened and could never be cleared. Emptiness is its own
+ *                    evidence: a machine is the only thing that runs in an app, so an app without one is
+ *                    running nothing and can lose nobody their sandbox. Past the grace window with no row
+ *                    behind it, the only things that produce this shape are a failed provision of ours and a
+ *                    failed provision of somebody else's — litter either way.
+ *   5. `unknown`     it HAS machines, but none carries a stamp: minted before the stamp existed. Left standing
+ *                    on purpose, because these are the ones that could still be somebody's sandbox. */
+export type OrphanSkip = "theirs" | "unknown" | "young" | "unreadable";
+
+const orphanVerdict = (evidence: Awaited<ReturnType<typeof appEvidence>>, now: number): OrphanSkip | undefined => {
+    if (evidence === undefined) {
+        return `unreadable`;
+    }
+    if (evidence.owner === `theirs`) {
+        return `theirs`;
+    }
+    if (evidence.oldestAt !== undefined && now - evidence.oldestAt.getTime() < REAP_GRACE_MS) {
+        return `young`;
+    }
+    if (evidence.machines === 0) {
+        return undefined;
+    }
+    return evidence.owner === `mine` ? undefined : `unknown`;
+};
+
 /* Every our-prefix app the database cannot explain, sorted into the ones this platform may collect and the
- * ones it must leave alone with the reason why. Sequential: this runs once a day over a handful of apps, and
- * the Fly API is happier for it. */
-const sortUnknownApps = async (
+ * ones it must leave alone with the reason why. Sequential: this runs over a handful of apps (normally none at
+ * all), and the Fly API is happier for it.
+ *
+ * Exported because the health watch asks the same question and must get the same answer: it reports what the
+ * reaper leaves standing, and two definitions of "whose app is this" would eventually disagree about the one
+ * thing they exist to agree on. */
+export const sortUnknownApps = async (
     config: Config,
     unknown: string[],
-): Promise<{ doomed: string[]; skipped: { app: string; why: AppOwner | `young` | `unreadable` }[] }> => {
+): Promise<{ doomed: string[]; skipped: { app: string; why: OrphanSkip }[] }> => {
     const now = Date.now();
     const doomed: string[] = [];
-    const skipped: { app: string; why: AppOwner | `young` | `unreadable` }[] = [];
+    const skipped: { app: string; why: OrphanSkip }[] = [];
     for (const app of unknown) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per unknown app, once a day
-        const evidence = await appEvidence(config, app);
-        const why =
-            evidence === undefined
-                ? `unreadable`
-                : evidence.owner !== `mine`
-                  ? evidence.owner
-                  : evidence.oldestAt !== undefined && now - evidence.oldestAt.getTime() < REAP_GRACE_MS
-                    ? `young`
-                    : undefined;
+        const why = orphanVerdict(await appEvidence(config, app), now);
         if (why === undefined) {
             doomed.push(app);
         } else {

@@ -1,9 +1,10 @@
+import { Prisma } from "@intentic-app/prisma";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
-import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
 import { forgetNamespace } from "../zrok-provision.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
@@ -364,6 +365,64 @@ describe(`provisionHosted`, () => {
         expect(poolDelete).toHaveBeenCalledTimes(1);
         expect(poolDelete).toHaveBeenCalledWith({ where: { id: `p2` } });
     });
+
+    /* THE OTHER REASON A CLAIM'S ROW-WRITE FAILS, and the one that must NOT be read as "this warm machine is
+     * bad". `sandboxId` is unique on HostedMachine, so a second provision for the same sandbox — a second tab,
+     * a retried request, the desktop app beside the browser — loses its write. Walking to the next candidate
+     * then brands, starts and strands EVERY ready machine in the region, one at a time, for a sandbox that
+     * already has one: the pool the next arrival was going to claim is gone, and several machines are running
+     * the same connect token until the reconcile collects them. */
+    it(`abandons the claim when the sandbox was provisioned concurrently, instead of burning the region's stock`, async () => {
+        const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed on the fields: (sandboxId)`, {
+            code: `P2002`,
+            clientVersion: `test`,
+        });
+        const created = vi.fn().mockRejectedValue(duplicate);
+        const poolDelete = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7`), respond: () => json({ id: `m7`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m7/start`), respond: () => json({ ok: true }) },
+        ]);
+        const second = { ...poolRow, id: `p2`, appName: `intentic-sbx-pool-def456`, machineId: `m8`, volumeId: `vol_8` };
+        const claim = vi.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({
+            hostedMachine: {
+                create: created,
+                // What `alreadyProvisioned` asks: the winner's row is there, so this really is the race and
+                // not an appName collision on one bad pool app.
+                findUnique: vi.fn().mockResolvedValue({ id: `hm1` }),
+            },
+            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([poolRow, second]), updateMany: claim, delete: poolDelete },
+        });
+        await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
+        // ONE row branded, not every row in the region: the guarded `ready` → `claimed` win is the pool's
+        // whole cost per attempt, and it must be paid exactly once however the row-write then fails.
+        expect(claim).toHaveBeenCalledTimes(1);
+        expect(claim).toHaveBeenCalledWith({ where: { id: `p1`, state: `ready` }, data: { state: `claimed` } });
+        // The second warm machine is never touched, and no cold app is built either: exactly one machine is
+        // spent on losing the race.
+        expect(calls.some((entry) => entry.url.includes(`/machines/m8`))).toBe(false);
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(false);
+        expect(created).toHaveBeenCalledTimes(1);
+    });
+
+    // The same race one step later: the cold path's own row-write loses. Its app is unambiguously its own (a
+    // name collision would have failed at createApp), so it is taken back down and the winner's machine is the
+    // answer — not a gateway error over a sandbox that has a machine.
+    it(`takes its own cold app back down and reports the race when the row-write loses`, async () => {
+        const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed`, { code: `P2002`, clientVersion: `test` });
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
+        ]);
+        const prisma = fakePrisma({
+            hostedMachine: { create: vi.fn().mockRejectedValue(duplicate), findUnique: vi.fn().mockResolvedValue({ id: `hm1` }) },
+        });
+        await expect(provisionHosted(prisma as never, config(), logger, args)).rejects.toBeInstanceOf(HostedAlreadyProvisioned);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
+    });
 });
 
 describe(`wakeHosted`, () => {
@@ -452,6 +511,38 @@ describe(`reapHostedOrphans`, () => {
             machinesOf({ "intentic-sbx-newborn": [flyMachine({ platform: INSTANCE, ageMinutes: 2 })] }),
             deleteRoute,
         ]);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+    });
+
+    // An app's volumes, with an age, so the two verdicts about an app holding no machine can be told apart.
+    const volumesAged = (ageMinutes: number) => ({
+        match: (method: string, url: string) => method === `GET` && url.endsWith(`/volumes`),
+        respond: () => json([{ id: `vol_1`, created_at: new Date(Date.now() - ageMinutes * 60_000).toISOString() }]),
+    });
+    const noMachines = { match: (method: string, url: string) => method === `GET` && url.endsWith(`/machines`), respond: () => json([]) };
+
+    /* AN APP WITH NOTHING IN IT, which used to stand forever. The stamp lives on a MACHINE, so an app holding
+     * none has nothing to be proved by, and "unprovable" meant "leave it": the sweep logged it as unprovable
+     * every night, the health watch counted it as a stranger every fifteen minutes, and the admins were mailed
+     * about a fleet-loss that had not happened, on a schedule nothing could ever clear.
+     *
+     * Emptiness is its own evidence. A machine is the only thing that runs in an app, so an app without one is
+     * running nothing and can cost nobody their sandbox; past the grace window with no row behind it, the only
+     * things that produce this shape are a failed provision of ours and a failed provision of somebody
+     * else's — litter under either reading. */
+    it(`collects an app holding no machine at all, which nothing could ever prove was ours`, async () => {
+        const calls = stubFetch([appList(`intentic-sbx-hollow`), noMachines, volumesAged(120), deleteRoute]);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        const deleted = deletedApps(calls);
+        expect(deleted).toHaveLength(1);
+        expect(deleted[0]).toContain(`intentic-sbx-hollow`);
+    });
+
+    // And the safety property that makes the rule above sound: the SAME empty shape, minutes old, is a cold
+    // provision caught between its own steps (app → volume → machine → row) and must be left completely alone.
+    it(`leaves an empty app whose volume was made minutes ago: that is a provision mid-flight`, async () => {
+        const calls = stubFetch([appList(`intentic-sbx-mid-provision`), noMachines, volumesAged(2), deleteRoute]);
         await reapHostedOrphans(knownRows as never, config(), logger);
         expect(deletedApps(calls)).toHaveLength(0);
     });
@@ -602,6 +693,45 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         // `warm` is read off the app name (a pool claim keeps its pool name): the wait card's promise rides on it.
         expect(summary.hosted).toEqual({ region: `iad`, warm: true });
         expect(fetchSpy).toHaveLength(0);
+    });
+
+    /* Idempotence again, for the case the check above cannot cover: the two calls OVERLAP. `existing` is a read
+     * with no lock behind it, so a second tab, a retried request or the desktop app beside the browser both get
+     * past it and one of them loses its row-write. The reader who lost is owed the machine that exists, not a
+     * gateway error about a sandbox that is, by then, perfectly hosted. */
+    it(`hostedProvision answers with the winner's machine when a concurrent provision beat it`, async () => {
+        const calls = stubFetch([
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
+            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
+        ]);
+        const duplicate = new Prisma.PrismaClientKnownRequestError(`Unique constraint failed`, { code: `P2002`, clientVersion: `test` });
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: vi.fn().mockResolvedValue(ownedRow),
+                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, appName: `intentic-sbx-pool-abc123` } }),
+                update: vi.fn().mockResolvedValue(ownedRow),
+            },
+            hostedMachine: {
+                // Null for the route's own pre-flight read, then the winner's row for the question
+                // `provisionHosted` asks once its write is refused.
+                findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ id: `hm1` }),
+                count: vi.fn().mockResolvedValue(0),
+                create: vi.fn().mockRejectedValue(duplicate),
+            },
+        });
+        // `headers` is the region pick's only input (region.ts reads cf-ipcountry): absent means "cannot tell",
+        // which is the US default, exactly as it is for a self-hosted platform with no Cloudflare in front.
+        const context = routeContext({ prisma, headers: new Headers() });
+        const summary = await call(sandboxRoutes.hostedProvision, { sandboxId: `s1` }, { context });
+        // The winner's machine, and the loser's own half-built app taken back down behind it.
+        expect(summary.hosted).toEqual({ region: `iad`, warm: true });
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/intentic-sbx-`))).toBe(true);
     });
 
     // The lane switch: a sandbox nobody ever connected to can hand its machine back. One that HAS connected

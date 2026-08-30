@@ -68,6 +68,40 @@ export const isFlyGone = (error: unknown): boolean => error instanceof FlyError 
 // Fly's error envelope on a non-2xx: { error: "…" }.
 const errorSchema = z.object({ error: z.string() });
 
+/* HOW LONG THE PLATFORM WILL WAIT FOR FLY TO SAY ANYTHING, the same 30s the other two providers get
+ * (zrok.ts, cloudflare.ts). Node's fetch has no default deadline, and this client had none, so a connection
+ * Fly never closed held its caller forever: a browser's `wake` or `hostedStatus` that could not time out, and
+ * — the expensive one — the daily retention sweep, which runs every hosted reconcile in sequence WHILE HOLDING
+ * the jobs advisory lock, so one hung read stopped the reaper, the hour meter and the idle collector for every
+ * replica until the process was restarted.
+ *
+ * Every Fly call in this file is a small control-plane request (create/read/start/stop return as soon as Fly
+ * has accepted the operation, never when the machine has finished booting), so 30s is far past slow and well
+ * short of a hang.
+ *
+ * A timeout is surfaced as a FlyError with NO status, which is the load-bearing part: `isFlyGone` answers
+ * false, so every caller reads it as "could not ask" rather than "it is gone" — the pool keeps its stock, the
+ * meter leaves its stretch open, the idle sweep collects nothing, and the reaper destroys nothing. */
+const FLY_TIMEOUT_MS = 30_000;
+
+/* One fetch, with the deadline attached and a transport failure named. Raw, an expired deadline reaches the
+ * caller as a DOMException reading "This operation was aborted", which names neither Fly nor the request and
+ * is indistinguishable from a cancellation; every one of these ends up in an operator's log, so it says which
+ * call gave up and after how long. This signal is the ONLY one on the request, so an abort of any spelling
+ * (`TimeoutError` from `AbortSignal.timeout`, `AbortError` from older runtimes) is this deadline. */
+const flyFetch = async (method: string, path: string, init: RequestInit): Promise<Response> => {
+    try {
+        return await fetch(`${BASE}${path}`, { ...init, method, signal: AbortSignal.timeout(FLY_TIMEOUT_MS) });
+    } catch (error) {
+        const aborted = error instanceof Error && (error.name === `TimeoutError` || error.name === `AbortError`);
+        throw new FlyError(
+            aborted
+                ? `Fly did not answer ${method} ${path} within ${FLY_TIMEOUT_MS / 1000}s`
+                : `Fly could not be reached for ${method} ${path}: ${error instanceof Error ? error.message : `transport failure`}`,
+        );
+    }
+};
+
 const appsSchema = z.object({ apps: z.array(z.object({ name: z.string() })) });
 const idSchema = z.object({ id: z.string() });
 // `updated_at` is Fly's own stamp of the last state transition, which for a stopped machine is when it
@@ -76,8 +110,7 @@ const idSchema = z.object({ id: z.string() });
 const machineSchema = z.object({ id: z.string(), state: z.string(), updated_at: z.string().optional() });
 
 const call = async (token: string, method: string, path: string, body?: unknown): Promise<unknown> => {
-    const response = await fetch(`${BASE}${path}`, {
-        method,
+    const response = await flyFetch(method, path, {
         headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": `application/json` }) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -109,10 +142,7 @@ export const createApp = async (token: string, org: string, name: string): Promi
 // and the reaper lean on. An app already gone (404) is a success: delete's contract is "not there anymore",
 // and both callers retry after partial failures.
 export const deleteApp = async (token: string, name: string): Promise<void> => {
-    const response = await fetch(`${BASE}/apps/${encodeURIComponent(name)}`, {
-        method: `DELETE`,
-        headers: { authorization: `Bearer ${token}` },
-    });
+    const response = await flyFetch(`DELETE`, `/apps/${encodeURIComponent(name)}`, { headers: { authorization: `Bearer ${token}` } });
     if (response.ok || response.status === 404) {
         return;
     }

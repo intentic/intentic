@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
-import { createApp, createMachine, createVolume, deleteApp, FlyError, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
+import {
+    createApp,
+    createMachine,
+    createVolume,
+    deleteApp,
+    FlyError,
+    getMachine,
+    isFlyGone,
+    listAppNames,
+    startMachine,
+    updateMachine,
+} from "./fly.js";
 
 // The cloud.test.ts fetch stub: route by method + URL substring, record calls for payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
@@ -87,6 +98,26 @@ describe(`fly`, () => {
         const calls = stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ ok: true }) }]);
         await updateMachine(`tok`, `app`, `m1`, config);
         expect(calls[0]?.body).toEqual({ config });
+    });
+
+    /* A DEADLINE ON EVERY CALL, and the one property that makes it safe to have. Node's fetch has none, so a
+     * connection Fly never closed used to hold its caller forever — a browser's wake, and the daily sweep that
+     * runs every hosted reconcile in sequence while holding the jobs advisory lock. The verdict must be "could
+     * not ask", never "it is gone": a status-less FlyError is what keeps `isFlyGone` false, and with it the pool
+     * keeps its stock, the meter leaves its stretch open, and the reaper destroys nothing. */
+    it(`fails a hung Fly call as a status-less FlyError, so nothing reads it as "gone"`, async () => {
+        vi.stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
+            // What `AbortSignal.timeout` produces once it fires, which is what undici rejects with.
+            const aborted = new Error(`The operation was aborted due to timeout`);
+            aborted.name = `TimeoutError`;
+            expect(init?.signal).toBeInstanceOf(AbortSignal);
+            return Promise.reject(aborted);
+        });
+        const failure = await getMachine(`tok`, `app`, `m1`).catch((error: unknown) => error);
+        expect(failure).toBeInstanceOf(FlyError);
+        expect((failure as FlyError).status).toBeUndefined();
+        expect(isFlyGone(failure)).toBe(false);
+        expect((failure as FlyError).message).toMatch(/did not answer GET .*within 30s/);
     });
 
     it(`names the operator's problem on 401 and relays Fly's refusal otherwise`, async () => {

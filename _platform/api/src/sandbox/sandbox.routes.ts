@@ -21,7 +21,15 @@ import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { getMachine, isFlyGone, stopMachine } from "./hosted/fly.js";
-import { destroyHosted, type HostedProvisionArgs, hostedEnabled, provisionHosted, refreshHosted, wakeHosted } from "./hosted/hosted.js";
+import {
+    destroyHosted,
+    HostedAlreadyProvisioned,
+    type HostedProvisionArgs,
+    hostedEnabled,
+    provisionHosted,
+    refreshHosted,
+    wakeHosted,
+} from "./hosted/hosted.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
@@ -90,6 +98,27 @@ const restartOrRebuild = async (
         await context.prisma.hostedMachine.delete({ where: { id: hosted.id } });
         await provisionHosted(context.prisma, context.config, context.logger, args);
         return true;
+    }
+};
+
+/* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about
+ * provisioning: kept out of the handler so it reads as the three things it actually does (mint the grant, build
+ * the machine, answer with the row).
+ *
+ * The hour ceiling applies to a NEW machine as much as to a wake: a machine boots the moment it is created, so
+ * without it here, releasing a spent machine and provisioning another would be the way around the limit. */
+const assertHostedAllowance = async (context: OrpcContext, userId: string): Promise<void> => {
+    const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } });
+    if (used >= context.config.hosted.perUser) {
+        throw new ORPCError(`BAD_REQUEST`, {
+            message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`}, remove one to have this sandbox hosted instead`,
+        });
+    }
+    const budget = await hostedBudgetOf(context.prisma, context.config, userId);
+    if (budget.metered && budget.remainingMinutes === 0) {
+        throw new ORPCError(`PAYMENT_REQUIRED`, {
+            message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, a membership lifts the limit, or run it on a machine of your own and it never applies`,
+        });
     }
 };
 
@@ -388,20 +417,7 @@ export const sandboxRoutes = {
             const already = await context.prisma.sandbox.findUniqueOrThrow({ where: { id: sandbox.id }, include: { hosted: true } });
             return toSummary(already, `owner`, context);
         }
-        const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: user.id } } });
-        if (used >= context.config.hosted.perUser) {
-            throw new ORPCError(`BAD_REQUEST`, {
-                message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`}, remove one to have this sandbox hosted instead`,
-            });
-        }
-        // A new machine boots the moment it is created, so the hour ceiling applies here as much as at wake,
-        // otherwise releasing a spent machine and provisioning another would be the way around it.
-        const budget = await hostedBudgetOf(context.prisma, context.config, user.id);
-        if (budget.metered && budget.remainingMinutes === 0) {
-            throw new ORPCError(`PAYMENT_REQUIRED`, {
-                message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, a membership lifts the limit, or run it on a machine of your own and it never applies`,
-            });
-        }
+        await assertHostedAllowance(context, user.id);
         if (!zrokEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `this platform has no tunnel fabric configured` });
         }
@@ -422,7 +438,14 @@ export const sandboxRoutes = {
                 region: hostedRegionFor(context.config.hosted, context.headers),
             });
         } catch (error) {
-            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
+            /* A second provision for this sandbox committed while this one ran: the `existing` check above is a
+             * read with no lock behind it, so a second tab, a retried request or the desktop app beside the
+             * browser can both pass it. The machine exists, which is exactly what was asked for, so this
+             * answers with it rather than with a gateway error the reader can do nothing about. */
+            if (!(error instanceof HostedAlreadyProvisioned)) {
+                throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `creating the hosted machine failed` });
+            }
+            context.logger.info({ sandboxId: sandbox.id }, `hosted provision: a concurrent provision won; answering with its machine`);
         }
         // The provision just spent (or found empty) a pool slot, start rebuilding stock now rather than
         // letting the replacement wait out the five-minute tick. Fire-and-forget: never this caller's wait.

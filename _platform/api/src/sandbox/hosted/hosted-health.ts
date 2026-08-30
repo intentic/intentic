@@ -4,7 +4,7 @@ import type { Config } from "../../config.js";
 import { JOB_HOSTED_HEALTH, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { hostedFleet } from "./hosted-fleet.js";
-import { hostedEnabled } from "./hosted.js";
+import { hostedEnabled, type OrphanSkip, sortUnknownApps } from "./hosted.js";
 
 /* IS THE HOSTED LANE ACTUALLY WORKING, asked on a timer instead of by a person who happened to look.
  *
@@ -22,11 +22,22 @@ import { hostedEnabled } from "./hosted.js";
  *   • MISSING, a row whose Fly app is gone. One is a provider hiccup or a hand-deleted machine; several at
  *     once is somebody else's reaper eating this platform's fleet, which is the outage, and the number is what
  *     tells them apart.
- *   • STRANGERS, our-prefix apps this platform did not stamp (hosted.ts's reaper leaves them standing on
- *     purpose). Nonzero means a second deployment is sharing this org and credential, which is the CAUSE
- *     rather than the symptom, and it shows up here BEFORE anyone's machine is lost.
+ *   • STRANGERS, apps a machine of ANOTHER deployment's is running under our prefix. Nonzero means a second
+ *     deployment is sharing this org and credential, which is the CAUSE rather than the symptom, and it shows
+ *     up here BEFORE anyone's machine is lost.
+ *   • LITTER, our-prefix apps with no row that are simply waiting for the daily reaper, plus the few it cannot
+ *     prove are ours. Reported, never mailed, and never counted against `healthy`.
  *   • STOCK, warm machines against the pool target, per region. A pool that never fills is a cold first boot
- *     for everybody who signs up, which nothing else on the platform would ever say out loud. */
+ *     for everybody who signs up, which nothing else on the platform would ever say out loud.
+ *
+ * STRANGERS AND LITTER USED TO BE ONE NUMBER, and that is what made this watch stop working. Every app with no
+ * row counted as a stranger, so an ordinary failed provision mailed the admins "another deployment is probably
+ * sharing this Fly org" — a sentence that was not true, about a fault nobody could act on — and an app the
+ * reaper could not prove was ours did it every six hours forever. An alarm that cries for something no action
+ * clears is an alarm people learn to close, which is the one thing this file cannot afford: it is the only
+ * warning before the outage it was built for. So the question "whose app is this" is now put to the provider,
+ * by the same code the reaper judges with (hosted.ts's sortUnknownApps), and only a foreign STAMP mails
+ * anybody. It costs one small read per orphan app, which is normally none at all. */
 
 // One alert per this window per problem shape, so a standing fault is a daily reminder rather than a mailbox
 // full of the same sentence. The log line is written every tick regardless: the mail is for a human, the log
@@ -36,8 +47,12 @@ const ALERT_EVERY_MS = 6 * 60 * 60 * 1000;
 export interface HostedHealth {
     // Rows whose app Fly no longer has: the shape that leaves people pressing "start it over".
     readonly missing: string[];
-    // Our-prefix apps that carry another platform's stamp, or none at all. See the reaper's `skipped`.
+    // Apps running a machine that names ANOTHER deployment. The cause signal, and the only orphan shape that
+    // mails anybody.
     readonly strangers: string[];
+    // Our-prefix apps with no row: the reaper's ordinary work, plus the few it cannot prove are ours. Said out
+    // loud, never mailed, never counted against `healthy`.
+    readonly litter: string[];
     // Warm stock per region against the configured target.
     readonly stock: { region: string; warm: number; target: number }[];
     readonly healthy: boolean;
@@ -46,26 +61,37 @@ export interface HostedHealth {
 export const hostedHealth = async (prisma: PrismaClient, config: Config): Promise<HostedHealth> => {
     const fleet = await hostedFleet(prisma, config);
     const missing = fleet.filter((entry) => entry.missing).map((entry) => entry.appName);
-    // `orphan` is the fleet's word for an app with no row behind it. From this vantage every one of them is
-    // either litter the reaper has not collected yet or a stranger's machine, and both are worth naming.
-    const strangers = fleet.filter((entry) => entry.role === `orphan`).map((entry) => entry.appName);
+    // `orphan` is the fleet's word for an app with no row behind it, which says nothing yet about WHOSE it is.
+    // The reaper's own classifier answers that from the provider; skipped entirely when there is nothing to
+    // ask about, which is the normal case and keeps this watch free.
+    const orphans = fleet.filter((entry) => entry.role === `orphan`).map((entry) => entry.appName);
+    const sorted: { doomed: string[]; skipped: { app: string; why: OrphanSkip }[] } =
+        orphans.length === 0 ? { doomed: [], skipped: [] } : await sortUnknownApps(config, orphans);
+    const strangers = sorted.skipped.filter((entry) => entry.why === `theirs`).map((entry) => entry.app);
+    const litter = [...sorted.doomed, ...sorted.skipped.filter((entry) => entry.why !== `theirs`).map((entry) => entry.app)];
     const regions = [...new Set([config.hosted.region, config.hosted.regionEu].filter((region) => region !== ``))];
     const stock = regions.map((region) => ({
         region,
         warm: fleet.filter((entry) => entry.role === `warm` && !entry.missing && entry.region === region).length,
         target: config.hosted.poolSize,
     }));
-    return { missing, strangers, stock, healthy: missing.length === 0 && strangers.length === 0 && stock.every((r) => r.warm >= r.target) };
+    return {
+        missing,
+        strangers,
+        litter,
+        stock,
+        healthy: missing.length === 0 && strangers.length === 0 && stock.every((r) => r.warm >= r.target),
+    };
 };
 
 const alertMail = (config: Config, health: HostedHealth) => ({
-    subject: `intentic hosted: ${health.missing.length} machine(s) gone, ${health.strangers.length} unowned app(s)`,
+    subject: `intentic hosted: ${health.missing.length} machine(s) gone, ${health.strangers.length} app(s) another deployment is running`,
     html: linkEmail({
         heading: `The hosted fleet and the database disagree`,
         body: [
             health.missing.length > 0 ? `${health.missing.length} sandbox row(s) point at Fly apps that no longer exist: ${health.missing.join(`, `)}.` : ``,
             health.strangers.length > 0
-                ? `${health.strangers.length} app(s) under this platform's prefix were not stamped by it: ${health.strangers.join(`, `)}. Another deployment is probably sharing this Fly org and credential.`
+                ? `${health.strangers.length} app(s) under this platform's prefix are running machines stamped by a DIFFERENT deployment: ${health.strangers.join(`, `)}. Another deployment is sharing this Fly org and credential, which is how a fleet gets destroyed out from under its rows.`
                 : ``,
             ...health.stock.filter((entry) => entry.warm < entry.target).map((entry) => `The ${entry.region} warm pool is at ${entry.warm} of ${entry.target}.`),
         ]
@@ -97,12 +123,15 @@ export const sweepHostedHealth = async (
         return undefined;
     }
     const health = await hostedHealth(prisma, config);
+    // Litter rides on BOTH lines, because it does not make the lane unhealthy and would otherwise be invisible
+    // on exactly the days there is nothing else to say: the apps the reaper cannot prove are ours are a small
+    // manual job, and a log nobody can grep is the same as not knowing.
     if (health.healthy) {
-        logger.info({ stock: health.stock }, `hosted health: fleet and database agree`);
+        logger.info({ stock: health.stock, litter: health.litter }, `hosted health: fleet and database agree`);
         return health;
     }
     logger.error(
-        { missing: health.missing, strangers: health.strangers, stock: health.stock },
+        { missing: health.missing, strangers: health.strangers, litter: health.litter, stock: health.stock },
         `hosted health: the fleet and the database disagree`,
     );
     const admins = adminsOf(config);

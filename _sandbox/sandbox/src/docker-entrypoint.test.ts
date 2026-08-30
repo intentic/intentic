@@ -20,3 +20,25 @@ describe(`hosted VM entrypoint`, () => {
         expect(enter).toBeGreaterThan(link);
     });
 });
+
+/* WHAT THIS SANDBOX IS REACHABLE AT is decided by one bind, and its retry has to know whether the name was
+ * taken. zrok.log is the wrong place to ask: the agent's restart loop appends to the same file every two
+ * seconds, so a window of it holds other boots' and other processes' lines. Reading it either misses this
+ * attempt's 409 (the name is never reclaimed, and the sandbox 502s until somebody notices) or finds the
+ * PREVIOUS attempt's (and deletes the share the agent has since restored, unbinding the address by hand).
+ * Both were live failures. Pin the property that prevents them: the verdict comes from the command. */
+describe(`zrok share bind`, () => {
+    it(`decides on the bind's own output rather than on the shared log`, () => {
+        expect(entrypoint).toContain(`bind_out="$(zrok2 share public`);
+        expect(entrypoint).toMatch(/case "\$bind_out" in\n\s*\*"already in use"\*\)/);
+    });
+
+    it(`never reads zrok.log to detect the name conflict`, () => {
+        // The log is written, never consulted: no line may both read the log and look for the 409.
+        const consultsLog = entrypoint
+            .split(`\n`)
+            .filter((line) => /already in use/.test(line))
+            .filter((line) => /tail|grep|cat|zrok\.log/.test(line));
+        expect(consultsLog).toEqual([]);
+    });
+});
