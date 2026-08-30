@@ -38,6 +38,9 @@ export interface TurnGateInput {
     // the program alone. Passed through untouched: what it costs and whether it is worth it are turn-plan.ts's
     // call, and a vendor runtime's card is the same card the Claude loop raises.
     readonly explainCommand?: CommandGateOptions["explain"];
+    // Where this turn's commands run, so the gate can check a credential-shaped path against the actual file
+    // instead of asking about every one that merely looks the part. See CommandGateOptions.cwd.
+    readonly cwd?: string;
     readonly signal: AbortSignal;
 }
 
@@ -102,6 +105,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             rules: turn.commandRules ?? {},
             unattended: turn.unattended === true,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
+            ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
             signal: turn.signal,
             taint,
             explain: turn.explainCommand,

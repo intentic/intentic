@@ -4,6 +4,7 @@ import {
     type AgentEvent,
     COMMAND_CLASS_LABELS,
     type CommandClass,
+    type CommandContext,
     type CommandMatch,
     type CommandSpan,
     matchCommand,
@@ -12,6 +13,7 @@ import {
 import { createRequest } from "../agent/agent-requests.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
+import { createCredentialOracle } from "./credential-files.js";
 import { guard, type GuardVerdict } from "./guard.js";
 import type { TurnTaint } from "./turn-taint.js";
 
@@ -70,6 +72,11 @@ export interface CommandGateOptions {
     readonly canPark?: boolean;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
     readonly signal: AbortSignal;
+    /* WHERE THE COMMAND WILL RUN, which is what lets `secrets.access` check its guess instead of asserting it: a
+     * credential-shaped path is resolved against this and read, and a file with nothing in it stops raising a
+     * card that says it holds a credential (guard/credential-files.ts). Absent ⇒ only absolute and `~` paths can
+     * be checked, and a relative one keeps the class on the strength of its name, as it always did. */
+    readonly cwd?: string;
     /* This turn's outside-content bit (guard/turn-taint.ts), READ per command rather than snapshotted: the
      * page that taints a turn usually arrives mid-turn, several tool calls before the command that matters. */
     readonly taint: TurnTaint;
@@ -281,13 +288,19 @@ export const createCommandGate = (options: CommandGateOptions): CommandGate => {
      * the network"), not about which backend or which runtime would produce it, a yes to force-pushing from Bash
      * answered the consequence, and asking again because the next attempt is a script is the same card twice. */
     const granted = new Set<CommandClass>();
+    /* The fact-check under `secrets.access`, bound once per turn. It reads the file a credential-shaped path
+     * names and drops the class when there is demonstrably no credential in it — see guard/credential-files.ts
+     * for what it will and will not answer, and the contract's CommandContext for why only a positive "no"
+     * counts. Not cached across commands on purpose: a turn that writes a token into `.env` and then reads it
+     * back must be judged on the file as it is at each consult, not as it was at the first. */
+    const context: CommandContext = { holdsSecret: createCredentialOracle(options.cwd) };
 
     return {
         enforcing: true,
         async *consult(program, subject) {
             // Matched rather than merely classified, so the fragments that fired are in hand if this ends on a
             // card. An allowed command drops them a line later and pays only the offsets the same walk collected.
-            const matches = matchCommand(program).filter((match) => !granted.has(match.commandClass));
+            const matches = matchCommand(program, context).filter((match) => !granted.has(match.commandClass));
             const held =
                 matches.length === 0
                     ? undefined

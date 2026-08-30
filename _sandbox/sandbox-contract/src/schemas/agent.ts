@@ -96,7 +96,11 @@ export const CommandClassSchema = z.enum([
      * owner wrote no rule, which is why it is separate from files.destructive rather than a shade of it:
      * `rm -rf build` is ordinary work in a disposable container and `rm -rf /` is the end of the machine. */
     "system.destructive",
-    // Names credential material: a .env file, an ssh key, ~/.aws/credentials, .npmrc, a stored token file.
+    /* READS credential material: a `{{secret:NAME}}` reference (which becomes the value on the way into the
+     * process), or a file that actually holds one — a dotenv, a private key, ~/.aws/credentials, an npmrc.
+     * "Actually" is load-bearing and is checked rather than assumed where the caller can open the file: an
+     * npmrc with no token in it, a dotenv of ports, a public key, a path that is not there, are none of them
+     * this class, however much they look like it from the command line. See command-classes.ts. */
     "secrets.access",
     // Publishes outward and irreversibly: npm/pnpm/yarn/cargo publish, gh release create, docker push.
     "package.publish",

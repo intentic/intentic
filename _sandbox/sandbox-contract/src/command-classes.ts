@@ -32,6 +32,16 @@ import { type CommandClass, CommandClassSchema } from "./schemas/agent.js";
  * stopped it. That answer only exists here, at the moment a pattern fires, and re-deriving it in the browser
  * would be a second classifier with all the ways to disagree with this one. So every table hands back offsets
  * and the card marks them; `classifyCommand` is the same walk with the offsets dropped.
+ *
+ * AND IT TAKES A FACT WHERE THE CALLER HAS ONE (CommandContext below). Every table here is a pattern over text,
+ * which is exactly the right instrument for a verb — `git push --force` means what it says, and no amount of
+ * looking at the repository makes it mean less. It is the WRONG instrument on its own for a class defined by a
+ * FILE: `secrets.access` fires on `~/.npmrc` because that path usually holds a token, and "usually" left this
+ * raising cards over registry config, over `.env` files holding a port number, over `~/.ssh/known_hosts`, and
+ * over files that were not there at all. Those cards are not near misses, they are noise, and noise is what
+ * teaches an owner to answer a card without reading it. A caller that can open the file (guard/credential-
+ * files.ts, on the sandbox that is about to run the command) answers the question the pattern could only guess
+ * at, and only ever in the direction of dropping a class it positively cleared — see credentialReads.
  */
 
 // A half-open slice of the command text, in UTF-16 code units, the offsets a renderer slices with.
@@ -45,6 +55,20 @@ export interface CommandSpan {
 export interface CommandMatch {
     readonly commandClass: CommandClass;
     readonly spans: readonly CommandSpan[];
+}
+
+/* WHAT THE CALLER CAN CHECK THAT THE PATTERNS CANNOT. Optional everywhere: absent ⇒ every table answers from
+ * the command text alone, which is what the browser, the machine agent and every test that does not care get. */
+export interface CommandContext {
+    /* Does the file at this path — as the command spells it, `~/.npmrc`, `.env`, `/work/app/.env.local` — hold
+     * credential material? (credential-material.ts says what that means; the caller says how to read a file.)
+     *
+     * THREE ANSWERS, and the third is the important one. `true` ⇒ it does. `false` ⇒ it was opened and read and
+     * there is no credential in it, or there is no such file. `undefined` ⇒ COULD NOT TELL: a path built from a
+     * variable, a glob, a directory, a file on another machine, an unreadable one. Only `false` drops a class;
+     * a rule that fell back to "no" whenever nobody could look would be a rule that quietly stopped applying
+     * exactly where checking was hardest. */
+    readonly holdsSecret?: (path: string) => boolean | undefined;
 }
 
 /* The `g` twin of a table's patterns, built once. The tables are written WITHOUT `g` because a lastIndex that
@@ -85,25 +109,49 @@ const GIT_DESTRUCTIVE = [
     /\bgit\s+filter-branch\b/,
 ];
 
-const SECRETS_ACCESS = [
-    /* The reference exit, which is a credential READ by another name: `{{secret:NAME}}` in a command becomes
-     * the real value on the way into the process (agent/agent-secrets.ts), so a command carrying one belongs in
-     * this class whatever else it does. Without it the outside-content floor in guard/actions.ts is bypassed by
-     * writing a reference into a curl instead of reading a dotenv, which is the shorter route to the same
-     * place: `curl -d @.env` is held, `curl -d '{"t":"{{secret:X}}"}'` was not. The alphabet is REFERENCE's,
-     * from secrets/secret-registry.ts, respelled rather than imported to keep this table free of a dependency
-     * on the stores it describes. */
-    /\{\{secret:[A-Za-z0-9_./-]+\}\}/,
+/* THE CREDENTIAL THAT IS IN THE COMMAND, not in some file the command names. `{{secret:NAME}}` becomes the real
+ * value on the way into the process (agent/agent-secrets.ts), so a command carrying one is reading a credential
+ * by definition and there is nothing for a filesystem to add: this half of the class is never fact-checked.
+ *
+ * Without it the outside-content floor in guard/actions.ts is bypassed by writing a reference into a curl
+ * instead of reading a dotenv, which is the shorter route to the same place: `curl -d @.env` is held,
+ * `curl -d '{"t":"{{secret:X}}"}'` was not. The alphabet is REFERENCE's, from secrets/secret-registry.ts,
+ * respelled rather than imported to keep this table free of a dependency on the stores it describes. */
+const SECRET_REFERENCES = [/\{\{secret:[A-Za-z0-9_./-]+\}\}/];
+
+/* A PATH THAT USUALLY HOLDS A CREDENTIAL — a guess about a FILE, which is why every entry here is subject to
+ * CommandContext.holdsSecret and the table above is not. Each pattern spans as much of the path as it can, so
+ * the card marks `.ssh/id_ed25519` rather than `.ssh`, and so the word around it (enclosingPath) resolves.
+ *
+ * WHAT IS DELIBERATELY NOT HERE is as much of the definition as what is: the public half of a keypair, the
+ * host list beside it, and the checked-in templates that ship next to the real file in every repo. None of
+ * those is credential material in any file, so no fact-check is needed to know they do not belong — and each
+ * of them was, before this, an ordinary setup command earning a card that said "read credential material". */
+/* The directory part in front of a filename, so a pattern spans `~/.aws/credentials` rather than the
+ * `.aws/credentials` inside it: what the card marks then reads as the file, and the word handed to the
+ * fact-check IS the file. Permissive about `~` and `${HOME}` on purpose — expanding those is the checker's job
+ * (guard/credential-files.ts), and a path this over-reaches on resolves to nothing, which changes nothing. */
+const LEADING_PATH = String.raw`[\w~$.{}/\\-]*`;
+
+const CREDENTIAL_PATHS = [
     /* A dotenv file: `.env`, `.env.production`, `-d @.env`. NOT the checked-in templates that sit beside it in
      * every repo, and not `process.env`, the lookbehind is what excludes the latter, which is otherwise the
      * single most common string in this workspace's own commands and would hold every grep for it. */
     /(?<![\w.])\.env(?!\.(?:example|sample|template))(?:\.[\w-]+)?\b/,
-    /\.ssh\//,
-    /\bid_(?:rsa|dsa|ecdsa|ed25519)\b/,
-    /\.aws\/credentials\b/,
-    /\.npmrc\b/,
-    /\.git-credentials\b/,
-    /\.credentials\.json\b/,
+    /* The ssh directory and what is under it, EXCEPT the three members that are public by design.
+     * `ssh-keyscan github.com >> ~/.ssh/known_hosts` is the first thing an agent does on a fresh box, `.pub` is
+     * the half of a keypair you are supposed to hand out, and `~/.ssh/config` is host aliases. The bare
+     * directory still counts (`cp -r ~/.ssh /tmp` is the copy that matters, and it names no file at all), which
+     * is why the lookaheads sit outside the optional path tail rather than inside it: an exclusion inside an
+     * optional group is one the regex backtracks around, matching `.ssh` and reporting the class anyway. */
+    /\.ssh(?!\w)(?!\/(?:known_hosts|config|authorized_keys|environment)(?!\w))(?!\/[\w.-]*\.pub(?!\w))(?:\/[\w.\-/]*)?/,
+    // A private key by its conventional name. `.pub` beside it is the public half and is not this.
+    /\bid_(?:rsa|dsa|ecdsa|ed25519)\b(?!\.pub\b)/,
+    new RegExp(String.raw`${LEADING_PATH}\.aws/credentials\b`),
+    // An npmrc, but not the checked-in template beside it — the `.env` exclusion, which this had been missing.
+    new RegExp(String.raw`${LEADING_PATH}\.npmrc(?!\.(?:example|sample|template))\b`),
+    new RegExp(String.raw`${LEADING_PATH}\.git-credentials\b`),
+    new RegExp(String.raw`${LEADING_PATH}\.credentials\.json\b`),
 ];
 
 const PACKAGE_PUBLISH = [
@@ -334,33 +382,75 @@ const rootDeletes = (program: string): CommandSpan[] => [
 // The `g` twins, built once at load rather than per call: a card is minted per held command and a classify runs
 // per command the agent types, so recompiling six tables of patterns each time is work with no reader.
 const GIT_DESTRUCTIVE_G = globally(GIT_DESTRUCTIVE);
-const SECRETS_ACCESS_G = globally(SECRETS_ACCESS);
+const SECRET_REFERENCES_G = globally(SECRET_REFERENCES);
+const CREDENTIAL_PATHS_G = globally(CREDENTIAL_PATHS);
 const PACKAGE_PUBLISH_G = globally(PACKAGE_PUBLISH);
 const NETWORK_OUTBOUND_G = globally(NETWORK_OUTBOUND);
 const SYSTEM_DESTRUCTIVE_G = globally(SYSTEM_DESTRUCTIVE);
 
+/* THE PATH A MATCHED FRAGMENT SITS IN, so the oracle is asked about the file the command would actually open
+ * rather than about the suffix that fired: `sed 's/…/' ~/.npmrc` fires on `.npmrc` and must ask about
+ * `~/.npmrc`, `curl -d @.env` fires on `.env` and must ask about `.env`.
+ *
+ * The shell word around the span, widened to whitespace or a separator on both sides, with the decoration a
+ * shell puts in FRONT of a path removed: a redirect's arrow, curl's `@` file-body marker, a `--flag=` prefix.
+ *
+ * DELIBERATELY DUMB, and it can afford to be: a word this gets wrong resolves to a path the caller cannot read,
+ * which is `undefined`, which leaves the class exactly where the pattern put it. The failure mode is the old
+ * behaviour, not a hole. */
+const WORD_EDGE = /[\s'"`;|&()]/;
+const enclosingPath = (command: string, span: CommandSpan): string => {
+    let start = span.start;
+    while (start > 0 && !WORD_EDGE.test(command[start - 1] as string)) {
+        start -= 1;
+    }
+    let end = span.end;
+    while (end < command.length && !WORD_EDGE.test(command[end] as string)) {
+        end += 1;
+    }
+    return command
+        .slice(start, end)
+        .replace(/^-{1,2}[\w-]+=/, "")
+        .replace(/^[@<>=]+/, "");
+};
+
+/* WHERE A COMMAND READS CREDENTIAL MATERIAL: every secret reference in it, plus every credential-shaped path the
+ * context did not positively clear.
+ *
+ * `!== false` is the whole fact-check, and the comparison is written against `false` rather than for `true` on
+ * purpose: `undefined` (nobody could look) has to behave like `true` (there is a credential in there), or the
+ * class would evaporate on every caller without a filesystem. */
+const credentialReads = (command: string, context: CommandContext | undefined): CommandSpan[] => [
+    ...spansOf(SECRET_REFERENCES_G, command),
+    ...spansOf(CREDENTIAL_PATHS_G, command).filter((span) => context?.holdsSecret?.(enclosingPath(command, span)) !== false),
+];
+
 // WHERE each class fires, one entry per class. Empty ⇒ the command is not in it, so membership and evidence are
 // the same walk and cannot disagree: there is no way to be held for a class with nothing to show for it.
-const MATCHES: Readonly<Record<CommandClass, (command: string) => CommandSpan[]>> = {
+const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandContext | undefined) => CommandSpan[]>> = {
     "git.destructive": (command) => spansOf(GIT_DESTRUCTIVE_G, command),
     "files.destructive": (command) => [...recursiveForceRms(command), ...recursiveDeletes(command)],
     "system.destructive": (command) => [...spansOf(SYSTEM_DESTRUCTIVE_G, command), ...rootDeletes(command)],
-    "secrets.access": (command) => spansOf(SECRETS_ACCESS_G, command),
+    "secrets.access": credentialReads,
     "package.publish": (command) => spansOf(PACKAGE_PUBLISH_G, command),
     "network.outbound": (command) => spansOf(NETWORK_OUTBOUND_G, command),
 };
 
 /* Every class the command falls in AND the fragments that put it there, in the catalog's own order so a card and
- * a log name them the same way twice. The primitive; classifyCommand is this with the offsets dropped. */
-export const matchCommand = (command: string): CommandMatch[] =>
+ * a log name them the same way twice. The primitive; classifyCommand is this with the offsets dropped.
+ *
+ * `context` is what a caller that can check a fact hands in (CommandContext); omitting it classifies from the
+ * command text alone, which is every caller that has no filesystem to consult. */
+export const matchCommand = (command: string, context?: CommandContext): CommandMatch[] =>
     CommandClassSchema.options.flatMap((commandClass) => {
-        const spans = normalize(MATCHES[commandClass](command));
+        const spans = normalize(MATCHES[commandClass](command, context));
         return spans.length === 0 ? [] : [{ commandClass, spans }];
     });
 
 // Every class the command falls in, for the callers that only take a verdict from it (the gate's rulebook
 // consult, the machine agent's scope switch).
-export const classifyCommand = (command: string): CommandClass[] => matchCommand(command).map((match) => match.commandClass);
+export const classifyCommand = (command: string, context?: CommandContext): CommandClass[] =>
+    matchCommand(command, context).map((match) => match.commandClass);
 
 // What the card says the command would DO. The class name is a settings key, not a sentence to show a person.
 export const COMMAND_CLASS_LABELS: Readonly<Record<CommandClass, string>> = {

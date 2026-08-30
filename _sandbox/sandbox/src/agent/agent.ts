@@ -649,6 +649,7 @@ const baseOptions = (
                 push,
                 signal: request.signal,
                 taint,
+                cwd: request.cwd,
                 explain: request.explainCommand,
             }),
             /* The outside-content envelope on everything the agent PULLS IN mid-turn, a fetched page, a foreign

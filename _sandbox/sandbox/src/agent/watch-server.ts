@@ -2,6 +2,7 @@ import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@
 import { type AdmissionRule, classifyCommand, type CommandClass } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { commandRun } from "../guard/actions.js";
+import { createCredentialOracle } from "../guard/credential-files.js";
 import { guard } from "../guard/guard.js";
 import { armWatcher, cancelWatcher, DEFAULT_INTERVAL_S, DEFAULT_TIMEOUT_S, listWatchers, type WatcherTurnSeed } from "./watchers.js";
 
@@ -36,8 +37,10 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
 
 // The strictest refusal across the check's classes, deny and hold refuse alike, because the check runs later
 // and repeatedly, where nobody can answer a hold.
-const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"]): string | undefined => {
-    for (const commandClass of classifyCommand(command)) {
+const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"], cwd: string): string | undefined => {
+    // The same fact-check the command gate runs, for the same reason: a check that reads a `.env` of ports must
+    // not be refused as a credential read, least of all with a message telling the agent to go and ask about it.
+    for (const commandClass of classifyCommand(command, { holdsSecret: createCredentialOracle(cwd) })) {
         const verdict = guard(commandRun, { commandClass, rules });
         if (verdict.effect !== "allow") {
             return `${verdict.reason}: a watch check runs unattended, so it cannot ask. Run the command through Bash instead, or watch with a narrower read-only check.`;
@@ -91,7 +94,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                             reason: "This turn has no conversation, so a watch would have nowhere to deliver its wake.",
                         });
                     }
-                    const refusal = ruleRefusal(args.command, deps.commandRules);
+                    const refusal = ruleRefusal(args.command, deps.commandRules, deps.cwd);
                     if (refusal !== undefined) {
                         return answer({ outcome: "refused", reason: refusal });
                     }

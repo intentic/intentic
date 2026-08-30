@@ -425,6 +425,17 @@ reports the profile.
   (`matchCommand` hands back the offsets each pattern fired at), and the gate carries those onto the card with
   the program itself, so the browser marks the fragment the rule actually stopped rather than re-running the
   patterns and marking whatever a second copy of them finds.
+- [src/guard/credential-files.ts](src/guard/credential-files.ts): the fact under `secrets.access`. Patterns are
+  the right instrument for a verb and the wrong one on their own for a FILE — `~/.npmrc` earned the class
+  because that name usually holds a token, which meant cards over registry config, over dotenvs holding a port
+  number, over `~/.ssh/known_hosts`, and over paths that were not there at all. This runs on the machine that
+  is about to run the command, resolves the path the classifier marked, reads the file, and asks
+  [sandbox-contract/src/credential-material.ts](../sandbox-contract/src/credential-material.ts) whether there is
+  anything in it. It may only ever SUBTRACT, and only on evidence: a glob, a variable, a directory, a remote
+  path, an unreadable or oversized file all answer "cannot tell", which leaves the class exactly where the
+  pattern put it. The asymmetry is the design — a wrong "yes" costs one card, a wrong "no" un-gates a real
+  credential read — and the reason it is worth having at all is that a card raised over an empty file is not a
+  near miss but noise, and noise is what teaches an owner to answer cards without reading them.
 - [src/agent/command-explainer.ts](src/agent/command-explainer.ts): one plain sentence about a held command,
   for the card a person is about to answer. Off unless the owner asks for it (`settings.explainCommands`), and
   wired as a callback the gate is handed rather than as anything guard/ knows about, so the account chain stays
