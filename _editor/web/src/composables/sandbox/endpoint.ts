@@ -1,4 +1,3 @@
-import { localHostname, zoneFromUrl } from "@intentic/sandbox-contract";
 import { localDaemonPort, localDaemonUrlInsecure } from "@intentic/sandbox-run";
 import { sha256Hex } from "../workspace/contentHash";
 
@@ -66,6 +65,16 @@ export interface Addressing {
     readonly token: string | undefined;
     readonly cloud: object | null;
     readonly hosted: object | null;
+    /* The name the daemon's loopback listener is certified under, as the PLATFORM reports it (its
+     * `localHostname` on the sandbox summary). Null or absent where there is no certified shortcut to reach.
+     *
+     * Told rather than derived, and that distinction is the whole point. This used to be built here out of
+     * `daemonUrl`'s zone, which is a different zone from the one holding the certificate the moment a sandbox's
+     * reachability moves to the tunnel hub: the browser then probed `<id>.local.sbx.<zone>`, a name that
+     * resolves to the hub rather than to loopback, failed, and fell through to plain http — HTTP/1.1, six
+     * connections per origin, the transport everything else here exists to avoid. The platform owns the zone,
+     * so the platform says the name and neither side guesses. */
+    readonly localHostname?: string | null;
 }
 
 /* Could the machine that runs this sandbox be the one this browser is on? NOT "is it", that is the question
@@ -92,15 +101,14 @@ export const couldBeOnThisMachine = (sandbox: Pick<Addressing, "cloud" | "hosted
  * id off the URL would compute a port nothing is listening on. */
 export const sandboxIdOf = async (connectToken: string): Promise<string> => (await sha256Hex(connectToken)).slice(0, 12);
 
-/* The certified loopback address: the daemon's own name (@intentic/sandbox-contract, where the whole hostname
- * family lives, and where the wildcard that resolves it is documented) on the port its container published
- * (@intentic/sandbox-run, which owns the derivation because it is what passes `-p` to docker).
+/* The certified loopback address: the name the PLATFORM reports, on the port the container published
+ * (@intentic/sandbox-run, which owns that derivation because it is what passes `-p` to docker).
  *
- * Composed here, in the module that DIALS it, rather than in either of those packages: it is the one address
- * that needs both, and neither package should have to depend on the other to spell it. Undefined where there
- * is no zone to certify under, which is a normal state, not a failure (see candidatesFor). */
-export const localDaemonUrl = (sandboxId: string, zone: string | undefined): string | undefined =>
-    zone === undefined || zone === `` ? undefined : `https://${localHostname(sandboxId, zone)}:${localDaemonPort(sandboxId)}`;
+ * There was a `localDaemonUrl(id, zone)` here that built the name too, from the sandbox's own public zone. It
+ * is gone rather than fixed: the bug was never the arithmetic, it was that this side had an opinion about the
+ * name at all. One authority for it (the platform, which owns the DNS) and no second guess to drift. */
+export const certifiedLoopbackUrl = (sandboxId: string, hostname: string | null | undefined): string | undefined =>
+    hostname === null || hostname === undefined || hostname === `` ? undefined : `https://${hostname}:${localDaemonPort(sandboxId)}`;
 
 /* THE ADDRESSES WORTH TRYING FOR A SANDBOX, BEST FIRST, and the order is a ranking by MULTIPLEXING before it
  * is a ranking by distance.
@@ -129,9 +137,9 @@ export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> =>
         return [tunnel];
     }
     const id = await sandboxIdOf(sandbox.token);
-    // The zone comes off the sandbox's PUBLIC url, the same one its tunnel hostname lives under, which is
-    // where the daemon asked for the certificate.
-    const secure = localDaemonUrl(id, zoneFromUrl(sandbox.daemonUrl));
+    // The certified name is the platform's answer, never a derivation from `daemonUrl` (see Addressing). The
+    // PORT is still ours to derive: it is a property of the container's publish, not of anybody's DNS.
+    const secure = certifiedLoopbackUrl(id, sandbox.localHostname);
     return [
         ...(secure === undefined ? [] : [{ kind: `local`, base: secure } as const]),
         tunnel,

@@ -2,8 +2,8 @@ import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 import { expect, it, vi } from "vitest";
 import {
     candidatesFor,
+    certifiedLoopbackUrl,
     couldBeOnThisMachine,
-    localDaemonUrl,
     probeEndpoint,
     PROMOTION_INTERVAL_MS,
     sandboxIdOf,
@@ -12,12 +12,14 @@ import {
 } from "./endpoint";
 
 const TUNNEL = `https://sandbox-abc.example.com`;
-const ZONE = `example.com`;
 const TOKEN = `connect-token`;
+// What the PLATFORM reports as the loopback listener's certified name. Deliberately under a zone that is NOT
+// the sandbox's own (`sbx.` sits between): the whole point of being told it is that the two can differ.
+const CERT_HOST = `abc123def456.local.example.com`;
 
 // A sandbox with no machine record: the ordinary self-hosted lane, which is the one that might be a loopback
 // hop away. The two records are what the cases below vary.
-const anywhere = { cloud: null, hosted: null };
+const anywhere = { cloud: null, hosted: null, localHostname: CERT_HOST };
 
 // The daemon's answer to GET /health. `id` undefined models a daemon too old to name itself.
 const health = (id: string | undefined): Response =>
@@ -43,15 +45,15 @@ it(`ranks by multiplexing, not by distance: the HTTP/1.1 address is last`, async
      * is reached only when nothing else answers, which is the outage it was written for. Put it back in the
      * middle and a missing DNS record silently downgrades every window again. */
     expect(withToken.map((candidate) => candidate.kind)).toEqual([`local`, `tunnel`, `local-insecure`]);
-    expect(withToken[0]?.base).toBe(localDaemonUrl(id, ZONE));
+    expect(withToken[0]?.base).toBe(certifiedLoopbackUrl(id, CERT_HOST));
     expect(withToken[1]?.base).toBe(TUNNEL);
     expect(withToken[2]?.base).toBe(localDaemonUrlInsecure(id));
-    /* A label DEEPER than the sandbox's own hostname, and this is the assertion that keeps it there: a DNS
-     * wildcard matches exactly one label, so `<id>.local.<zone>` is what lets one `*.local.<zone>` record
-     * answer for every sandbox there will ever be. Flatten it back to `local-<id>.<zone>` and each sandbox
-     * needs a record of its own again, which is what filled the zone's quota and took the certified shortcut
-     * (and with it h2, and with it the workspace) down. */
-    expect(new URL(withToken[0]!.base).hostname).toBe(`${id}.local.${ZONE}`);
+    /* THE PLATFORM'S NAME, VERBATIM, and note it does not match anything derivable from `TUNNEL` or from the
+     * id: that is the point of the fixture. This side used to build the name out of the sandbox's own public
+     * zone, which is a different zone from the one holding the certificate as soon as reachability moves to
+     * the tunnel hub. The browser then probed a name nothing was certified for, failed, and settled for plain
+     * http — HTTP/1.1, six per origin. Derive it here again and that returns. */
+    expect(new URL(withToken[0]!.base).hostname).toBe(CERT_HOST);
     // Both loopback forms are the SAME published port: one mapping, and what the daemon serves decides.
     expect(new URL(withToken[0]!.base).port).toBe(new URL(withToken[2]!.base).port);
 
@@ -85,16 +87,22 @@ it(`never reaches for the machine when the sandbox cannot be on it`, async () =>
     expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it(`drops the certified candidate when the sandbox's URL carries no zone to certify under`, async () => {
-    // A two-label host has no zone suffix to strip: an attached sandbox behind someone's own bare domain. It
-    // can never have a certificate, so it rides the tunnel and only drops to plain http when offline.
-    const candidates = await candidatesFor({ daemonUrl: `https://example.com`, token: TOKEN, ...anywhere });
+it(`drops the certified candidate when the platform reports no loopback name`, async () => {
+    /* Null is the platform saying "this sandbox has no certified shortcut": no zone configured, the
+     * loopback-certificate path switched off, a row whose token yields no id. It is a normal state, not a
+     * failure, and it reads the same whether the reason is configuration or a sandbox behind somebody's own
+     * bare domain. The tunnel carries it, and plain http is still there for the outage. */
+    const candidates = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: null, localHostname: null });
     expect(candidates.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
+
+    // An older platform that does not report the field at all is the same answer, not a crash.
+    const legacy = await candidatesFor({ daemonUrl: TUNNEL, token: TOKEN, cloud: null, hosted: null });
+    expect(legacy.map((candidate) => candidate.kind)).toEqual([`tunnel`, `local-insecure`]);
 });
 
 it(`accepts a loopback candidate only when the daemon behind it names THIS sandbox`, async () => {
     const id = await sandboxIdOf(TOKEN);
-    const local = { kind: `local` as const, base: localDaemonUrl(id, ZONE)! };
+    const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST)! };
 
     expect(
         await probeEndpoint(
@@ -139,7 +147,7 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
 
 it(`treats every way a loopback call can be refused as the same instruction: use the tunnel`, async () => {
     const id = await sandboxIdOf(TOKEN);
-    const local = { kind: `local` as const, base: localDaemonUrl(id, ZONE)! };
+    const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST)! };
     // Safari refusing it as mixed content, Chrome's Local Network Access permission being declined, and
     // nothing listening all surface as a rejected fetch: none of them are worth telling apart.
     const refused = vi.fn(async () => {
@@ -184,7 +192,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
         ),
     ).toEqual({
         kind: `local`,
-        base: localDaemonUrl(id, ZONE),
+        base: certifiedLoopbackUrl(id, CERT_HOST),
     });
 
     /* NO CERTIFICATE, BUT ONLINE: the tunnel, not the plain loopback sitting right there. This is the case the
@@ -192,7 +200,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
      * while a healthy h2/h3 tunnel went unused. Slower per request, and the only thing that makes an app
      * holding a dozen live streams usable. */
     const noCertificate = vi.fn(async (input: string | URL | Request) => {
-        if (String(input).startsWith(localDaemonUrl(id, ZONE)!)) {
+        if (String(input).startsWith(certifiedLoopbackUrl(id, CERT_HOST)!)) {
             throw new TypeError(`Failed to fetch`);
         }
         return health(id);

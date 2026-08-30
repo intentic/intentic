@@ -9,8 +9,9 @@ import {
 } from "@intentic-app/api-contract";
 import { Prisma } from "@intentic-app/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract";
-import { GrantedRoleSchema, sandboxSubdomain } from "@intentic/sandbox-contract";
+import { GrantedRoleSchema, localHostname, sandboxSubdomain } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { decryptSecret, encryptSecret } from "../crypto.js";
@@ -42,6 +43,25 @@ const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
 // The hub's zone when the tunnel fabric is configured, else undefined, the zone alone defaults even when
 // the fabric is off, so it must not flag sandboxes on its own.
 const intenticZoneOf = (context: OrpcContext): string | undefined => (zrokEnabled(context.config) ? context.config.zrok.zone : undefined);
+
+/* The loopback listener's certified name, from the zone that actually holds its DNS.
+ *
+ * Deliberately NOT `intenticZoneOf` above: that one answers "where is this sandbox REACHABLE", which is the
+ * tunnel hub's zone, and the loopback certificate lives in intentic's own DNS zone instead. They were the same
+ * zone until reachability moved to the hub, and every derivation that assumed so broke silently when it did.
+ * Two questions, two zones, and this is the one the wildcard and the ACME challenge are written under
+ * (cloudflare.ts ensureLocalDnsRecord).
+ *
+ * Null where there is nothing to name: no configured zone or token (the path is off), or a row whose connect
+ * token yields no id. The browser reads null as "no local candidate at all" and rides the tunnel. */
+const loopbackHostname = (config: Config, encryptedToken: string): string | null => {
+    const { apiToken, zone } = config.intenticCloudflare;
+    if (apiToken === `` || zone === ``) {
+        return null;
+    }
+    const id = sandboxIdFromToken(decryptSecret(config, encryptedToken));
+    return id === undefined ? null : localHostname(id, zone);
+};
 
 /* Reboot the machine this row describes, or, when Fly answers that there is no such machine, replace it.
  * Answers whether it had to rebuild, which is the caller's cue not to open a second metered stretch.
@@ -139,6 +159,10 @@ const toSummary = (
         token: decryptSecret(context.config, sandbox.token),
         role,
         providedTunnel: sandbox.daemonUrl !== null && zone !== undefined && new URL(sandbox.daemonUrl).hostname.endsWith(`.${zone}`),
+        /* Derived from the LOOPBACK zone, never from `daemonUrl`: those are two different zones now, and
+         * conflating them is what took the certified shortcut down (see the schema). Null where the platform
+         * runs no loopback-certificate path at all, which the browser reads as "no local candidate". */
+        localHostname: loopbackHostname(context.config, sandbox.token),
     };
 };
 

@@ -24,6 +24,7 @@ const summary = (id: string): SandboxSummary => ({
     token: `token-${id}`,
     role: `owner`,
     providedTunnel: false,
+    localHostname: null,
 });
 
 // The sandbox list now lives in the shared query cache (useSandbox backs it with fetchQuery + a disabled

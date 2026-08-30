@@ -664,6 +664,20 @@ export const SandboxSummarySchema = z.object({
     // floors, so this is a rendering fact, never the security boundary.
     role: MemberRoleSchema,
     providedTunnel: z.boolean(),
+    /* THE NAME THIS SANDBOX'S LOOPBACK LISTENER IS CERTIFIED UNDER, or null where it cannot have one (no
+     * connect token to derive an id from, or a platform with the loopback-certificate path switched off).
+     *
+     * Server-computed, and it has to be, because it is the one address in the product that lives in a
+     * DIFFERENT zone from the sandbox itself. The browser used to derive it from `daemonUrl` — right only
+     * while a sandbox's public zone and the platform's DNS zone were the same one, which stopped being true
+     * the moment reachability moved to the zrok hub: the sandbox answers under `sbx.<zone>` while the wildcard
+     * and the ACME challenge are written under `<zone>`. The two names never met, so the browser probed an
+     * address nothing was certified for, failed, and quietly settled for the plain-http loopback — HTTP/1.1,
+     * six connections per origin, which is the transport the whole stream budget exists to survive.
+     *
+     * The platform owns the zone, so the platform says the name. One field ends the guessing on both sides
+     * (the daemon asks for it too, over /sandbox/local-dns). */
+    localHostname: z.string().nullable(),
     // Where the cloud lane created this sandbox's machine (sandbox.cloudProvision), null for every other
     // creation path. Display metadata only, never a credential: the platform cannot reach the machine again
     // (the provider token was request-scoped), so this exists to SAY so, the switcher badge and the delete

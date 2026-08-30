@@ -177,7 +177,15 @@ const resolve = async (): Promise<void> => {
         return pending;
     }
     const attempt = (async (): Promise<void> => {
-        const endpoint = await selectEndpoint({ daemonUrl: url, token: sandbox.token, cloud: sandbox.cloud, hosted: sandbox.hosted });
+        const endpoint = await selectEndpoint({
+            daemonUrl: url,
+            token: sandbox.token,
+            cloud: sandbox.cloud,
+            hosted: sandbox.hosted,
+            // Forwarded, never recomputed: the platform owns the certificate's zone and this row is where it
+            // says so (endpoint.ts Addressing).
+            localHostname: sandbox.localHostname,
+        });
         // The sandbox may have been switched (or demoted) during the probe; writing the result under the id
         // we probed FOR, never under whatever is active now, is what keeps it off the wrong sandbox.
         if (!demotionHolds(id, Date.now())) {
