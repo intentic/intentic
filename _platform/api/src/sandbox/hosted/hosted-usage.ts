@@ -2,7 +2,7 @@ import type { PrismaClient } from "@intentic-app/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { premiumOf } from "../../pool/pool-membership.js";
-import { getMachine } from "./fly.js";
+import { getMachine, isFlyGone } from "./fly.js";
 
 /* THE FREE HOSTED LANE'S HOUR METER, what a machine we run costs its owner's monthly allowance, and whether
  * there is any left to wake it with.
@@ -96,18 +96,27 @@ export const settleHostedStretch = async (
         return;
     }
     const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
+        /* A machine Fly says does not exist is a stretch that ended, not one we cannot read: it stopped when
+         * it was destroyed, and there is nothing left to ask. Reading that as "unreachable" is what left open
+         * stretches on every destroyed machine, so the same warning repeated daily forever and the owner's
+         * month kept an hour that ended weeks ago. `undefined` state below still means the honest "leave it". */
+        if (isFlyGone(error)) {
+            return `gone` as const;
+        }
         // Fly unreachable: leave the stretch open rather than guess. The next wake or tomorrow's sweep
         // settles it; a machine we cannot ask about is also one we cannot bill honestly.
         logger.warn({ err: error, app: machine.appName }, `hosted meter: could not read machine state; stretch left open`);
         return undefined;
     });
-    if (state === undefined || LIVE_STATES.has(state.state)) {
+    if (state === undefined || (state !== `gone` && LIVE_STATES.has(state.state))) {
         return;
     }
     // Fly's stamp of the last transition is when it stopped. Missing (or ahead of now, which a clock skew can
     // produce) falls back to now, the stretch is over either way, and now is the latest it could have ended.
+    // A destroyed machine has no stamp left to read at all, so it takes the same honest ceiling.
     const now = new Date();
-    const stoppedAt = state.updatedAt !== undefined && state.updatedAt <= now && state.updatedAt >= machine.wokeAt ? state.updatedAt : now;
+    const lastTransition = state === `gone` ? undefined : state.updatedAt;
+    const stoppedAt = lastTransition !== undefined && lastTransition <= now && lastTransition >= machine.wokeAt ? lastTransition : now;
     const minutes = Math.round((stoppedAt.getTime() - machine.wokeAt.getTime()) / 60_000);
     await chargeMinutes(prisma, ownerId, usageMonth(machine.wokeAt), minutes);
     await prisma.hostedMachine.update({ where: { id: machine.id }, data: { wokeAt: null } });

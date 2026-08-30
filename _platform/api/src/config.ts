@@ -179,6 +179,23 @@ export const configSchema = z.object({
              * builds nothing regardless. 0 disables the pool and drains anything left in it.
              * HOSTED_POOL_SIZE. */
             poolSize: z.coerce.number().int().nonnegative().default(2),
+            /* HOW OFTEN THE LANE IS CHECKED AGAINST THE PROVIDER, in minutes (hosted-health.ts). Read-only:
+             * it compares the platform's rows with what Fly actually has and says so, loudly, when they
+             * disagree. It exists because they did disagree, for days, and the only trace was one warn line
+             * per machine per night while every affected person met a button that could not work. 0 turns the
+             * watch off. HOSTED_HEALTH_MINUTES. */
+            healthMinutes: z.coerce.number().int().nonnegative().default(15),
+            /* THE PROVISIONING CANARY (hosted-canary.ts): how often, in minutes, the platform provisions a
+             * sandbox of its own end to end and waits for its daemon to check in, then destroys it. The health
+             * watch above compares rows against Fly, which cannot see a lane that is intact but no longer
+             * WORKS, an image that stopped booting, a tunnel grant the hub refuses, a region out of capacity.
+             * All of those look perfect from here and show up only as people who never arrive.
+             *
+             * OFF by default because every run spends a real machine's few minutes. Both knobs are required:
+             * the email is the account the canary's sandbox belongs to, and it must be one nobody signs in as.
+             * HOSTED_CANARY_MINUTES, HOSTED_CANARY_EMAIL. */
+            canaryMinutes: z.coerce.number().int().nonnegative().default(0),
+            canaryEmail: z.string().default(``),
         })
         .prefault({}),
     /* THE FREE-TRIAL POOL, intentic's OWN model keys, and the SECOND documented exception to the secret-free

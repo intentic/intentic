@@ -1,9 +1,24 @@
+import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic-app/prisma";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
-import { createApp, createMachine, createVolume, deleteApp, flySandboxRole, getMachine, listAppNames, startMachine, updateMachine } from "./fly.js";
+import {
+    createApp,
+    createMachine,
+    createVolume,
+    deleteApp,
+    FLY_META_PLATFORM,
+    flySandboxRole,
+    getMachine,
+    isFlyGone,
+    listAppNames,
+    listMachines,
+    listVolumes,
+    startMachine,
+    updateMachine,
+} from "./fly.js";
 
 /* The hosted lane's orchestration, what the routes call, over the fly.ts client. One machine + one volume in
  * one app per sandbox; the app name is derived from the sandbox's 12-hex tunnel id, so the Fly console, the
@@ -19,6 +34,13 @@ import { createApp, createMachine, createVolume, deleteApp, flySandboxRole, getM
 // boot to nothing.
 export const hostedEnabled = (config: Config): boolean =>
     config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
+
+/* WHICH PLATFORM THIS IS, as the twelve hex characters every machine it creates carries in its Fly metadata
+ * (fly.ts). Derived from the API's own public URL because that is the one setting two deployments can never
+ * legitimately share: a staging box, a laptop and production may hold the same Fly token, org, prefix and
+ * image, but they answer on different addresses, so the id separates them without anybody having to remember
+ * to set a knob. A copied env file is therefore harmless by construction rather than by discipline. */
+export const hostedInstanceId = (config: Config): string => createHash(`sha256`).update(config.api.url).digest(`hex`).slice(0, 12);
 
 const hostedAppName = (config: Config, sandboxId: string, connectToken: string): string =>
     `${config.hosted.appPrefix}-${sandboxIdFromToken(connectToken) ?? sandboxId}`;
@@ -68,7 +90,7 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
             [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
         ],
     }),
-    metadata: flySandboxRole(args.sandboxId),
+    metadata: flySandboxRole(args.sandboxId, hostedInstanceId(config)),
 });
 
 /* Power on a (probably) stopped machine, and the one place "it is coming up" is decided. Idempotent by reading
@@ -224,12 +246,103 @@ export const refreshHosted = async (
 // Tear the whole app down (machines + volume ride with it). 404-tolerant by fly.ts's contract.
 export const destroyHosted = async (config: Config, appName: string): Promise<void> => deleteApp(config.hosted.flyApiToken, appName);
 
-/* The daily reconcile (retention.ts): every OUR-prefix app in the org whose row. HostedMachine for a
- * sandbox's machine, HostedPoolMachine for a warm one still waiting, is gone gets destroyed:
- * failed-provision leftovers, delete-flow teardowns that lost their race, anything half-made. The DB row is
- * the single source of "this app should exist": rows are created only after the machine is, and deleted only
- * when the machine's story ends, so an app without one is never a machine somebody is working in. Apps
- * outside the prefix are not ours and are never touched. */
+/* HOW LONG AN APP IS TOO YOUNG TO JUDGE. A cold provision is app → volume → machine → row, so between the
+ * first call and the last there are minutes in which a perfectly healthy signup owns Fly resources that no row
+ * vouches for yet. Anything inside this window is somebody arriving, never a leftover. */
+const REAP_GRACE_MS = 30 * 60 * 1000;
+
+/* THE MOST THIS SWEEP MAY DESTROY IN ONE PASS, in apps and as a share of our-prefix stock. A reaper's whole
+ * input is "the database did not mention it", so every way the database can be wrong (a replica pointed at
+ * the wrong DSN, a restore in progress, a migration that has not run) reads as "destroy everything", and the
+ * sweep is at its most confident exactly when it is most wrong. A sweep that wants more than this stops and
+ * says so instead: an operator reading one loud line beats a fleet nobody can get back. */
+const REAP_MAX_APPS = 3;
+const REAP_MAX_SHARE = 0.25;
+
+/* WHOSE APP THIS IS, answered from the provider rather than inferred from a name. Three answers, and the two
+ * that are not "mine" both mean LEAVE IT:
+ *   • `mine`     every machine in it carries this platform's stamp: the sweep may judge it by our rows.
+ *   • `theirs`   at least one machine names a different platform: another deployment sharing this org and
+ *                credential is running it, and its rows are not ours to read. Destroying it is the outage.
+ *   • `unknown`  nothing to go on, an app with no machines, or machines minted before the stamp existed.
+ *                Unprovable is not the same as unwanted; the health sweep reports these for a human. */
+type AppOwner = "mine" | "theirs" | "unknown";
+
+const appOwner = (machines: { metadata: Record<string, string> }[], instance: string): AppOwner => {
+    const stamps = machines.map((machine) => machine.metadata[FLY_META_PLATFORM]).filter((stamp) => stamp !== undefined);
+    if (stamps.length === 0) {
+        return `unknown`;
+    }
+    return stamps.every((stamp) => stamp === instance) ? `mine` : `theirs`;
+};
+
+/* Everything about an unknown app the sweep needs, or `undefined` when Fly stopped answering about it (a
+ * concurrent teardown, a bad minute), which is read as "not now" rather than as a verdict. The age is the
+ * OLDEST resource in the app: a machine replaced a minute ago inside an app from last week is not new. */
+const appEvidence = async (
+    config: Config,
+    app: string,
+): Promise<{ owner: AppOwner; oldestAt: Date | undefined; machines: number } | undefined> => {
+    try {
+        const machines = await listMachines(config.hosted.flyApiToken, app);
+        const volumes = machines.length > 0 ? [] : await listVolumes(config.hosted.flyApiToken, app);
+        const stamps = [...machines.map((machine) => machine.createdAt), ...volumes.map((volume) => volume.createdAt)].filter(
+            (at): at is Date => at !== undefined,
+        );
+        return {
+            owner: appOwner(machines, hostedInstanceId(config)),
+            oldestAt: stamps.length === 0 ? undefined : new Date(Math.min(...stamps.map((at) => at.getTime()))),
+            machines: machines.length,
+        };
+    } catch (error) {
+        return isFlyGone(error) ? { owner: `mine`, oldestAt: undefined, machines: 0 } : undefined;
+    }
+};
+
+/* Every our-prefix app the database cannot explain, sorted into the ones this platform may collect and the
+ * ones it must leave alone with the reason why. Sequential: this runs once a day over a handful of apps, and
+ * the Fly API is happier for it. */
+const sortUnknownApps = async (
+    config: Config,
+    unknown: string[],
+): Promise<{ doomed: string[]; skipped: { app: string; why: AppOwner | `young` | `unreadable` }[] }> => {
+    const now = Date.now();
+    const doomed: string[] = [];
+    const skipped: { app: string; why: AppOwner | `young` | `unreadable` }[] = [];
+    for (const app of unknown) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one small read per unknown app, once a day
+        const evidence = await appEvidence(config, app);
+        const why =
+            evidence === undefined
+                ? `unreadable`
+                : evidence.owner !== `mine`
+                  ? evidence.owner
+                  : evidence.oldestAt !== undefined && now - evidence.oldestAt.getTime() < REAP_GRACE_MS
+                    ? `young`
+                    : undefined;
+        if (why === undefined) {
+            doomed.push(app);
+        } else {
+            skipped.push({ app, why });
+        }
+    }
+    return { doomed, skipped };
+};
+
+/* The daily reconcile (retention.ts): every OUR-prefix app in the org that THIS platform made and no longer
+ * has a row for gets destroyed. Failed-provision leftovers, delete-flow teardowns that lost their race,
+ * anything half-made. The DB row is the source of "this app should still exist", rows are created only after
+ * the machine is and deleted only when the machine's story ends, so one of ours without a row is never a
+ * machine somebody is working in.
+ *
+ * "That this platform made" is the load-bearing clause and the reason this is not a set difference any more.
+ * A Fly org is shared by everything holding its credential, and an app name carries no owner, so a sweep that
+ * destroys every app its own database cannot explain will happily destroy another deployment's entire fleet,
+ * leaving that deployment's rows pointing at machines Fly no longer has. That is precisely what happened here:
+ * production's sandboxes were destroyed by a second instance, and every affected user was left pressing a
+ * "start it over" button that 404s forever. So ownership is read off machine metadata (fly.ts), a young app is
+ * left alone (a signup in flight owns resources before its row exists), and a pass that wants to destroy an
+ * implausible amount refuses outright. Apps outside the prefix are still never even looked at. */
 export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
     if (!hostedEnabled(config)) {
         return;
@@ -244,7 +357,24 @@ export const reapHostedOrphans = async (prisma: PrismaClient, config: Config, lo
         prisma.hostedPoolMachine.findMany({ select: { appName: true } }),
     ]);
     const known = new Set([...machines, ...pooled].map((row) => row.appName));
-    for (const name of names.filter((candidate) => !known.has(candidate))) {
+    const { doomed, skipped } = await sortUnknownApps(
+        config,
+        names.filter((candidate) => !known.has(candidate)),
+    );
+    if (skipped.length > 0) {
+        // One line an operator can act on: an app this sweep will never collect is either somebody else's
+        // (fine, and worth knowing) or ours from before the stamp (a manual cleanup, once).
+        logger.warn({ skipped }, `hosted reaper: apps left standing because this platform cannot prove they are its own`);
+    }
+    const ceiling = Math.max(REAP_MAX_APPS, Math.floor(names.length * REAP_MAX_SHARE));
+    if (doomed.length > ceiling) {
+        logger.error(
+            { doomed: doomed.length, ceiling, ourApps: names.length, apps: doomed },
+            `hosted reaper: refusing to destroy this many apps at once; the database, not the fleet, is the likely fault`,
+        );
+        return;
+    }
+    for (const name of doomed) {
         logger.warn({ app: name }, `hosted reaper: destroying orphaned app`);
         // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown, gentle on the API; a handful at most
         await deleteApp(config.hosted.flyApiToken, name).catch((error: unknown) =>

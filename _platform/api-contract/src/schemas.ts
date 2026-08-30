@@ -548,10 +548,16 @@ export type AnnounceRefusal = z.infer<typeof AnnounceRefusalSchema>;
  * `unknown` covers both "this platform cannot ask" and "the provider answered a state we don't model", the
  * wait must degrade to today's honest spinner on an unrecognized state, never break on one. Otherwise this is
  * the only signal that exists BEFORE the daemon does, which makes it the only way to tell a machine that
- * never booted from one that booted and went quiet. */
+ * never booted from one that booted and went quiet.
+ *
+ * `gone` is the state Fly reports by refusing to answer at all: the machine, or the whole app around it, does
+ * not exist. It is deliberately NOT folded into `unknown`, because the two ask opposite things of the reader.
+ * Unknown means keep waiting, we cannot see; gone means stop waiting, there is nothing there and only a new
+ * machine will do. Flattening them is what left people watching a spinner for a box that had been destroyed. */
 export const HostedStatusSchema = z.object({
     machine: z.enum([
         "unknown",
+        "gone",
         "created",
         "starting",
         "started",

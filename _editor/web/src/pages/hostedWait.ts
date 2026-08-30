@@ -139,110 +139,142 @@ const at = (steps: readonly { key: WaitStep; label: string }[], active: WaitStep
     }));
 };
 
-export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
-    const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
-    // The step labels this origin earns, and the caption under them, both origin-first, clock-second.
-    const steps = input.warm === false ? coldSteps(STEPS) : STEPS;
-    const note = noteFor(input.warm, input.waitedMs);
+// A failure and the step it happened at, the shape both readers below answer in.
+type Stall = { readonly step: WaitStep; readonly failure: WaitFailure };
 
-    /* THE REFUSAL FIRST, because it outranks every other reading: a sandbox we are turning away is talking to
-     * us perfectly and will never be accepted, so no amount of waiting helps and every other signal (a running
-     * machine, a booting daemon) would narrate progress that cannot happen. This is the shape a half-migrated
-     * sandbox takes, and it is the one failure that is genuinely ours rather than the machine's. */
+/* THE FINALS, in rank order, each established by somebody rather than by the clock: no amount of waiting
+ * changes any of them, so they outrank every other reading, including a machine that looks like it is booting. */
+const finalFailure = (input: HostedWaitInput): Stall | undefined => {
+    /* THE REFUSAL FIRST: a sandbox we are turning away is talking to us perfectly and will never be accepted,
+     * and every other signal (a running machine, a booting daemon) would narrate progress that cannot happen.
+     * This is the shape a half-migrated sandbox takes, and the one failure genuinely ours rather than the
+     * machine's. */
     if (input.refusal !== null) {
         return {
-            steps: at(steps, `connecting`),
-            note,
+            step: `connecting`,
             failure: {
                 problem: `Your sandbox is running, but it's checking in from ${input.refusal.announced}, we expect it at ${input.refusal.expected}.`,
                 remedy: `We won't hand you an address we can't vouch for. Start it over below, a fresh machine comes up on the right one.`,
                 // The wrong address is built into this machine, so booting it again would reproduce it exactly.
                 action: `remake`,
             },
-            reachable,
         };
     }
-
-    // The machine is not coming back on its own. The only case where the wait is over and nothing inside the
-    // box could ever fix it.
+    /* THE MACHINE IS NOT THERE AT ALL, which the platform learns by the provider refusing to answer about it.
+     * Just as final as the refusal and just as invisible from inside the box: nothing is booting, nothing will
+     * check in, and the wait would otherwise narrate a machine that stopped existing. Said plainly, INCLUDING
+     * what it costs, because "start it over" here means a new machine with an empty disk rather than the same
+     * one booted again, and a card that hid that would be promising files back that are not coming back. */
+    if (input.machine === `gone`) {
+        return {
+            step: `machine`,
+            failure: {
+                problem: `The machine we were running for you isn't there any more.`,
+                remedy: `Start it over below and we'll build you a new one, on the same address. Anything that was on the old machine is gone with it, and that's ours to fix, nothing on your side causes this.`,
+                // `reboot` even though the machine is gone: the platform's restart replaces a machine that no
+                // longer exists (sandbox.routes.ts), while `remake` hands the sandbox back first, which it
+                // refuses to do for anything that has ever connected.
+                action: `reboot`,
+            },
+        };
+    }
+    // The machine is not coming back on its own: Fly says stopped or failed, and nothing inside the box could
+    // ever fix that.
     if (input.machine !== undefined && DEAD_MACHINE.has(input.machine)) {
         return {
-            steps: at(steps, `machine`),
-            note,
+            step: `machine`,
             failure: {
                 problem: `The machine we started for you isn't running.`,
                 remedy: `Start it over below. If it stops again, that's ours to fix, nothing on your side causes this.`,
                 action: `reboot`,
             },
-            reachable,
         };
     }
+    return undefined;
+};
 
-    /* THE BOX SAYS ITS OWN ADDRESS DOESN'T ANSWER, the failure that stranded everybody, and the one nothing
-     * else on this page can see. Only a verdict once the daemon has stopped trying: before that it is the
-     * ordinary state of a tunnel coming up, and calling it broken at three seconds would be a lie about a
-     * boot that is going fine.
-     *
-     * `checking` counts here once the window is spent, and that is not a technicality: it is a box that said
-     * it was testing itself and then never came back, the daemon died mid-probe, or its reports stopped
-     * arriving. Reading it as "still working" forever would rebuild the exact silent wait this replaces, one
-     * state to the left. */
-    if ((input.boot?.reach === `unreachable` || input.boot?.reach === `checking`) && input.waitedMs > UNREACHABLE_MS) {
-        return {
-            steps: at(steps, `connecting`),
-            note,
-            failure: {
-                problem: input.boot.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
-                remedy: `The sandbox itself is fine, it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
-                // The box and its files are healthy; it is the boot's networking half that needs rerunning.
-                action: `reboot`,
-            },
-            reachable,
-        };
+/* THE BOX SAYS ITS OWN ADDRESS DOESN'T ANSWER, the failure that stranded everybody, and the one nothing else
+ * on this page can see. Only a verdict once the daemon has stopped trying: before that it is the ordinary
+ * state of a tunnel coming up, and calling it broken at three seconds would be a lie about a boot that is
+ * going fine.
+ *
+ * `checking` counts here once the window is spent, and that is not a technicality: it is a box that said it
+ * was testing itself and then never came back, the daemon died mid-probe, or its reports stopped arriving.
+ * Reading it as "still working" forever would rebuild the exact silent wait this replaces, one state left. */
+const unreachableFailure = (input: HostedWaitInput): Stall | undefined => {
+    const stopped = input.boot?.reach === `unreachable` || input.boot?.reach === `checking`;
+    if (!stopped || input.waitedMs <= UNREACHABLE_MS) {
+        return undefined;
     }
+    return {
+        step: `connecting`,
+        failure: {
+            problem: input.boot?.detail ?? `Your sandbox is running, but it can't be reached at its address.`,
+            remedy: `The sandbox itself is fine, it's the connection to it that didn't come up. Starting it over sets that up again; nothing on it is lost.`,
+            // The box and its files are healthy; it is the boot's networking half that needs rerunning.
+            action: `reboot`,
+        },
+    };
+};
 
+/* THE ONES THE CLOCK DECIDES, each with a window chosen so that a boot going fine is never accused of being
+ * stuck. Only reached when nothing above has already ended the wait. */
+const stalledFailure = (input: HostedWaitInput): Stall | undefined => {
+    const unreachable = unreachableFailure(input);
+    if (unreachable !== undefined) {
+        return unreachable;
+    }
+    if (input.announced || input.boot !== null) {
+        return undefined;
+    }
     // Nothing has said anything for long enough that saying so beats a spinner. Deliberately not called a
     // failure: it may still arrive, and the machine keeps trying either way.
-    if (!input.announced && input.boot === null && input.waitedMs > SILENT_MS && input.machine !== `starting` && input.machine !== `created`) {
+    if (input.waitedMs > SILENT_MS && input.machine !== `starting` && input.machine !== `created`) {
         return {
-            steps: at(steps, `booting`),
-            note,
+            step: `booting`,
             failure: {
                 problem: `The machine is running, but your sandbox hasn't checked in yet.`,
                 remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
                 action: `reboot`,
             },
-            reachable,
         };
     }
-
     /* The ceiling the exclusion above needs: `starting`/`created` are exempt from SILENT_MS because a pull in
      * flight is the ordinary shape of a cold first boot, but a machine STILL in them at double a pull's worst
      * honest case is not pulling any more, and without this the note would reassure forever with nothing on
      * screen to press. Same soft shape as the silence above: not called broken, and the reboot loses nothing. */
-    if (!input.announced && input.boot === null && input.waitedMs > MACHINE_STUCK_MS) {
+    if (input.waitedMs > MACHINE_STUCK_MS) {
         return {
-            steps: at(steps, `machine`),
-            note,
+            step: `machine`,
             failure: {
                 problem: `The machine is taking far longer to come up than it should.`,
                 remedy: `It keeps trying on its own, leave this open or come back later. Starting it over is safe if you'd rather not wait.`,
                 action: `reboot`,
             },
-            reachable,
         };
     }
+    return undefined;
+};
 
-    // …and the healthy readings, in order. Each is a fact somebody established, never elapsed time.
+// The healthy readings, in order. Each is a fact somebody established, never elapsed time.
+const healthyStep = (input: HostedWaitInput, reachable: boolean | undefined): WaitStep => {
     if (reachable === true) {
-        return { steps: at(steps, `ready`), note, failure: undefined, reachable };
+        return `ready`;
     }
+    // The daemon exists and is either testing its address or waiting for the tunnel to bind.
     if (input.boot !== null || input.announced) {
-        // The daemon exists and is either testing its address or waiting for the tunnel to bind.
-        return { steps: at(steps, `connecting`), note, failure: undefined, reachable };
+        return `connecting`;
     }
-    if (input.machine === `started`) {
-        return { steps: at(steps, `booting`), note, failure: undefined, reachable };
-    }
-    return { steps: at(steps, `machine`), note, failure: undefined, reachable };
+    return input.machine === `started` ? `booting` : `machine`;
+};
+
+export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
+    const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
+    // The step labels this origin earns, and the caption under them, both origin-first, clock-second.
+    const steps = input.warm === false ? coldSteps(STEPS) : STEPS;
+    const note = noteFor(input.warm, input.waitedMs);
+    const stall = finalFailure(input) ?? stalledFailure(input);
+    return stall === undefined
+        ? { steps: at(steps, healthyStep(input, reachable)), note, failure: undefined, reachable }
+        : { steps: at(steps, stall.step), note, failure: stall.failure, reachable };
 };

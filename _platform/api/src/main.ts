@@ -7,6 +7,8 @@ import { createLogger } from "./logger.js";
 import { createPrisma } from "./prisma.js";
 import { startPoolCycle } from "./pool/pool-cycle-job.js";
 import { seedDemoService } from "./pool/pool-demo.js";
+import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
+import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startRetention } from "./retention.js";
 import { startTracing } from "./tracing.js";
@@ -39,6 +41,12 @@ startRetention(prisma, config, logger);
 startPoolCycle(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand (and drains them when the pool is off), see hosted-pool.ts.
 startHostedPool(prisma, config, logger);
+// Watches the hosted lane against Fly and says so when the two disagree (hosted-health.ts). Reads only: it is
+// the alarm the sweeps above never had, and the reason a fleet destroyed under its rows was found by a user.
+startHostedHealth(prisma, config, logger);
+// …and the same question asked the only way that can answer it for certain: provision a sandbox end to end
+// and wait for its daemon to check in (hosted-canary.ts). Off unless HOSTED_CANARY_MINUTES says otherwise.
+startHostedCanary(prisma, config, logger);
 // The demo service's row follows the POOL_DEMO_SERVICE flag: seeded/reactivated on, delisted off. Unawaited
 // and self-swallowing, a catalog short one demo row must never hold the platform's boot.
 void seedDemoService(prisma, config).catch((error: unknown) => logger.warn({ err: error }, `pool: demo service seed failed`));

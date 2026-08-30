@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { linkEmail, sendMail } from "../../mail.js";
 import { premiumOf } from "../../pool/pool-membership.js";
-import { getMachine } from "./fly.js";
+import { getMachine, isFlyGone } from "./fly.js";
 import { destroyHosted, hostedEnabled } from "./hosted.js";
 
 /* COLLECTING THE MACHINES NOBODY CAME BACK TO, the free hosted lane's largest cost and its least useful one.
@@ -52,13 +52,90 @@ const warnMail = (config: Config, sandboxName: string, days: number) => ({
     link: config.webOrigin,
 });
 
+/* What one candidate turned out to be. `dropped` is the case that is not about idleness at all: the provider
+ * says the machine does not exist, so the row describes something that already ended. */
+type IdleVerdict = "kept" | "warned" | "destroyed" | "dropped";
+
+interface IdleCandidate {
+    readonly id: string;
+    readonly appName: string;
+    readonly machineId: string;
+    readonly createdAt: Date;
+    readonly idleWarnedAt: Date | null;
+    readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
+}
+
+// One candidate, decided. Split out of the sweep below so the sweep stays a loop with a tally and this stays
+// the whole policy: member, gone, alive, past the axe, or owed its one warning.
+const decideIdleMachine = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+    machine: IdleCandidate,
+    idleDaysSoFar: number,
+): Promise<IdleVerdict> => {
+    if (await premiumOf(prisma, config, machine.sandbox.ownerId)) {
+        return `kept`;
+    }
+    /* A machine Fly no longer has is not a candidate for collection, it is a row describing something that
+     * already ended, and the row is not harmless: it holds the owner's one hosted slot (hostedOffer counts
+     * rows), so leaving it costs them the free lane entirely. Before this, such a row threw here every night
+     * forever. The SANDBOX still stays, exactly as when this sweep collects a machine itself, so its owner
+     * comes back to the wizard's first screen rather than to nothing. */
+    const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
+        if (!isFlyGone(error)) {
+            throw error;
+        }
+        return undefined;
+    });
+    if (state === undefined) {
+        await prisma.hostedMachine.delete({ where: { id: machine.id } });
+        logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
+        return `dropped`;
+    }
+    if (LIVE_STATES.has(state.state)) {
+        // Up and working despite a stale announce. Re-arm so it gets a full warning period whenever it does
+        // eventually stop.
+        if (machine.idleWarnedAt !== null) {
+            await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: null } });
+        }
+        return `kept`;
+    }
+    if (idleDaysSoFar >= config.hosted.idleDays) {
+        await destroyHosted(config, machine.appName);
+        // The row goes with the machine; the SANDBOX stays, which is what lets its owner give it a new machine
+        // without losing the name, the address or who it is shared with.
+        await prisma.hostedMachine.delete({ where: { id: machine.id } });
+        logger.warn(
+            { app: machine.appName, sandboxId: machine.sandbox.id, idleDays: Math.floor(idleDaysSoFar) },
+            `hosted idle sweep: machine collected`,
+        );
+        return `destroyed`;
+    }
+    if (machine.idleWarnedAt !== null) {
+        return `kept`;
+    }
+    // Mail first, stamp second: a stamp written before a send that then failed would silently consume this
+    // machine's one warning and delete it unannounced a week later.
+    await sendMail(config, logger, {
+        to: machine.sandbox.owner.email,
+        ...warnMail(config, machine.sandbox.name, Math.max(1, Math.ceil(config.hosted.idleDays - idleDaysSoFar))),
+    });
+    await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: new Date() } });
+    return `warned`;
+};
+
 /* One pass. Sequential on purpose, a platform has a handful of these at most, the Fly API is happier for it,
  * and one machine's failure must not cost the rest of the sweep. Every failure is logged and retried tomorrow;
  * nothing here is urgent enough to be worth a partial teardown. */
-export const reapIdleHosted = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<{ warned: number; destroyed: number }> => {
+export const reapIdleHosted = async (
+    prisma: PrismaClient,
+    config: Config,
+    logger: Logger,
+): Promise<{ warned: number; destroyed: number; dropped: number }> => {
     const { idleDays, idleWarnDays } = config.hosted;
     if (!hostedEnabled(config) || idleDays === 0 || idleWarnDays === 0) {
-        return { warned: 0, destroyed: 0 };
+        return { warned: 0, destroyed: 0, dropped: 0 };
     }
     const now = Date.now();
     const candidates = await prisma.hostedMachine.findMany({
@@ -73,58 +150,20 @@ export const reapIdleHosted = async (prisma: PrismaClient, config: Config, logge
             sandbox: { select: { id: true, name: true, lastSeenAt: true, ownerId: true, owner: { select: { email: true } } } },
         },
     });
-    let warned = 0;
-    let destroyed = 0;
+    const tally = { warned: 0, destroyed: 0, dropped: 0 };
     for (const machine of candidates) {
         const idleDaysSoFar = (now - idleSince(machine).getTime()) / DAY_MS;
         if (idleDaysSoFar < idleWarnDays) {
             continue;
         }
-        try {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-            if (await premiumOf(prisma, config, machine.sandbox.ownerId)) {
-                continue;
-            }
-            // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
-            const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId);
-            if (LIVE_STATES.has(state.state)) {
-                // Up and working despite a stale announce. Re-arm so it gets a full warning period whenever
-                // it does eventually stop.
-                if (machine.idleWarnedAt !== null) {
-                    // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep
-                    await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: null } });
-                }
-                continue;
-            }
-            if (idleDaysSoFar >= idleDays) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown
-                await destroyHosted(config, machine.appName);
-                // The row goes with the machine; the SANDBOX stays, which is what lets its owner give it a new
-                // machine without losing the name, the address or who it is shared with.
-                // oxlint-disable-next-line eslint/no-await-in-loop -- sequential teardown
-                await prisma.hostedMachine.delete({ where: { id: machine.id } });
-                destroyed += 1;
-                logger.warn(
-                    { app: machine.appName, sandboxId: machine.sandbox.id, idleDays: Math.floor(idleDaysSoFar) },
-                    `hosted idle sweep: machine collected`,
-                );
-                continue;
-            }
-            if (machine.idleWarnedAt === null) {
-                // Mail first, stamp second: a stamp written before a send that then failed would silently
-                // consume this machine's one warning and delete it unannounced a week later.
-                // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep
-                await sendMail(config, logger, {
-                    to: machine.sandbox.owner.email,
-                    ...warnMail(config, machine.sandbox.name, Math.max(1, Math.ceil(idleDays - idleDaysSoFar))),
-                });
-                // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep
-                await prisma.hostedMachine.update({ where: { id: machine.id }, data: { idleWarnedAt: new Date() } });
-                warned += 1;
-            }
-        } catch (error) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- sequential sweep, gentle on the API
+        const verdict = await decideIdleMachine(prisma, config, logger, machine, idleDaysSoFar).catch((error: unknown) => {
             logger.error({ err: error, app: machine.appName }, `hosted idle sweep: failed for this machine; retried tomorrow`);
+            return `kept` as const;
+        });
+        if (verdict !== `kept`) {
+            tally[verdict === `warned` ? `warned` : verdict === `destroyed` ? `destroyed` : `dropped`] += 1;
         }
     }
-    return { warned, destroyed };
+    return tally;
 };

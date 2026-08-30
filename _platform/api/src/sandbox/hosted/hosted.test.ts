@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
-import { hostedEnabled, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
+import { hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
 import { forgetNamespace } from "../zrok-provision.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
@@ -59,7 +59,9 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof v
         hostedMachine: { update: vi.fn().mockResolvedValue({}), ...overrides[`hostedMachine`] },
     }) as unknown as OrpcContext[`prisma`];
 
-const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
+// `respond` receives the URL so a route can answer per app (the orphan sweep asks each app about its own
+// machines, and what those machines say is the whole subject of its tests).
+const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: (url: string) => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
     vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
         const method = init?.method ?? `GET`;
@@ -68,12 +70,23 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
         if (!route) {
             throw new Error(`unexpected fetch: ${method} ${String(url)}`);
         }
-        return Promise.resolve(route.respond());
+        return Promise.resolve(route.respond(String(url)));
     });
     return calls;
 };
 
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
+
+// This deployment's stamp, derived from its own API URL, so the fixtures below say what a machine of OURS
+// looks like without hard-coding a hash anybody would have to update by hand.
+const INSTANCE = hostedInstanceId(config());
+// A Fly machine as the orphan sweep reads it: whose it is, and when it was made.
+const flyMachine = (over: { platform?: string; ageMinutes?: number } = {}) => ({
+    id: `m1`,
+    state: `stopped`,
+    created_at: new Date(Date.now() - (over.ageMinutes ?? 120) * 60_000).toISOString(),
+    config: { metadata: over.platform === undefined ? {} : { intentic_role: `warm`, intentic_platform: over.platform } },
+});
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -112,7 +125,9 @@ describe(`provisionHosted`, () => {
             config: { env: Record<string, string>; mounts: { volume: string }[]; metadata: Record<string, string> };
         };
         expect(machine.config.mounts).toEqual([{ volume: `vol_1`, path: `/data` }]);
-        expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1` });
+        // The platform stamp rides with the role: it is what lets THIS deployment's reaper tell its own
+        // machines from those of anything else sharing the Fly org and credential (fly.ts, hosted.ts).
+        expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(machine.config.env[`ZROK_TOKEN`]).toBe(`acct-1`);
         expect(machine.config.env[`ZROK_NAMESPACE`]).toBe(`ns-1`);
@@ -177,7 +192,7 @@ describe(`provisionHosted`, () => {
         };
         // The stamp flips with the identity, in the same call: the app name will say `pool` forever, so this
         // is the only thing that can tell Fly this machine stopped being the platform's stock.
-        expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1` });
+        expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
@@ -329,33 +344,91 @@ describe(`wakeHosted`, () => {
     });
 });
 
+/* THE SWEEP THAT CAUSED THE OUTAGE, and the three rules that keep it from causing another one.
+ *
+ * What it used to be: "every app under our prefix that our database cannot explain is litter". A Fly org is
+ * shared by everything holding its credential, an app name carries no owner, and a second deployment (a
+ * staging box, a laptop with a copy of the production env) therefore reads production's entire fleet as
+ * litter. It destroyed all of it. The rows survived, pointing at machines that no longer existed, so every
+ * affected person met a "start it over" button that could not, in principle, work. */
 describe(`reapHostedOrphans`, () => {
-    it(`destroys only our-prefix apps whose row is gone; live machines, pool machines and strangers stand`, async () => {
+    const appList = (...names: string[]) => ({
+        match: (method: string, url: string) => method === `GET` && url.includes(`/apps?org_slug=`),
+        respond: () => json({ apps: names.map((name) => ({ name })) }),
+    });
+    // Every app's machines answer from one table, keyed by the app named in the URL; an app missing from the
+    // table has none, which is also how an empty app (volumes only) is modelled.
+    const machinesOf = (byApp: Record<string, unknown[]>) => ({
+        match: (method: string, url: string) => method === `GET` && (url.endsWith(`/machines`) || url.endsWith(`/volumes`)),
+        respond: (url: string) => json(url.endsWith(`/volumes`) ? [] : (byApp[Object.keys(byApp).find((app) => url.includes(app)) ?? ``] ?? [])),
+    });
+
+    const deleteRoute = { match: (method: string) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) };
+    const knownRows = fakePrisma({
+        hostedMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
+        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
+    });
+    const deletedApps = (calls: { method: string; url: string }[]) => calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url);
+
+    it(`destroys only apps THIS platform stamped and no longer has a row for`, async () => {
         const calls = stubFetch([
-            {
-                match: (method, url) => method === `GET` && url.includes(`/apps?org_slug=`),
-                respond: () =>
-                    json({
-                        apps: [
-                            { name: `intentic-sbx-live` },
-                            { name: `intentic-sbx-orphan` },
-                            // A warm machine waiting in the pool is OURS ON PURPOSE: a reaper that eats the
-                            // pool every night would silently turn every claim back into a cold build.
-                            { name: `intentic-sbx-pool-warm1` },
-                            { name: `unrelated-app` },
-                        ],
-                    }),
-            },
-            { match: (method) => method === `DELETE`, respond: () => new Response(``, { status: 202 }) },
+            appList(
+                `intentic-sbx-live`,
+                `intentic-sbx-orphan`,
+                `intentic-sbx-stranger`,
+                `intentic-sbx-unstamped`,
+                // A warm machine waiting in the pool is OURS ON PURPOSE: a reaper that eats the pool every
+                // night would silently turn every claim back into a cold build.
+                `intentic-sbx-pool-warm1`,
+                `unrelated-app`,
+            ),
+            machinesOf({
+                "intentic-sbx-orphan": [flyMachine({ platform: INSTANCE })],
+                // Another deployment's machine, in the same org, under the same prefix. Destroying this is
+                // the outage; leaving it standing is the entire point of the stamp.
+                "intentic-sbx-stranger": [flyMachine({ platform: `deadbeefcafe` })],
+                // No stamp at all: a machine from before this rule existed, or from a deployment that has not
+                // been updated yet. Unprovable is not the same as unwanted, so it stands (the health sweep
+                // reports it for a human instead).
+                "intentic-sbx-unstamped": [flyMachine()],
+            }),
+            deleteRoute,
         ]);
-        const prisma = fakePrisma({
-            hostedMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-live` }]) },
-            hostedPoolMachine: { findMany: vi.fn().mockResolvedValue([{ appName: `intentic-sbx-pool-warm1` }]) },
-        });
-        await reapHostedOrphans(prisma as never, config(), logger);
-        const deleted = calls.filter((entry) => entry.method === `DELETE`).map((entry) => entry.url);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        const deleted = deletedApps(calls);
         expect(deleted).toHaveLength(1);
         expect(deleted[0]).toContain(`intentic-sbx-orphan`);
+        // Never even asked about: the prefix is still the jurisdiction, and a stranger's app outside it is
+        // not this platform's business to read, let alone destroy.
+        expect(calls.some((entry) => entry.url.includes(`unrelated-app`))).toBe(false);
+    });
+
+    /* A cold provision is app → volume → machine → row, minutes end to end, and for every one of them the app
+     * exists with nothing in the database to vouch for it. A sweep landing in that window used to destroy the
+     * machine of somebody who was, at that moment, watching it come up. */
+    it(`leaves a young app alone: a provision in flight owns Fly resources before its row exists`, async () => {
+        const calls = stubFetch([
+            appList(`intentic-sbx-newborn`),
+            machinesOf({ "intentic-sbx-newborn": [flyMachine({ platform: INSTANCE, ageMinutes: 2 })] }),
+            deleteRoute,
+        ]);
+        await reapHostedOrphans(knownRows as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
+    });
+
+    /* THE CIRCUIT BREAKER. Every input this sweep has is "the database did not mention it", so every way the
+     * database can be wrong (a replica on the wrong DSN, a restore in flight, migrations that have not run)
+     * reads as "destroy everything" — and the sweep is most confident exactly when it is most wrong. */
+    it(`refuses the whole pass when it would destroy an implausible share of the fleet`, async () => {
+        const ours = Array.from({ length: 8 }, (_, index) => `intentic-sbx-${index}`);
+        const calls = stubFetch([
+            appList(...ours),
+            machinesOf(Object.fromEntries(ours.map((app) => [app, [flyMachine({ platform: INSTANCE })]]))),
+            deleteRoute,
+        ]);
+        // An empty database: nothing is known, so every app looks like litter.
+        await reapHostedOrphans(fakePrisma({ hostedMachine: { findMany: vi.fn().mockResolvedValue([]) } }) as never, config(), logger);
+        expect(deletedApps(calls)).toHaveLength(0);
     });
 
     it(`does nothing when the lane is off`, async () => {
@@ -551,6 +624,82 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         expect(calls.findIndex((entry) => entry.url.endsWith(`/machines/m1`))).toBeLessThan(
             calls.findIndex((entry) => entry.url.endsWith(`/machines/m1/start`)),
         );
+    });
+
+    /* THE BUTTON THAT COULD NOT WORK. A machine destroyed provider-side leaves a row pointing at nothing, so
+     * every refresh answers 404 and the setup card's one recovery failed forever, for exactly the people most
+     * likely to press it. There is nothing on a machine that does not exist to preserve, so the honest
+     * recovery is a new machine on the same sandbox: same name, same address, same sharing, empty disk. */
+    it(`hostedRestart builds a replacement when the provider says the machine is gone`, async () => {
+        const machineCreate = vi.fn().mockResolvedValue({});
+        const rowDelete = vi.fn().mockResolvedValue({});
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ error: `app not found` }, 404) },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => json({ error: `app not found` }, 404) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            // The refresh of the machine that is gone…
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ error: `app not found` }, 404) },
+            // …and the cold build that replaces it.
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `a2` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_2` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m2`, state: `created` }) },
+        ]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: {
+                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
+                create: machineCreate,
+                delete: rowDelete,
+                update: vi.fn().mockResolvedValue({}),
+            },
+        });
+        expect(await call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ ok: true });
+        // The dead row goes first: `sandboxId` is unique on that table, so the replacement could not be
+        // written beside it, and a machine with no row is what the reaper collects.
+        expect(rowDelete).toHaveBeenCalledWith({ where: { id: `h1` } });
+        expect(machineCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ machineId: `m2`, sandboxId: `s1` }) }));
+        expect(calls.some((entry) => entry.url.endsWith(`/apps`))).toBe(true);
+    });
+
+    // The other half of the same rule: a refusal that is NOT "there is no such machine" must never be read as
+    // one, or a bad minute at the provider would throw away a working machine and its disk.
+    it(`hostedRestart destroys nothing when the provider merely refuses`, async () => {
+        const rowDelete = vi.fn();
+        stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
+            {
+                match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+            },
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1`), respond: () => json({ error: `host unavailable` }, 500) },
+        ]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: {
+                findUnique: vi.fn().mockResolvedValue({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null }),
+                delete: rowDelete,
+                update: vi.fn().mockResolvedValue({}),
+            },
+        });
+        await expect(call(sandboxRoutes.hostedRestart, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `BAD_GATEWAY`,
+        });
+        expect(rowDelete).not.toHaveBeenCalled();
+    });
+
+    // The wait card cannot narrate what the route will not say: a destroyed machine reads as `gone`, never as
+    // the `unknown` that means "keep waiting, we cannot see".
+    it(`hostedStatus answers gone when the provider says there is no such machine`, async () => {
+        stubFetch([{ match: (method, url) => method === `GET` && url.includes(`/machines/`), respond: () => json({ error: `app not found` }, 404) }]);
+        const prisma = fakePrisma({
+            sandbox: { findFirst: vi.fn().mockResolvedValue(ownedRow) },
+            hostedMachine: { findUnique: vi.fn().mockResolvedValue({ appName: `intentic-sbx-a`, machineId: `m1` }) },
+        });
+        expect(await call(sandboxRoutes.hostedStatus, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).toEqual({ machine: `gone` });
     });
 
     it(`wake 404s for a sandbox that is not hosted (or not the caller's)`, async () => {

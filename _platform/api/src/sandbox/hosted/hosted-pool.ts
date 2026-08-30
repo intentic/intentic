@@ -4,8 +4,8 @@ import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
-import { createApp, createMachine, createVolume, deleteApp, FLY_ROLE_WARM, FlyError, getMachine } from "./fly.js";
-import { hostedEnabled } from "./hosted.js";
+import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine } from "./fly.js";
+import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 
 /* THE WARM POOL'S LIFECYCLE, everything except the claim, which lives beside provisionHosted (hosted.ts)
  * because a claim's product is a HostedMachine.
@@ -45,12 +45,14 @@ const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Lo
     await createApp(flyApiToken, flyOrg, appName);
     try {
         const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb);
-        // The no-op boot is what makes it warm; the metadata is what makes it READABLE as warm, this app's
-        // name says `pool` whether or not anybody owns it yet, and Fly will never let that name change.
+        /* The no-op boot is what makes it warm; the metadata is what makes it READABLE as warm, this app's
+         * name says `pool` whether or not anybody owns it yet, and Fly will never let that name change. The
+         * platform stamp rides in the same bag from the machine's first second, which is what keeps a second
+         * deployment sharing this org from reading our stock as litter (hosted.ts's reaper). */
         const warm = {
             ...flyMachineConfig({ name: appName, image, baseImage: image, guest: { cpus, memoryMb }, volumeId, env: [] }),
             init: { exec: [...WARM_BOOT_EXEC] },
-            metadata: { ...FLY_ROLE_WARM },
+            metadata: flyWarmRole(hostedInstanceId(config)),
         };
         const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });
         await prisma.hostedPoolMachine.create({ data: { appName, machineId, volumeId, region, image, state: `building` } });

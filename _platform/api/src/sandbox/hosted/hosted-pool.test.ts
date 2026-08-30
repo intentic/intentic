@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
 import { reconcileHostedPool, WARM_BOOT_EXEC } from "./hosted-pool.js";
+import { hostedInstanceId } from "./hosted.js";
 
 /* THE POOL'S PROMISES, pinned: a warm machine never runs the sandbox (its one boot is a no-op), the stock
  * converges on the target per region and only per region (the EEA caller's machine must already BE in the
@@ -105,8 +106,9 @@ describe(`reconcileHostedPool`, () => {
         expect(posted.config.image).toBe(`ghcr.io/intentic/sandbox:stable`);
         expect(posted.config.init).toEqual({ exec: [...WARM_BOOT_EXEC] });
         // …and it says so to Fly, which is the only place the truth survives: this app is named `pool` for
-        // life, claimed or not, so the console's app list can never be the answer.
-        expect(posted.config.metadata).toEqual({ intentic_role: `warm` });
+        // life, claimed or not, so the console's app list can never be the answer. The platform stamp is on
+        // it from its first second, so no other deployment sharing this org reads our stock as litter.
+        expect(posted.config.metadata).toEqual({ intentic_role: `warm`, intentic_platform: hostedInstanceId(config()) });
         expect(posted.config.env[`CONNECT_TOKEN`]).toBeUndefined();
         expect(posted.config.env[`OWNER_EMAIL`]).toBeUndefined();
         expect(create).toHaveBeenCalledTimes(2);

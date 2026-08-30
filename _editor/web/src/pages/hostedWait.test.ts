@@ -83,6 +83,23 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView(wait({ machine: `stopped` })).failure?.action).toBe(`reboot`);
     });
 
+    /* A MACHINE THAT NO LONGER EXISTS reads differently from one that is merely off, and the difference is the
+     * whole reason `gone` is its own state: nothing is booting, nothing will check in, and the recovery costs
+     * the disk. Said outright, immediately (no clock involved), and it outranks a machine still reporting a
+     * healthy-looking state, which is what a stale poll would otherwise narrate. */
+    it(`says outright when the machine is gone, and admits what starting over costs`, () => {
+        const view = hostedWaitView(wait({ machine: `gone` }));
+        expect(view.failure?.problem).toContain(`isn't there any more`);
+        expect(view.failure?.remedy).toContain(`gone with it`);
+        // `reboot`, not `remake`: the platform's restart route replaces a machine that no longer exists, while
+        // `remake` hands the sandbox back first, which it refuses to do for anything that has ever connected.
+        expect(view.failure?.action).toBe(`reboot`);
+        // No amount of waiting is involved, and a boot report from before the machine died cannot outvote it.
+        expect(hostedWaitView(wait({ machine: `gone`, waitedMs: 0, announced: true, boot: boot(`reachable`) })).failure?.problem).toContain(
+            `isn't there any more`,
+        );
+    });
+
     it(`says so when a running machine has gone silent for long enough`, () => {
         const silent = wait({ machine: `started`, waitedMs: 4 * 60_000 });
         expect(hostedWaitView(silent).failure?.problem).toContain(`hasn't checked in`);

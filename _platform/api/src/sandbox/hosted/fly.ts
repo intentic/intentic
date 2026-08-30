@@ -23,9 +23,24 @@ const BASE = `https://api.machines.dev/v1`;
  * before anyone has asked for the machine. Machine metadata is the lever that does work, set at create,
  * rewritten with the config at claim (updates replace the whole config), and filterable server-side, e.g.
  * GET /apps/{app}/machines?metadata.intentic_role=sandbox. hosted-fleet.ts is the readable answer built on
- * top; this is the vocabulary both the pool's builder and the sandbox's composer write. */
-export const FLY_ROLE_WARM = { intentic_role: `warm` } as const;
-export const flySandboxRole = (sandboxId: string): Record<string, string> => ({ intentic_role: `sandbox`, intentic_sandbox: sandboxId });
+ * top; this is the vocabulary both the pool's builder and the sandbox's composer write.
+ *
+ * WHICH PLATFORM the machine belongs to rides in the same bag, and it is the load-bearing half. An app name
+ * says the deployment's prefix and nothing about WHOSE deployment: two platforms sharing a Fly org and a
+ * credential (a staging box, a laptop, anything holding a copy of the production env file) mint
+ * indistinguishable names, and each one's reaper reads the other's machines as apps with no row behind them.
+ * That is not hypothetical, it is the outage this stamp exists to prevent: a second instance's orphan sweep
+ * destroyed every production machine in the org, leaving the rows behind, so every affected user met a
+ * "start it over" button that could never work again. The stamp makes ownership a fact the provider can be
+ * asked about instead of an inference from a name, and the reaper destroys nothing it cannot prove is its own. */
+export const FLY_META_ROLE = `intentic_role`;
+export const FLY_META_PLATFORM = `intentic_platform`;
+export const flyWarmRole = (instance: string): Record<string, string> => ({ [FLY_META_ROLE]: `warm`, [FLY_META_PLATFORM]: instance });
+export const flySandboxRole = (sandboxId: string, instance: string): Record<string, string> => ({
+    [FLY_META_ROLE]: `sandbox`,
+    intentic_sandbox: sandboxId,
+    [FLY_META_PLATFORM]: instance,
+});
 
 /* The operator misconfigured the platform (bad/expired token, wrong org), nothing a user can fix, and the
  * route surfaces it as a gateway failure. Named so hosted.ts can log it apart from capacity weather.
@@ -43,6 +58,12 @@ export class FlyError extends Error {
         this.status = status;
     }
 }
+
+/* Fly ANSWERING that a thing is not there, told apart from every other way a call can fail. The difference is
+ * the whole recovery story on the platform side: a machine (or its whole app) that Fly says does not exist
+ * will never start, boot or be restarted, so the row describing it is a belief the platform has to give up,
+ * while a 500 or a dead socket is a bad minute at the provider that must change nothing at all. */
+export const isFlyGone = (error: unknown): boolean => error instanceof FlyError && error.status === 404;
 
 // Fly's error envelope on a non-2xx: { error: "…" }.
 const errorSchema = z.object({ error: z.string() });
@@ -135,6 +156,55 @@ export const getMachine = async (token: string, app: string, machineId: string):
     // An unparseable stamp is dropped rather than propagated as an Invalid Date, the meter's fallback (bill
     // to now) is a worse answer than Fly's, but a NaN one would silently poison every sum it reaches.
     return { state: parsed.state, updatedAt: updatedAt !== undefined && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined };
+};
+
+/* EVERY MACHINE IN AN APP, with the two facts the orphan sweep judges an app by: who stamped it
+ * (config.metadata) and how old it is. `created_at` is what keeps a provision in flight safe, an app whose
+ * machine was made a minute ago is somebody mid-signup, not a leftover, and the row that will vouch for it is
+ * written after the machine exists. Optional because Fly is free to grow the shape; a machine that arrives
+ * without either field is simply one the sweep cannot vouch for, which is read as "leave it alone". */
+const machineListSchema = z.array(
+    z.object({
+        id: z.string(),
+        state: z.string(),
+        created_at: z.string().optional(),
+        config: z.object({ metadata: z.record(z.string(), z.string()).optional() }).optional(),
+    }),
+);
+
+export interface FlyMachineSummary {
+    readonly id: string;
+    readonly state: string;
+    readonly createdAt: Date | undefined;
+    readonly metadata: Record<string, string>;
+}
+
+const parsedDate = (value: string | undefined): Date | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    const at = new Date(value);
+    return Number.isNaN(at.getTime()) ? undefined : at;
+};
+
+export const listMachines = async (token: string, app: string): Promise<FlyMachineSummary[]> => {
+    const parsed = machineListSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/machines`));
+    return parsed.map((machine) => ({
+        id: machine.id,
+        state: machine.state,
+        createdAt: parsedDate(machine.created_at),
+        metadata: machine.config?.metadata ?? {},
+    }));
+};
+
+// An app's volumes, read for the same age question when the app holds no machine yet: the cold provision
+// creates app → volume → machine → row, so a volume with nothing beside it is either the middle of that
+// sequence or what a failed one left behind, and only the clock tells them apart.
+const volumeListSchema = z.array(z.object({ id: z.string(), created_at: z.string().optional() }));
+
+export const listVolumes = async (token: string, app: string): Promise<{ id: string; createdAt: Date | undefined }[]> => {
+    const parsed = volumeListSchema.parse(await call(token, `GET`, `/apps/${encodeURIComponent(app)}/volumes`));
+    return parsed.map((volume) => ({ id: volume.id, createdAt: parsedDate(volume.created_at) }));
 };
 
 // Start answers 200 with a small status body; a machine already running answers an error naming its state,

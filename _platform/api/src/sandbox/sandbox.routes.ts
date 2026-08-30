@@ -19,8 +19,8 @@ import { CloudCredentialError, CloudProviderError } from "./cloud/common.js";
 import { cloudCreate, cloudOptions } from "./cloud/index.js";
 import { cloudInitUserData } from "./cloud/user-data.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
-import { getMachine, stopMachine } from "./hosted/fly.js";
-import { destroyHosted, hostedEnabled, provisionHosted, refreshHosted, wakeHosted } from "./hosted/hosted.js";
+import { getMachine, isFlyGone, stopMachine } from "./hosted/fly.js";
+import { destroyHosted, type HostedProvisionArgs, hostedEnabled, provisionHosted, refreshHosted, wakeHosted } from "./hosted/hosted.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
@@ -42,6 +42,36 @@ const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
 // The hub's zone when the tunnel fabric is configured, else undefined, the zone alone defaults even when
 // the fabric is off, so it must not flag sandboxes on its own.
 const intenticZoneOf = (context: OrpcContext): string | undefined => (zrokEnabled(context.config) ? context.config.zrok.zone : undefined);
+
+/* Reboot the machine this row describes, or, when Fly answers that there is no such machine, replace it.
+ * Answers whether it had to rebuild, which is the caller's cue not to open a second metered stretch.
+ *
+ * The row is deleted BEFORE the new machine is provisioned, and deliberately: `provisionHosted` writes a
+ * HostedMachine row of its own, `sandboxId` is unique on that table, and a provision that failed after the
+ * delete leaves the sandbox with no machine, which is a state the wizard already knows how to offer a machine
+ * for. Keeping the dead row instead would fail the write, lose the new machine to the reaper, and leave the
+ * owner exactly as stuck as before. */
+const restartOrRebuild = async (
+    context: OrpcContext,
+    args: HostedProvisionArgs,
+    hosted: { id: string; appName: string; machineId: string; volumeId: string },
+): Promise<boolean> => {
+    try {
+        await refreshHosted(context.config, args, hosted);
+        return false;
+    } catch (error) {
+        if (!isFlyGone(error)) {
+            throw error;
+        }
+        context.logger.warn(
+            { app: hosted.appName, sandboxId: args.sandboxId },
+            `hosted restart: the machine is gone from the provider; building a replacement for this sandbox`,
+        );
+        await context.prisma.hostedMachine.delete({ where: { id: hosted.id } });
+        await provisionHosted(context.prisma, context.config, context.logger, args);
+        return true;
+    }
+};
 
 // Shape a sandbox row for the browser. `role` is the caller's relationship, owner rows drive management, member
 // rows are access-only. token + daemonUrl are what the browser needs to reach the daemon directly (the stored
@@ -417,9 +447,20 @@ export const sandboxRoutes = {
             return { machine: `unknown` as const };
         }
         const state = await getMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) => {
+            /* Fly ANSWERING that the machine (or its whole app) is not there is a fact, not a hiccup, and the
+             * one fact this route exists to carry: nothing about that machine will ever change again. Reported
+             * as `gone` rather than folded into `unknown`, because the wait's two readings are opposite, keep
+             * waiting versus stop waiting, and flattening them is what left people watching a spinner for a
+             * box that had been destroyed under them. */
+            if (isFlyGone(error)) {
+                return `gone` as const;
+            }
             context.logger.warn({ err: error, app: hosted.appName }, `hosted status: reading the machine failed`);
             return undefined;
         });
+        if (state === `gone`) {
+            return { machine: `gone` as const };
+        }
         const known = MACHINE_STATES.find((candidate) => candidate === state?.state);
         return { machine: known ?? (`unknown` as const) };
     }),
@@ -430,7 +471,16 @@ export const sandboxRoutes = {
      *
      * Owner-only, and nothing is destroyed, the volume, the files and the address all survive, which is what
      * separates this from hostedRelease and what makes it safe to put under a failure message somebody is
-     * reading in frustration. */
+     * reading in frustration.
+     *
+     * AND WHEN THERE IS NO MACHINE LEFT TO BOOT, it builds one. A row whose Fly app has been destroyed under it
+     * (a provider-side loss, or the orphan sweep of another deployment sharing the org, which is how this was
+     * found) used to make this route 404 forever: the button under "the machine we started for you isn't
+     * running" could not, in principle, ever work, and the row went on holding the owner's one hosted slot so
+     * nothing else could be provisioned either. There is nothing to preserve on a machine that does not exist,
+     * so the honest recovery is a new one on the same sandbox: same name, same address, same sharing, empty
+     * disk. That is the same trade the idle sweep already makes when it collects a machine and keeps the
+     * sandbox, and it is the only reading under which "start it over" is a true sentence. */
     hostedRestart: os.sandbox.hostedRestart.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: sandbox.id } });
@@ -453,21 +503,22 @@ export const sandboxRoutes = {
         }
         try {
             const grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
-            await refreshHosted(
-                context.config,
-                {
-                    sandboxId: sandbox.id,
-                    connectToken: decryptSecret(context.config, sandbox.token),
-                    grant,
-                    ownerEmail: user.email.toLowerCase(),
-                    region: hosted.region,
-                },
-                hosted,
-            );
+            const args = {
+                sandboxId: sandbox.id,
+                connectToken: decryptSecret(context.config, sandbox.token),
+                grant,
+                ownerEmail: user.email.toLowerCase(),
+                region: hosted.region,
+            };
+            const rebuilt = await restartOrRebuild(context, args, hosted);
+            // A rebuild's row is stamped `wokeAt` as it is created (the machine runs from the moment it
+            // exists), so opening a stretch again here would start the meter twice for one boot.
+            if (!rebuilt) {
+                await openHostedStretch(context.prisma, hosted.id);
+            }
         } catch (error) {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `restarting the machine failed` });
         }
-        await openHostedStretch(context.prisma, hosted.id);
         return { ok: true };
     }),
     /* Power a hosted sandbox's machine back on, the idle-stop's other half, called by any browser (owner or

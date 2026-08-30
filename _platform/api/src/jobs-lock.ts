@@ -21,6 +21,13 @@ export const JOB_HOSTED_POOL = 2;
 // closing the same month would each write a set of statements, and two payout runs would race for the same
 // ones. Money counted twice is not a duplicate log line.
 export const JOB_POOL_CYCLE = 3;
+// The hosted lane's health watch (hosted-health.ts). Read-only, so the lock is about not paying for the same
+// Fly round-trips on every replica, and about one alert rather than one per replica.
+export const JOB_HOSTED_HEALTH = 4;
+// The hosted lane's provisioning canary (hosted-canary.ts). Exclusive for the strongest reason on this list
+// after money: every run BUILDS A MACHINE, so two replicas ticking together would spend twice and, worse,
+// leave the second one's sandbox behind when the first collected the leftovers out from under it.
+export const JOB_HOSTED_CANARY = 5;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });
