@@ -35,10 +35,10 @@ export const insertMention = (text: string, mention: MentionQuery, caret: number
     return { text: next, caret: mention.start + path.length + 2 };
 };
 
-// Workspace paths referenced as @-mentions in a prompt, deduped. Trailing sentence punctuation is stripped,
-// and only path-looking tokens count (a "/" or "." present), so a prose handle ("@radarsu") never becomes a
-// phantom attachment; popover-inserted paths always qualify.
-export const mentionPaths = (text: string): string[] => {
+/* Every path-looking @ token in text, including tokens that are not valid composer mentions. Kept separate
+ * from `mentionPaths` because old turns persisted these candidates in the shared attachment field; restore
+ * needs the broad set to recognise and hide those inline paths rather than redraw them as file chips. */
+export const mentionedPathTokens = (text: string): string[] => {
     const paths = new Set<string>();
     for (const match of text.matchAll(/(?:^|\s)@([^\s@]+)/g)) {
         const token = (match[1] as string).replace(/[.,;:!?)]+$/, ``);
@@ -48,3 +48,9 @@ export const mentionPaths = (text: string): string[] => {
     }
     return [...paths];
 };
+
+// Workspace paths referenced as @-mentions in a prompt, deduped. A scoped package script prefix from copied
+// pnpm output has the same opening shape (`@scope/package:test:`) but is not a file; accepting it hands the
+// daemon a phantom attachment which only becomes visible when a restored transcript redraws the wire fields.
+const PACKAGE_SCRIPT = /^[^/]+\/[^/]+:[^/]+$/u;
+export const mentionPaths = (text: string): string[] => mentionedPathTokens(text).filter((token) => !PACKAGE_SCRIPT.test(token));

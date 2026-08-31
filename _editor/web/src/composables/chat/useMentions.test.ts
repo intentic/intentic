@@ -31,4 +31,8 @@ describe(`mentionPaths`, () => {
     it(`skips prose handles and mid-word @`, () => {
         expect(mentionPaths(`thanks @radarsu — mail me@example.com`)).toEqual([]);
     });
+
+    it(`skips scoped package script prefixes in copied pnpm output`, () => {
+        expect(mentionPaths(`@intentic/iq-engine:test: failed\nsee @src/app.ts`)).toEqual([`src/app.ts`]);
+    });
 });

@@ -1714,9 +1714,7 @@ describe(`Conversation`, () => {
         // The daemon self-heals a stale model in-turn (re-prompting with one xAI named), so this code now reaches
         // the client only when that failed, xAI rejected the model AND named no alternative: a genuine error.
         const xaiMessage = `xAI returned no available models for your account.`;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]),
-        );
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]));
         await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -3287,6 +3285,24 @@ describe(`Conversation`, () => {
         });
     });
 
+    it(`does not redraw inline mentions or copied package-script prefixes as attachment chips`, () => {
+        const conversation = new Conversation(`c1`);
+        const upload = `${STATE_DIR}/records/artifacts/attachments/u1/shot.png`;
+
+        conversation.restoreMessages([
+            {
+                role: `user`,
+                text: `@intentic/iq-engine:test: failed\ncheck @src/app.ts and @${upload}`,
+                attachments: [`intentic/iq-engine:test`, `src/app.ts`, `plan.md`, upload],
+            },
+        ]);
+
+        expect(conversation.messages.value[0]?.attachments).toEqual([
+            { name: `plan.md`, path: `plan.md` },
+            { name: `shot.png`, path: upload },
+        ]);
+    });
+
     // A restored tab already carries its own posture from the tab snapshot. loadTranscript's history-menu
     // defaults would move an isolated agent's next turn onto the main tree: the worktree it has been working
     // in for the whole conversation.
@@ -3574,9 +3590,7 @@ describe(`Conversation placeAsAgent`, () => {
         const before = conversation.messages.value.length;
 
         const daemonMessage = `the discord gateway is not running, so the message cannot reach the channel`;
-        sandboxRequestMock.mockImplementation(
-            async () => new Response(JSON.stringify({ message: daemonMessage }), { status: 502 }),
-        );
+        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ message: daemonMessage }), { status: 502 }));
         expect(await conversation.placeAsAgent(`planted`)).toBe(false);
 
         expect(conversation.messages.value).toHaveLength(before);

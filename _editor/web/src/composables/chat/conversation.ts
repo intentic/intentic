@@ -1,4 +1,4 @@
-import { errorMessage } from "@intentic/ui/async";
+import { STATE_DIR } from "@intentic/constants";
 import {
     type AgentCommand,
     type AgentEvent,
@@ -17,6 +17,7 @@ import {
     type RestoredMessage,
     withoutResumeNote,
 } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { trackPerf } from "../perf";
 import { sandboxError, sandboxRequest } from "../sandbox/sandboxClient";
@@ -44,7 +45,7 @@ import type { TurnEffect } from "./turnReducer";
 import { type SessionRef, type TurnSettings, resumes, turnRequestBody } from "./turnRequest";
 import { type AttachHead, followRun, postTurnControl, type TurnContext } from "./turnStream";
 import { formatReset, formatUtilization, modelAllowance, planHeadroom, SPENT_PERCENT, usageStatusByAccount, usageStatusFor } from "./usageStatus";
-import { mentionPaths } from "./useMentions";
+import { mentionPaths, mentionedPathTokens } from "./useMentions";
 import { uuid } from "../uuid";
 
 // A file staged in a conversation's composer, uploaded to the workspace the moment it's attached (send is
@@ -96,6 +97,21 @@ const repeatsNudge = (message: { readonly text: string; readonly attachments: re
         return false;
     }
     return isNudgeText(message.text) && isNudgeText(neighbour.text);
+};
+
+const UPLOADED_ATTACHMENT_DIR = `${STATE_DIR}/records/artifacts/attachments/`;
+
+/* The turn wire historically carried uploaded files and inline @-mentioned workspace paths in one array.
+ * The live bubble knew which were uploads because it drew from the composer's objects; a reload knew only the
+ * array and redrew every entry as a chip. Remove paths already visible inline, while keeping a real uploaded
+ * file if the user also happened to type its generated path. This also cleans already-recorded turns whose
+ * copied pnpm output was misread as a list of @scope/package:test attachments. */
+const restoredAttachmentFields = (message: RestoredMessage): { readonly attachments?: readonly ChatAttachment[] } => {
+    const inline = new Set(mentionedPathTokens(message.text));
+    const attachments = (message.attachments ?? [])
+        .filter((path) => !inline.has(path) || path.includes(UPLOADED_ATTACHMENT_DIR))
+        .map((path) => ({ name: path.split(`/`).at(-1) ?? path, path }));
+    return attachments.length > 0 ? { attachments } : {};
 };
 
 // What a conversation is doing right now, surfaced as the tab's status icon.
@@ -1100,9 +1116,7 @@ export class Conversation {
                 ...(message.checkpointId !== undefined ? { checkpointId: message.checkpointId, rewindIndex: index } : {}),
                 // Chips from the restored workspace-relative paths; thumbnails re-mint from the
                 // workspace bytes at render time (attachmentPreview), object URLs don't survive here.
-                ...(message.attachments !== undefined && message.attachments.length > 0
-                    ? { attachments: message.attachments.map((path) => ({ name: path.split(`/`).at(-1) ?? path, path })) }
-                    : {}),
+                ...restoredAttachmentFields(message),
                 ...(message.thinking !== undefined ? { thinking: message.thinking } : {}),
                 ...(message.tools !== undefined ? { tools: message.tools } : {}),
                 // The user's words in the agent's voice keep their quiet mark across a reopen, the mark's
