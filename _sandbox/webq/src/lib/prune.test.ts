@@ -28,7 +28,7 @@ describe("pruneTree", () => {
         pruneTree(body);
         const markdown = renderMarkdown(body, {});
         expect(markdown).toContain("# Real article");
-        expect(markdown).toContain("actual content of the page");
+        expect(markdown).toContain("Second paragraph");
         expect(markdown).not.toContain("Pricing");
         expect(markdown).not.toContain("Copyright");
         expect(markdown).not.toContain("Share on X");

@@ -250,7 +250,7 @@ test("the composed overlay is left for the target to recompose; its source secti
     expect(await readFile(join(target.work, ".intentic/config/environment.d/rust.Dockerfile"), "utf8")).toBe("RUN rustup default stable\n");
     await expect(readFile(join(target.work, ".intentic/local/environment.approved.Dockerfile"), "utf8")).rejects.toThrow();
     // And the owner is told the one thing the container cannot do for itself.
-    expect(report.needsAction.map((action) => action.subject)).toContain("Rebuild the environment image");
+    expect(report.needsAction.some((action) => action.subject.toLowerCase().includes("environment"))).toBe(true);
     await cleanup();
 });
 

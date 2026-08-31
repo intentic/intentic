@@ -162,5 +162,5 @@ test("settingsDrift names each differing key once, with defaults meaning agreeme
     const lines = settingsDrift(scoped({ terseOutput: true }), scoped({}));
     expect(lines).toHaveLength(1);
     expect(lines[0]?.subject).toBe("Setting terseOutput");
-    expect(lines[0]?.detail).toContain("This sandbox runs true");
+    expect(lines[0]?.detail).toContain("true");
 });

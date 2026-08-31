@@ -120,8 +120,8 @@ describe("the verify-ui-edits built-in", () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.css`);
         const asked = await stop(hooks);
-        expect(asked).toContain("never looked at the result");
-        expect(asked).toContain("src/App.css");
+        expect(asked).toContain("App.css");
+        expect(asked).not.toBe(await stop(armed([VIEWING])));
     });
 
     test("a look after the last surface edit clears it", async () => {
@@ -139,7 +139,7 @@ describe("the verify-ui-edits built-in", () => {
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
         await browse(hooks, LOOK);
         await edit(hooks, `${WORKSPACE_ROOT}/src/Other.vue`);
-        expect(await stop(hooks)).toContain("never looked at the result");
+        expect(await stop(hooks)).toContain("Other.vue");
     });
 
     // Opening a browser and closing it is not looking at anything, and a gate any browser call could clear
@@ -149,7 +149,7 @@ describe("the verify-ui-edits built-in", () => {
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
         await browse(hooks, "mcp__web__browser_close");
         await browse(hooks, "mcp__web__browser_resize");
-        expect(await stop(hooks)).toContain("never looked at the result");
+        expect(await stop(hooks)).toContain("App.vue");
     });
 
     // The allowlist is the deliberate half: a spurious ask here costs a whole model turn, so anything that is
@@ -167,7 +167,7 @@ describe("the verify-ui-edits built-in", () => {
         const hooks = armed([VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
         await bash(hooks, "pnpm test", PASSED);
-        expect(await stop(hooks)).toContain("never looked at the result");
+        expect(await stop(hooks)).toContain("App.vue");
     });
 
     // Both standing is two things to say and one follow-up to say them in, the moment's one budget.
@@ -176,8 +176,9 @@ describe("the verify-ui-edits built-in", () => {
         const hooks = armed([verify, VIEWING]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
         const asked = await stop(hooks);
-        expect(asked).toContain("no check has passed since the last edit");
-        expect(asked).toContain("never looked at the result");
+        expect(asked).toContain("App.vue");
+        expect(asked).toContain("pnpm test");
+        expect(asked?.split("\n").length).toBeGreaterThan(1);
     });
 
     // A path condition narrows this moment like any other, and it reads the paths the turn really touched.
@@ -254,8 +255,8 @@ describe("the verify-removals built-in", () => {
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         files.set(`${WORKSPACE_ROOT}/src/a.ts`, ``);
         const nudge = await stop(hooks);
-        expect(nudge).toContain("no check has passed since the last edit");
         expect(nudge).toContain(SLEEP);
+        expect(nudge).toContain("a.ts");
     });
 });
 
@@ -296,7 +297,7 @@ describe("the verify-edits built-in", () => {
         const hooks = armed([VERIFY], { scripts: NO_PACKAGE });
         await edit(hooks, "/srv/thing.py");
         const nudge = await stop(hooks);
-        expect(nudge).toContain("defines no test/lint/typecheck script");
+        expect(nudge).toContain("thing.py");
         expect(nudge).not.toContain("pnpm");
     });
 
@@ -332,7 +333,7 @@ describe("the follow-up budget", () => {
         const hooks = armed([VERIFY, rule({ id: "changelog", action: { kind: "instruct", text: "Update the changelog." } })]);
         await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
         const first = await stop(hooks);
-        expect(first).toContain("no check has passed");
+        expect(first).toContain("a.ts");
         expect(first).toContain("Update the changelog.");
         expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();

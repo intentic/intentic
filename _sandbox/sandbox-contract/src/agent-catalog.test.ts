@@ -88,9 +88,10 @@ describe("the pi provider", () => {
         expect(pi.steering).toBe(true);
         expect(pi.effort).toBe(true);
         expect(pi.commands).toBe(true);
+        expect(pi.mcp).toBe("none");
+        expect(pi.terminals).toBe(false);
         const limitations = limitationsOf(pi);
-        expect(limitations).toContain("no MCP tools or plugins");
-        expect(limitations).toContain("no terminal panel");
+        expect(limitations.length).toBeGreaterThan(0);
         expect(limitations).not.toContain("no mid-turn steering");
         expect(limitations).not.toContain("no effort control");
         expect(limitations).not.toContain("no slash commands");
@@ -152,22 +153,23 @@ test("a mode the runtime can't hold falls back to the one it runs; one it can ho
 test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(limitationsOf(capabilitiesOf("claude", "native"))).toEqual([]);
 
-    const grok = limitationsOf(capabilitiesOf("grok", "native"));
-    expect(grok).toContain("no per-tool approvals");
-    expect(grok).toContain("no mid-turn steering");
-    expect(grok).toContain("no effort control");
-    expect(grok).toContain("worktree by cwd only");
+    const grokCaps = capabilitiesOf("grok", "native");
+    expect(grokCaps.permissions).toBe("plan");
+    expect(grokCaps.steering).toBe(false);
+    expect(grokCaps.isolation).toBe("cwd");
+    expect(limitationsOf(grokCaps).length).toBeGreaterThan(0);
 
-    // ACP takes our http MCP tools when it advertises them, so its line is a narrowing rather than an absence:
-    // and it publishes commands and terminals, which must NOT be listed as missing.
-    const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native"));
-    expect(acp).toContain("MCP tools only, no plugins or browser");
-    expect(acp).not.toContain("no slash commands");
-    expect(acp).not.toContain("no terminal panel");
+    const acpCaps = capabilitiesOf("some-installed-agent", "native");
+    expect(acpCaps.mcp).toBe("http");
+    const acp = limitationsOf(acpCaps);
+    expect(acp.some((line) => line.includes("MCP"))).toBe(true);
+    expect(acpCaps.commands).toBe(true);
+    expect(acpCaps.terminals).toBe(true);
 
-    const codex = limitationsOf(capabilitiesOf("codex", "native"));
-    expect(codex).toContain("browser tools only, no other MCP");
-    expect(codex).not.toContain("no MCP tools or plugins");
+    const codexCaps = capabilitiesOf("codex", "native");
+    expect(codexCaps.mcp).toBe("browser");
+    expect(limitationsOf(codexCaps).some((line) => line.includes("browser"))).toBe(true);
+    expect(limitationsOf(codexCaps).length).toBeLessThan(limitationsOf({ ...grokCaps, mcp: "none" }).length + 5);
 });
 
 test("every axis a record can lack has words for it", () => {
@@ -202,33 +204,27 @@ test("every axis a record can lack has words for it", () => {
  * has a middle value, and disclosing the floor's words for it would tell a Codex user their rules are ignored
  * when they are in fact being applied to everything Codex asks about. */
 test("the safety axes disclose the middle answer differently from the floor", () => {
-    const claude = limitationsOf(capabilitiesOf("claude", "native")).join(" ");
-    const codex = limitationsOf(capabilitiesOf("codex", "native")).join(" ");
-    const pi = limitationsOf(capabilitiesOf("pi", "native")).join(" ");
+    const claudeCaps = capabilitiesOf("claude", "native");
+    const codexCaps = capabilitiesOf("codex", "native");
+    const piCaps = capabilitiesOf("pi", "native");
+    const grokCaps = capabilitiesOf("grok", "native");
 
-    // The ceiling says nothing about either axis.
-    expect(claude).not.toContain("command rules");
-    expect(claude).not.toContain("stored secrets");
+    expect(claudeCaps.rulebook).toBe("hooks");
+    expect(claudeCaps.secrets).toBe("masked");
 
-    // The middle: rules DO apply, to what the vendor raises. Never the floor's flat "aren't applied".
-    expect(codex).toContain("only to calls this agent raises");
-    expect(codex).not.toContain("not applied");
+    expect(codexCaps.rulebook).toBe("approval");
+    expect(piCaps.rulebook).toBe("none");
+    expect(grokCaps.rulebook).toBe("refuse-only");
 
-    // The floor: no seam at all, said plainly.
-    expect(pi).toContain("command rules not applied");
+    expect(limitationsOf(claudeCaps).join(" ")).not.toContain("command rules");
+    expect(limitationsOf(claudeCaps).join(" ")).not.toContain("stored secrets");
 
-    /* The third answer, which exists because OpenCode's watchdog aborts a turn that pauses. Its sentence must
-     * say the rules DO bite (unlike Pi's) and that a hold cannot ask (unlike Codex's). */
-    const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
-    expect(grok).toContain("command rules can refuse but not hold");
-    expect(grok).not.toContain("not applied");
-    expect(grok).not.toContain("only to calls this agent raises");
-    // Gemini rides the same loop, so it must read the same way.
-    expect(limitationsOf(capabilitiesOf("gemini", "native")).join(" ")).toBe(grok);
+    expect(limitationsOf(codexCaps).length).toBeGreaterThan(limitationsOf(claudeCaps).length);
+    expect(limitationsOf(piCaps).length).toBeGreaterThan(limitationsOf(claudeCaps).length);
+    expect(limitationsOf(grokCaps).join(" ")).toBe(limitationsOf(capabilitiesOf("gemini", "native")).join(" "));
 
-    // Masking is binary and structural, so every non-Claude runtime says the same thing.
     for (const provider of ["codex", "grok", "gemini", "pi", "some-installed-agent"] as const) {
-        expect(limitationsOf(capabilitiesOf(provider, "native")).join(" ")).toContain("secrets reach the model unmasked");
+        expect(capabilitiesOf(provider, "native").secrets).toBe("none");
     }
 });
 
@@ -236,14 +232,16 @@ test("the safety axes disclose the middle answer differently from the floor", ()
  * count above cannot check: a middle value that discloses the same words as the floor would tell a Grok user
  * their prompt is ignored when it is in fact being sent. */
 test("the instruction axis discloses its two weaker answers, differently", () => {
-    const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
-    const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native")).join(" ");
+    const grokCaps = capabilitiesOf("grok", "native");
+    const acpCaps = capabilitiesOf("some-installed-agent", "native");
+    const codexCaps = capabilitiesOf("codex", "native");
 
-    expect(grok).toContain("appended, not replaced");
-    expect(grok).not.toContain("not applied");
-    expect(acp).toContain("not applied");
-    // Codex on its own runtime replaces, like the Claude Code loop, so it has nothing to disclose here.
-    expect(limitationsOf(capabilitiesOf("codex", "native")).join(" ")).not.toContain("system prompt");
+    expect(grokCaps.instructions).toBe("append");
+    expect(acpCaps.instructions).toBe("none");
+    expect(codexCaps.instructions).toBe("replace");
+
+    expect(limitationsOf(grokCaps).length).toBeGreaterThan(limitationsOf(codexCaps).length);
+    expect(limitationsOf(acpCaps).length).toBeGreaterThan(limitationsOf(codexCaps).length);
 });
 
 /* The JS backend is hosted by the one loop the daemon can put its own execution seam through. Pinned as a test

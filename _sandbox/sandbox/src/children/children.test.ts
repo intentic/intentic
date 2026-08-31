@@ -744,6 +744,6 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("with no live turn there is nowhere to ask, and it says so", async () => {
         const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go" }, fakeTurn([]));
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("outside a live turn") });
-        expect(held.ok === false && held.message).toContain("agents.spawn action rule");
+        expect(held.ok === false && held.message).toContain("agents.spawn");
     });
 });

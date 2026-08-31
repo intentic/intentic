@@ -80,10 +80,11 @@ test("a pin the range already reaches has nothing to report", async () => {
 // Deprecation is worth saying whatever the numbers are: a package can be on its newest version and still be
 // one its own author has told you to stop using.
 test("a deprecated package is reported even when it is on the newest version", async () => {
-    const { fetcher } = npmStub("2.88.2", "request has been deprecated");
+    const deprecation = "request has been deprecated";
+    const { fetcher } = npmStub("2.88.2", deprecation);
     vi.stubGlobal("fetch", fetcher);
     const answer = await createFreshnessResolver()(pin("2.88.2", "", "request"));
-    expect(answer?.deprecated).toBe("request has been deprecated");
+    expect(answer?.deprecated).toBe(deprecation);
 });
 
 test("a registry that answers nothing useful produces no claim", async () => {

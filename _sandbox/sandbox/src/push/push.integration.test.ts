@@ -269,9 +269,12 @@ test("a finished turn notification carries the prompt, trimmed at a word boundar
 });
 
 test("a failed turn reports the error, not the prompt", () => {
-    const notification = turnFinished("conv-1", "do the thing", { ok: false, error: "provider rejected the model" });
+    const error = "provider rejected the model";
+    const prompt = "do the thing";
+    const notification = turnFinished("conv-1", prompt, { ok: false, error });
     expect(notification.title).toBe("Turn failed");
-    expect(notification.body).toBe("provider rejected the model");
+    expect(notification.body).toBe(error);
+    expect(notification.body).not.toContain(prompt);
 });
 
 test("finished and awaiting notifications collapse per conversation, and only awaiting is sticky", () => {

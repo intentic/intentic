@@ -65,11 +65,10 @@ test("a folder with no manifest is not offered to a turn", async () => {
 test("a prompt round-trips, and emptying it removes the file rather than storing a blank", async () => {
     const root = kitRoot();
 
-    await writePersonaPrompt(root, "studio", "Studio", "You write release notes.\n\n");
+    const prompt = "You write release notes.";
+    await writePersonaPrompt(root, "studio", "Studio", `${prompt}\n\n`);
 
-    // Trailing whitespace is dropped on the way in AND on the way out, so a re-read equals what was typed and
-    // the editor does not open showing an unsaved change it cannot explain.
-    expect(await readPersonaPrompt(root, "studio")).toBe("You write release notes.");
+    expect(await readPersonaPrompt(root, "studio")).toBe(prompt);
     // Writing a prompt brings the kit into existence, so the loader will read the skills beside it.
     expect(await personaKitPlugin(root, "studio")).toEqual(expect.any(String));
 

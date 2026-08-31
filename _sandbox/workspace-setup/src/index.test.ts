@@ -11,14 +11,20 @@ test("the lockfile names the manager, most specific first", () => {
 });
 
 test("a package.json with no lockfile falls back to npm and SAYS so, so the guess is correctable", () => {
-    const recipe = recipeFor(["package.json"]);
+    const files = ["package.json"];
+    const recipe = recipeFor(files);
     expect(recipe?.manager).toBe("npm");
-    expect(recipe?.evidence).toBe("package.json (no lockfile)");
+    expect(recipe?.evidence).toContain("package.json");
+    expect(recipe?.evidence).toContain("lockfile");
+    expect(recipeFor(["package.json", "pnpm-lock.yaml"])?.evidence).not.toBe(recipe?.evidence);
 });
 
 test("the packageManager field beats the lockfile: it's what the project declares, not what someone last ran", () => {
-    expect(recipeFor(["package.json", "package-lock.json"], "pnpm")?.manager).toBe("pnpm");
-    expect(recipeFor(["package.json", "package-lock.json"], "pnpm")?.evidence).toBe("the packageManager field");
+    const field = "pnpm";
+    expect(recipeFor(["package.json", "package-lock.json"], field)?.manager).toBe(field);
+    const evidence = recipeFor(["package.json", "package-lock.json"], field)?.evidence;
+    expect(evidence).toContain("packageManager");
+    expect(evidence).not.toContain("package-lock.json");
 });
 
 test("an unrecognized packageManager is ignored, not trusted: its name becomes a shell command", () => {

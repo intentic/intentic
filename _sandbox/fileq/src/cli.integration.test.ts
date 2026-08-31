@@ -87,12 +87,13 @@ describe("read", () => {
     // `read` resolves relative paths against the CALLER's cwd (an agent standing in a subdir), which in this
     // suite is the package checkout — so the workspace files are named absolutely here.
     it("prints a capsule, the content, and the sidecar path", async () => {
-        writeFileSync(join(root, "notes.docx"), docxBytes("Notes", ["A line worth reading."]));
+        const bodyLine = "A line worth reading.";
+        writeFileSync(join(root, "notes.docx"), docxBytes("Notes", [bodyLine]));
         const { out, exit } = await fileq("read", join(root, "notes.docx"));
         expect(exit).toBe(0);
         expect(out).toContain("fileq:");
         expect(out).toContain("docx");
-        expect(out).toContain("A line worth reading.");
+        expect(out).toContain(bodyLine);
         expect(out).toContain(sidecarOf("notes.docx"));
     });
 

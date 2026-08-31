@@ -77,7 +77,8 @@ test("status is the filename, so any reader derives the same answer without bein
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, "intentic-a-2026-01-01-00-00-00.tar.gz"), "done");
     await writeFile(join(dir, "intentic-b-2026-01-02-00-00-00.tar.gz.part"), "half");
-    await writeFile(join(dir, "intentic-c-2026-01-03-00-00-00.tar.gz.failed"), "the disk filled up\n");
+    const errorLog = "the disk filled up";
+    await writeFile(join(dir, "intentic-c-2026-01-03-00-00-00.tar.gz.failed"), `${errorLog}\n`);
 
     const byName = new Map((await listExports(source.history)).map((entry) => [entry.name, entry]));
     expect(byName.get("intentic-a-2026-01-01-00-00-00.tar.gz")?.status).toBe("ready");
@@ -85,7 +86,7 @@ test("status is the filename, so any reader derives the same answer without bein
     const failed = byName.get("intentic-c-2026-01-03-00-00-00.tar.gz");
     expect(failed?.status).toBe("failed");
     // The reason travels with the marker, so the card explains itself rather than just going red.
-    expect(failed?.error).toContain("the disk filled up");
+    expect(failed?.error).toContain(errorLog);
     await cleanup();
 });
 

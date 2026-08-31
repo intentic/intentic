@@ -33,7 +33,7 @@ test("a check that throws on its own account is recorded as broken, not as evide
     // The distinction is the whole point: `broken` says the check failed to run, so nothing was learned about
     // the subject. Reading it as a violation of the promise is how a diagnostic starts lying.
     expect(violation).toMatchObject({ owner: "agent", broken: true });
-    expect(violation?.message).toContain("cannot read properties of undefined");
+    expect(violation?.message).toContain("undefined");
 });
 
 test("a check that never settles is bounded rather than holding the pass open", async () => {

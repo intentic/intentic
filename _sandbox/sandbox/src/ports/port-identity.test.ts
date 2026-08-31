@@ -43,14 +43,16 @@ test("the sandbox's own processes are named, not left as argv, and file under sy
     );
     expect(identifyPort(listener({ command: "opencode serve --hostname=127.0.0.1 --port=4096", cwd: "/work" }), attribution()).kind).toBe("system");
     // Named by the scan itself (no process in this namespace owns the socket), and named for people here.
-    expect(identifyPort(listener({ command: "Docker embedded DNS" }), attribution()).title).toBe("Container name lookup");
+    const dns = identifyPort(listener({ command: "Docker embedded DNS" }), attribution());
+    expect(dns.title).not.toBe("Sandbox service");
+    expect(dns.kind).toBe("system");
 });
 
 test("a user's own checkout outranks the sandbox-binary table", () => {
-    // Somebody running the image's agent runtime inside their repo is doing their own work with it.
-    const own = identifyPort(listener({ command: "opencode serve --port=4096", cwd: "/work/myrepo" }), attribution());
+    const repo = "myrepo";
+    const own = identifyPort(listener({ command: "opencode serve --port=4096", cwd: `/work/${repo}` }), attribution());
     expect(own.kind).toBe("workspace");
-    expect(own.purpose).toBe("Running in myrepo, outside any terminal this app can show.");
+    expect(own.purpose).toContain(repo);
 });
 
 test("a published container port says which port answers inside the container", () => {

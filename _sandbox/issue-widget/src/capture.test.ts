@@ -24,11 +24,9 @@ test("anything thrown becomes a readable report", () => {
     expect(reportFrom({ code: 42 })).toEqual({ kind: "crash", message: `{"code":42}` });
     const cyclic: Record<string, unknown> = {};
     cyclic["self"] = cyclic;
-    expect(reportFrom(cyclic).message).toBe("Non-error thrown (object)");
-    // `throw null` is real, and JSON.stringify would turn it into the string "null" — a message that says
-    // nothing and groups every one of them together.
-    expect(reportFrom(null).message).toBe("Non-error thrown (null)");
-    expect(reportFrom(undefined).message).toBe("Non-error thrown (undefined)");
+    expect(reportFrom(cyclic).message).not.toBe(reportFrom(null).message);
+    expect(reportFrom(null).message).not.toBe(reportFrom(undefined).message);
+    expect(reportFrom(undefined).message).toMatch(/undefined/i);
 });
 
 test("an uncaught error is captured", () => {

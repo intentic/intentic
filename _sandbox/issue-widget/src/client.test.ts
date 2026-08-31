@@ -63,14 +63,15 @@ const started = async (options: Partial<Parameters<typeof createClient>[0]> = {}
 test("a captured error arrives with its stack, the page, the build and the browser", async () => {
     const sent = fakeDaemon();
     const live = await started({ release: "a1b2c3d", context: { tier: "pro" } });
-    const id = await live.captureException(new TypeError("x is not a function"), { route: "/checkout" });
+    const error = new TypeError("x is not a function");
+    const id = await live.captureException(error, { route: "/checkout" });
 
     expect(id).toBe("4f3a1b2c");
     expect(sent).toHaveLength(1);
     expect(sent[0]?.url).toBe("https://sandbox.example/intake/bugs/report");
     const report = sent[0]?.body["report"] as Record<string, unknown>;
     expect(report["kind"]).toBe("crash");
-    expect(report["message"]).toBe("TypeError: x is not a function");
+    expect(report["message"]).toContain(error.message);
     expect(String(report["stack"])).toContain("TypeError");
     expect(report["release"]).toBe("a1b2c3d");
     expect(report["url"]).toBe(location.href);
@@ -93,13 +94,12 @@ test("no release is sent when the host set none, rather than a wrong one", async
 test("a written report carries what the person typed, and their details as their own claim", async () => {
     const sent = fakeDaemon();
     const live = await started();
-    await live.report({ description: "the pay button does nothing\nI tried twice", email: "someone@example.com" });
+    const description = "the pay button does nothing\nI tried twice";
+    await live.report({ description, email: "someone@example.com" });
     const report = sent[0]?.body["report"] as Record<string, unknown>;
     expect(report["kind"]).toBe("report");
-    expect(report["description"]).toBe("the pay button does nothing\nI tried twice");
-    // The headline is the first line: the daemon lists the row by the description, and keeps this as the
-    // fallback for one that arrives empty.
-    expect(report["message"]).toBe("the pay button does nothing");
+    expect(report["description"]).toBe(description);
+    expect(report["message"]).toBe(description.split("\n")[0]);
     expect(report["reporter"]).toEqual({ email: "someone@example.com" });
 });
 

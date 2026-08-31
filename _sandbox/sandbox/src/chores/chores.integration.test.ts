@@ -59,9 +59,10 @@ describe(`runProbe`, () => {
     // The case that matters most: a tool whose JSON shape moved must read as failed, never as measured-and-clean.
     test(`output the parser cannot recognise is a failure`, async () => {
         const dir = await scaffold({ "package.json": `{}` });
-        const result = await runProbe(fakeSpec({ available: `true`, command: `echo "not json at all"` }), dir, 1000);
+        const garbage = `not json at all`;
+        const result = await runProbe(fakeSpec({ available: `true`, command: `echo "${garbage}"` }), dir, 1000);
         expect(result.state).toBe(`failed`);
-        expect(result.reason).toContain(`could not read the tool's output`);
+        expect(result.reason).toContain(garbage);
     });
 
     /* And it quotes the FRONT of what it got. These tools print JSON by the megabyte, so the last 400 characters

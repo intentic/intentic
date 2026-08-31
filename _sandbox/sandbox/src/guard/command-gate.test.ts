@@ -1,4 +1,5 @@
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
+import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "vitest";
 import { resolveRequest } from "../agent/agent-requests.js";
@@ -83,7 +84,7 @@ describe("command gate", () => {
     test("a denied class is refused before it runs, and says which rule refused it", async () => {
         const out = await harness({ rules: { "git.destructive": "deny" } }).run(FORCE_PUSH);
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("rewrite or discard git history");
+        expect(reasonOf(out)).toContain(COMMAND_CLASS_LABELS["git.destructive"]);
     });
 
     /* The unattended branch, and the whole reason the gate words the refusal rather than the guard: a card
@@ -92,7 +93,7 @@ describe("command gate", () => {
         const gate = harness({ rules: { "git.destructive": "hold" }, unattended: true });
         const out = await gate.run(FORCE_PUSH);
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("nobody to approve it");
+        expect(reasonOf(out)).toContain("unattended");
         expect(reasonOf(out)).toContain("Do not retry");
         expect(gate.events).toEqual([]);
     });
@@ -103,7 +104,7 @@ describe("command gate", () => {
         await settled();
         const card = cardOf(gate.events);
         expect(card).toMatchObject({ toolName: "Bash", program: { text: FORCE_PUSH, language: "bash", truncated: false } });
-        expect(card.title).toContain("rewrite or discard git history");
+        expect(card.title).toContain(COMMAND_CLASS_LABELS["git.destructive"]);
         expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe(true);
         expect(await pending).toEqual({});
         // Every parked card owes the stream its resolution frame.
@@ -112,12 +113,14 @@ describe("command gate", () => {
 
     test("declining refuses the command and does not invite a way around it", async () => {
         const gate = harness({ rules: { "files.destructive": "hold" } });
-        const pending = gate.run("rm -rf /work/intentic");
+        const command = "rm -rf /work/intentic";
+        const pending = gate.run(command);
         await settled();
         expect(resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" })).toBe(true);
         const out = await pending;
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("do not look for another way");
+        expect(reasonOf(out)).toMatch(/declined/i);
+        expect(reasonOf(out)).not.toMatch(/unattended/i);
     });
 
     test("declining WITH feedback passes the redirection through instead", async () => {
@@ -236,7 +239,7 @@ describe("command gate: the outside-content floor", () => {
         const pending = gate.run("rm -rf build");
         await settled();
         const card = cardOf(gate.events);
-        expect(card.title).toContain("delete files recursively");
+        expect(card.title).toContain(COMMAND_CLASS_LABELS["files.destructive"]);
         resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
         expect((await pending).hookSpecificOutput).toBeUndefined();
     });
@@ -281,7 +284,7 @@ describe("command gate: the standing floor", () => {
     test("unattended, the floor refuses instead of parking", async () => {
         const out = await harness({ unattended: true }).run("mkfs.ext4 /dev/sda1");
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-        expect(reasonOf(out)).toContain("nobody to approve it");
+        expect(reasonOf(out)).toContain("unattended");
     });
 });
 

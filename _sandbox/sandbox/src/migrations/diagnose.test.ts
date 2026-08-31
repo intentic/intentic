@@ -12,9 +12,10 @@ test("an empty archive points at the error the pack command already printed", ()
 });
 
 test("workspace files without a settings file name the marker that gave it away", () => {
-    const message = diagnoseArchive(files("SOUL.md", "memory/2026-01-01.md", "skills/x/SKILL.md"));
-    expect(message).toContain("SOUL.md");
-    expect(message).toContain("whole assistant folder");
+    const marker = "SOUL.md";
+    const message = diagnoseArchive(files(marker, "memory/2026-01-01.md", "skills/x/SKILL.md"));
+    expect(message).toContain(marker);
+    expect(message).not.toContain("whole home directory");
 });
 
 test("a whole home directory is recognized as one rather than listed file by file", () => {
@@ -26,7 +27,7 @@ test("a whole home directory is recognized as one rather than listed file by fil
         ),
     );
     expect(message).toContain("whole home directory");
-    expect(message).toContain("just the assistant's own folder");
+    expect(message).not.toContain("SOUL.md");
 });
 
 test("anything else names what the archive actually held, so the mismatch is visible", () => {

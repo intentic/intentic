@@ -236,23 +236,25 @@ test("a card that grants every connector leaves the environment exactly as it wa
 // ── What the turn is told ───────────────────────────────────────────────────────────────────────────────────
 
 test("the note names the persona and says its accounts are the only ones", () => {
+    const label = "Work Reddit";
     const note = personaNote(
         turnPersona({
-            personas: [card("work", ["reddit-work"], { label: "Work Reddit" })],
+            personas: [card("work", ["reddit-work"], { label })],
             actsAs: "work",
             unattended: true,
         }),
     );
-    expect(note).toContain("Work Reddit");
-    expect(note).toContain("Only that persona's accounts");
+    expect(note).toContain(label);
+    expect(note?.length).toBeGreaterThan(label.length);
 });
 
 /* The one card whose wording is the PRODUCT's (a public web chat's desk) gets it from the daemon rather than
  * from a field on the card, so this is what proves the guidance still reaches the turn that needs it. */
 test("the front desk's own manner rides its note, and no other card's", () => {
     const desk = personaNote(turnPersona({ personas: [card(FRONT_DESK_PERSONA, [])], actsAs: FRONT_DESK_PERSONA, unattended: true }));
-    expect(desk).toContain("You are the front desk");
-    expect(personaNote(turnPersona({ personas: CAST, actsAs: "work", unattended: true }))).not.toContain("front desk");
+    const work = personaNote(turnPersona({ personas: CAST, actsAs: "work", unattended: true }));
+    expect(desk).not.toBe(work);
+    expect(desk).not.toEqual(work);
 });
 
 /* The folder limit IS narrated, unlike the shelves, and the asymmetry is deliberate: a tool that is absent

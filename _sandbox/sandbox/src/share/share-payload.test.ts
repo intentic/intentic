@@ -69,7 +69,7 @@ describe("a placed row", () => {
 describe("an everything share", () => {
     it("carries the work: the thinking, the cards, and the diffs of what was edited", () => {
         const { messages } = shareTranscript(conversation, "everything");
-        expect(messages[1]?.thinking).toBe("the guard re-runs on every hop");
+        expect(messages[1]?.thinking).toBe(conversation[1]?.thinking);
         expect(messages[1]?.tools?.[0]?.target).toBe("auth/guard.ts");
         expect(messages[1]?.tools?.[0]?.content?.[0]).toMatchObject({ type: "diff", newText: "const KEY = process.env.KEY" });
     });
