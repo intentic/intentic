@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@intentic/ui";
+import { Code, Icon } from "@intentic/ui";
 import SuggestedSessionBox from "../agents/SuggestedSessionBox.vue";
 import { usePushFlow } from "../composables/workspace/usePushFlow";
 
@@ -19,12 +19,15 @@ const pushFlow = usePushFlow();
          comment node for the tick between the question clearing and the card retiring, and an attribute has
          nothing to fall through to on a comment. -->
     <div>
-        <!-- The command leads the line in monospace, exactly as it did while the check was still running, so what
-             changed when the run settled is the tense and nothing else. -->
-        <p v-if="pushFlow.question.value" class="break-words text-2xs text-muted">
-            <span v-if="pushFlow.question.value.command" class="font-mono text-content">{{ pushFlow.question.value.command }}</span>
-            {{ pushFlow.question.value.detail }}
-        </p>
+        <!-- The command that failed in a 1-line syntax-highlighted code block, with detail text. -->
+        <div v-if="pushFlow.question.value" class="flex flex-col gap-1.5">
+            <div v-if="pushFlow.question.value.command" class="checks-command flex min-w-0 items-center rounded-md border border-line bg-canvas">
+                <Code class="min-w-0 flex-1" :code="pushFlow.question.value.command" lang="bash" :copyable="false" />
+            </div>
+            <p class="break-words text-2xs text-muted">
+                {{ pushFlow.question.value.detail }}
+            </p>
+        </div>
 
         <!-- The proposal: the whole turn composed from the failure — text, model, effort — and editable to the
              last character before it costs anything (composables/agents/sessionSuggestion.ts). Absent for a check
@@ -49,3 +52,11 @@ const pushFlow = usePushFlow();
         </button>
     </div>
 </template>
+
+<style scoped>
+.checks-command :deep(.shiki),
+.checks-command :deep(pre) {
+    border: 0;
+    background-color: transparent !important;
+}
+</style>

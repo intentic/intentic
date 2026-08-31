@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ResponsiveOverlay, growTextarea, useDevice } from "@intentic/ui";
+import { Button, ResponsiveOverlay, growTextarea, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
 import ComposerEffort from "../chat/ComposerEffort.vue";
@@ -85,21 +85,21 @@ onMounted(() => {
             @keydown="onKeydown"
         ></textarea>
 
-        <div class="flex items-center gap-1 px-2 pb-2">
+        <div class="flex min-w-0 items-center gap-1 overflow-hidden px-2 pb-2">
             <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
 
             <ComposerEffort :conversation="conversation" />
 
-            <button
-                type="button"
-                class="composer-ghost ui-off ml-auto h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium text-link max-md:h-11"
+            <Button
+                size="small"
+                class="ml-auto shrink-0"
                 :disabled="!canStart"
+                :loading="busy"
+                :label="action"
+                icon="send"
                 v-tooltip.top="'Ctrl+Enter'"
                 @click="start"
-            >
-                <Icon :name="busy ? `spinner` : `send`" :spin="busy" class="text-2xs" />
-                <span>{{ action }}</span>
-            </button>
+            />
         </div>
 
         <!-- The same picker body the chat composer raises, over THIS conversation, in the same overlay: no
