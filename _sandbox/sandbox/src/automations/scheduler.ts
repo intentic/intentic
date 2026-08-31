@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
 import type { AgentEvent, AgentOrigin, AgentTurn, AutomationApproval } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
@@ -80,13 +82,18 @@ const quarantineIfSpinning = async (services: Services, id: string): Promise<str
 
 // Run the guard command in the workspace root; exit 0 ⇒ wake. An event's payload is in AUTOMATION_PAYLOAD so
 // guards can filter on it. On failure the stderr/stdout tail becomes the run's detail ("Skipped by guard" in
-// the UI). Plain process env otherwise, guards are sandbox scripts, not agent turns.
+// the UI). The process env also names the root-only shelf exclusion for scanner-backed guards; guards are
+// sandbox scripts, not agent turns.
 const runGuard = async (command: string, cwd: string, payload: string | undefined): Promise<{ pass: boolean; detail?: string }> => {
     try {
         await execFileAsync("sh", ["-c", command], {
             cwd,
             timeout: GUARD_TIMEOUT_MS,
-            env: { ...process.env, ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}) },
+            env: {
+                ...process.env,
+                [WORKSPACE_ROOT_EXCLUDE_ENV]: REFERENCE_DIR,
+                ...(payload !== undefined ? { AUTOMATION_PAYLOAD: payload } : {}),
+            },
         });
         return { pass: true };
     } catch (error) {

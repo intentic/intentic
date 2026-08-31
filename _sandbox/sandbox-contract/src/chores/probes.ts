@@ -10,6 +10,7 @@ import {
     UI_FRAMEWORKS,
     TAILWIND_PACKAGES,
 } from "./stack.js";
+import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG, WORKSPACE_ROOT_RG_EXCLUDE_ARG } from "./workspace-scope.js";
 
 /* THE PROBES, the measurements that cost a subprocess, declared once so the daemon that runs them and the panel
  * that explains them cannot disagree about what "outdated" meant.
@@ -348,7 +349,8 @@ const RULE_FILE_LIMIT = 500;
  * path reaches the chores no matter which tool produced it. */
 const SCAN_ROOT = `.`;
 
-const globArgs = (globs: readonly string[]): string => [...globs, ...SCAN_IGNORES].map((glob) => `-g '${glob}'`).join(` `);
+const globArgs = (globs: readonly string[]): string =>
+    [...[...globs, ...SCAN_IGNORES].map((glob) => `-g '${glob}'`), WORKSPACE_ROOT_RG_EXCLUDE_ARG].join(` `);
 
 // `path:count` from `rg --count-matches`, normalised. Split at the LAST colon: a path may contain one, a count is
 // always the digits at the end.
@@ -526,7 +528,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // `--threshold 100` so jscpd never fails the command on its own opinion of what is too much duplication,
         // that judgement is the chore's, made from the percentage, not the tool's exit code.
         command:
-            `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
+            `pnpm dlx jscpd ${WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG} --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
             `cat ${JSCPD_DIR}/jscpd-report.json 2>/dev/null`,
         parse: parseJscpd,
     },
@@ -576,7 +578,7 @@ export const PROBES: readonly ProbeSpec[] = [
         // Any manifest in the repo declaring a UI framework or Tailwind, not just the root's, a monorepo keeps
         // React in the app package and the root manifest is a handful of build tools.
         available:
-            `rg -l --no-messages -g '**/package.json' -g '!**/node_modules/**' ` +
+            `rg -l --no-messages -g '**/package.json' -g '!**/node_modules/**' ${WORKSPACE_ROOT_RG_EXCLUDE_ARG} ` +
             `-e '[\\x22](${[...UI_FRAMEWORKS.flatMap((framework) => framework.packages), ...TAILWIND_PACKAGES].join(`|`)})[\\x22]\\s*:' . >/dev/null`,
         unavailable: `no package here declares a UI framework or Tailwind`,
         command: scanCommand(),

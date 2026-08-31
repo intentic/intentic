@@ -62,6 +62,13 @@ test("a dependency's compose file is not the user's stack, node_modules and dot-
     expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([]);
 });
 
+test("the reference shelf is skipped while a repository-local refs directory remains ordinary", async () => {
+    const root = await workspace({ "refs/upstream/docker-compose.yml": "", "app/refs/docker-compose.yml": "" });
+    expect(await capabilityRecommendations(root, [], [], noRemotes)).toEqual([
+        { card: "docker", evidence: "app/refs/docker-compose.yml", reason: "your workspace has a compose stack to run", prefill: {} },
+    ]);
+});
+
 // Depth 2 is the cutoff: a compose file three levels down belongs to a subproject's own tooling, and scanning
 // for it would turn every /capabilities load into a full-tree walk.
 test("a compose file deeper than a repo's root is left alone", async () => {

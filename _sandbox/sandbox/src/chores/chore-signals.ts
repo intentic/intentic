@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChorePackage, ChoreShape, ChoreSignals } from "@intentic/sandbox-contract";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { readWorkspaceManifests } from "../workspace/package-graph.js";
 import type { Services } from "../composition.js";
 
@@ -92,7 +93,7 @@ const listDir = (dir: string): string[] => {
  * shortlist the workspace tree walk uses. */
 const IGNORED = new Set(["node_modules", ".git", "dist", "build", ".cache", "coverage", ".venv", "target", "vendor"]);
 
-const findFiles = (root: string, matches: (name: string) => boolean): string[] => {
+const findFiles = (root: string, matches: (name: string) => boolean, skipRootReference = false): string[] => {
     const found: string[] = [];
     let frontier = [""];
     for (let depth = 0; depth <= SHAPE_DEPTH && frontier.length > 0 && found.length < SHAPE_LIMIT; depth++) {
@@ -106,7 +107,8 @@ const findFiles = (root: string, matches: (name: string) => boolean): string[] =
             }
             for (const entry of entries) {
                 const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
-                if (entry.isDirectory() && !IGNORED.has(entry.name) && !entry.name.startsWith(".")) {
+                const rootReference = skipRootReference && relative === "" && entry.name === REFERENCE_DIR;
+                if (entry.isDirectory() && !rootReference && !IGNORED.has(entry.name) && !entry.name.startsWith(".")) {
                     next.push(path);
                 } else if (entry.isFile() && matches(entry.name) && found.length < SHAPE_LIMIT) {
                     found.push(path);
@@ -160,9 +162,9 @@ const declaredDeps = (repoDir: string): string[] => {
  * somebody made and never filled, and gating the drift survey on it would put the chore back exactly where a repo
  * with nothing to re-read cannot use it. Package pages are READMEs and are counted per package by
  * `packageSignals`; a repo with a map is a repo that has been documented at all, which is what this gate asks. */
-export const choreShape = (repoDir: string): ChoreShape => ({
+export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape => ({
     docs: findFiles(join(repoDir, "docs", "architecture"), (name) => name.endsWith(".md")),
-    dockerfiles: findFiles(repoDir, isDockerfile),
+    dockerfiles: findFiles(repoDir, isDockerfile, workspaceRoot),
     ci: [
         ...listDir(join(repoDir, WORKFLOWS_DIR))
             .filter((name) => name.endsWith(".yml") || name.endsWith(".yaml"))
@@ -179,7 +181,7 @@ export const choreSignals = async (services: Services, repo: string): Promise<Ch
     const repoDir = join(services.workspace.root, repo);
     return {
         packages: packageSignals(repoDir),
-        shape: choreShape(repoDir),
+        shape: choreShape(repoDir, repo === ""),
         hotspots: health.hotspots,
         keyModules: health.modules,
         totals: health.totals,

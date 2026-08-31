@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { choreById } from "./chores.js";
 import { probeSpec } from "./probes.js";
 import { IDIOM_RULES } from "./stack.js";
+import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG, WORKSPACE_ROOT_RG_EXCLUDE_ARG } from "./workspace-scope.js";
 
 /* The parsers are the part of this library that faces someone else's output, so they are tested the way that
  * output actually arrives: real shapes, then the shapes that have historically broken things, a tool that
@@ -143,6 +145,11 @@ describe(`knip`, () => {
 });
 
 describe(`jscpd`, () => {
+    test(`the root-scoped command carries the reference-shelf prune argument`, () => {
+        expect(probeSpec(`jscpd`).command).toContain(WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG);
+        expect(choreById(`duplication`)?.automation?.guard).toContain(WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG);
+    });
+
     test(`takes the percentage of scanned lines and the biggest clones, longest first`, () => {
         const facts = parse(
             `jscpd`,
@@ -321,6 +328,11 @@ describe(`ui`, () => {
  * other made it depend on a ripgrep feature that is a compile-time option. */
 describe(`the sweep's composed command`, () => {
     const stages = (): string[] => probeSpec(`ui`).command.split(`; `);
+
+    test(`both ripgrep entry points carry the root-scoped prune argument`, () => {
+        expect(probeSpec(`ui`).available).toContain(WORKSPACE_ROOT_RG_EXCLUDE_ARG);
+        expect(probeSpec(`ui`).command.split(WORKSPACE_ROOT_RG_EXCLUDE_ARG)).toHaveLength(3 + IDIOM_RULES.length);
+    });
 
     /* Given no path, ripgrep searches STDIN whenever stdin is not a TTY, which is exactly how a probe is spawned.
      * The sweep exited 0, printed its marker and matched nothing, in every repository, forever, which the marker

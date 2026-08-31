@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { PROBES, type ProbeSpec } from "@intentic/sandbox-contract/chores";
+import { PROBES, type ProbeSpec, WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import type { ProbeId, ProbeResult, RunningProbe } from "@intentic/sandbox-contract";
+import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import type { Logger } from "pino";
 import { discoverRepos } from "../workspace/repo-discovery.js";
 import { type ChoresStore, isStale, probeOf } from "./chores-store.js";
@@ -58,7 +59,7 @@ const head = (text: string): string => {
 /* Run one probe against one repo and return what to record. Never throws: every outcome is a ProbeResult, because
  * the panel showing "jscpd failed: out of memory" is strictly better than a probe that vanishes and leaves a chore
  * reading "not measured yet" forever with no explanation. */
-export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number): Promise<ProbeResult> => {
+export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number, workspaceRoot = false): Promise<ProbeResult> => {
     const started = Date.now();
     const finish = (rest: Omit<ProbeResult, "id" | "ranAt" | "tookMs">): ProbeResult => ({
         id: spec.id,
@@ -67,8 +68,17 @@ export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number): Pro
         ...rest,
     });
 
+    // Only the pseudo-repository at /work receives this. Commands use it for root-anchored scanner exclusions;
+    // a real repository's own `refs/` directory must stay visible to its probes.
+    const env = { ...process.env };
+    if (workspaceRoot) {
+        env[WORKSPACE_ROOT_EXCLUDE_ENV] = REFERENCE_DIR;
+    } else {
+        delete env[WORKSPACE_ROOT_EXCLUDE_ENV];
+    }
+
     try {
-        await execFileAsync("sh", ["-c", spec.available], { cwd, timeout: 30_000 });
+        await execFileAsync("sh", ["-c", spec.available], { cwd, timeout: 30_000, env });
     } catch {
         // The tool is not part of this repository. Not a failure and not a clean result, see ProbeStateSchema.
         // The reason is the spec's own, naming what is missing: a sentence built from the probe's title reads as
@@ -80,7 +90,12 @@ export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number): Pro
     try {
         // maxBuffer because knip and jscpd on a large repo emit megabytes of JSON, and the default 1MB would
         // truncate it into something the parser correctly refuses, reported as a failure nobody could diagnose.
-        ({ stdout } = await execFileAsync("sh", ["-c", spec.command], { cwd, timeout: spec.timeoutMs, maxBuffer: 64 * 1024 * 1024 }));
+        ({ stdout } = await execFileAsync("sh", ["-c", spec.command], {
+            cwd,
+            timeout: spec.timeoutMs,
+            maxBuffer: 64 * 1024 * 1024,
+            env,
+        }));
     } catch (error) {
         const { stdout: out, stderr, killed } = error as { stdout?: string; stderr?: string; killed?: boolean };
         const reason = killed === true ? `timed out after ${Math.round(spec.timeoutMs / 1000)}s` : tail(`${stderr ?? ""}${out ?? ""}`);
@@ -144,7 +159,7 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
     let lane: readonly RunningProbe[] = [];
 
     const record = async (repo: string, spec: ProbeSpec): Promise<void> => {
-        const result = await runProbe(spec, join(deps.workspace.root, repo), Date.now());
+        const result = await runProbe(spec, join(deps.workspace.root, repo), Date.now(), repo === "");
         await deps.chores.recordProbe(repo, result);
         deps.logger.info({ repo, probe: spec.id, state: result.state, tookMs: result.tookMs }, "chores: probe finished");
     };

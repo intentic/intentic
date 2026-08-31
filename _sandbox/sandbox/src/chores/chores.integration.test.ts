@@ -353,4 +353,39 @@ describe(`repo shape`, () => {
         const dir = await scaffold({ "node_modules/some-dep/Dockerfile": `FROM node`, "dist/Dockerfile": `FROM node` });
         expect(choreShape(dir).dockerfiles).toEqual([]);
     });
+
+    test(`workspace shape skips only the top-level reference shelf`, async () => {
+        const dir = await scaffold({
+            "refs/upstream/Dockerfile": `FROM hidden`,
+            "app/refs/Dockerfile": `FROM visible`,
+        });
+        expect(choreShape(dir, true).dockerfiles).toEqual([`app/refs/Dockerfile`]);
+        expect(choreShape(dir).dockerfiles.toSorted()).toEqual([`app/refs/Dockerfile`, `refs/upstream/Dockerfile`]);
+    });
+});
+
+describe(`workspace-root probe scope`, () => {
+    test(`the UI probe does not become available from a framework manifest inside the reference shelf`, async () => {
+        const dir = await scaffold({
+            "refs/upstream/package.json": JSON.stringify({ dependencies: { react: `1.0.0` } }),
+            "refs/upstream/Card.tsx": `export const Card = () => null`,
+        });
+        expect(await runProbe(probeSpec(`ui`), dir, 1000, true)).toMatchObject({ state: `unavailable` });
+        expect(await runProbe(probeSpec(`ui`), dir, 1000)).toMatchObject({ state: `ok` });
+    });
+
+    test(`the UI scan skips the shelf but keeps a repository-local refs directory`, async () => {
+        const dir = await scaffold({
+            "package.json": JSON.stringify({ dependencies: { react: `1.0.0` } }),
+            "refs/upstream/Hidden.tsx": `export const Hidden = () => null`,
+            "app/refs/Visible.tsx": `export const Visible = () => null`,
+        });
+        const root = await runProbe(probeSpec(`ui`), dir, 1000, true);
+        const repo = await runProbe(probeSpec(`ui`), dir, 1000);
+        expect(root).toMatchObject({ state: `ok`, facts: { id: `ui`, scan: { components: [`app/refs/Visible.tsx`] } } });
+        expect(repo).toMatchObject({
+            state: `ok`,
+            facts: { id: `ui`, scan: { components: [`app/refs/Visible.tsx`, `refs/upstream/Hidden.tsx`] } },
+        });
+    });
 });

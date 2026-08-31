@@ -8,6 +8,7 @@ export { updateBrief } from "./extension-update.js";
 export type { UpdateBrief } from "./extension-update.js";
 export { PROBES, probeSpec } from "./probes.js";
 export type { ProbeSpec } from "./probes.js";
+export { WORKSPACE_ROOT_EXCLUDE_ENV } from "./workspace-scope.js";
 export { componentStem, frameworksOf, IDIOM_RULES, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
 export type { IdiomRule, UiFramework } from "./stack.js";
 export { assessChore, assessReport, ledgerKey, unseenVerdicts } from "./verdict.js";

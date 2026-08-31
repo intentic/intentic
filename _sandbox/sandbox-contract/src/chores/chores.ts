@@ -2,6 +2,7 @@ import type { Advisory, ChoreSignals, OutdatedPackage, ProbeId, ProbeResult } fr
 import { bucketOf, digestOf } from "./digest.js";
 import { CHORE_INVARIANTS, composeAsk, REPORT_INVARIANTS, TRIAGE_NOTE } from "./prompt.js";
 import { componentStem, frameworksOf, idiomRule, normalizePath, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
+import { WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG } from "./workspace-scope.js";
 
 /* THE CHORE BOOK, what routine maintenance a repository is owed, and what has to be TRUE before we say so.
  *
@@ -397,7 +398,7 @@ const duplication: Chore = {
         // Gated on the percentage rather than "any clone at all", which every real repository has: below this the
         // report is noise that would wake an agent every week to say nothing actionable.
         guard:
-            `pnpm dlx jscpd --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
+            `pnpm dlx jscpd ${WORKSPACE_ROOT_JSCPD_EXCLUDE_ARG} --reporters json --output ${JSCPD_DIR} --min-lines 12 --threshold 100 . >/dev/null 2>&1; ` +
             `[ "$(jq '.statistics.total.percentage // 0 | floor' ${JSCPD_REPORT} 2>/dev/null || echo 0)" -ge ${DUPLICATION_FLOOR} ]`,
         note: `weekly · wakes above ${DUPLICATION_FLOOR}% duplication`,
         report: JSCPD_REPORT,

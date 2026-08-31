@@ -2,7 +2,7 @@ import { access, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Capability, CapabilityRecommendation } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { IGNORED_DIRS } from "@intentic/workspace-ignore";
+import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { parseRemote, remoteUrlsOf } from "../git/remote-urls.js";
 import { discoverRepos, hasGitEntry } from "../workspace/repo-discovery.js";
 import type { DismissedRecommendation } from "./dismissals-store.js";
@@ -74,7 +74,14 @@ const scanFiles = async (dir: string, prefix: string, depth: number): Promise<Sc
     if (depth === 0) {
         return here;
     }
-    const dirs = entries.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !IGNORED_DIRS.has(entry.name));
+    const dirs = entries.filter(
+        (entry) =>
+            entry.isDirectory() &&
+            !entry.name.startsWith(".") &&
+            !IGNORED_DIRS.has(entry.name) &&
+            // `prefix === ""` is the workspace boundary. A repository's own `app/refs/` remains ordinary.
+            !(prefix === "" && entry.name === REFERENCE_DIR),
+    );
     const below = await Promise.all(dirs.map((entry) => scanFiles(join(dir, entry.name), `${prefix}${entry.name}/`, depth - 1)));
     return {
         compose: [...here.compose, ...below.flatMap((found) => found.compose)],

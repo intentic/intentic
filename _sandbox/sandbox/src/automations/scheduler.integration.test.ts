@@ -2,12 +2,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
+import { unstubbed } from "@intentic/testing";
 import { expect, test, vi } from "vitest";
 import { SETTLES } from "@intentic/testing/vitest";
 import type { z } from "zod";
 import { fileTurnJournal } from "../agent/turn-journal.js";
 import type { Services } from "../composition.js";
-import { unstubbed } from "@intentic/testing";
 import { fileApprovalsStore } from "./approvals-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, createAutomationsScheduler, fireAutomation, type WakeFn } from "./scheduler.js";
@@ -84,6 +85,15 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2), SETTLES);
     expect((await services.automations.get("guarded"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toEqual(["wake:guarded"]);
+});
+
+test("guards receive the reserved workspace-root directory to prune", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automation("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
+    const prompts: string[] = [];
+    await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
+    expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
+    expect(prompts).toEqual(["wake:scoped"]);
 });
 
 test("event automations never tick; fireAutomation hands the payload to the guard and the prompt", async () => {
