@@ -135,6 +135,65 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
     expect(filed).toEqual([{ kind: "limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" }]);
 });
 
+/* A LIMIT ON A NATIVE RUNTIME NAMES ITS RESET TOO, which decides whether the chat schedules or guesses.
+ *
+ * The frame the Codex app-server produces is bare: the adapter reads "rate limit" off OpenAI's own wire and has
+ * no allowance object to ask, unlike the Claude Code loop, which dresses its own (error-frames.ts). The route's
+ * only fallback was the per-ACCOUNT snapshot, and a native routed turn names no account, it names the
+ * subscription serving every Codex turn there is, so that lookup could never hit. The instant was on file the
+ * whole time, in the translator's pool reading, and nothing asked it.
+ *
+ * What the miss cost is in the client: with no instant the pick-up has no `readyAt`, so auto-continue falls back
+ * to its bare ladder and spends 5s, 15s and 45s on a window that reopens in two hours, then stands down for
+ * good. With it, the chat sleeps to the reset and picks the work up on the far side (conversation.ts). */
+test("a spent allowance on a native runtime carries the reset the translator already knew", async () => {
+    const reopensAt = Math.floor(Date.now() / 1000) + 7_200;
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 1, withHeadroom: 0, reopensAt }) },
+                // Exactly what codex-agent.ts emits: coded, and with nothing else on it to read.
+                async *codexAgent() {
+                    yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-limit", agent: "codex" });
+
+    expect(events).toContainEqual(
+        expect.objectContaining({ kind: "error", code: "rate_limit", message: "429 You've hit your usage limit.", held: { ran: false }, resetsAt }),
+    );
+});
+
+// …and the same runtime says nothing when the reading does not support one. Headroom on file means the quota is
+// not what refused the turn (TurnLimit), so there is no reset the user is waiting for, and a frame carrying one
+// anyway would send them away for hours over a cooldown that clears in seconds.
+test("a spent allowance goes out bare when the pool reading names no reset", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                config: withTranslator,
+                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 30, withHeadroom: 1 }) },
+                async *codexAgent() {
+                    yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-cooldown", agent: "codex" });
+    const limits = events.filter((event) => event.kind === "error" && event.code === "rate_limit");
+
+    expect(limits).toHaveLength(1);
+    // Absent, not present-and-undefined: the client branches on the field existing at all.
+    expect(Object.keys(limits[0]!)).not.toContain("resetsAt");
+});
+
 /* A SPENT ALLOWANCE HOLDS THE TURN, AND SAYING SO ON THE FRAME IS WHAT MAKES CONTINUE MEAN "AGAIN".
  *
  * Asserted end to end, over the two routes together, because the bug lived exactly in the gap between them: the

@@ -23,7 +23,6 @@ import { REPO_SYNC_NOTE_TITLE, syncAdvisory, syncWorkspaceRepos } from "../works
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
-import { accountLimitReset } from "../usage/account-usage.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { anchorWorktree, forkWorktreeBase } from "./anchor-worktree.js";
 import { landAgent } from "../agents/land.js";
@@ -1451,12 +1450,22 @@ async function* runTurn(
                         .refuse(resolvedAccount, event.message)
                         .catch((error: unknown) => services.logger.warn({ err: error }, "claude account: could not record the entitlement refusal"));
                 }
-                // An api_retry rate limit carries the SDK's own retry instant directly. Older/final refusal
-                // shapes still resolve through the preceding rate_limit_event or the persisted account
-                // snapshot, one precedence, whatever the rate-limit source.
+                /* WHEN THIS ALLOWANCE COMES BACK, one precedence for every runtime and every provider, because a
+                 * limit that can name its reset and one that cannot are what separate a scheduled continuation
+                 * from three five-second retries into a closed window.
+                 *
+                 * An api_retry rate limit carries the SDK's own retry instant directly, and a refusal the
+                 * harness dressed itself already carries the allowance's (error-frames.ts). Everything else, the
+                 * final refusal shapes, and every frame raised by a NATIVE runtime that has no allowance object
+                 * to ask, resolves through limitReopensAt, which reads the account snapshot and the translator's
+                 * pool alike. That last arm is the one this used to be missing: Codex, the two OpenCode loops and
+                 * Cursor all emit a bare `rate_limit`, and the per-account fallback could never answer for them.
+                 *
+                 * Frame first, snapshot second, throughout: a failure that named its own instant read it off the
+                 * provider's live scheduler, while a snapshot can be minutes old. */
                 const rateLimited = event.code === "rate_limit";
                 const resetsAt = rateLimited
-                    ? (limitReset ?? event.resetsAt ?? (await accountLimitReset(services.accountUsage, resolvedAccount)))
+                    ? (limitReset ?? event.resetsAt ?? (await limitReopensAt({ services, provider, model: request.model, account: resolvedAccount })))
                     : undefined;
                 /* THE TURN IS BEING HELD, said on the frame, because the client's whole answer to this
                  * failure hangs off it: a held turn makes Continue a re-run of this turn, and an unheld one
