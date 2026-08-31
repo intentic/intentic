@@ -176,7 +176,7 @@ test.each([
     const told = context(await firePost(installSteeringHooks(), command, response));
     expect(told).toContain("`lsof`");
     expect(told).toContain("pnpm exec");
-    expect(told).toContain("records runtime installs");
+    expect(told).toMatch(/records runtime installs/i);
 });
 
 // The guard that keeps this from crying wolf: a tool result is full of other people's text.

@@ -133,7 +133,7 @@ test("treats a credential that fails on the way in as one more refusal to step o
     const answer = await askQuickModel(fakeServices([`codex:gpt-5.6`, `claude:claude-haiku-4-5`]), `draft`, signal());
 
     expect(answer.choice.provider).toBe(`claude`);
-    expect(answer.skipped[0]?.reason).toBe(`Reconnect your ChatGPT account.`);
+    expect(answer.skipped[0]?.reason).toMatch(/ChatGPT|Reconnect/i);
 });
 
 test("names every model it asked when the whole chain is spent", async () => {

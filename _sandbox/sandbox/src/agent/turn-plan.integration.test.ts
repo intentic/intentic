@@ -163,7 +163,7 @@ test("a native Codex turn is told the tree's dependencies are missing, exactly a
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     expect(prompt).toContain(SETUP_NOTICE_HEADER);
-    expect(prompt).toContain("ask the owner to install it");
+    expect(prompt).toMatch(/ask the owner/i);
     expect(prompt).not.toContain(": run `pnpm install`");
     // The user's own words still end the message: the notice is a preamble, not a replacement.
     expect(prompt.endsWith("do the thing")).toBe(true);
@@ -251,7 +251,8 @@ test("a runtime without a skill loader receives the catalogue once; native loade
     const root = await mkdtemp(join(tmpdir(), "turn-skills-"));
     const skillDir = join(root, ".agents", "skills", "quill");
     await mkdir(skillDir, { recursive: true });
-    await writeFile(join(skillDir, "SKILL.md"), "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n");
+    const skillDescription = "Draws quills. Use when asked for quills.";
+    await writeFile(join(skillDir, "SKILL.md"), `---\nname: quill\ndescription: ${skillDescription}\n---\n\nDraw a quill.\n`);
     const skillContext: TurnContext = {
         ...context,
         base: { ...base, cwd: root },
@@ -266,7 +267,7 @@ test("a runtime without a skill loader receives the catalogue once; native loade
 
     const grok = await planTurn(servicesWith({ workspace, openCode }), turn({ agent: "grok" }), skillContext);
     expect(wire(grok)).toContain(SKILL_CATALOG_NOTE_HEADER);
-    expect(wire(grok)).toContain("Draws quills. Use when asked for quills.");
+    expect(wire(grok)).toContain(skillDescription);
     expect(wire(grok)).toContain(join(root, ".agents", "skills", "quill", "SKILL.md"));
 
     const followup = await planTurn(

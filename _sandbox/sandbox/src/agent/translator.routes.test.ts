@@ -59,15 +59,16 @@ test("a completion failure carries the reason CLIProxyAPI gave for rejecting the
 });
 
 test("a disconnect failure says what went wrong instead of Internal server error", async () => {
-    const app = createApp(services({ config: withTranslator, cliProxy: failing(new Error("the translator refused to drop that credential")) }));
+    const reason = "the translator refused to drop that credential";
+    const app = createApp(services({ config: withTranslator, cliProxy: failing(new Error(reason)) }));
 
     const response = await postJson(app, "/translator/gemini/disconnect", { provider: "gemini", name: "antigravity-user.json" });
 
-    expect(((await response.json()) as { message?: string }).message).toBe("the translator refused to drop that credential");
+    expect(((await response.json()) as { message?: string }).message).toBe(reason);
 });
 
 test("a listing failure says so rather than claiming the sandbox has no subscriptions", async () => {
     const client = clientFor(createApp(services({ config: withTranslator, cliProxy: failing(new Error("could not read the credential store")) })));
 
-    await expect(client.translator.accounts()).rejects.toThrow("could not read the credential store");
+    await expect(client.translator.accounts()).rejects.toThrow(/credential store/);
 });

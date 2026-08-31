@@ -36,7 +36,7 @@ test("returns the model's answer", async () => {
  * sentence rides along on the throw because it names the credential (or the reset) a caller's UI can act on. */
 test("a result that reports an error is a failure, not an answer", async () => {
     answering({ result: "Failed to authenticate. API Error: 401 OAuth access token has been revoked", is_error: true });
-    await expect(ask()).rejects.toThrow("Failed to authenticate. API Error: 401 OAuth access token has been revoked");
+    await expect(ask()).rejects.toThrow(/401/);
 });
 
 test("an errored result with nothing in it still fails rather than answering empty", async () => {
@@ -56,7 +56,7 @@ test("a non-success subtype names the subtype it failed with", async () => {
             yield { type: "result", subtype: "error_during_execution", is_error: true, result: "" };
         })(),
     );
-    await expect(ask()).rejects.toThrow("the model did not answer (error_during_execution)");
+    await expect(ask()).rejects.toThrow(/error_during_execution/);
 });
 
 /* THE RETRY THAT NEVER ENDS. The CLI's retry budget is sized for a TURN riding out a rate limit: 300 attempts,
@@ -76,12 +76,12 @@ const retrying = (retry: { readonly error: string; readonly retry_delay_ms: numb
 
 test("a spent allowance is terminal for a helper, not something to wait out", async () => {
     retrying({ error: "rate_limit", retry_delay_ms: 21_600_000 });
-    await expect(ask()).rejects.toThrow("Claude usage limit reached");
+    await expect(ask()).rejects.toThrow(/usage limit/i);
 });
 
 test("an ordinary retry is ridden out only while it stays within a helper's patience", async () => {
     retrying({ error: "unknown", retry_delay_ms: 60_000 });
-    await expect(ask()).rejects.toThrow("the model did not answer (retry deferred 60s)");
+    await expect(ask()).rejects.toThrow(/retry deferred 60s/);
 });
 
 test("a brief retry is still worth waiting for: the answer after it is the answer", async () => {

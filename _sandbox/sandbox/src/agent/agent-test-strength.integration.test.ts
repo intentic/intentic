@@ -113,7 +113,7 @@ describe(`a test re-run against the code as it was`, () => {
             ].join(`\n`),
         );
         const notice = await ask(root, testFile);
-        expect(notice).toContain(`passes against the code as it was before this turn's changes`);
+        expect(notice).toMatch(/passes against the code as it was/i);
         // Names the file whose reversion it survived, so the reader can tell which change went untested.
         expect(notice).toContain(`pkg/src/bucket.ts`);
     });

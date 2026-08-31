@@ -58,7 +58,7 @@ test("apply installs the contributed browser pack with the core tools note and t
 
     const skill = await readWorkspaceFile(skillPath(root));
     // The pack is the family half; `${tools}` is the core half, and `${id}` makes the tool names this browser's.
-    expect(skill).toContain("Chromium specifics worth knowing");
+    expect(skill).toMatch(/Chromium specifics/i);
     expect(skill).toContain("mcp__my-chrome__snapshot");
     expect(skill).toContain("name: my-chrome");
     expect(skill).not.toContain("${tools}");

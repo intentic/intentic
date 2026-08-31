@@ -36,7 +36,7 @@ test("a built-in base appends the terse steer", () => {
         terseOutput: true,
     });
     expect(placement.systemPrompt).toBeUndefined();
-    expect(placement.systemAppend).toContain("be concise");
+    expect(placement.systemAppend).toMatch(/concise/i);
     expect(placement.userNotes).toBeUndefined();
     // Claude's preset is the same deal: the base differs, the composition around it does not.
     expect(
@@ -77,7 +77,7 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
     expect(codex.systemAppend).toContain("`public/`");
     // How work leaves the session is the third of them: a runtime told nothing ends every turn offering to
     // commit, which is the one thing the land route exists to make unnecessary.
-    expect(codex.systemAppend).toContain("commit only when asked");
+    expect(codex.systemAppend).toMatch(/commit only when asked/i);
     // And nothing that names a mechanism only the Claude Code loop wires: a Codex turn has no question card,
     // no ToolSearch, no browser server to reach for.
     expect(codex.systemAppend).not.toContain("AskUserQuestion");
@@ -213,14 +213,14 @@ test("both built-in bases carry the waiting and context-reuse steers", () => {
         expect(text).toContain("run_in_background");
         expect(text).toContain("mcp__watch__start");
         expect(text).toContain("`sleep N`");
-        expect(text).toContain("already read this session");
+        expect(text).toMatch(/already read/i);
     }
 });
 
 test("an unattended turn keeps them: a wake nobody watches is where polling costs most", () => {
     const text = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true }) as string;
     expect(text).toContain("run_in_background");
-    expect(text).toContain("already read this session");
+    expect(text).toMatch(/already read/i);
 });
 
 /* Same rule as the browser and the question card: these name THIS loop's seams (the Bash tool's background flag,

@@ -36,7 +36,7 @@ test.each([
     `Failed to resolve import "vue" from "src/main.ts". Does the file exist?`,
 ])("a command that failed on a package the tree really lacks is told why: %s", async (output) => {
     const { probe } = treeMissing(["vue"]);
-    expect(context(await fire(depsNoticeHooks(probe, true), output))).toContain("the install being behind");
+    expect(context(await fire(depsNoticeHooks(probe, true), output))).toMatch(/install being behind/i);
 });
 
 /* THE PROPERTY THE WHOLE HOOK RESTS ON. A name lifted out of a failure is a claim, and excusing one the tree can
@@ -113,7 +113,7 @@ test("an explicit cd scopes a root-started turn to the project it actually teste
 test("a negative answer for one command does not hide a later failure in another project", async () => {
     const hooks = depsNoticeHooks(async (command) => (command.includes("cd app") ? { dir: "app", state: "stale", names: ["vue"] } : undefined), true);
     expect(await fire(hooks, `Cannot find module 'vue'`, "pnpm test")).toEqual({});
-    expect(context(await fire(hooks, `Cannot find module 'vue'`, "cd app && pnpm test"))).toContain("install being behind");
+    expect(context(await fire(hooks, `Cannot find module 'vue'`, "cd app && pnpm test"))).toMatch(/install being behind/i);
 });
 
 // Silence is the safe answer: an unreadable tree cannot settle the claim, and guessing in either direction is
@@ -134,5 +134,5 @@ test("a never-installed project asks for setup rather than promising an automati
 
 test("a read-only persona is told to ask the owner for first-time setup", async () => {
     const hooks = depsNoticeHooks(async () => ({ dir: "app", state: "needs-setup", names: ["vue"] }), false);
-    expect(context(await fire(hooks, `Cannot find module 'vue'`))).toContain("ask the owner");
+    expect(context(await fire(hooks, `Cannot find module 'vue'`))).toMatch(/ask the owner/i);
 });

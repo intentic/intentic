@@ -110,8 +110,7 @@ test("a pin the registry has moved past is reported, with both versions named", 
 test("the notice names the good reasons to keep an older version", async () => {
     const { resolve } = registry({ vue: behind("3.5.41") });
     const said = context(await fire(freshnessHooks("versions", resolve), "PreToolUse", { command: "pnpm add vue@3.5.22" }));
-    expect(said).toContain("already");
-    expect(said).toContain("memory");
+    expect(said).toMatch(/already.*memory/i);
 });
 
 test("a resolver with nothing to say produces no notice", async () => {
@@ -215,15 +214,14 @@ test("a superseded remark is made when the package is being added, where the cho
 test("a suggestion on its own never claims a registry was consulted", async () => {
     const { resolve } = registry({});
     const said = context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add moment" }));
-    expect(said).not.toContain("checked against the registry");
-    expect(said).not.toContain("Take the newer version");
-    expect(said).toContain("a lookup");
+    expect(said).not.toMatch(/checked against the registry|Take the newer version/i);
+    expect(said).toMatch(/lookup/i);
 });
 
 test("when both have something to say they stay two sections", async () => {
     const { resolve } = registry({ moment: behind("2.30.1") });
     const said = context(await fire(freshnessHooks("full", resolve), "PreToolUse", { command: "pnpm add moment@2.29.4" }));
-    expect(said).toContain("checked against the registry");
+    expect(said).toMatch(/checked against the registry/i);
     expect(said).toContain("date-fns");
 });
 

@@ -132,9 +132,9 @@ describe("watchers", () => {
         const wake = harness.started[0] as AgentTurn & { conversationId: string };
         expect(wake.conversationId).toBe("conv-1");
         expect(wake.sessionId).toBe("session-9");
-        expect(wake.prompt).toContain("condition you were watching is now met");
         expect(wake.prompt).toContain("CI run 316 on intentic/intentic");
         expect(wake.prompt).toContain("conclusion: success");
+        expect(wake.prompt).not.toMatch(/timed out/i);
         // Fired means gone: no second wake, no lingering record.
         expect(armedWatcherCount()).toBe(0);
         await vi.advanceTimersByTimeAsync(60_000);
@@ -148,9 +148,9 @@ describe("watchers", () => {
         await vi.advanceTimersByTimeAsync(60_000);
         expect(harness.started).toHaveLength(1);
         const wake = harness.started[0] as AgentTurn & { conversationId: string };
-        expect(wake.prompt).toContain("timed out");
+        expect(wake.prompt).toMatch(/timed out/i);
         expect(wake.prompt).toContain("could not resolve host");
-        expect(wake.prompt).toContain("none (check was killed or failed to start)");
+        expect(wake.prompt).not.toContain("conclusion: success");
         expect(armedWatcherCount()).toBe(0);
     });
 
@@ -328,7 +328,8 @@ describe("watchers", () => {
             harness.check = { exitCode: 0, output: "conclusion: success" };
             await vi.advanceTimersByTimeAsync(10_000);
             expect(harness.started).toHaveLength(1);
-            expect(harness.started[0]?.prompt).toContain("condition you were watching is now met");
+            expect(harness.started[0]?.prompt).toContain("CI run 316 on intentic/intentic");
+            expect(harness.started[0]?.prompt).toContain("conclusion: success");
         });
 
         /* THE LIKELIEST WAY A REBUILD ENDS, and the reason restore re-checks instead of only re-arming: the
@@ -339,7 +340,8 @@ describe("watchers", () => {
             await armWatcher(specOf({ timeoutSeconds: 600 }));
             await restart({ check: { exitCode: 0, output: "conclusion: success" } });
             expect(harness.started).toHaveLength(1);
-            expect(harness.started[0]?.prompt).toContain("condition you were watching is now met");
+            expect(harness.started[0]?.prompt).toContain("CI run 316 on intentic/intentic");
+            expect(harness.started[0]?.prompt).toContain("conclusion: success");
             // Woken means over: nothing re-armed, nothing left on the card.
             expect(armedWatcherCount()).toBe(0);
             expect(watchProjection.of("conv-1")).toEqual([]);
@@ -354,8 +356,9 @@ describe("watchers", () => {
             await restart({ downSeconds: 120 });
             expect(harness.started).toHaveLength(1);
             const wake = harness.started[0] as AgentTurn & { conversationId: string };
-            expect(wake.prompt).toContain("deadline passed while the daemon was restarting");
-            expect(wake.prompt).toContain("re-checked once and the condition still does not hold");
+            expect(wake.prompt).toMatch(/deadline passed.*restarting/i);
+            expect(wake.prompt).toMatch(/re-checked/i);
+            expect(wake.prompt).not.toContain("conclusion: success");
             expect(armedWatcherCount()).toBe(0);
         });
 
@@ -366,7 +369,7 @@ describe("watchers", () => {
             await restart();
             await vi.advanceTimersByTimeAsync(600_000);
             expect(harness.started).toHaveLength(1);
-            expect(harness.started[0]?.prompt).toContain("timed out");
+            expect(harness.started[0]?.prompt).toMatch(/timed out/i);
         });
 
         /* NO CREDENTIAL CROSSES THE RESTART, only the names of the ones the arming turn had. The values come

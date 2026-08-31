@@ -238,7 +238,7 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
     expect(seen).toHaveLength(2);
     // The same request again, in full, behind the note that says why it is here and that nothing was done.
     expect(seen[1]!.prompt).toContain("ship the parser");
-    expect(seen[1]!.prompt).toContain("no part of the request below was read or acted on");
+    expect(seen[1]!.prompt).toMatch(/no part of the request below/i);
     // And NOT onto s-void, whose whole content is the message the provider refused to read.
     expect(seen[1]!.sessionId).toBeUndefined();
     expect(frames).toContainEqual(expect.objectContaining({ kind: "frame", event: { kind: "delta", text: "on it" } }));

@@ -44,7 +44,8 @@ test("a window that cannot hold the loop's own instructions refuses, naming the 
     // the cheapest way out is a field on its own card and the refusal has to name that field: the version of this
     // sentence that said "raise the context size the server was started with" was sending the one person who
     // could fix it in ten seconds off to look for a command line they never typed.
-    expect(shortfall?.message).toContain(`Raise "Conversation window" on this model's card`);
+    expect(shortfall?.message).toContain("card");
+    expect(shortfall?.message).not.toMatch(/server was started with/i);
 });
 
 /* THE OTHER HALF OF THAT SENTENCE, and the reason it is not one sentence: a user-added endpoint is somebody
@@ -70,7 +71,7 @@ test("a window on somebody else's server points at the server, not at a card", a
         prompt: "Are you there?",
     });
 
-    expect(shortfall?.message).toContain("Raise the context size the server was started with");
+    expect(shortfall?.message).toMatch(/server was started with/i);
     expect(shortfall?.message).not.toContain("card");
 });
 

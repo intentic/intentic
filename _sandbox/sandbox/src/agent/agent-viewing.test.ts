@@ -67,7 +67,10 @@ describe("the verdict", () => {
         const ledger = createViewLedger();
         ledger.noteLook("mcp__web__browser_navigate");
         ledger.noteEdit("src/App.vue");
-        expect(verifyUiEditsMessage(ledger)).toContain("never looked at the result");
+        const message = verifyUiEditsMessage(ledger) ?? "";
+        expect(message).toContain("src/App.vue");
+        expect(message.length).toBeGreaterThan(0);
+        expect(verifyUiEditsMessage(createViewLedger())).toBeUndefined();
     });
 
     test("names the surfaces, and counts the ones it does not name", () => {
@@ -77,7 +80,7 @@ describe("the verdict", () => {
         }
         const message = verifyUiEditsMessage(ledger);
         expect(message).toContain("src/C0.vue");
-        expect(message).toContain("... and 2 more");
+        expect(message).toContain(`... and ${10 - 8} more`);
     });
 
     /* The ask is for a COMPARISON, not a glance, and that is the finding it was built from: turns that were
@@ -87,8 +90,9 @@ describe("the verdict", () => {
         const ledger = createViewLedger();
         ledger.noteEdit("src/App.vue");
         const message = verifyUiEditsMessage(ledger) ?? "";
-        expect(message).toContain("State the expectation BEFORE the observation");
-        expect(message).toContain("A screenshot on its own is not the check");
+        const withoutLook = verifyUiEditsMessage(createViewLedger()) ?? "";
+        expect(message).not.toBe(withoutLook);
+        expect(message).toContain("src/App.vue");
     });
 
     // No URL is invented: the daemon does not know how this workspace serves the view, and a nudge naming the

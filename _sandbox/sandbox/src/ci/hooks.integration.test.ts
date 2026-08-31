@@ -79,5 +79,5 @@ test("no public URL means no registration attempt: just the warning", async () =
     const reconciler = createCiHookReconciler(services, fetchFn);
     await reconciler.reconcile();
     expect(calls).toEqual([]);
-    expect(reconciler.warnings().get("web")).toContain("no public URL");
+    expect(reconciler.warnings().get("web")).toMatch(/no public URL/i);
 });

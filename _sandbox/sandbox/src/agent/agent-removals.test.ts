@@ -80,7 +80,7 @@ describe("the verify-removals follow-up", () => {
         expect(message).toContain(SLEEP);
         expect(message).toContain(`a91d33 "fix: nightly export dies on cold replica"`);
         // The whole point of the check: the suite it just ran cannot answer this.
-        expect(message).toContain("A passing suite does not settle this");
+        expect(message).toMatch(/passing suite does not settle/i);
     });
 
     /* No cwd is an ACP or translator turn, where there is no repository to ask. The check does not go silent,

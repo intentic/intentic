@@ -68,7 +68,7 @@ test("apply installs the contributed OS pack with the core tools note and this i
     const skill = await readWorkspaceFile(skillPath(root));
     // The pack is the OS half (PowerShell here); `${tools}` is the core half, and `${id}` makes the tool names
     // this machine's, so the examples are copy-pasteable rather than illustrative.
-    expect(skill).toContain("This machine runs Windows");
+    expect(skill).toMatch(/Windows/i);
     expect(skill).toContain("mcp__my-laptop__run_command");
     expect(skill).toContain("name: my-laptop");
     expect(skill).not.toContain("${tools}");

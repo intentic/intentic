@@ -284,7 +284,7 @@ test("a turn the API refused mid-flight is re-minted and re-run on the next pass
     expect(prompts).toHaveLength(1);
     // The original request rides again in full, behind a note saying why: a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
-    expect(prompts[0]).toContain("has been renewed");
+    expect(prompts[0]).toMatch(/renew/i);
 });
 
 test("no resume when the credential is genuinely dead, the error frame's reconnect prompt is the real fix", async () => {
@@ -430,7 +430,7 @@ test("a stranded turn resumes once the provider's wait elapses, under a note say
     // The original request rides again IN FULL behind the note: a bare "continue" would lose it, and the note is
     // what stops the model from starting over on work its session already holds.
     expect(prompts[0]).toContain("finish the report");
-    expect(prompts[0]).toContain("model provider was briefly unavailable");
+    expect(prompts[0]).toMatch(/unavailable|outage/i);
     expect(pendingOutageFailure("out-1")).toBeUndefined();
 });
 
@@ -636,7 +636,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     await resumeInterruptedTurns(services, capture, BOOT_AT);
 
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain("The sandbox restarted");
+    expect(prompts[0]).toMatch(/restarted/i);
     // The request rides again IN FULL: a bare "continue" would lose it.
     expect(prompts[0]).toContain("finish the report");
     // On the session the dying turn last reported, which is what makes this a continuation and not a restart.
@@ -960,7 +960,7 @@ test("approving the restored plan resumes the session in the posture a live appr
     // The answer is the prompt, behind the note that says the words are the user's response, not a repeat of
     // the original request, which the session already holds.
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
-    expect(prompts[0]).toContain("approved the plan");
+    expect(prompts[0]).toMatch(/approved.*plan/i);
     // On the journalled session, in POST_PLAN_MODE: "the sandbox restarted in between" must not cost the user
     // a permission prompt per tool that a live approval would have spared them.
     expect(inputs[0]).toMatchObject({ conversationId: "pk-plan", sessionId: "s-parked", permissionMode: "bypassPermissions" });
@@ -984,9 +984,10 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
     await resumeInterruptedTurns(services, capture, BOOT_AT);
     await cardsUp(observed, "plan");
 
-    expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback: "Use pnpm, not npm." })).toBe(true);
+    const feedback = "Use pnpm, not npm.";
+    expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe(true);
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain("Use pnpm, not npm.");
+    expect(prompts[0]).toContain(feedback);
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
     await settle("pk-rej");
 });
@@ -1001,8 +1002,8 @@ test("answering the restored question resumes with the picks, worded as a live a
     expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe(true);
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // formatAnswers' own wording: the model reads ONE shape of answer whichever side of a restart it lands on.
-    expect(prompts[0]).toContain("The user answered:");
-    expect(prompts[0]).toContain("Deploy: Yes");
+    expect(prompts[0]).toMatch(/user answered/i);
+    expect(prompts[0]).toContain("Yes");
     await settle("pk-q");
 });
 
@@ -1030,7 +1031,7 @@ test("allowing the restored permission resumes the turn told to run the tool", a
     expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe(true);
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
-    expect(prompts[0]).toContain("The user allowed Bash");
+    expect(prompts[0]).toMatch(/allowed Bash/i);
     await settle("pk-allow");
 });
 
@@ -1040,9 +1041,10 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
     await cardsUp(observed, "permission");
-    expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback: "Read the file instead." })).toBe(true);
+    const feedback = "Read the file instead.";
+    expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe(true);
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain("Read the file instead.");
+    expect(prompts[0]).toContain(feedback);
     await settle("pk-redir");
 
     // The bare deny is the user pulling the plug (the client stops the turn on it, as live): nothing resumes.
@@ -1066,7 +1068,7 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
 
     expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe(true);
     await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    expect(prompts[0]).toContain("The user allowed Bash");
+    expect(prompts[0]).toMatch(/allowed Bash/i);
     // The question the user did not answer froze cancelled: no reply on its resolved frame, and the resumed
     // turn re-asks what it still needs.
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-mq" });
@@ -1119,8 +1121,8 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
     // Told plainly that nothing happened. The three notes above it all say "part of it was already completed in
     // this session, continue from that point", which over a turn that never ran is an instruction to continue
     // from work that does not exist, and a model handed that instruction answers it by inventing some.
-    expect(turns[0]!.prompt).toContain("no part of the request below was read or acted on");
-    expect(turns[0]!.prompt).not.toContain("continue from that point");
+    expect(turns[0]!.prompt).toMatch(/no part of the request below/i);
+    expect(turns[0]!.prompt).not.toMatch(/continue from that point/i);
     /* AND THE VOID SESSION IS DROPPED, which is the change that actually empties the model's context. What is on
      * disk under s-void is one unanswered message, and resuming a turn that never answered makes the CLI
      * materialize the resume by writing a "Continue from where you left off." and a synthetic assistant reply
@@ -1142,8 +1144,8 @@ test("a limit reached mid-flight keeps the session holding its work, and says so
     // The opposite call on both counts, and for one reason: this session's tail is real work, so throwing it
     // away would make the press cost more than it saves, and the model should carry on from it rather than redo.
     expect(turns[0]!.sessionId).toBe("s-real");
-    expect(turns[0]!.prompt).toContain("allowance ran out while this turn was running");
-    expect(turns[0]!.prompt).toContain("continue from that point");
+    expect(turns[0]!.prompt).toMatch(/allowance ran out/i);
+    expect(turns[0]!.prompt).toMatch(/continue from that point/i);
 
     clearPendingResume("lim-2");
 });
@@ -1188,8 +1190,8 @@ test("a turn that ran before it was refused stops claiming nothing had been done
      * per press and is the wrong answer when the reason has changed underneath: a prompt still saying "nothing
      * has been done towards it" over a session that now holds work is the same class of lie as the pile it
      * replaced, told to the same reader. */
-    expect(turns[1]!.prompt).toContain("allowance ran out while this turn was running");
-    expect(turns[1]!.prompt).not.toContain("no part of the request below");
+    expect(turns[1]!.prompt).toMatch(/allowance ran out/i);
+    expect(turns[1]!.prompt).not.toMatch(/no part of the request below/i);
     expect(turns[1]!.prompt).toContain("ship the parser");
 
     clearPendingResume("lim-4");

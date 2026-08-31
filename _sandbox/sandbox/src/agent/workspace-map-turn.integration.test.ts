@@ -100,12 +100,13 @@ const promptOf = async (services: Services, turn: AgentTurn, context: TurnContex
 };
 
 test("the map rides the opening message when the setting is on, and the user's words still end it", async () => {
-    const root = await projectAt("wsmap-on-", "shared");
+    const marker = "shared";
+    const root = await projectAt("wsmap-on-", marker);
 
     const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root));
 
     expect(prompt).toContain(WORKSPACE_MAP_NOTE_HEADER);
-    expect(prompt).toContain("The shared billing area");
+    expect(prompt).toContain(`The ${marker} billing area`);
     expect(prompt.endsWith("do the thing")).toBe(true);
 });
 
@@ -135,7 +136,8 @@ test("a follow-up in the same conversation is not charged for the map again", as
 });
 
 test("a native Codex turn gets the same map: it is a fact about the filesystem, not about one loop", async () => {
-    const root = await projectAt("wsmap-codex-", "shared");
+    const sharedMarker = "shared";
+    const root = await projectAt("wsmap-codex-", sharedMarker);
     const services = servicesIn(
         root,
         { workspaceMap: true },
@@ -150,7 +152,7 @@ test("a native Codex turn gets the same map: it is a fact about the filesystem, 
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, contextIn(root));
 
     expect(prompt).toContain(WORKSPACE_MAP_NOTE_HEADER);
-    expect(prompt).toContain("The shared billing area");
+    expect(prompt).toContain(`The ${sharedMarker} billing area`);
 });
 
 /* THE STARTING POSITION, and the one case where getting it wrong is invisible.
@@ -160,13 +162,15 @@ test("a native Codex turn gets the same map: it is a fact about the filesystem, 
  * directories, plausibly described, and not the ones this turn can write to. The two trees are given different
  * area descriptions here precisely so that a map of the wrong one cannot pass. */
 test("an isolated turn is mapped against its own tree, not the shared checkout", async () => {
-    const root = await projectAt("wsmap-root-", "shared");
-    const worktree = await projectAt("wsmap-wt-", "branch");
+    const sharedMarker = "shared";
+    const branchMarker = "branch";
+    const root = await projectAt("wsmap-root-", sharedMarker);
+    const worktree = await projectAt("wsmap-wt-", branchMarker);
 
     const prompt = await promptOf(servicesIn(root, { workspaceMap: true }), { prompt: "do the thing" } as AgentTurn, contextIn(root, worktree));
 
-    expect(prompt).toContain("The branch billing area");
-    expect(prompt).not.toContain("The shared billing area");
+    expect(prompt).toContain(`The ${branchMarker} billing area`);
+    expect(prompt).not.toContain(`The ${sharedMarker} billing area`);
 });
 
 /* THE NOTE IS PROTOCOL, NOT SOMETHING THE USER SAID, and the PROVIDER's store keeps the composed prompt

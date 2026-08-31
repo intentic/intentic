@@ -110,7 +110,7 @@ test("adding an exit lands in the manifest and writes the shared skill, even wit
     // The collision that forced the rename is stated in the skill itself, or an agent types `exit list` once.
     expect(skill).toMatch(/`exit` is a shell builtin/);
     // The three things an agent gets wrong without being told, all in the skill it is handed.
-    expect(skill).toContain("Nothing is proxied by default");
+    expect(skill).toMatch(/proxied by default/i);
     expect(skill).toMatch(/Tor exits are blocked by a lot of the web/);
     expect(skill).toMatch(/datacenter addresses/);
 });

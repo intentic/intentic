@@ -133,7 +133,8 @@ test("a turn that changed a rendered surface and never looked is sent a follow-u
         ledger: edited("/work/src/App.vue"),
         view: drew("/work/src/App.vue"),
     });
-    expect(message).toContain("never looked at the result");
+    expect(message).toContain("/work/src/App.vue");
+    expect(message).toMatch(/never looked/i);
     await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 
@@ -169,8 +170,9 @@ test("both builtins standing produce a single follow-up carrying both", async ()
         ledger: edited("/work/src/App.vue"),
         view: drew("/work/src/App.vue"),
     });
-    expect(message).toContain("no check has passed since the last edit");
-    expect(message).toContain("never looked at the result");
+    expect(message).toMatch(/no check.*passed/i);
+    expect(message).toContain("/work/src/App.vue");
+    expect(message).toMatch(/never looked/i);
     await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 

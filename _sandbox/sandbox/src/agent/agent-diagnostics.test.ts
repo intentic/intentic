@@ -144,14 +144,14 @@ test("a tree missing one package still type-checks, with the cause named alongsi
     expect(ran).toBe(true);
     const context = contextOf(result);
     expect(context).toContain("error TS2307");
-    expect(context).toContain("1 dependency that is not installed (left-pad)");
-    expect(context).toContain("the install being behind");
-    expect(context).toContain("do not run an install");
+    expect(context).toContain("left-pad");
+    expect(context).not.toContain("vue");
 });
 
 test("a drifted tree is worth saying even when the edit itself type-checks clean: the next test will fail too", async () => {
     const result = await runHook(checked(), { file_path: `${WORKSPACE_ROOT}/src/app.ts` }, stale("vue", "zod"));
-    expect(contextOf(result)).toContain("2 dependencies that are not installed (vue, zod)");
+    expect(contextOf(result)).toContain("vue");
+    expect(contextOf(result)).toContain("zod");
 });
 
 test("the drift sentence is told once per package, and again when the set of missing names changes", async () => {

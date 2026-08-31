@@ -45,7 +45,7 @@ test("apply lands the identity on the shared identities skill; status is pending
     expect(skill).toContain("mcp__browser__browser_");
     expect(skill).toContain("`account`");
     // The switch is off, and the skill says so out loud rather than leaving the agent to hit the tool's refusal.
-    expect(skill).toContain("may NOT open accounts");
+    expect(skill).toMatch(/NOT open accounts/i);
 
     // No session yet: pending either way (with or without the browser pack, the detail differs, never the state).
     expect((await identityHandler.status(ctx, "main", config())).state).toBe("pending");
