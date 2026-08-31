@@ -30,6 +30,21 @@
   stranded on GitHub's side ("A session for this runner already exists"). The reconciler waits for the engine
   to answer before it touches the distro, every time, for both reasons.
 
+  AND THE DISK IS THE THIRD WAY, the one the two above cannot see. On 30 August the host volume reached 2.04 GB
+  free of 1 TB -- Docker Desktop's docker_data.vhdx at 456 GB and the distro's ext4.vhdx at 188 GB, neither
+  bounded by anything. Docker's data disk could not extend, so the engine stopped ANSWERING rather than
+  returning an error: `docker version` blocked instead of failing. Every job then hung on "Initialize
+  containers" and was killed at its own timeout-minutes, which Actions records as `cancelled` -- six pipelines
+  in a row, while the six listeners stayed online and GitHub showed a healthy fleet.
+
+  The reconciler was running throughout and did not save it, for two reasons this script now fixes. Its probe
+  was an unbounded `docker version`, so every pass parked on the call: the 3-minute repetitions behind it were
+  refused by IgnoreNew, the 15-minute ExecutionTimeLimit killed each pass before it reached a single log line,
+  and Task Scheduler ended the pass without ending the `docker.exe` it was blocked on -- 46 of those piled up in
+  twelve hours. And nothing measured the disk. Nothing inside the distro could have: WSL's vhdx is sparse, so
+  the distro's `df` read 680 GB free while Windows had 2.04. That number is only true on the host, which is
+  where this script runs.
+
   WHAT IT REGISTERS. A logon task with a repeating trigger, the same shape setup-windows-runner.ps1 uses for
   the Windows runner and for the same reasons: at logon for the reboot, every few minutes for everything that
   takes the fleet down without anybody logging out. The action is a reconciler, not a supervisor -- it looks
@@ -69,6 +84,13 @@ param(
     # seconds of probing and changes nothing -- so this is the WORST CASE between the fleet going down and it
     # being back.
     [int]$WatchdogMinutes = 3,
+    # How long the engine readiness probe may take before a pass calls the engine dead. This is a BOUND, not a
+    # patience setting: a wedged Docker Desktop does not fail `docker version`, it never returns it, so without
+    # a cap the probe is what parks the pass forever. See the reconciler's own section 1.
+    [int]$EngineProbeSeconds = 20,
+    # Free space on the host volume, in GB, under which a pass reclaims rebuildable docker state. Twice this is
+    # only reported; half of it takes the whole build cache rather than the stale part.
+    [int]$LowDiskGb = 60,
     # A GUI-subsystem stub, so the reconciler never maps a window. Discovered if not passed; see the block
     # below for why `powershell -WindowStyle Hidden` is not the answer on Windows 11.
     [string]$LauncherPath,
@@ -200,6 +222,30 @@ function Say(`$m) {
 # anywhere was reporting an error" is the whole reason this file exists. One line per pass is also what makes
 # the log answer "when did the fleet last go down", which is the question asked after the fact.
 
+# -- 0. the disk, measured where the number is true --------------------------------------------------------------
+# ON THE HOST, NEVER FROM INSIDE THE DISTRO, and that distinction is the whole reason this section exists. WSL's
+# vhdx is sparse, so the distro's `df` reports its VIRTUAL size: on 30 August it read 680 GB free while Windows
+# had 2.04 GB. Every check that could have caught this from inside the fleet was reading a number that cannot go
+# down. Two files carry it -- Docker Desktop's docker_data.vhdx and the distro's own ext4.vhdx, 456 GB and 188 GB
+# that day -- and until section 2 below, nothing on this machine bounded either.
+#
+# WRITTEN FIRST, BEFORE ANYTHING THAT CAN BLOCK, so a pass that dies later still leaves the number that explains
+# why, stamped at the moment it was true. The 30 August log simply stops at 06:53:28, and the free-space figure
+# that was the entire answer had to be read off the machine twelve hours after the fact.
+`$LowDiskGb = $LowDiskGb
+function HostFreeGb {
+    try {
+        `$root = [System.IO.Path]::GetPathRoot(`$env:LOCALAPPDATA)
+        return [math]::Round((New-Object System.IO.DriveInfo(`$root)).AvailableFreeSpace / 1GB, 1)
+    } catch { return -1 }
+}
+`$freeGb = HostFreeGb
+if (`$freeGb -lt 0) { Say 'disk: could not read free space on this host' }
+elseif (`$freeGb -lt (`$LowDiskGb / 2)) { Say "disk: `$freeGb GB free -- CRITICAL, under half the `$LowDiskGb GB floor" }
+elseif (`$freeGb -lt `$LowDiskGb) { Say "disk: `$freeGb GB free -- UNDER the `$LowDiskGb GB floor" }
+elseif (`$freeGb -lt (`$LowDiskGb * 2)) { Say "disk: `$freeGb GB free -- approaching the `$LowDiskGb GB floor" }
+else { Say "disk: `$freeGb GB free" }
+
 # -- 1. the engine, BEFORE the distro --------------------------------------------------------------------------
 # Docker Desktop starts by restarting the WSL utility VM. Bringing it up after the fleet therefore kills every
 # runner mid-job and strands their sessions on GitHub's side; bringing the fleet up without it at all means
@@ -211,17 +257,52 @@ function Say(`$m) {
 ) | Where-Object { Test-Path `$_ } | Select-Object -First 1
 `$desktopExe = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
 
+# NO PROBE HERE MAY BLOCK, and that is the lesson of 30 August. A wedged engine does not FAIL `docker version` --
+# it never answers it, and an unbounded call is then what parks the pass forever. WaitForEngine's deadline was
+# never the bound it looked like: the LOOP was bounded and the call inside it was not, so the pass never reached
+# a Say, the 3-minute repetitions behind it were refused by IgnoreNew (0x800710E0), the 15-minute
+# ExecutionTimeLimit killed it, and the `docker.exe` it was blocked on outlived the kill -- 46 of them in twelve
+# hours. The supervision was gone and its log was empty, which is this file's own failure mode reached from the
+# inside.
+#
+# So every external command goes through here, and a timeout is an ANSWER (`$null`) rather than a wait.
+function RunBounded(`$exe, `$arguments, `$seconds) {
+    `$psi = New-Object System.Diagnostics.ProcessStartInfo
+    `$psi.FileName = `$exe
+    `$psi.Arguments = `$arguments
+    `$psi.UseShellExecute = `$false
+    `$psi.RedirectStandardOutput = `$true
+    `$psi.RedirectStandardError = `$true
+    `$psi.CreateNoWindow = `$true
+    try { `$p = [System.Diagnostics.Process]::Start(`$psi) } catch { return `$null }
+    if (-not `$p.WaitForExit(`$seconds * 1000)) {
+        # KILLED, not abandoned. The 46 strays were grandchildren Task Scheduler had no reason to end; a probe
+        # that cleans up after itself is what stops them accumulating in the first place.
+        try { `$p.Kill() } catch { }
+        return `$null
+    }
+    # Read AFTER the wait, which is only safe because every command here produces a few bytes. One with real
+    # output would deadlock on a full pipe buffer and needs the async form instead.
+    return @{ Code = `$p.ExitCode; Out = `$p.StandardOutput.ReadToEnd() }
+}
+
 # "docker version" is the readiness probe, and the PROCESS LIST IS NOT. Docker Desktop's own processes are up
 # long before the engine behind them takes a request, so the process list says yes too early -- and, worse, it
 # keeps saying yes when the engine is dead.
+`$engineBlocked = `$false
 function EngineReady {
     if (-not `$dockerExe) { return `$false }
-    & `$dockerExe version --format '{{.Server.Version}}' 2>`$null | Out-Null
-    return `$LASTEXITCODE -eq 0
+    `$r = RunBounded `$dockerExe 'version --format {{.Server.Version}}' $EngineProbeSeconds
+    # A TIMEOUT AND AN ERROR ARE BOTH "not ready", but only one of them is worth naming in the log: an engine
+    # that blocks is the shape that took the fleet down, and an engine that answers non-zero is the ordinary
+    # not-up-yet.
+    if (`$null -eq `$r) { `$script:engineBlocked = `$true; return `$false }
+    return `$r.Code -eq 0
 }
 function WaitForEngine(`$minutes) {
-    # Bounded, always. A pass that waits forever holds the task 'running', and IgnoreNew then swallows every
-    # watchdog repetition behind it: the supervision would go quiet exactly when it is most needed.
+    # Bounded, always -- and now bounded in both places. A pass that waits forever holds the task 'running', and
+    # IgnoreNew then swallows every watchdog repetition behind it: the supervision would go quiet exactly when it
+    # is most needed.
     `$deadline = (Get-Date).AddMinutes(`$minutes)
     while (-not (EngineReady) -and (Get-Date) -lt `$deadline) { Start-Sleep -Seconds 5 }
     return (EngineReady)
@@ -252,17 +333,66 @@ if (`$dockerExe -and -not (EngineReady)) {
         if (-not (WaitForEngine 1.5)) {
             Say 'Docker Desktop is running but its engine has not answered -- restarting it'
             DockerProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+            # The CLI processes a wedged engine is holding open. RunBounded kills the ones this pass starts, so
+            # these are only ever leftovers from a pass that predates that bound -- but leaving them is what
+            # turned one wedge into 46 processes. Age-guarded, so a `docker` a person is running is never in
+            # scope, and the guard reads StartTime defensively because it throws on a process this session
+            # cannot open.
+            `$strays = @(Get-Process -Name 'docker' -ErrorAction SilentlyContinue |
+                Where-Object { try { `$_.StartTime -lt (Get-Date).AddMinutes(-30) } catch { `$false } })
+            if (`$strays.Count -gt 0) {
+                Say "killing `$(`$strays.Count) docker CLI process(es) left stuck on the dead engine"
+                `$strays | Stop-Process -Force -ErrorAction SilentlyContinue
+            }
             Start-Sleep -Seconds 8
             if (Test-Path `$desktopExe) { Start-Process `$desktopExe -ErrorAction SilentlyContinue }
             WaitForEngine 4 | Out-Null
         }
     }
     if (EngineReady) { Say 'docker engine is up' }
-    else { Say 'docker engine still not answering -- starting the fleet anyway; its container jobs will fail until it does' }
+    else { Say "docker engine still not answering`$(if (`$engineBlocked) { ' (the probe TIMED OUT -- it is blocking, not erroring, which is what a full host disk does to it)' }) -- starting the fleet anyway; its container jobs will fail until it does" }
 }
 if (-not `$dockerExe) { Say 'no docker CLI on this host -- skipping the engine check' }
 
-# -- 2. the distribution -----------------------------------------------------------------------------------------
+# -- 2. the bound on the disk, which is the part that had no owner -----------------------------------------------
+# Reclaim what is REBUILDABLE and nothing else. This daemon is shared with the owner's own sandboxes, so nothing
+# here removes a tagged image or a volume: `docker image prune` without `-a` takes dangling layers only, and
+# BuildKit's cache is rebuilt on demand by the next build that wants it.
+#
+# The build cache is the half CI creates and nothing evicted. publish-images.sh stands up a `docker-container`
+# buildx builder named intentic-cache, and its BuildKit state grows with every image build for the life of the
+# machine -- docs/ci-runner.md's "Keeping it bounded" covered turbo, pnpm, cargo, xwin and playwright, and not
+# this. That builder lives in the DISTRO's buildx state rather than this host's, so the prune is issued through
+# wsl.exe as the distro's default user, whose builder it is; root would prune its own empty default builder and
+# report success.
+#
+# ONLY WITH A LIVE ENGINE, and the other branch is the line that would have ended the last incident in five
+# minutes rather than twelve hours.
+if (`$freeGb -ge 0 -and `$freeGb -lt `$LowDiskGb) {
+    if (EngineReady) {
+        `$deep = `$freeGb -lt (`$LowDiskGb / 2)
+        `$cacheArgs = if (`$deep) { '-af' } else { '-f --filter until=72h' }
+        Say "disk: reclaiming rebuildable docker state (`$(if (`$deep) { 'all build cache' } else { 'build cache older than 72h' }))"
+        # A BUDGET, because the pass runs under a 15-minute ExecutionTimeLimit and a prune on a full disk is
+        # slow. Whatever does not fit is not lost -- the next pass three minutes later still sees a host under
+        # the floor and picks up where this one stopped.
+        `$pruneDeadline = (Get-Date).AddMinutes(5)
+        foreach (`$cmd in @("buildx prune --builder intentic-cache `$cacheArgs", "builder prune `$cacheArgs", 'image prune -f')) {
+            if ((Get-Date) -ge `$pruneDeadline) { Say 'disk: prune budget spent -- the rest waits for the next pass'; break }
+            RunBounded 'wsl.exe' "-d `$Distro -- docker `$cmd" 180 | Out-Null
+        }
+        `$after = HostFreeGb
+        Say "disk: `$after GB free after the prune (was `$freeGb)"
+    } else {
+        # NAMED, because this pairing is the whole of 30 August. A wedged engine on a host this low is wedged
+        # BECAUSE the host is this low: docker's data disk cannot extend, and the daemon stops answering rather
+        # than returning an error anything upstream could read. Restarting it does not hold, so say so instead
+        # of restarting it every three minutes forever.
+        Say "disk: `$freeGb GB free AND the engine is not answering -- free space on this host before trusting any restart; the engine is almost certainly wedged on the disk"
+    }
+}
+
+# -- 3. the distribution -----------------------------------------------------------------------------------------
 # This is the whole reason the file exists. WSL2 starts no distribution at boot, so without this the fleet is
 # down from the reboot until a person opens a shell.
 `$running = @(& wsl.exe -l --running -q 2>`$null | ForEach-Object { (`$_ -replace "``0", '').Trim() } | Where-Object { `$_ })
@@ -275,7 +405,7 @@ if (`$running -notcontains `$Distro) {
     Start-Sleep -Seconds 10
 }
 
-# -- 3. the units ------------------------------------------------------------------------------------------------
+# -- 4. the units ------------------------------------------------------------------------------------------------
 # The runner units carry no Restart= directive, so systemd does not bring one back that exited -- a crash, a
 # network drop the listener gave up on, a self-update that failed halfway, or an operator's "svc.sh stop" all
 # leave a runner down until somebody notices. This is the same gap the Windows runner's repeating trigger
@@ -290,7 +420,7 @@ if (`$down.Count -gt 0) {
     foreach (`$unit in `$down) { & wsl.exe -d `$Distro -u root -e systemctl start `$unit 2>&1 | Out-Null }
 }
 
-# -- 4. what this pass found -------------------------------------------------------------------------------------
+# -- 5. what this pass found -------------------------------------------------------------------------------------
 `$active = 0
 foreach (`$unit in `$Units) {
     `$state = (& wsl.exe -d `$Distro -e systemctl is-active `$unit 2>`$null | ForEach-Object { (`$_ -replace "``0", '').Trim() }) -join ''
@@ -298,11 +428,12 @@ foreach (`$unit in `$Units) {
 }
 Say "pass: `$active/`$(`$Units.Count) runners active`$(if (`$down.Count) { " (started `$(`$down.Count))" })"
 
-# Bounded, because this file is appended to every few minutes for the life of the machine. Two thousand lines is
-# several days of history at that rate, which is the window in which anybody asks what happened.
+# Bounded, because this file is appended to every few minutes for the life of the machine. FOUR thousand lines,
+# not two: a pass now writes the disk line as well as the summary, and the window that matters is "several days"
+# rather than a line count -- it is the window in which anybody asks what happened.
 try {
     `$lines = @(Get-Content '$LogPath' -ErrorAction Stop)
-    if (`$lines.Count -gt 2000) { Set-Content -Path '$LogPath' -Value (`$lines | Select-Object -Last 1000) }
+    if (`$lines.Count -gt 4000) { Set-Content -Path '$LogPath' -Value (`$lines | Select-Object -Last 2000) }
 } catch { }
 "@
 
@@ -484,6 +615,8 @@ if ($inactive) { Die "these runner units are not active after a pass: $($inactiv
 Write-Host ''
 Step "ready: $Distro is up with $($units.Count) runner units active."
 Step "it is reconciled at every sign-in and every $WatchdogMinutes minutes ($repetition, read back off the registered task) -- nothing to keep open, nothing to babysit."
+Step "every probe is bounded ($EngineProbeSeconds s for the engine), so a wedged docker can no longer park a pass and take the supervision down with it."
+Step "free space on this host is read and logged every pass, and rebuildable docker state is reclaimed under $LowDiskGb GB. Nothing tagged and no volume is ever pruned -- this daemon also runs your sandboxes."
 Step "the pass logs to $LogPath."
 if (-not $LauncherPath) { Warn 'without the launcher stub this task maps a console window for a moment on every pass, on the machine whose desktop tiers read window titles. See -LauncherPath.' }
 Step 'after an unattended reboot this still waits for a sign-in. Windows signs itself back in after its own update restarts; for anything else, see -AutoLogon in setup-windows-runner.ps1.'

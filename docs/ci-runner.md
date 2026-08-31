@@ -204,8 +204,8 @@ the pipeline.
 ### Staying up, on a host where the fleet lives in WSL
 
 The Linux fleet runs inside a WSL2 distribution on the same Windows box that carries the Windows runner. That
-is one sentence of hosting detail and **two** ways for six runners to be offline with nothing reporting an
-error, both of which this host hit.
+is one sentence of hosting detail and **three** ways for the fleet to be out of service with nothing reporting
+an error, all of which this host hit.
 
 **1. WSL2 starts no distribution at boot.** A distro runs because something invoked `wsl.exe`, and stops when
 the host reboots or when anything issues `wsl --shutdown` — which Docker Desktop does to the whole utility VM
@@ -223,9 +223,31 @@ open. Measured directly, polling GitHub's runner list every 30 seconds and touch
 `offline=6`, `online=6`. From inside the distro nothing has gone wrong, and the journal shows only a clean
 shutdown, so there is no error to find anywhere.
 
-The second one is why the fix is a **setting** and not only a watchdog. A three-minute reconcile against a
-sixty-second timeout leaves the fleet down most of the time; `vmIdleTimeout=-1` removes the cause. WSL reads
-`.wslconfig` only when the VM starts, so the setting is inert until the next `wsl --shutdown`.
+**3. The host runs out of disk and the fleet stays `online`.** This is the one the first two cannot show you,
+because it takes nothing down. On 30 August the box reached **2.04 GB free of 1 TB**: `docker_data.vhdx` at
+456 GB, the distro's `ext4.vhdx` at 188 GB, neither bounded by anything (see "Keeping it bounded"). Docker's
+data disk could not extend, and **a wedged engine stops answering rather than erroring** — `docker version`
+inside the distro exits 124 on a 30-second timeout. The six listeners are untouched by that, so they stay
+online and keep accepting jobs; every job then hangs in `Initialize containers`, a step that takes 3–4 seconds
+on a healthy host, until it is killed at its own `timeout-minutes`. **Actions records a timed-out job as
+`cancelled`**, and the annotation is the only place it says otherwise:
+
+```
+The job has exceeded the maximum execution time of 15m0s
+```
+
+Six CI runs and a nightly went that way over twelve hours, each job dying at exactly its timeout plus the
+five-minute force-kill grace (15+5, 60+5, 90+5) while the GitHub-hosted jobs in the same runs — codeql,
+scorecard, mobile — all went green. **A run cancelled at a suspiciously round duration is this, not somebody
+pressing the button.**
+
+**Nothing inside the distro could have caught it.** WSL's vhdx is sparse, so the guest's `df` reports its
+virtual size: 680 GB free against the host's 2.04. Only a check on Windows sees the real number, which is why
+that check lives in the reconciler below rather than in any CI step.
+
+The second failure mode is why the fix is a **setting** and not only a watchdog. A three-minute reconcile
+against a sixty-second timeout leaves the fleet down most of the time; `vmIdleTimeout=-1` removes the cause.
+WSL reads `.wslconfig` only when the VM starts, so the setting is inert until the next `wsl --shutdown`.
 
 ```powershell
 # On the Windows host, from an ordinary PowerShell (no administrator needed). Idempotent; this is also the
@@ -263,6 +285,28 @@ Measured against a deliberately wedged engine (`wsl -t docker-desktop`, app left
 `+3m14s` rather than the nominal 90 seconds — a wedged engine takes about ten seconds to return each `500`, so
 the probe loop overshoots its own grace — restarted Docker Desktop, and had the engine back **25 seconds
 later**, with the fleet never leaving `online=6` because the distro was never involved.
+
+**No probe in a pass may block, and a bounded loop around an unbounded call is not a bound.** This is the
+watchdog's own failure mode, and it cost twelve hours. `EngineReady` was a plain `docker version`; against the
+wedged engine above that call does not fail, it never returns. Every pass parked on it — so the pass never
+reached a single log line, the three-minute repetitions behind it were refused by `IgnoreNew`
+(`LastTaskResult 0x800710E0`), the 15-minute `ExecutionTimeLimit` killed each pass, and Task Scheduler ended
+the pass without ending the `docker.exe` it was blocked on. **46 stray CLI processes**, one per kill, and a
+`fleet.log` whose last line was twelve hours old. The supervision was gone in exactly the way this whole
+section exists to prevent, reached from the inside. Every external command in the pass now runs through a
+helper that kills it at a deadline (`-EngineProbeSeconds`, 20s), so a timeout is an *answer* — and the log
+distinguishes an engine that returned an error from one that never answered, because only the second means
+"look at the disk".
+
+**And the pass reads free space on Windows before it does anything that can block.** The number is logged every
+pass whether or not it acted, so a pass that dies later still leaves the figure that explains why, stamped at
+the moment it was true — the previous incident's log simply stopped, and the free-space number that was the
+whole answer had to be read off the machine half a day afterwards. Under `-LowDiskGb` (60) a pass reclaims the
+build cache and dangling layers, inside a five-minute budget so it cannot outlive its own `ExecutionTimeLimit`;
+whatever does not fit is picked up by the next pass three minutes later. It never removes a tagged image and
+never touches a volume — **that daemon also runs the operator's own sandboxes**. When the host is under the
+floor *and* the engine is not answering, the pass says so in one line and does not restart Docker Desktop:
+that pairing is not a Docker Desktop problem and no restart holds until space is freed.
 
 **The units carry no `Restart=`, so this is also what heals a runner that merely exited.** `svc.sh` generates a
 unit with none, and `runsvc.sh` stops the service on a zero exit — a graceful stop, most self-update handoffs —
@@ -431,6 +475,23 @@ Tauri toolchains: is baked into `ci-base` and `ci-desktop`.
   default under `$HOME/.cache` because that is cleared out from under a job often enough to cost every release
   a 2m40s re-download. It is not cleared *reliably*: see the entry below, where the same directory keeping
   its contents across two pipelines is what broke a job that never asked for a browser.
+- **buildx**: the `intentic-cache` builder `publish-images.sh` creates is a `docker-container` driver, so its
+  BuildKit state is a **docker volume on the host daemon** — not a directory under `/ci-cache`, and therefore
+  outside every sweep in this list and outside a `docker system prune` that spares volumes. Nothing evicted from
+  it for the life of the host. `setup_builder` now sweeps entries older than `BUILDKIT_CACHE_MAX_AGE` (72h) on
+  every image build, which is cheap here because **that store is not the cache of record**: `--cache-to
+  type=inline` writes the layer cache into the pushed image and the next build reads it back over `--cache-from
+  type=registry`, so a swept builder costs a registry read rather than a cold build.
+- **the host volume itself**, which is the one nothing in this file could see. On 30 August the runner box
+  reached **2.04 GB free of 1 TB** — `docker_data.vhdx` at 456 GB, the distro's `ext4.vhdx` at 188 GB. A docker
+  whose data disk cannot extend **stops answering rather than erroring**, and six pipelines in a row then hung
+  in `Initialize containers` (normally 3–4 seconds) until each job was killed at its own `timeout-minutes`,
+  which Actions records as `cancelled`. All six listeners stayed online throughout, so GitHub showed a healthy
+  fleet. **No check inside the distro could have caught it**: WSL's vhdx is sparse, so the guest's `df` reported
+  680 GB free against the host's 2.04. `setup-wsl-fleet.ps1`'s reconciler reads free space **on Windows** every
+  pass, logs the number whether or not it acted, and under `-LowDiskGb` (60) reclaims the build cache and
+  dangling layers — never a tagged image and never a volume, because that daemon also runs the operator's own
+  sandboxes.
 - **playwright**: `/ci-cache/ms-playwright` holds the Chromium that `images-platform`'s sign-in smoke drives
   (~200 MB with its headless shell and ffmpeg), named by that job's `PLAYWRIGHT_BROWSERS_PATH`. Keeping the
   download warm is the smaller half of the reason. The larger half is that **the default is not private to the

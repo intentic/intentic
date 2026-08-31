@@ -40,21 +40,46 @@ REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 # `pnpm install --frozen-lockfile` resolves the root lockfile; `pnpm deploy` prunes the final image to core.
 root="$(repo_root)"
 
+# How long BuildKit state may sit unused in the builder below before a build sweeps it. A BOUND on a store that
+# otherwise grows for the life of the runner host, not a tuning knob — see setup_builder.
+BUILDKIT_CACHE_MAX_AGE="${BUILDKIT_CACHE_MAX_AGE:-72h}"
+
 # A docker-container buildx builder. The default `docker` driver exports no cache beyond inline and pushes
 # over an untested path here, so this stays — but it is best-effort: a build must NEVER fail over builder setup.
+#
+# AND ITS CACHE IS THE ONE STORE ON THESE RUNNERS THAT NOTHING EVICTED. Every other shared directory has an
+# owner in docs/ci-runner.md's "Keeping it bounded": turbo gets a 14-day sweep in the pnpm-setup action, pnpm
+# and cargo grow only when a version is added, xwin and playwright are fixed-size downloads. This one is a
+# `docker-container` driver, so its BuildKit state is a docker VOLUME on the host daemon rather than anything
+# under /ci-cache — outside every sweep that file describes, and outside a `docker system prune` that spares
+# volumes. It grew until the host ran out: on 30 August the runner box had 2.04 GB free of 1 TB with
+# docker_data.vhdx at 456 GB, and a docker whose data disk cannot extend stops ANSWERING rather than erroring.
+# Six pipelines in a row then hung in "Initialize containers" and were killed at their own timeout-minutes,
+# which Actions reports as `cancelled` — with all six listeners still online, so nothing looked down.
+#
+# SWEPT BY AGE, like the turbo cache it sits beside, and cheap here in a way it would not be elsewhere: this
+# builder's local state is not the cache of record. `--cache-to type=inline` writes the layer cache into the
+# image being pushed and the next build reads it back over `--cache-from type=registry` (see publish() below),
+# so a swept builder costs a registry read, not a cold build.
 setup_builder() {
     command -v docker >/dev/null || return 0
-    docker buildx inspect intentic-cache >/dev/null 2>&1 && { docker buildx use intentic-cache; return 0; }
-    # dind serves docker over TLS; the docker-container driver can't read those certs from env vars, only from
-    # a named context (that's the "could not create a builder instance with TLS data" error). Build one.
-    local ctx=default
-    if [ -n "${DOCKER_CERT_PATH:-}" ] && [ -n "${DOCKER_HOST:-}" ]; then
-        docker context create intentic-dind \
-            --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem" >/dev/null 2>&1 || true
-        docker context inspect intentic-dind >/dev/null 2>&1 && ctx=intentic-dind
+    if ! docker buildx inspect intentic-cache >/dev/null 2>&1; then
+        # dind serves docker over TLS; the docker-container driver can't read those certs from env vars, only
+        # from a named context (that's the "could not create a builder instance with TLS data" error). Build one.
+        local ctx=default
+        if [ -n "${DOCKER_CERT_PATH:-}" ] && [ -n "${DOCKER_HOST:-}" ]; then
+            docker context create intentic-dind \
+                --docker "host=${DOCKER_HOST},ca=${DOCKER_CERT_PATH}/ca.pem,cert=${DOCKER_CERT_PATH}/cert.pem,key=${DOCKER_CERT_PATH}/key.pem" >/dev/null 2>&1 || true
+            docker context inspect intentic-dind >/dev/null 2>&1 && ctx=intentic-dind
+        fi
+        docker buildx create --name intentic-cache --driver docker-container --bootstrap --use "$ctx" >/dev/null 2>&1 \
+            || echo "  note: docker-container builder unavailable; using the default builder" >&2
     fi
-    docker buildx create --name intentic-cache --driver docker-container --bootstrap --use "$ctx" >/dev/null 2>&1 \
-        || echo "  note: docker-container builder unavailable; using the default builder" >&2
+    docker buildx use intentic-cache >/dev/null 2>&1 || true
+    # AFTER the `use`, so it always sweeps the builder that is about to run the build — including the default
+    # one, on a host where the create above failed. `until` is the one prune filter whose spelling has not moved
+    # across buildx versions; the byte-capped flags have been renamed twice, and a build must never fail here.
+    docker buildx prune -f --filter "until=$BUILDKIT_CACHE_MAX_AGE" >/dev/null 2>&1 || true
 }
 setup_builder
 
