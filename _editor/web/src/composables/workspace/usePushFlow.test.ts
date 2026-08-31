@@ -159,7 +159,7 @@ test(`a red check raises a question that outlives the surface that asked`, async
     await flush();
 
     expect(git.syncAll).not.toHaveBeenCalled();
-    expect(flow.question.value).toEqual({ kind: `checks`, title: `Checks failed`, command: `pnpm check`, detail: `failed with exit 1.` });
+    expect(flow.question.value).toEqual({ kind: `checks`, title: `Checks failed`, command: `pnpm check`, detail: `` });
     /* Composed once, from the failure: text, model and effort, and waiting to be edited whenever the user
      * gets back to it.
      *

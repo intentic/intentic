@@ -139,7 +139,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
             >
                 <Icon
                     :name="entry.icon ?? GLYPH[entry.tone]"
-                    class="mt-1 shrink-0 text-xs"
+                    class="shrink-0 text-xs"
                     :class="TINT[entry.tone]"
                     :spin="entry.spin === true"
                     aria-hidden="true"

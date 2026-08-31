@@ -19,12 +19,12 @@ const pushFlow = usePushFlow();
          comment node for the tick between the question clearing and the card retiring, and an attribute has
          nothing to fall through to on a comment. -->
     <div>
-        <!-- The command that failed in a 1-line syntax-highlighted code block, with detail text. -->
+        <!-- The command that failed in a 1-line syntax-highlighted code block. -->
         <div v-if="pushFlow.question.value" class="flex flex-col gap-1.5">
             <div v-if="pushFlow.question.value.command" class="checks-command flex min-w-0 items-center rounded-md border border-line bg-canvas">
                 <Code class="min-w-0 flex-1" :code="pushFlow.question.value.command" lang="bash" :copyable="false" />
             </div>
-            <p class="break-words text-2xs text-muted">
+            <p v-if="pushFlow.question.value.detail" class="break-words text-2xs text-muted">
                 {{ pushFlow.question.value.detail }}
             </p>
         </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ResponsiveOverlay, growTextarea, useDevice } from "@intentic/ui";
+import { Button, CodeField, ResponsiveOverlay, useDevice } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import ChatModelPicker from "../chat/ChatModelPicker.vue";
 import ComposerEffort from "../chat/ComposerEffort.vue";
@@ -24,7 +24,7 @@ const emit = defineEmits<{ start: [] }>();
 
 const { mobile } = useDevice();
 
-const input = ref<HTMLTextAreaElement | null>(null);
+const codeField = ref<InstanceType<typeof CodeField>>();
 // The pill IS the anchor, which is why the component hands its element back: the overlay derives the document
 // it teleports into, the viewport it measures the room against, and the click that never dismisses it, all from
 // that element, so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
@@ -33,13 +33,6 @@ const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 // ONE flag for both hosts. It was two: one for the sheet, one for the panel, which is the shape a
 // hand-written pair grows into and the reason the swap is a component now.
 const modelOpen = ref(false);
-
-// Auto-grow, the composer's own: size to content, capped by the box's own `max-h-64` rather than by a number
-// here. The box opens on a composed prompt rather than an empty line, so this runs once at mount or it opens
-// one row tall over a twelve-line message.
-const grow = (): void => {
-    growTextarea(input.value);
-};
 
 const canStart = computed(() => !busy && conversation.draft.value.trim() !== ``);
 const start = (): void => {
@@ -61,11 +54,10 @@ const onKeydown = (event: KeyboardEvent): void => {
 
 onMounted(() => {
     void nextTick(() => {
-        grow();
         // Caret at the end, not selecting the whole prompt: the common edit is an addition, and a text
         // selection that a single keystroke would wipe out is a trap over a message the app just wrote.
-        const el = input.value;
-        if (el !== null && !mobile.value) {
+        const el = codeField.value?.field;
+        if (el !== undefined && !mobile.value) {
             el.focus();
             el.setSelectionRange(el.value.length, el.value.length);
         }
@@ -74,21 +66,24 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="rounded-xl border border-line bg-canvas focus-within:border-line-strong">
-        <textarea
-            ref="input"
-            rows="1"
-            v-model="conversation.draft.value"
-            class="scrollbar-thin block max-h-64 w-full resize-none overflow-y-auto bg-transparent px-3 py-2.5 text-base leading-relaxed text-content placeholder:text-subtle focus:outline-none md:text-xs"
-            placeholder="What should the agent do?"
-            @input="grow"
-            @keydown="onKeydown"
-        ></textarea>
+    <div class="rounded-xl border border-line bg-canvas">
+        <div class="scrollbar-thin max-h-64 overflow-y-auto px-1 pt-1">
+            <CodeField
+                ref="codeField"
+                v-model="conversation.draft.value"
+                lang="markdown"
+                placeholder="What should the agent do?"
+                aria-label="What should the agent do?"
+                @keydown="onKeydown"
+            />
+        </div>
 
-        <div class="flex min-w-0 items-center gap-1 overflow-hidden px-2 pb-2">
-            <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
+        <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2 pb-2">
+            <div class="flex min-w-0 items-center gap-1">
+                <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
 
-            <ComposerEffort :conversation="conversation" />
+                <ComposerEffort :conversation="conversation" label-class="@max-lg:hidden" />
+            </div>
 
             <Button
                 size="small"

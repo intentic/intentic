@@ -45,7 +45,7 @@ export const fixSummary = (run: PrepushRun): string => {
     if (run.status === `cancelled`) {
         return `was stopped before it finished.`;
     }
-    return `failed with exit ${run.exitCode ?? `unknown`}.`;
+    return ``;
 };
 
 /* The heading over a settled check, three or four words, because it is read at a glance and from across a
