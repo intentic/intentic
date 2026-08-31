@@ -96,8 +96,8 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
 
 // What the model will actually read: the plan's typed notes serialized in front of its prompt, by the same
 // function dispatch uses (agent.routes.ts, composeWirePrompt).
-const promptOf = async (services: Services, turn: AgentTurn, context: TurnContext): Promise<string> => {
-    const plan = await planTurn(services, turn, context);
+const promptOf = async (services: Services, agentTurn: AgentTurn, turnContext: TurnContext): Promise<string> => {
+    const plan = await planTurn(services, agentTurn, turnContext);
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
     return composeWirePrompt(request.notes ?? [], request.prompt);

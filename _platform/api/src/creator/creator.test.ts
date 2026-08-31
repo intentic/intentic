@@ -542,8 +542,8 @@ describe(`domain claims`, () => {
     });
 
     it(`refuses IPs and reserved words before any network is touched`, () => {
-        expect(domainClaimProblem(`192.168.0.1`)).toBeDefined();
-        expect(domainClaimProblem(`not-intentic.dev`)).toBeDefined();
+        expect(domainClaimProblem(`192.168.0.1`)).toEqual(expect.any(String));
+        expect(domainClaimProblem(`not-intentic.dev`)).toEqual(expect.any(String));
         expect(domainClaimProblem(`acme.dev`)).toBeUndefined();
     });
 

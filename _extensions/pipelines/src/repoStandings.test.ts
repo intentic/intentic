@@ -75,7 +75,7 @@ test("the row's tooltip says the whole state the single number cannot", () => {
     const [quiet] = repoStandings([repo("two", "no public URL")], []);
     const quietNote = standingNote(quiet!);
     expect(quiet!.runs).toHaveLength(0);
-    expect(quiet!.repo.hookWarning).toBeDefined();
+    expect(quiet!.repo.hookWarning).toBe("no public URL");
     expect(quietNote).toContain("webhook");
     expect(quietNote).not.toContain(String(broken!.failing));
     expect(brokenNote).not.toBe(quietNote);

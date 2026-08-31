@@ -62,14 +62,15 @@ describe(`what a registry row becomes against this sandbox`, () => {
     test(`an official row with no current security admission cannot be installed`, () => {
         const state = listingState(entry({ admitted: false }), []);
         expect(state.kind).toBe(`unavailable`);
-        expect(state.reason?.length ?? 0).toBeGreaterThan(0);
+        expect(state.reason).toEqual(expect.stringMatching(/\S/));
     });
 
     test(`a pointer with no exact commit reads, but cannot be installed in one click`, () => {
         const branch = entry({ install: { url: `https://github.com/o/e.git`, ref: `main` } });
         const state = listingState(branch, []);
         expect(state.kind).toBe(`unavailable`);
-        expect(state.reason).toContain(`main`);
+        // Two ways to be unavailable, and the reader has to be able to tell which one they are looking at.
+        expect(state.reason).not.toBe(listingState(entry({ admitted: false }), []).reason);
     });
 
     test(`a source this daemon cannot clone is unavailable rather than absent`, () => {

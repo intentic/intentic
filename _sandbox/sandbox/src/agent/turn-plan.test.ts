@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { HISTORY_ROOT } from "@intentic/constants";
-import { type AgentTurn, type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";

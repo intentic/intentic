@@ -147,7 +147,6 @@ describe(`the ledger debounces; it cannot hide`, () => {
         const verdict = verdictFor({ ...withAdvisories, ledger: [ledgerEntry({ outcome: `clean` })] }, `security-advisories`);
         expect(verdict.state).toBe(`clear`);
         expect(verdict.headline).not.toBe(due.headline);
-        expect(verdict.headline.length).toBeGreaterThan(0);
     });
 
     test(`a snooze silences a due chore without hiding it, and lapses on its own`, () => {

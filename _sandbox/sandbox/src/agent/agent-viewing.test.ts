@@ -69,7 +69,6 @@ describe("the verdict", () => {
         ledger.noteEdit("src/App.vue");
         const message = verifyUiEditsMessage(ledger) ?? "";
         expect(message).toContain("src/App.vue");
-        expect(message.length).toBeGreaterThan(0);
         expect(verifyUiEditsMessage(createViewLedger())).toBeUndefined();
     });
 

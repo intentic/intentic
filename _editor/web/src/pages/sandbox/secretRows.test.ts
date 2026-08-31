@@ -80,8 +80,8 @@ it(`owes attention for a required value nobody set and for a copy CI never got, 
     expect([missingRequired.attention, missingSpare.attention, stale.attention]).toEqual([true, false, true]);
     // Both say they are empty; only one of them is an outstanding task.
     expect([missingRequired.note, missingSpare.note]).toEqual([`not set`, `not set`]);
-    expect(stale.attention).toBe(true);
-    expect(stale.note?.length ?? 0).toBeGreaterThan(0);
+    // A copy CI never got is not the same errand as a value nobody set, and its row must not borrow that wording.
+    expect(stale.note).not.toBe(missingRequired.note);
 });
 
 it(`leaves another page's errand off this tab, while still sorting it to the top of its own group`, () => {
@@ -97,8 +97,10 @@ it(`leaves another page's errand off this tab, while still sorting it to the top
         },
     );
     expect(rows.map((row) => row.attention)).toEqual([false, false]);
-    expect(rows[0]?.state?.tone).toBeDefined();
+    // The errand still carries a whole connection state, and still outranks the row that merely works.
+    expect(rows[0]?.state).toMatchObject({ label: expect.any(String), tone: expect.any(String), rank: expect.any(Number) });
     expect(rows[0]?.state?.label).not.toBe(rows[1]?.state?.label);
+    expect(rows[0]!.state!.rank).toBeLessThan(rows[1]!.state!.rank);
 });
 
 it(`finds a credential by the things its row actually shows`, () => {
