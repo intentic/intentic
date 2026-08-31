@@ -77,13 +77,31 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
     }
 };
 
-/* The background work a turn's end must WAIT for, by the task machine's own discriminant. These run inside
- * the turn's CLI process, so a stream ended while one is live kills it mid-flight, the failure the user meets
- * as "the session process exited and took all 14 agents with it", minutes after the model said it would come
- * back with their results. A backgrounded shell is deliberately absent: it runs in the turn's tmux session,
- * which the daemon owns and outlives the turn, and holding on one would keep a turn spinning for as long as a
- * dev server runs. `monitor` is ambient by design and lives exactly as long as the session, never waited on. */
-const HELD_TASK_TYPES: ReadonlySet<string> = new Set(["subagent", "workflow", "local_workflow"]);
+/* The background work a turn's end must WAIT for, named by what it must NOT wait for. In-process tasks (a
+ * backgrounded Agent child, a teammate, a workflow) live inside the turn's CLI process, so a stream ended while
+ * one is live kills it mid-flight, the failure the user meets as "the session process exited and took all 14
+ * agents with it", minutes after the model said it would come back with their results.
+ *
+ * WRITTEN INSIDE OUT BECAUSE THE ALLOWLIST IT REPLACES WAS SILENTLY EMPTY. `task_type` carries the CLI's own raw
+ * discriminant, and the whole vocabulary is `local_agent`, `in_process_teammate`, `local_workflow`, `local_bash`,
+ * `monitor_ws`, `monitor_mcp`, `remote_agent`. The first version of this set waited on `"subagent"` and
+ * `"workflow"`, two spellings the CLI has never emitted (the SDK's own field docs use the raw ones: "only set
+ * when task_type is 'local_workflow'"). `local_workflow` matched, so backgrounded workflows were held correctly
+ * and nobody noticed that every backgrounded AGENT fell straight through and died at its parent's first result.
+ *
+ * The two mistakes are not symmetric, and that asymmetry is the whole argument for this direction. A type
+ * missing from an allowlist kills running agents and says nothing about it. A type missing from THIS list holds
+ * an already-finished turn open until the task clears, which is visible, stoppable, and bounded, only LIVE tasks
+ * are ever listed. So anything the SDK adds later is waited on by default, and each name below earns its
+ * exemption by outliving the process or by never ending at all:
+ *
+ *   local_bash    a backgrounded shell, running in the turn's tmux session, which the daemon owns and outlives
+ *                 the turn: holding on one would keep a turn spinning for as long as a dev server runs.
+ *   monitor_ws    ambient by design, alive for exactly as long as the session, so never a thing to wait on.
+ *   monitor_mcp   the same.
+ *   remote_agent  runs on the provider's side rather than in this process, so ending the stream cannot hurt it,
+ *                 and waiting would park a turn on a cloud review for however long that review takes. */
+const UNHELD_TASK_TYPES: ReadonlySet<string> = new Set(["local_bash", "monitor_ws", "monitor_mcp", "remote_agent"]);
 
 /* HOW DEEP AN IN-TURN RETRY STORM MAY GET BEFORE THE TURN STOPS CLAIMING TO BE WORKING.
  *
@@ -114,7 +132,7 @@ const MAX_IN_TURN_RETRIES = 8;
 // wedge a stale hold). Undefined on every other message, so the caller keeps its last count.
 const heldTaskCount = (message: SDKMessage): number | undefined =>
     message.type === "system" && message.subtype === "background_tasks_changed"
-        ? message.tasks.filter((task) => HELD_TASK_TYPES.has(task.task_type)).length
+        ? message.tasks.filter((task) => !UNHELD_TASK_TYPES.has(task.task_type)).length
         : undefined;
 
 // A main-thread model frame, a turn mid-stream always produces more messages, so only the idle gaps BETWEEN

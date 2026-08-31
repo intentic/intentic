@@ -750,8 +750,7 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
         {
             kind: "error",
             code: "rate_limit",
-            message:
-                "Claude usage limit reached. Send again once it resets.",
+            message: "Claude usage limit reached. Send again once it resets.",
         },
         { kind: "done" },
     ]);
@@ -1405,7 +1404,12 @@ test("after the last result a steered stream settles: the grace window closes th
  * child lives inside the turn's CLI process, so ending the stream at the first result took every running
  * child with it: 14 agents dead the moment the parent finished its sentence. The stream is held open
  * instead: the child settles, the CLI injects its task notification, and the wake turn's frames arrive on
- * this same stream like a steered follow-up. */
+ * this same stream like a steered follow-up.
+ *
+ * `local_agent` IS THE SPELLING, and it is the point of this test as much as the hold is. The level signal
+ * carries the CLI's raw discriminant, and while these fakes said `"subagent"` the suite passed against a
+ * vocabulary that does not exist: in production every backgrounded agent fell through the hold and died at
+ * its parent's first result, which is the bug this pins. */
 test("a result with a backgrounded child in flight holds the stream open for the wake turn", async () => {
     resetSubagents();
     const events = await collect(
@@ -1424,7 +1428,7 @@ test("a result with a backgrounded child in flight holds the stream open for the
                 type: "system",
                 subtype: "background_tasks_changed",
                 session_id: "s",
-                tasks: [{ task_id: "task-1", task_type: "subagent", description: "audit chapter 4" }],
+                tasks: [{ task_id: "task-1", task_type: "local_agent", description: "audit chapter 4" }],
             },
             { type: "result", subtype: "success", total_cost_usd: 0.1 },
             // Minutes later the child settles: its report lands, the level empties, and the CLI wakes the
@@ -1514,7 +1518,7 @@ test("children settled with no wake turn: the grace window closes the input so t
             type: "system",
             subtype: "background_tasks_changed",
             session_id: "s",
-            tasks: [{ task_id: "task-1", task_type: "subagent", description: "audit chapter 4" }],
+            tasks: [{ task_id: "task-1", task_type: "local_agent", description: "audit chapter 4" }],
         } as unknown as SDKMessage;
         yield { type: "result", subtype: "success" } as SDKMessage;
         yield {
@@ -1554,13 +1558,34 @@ test("a backgrounded shell does not hold the turn open", async () => {
                 type: "system",
                 subtype: "background_tasks_changed",
                 session_id: "s",
-                tasks: [{ task_id: "task-9", task_type: "shell", description: "pnpm dev" }],
+                tasks: [{ task_id: "task-9", task_type: "local_bash", description: "pnpm dev" }],
             },
             { type: "result", subtype: "success" },
             { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
         ),
     );
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "done" }]);
+});
+
+/* A TASK TYPE NOBODY HAS HEARD OF IS WAITED ON, which is the direction this boundary has to fail in. The set
+ * next door names what may be abandoned rather than what must be kept, precisely so that the SDK adding a kind
+ * of in-process work costs a turn that looks busy a moment too long instead of a fan-out of agents killed with
+ * nothing said about it. The trailing frame is the proof: it only arrives on a stream still being read. */
+test("an unrecognised background task type holds the turn open rather than being abandoned", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "system",
+                subtype: "background_tasks_changed",
+                session_id: "s",
+                tasks: [{ task_id: "task-7", task_type: "local_something_new", description: "whatever ships next" }],
+            },
+            { type: "result", subtype: "success" },
+            { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "still here" } } },
+        ),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "delta", text: "still here" }, { kind: "done" }]);
 });
 
 /* THE SWALLOWED PROMPT. A resume that wakes to its own stale background-task notifications classifies the

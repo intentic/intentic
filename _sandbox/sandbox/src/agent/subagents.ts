@@ -384,11 +384,11 @@ const ending = (
  * pairing that `task_started` established.
  *
  * NOT EVERY TASK IS AN AGENT, and reading the stream as though it were is what first shipped here. The SDK runs
- * one task machine for all of its background work, `shell`, `subagent`, `monitor`, `workflow`, so a Bash
- * command sent to the background arrives as a `task_started` with a tool_use id like any other, and filing it
- * listed a shell command as an agent, under its Bash description, with a transcript door that opened on nothing
- * (there is no per-child JSONL for something that was never a child). Hence IS_SUBAGENT: the two fields the SDK
- * sets only for Task-tool children, either of which is enough. */
+ * one task machine for all of its background work, `local_bash`, `local_agent`, `monitor_ws`, `local_workflow`
+ * and the rest, so a Bash command sent to the background arrives as a `task_started` with a tool_use id like any
+ * other, and filing it listed a shell command as an agent, under its Bash description, with a transcript door
+ * that opened on nothing (there is no per-child JSONL for something that was never a child). Hence
+ * isSubagentTask: the two fields the SDK sets only for Task-tool children, either of which is enough. */
 
 // The narrow shape of the SDK's task messages, declared here because the daemon reads a handful of fields off a
 // union of four types (agent.ts does the same for the stream events it maps).
@@ -397,8 +397,9 @@ export interface SubagentTaskMessage {
     readonly task_id?: string;
     readonly tool_use_id?: string;
     readonly description?: string;
-    // 'shell' | 'subagent' | 'monitor' | 'workflow' | 'local_workflow', see IS_SUBAGENT. Left an open string
-    // because the SDK documents the set as a label that "falls back to the raw discriminant for unknown types".
+    // The CLI's own raw discriminant, `local_agent` | `in_process_teammate` | `local_workflow` | `local_bash` |
+    // `monitor_ws` | `monitor_mcp` | `remote_agent`, see isSubagentTask. Left an open string because the SDK
+    // types it as one and adds to the set without notice.
     readonly task_type?: string;
     readonly subagent_type?: string;
     readonly prompt?: string;
@@ -413,14 +414,19 @@ export interface SubagentTaskMessage {
 const tasks = new Map<string, string>();
 
 /* Is this task an AGENT, as opposed to the shell/monitor/workflow work the same stream carries? Either field
- * answers yes on its own: `subagent_type` is documented as set only for Task-tool subagents, and `task_type`
- * names the machine's own discriminant. Deliberately a whitelist, an unknown task type the SDK adds later is
- * left off this surface rather than filed as an agent, which is the failure that produced a Subagents list of
- * backgrounded shell commands.
+ * answers yes on its own: `subagent_type` is documented as set only for Task-tool subagents, and `local_agent`
+ * is what the machine's own discriminant calls one. Deliberately a whitelist, an unknown task type the SDK adds
+ * later is left off this surface rather than filed as an agent, which is the failure that produced a Subagents
+ * list of backgrounded shell commands.
+ *
+ * SPELL THE DISCRIMINANT THE WAY THE CLI EMITS IT. This clause used to read `"subagent"`, which the CLI has
+ * never sent, so the whitelist was one live test resting entirely on `subagent_type`. It held here (that field
+ * is set for every Task child), and the same wrong vocabulary in the turn-end hold next door did not
+ * (sdk-stream.ts UNHELD_TASK_TYPES): there it silently stopped waiting for backgrounded agents and killed them.
  *
  * A real child that somehow reached us unlabelled is still not lost: the SubagentStop hook adopts it from its
  * own meta file, and that hook fires for nothing else. */
-const isSubagentTask = (message: SubagentTaskMessage): boolean => message.subagent_type !== undefined || message.task_type === "subagent";
+const isSubagentTask = (message: SubagentTaskMessage): boolean => message.subagent_type !== undefined || message.task_type === "local_agent";
 
 // The SDK's task status vocabulary is our own (SubagentStatusSchema), so a value it adds that we have never heard
 // of leaves the status where it was rather than being coerced into a wrong one.
