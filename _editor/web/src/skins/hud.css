@@ -291,7 +291,9 @@
     [data-skin="hud"] .bg-card,
     /* The session card (the board's, the workflow row's, every chat rail's) paints its own fill from a
        variable rather than through `bg-card`, so it has to be named — one class for all three frames of it. */
-    [data-skin="hud"] .session-card {
+    [data-skin="hud"] .session-card,
+    /* The pinned prompt band: same plate as the panel's `bg-card` (see sanctum's matching rule). */
+    [data-skin="hud"] .chat-prompt-pinned {
         background-image:
             linear-gradient(180deg, color-mix(in oklab, var(--color-primary-200) 6%, transparent), transparent 44%),
             var(--hud-scan);

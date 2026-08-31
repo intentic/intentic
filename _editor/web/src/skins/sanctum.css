@@ -503,6 +503,14 @@
             0 1px 3px -1px rgba(0, 0, 0, 0.5);
     }
 
+    /* THE PINNED PROMPT BAND — the scroller has no fill of its own; it shows the panel's `bg-card` through it,
+     * and `.chat-prompt-pinned` must paint the same plate while sticky so messages pass under an continuous
+     * surface rather than a flat `--color-card` rectangle. Texture only: the band is part of the wall, not a
+     * card sitting on it, so it takes the tooth and not the ledge the rule above gives raised objects. */
+    [data-skin="sanctum"] .chat-prompt-pinned {
+        background-image: var(--sanctum-tooth);
+    }
+
     /* THE SESSION CARD — the fleet board's cards, the workflow rows and every chat-rail row, which are one
      * component (.session-card in the app's stylesheet) and so are one rule here. It cannot take the line
      * above: that card paints its own fill from a variable rather than through `bg-card`, and it owns its

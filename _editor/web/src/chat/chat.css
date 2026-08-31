@@ -103,7 +103,11 @@
    stops at the edge of the reading measure, which is what the inset in that container query is for. Gated
    because a divider under an in-flow row would fence the prompt off from the transcript it sits in. */
 .chat-prompt-pinned {
-    background: var(--color-card);
+    /* `background-color` only — not the `background` shorthand. Skins paint the chat panel's `bg-card` with a
+       plate texture on top of this token; shorthand would wipe that image and leave a flat rectangle in a
+       band that is supposed to read as the same surface the transcript sits on (worst in the floating window,
+       where the mismatch runs the full width beside the bubbles). */
+    background-color: var(--color-card);
 }
 /* WHAT AN UNSENT EDIT WOULD THROW AWAY (ChatPane's `doomed`) — the edited prompt and everything under it, drawn
    as already gone while still entirely there.
