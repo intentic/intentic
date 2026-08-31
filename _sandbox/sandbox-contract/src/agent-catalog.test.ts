@@ -185,6 +185,7 @@ test("every axis a record can lack has words for it", () => {
         terminals: false,
         recovery: false,
         instructions: "none",
+        skillDiscovery: "prompt",
         rulebook: "none",
         secrets: "none",
     };

@@ -43,9 +43,10 @@ mismatch is a type error rather than a runtime surprise.
   rule would let a card carry a document the transcript never drew.
 - [src/agent-catalog.ts](src/agent-catalog.ts): what each (provider, harness) pair can actually DO, as one
   record per runtime: its permission axis, its MCP reach, whether it steers, and how much of the owner's system
-  prompt it will take (`instructions`: replace, add, or nothing at all). Shared because both sides act on it:
-  the daemon composes a turn's instructions against it and the browser both discloses what a pair cannot do
-  (`limitationsOf`) and names which models the system-prompt setting reaches.
+  prompt it will take (`instructions`: replace, add, or nothing at all), plus whether it discovers loaded
+  skills natively or needs their catalogue in its opening prompt. Shared because both sides act on it: the
+  daemon composes a turn's instructions and skill discovery against it and the browser both discloses what a
+  pair cannot do (`limitationsOf`) and names which models the system-prompt setting reaches.
 - [src/chores](src/chores), the chore book: definitions, applicability gates and verdicts, shared because the
   daemon computes the signals and the browser renders the judgement.
 - [src/publish-drafts.ts](src/publish-drafts.ts): the drafts publisher automation, shared for the chore book's

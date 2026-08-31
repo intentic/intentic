@@ -56,15 +56,9 @@ const STARTER_DEV = "pnpm --filter {pkg} dev";
  * own: `.intentic`, the reference shelf, git's pointer, the agent config it converges later. Dotted entries are
  * therefore skipped and anything else at all means somebody brought their own work.
  *
- * ASKED ONCE, AT COMPOSITION, BEFORE THIS DAEMON HAS WRITTEN A BYTE INTO /work (composition.ts), and the
- * timing is the whole contract rather than a detail. The daemon writes into /work while it boots, and one of
- * those writes is NOT dotted: converging the skills index splices a managed block into `AGENTS.md`
- * (settings/loaded-skills.ts). On the desktop install path that convergence starts before the boot chain does,
- * off the setup computer's own card (main.ts seeds it detached, so the machine that ran the installer can
- * enroll), which on a real install landed AGENTS.md 40ms before this question was asked from inside the seed.
- * The seed then read the daemon's own file as "somebody brought their own work" and skipped the starter site,
- * silently, on every desktop install. Reading the answer before anything can write is what makes the verdict
- * about the USER's content instead of about who won a race. */
+ * ASKED ONCE, AT COMPOSITION, BEFORE THIS DAEMON HAS WRITTEN A BYTE INTO /work (composition.ts). The timing is
+ * the contract rather than a detail: it makes the verdict about the USER's content instead of about whatever
+ * dotted state a concurrent setup or boot step happened to converge first. */
 export const workspaceArrivedEmpty = (root: string): boolean => {
     try {
         return readdirSync(root).every((entry) => entry.startsWith(".") || entry === REFERENCE_DIR);

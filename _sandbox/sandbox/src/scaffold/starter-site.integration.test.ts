@@ -130,24 +130,6 @@ describe("seedStarterSite", () => {
         expect(started).toEqual([]);
     });
 
-    /* THE DESKTOP INSTALL'S OWN BUG, as a test. The seed used to take the "did anything arrive here" reading
-     * itself, at the moment it ran, which put it in a race with the daemon's own boot-time writes. The desktop
-     * path lost that race every time: the setup computer's card is seeded detached, ahead of the boot chain, and
-     * converging its skill files splices the managed index into AGENTS.md, a file that is not dotted. So the
-     * seed read the daemon's own AGENTS.md as the user's work and every desktop install opened empty.
-     *
-     * The verdict is now composed before the daemon writes anything, so a file that appeared afterwards cannot
-     * change it: that is what this asserts, with the racing writes already on disk. */
-    it("seeds past files the daemon itself wrote after the workspace was read", async () => {
-        await mkdir(join(root, ".intentic", "config"), { recursive: true });
-        await mkdir(join(root, ".agents", "skills", "radarsu-rog"), { recursive: true });
-        await mkdir(join(root, "refs"), { recursive: true });
-        await writeFile(join(root, "AGENTS.md"), "<!-- intentic:skills -->\n## Skills\n<!-- /intentic:skills -->\n");
-
-        expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
-        expect(existsSync(join(root, "site", "_apps", "landing", "package.json"))).toBe(true);
-    });
-
     it("does nothing when the image baked no starter: an older image simply opens empty", async () => {
         expect(await seedStarterSite(services(), join(baked, "absent"))).toEqual({ skipped: "no baked starter in this image" });
         expect(existsSync(join(root, "site"))).toBe(false);
@@ -180,9 +162,7 @@ describe("workspaceArrivedEmpty", () => {
         expect(workspaceArrivedEmpty(root)).toBe(false);
     });
 
-    // Before the daemon has run, an AGENTS.md is the user's own operating notes, handed in with their folder.
-    // It only becomes the daemon's file once the skills index is converged into it, which is why this question
-    // is asked at composition and never again.
+    // AGENTS.md is always the user's own operating notes, handed in with their folder.
     it("reads an AGENTS.md that was already there as somebody's work", async () => {
         await writeFile(join(root, "AGENTS.md"), "# how I work\n");
 

@@ -1228,8 +1228,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         reach: createReachReporter(config, logger),
         workspace,
         // Read HERE, at composition, and read once: this is the last moment /work still looks the way the user
-        // handed it over. Everything after this line, the boot chain, the detached setup seeds, the capability
-        // cards that converge skill files and splice the AGENTS.md index, writes into it.
+        // handed it over. Everything after this line, the boot chain, the detached setup seeds and capability
+        // cards that converge skill files, may write into it.
         workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
         processes,
         serviceProcesses,

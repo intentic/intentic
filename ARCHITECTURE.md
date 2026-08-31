@@ -743,7 +743,7 @@ on connected instances, and as grid badges for the consequential ones (image / r
 
 | Effect | Mechanics |
 | --- | --- |
-| `skill` | Writes `.agents/skills/<name>/SKILL.md`: the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through a managed AGENTS.md index), per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`/`exit` (whose skill is `geo`, after its command). |
+| `skill` | Writes `.agents/skills/<name>/SKILL.md`: the vendor-neutral loaded folder every runtime reads (Claude Code through per-skill symlinks under `.claude/skills/`, loader-less runtimes through an opening prompt catalogue), per-instance for `cli`/`browser` (the instance id is the skill name), shared for `ssh`/`vpn`/`exit` (whose skill is `geo`, after its command). |
 | `secret` | `agent-env`: injected into the agent's environment each turn, never written to disk (`cli`). `disk`: a `0600` file, or a field in the off-workspace secret vault the manifest points at with a marker (ssh key/password, WireGuard conf, git token). |
 | `clone` | Git checkout into `.intentic/records/plugins/<id>` or `.intentic/local/extensions/<id>` (staged → pinned detached checkout → swap; tokens ride `GIT_CONFIG_*`, never the URL). |
 | `image` | A Dockerfile fragment composed into the environment overlay: needs a one-time owner-run rebuild. |

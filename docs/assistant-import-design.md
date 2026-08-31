@@ -157,7 +157,7 @@ emulates the foreign runtime.
 | `SOUL.md` + `IDENTITY.md` | The sandbox's voice: `settings.systemPromptMode: "custom"` + `systemPrompt` when it reads as operating doctrine; a **persona** (`PROMPT.md` kit) when it reads as a character the agent acts as | Settings write / persona create. The adapter proposes, the owner picks, this is the one mapping with taste in it, flagged in the preview |
 | `USER.md`, `MEMORY.md`, `memory/*.md` | Fenced block in `CLAUDE.md`/`AGENTS.md` via `mergeMemory`, under a per-source fence id (`intentic:imported-openclaw`) so reruns and the generic memory importer never fight | Idempotent merge |
 | Long-lived facts about people/projects inside memory | `knowledge/` notes, then `kb check` | Deferred to the agent (§7): entity extraction is judgment, not translation |
-| `AGENTS.md` | Same fenced merge into ours; our managed skills-index block is marker-fenced and survives | Idempotent merge |
+| `AGENTS.md` | Same fenced merge into ours; it remains entirely user-owned | Idempotent merge |
 | `HEARTBEAT.md` | One `schedule` automation whose prompt is the file, `chore: true`, default cadence from their heartbeat config | `POST /automations` |
 | cron `jobs.json` / Hermes cron | One `AutomationSchema` record each: cron expression → `schedule` trigger, message → `prompt`, `requireApproval: true` on anything whose prompt implies outbound sends | `POST /automations` |
 | `skills/<name>/SKILL.md` | `.intentic/config/skills/<name>/` + enabled in `settings.skills` | `POST /skills`; frontmatter normalized to our two-key form, nested Hermes skills flattened |

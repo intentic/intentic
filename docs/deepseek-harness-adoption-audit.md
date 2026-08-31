@@ -271,7 +271,7 @@ forgotten.
 **Where intentic stands.** The documenting skill mandates a README per package in a plain-language
 house style, with computed rather than written figures: good, and better than dsh in some respects.
 But there is no section contract, and intentic has a *lot* of surfaces that inject into agent
-context: skills written per capability instance, capability cards, the AGENTS.md index for
+context: skills written per capability instance, capability cards, the opening skill catalogue for
 loader-less runtimes, extension agent plugin directories, hooks, `${id}`/`${tools}` skill
 substitution, environment drafts, context files. Which of those cost tokens every turn, and which
 invalidate a cached prefix, is currently nobody's declared property.

@@ -94,9 +94,8 @@ reports the profile.
   already installed, so the wait is a few seconds rather than the minute or two an install costs. Fresh
   workspaces only, and only where the daemon owns the workspace, a local daemon runs over a folder the user
   chose and never seeds anything into it. "Fresh" is decided ONCE, in `createServices`, before this process has
-  written a byte into `/work` (`workspaceArrivedEmpty`): the boot chain, the detached setup seeds and the
-  capability cards all write there, and one of those writes is not dotted, so a verdict taken any later is a
-  race rather than a reading. Losing it is what stopped every desktop install from seeding.
+  written a byte into `/work` (`workspaceArrivedEmpty`), so the verdict describes what the user handed over
+  rather than dotted state a concurrent setup or boot step converged first.
 - Run the `intentic` CLI in-workspace and stream its ndjson lines; commit/push the repos.
 - Turn the composer's voice into text without the audio leaving the box: the browser records and segments
   utterances itself and posts each one's WAV to `/speech/transcribe`, where whisper.cpp answers
@@ -224,9 +223,10 @@ reports the profile.
   The owner's own skills are stored APART from the folder the agents read (`.intentic/config/skills/`, reconciled into
   `.agents/skills/` by src/settings/skills.ts) so that switching one off keeps what they wrote: in the loaded
   folder, "off" and "deleted" would be the same operation. The loaded folder is the vendor-neutral one on
-  purpose (src/settings/loaded-skills.ts): Codex and Gemini read `.agents/skills/` natively, Claude Code reads
-  it through per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get a managed index
-  block in AGENTS.md naming each skill, its description, and its file.
+  purpose (src/settings/loaded-skills.ts): Codex reads `.agents/skills/` natively, Claude Code reads it through
+  per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get the same name, description
+  and file path as a disclosed note on the conversation's opening prompt. `AGENTS.md` remains entirely the
+  user's file.
 - Schedule workflow graphs daemon-side. A run snapshots every repository HEAD once, creates every fresh step
   from those exact commits, holds candidate branches instead of auto-landing them, and resumes workflow-owned
   loops through one coordinated restart path. At most four workflow graphs execute across a sandbox at once.

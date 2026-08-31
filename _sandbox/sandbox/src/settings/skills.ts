@@ -14,10 +14,10 @@ import { parseSkillFile, skillDocument } from "./skill-file.js";
  * baked tool is one registry entry here plus its name in that array, with no settings-contract change.
  *
  * OWN SKILLS are the same mechanism pointed at text the owner typed. They live under `.intentic/config/skills/<name>/`
- * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder and its per-runtime
- * projections), for one reason: switching a skill off must not delete what you wrote. The loaded folder holds
- * only what is currently on, so the durable copy has to sit beside the daemon's other state, and then "off" is
- * simply "not copied", with the text intact.
+ * and are copied into `.agents/skills/` by the same pass (loaded-skills.ts owns that folder, its Claude loader
+ * projection and the cross-runtime prompt catalogue), for one reason: switching a skill off must not delete
+ * what you wrote. The loaded folder holds only what is currently on, so the durable copy has to sit beside the
+ * daemon's other state, and then "off" is simply "not copied", with the text intact.
  *
  * The two share the `skills` array as their enabled set rather than having one each: from the owner's side there
  * is one question ("which skills are on"), and one list is what makes the Skills surface's switch mean the same

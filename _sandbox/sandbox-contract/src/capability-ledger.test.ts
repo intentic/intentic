@@ -54,6 +54,9 @@ const LEDGER: Record<keyof AgentCapabilities, Backing> = {
      * that produced it: before the field existed, every runtime was composed for as though it were the Claude
      * Code loop, and five of the six silently dropped the owner's prompt. */
     instructions: "enforced",
+    // turn-plan.ts reads this before an opening turn: a "prompt" runtime receives the generated catalogue as
+    // a typed note, while a "native" runtime is left to its own loader so the same list never arrives twice.
+    skillDiscovery: "enforced",
     // turn-plan.ts (honoured) plans the JS backend only where "js" is declared, so a runtime without it is
     // handed no `jsExecution` and mounts no Code tool: the same drop-what-you-can't-honour rule as `effort`.
     execution: "enforced",

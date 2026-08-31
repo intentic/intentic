@@ -300,6 +300,16 @@ export interface AgentCapabilities {
      * only the Claude Code loop's: Codex's own base describes Codex's own tools, so swapping it for a prompt
      * written about another harness is the owner's deliberate act (their custom text), never ours. */
     readonly instructions: "replace" | "append" | "none";
+    /* HOW THIS RUNTIME DISCOVERS THE WORKSPACE'S LOADED SKILLS.
+     *
+     *   "native", the runtime scans one of the filesystem projections itself: `.agents/skills/` for Codex,
+     *               `.claude/skills/` for the Claude Code loop. Its own loader injects the catalogue and reads
+     *               the matching SKILL.md on demand, so adding our own note would duplicate it.
+     *   "prompt", the runtime has no loader the daemon can rely on. turn-plan.ts puts the same name,
+     *               description and absolute SKILL.md path into the opening user-message preamble. This is a
+     *               separate axis from `instructions`: Pi and ACP take no system prompt at all, while OpenCode
+     *               and Cursor take an append, but all four still need skill discovery. */
+    readonly skillDiscovery: "native" | "prompt";
     /* WHETHER THE OWNER'S COMMAND RULEBOOK REACHES THIS RUNTIME (SandboxSettings.commandRules, decided by
      * guard/actions.ts commandRun, delivered by guard/command-gate.ts).
      *
@@ -364,6 +374,7 @@ const CLAUDE_CODE: AgentCapabilities = {
     terminals: true,
     recovery: true,
     instructions: "replace",
+    skillDiscovery: "native",
     // The only runtime with a pre-execution hook of its own, which is why it is the only one where a HOLD can
     // park the call and wait for a card rather than having to refuse it.
     rulebook: "hooks",
@@ -397,6 +408,7 @@ const CODEX: AgentCapabilities = {
      * message ahead of its skills and team blocks. Verified against codex-cli 0.147 by reading what actually
      * reached the wire, the keys are undocumented, and a strings dump proves only that they parse. */
     instructions: "replace",
+    skillDiscovery: "native",
     /* App-server publishes `item/commandExecution/requestApproval`, whose params carry the command text, and
      * takes `accept`/`decline` back (codex-cli 0.147's own generated JSON Schema, read with
      * `codex app-server generate-json-schema`). The daemon only asks Codex to raise those requests when the
@@ -425,6 +437,7 @@ const OPENCODE: AgentCapabilities = {
     // replacing that, so a custom prompt lands here as extra instructions, and the settings page says so
     // rather than letting "replaces everything" quietly mean something else on two providers.
     instructions: "append",
+    skillDiscovery: "prompt",
     /* OpenCode asks over its own permission channel (`permission.updated`, replied on
      * `/session/{id}/permissions/{permissionID}`, vocabulary once/always/reject), and the daemon judges what it
      * raises with the same decide fn every other runtime uses.
@@ -474,6 +487,7 @@ const ACP: AgentCapabilities = {
     // ACP's `session/new` and `session/prompt` carry no system field: the agent owns its own instructions the
     // same way it owns its model and its permission posture. The persona note takes the user message instead.
     instructions: "none",
+    skillDiscovery: "prompt",
     /* `session/request_permission` is in the protocol floor, so every conforming agent has the channel and the
      * daemon answers it from the rulebook (acp/acp-permissions.ts). The caveat the "approval" value already
      * carries is at its widest here: WHICH calls an agent asks about is entirely the agent's choice, and one
@@ -510,6 +524,7 @@ const PI: AgentCapabilities = {
     // Pi's RPC opens a session with a prompt and steers it; nothing in that protocol sets standing
     // instructions, so like ACP it hears the persona note through the user message.
     instructions: "none",
+    skillDiscovery: "prompt",
     /* THE ONE RUNTIME WITH NO SEAM AT ALL. Pi runs bash in-process and its RPC publishes no approval request,
      * so there is nothing to consult before a command runs and no rule the owner writes can apply here. Said
      * out loud rather than left to be discovered: limitationsOf renders it, and the taint floor treats a "none"
@@ -582,6 +597,7 @@ const CURSOR: AgentCapabilities = {
      * `additional_context` that is folded into the request. So the owner's prompt and the persona note DO reach
      * the model, on top of Cursor's own base prompt, and nothing can replace that base. */
     instructions: "append",
+    skillDiscovery: "prompt",
     /* THE FULL HOOK TIER, the only foreign runtime that reaches it. Cursor reads `.cursor/hooks.json` in its
      * local runtime, and `beforeShellExecution` answers with `allow` / `deny` / `ask` plus the messages that
      * explain it, with `failClosed` available so a crashed gate blocks instead of waving the command through.

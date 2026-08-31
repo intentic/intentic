@@ -6,6 +6,7 @@ import { SPAWN_NOTE_HEADER } from "../children/spawn-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
+import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../settings/loaded-skills.js";
 
 // Turn preambles: notes the daemon prepends to a user message before it reaches the model, the spawn
 // how-to for shell-only runtimes, the dependency-readiness notice (which
@@ -116,6 +117,7 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     // Computed off the filesystem when the conversation opened, so the reader can check what the agent was told
     // the project looks like against what it actually looks like, the one disclosure a generated map needs.
     { header: WORKSPACE_MAP_NOTE_HEADER, title: "Map of this project" },
+    { header: SKILL_CATALOG_NOTE_HEADER, title: SKILL_CATALOG_NOTE_TITLE },
     { header: TURN_CONTEXT_NOTE_HEADER, title: "Workspace context found for this message" },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },

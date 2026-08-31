@@ -1,10 +1,13 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type AgentTurn, type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../testing.js";
+import { SKILL_CATALOG_NOTE_HEADER } from "../settings/loaded-skills.js";
 import type { AgentRequest } from "./agent.js";
 import { composeWirePrompt } from "./turn-preamble.js";
 import { conversationExperimentArm, planTurn, type TurnContext } from "./turn-plan.js";
@@ -265,6 +268,46 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     expect((offered as { request: AgentRequest }).request.model).toBe("grok-4-fast");
     // OpenCode holds one xAI auth, so every Grok turn attributes to the same account.
     expect(offered).toMatchObject({ account: "xai" });
+});
+
+test("a runtime without a skill loader receives the catalogue once; native loaders are not told twice", async () => {
+    const root = await mkdtemp(join(tmpdir(), "turn-skills-"));
+    const skillDir = join(root, ".agents", "skills", "quill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n");
+    const skillContext: TurnContext = {
+        ...context,
+        base: { ...base, cwd: root },
+        localCwd: root,
+        effectiveCwd: root,
+    };
+    const workspace = unstubbed<Services["workspace"]>("workspace", { root });
+    const openCode = unstubbed<Services["openCode"]>("openCode", {
+        connected: async () => true,
+        xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+    });
+
+    const grok = await planTurn(servicesWith({ workspace, openCode }), turn({ agent: "grok" }), skillContext);
+    expect(wire(grok)).toContain(SKILL_CATALOG_NOTE_HEADER);
+    expect(wire(grok)).toContain("Draws quills. Use when asked for quills.");
+    expect(wire(grok)).toContain(join(root, ".agents", "skills", "quill", "SKILL.md"));
+
+    const followup = await planTurn(
+        servicesWith({
+            workspace,
+            openCode,
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 2 }) as ReturnType<Services["agents"]["entry"]> }),
+        }),
+        turn({ agent: "grok", conversationId: "grok-skills" }),
+        skillContext,
+    );
+    expect(wire(followup)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
+
+    const codex = await planTurn(codexServices({ workspace }), turn({ agent: "codex" }), skillContext);
+    expect(wire(codex)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
+
+    const claude = await planTurn(harnessServices({ workspace }), turn(), skillContext);
+    expect(wire(claude)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
 });
 
 test("iq search teaching reaches native Codex and OpenCode as the shipped nudge, not the full skill Claude loads", async () => {

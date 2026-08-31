@@ -1,7 +1,9 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { expect, test } from "vitest";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { SPAWN_NOTE_HEADER } from "../children/spawn-note.js";
+import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../settings/loaded-skills.js";
 import { LITERAL_SLASH_NOTE, preambleNotes, stripTurnPreamble, unwrapStoredPrompt, withTurnPreamble } from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
@@ -11,6 +13,14 @@ test("strip is the builder's inverse, for one note and for both", () => {
     expect(stripTurnPreamble(withTurnPreamble([notice], "fix the bug"))).toBe("fix the bug");
     expect(stripTurnPreamble(withTurnPreamble([note], "fix the bug"))).toBe("fix the bug");
     expect(stripTurnPreamble(withTurnPreamble([note, notice], "fix the bug"))).toBe("fix the bug");
+});
+
+test("the generated skill catalogue strips from provider history and keeps its disclosure title", () => {
+    const catalogue = `${SKILL_CATALOG_NOTE_HEADER}\n\n- **quill** → \`${WORKSPACE_ROOT}/.agents/skills/quill/SKILL.md\``;
+    const prompt = withTurnPreamble([catalogue], "draw one");
+
+    expect(stripTurnPreamble(prompt)).toBe("draw one");
+    expect(preambleNotes(prompt)).toEqual([{ title: SKILL_CATALOG_NOTE_TITLE, text: catalogue }]);
 });
 
 // The whole point of the literal-slash note is positional: with it in front, the user's `/` is no longer the

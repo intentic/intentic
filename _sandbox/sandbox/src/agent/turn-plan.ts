@@ -65,6 +65,7 @@ import { WORKSPACE_MAP_NOTE_TITLE, workspaceMapNote } from "./workspace-map.js";
 import { createDepsServer } from "../workspace/deps-tools.js";
 import { dependencyDirForCommand } from "./agent-deps.js";
 import { setupNoticeFor, setupNoticeTitle } from "../workspace/workspace-setup.js";
+import { loadedSkillCatalogNote, SKILL_CATALOG_NOTE_TITLE } from "../settings/loaded-skills.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE, iqSearchInstruction } from "./iq-search-instruction.js";
 import { explainCommand } from "./command-explainer.js";
 import type { CommandGateOptions } from "../guard/command-gate.js";
@@ -134,6 +135,9 @@ export interface TurnContext {
     readonly conversationTurns?: number;
     readonly iqSearchEnabled?: boolean;
     readonly iqSearchNote?: string;
+    // The generated name/description catalogue for a runtime without a native skill loader. Opening turn only;
+    // the provider session carries it thereafter, like the workspace map and iq teaching.
+    readonly skillCatalogNote?: string;
     // The `agents` CLI teaching for shell-only runtimes, resolved by planTurn on a conversation's opening turn
     // where the spawn door is open (children/spawn-note.ts). Rides the same notes list as the iq teaching.
     readonly spawnNote?: string;
@@ -207,10 +211,11 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
     const provider = input.agent ?? "claude";
     const harness = input.harness ?? "native";
     const capabilities = capabilitiesOf(provider, harness);
+    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
     // SETTINGS FIRST AND ALONE, one small local JSON read, resolved before the arms are dispatched to because
     // the composition of this turn's instructions reads it (honoured, below).
     const settings = context.settings ?? (await services.perf.track("turn.plan.settings", {}, () => services.sandboxSettings.get()));
-    const [installed, setup, cast] = await Promise.all([
+    const [installed, setup, cast, skillCatalogNote] = await Promise.all([
         // cli/mcp/plugin/browser/agent-kind capabilities, read once and shared by the arms that need them. NOT
         // the record above, these are what the OWNER installed, that is what the runtime can DO.
         services.perf.track("turn.plan.capabilities", {}, () => services.capabilities.list()),
@@ -237,6 +242,13 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         // `actsAs` being set would skip exactly the case that matters most: an unattended wake that named
         // nothing, whose correct answer is "no accounts" and which must not reach one by saying nothing at all.
         services.perf.track("turn.plan.personas", {}, () => services.personas.list()),
+        /* A native loader reads the canonical filesystem projection itself. Everything else gets the same
+         * progressive-disclosure catalogue on the opening request, generated from THIS turn's tree and with
+         * paths written as the agent sees them. It rides the user-message preamble rather than the system
+         * append: Pi and ACP have no system seam, and a custom prompt must not make tools disappear. */
+        capabilities.skillDiscovery === "prompt" && conversationTurns === 0
+            ? services.perf.track("turn.plan.skills", {}, () => loadedSkillCatalogNote(context.localCwd, context.effectiveCwd))
+            : Promise.resolve(undefined),
     ]);
     /* WHO THIS TURN IS AND WHAT IT MAY DO, resolved ABOVE the provider split, which is the whole reason this
      * moved here from the harness arm.
@@ -259,7 +271,6 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
      * Filtering here rather than in each arm is what makes a shelf mean the same thing on every runtime, and
      * what keeps a capability kind added tomorrow from being quietly denied to everybody (personas.ts). */
     const granted = personaCapabilities(installed, persona);
-    const conversationTurns = input.conversationId === undefined ? 0 : (services.agents.entry(input.conversationId)?.turns ?? 0);
     /* THE SPAWN DOOR, decided once here for every runtime, in both of its shapes. A persona with the delegate
      * shelf open AND full agency (shell and write — a child is a whole agent holding both) gets to start
      * agents on any connected provider; one without must not get them back by proxy. The TOOL mounts read this
@@ -324,6 +335,7 @@ export const planTurn = async (services: Services, input: AgentTurn, context: Tu
         conversationTurns,
         iqSearchEnabled,
         ...(iqSearchNote !== undefined ? { iqSearchNote } : {}),
+        ...(skillCatalogNote !== undefined ? { skillCatalogNote } : {}),
         ...(teaching !== undefined ? { iqSearchCohort: teaching.cohort } : {}),
         ...(spawnNoteText !== undefined ? { spawnNote: spawnNoteText } : {}),
     };
@@ -506,6 +518,7 @@ const honoured = (
               ]
             : []),
         ...(mapNote === undefined ? [] : [{ title: WORKSPACE_MAP_NOTE_TITLE, text: mapNote }]),
+        ...(context.skillCatalogNote === undefined ? [] : [{ title: SKILL_CATALOG_NOTE_TITLE, text: context.skillCatalogNote }]),
         /* THE DEPENDENCY NOTICE IS NOW THE FALLBACK RATHER THAN THE MECHANISM, and only for the runtimes that
          * have no mechanism to fall back FROM.
          *

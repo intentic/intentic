@@ -266,8 +266,9 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                  *
                  * "mdm" is /etc/cursor/hooks.json, which this daemon owns and writes the command gate into
                  * (cursor-hooks.ts) — without it the owner's command rules do not apply here at all.
-                 * "project" is the workspace's own .cursor rules, skills and AGENTS.md, which belong to the
-                 * user and should be in force.
+                 * "project" is the workspace's own .cursor rules, skills and user-authored AGENTS.md, which
+                 * belong to the user and should be in force. Loaded sandbox skills arrive through the opening
+                 * prompt catalogue because their canonical home is `.agents/skills/`, not Cursor's tree.
                  *
                  * "user" is left out because Cursor reads ~/.claude/settings.json under that layer as well as
                  * ~/.cursor: this daemon WRITES that Claude settings file, for a different runtime, and its

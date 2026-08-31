@@ -4,20 +4,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { removeWorkspacePath, writeWorkspaceFile } from "../workspace/workspace-files.js";
-import { loadedSkillDir, loadedSkillFile, removeLoadedSkill, type SkillFiles, writeLoadedSkill } from "./loaded-skills.js";
+import {
+    loadedSkillCatalogNote,
+    loadedSkillDir,
+    loadedSkillFile,
+    removeLoadedSkill,
+    SKILL_CATALOG_NOTE_HEADER,
+    type SkillFiles,
+    writeLoadedSkill,
+} from "./loaded-skills.js";
 
 // The real writer, as the daemon composes it: these tests assert what lands on disk, so the seam is the
 // production one rather than a fake standing in for it.
 const FILES: SkillFiles = { write: writeWorkspaceFile, remove: removeWorkspacePath };
 
-/* The three-way contract of one loaded skill: the canonical file under `.agents/skills/` (Codex and Gemini read
- * it there directly), the `.claude/skills/` symlink (Claude Code's loader follows it), and the AGENTS.md index
- * entry (the runtimes with no skill loader). A writer that landed one projection and not another would be a
- * skill only SOME of the agents know they have: the exact split this module exists to close. */
+/* The filesystem contract of one loaded skill: the canonical file under `.agents/skills/` (Codex reads it
+ * directly) and the `.claude/skills/` symlink (Claude Code's loader follows it). Runtimes without either loader
+ * receive a catalogue generated from the canonical set, never a third copy in the user's AGENTS.md. */
 
 const SKILL = "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n";
 
-test("writing a skill lands the canonical file, the Claude symlink, and the AGENTS.md index entry", async () => {
+test("writing a skill lands the canonical file and Claude symlink without creating AGENTS.md", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "quill", SKILL);
 
@@ -25,12 +32,10 @@ test("writing a skill lands the canonical file, the Claude symlink, and the AGEN
     const link = join(root, ".claude", "skills", "quill");
     expect((await lstat(link)).isSymbolicLink()).toBe(true);
     expect(await readFile(join(link, "SKILL.md"), "utf8")).toBe(SKILL);
-    const index = await readFile(join(root, "AGENTS.md"), "utf8");
-    expect(index).toContain("**quill**, Draws quills. Use when asked for quills.");
-    expect(index).toContain("`.agents/skills/quill/SKILL.md`");
+    await expect(stat(join(root, "AGENTS.md"))).rejects.toThrow();
 });
 
-test("removing a skill clears all three projections, deleting an AGENTS.md that was only the index", async () => {
+test("removing a skill clears both filesystem projections", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "quill", SKILL);
     await removeLoadedSkill(FILES, root, "quill");
@@ -40,69 +45,34 @@ test("removing a skill clears all three projections, deleting an AGENTS.md that 
     await expect(stat(join(root, "AGENTS.md"))).rejects.toThrow();
 });
 
-// AGENTS.md is the user's file first: the index is a marked block spliced in place, and everything around it:
-// including their trailing prose when the block goes: must come through every rewrite byte-intact.
-test("the index block leaves the user's own AGENTS.md text alone, coming and going", async () => {
+test("converging leaves a user-authored AGENTS.md byte-intact", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
-    await writeFile(join(root, "AGENTS.md"), "# My rules\n\nAlways be brief.\n");
+    const user = "# My rules\n\nAlways be brief.\n";
+    await writeFile(join(root, "AGENTS.md"), user);
 
     await writeLoadedSkill(FILES, root, "quill", SKILL);
-    const withIndex = await readFile(join(root, "AGENTS.md"), "utf8");
-    expect(withIndex).toContain("# My rules\n\nAlways be brief.");
-    expect(withIndex).toContain("**quill**");
-
-    await removeLoadedSkill(FILES, root, "quill");
-    expect(await readFile(join(root, "AGENTS.md"), "utf8")).toContain("Always be brief.");
-    expect(await readFile(join(root, "AGENTS.md"), "utf8")).not.toContain("**quill**");
+    expect(await readFile(join(root, "AGENTS.md"), "utf8")).toBe(user);
 });
 
-test("the index lists every skill, name-ordered, and re-writing converges rather than appending", async () => {
+test("the prompt catalogue lists every skill name-ordered and reflects rewrites", async () => {
     const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
     await writeLoadedSkill(FILES, root, "zebra", "---\nname: zebra\ndescription: Z.\n---\n\nZ.\n");
     await writeLoadedSkill(FILES, root, "apple", "---\nname: apple\ndescription: A.\n---\n\nA.\n");
     await writeLoadedSkill(FILES, root, "apple", "---\nname: apple\ndescription: A2.\n---\n\nA.\n");
 
-    const index = await readFile(join(root, "AGENTS.md"), "utf8");
-    expect(index.indexOf("**apple**")).toBeLessThan(index.indexOf("**zebra**"));
-    expect(index).toContain("A2.");
-    expect(index).not.toContain("— A. ");
-    expect(index.match(/## Skills/g)).toHaveLength(1);
-});
-
-test("converging removes duplicate indexes and superseded marker spellings", async () => {
-    const root = mkdtempSync(join(tmpdir(), "loaded-skills-"));
-    await writeFile(
-        join(root, "AGENTS.md"),
+    const catalogue = await loadedSkillCatalogNote(root, "/visible/worktree");
+    expect(catalogue).toBe(
         [
-            "# My rules",
+            SKILL_CATALOG_NOTE_HEADER,
             "",
-            "<!-- intentic:skills — managed by the sandbox; edits between these markers are overwritten -->",
-            "## Skills",
+            "One folder per connected tool, account, or workflow is available below. When a task matches a",
+            "description, read that skill's SKILL.md before improvising: it carries the exact commands, endpoints,",
+            "and rules.",
             "",
-            "- stale legacy index",
-            "<!-- /intentic:skills -->",
-            "",
-            "Keep this sentence.",
-            "",
-            "<!-- intentic:skills: managed by the sandbox; edits between these markers are overwritten -->",
-            "## Skills",
-            "",
-            "- stale current index",
-            "<!-- /intentic:skills -->",
-            "",
+            "- **apple**, A2. → `/visible/worktree/.agents/skills/apple/SKILL.md`",
+            "- **zebra**, Z. → `/visible/worktree/.agents/skills/zebra/SKILL.md`",
         ].join("\n"),
     );
-
-    await writeLoadedSkill(FILES, root, "quill", SKILL);
-
-    const index = await readFile(join(root, "AGENTS.md"), "utf8");
-    expect(index).toContain("# My rules");
-    expect(index).toContain("Keep this sentence.");
-    expect(index).toContain("**quill**");
-    expect(index).not.toContain("stale legacy index");
-    expect(index).not.toContain("stale current index");
-    expect(index.match(/## Skills/g)).toHaveLength(1);
-    expect(index.match(/<!-- intentic:skills/g)).toHaveLength(1);
 });
 
 // A real directory under .claude/skills is something a person put there for Claude specifically: the projection
