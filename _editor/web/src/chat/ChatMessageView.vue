@@ -1115,7 +1115,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     </template>
                 </div>
                 <!-- THE PLAN THE TEXT ABOVE POINTS AT. Present only when the model wrote the real plan to a file
-                     and summarised it into the tool call (agent.ts decides, on which of the two is longer), so
+                     and summarised it in the adjacent prose (agent.ts decides, on which of the two is longer), so
                      approving is never a yes to a document the card did not show. -->
                 <ChatDocumentBody
                     v-if="message.plan.document"

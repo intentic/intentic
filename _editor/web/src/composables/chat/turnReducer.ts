@@ -566,12 +566,19 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
             return step({ ...attachUsage(flushPending(state), usage), bubbleId: null }, { kind: `totals`, usage });
         }
         case `plan`: {
-            // Attach the plan to the current bubble (its intro text, if any) and clear the turn's bubble so the
-            // post-decision continuation streams into a fresh one below the plan card. Flush first so any
-            // in-flight intro text finishes typing into this bubble, not the next.
-            const opened = withBubble(flushPending(state));
+            /* Current ExitPlanMode has no plan input: the completed prose block immediately before the call IS
+             * the plan. The daemon repeats it on this frame so the card is self-contained; when that exact
+             * block is the adjacent retired bubble, reclassify it into the card instead of drawing the same
+             * markdown once as prose and again as a plan. A distinct intro remains its own bubble and takes
+             * the ordinary path below. */
+            const flushed = flushPending(state);
+            const adjacent = flushed.messages.at(-1);
+            const consumesAdjacent =
+                adjacent?.role === `assistant` && adjacent.text.trim() !== `` && adjacent.text.trim() === event.text.trim();
+            const opened = consumesAdjacent ? { state: flushed, id: adjacent.id } : withBubble(flushed);
             const attached = mapMessage(opened.state, opened.id, (message) => ({
                 ...message,
+                ...(consumesAdjacent ? { text: `` } : {}),
                 plan: {
                     requestId: event.requestId,
                     text: event.text,

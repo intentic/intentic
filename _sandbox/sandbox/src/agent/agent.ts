@@ -786,6 +786,42 @@ export interface TurnDocuments {
     latest: CardDocument | undefined;
 }
 
+/* THE MAIN TURN'S MOST RECENT COMPLETED PROSE BLOCK. ExitPlanMode no longer carries the plan in its input
+ * (the SDK's current input is empty apart from a deprecated allowedPrompts field): the model writes the plan
+ * as assistant prose, then calls the tool. The stream has already seen those words when the permission gate
+ * runs, so keep the adjacent block on the same kind of turn-scoped live handle as documents and the shell.
+ *
+ * `current` is deliberately separate from `latest`: only a text_end makes prose eligible to become a plan,
+ * and a main-thread tool call clears it so an empty ExitPlanMode cannot resurrect narration from before the
+ * agent's latest exploration step. Subagent prose never enters this handle. */
+interface TurnProse {
+    current: string;
+    latest: string | undefined;
+}
+
+/* One stream frame's effect on that handle. Deltas accumulate, a text_end commits, and any other main-thread
+ * tool call invalidates, EXCEPT ExitPlanMode itself: its frame is read off the assistant message carrying the
+ * tool_use block, and the SDK enqueues that message BEFORE dispatching the can_use_tool control request the
+ * gate answers (Query.readMessages dispatches control requests un-awaited, past a queue this turn's pump
+ * drains on its own schedule). Counting it as an invalidator erased the plan one frame before the gate read
+ * it, which is the blank approval card this seam exists to prevent. */
+const trackProse = (prose: TurnProse, event: AgentEvent): void => {
+    if (event.kind === "delta" && event.parentToolUseId === undefined) {
+        prose.current += event.text;
+        return;
+    }
+    if (event.kind === "text_end" && event.parentToolUseId === undefined) {
+        const completed = prose.current.trim();
+        prose.current = "";
+        prose.latest = completed === "" ? undefined : completed;
+        return;
+    }
+    if (event.kind === "tool_call" && event.parentToolUseId === undefined && event.name !== "ExitPlanMode") {
+        prose.current = "";
+        prose.latest = undefined;
+    }
+};
+
 // The `ask` tool behind AskUserQuestion. It is an SDK MCP tool rather than the built-in of the same name
 // because the built-in renders its own picker inside the CLI, headless, that UI has nowhere to go. Aliasing
 // the built-in NAME onto this tool (see toolAliases below) keeps the model's trained call site working while
@@ -917,7 +953,13 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 // when the active mode actually requires a prompt (bypassPermissions never does; acceptEdits skips edits;
 // default skips reads), so there is no mode branching here, if we were called, the user is the decider.
 const permissionGate =
-    (request: AgentRequest, push: (event: AgentEvent) => void, shell: { sessionId: string | undefined }, documents: TurnDocuments): CanUseTool =>
+    (
+        request: AgentRequest,
+        push: (event: AgentEvent) => void,
+        shell: { sessionId: string | undefined },
+        documents: TurnDocuments,
+        prose: TurnProse,
+    ): CanUseTool =>
     async (toolName, input, options) => {
         // Nobody can answer, so refuse rather than park: a card raised here would hang the turn until its
         // timeout, which reads as the agent freezing rather than as a decision nobody was there to make.
@@ -925,13 +967,25 @@ const permissionGate =
             return { behavior: "deny", message: `${toolName} needs a person to answer, and this turn is running unattended. Proceed another way.` };
         }
         if (toolName === "ExitPlanMode") {
+            const adjacent = prose.latest?.trim();
+            prose.latest = undefined;
+            const written = documents.latest?.plan === true ? documents.latest.markdown.trim() : undefined;
+            const text = adjacent ?? written;
+            /* A blank approval card asks the user to approve nothing. Keep the model in plan mode and tell it
+             * how to satisfy the SDK's current protocol instead; the next completed prose block becomes the
+             * retry's plan. A written plan is also sufficient when the model put the plan in a file. */
+            if (text === undefined || text === "") {
+                return {
+                    behavior: "deny",
+                    message: "Write the complete plan in your response, then call ExitPlanMode again.",
+                };
+            }
             const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
-            const text = String((input as { plan?: unknown }).plan ?? "");
-            /* The write-up this plan POINTS at, when it points at one. A model that pasted its plan into the tool
-             * call has already filled the card and gets nothing attached; one that wrote the real thing to a file
-             * and summarised it here would otherwise be asking for a yes to a document the reader cannot see. The
-             * longer text is the plan, which is the whole of the test. */
-            const document = documents.latest !== undefined && documents.latest.markdown.length > text.length ? documents.latest : undefined;
+            /* The write-up this prose POINTS at, when it points at one. A model that wrote the real plan to a file
+             * and summarised it in the adjacent prose would otherwise be asking for a yes to a document the reader
+             * cannot see. When no prose was emitted, the document itself became `text` above and needs no duplicate
+             * attachment. */
+            const document = adjacent !== undefined && documents.latest !== undefined && documents.latest.markdown.length > text.length ? documents.latest : undefined;
             push({ kind: "plan", requestId: id, text, ...(document === undefined ? {} : { document }) });
             const { reply, resolved } = await wait(request.signal);
             push(resolved);
@@ -1057,6 +1111,8 @@ export async function* runAgent(
     // on (see TurnDocuments). Per TURN, deliberately: a question asked in a later turn is not about a document
     // written in an earlier one, and attaching one on that guess would be the harness making things up.
     const documents: TurnDocuments = { latest: undefined };
+    // The adjacent assistant prose ExitPlanMode now points at, filled from main-thread stream frames below.
+    const prose: TurnProse = { current: "", latest: undefined };
     // Writes seen but not yet settled, by tool-call id: a Write carries its whole file at CALL time and can
     // still be refused or fail, so a document is only somebody's to read once the call says it landed.
     const writing = new Map<string, CardDocument>();
@@ -1122,8 +1178,8 @@ export async function* runAgent(
         // here because the web-SDK default is HTML and would render as escaped source in the card).
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
-            "Propose a clear, concise approach for the user's request, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(request, push, shell, documents),
+            "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
+        canUseTool: permissionGate(request, push, shell, documents, prose),
     };
 
     // A turn that authenticated with a stored account's OAuth token can read that plan's limit pools at settle
@@ -1173,6 +1229,8 @@ export async function* runAgent(
                 if (event.kind === "session") {
                     shell.sessionId = event.sessionId;
                 }
+                // ExitPlanMode's current SDK input carries no plan; the completed prose before it does.
+                trackProse(prose, event);
                 /* And the same seam for what the turn WROTE: every write comes past here as a frame carrying the
                  * file whole, so the cards learn what they are about from the stream they are already in rather
                  * than from a second pass over the transcript or a re-read off disk. Latest wins: the newest

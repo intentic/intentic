@@ -495,8 +495,8 @@ const PlanCardSchema = z.object({
     kind: z.literal("plan").describe("The agent has written a plan and is waiting for a yes."),
     requestId: z.string().describe("What to send back when you answer."),
     text: z.string().describe("The plan itself."),
-    // Present when the plan text POINTS at a document instead of being one: the model wrote the real plan to a
-    // file and summarised it here. Absent when the text already is the whole plan, which is the ordinary case.
+    // Present when the adjacent plan prose POINTS at a document instead of being one: the model wrote the real
+    // plan to a file and summarised it there. Absent when the text already is the whole plan.
     document: CardDocumentSchema.optional().describe("The write-up this plan refers to, when the plan itself is a pointer to one."),
 });
 const QuestionCardSchema = z.object({

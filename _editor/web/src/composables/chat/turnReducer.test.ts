@@ -216,6 +216,20 @@ describe(`tool calls`, () => {
 });
 
 describe(`interactive cards`, () => {
+    it(`reclassifies the adjacent SDK plan prose into the card instead of drawing it twice`, () => {
+        const plan = `# Do it\n\n- First step\n- Second step`;
+        const { state } = run(
+            started(),
+            { kind: `delta`, text: plan },
+            { kind: `text_end` },
+            { kind: `plan`, requestId: `p1`, text: plan },
+        );
+
+        expect(state.messages).toHaveLength(2);
+        expect(state.messages[1]).toMatchObject({ text: ``, plan: { requestId: `p1`, text: plan, status: `pending` } });
+        expect(state.bubbleId).toBeNull();
+    });
+
     it(`attaches a plan to the bubble that introduced it and opens a fresh one below`, () => {
         const { state } = run(started(), { kind: `delta`, text: `Here's my plan:` }, { kind: `plan`, requestId: `p1`, text: `# Do it` });
         expect(state.messages[1]!.plan).toMatchObject({ requestId: `p1`, status: `pending` });

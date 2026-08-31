@@ -18,6 +18,24 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
         }
     };
 
+const proseBlock = (text: string, sessionId?: string): SDKMessage[] => [
+    {
+        type: "stream_event",
+        ...(sessionId === undefined ? {} : { session_id: sessionId }),
+        event: { type: "content_block_start", index: 0, content_block: { type: "text" } },
+    } as SDKMessage,
+    {
+        type: "stream_event",
+        ...(sessionId === undefined ? {} : { session_id: sessionId }),
+        event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } },
+    } as SDKMessage,
+    {
+        type: "stream_event",
+        ...(sessionId === undefined ? {} : { session_id: sessionId }),
+        event: { type: "content_block_stop", index: 0 },
+    } as SDKMessage,
+];
+
 const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn, usageFetch?: typeof fetch): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
     for await (const event of runAgent(request, queryFn, usageFetch)) {
@@ -414,7 +432,7 @@ type DecidableCard = Extract<AgentEvent, { kind: "permission" | "plan" }>;
 
 const decide = async (
     turn: Parameters<typeof runAgent>[0],
-    call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[] },
+    call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[]; prose?: string },
     answer: (event: DecidableCard) => AgentReply,
 ): Promise<{ result: PermissionResult; card: DecidableCard; frames: AgentEvent[] }> => {
     let result: PermissionResult | null | undefined;
@@ -422,6 +440,17 @@ const decide = async (
     const frames: AgentEvent[] = [];
     const query: QueryFn = async function* (args) {
         const gate = args.options.canUseTool!;
+        if (call.prose !== undefined) {
+            yield* proseBlock(call.prose);
+        }
+        /* The assistant message carrying the tool_use block, drained BEFORE the gate is asked, because that is
+         * the order the real SDK delivers in: Query.readMessages enqueues the message and only then dispatches
+         * the un-awaited can_use_tool control request. Any turn-scoped handle the gate reads has therefore
+         * already seen this frame, and a fake that skips it hides exactly that class of bug. */
+        yield {
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: `call-${call.tool}`, name: call.tool, input: call.input ?? {} }] },
+        } as SDKMessage;
         result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
@@ -494,11 +523,39 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
      * 'acceptEdits', so approving a plan in the mode the user picked TO SEE ONE bought them a permission card
      * for `git log`. */
     for (const permissionMode of ["plan", "default", "acceptEdits", "bypassPermissions"] as const) {
-        const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", input: { plan: "# Plan" } }, approve);
+        const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", prose: "# Plan" }, approve);
         expect(result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
         // ...and the composer's pill hears about it, so it never claims the turn is still planning.
         expect(frames).toContainEqual({ kind: "mode", mode: "bypassPermissions" });
     }
+});
+
+test("ExitPlanMode uses the adjacent prose as its plan because the current SDK call has no plan input", async () => {
+    const plan = "# Make rollback quiet\n\n- Collapse the recovery controls.\n- Keep updates prominent.";
+    const { card } = await decide({ ...request, permissionMode: "plan" }, { tool: "ExitPlanMode", prose: plan }, (event) => ({
+        kind: "plan",
+        requestId: event.requestId,
+        approve: true,
+    }));
+
+    expect(card).toMatchObject({ kind: "plan", text: plan });
+});
+
+test("ExitPlanMode refuses to raise an empty approval card", async () => {
+    let result: PermissionResult | undefined;
+    const frames = await collect(
+        { ...request, permissionMode: "plan" },
+        async function* (args) {
+            result = await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
+            yield { type: "result", subtype: "success" } as SDKMessage;
+        },
+    );
+
+    expect(result).toEqual({
+        behavior: "deny",
+        message: "Write the complete plan in your response, then call ExitPlanMode again.",
+    });
+    expect(frames.some((frame) => frame.kind === "plan")).toBe(false);
 });
 
 /* THE REBASE A CARD SETTLES INTO. A plan approval is the longest park of the three cards and the one followed
@@ -523,7 +580,7 @@ test("an approved plan rebases the branch and announces it to the transcript alo
                 return parkedSync;
             },
         },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
     );
 
@@ -549,7 +606,7 @@ test("a rejected plan leaves the branch alone", async () => {
                 return parkedSync;
             },
         },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({ kind: "plan", requestId: event.requestId, approve: false, feedback: "not yet" }),
     );
 
@@ -562,7 +619,7 @@ test("an approved plan on a current branch says nothing", async () => {
     const steering = new SteeringQueue();
     const { frames } = await decide(
         { ...request, steering, resync: async () => undefined },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({
             kind: "plan",
             requestId: event.requestId,
@@ -598,7 +655,7 @@ test("a subagent still running holds the rebase off", async () => {
                 return parkedSync;
             },
         },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
     );
 
@@ -618,7 +675,7 @@ test("a subagent still running holds the rebase off", async () => {
                 return parkedSync;
             },
         },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
     );
     expect(calls).toBe(1);
@@ -638,7 +695,7 @@ test("a plan approval survives a sync that fails", async () => {
                 throw new Error("git exploded");
             },
         },
-        { tool: "ExitPlanMode", input: { plan: "# Plan" } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
         (event) => ({ kind: "plan", requestId: event.requestId, approve: true }),
     );
 
@@ -1890,19 +1947,22 @@ test("a question after an ordinary source write carries nothing", async () => {
 });
 
 /* A PLAN CARD IS THE SAME PROBLEM ONE SURFACE ALONG. A model that wrote the real plan to a file and summarised
- * it into ExitPlanMode is asking for a yes to a document the card never showed; one that pasted the plan into
- * the tool call has already filled the card and needs nothing attached. The longer of the two is the plan. */
-const planAfterWriting = async (markdown: string, plan: string): Promise<AgentEvent[]> => {
+ * it in the prose before ExitPlanMode is asking for a yes to a document the card never showed; one whose prose
+ * is already the complete plan needs nothing attached. The longer of the two is the plan. */
+const planAfterWriting = async (markdown: string, plan: string | undefined, path = "docs/plan.md"): Promise<AgentEvent[]> => {
     withoutTmux();
     const frames: AgentEvent[] = [];
     const query: QueryFn = async function* (args) {
         yield {
             type: "assistant",
             session_id: "s",
-            message: { content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: "docs/plan.md", content: markdown } }] },
+            message: { content: [{ type: "tool_use", id: "w1", name: "Write", input: { file_path: path, content: markdown } }] },
         } as SDKMessage;
         yield { type: "user", session_id: "s", message: { content: [{ type: "tool_result", tool_use_id: "w1", content: "ok" }] } } as SDKMessage;
-        await args.options.canUseTool!("ExitPlanMode", { plan }, { signal: request.signal } as never);
+        if (plan !== undefined) {
+            yield* proseBlock(plan, "s");
+        }
+        await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
     for await (const event of runAgent(request, query)) {
