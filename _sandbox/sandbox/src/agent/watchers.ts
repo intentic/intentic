@@ -170,6 +170,16 @@ export interface WatcherRuntime {
      * outlives its conversation is not a stale readout, it is a timer that will eventually try to start a turn
      * on an id nothing answers to, the same thing agents.routes disarms against on discard and purge. */
     readonly conversationLive: (conversationId: string) => boolean;
+    /* Whether the tree a journalled watch checked in is still on disk, the restore's other staleness test: an
+     * isolated conversation's worktree can be landed and removed while the daemon is down, and re-running a
+     * check somewhere else is worse than dropping the watch.
+     *
+     * A SEAM rather than an `access` call in restoreOne, like every other machine-touching thing this module
+     * does. Called straight from here it was the one side effect the unit suite could not stand a fake into,
+     * and the suite therefore asserted the restore pass against whatever directory the arming spec happened to
+     * name on whatever box ran it: green in a sandbox that has `/work`, and in a CI container that checks out
+     * elsewhere, eight red assertions on a pass that had quietly decided every tree was gone. */
+    readonly treeLive: (cwd: string) => Promise<boolean>;
 }
 
 let runtime: WatcherRuntime | undefined;
@@ -534,12 +544,7 @@ const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Rec
         await live.journal.drop(entry.id);
         return;
     }
-    if (
-        !(await access(entry.cwd).then(
-            () => true,
-            () => false,
-        ))
-    ) {
+    if (!(await live.treeLive(entry.cwd))) {
         live.logger.info({ ...context, cwd: entry.cwd }, "watch: not restored, the tree it checked in is gone");
         await live.journal.drop(entry.id);
         return;
@@ -622,4 +627,11 @@ export const startWatchers = (services: Services, wake: WakeFn): (() => void) =>
         // Archived counts as live: archiving takes a card off the board, it does not disarm anything, and a
         // watch on an archived conversation is the one agents.routes goes out of its way to keep working.
         conversationLive: (conversationId) => services.agents.entry(conversationId) !== undefined,
+        // The real disk, and the only place in this module that touches it: a landed worktree is gone by the
+        // time the next daemon boots, and the check must not be re-run anywhere else.
+        treeLive: (cwd) =>
+            access(cwd).then(
+                () => true,
+                () => false,
+            ),
     });

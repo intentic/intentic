@@ -23,6 +23,9 @@ const logger = pino({ level: "silent" });
  * become a steer or a wake turn. Fake timers drive the intervals: one advance per expected check, so a test
  * that fires early or late fails on the count, not just the outcome. */
 
+// The tree a watch checks in. A name, not a path anybody has to have: nothing here opens it.
+const WORKTREE = "/work";
+
 interface Harness {
     readonly checks: string[];
     readonly steered: string[];
@@ -38,6 +41,11 @@ interface Harness {
     env: Record<string, string>;
     // Which conversations still exist. Emptied to model a card discarded while the daemon was down.
     live: Set<string>;
+    /* Which trees are still on disk, faked for the same reason the conversations are: this suite runs under the
+     * unit budget, where nothing may reach the machine (@intentic/testing/vitest). Read off the real filesystem
+     * it made every assertion below conditional on the box having the directory `specOf` names, which the CI
+     * container does not, and a restore that thinks every tree is gone drops every watch in silence. */
+    trees: Set<string>;
     journal: WatchJournal;
     stop: () => void;
 }
@@ -53,6 +61,7 @@ const harnessOf = (over: Partial<Pick<Harness, "steerAnswer" | "startAnswer" | "
         check: { exitCode: 1, output: "still waiting" },
         env: {},
         live: new Set(["conv-1", "conv-2", "conv-3"]),
+        trees: new Set([WORKTREE]),
         journal: memoryWatchJournal(),
         stop: () => undefined,
         ...over,
@@ -80,6 +89,7 @@ const harnessOf = (over: Partial<Pick<Harness, "steerAnswer" | "startAnswer" | "
         journal: harness.journal,
         envOf: () => Promise.resolve(harness.env),
         conversationLive: (conversationId) => harness.live.has(conversationId),
+        treeLive: (cwd) => Promise.resolve(harness.trees.has(cwd)),
     };
     harness.stop = startWatcherRuntime(runtime);
     return harness;
@@ -91,7 +101,7 @@ const specOf = (over: Partial<WatcherSpec> = {}): WatcherSpec => ({
     note: "CI run 316 on intentic/intentic",
     intervalSeconds: 10,
     timeoutSeconds: 60,
-    cwd: "/work",
+    cwd: WORKTREE,
     env: {},
     turn: {},
     ...over,
@@ -435,6 +445,25 @@ describe("watchers", () => {
             expect(armedWatcherCount()).toBe(0);
             expect(harness.started).toHaveLength(0);
             // And it is gone for good: the next boot must not re-litigate it.
+            expect(await journal.list()).toHaveLength(0);
+        });
+
+        /* The other staleness test, and the one this suite could not make until the check became a seam: an
+         * isolated conversation's worktree is landed and removed while the daemon is down, so there is nowhere
+         * to run the check. Re-running it somewhere else would answer about the wrong tree, so the watch is
+         * dropped, off disk too, rather than re-armed. */
+        it("drops a watch whose tree was landed away, without waking anything", async () => {
+            await armWatcher(specOf({ timeoutSeconds: 600 }));
+            const { journal } = harness;
+            harness.stop();
+            harness = harnessOf({ journal, check: { exitCode: 0, output: "done" } });
+            harness.trees.clear();
+            await restoreWatchers();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(armedWatcherCount()).toBe(0);
+            expect(harness.started).toHaveLength(0);
+            // The check never ran: there was nowhere to run it.
+            expect(harness.checks).toHaveLength(0);
             expect(await journal.list()).toHaveLength(0);
         });
 
