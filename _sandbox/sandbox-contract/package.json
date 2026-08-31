@@ -51,6 +51,28 @@
                 "default": "./dist/tunnel-ids.js"
             }
         },
+        "./ingress-contract": {
+            "types": "./dist/ingress-contract.d.ts",
+            "import": {
+                "@intentic/src": "./src/ingress-contract.ts",
+                "default": "./dist/ingress-contract.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ingress-contract.ts",
+                "default": "./dist/ingress-contract.js"
+            }
+        },
+        "./ingress-protocol": {
+            "types": "./dist/ingress-protocol.d.ts",
+            "import": {
+                "@intentic/src": "./src/ingress-protocol.ts",
+                "default": "./dist/ingress-protocol.js"
+            },
+            "require": {
+                "@intentic/src": "./src/ingress-protocol.ts",
+                "default": "./dist/ingress-protocol.js"
+            }
+        },
         "./share-paths": {
             "types": "./dist/share-paths.d.ts",
             "import": {
