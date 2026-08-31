@@ -46,6 +46,7 @@ import { createHashlineServer } from "../hashline/hashline-tools.js";
 import { createDiagnosticsServer } from "../logs/diagnostics-tools.js";
 import { runRuleCommand } from "../rules/rule-command.js";
 import { standing } from "../rules/rules.js";
+import { turnEndingNote } from "../rules/turn-ending-note.js";
 import { CHECKS_SESSION } from "../terminal/terminal-session.js";
 import { queueRunEnabled } from "../terminal/terminal-run.js";
 import type { AgentRequest } from "./agent.js";
@@ -534,6 +535,9 @@ const honoured = (
         ...(setupNotice !== undefined && capabilities.mcp !== "full" ? [{ title: setupNoticeTitle(setupNotice), text: setupNotice }] : []),
         ...(context.iqSearchNote !== undefined ? [{ title: IQ_SEARCH_INSTRUCTION_TITLE, text: context.iqSearchNote }] : []),
         ...(context.spawnNote !== undefined ? [{ title: SPAWN_NOTE_TITLE, text: context.spawnNote }] : []),
+        /* Only the Claude Code loop executes command rules at Stop. Native runtimes must not be promised a
+         * check their fallback path does not run. */
+        ...(capabilities.runtime === "claude-code" ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
     ];
     // The connectors this card did not grant, taken out of the shell's environment rather than left in it with
     // an instruction not to look. The manifest is read from the context's own base, which is the unfiltered

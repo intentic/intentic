@@ -427,6 +427,30 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
     expect(wire(plan)).toBe("do the thing");
 });
 
+test("a Claude Code turn is told which automatic check runs at Stop", async () => {
+    const gated = SandboxSettingsSchema.parse({
+        rules: [
+            {
+                id: "pre-land",
+                label: "Verify before you finish",
+                moment: "turn.ending",
+                action: { kind: "command", command: "cd intentic && pnpm lint && pnpm verify", timeoutMs: 900_000 },
+                enabled: true,
+            },
+        ],
+    });
+
+    const claude = await planTurn(withSettings(harnessServices(), gated), turn(), context);
+    expect(wire(claude)).toContain("**Verify before you finish:** `cd intentic && pnpm lint && pnpm verify`");
+    expect(wire(claude)).toContain("Do not run or announce them yourself");
+
+    // Native Codex has no Stop-command runner, so it must not be promised one.
+    const codex = await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context);
+    expect(wire(codex)).toBe("do the thing");
+
+    expect(wire(await planTurn(harnessServices(), turn(), context))).toBe("do the thing");
+});
+
 /* The pre-turn rebase is SILENT to the model: it moved the tree, and telling the agent so only ever bought a
  * verification sweep it then reported as green (turn-preamble.ts). The human still sees it in the transcript's
  * worktree frame; this is what keeps it out of the words any of the four runtimes read. */

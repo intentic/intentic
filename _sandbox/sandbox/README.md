@@ -672,6 +672,10 @@ conversation's worktree instead of a path that still reaches the shared checkout
   turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
   is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
   already told what it proved), and a nudge never answers a nudge.
+- **Claude Code turns are told about automatic Stop commands before they run**
+  (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not
+  to duplicate them. Built-ins add no prompt text. Native runtimes are omitted because their fallback does not
+  execute command rules.
 - **The branch is rebased again at the last moment before it lands, not only before the turn starts**
   (`src/agents/sync.ts` `syncBeforeLand`, called from the auto-land in `src/agent/agent.routes.ts` and the
   manual land route). Turn-start is the right moment for the MODEL, which then reads today's code, and the

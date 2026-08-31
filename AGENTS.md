@@ -37,19 +37,10 @@ described, changing an implementation detail it deliberately does not mention.
 
 ## Before you finish a turn
 
-**The gate runs itself: do not run it by hand, and do not announce that you are about to.** A Stop hook
-(`/work/.claude/hooks/verify-intentic.sh`) runs `pnpm lint` and then **`pnpm verify`** — `pnpm typecheck`
-and every package's suite — the moment a turn tries to end with this worktree dirty or ahead of main, and a
-failure blocks the stop and comes back to you with the failing lines while you still hold the context. A turn
-that runs the same 45 seconds itself first pays for it twice and says so in prose the reader did not ask for.
-Both halves are the whole of what CI decides main's health on.
+On Claude Code turns, the sandbox automatically runs `pnpm lint && pnpm verify` after edits under
+`intentic/**`. Do not run or announce that gate yourself; failures return to the turn.
 
-Run a check by hand only when you want the answer EARLIER than the Stop: a targeted `vitest run <file>` or a
-single package's typecheck, mid-task, because you are about to build on it. That is a debugging tool, not the
-gate, and it is reported as what it is — never as "the suite is green".
-
-`pnpm format` is not part of any gate. Nothing runs prettier in CI or in a hook, so running it before
-finishing is noise plus an unrelated diff.
+Use targeted checks only when you need an earlier result. `pnpm format` is not part of any gate.
 
 Neither half goes through `pnpm build`, which dies EXDEV under worktree isolation: a prepass emits every
 package's dist with `tsgo -b` (`_tools/scripts/prepass.mjs`) and the tests then run with `--only`, off turbo's

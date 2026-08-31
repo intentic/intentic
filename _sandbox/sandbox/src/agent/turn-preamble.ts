@@ -3,6 +3,7 @@ import { REPO_SYNC_NOTE_HEADER } from "../workspace/sync-repos.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER } from "../workspace/workspace-setup.js";
 import { PERSONA_NOTE_HEADER } from "../personas/personas.js";
 import { SPAWN_NOTE_HEADER } from "../children/spawn-note.js";
+import { TURN_ENDING_NOTE_HEADER, TURN_ENDING_NOTE_TITLE } from "../rules/turn-ending-note.js";
 import { IQ_SEARCH_INSTRUCTION_HEADER } from "./iq-search-instruction.js";
 import { TURN_CONTEXT_NOTE_HEADER } from "./turn-context.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
@@ -122,6 +123,8 @@ const INJECTED: readonly { readonly header: string; readonly title: string }[] =
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },
     { header: WORKTREE_NOTE_HEADER, title: "Where this turn's files live" },
     { header: REPO_SYNC_NOTE_HEADER, title: "Repos synced with their remotes" },
+    // Keep the parser's title aligned with the typed note.
+    { header: TURN_ENDING_NOTE_HEADER, title: TURN_ENDING_NOTE_TITLE },
 ];
 
 /* Notes in front of the user's message, separated from it exactly ONCE however many passes add to them.
