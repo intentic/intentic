@@ -51,7 +51,7 @@ const custom = {
             root: {
                 borderRadius: `var(--radius-md)`,
                 paddingY: `var(--ui-control-padding-y)`,
-                paddingX: `var(--ui-control-padding-x)`,
+                paddingX: `var(--ui-button-padding-x)`,
                 iconOnlyWidth: `2.375rem`,
                 /* THE COMPACT SIZE, the app's default action button, and the one the board's "New agent"
                  * used to draw by hand. These four numbers were spelled out at 23 call sites in six

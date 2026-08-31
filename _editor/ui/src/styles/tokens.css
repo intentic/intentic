@@ -150,6 +150,21 @@
     --ui-control-padding-y: calc(var(--spacing) * 2);
     --ui-field-gap: calc(var(--spacing) * 2);
 
+    /* A BUTTON IS WIDER THAN A FIELD AT THE SAME HEIGHT, and that is not a stylistic preference — it is the
+     * difference between the two controls. A text input is a container: its side padding is an inset before
+     * content that may be long, so 12px either side of a 38px box is right and more would just push the
+     * caret away from the edge the eye tracks. A button is a TARGET wrapped around a short label, and the
+     * label needs air on the axis it is read along, or the word collides with the rim and the control reads
+     * as cramped — which is exactly the report: the default-size buttons looked squeezed while the compact
+     * ones (10px against 4px, 2.5:1) looked fine.
+     *
+     * At 12px against 8px the default button was 1.5:1, tighter than the compact size it is supposed to be
+     * the roomier form of — the geometry inverted as the button grew. 16px against 8px is 2:1, which is
+     * where the label sits in the middle of its plate at both sizes and the two read as one control at two
+     * scales. Only the horizontal number moves: the 38px height is shared with the inputs beside it in a
+     * form row and must not drift. */
+    --ui-button-padding-x: calc(var(--spacing) * 4);
+
     /* ── WHAT "NOT RIGHT NOW" LOOKS LIKE, ONCE, FOR EVERY BUTTON IN THE APP ───────────────────────────────
      * A disabled control was a FADE: PrimeVue's `opacity: 0.6` over whatever the tier had painted. That is the
      * wrong instrument for this design system specifically, and the reason is arithmetic rather than taste.
