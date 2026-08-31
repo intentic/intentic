@@ -19,9 +19,9 @@ const issue = (over: Partial<IssueSummary> = {}): IssueSummary => ({
  * only the rows that are NOT simply waiting earn one. */
 test("only a row that is more than 'waiting' gets a badge", () => {
     expect(statusBadge("open")).toBeUndefined();
-    expect(statusBadge("investigating")).toEqual({ label: "Being looked at", tone: "primary" });
-    expect(statusBadge("resolved")).toEqual({ label: "Resolved", tone: "success" });
-    expect(statusBadge("ignored")).toEqual({ label: "Ignored", tone: "neutral" });
+    expect(statusBadge("investigating")).toEqual({ label: "being looked at", tone: "primary" });
+    expect(statusBadge("resolved")).toEqual({ label: "resolved", tone: "success" });
+    expect(statusBadge("ignored")).toEqual({ label: "ignored", tone: "neutral" });
 });
 
 /* THE ONE THING THIS INBOX KNOWS THAT NO SINGLE REPORT CAN SAY. The daemon reopens a resolved group when it

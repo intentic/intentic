@@ -134,7 +134,7 @@ const logText = computed(() => {
                 <span v-if="resource.kind === `stack`" class="shrink-0 rounded border border-line px-1.5 py-px text-2xs font-medium text-subtle">
                     stack
                 </span>
-                <StatusBadge v-if="resource.updateAvailable" variant="info" size="xs" label="New image" class="shrink-0" />
+                <StatusBadge v-if="resource.updateAvailable" variant="info" size="xs" label="new image" class="shrink-0" />
             </span>
         </template>
 

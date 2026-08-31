@@ -11,11 +11,11 @@ export type Tone = `success` | `danger` | `warning` | `info` | `neutral` | `prim
 export const statusBadge = (status: IssueStatus): { label: string; tone: Tone } | undefined => {
     switch (status) {
         case `investigating`:
-            return { label: `Being looked at`, tone: `primary` };
+            return { label: `being looked at`, tone: `primary` };
         case `resolved`:
-            return { label: `Resolved`, tone: `success` };
+            return { label: `resolved`, tone: `success` };
         case `ignored`:
-            return { label: `Ignored`, tone: `neutral` };
+            return { label: `ignored`, tone: `neutral` };
         case `open`:
             return undefined;
     }

@@ -120,7 +120,7 @@ const facts = computed(() =>
         <!-- HOW IT RAN, trailing and tabular so times and costs line up down the list rather than each sitting
              wherever its row's own facts happened to end. -->
         <template #meta>
-            <StatusBadge v-if="episode.failed" variant="danger" label="Failed" size="xs" dot />
+            <StatusBadge v-if="episode.failed" variant="danger" label="failed" size="xs" dot />
             <span v-if="duration">{{ duration }}</span>
             <span v-if="cost">{{ cost }}</span>
             <span :title="formatTimestamp(episode.at)">{{ timeAgo(episode.at) }}</span>

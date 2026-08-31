@@ -28,17 +28,17 @@ export const STATE_TONE: Record<DeployState, StateTone> = {
     running: {
         icon: `check-circle`,
         spin: false,
-        label: `Running`,
+        label: `running`,
         variant: `success`,
         text: `text-success`,
         dot: `bg-success`,
         rowBorder: `border-l-success`,
     },
-    deploying: { icon: `spinner`, spin: true, label: `Deploying`, variant: `info`, text: `text-info`, dot: `bg-info`, rowBorder: `border-l-info` },
+    deploying: { icon: `spinner`, spin: true, label: `deploying`, variant: `info`, text: `text-info`, dot: `bg-info`, rowBorder: `border-l-info` },
     unhealthy: {
         icon: `exclamation-circle`,
         spin: false,
-        label: `Unhealthy`,
+        label: `unhealthy`,
         variant: `danger`,
         text: `text-danger`,
         dot: `bg-danger`,
@@ -47,7 +47,7 @@ export const STATE_TONE: Record<DeployState, StateTone> = {
     stopped: {
         icon: `stop`,
         spin: false,
-        label: `Stopped`,
+        label: `stopped`,
         variant: `neutral`,
         text: `text-subtle`,
         dot: `bg-subtle`,
@@ -56,7 +56,7 @@ export const STATE_TONE: Record<DeployState, StateTone> = {
     unknown: {
         icon: `question-circle`,
         spin: false,
-        label: `Unknown`,
+        label: `unknown`,
         variant: `neutral`,
         text: `text-subtle`,
         dot: `bg-subtle`,
@@ -68,7 +68,7 @@ export const SERVER_TONE: Record<DeployServerState, StateTone> = {
     ok: {
         icon: `check-circle`,
         spin: false,
-        label: `Ok`,
+        label: `ok`,
         variant: `success`,
         text: `text-success`,
         dot: `bg-success`,
@@ -77,7 +77,7 @@ export const SERVER_TONE: Record<DeployServerState, StateTone> = {
     unreachable: {
         icon: `exclamation-circle`,
         spin: false,
-        label: `Unreachable`,
+        label: `unreachable`,
         variant: `danger`,
         text: `text-danger`,
         dot: `bg-danger`,
@@ -86,7 +86,7 @@ export const SERVER_TONE: Record<DeployServerState, StateTone> = {
     disabled: {
         icon: `stop`,
         spin: false,
-        label: `Disabled`,
+        label: `disabled`,
         variant: `neutral`,
         text: `text-subtle`,
         dot: `bg-subtle`,

@@ -26,14 +26,14 @@ export const sandboxAvailabilityVisual = (availability: SandboxAvailability): Sa
     switch (availability) {
         case "live":
         case "stale":
-            return { label: "Online", variant: "success", dotClass: "bg-success" };
+            return { label: "online", variant: "success", dotClass: "bg-success" };
         case "busy":
-            return { label: "Busy, catching up", variant: "neutral", dotClass: "bg-info animate-pulse" };
+            return { label: "busy, catching up", variant: "neutral", dotClass: "bg-info animate-pulse" };
         case "warming":
         case "starting":
-            return { label: "Starting", variant: "neutral", dotClass: "bg-subtle" };
+            return { label: "starting", variant: "neutral", dotClass: "bg-subtle" };
         case "blocked":
-            return { label: "Needs attention", variant: "warning", dotClass: "bg-warning" };
+            return { label: "needs attention", variant: "warning", dotClass: "bg-warning" };
     }
 };
 

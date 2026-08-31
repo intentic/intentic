@@ -28,7 +28,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     success: {
         icon: `check-circle`,
         spin: false,
-        label: `Passed`,
+        label: `passed`,
         variant: `success`,
         text: `text-success`,
         circle: `border-success bg-success/20 text-success`,
@@ -39,7 +39,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     failed: {
         icon: `exclamation-circle`,
         spin: false,
-        label: `Failed`,
+        label: `failed`,
         variant: `danger`,
         text: `text-danger`,
         circle: `border-danger bg-danger/20 text-danger`,
@@ -50,7 +50,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     running: {
         icon: `spinner`,
         spin: true,
-        label: `Running`,
+        label: `running`,
         variant: `info`,
         text: `text-info`,
         circle: `border-info bg-info/20 text-info`,
@@ -61,7 +61,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     canceled: {
         icon: `stop`,
         spin: false,
-        label: `Canceled`,
+        label: `canceled`,
         variant: `neutral`,
         text: `text-subtle`,
         circle: `border-subtle/60 bg-subtle/10 text-subtle`,
@@ -72,7 +72,7 @@ export const STATUS_TONE: Record<PipelineStatus, StatusTone> = {
     skipped: {
         icon: `forward`,
         spin: false,
-        label: `Skipped`,
+        label: `skipped`,
         variant: `neutral`,
         text: `text-subtle`,
         circle: `border-subtle/60 bg-subtle/10 text-subtle`,

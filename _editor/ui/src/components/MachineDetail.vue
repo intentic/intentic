@@ -206,7 +206,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                      and the difference (that a restart is needed even though nothing looks dead) is exactly
                      what a reader cannot infer from a green line. -->
                 <template v-if="watcher.stalled === true">
-                    <StatusBadge variant="warning" :dot="true" size="xs" label="Sync agent stalled" />
+                    <StatusBadge variant="warning" :dot="true" size="xs" label="sync agent stalled" />
                     <span class="text-xs text-warning">
                         Its process is alive but has stopped making rounds, so ports and commits below may be out of date. Restart it with
                         <span class="font-mono">intentic-machine run --stop</span> then <span class="font-mono">intentic-machine run</span>
@@ -220,7 +220,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                     <span v-if="watcher.pid !== undefined" class="font-mono text-2xs text-subtle">pid {{ watcher.pid }}</span>
                 </template>
                 <template v-else>
-                    <StatusBadge variant="warning" :dot="true" size="xs" label="Sync agent stopped" />
+                    <StatusBadge variant="warning" :dot="true" size="xs" label="sync agent stopped" />
                     <span class="text-xs text-warning">
                         Nothing is reaching this computer's folders or ports until it restarts:
                         <span class="font-mono">intentic-machine run</span>

@@ -88,10 +88,10 @@ const ready = computed(() => state.value?.holdsAnyPublisher === true && state.va
  * fleet board. What the sentence was carrying (what to do about it) belongs to `nextStep` below, and is said
  * there once. */
 const STATUS: Record<ProviderService[`status`], { label: string; variant: StatusVariant; icon: IconName; tone: RowTone }> = {
-    draft: { label: `Draft`, variant: `neutral`, icon: `file-edit`, tone: `default` },
-    probation: { label: `On probation`, variant: `warning`, icon: `bolt`, tone: `warning` },
-    listed: { label: `Live`, variant: `success`, icon: `bolt`, tone: `success` },
-    suspended: { label: `Suspended`, variant: `danger`, icon: `exclamation-circle`, tone: `danger` },
+    draft: { label: `draft`, variant: `neutral`, icon: `file-edit`, tone: `default` },
+    probation: { label: `on probation`, variant: `warning`, icon: `bolt`, tone: `warning` },
+    listed: { label: `live`, variant: `success`, icon: `bolt`, tone: `success` },
+    suspended: { label: `suspended`, variant: `danger`, icon: `exclamation-circle`, tone: `danger` },
 };
 
 // What the provider should do next, in one sentence, computed rather than guessed at by reading the badge.

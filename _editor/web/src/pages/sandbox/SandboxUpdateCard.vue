@@ -108,7 +108,7 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                 <template v-else>You are on the newest image for this channel.</template>
             </template>
             <template #meta>
-                <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="Downloaded" dot />
+                <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="downloaded" dot />
                 <StatusBadge v-if="updateAvailable" :variant="breaking ? `danger` : `warning`" :label="`${installed ?? '?'} → ${latest}`" dot />
                 <StatusBadge v-else-if="channel" variant="neutral" :label="channel" />
             </template>

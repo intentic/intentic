@@ -91,7 +91,7 @@ const voiceMinutes = computed(() => (status.value?.voice === undefined ? 0 : Mat
                 <template #description>
                     {{ voiceMinutes }} min: {{ status.voice.participants.length > 0 ? status.voice.participants.join(`, `) : `no speakers yet` }}
                 </template>
-                <template #control><StatusBadge variant="info" label="Transcribing" size="xs" dot /></template>
+                <template #control><StatusBadge variant="info" label="transcribing" size="xs" dot /></template>
             </Row>
         </div>
 

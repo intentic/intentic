@@ -264,7 +264,7 @@ const cancel = (): Promise<void> =>
                  below this writes until Apply, the migration card's discipline. -->
             <template v-if="plan !== undefined">
                 <div class="flex items-center gap-2">
-                    <StatusBadge variant="info" :label="plan.name ?? `Definition`" />
+                    <StatusBadge variant="info" :label="plan.name ?? `definition`" />
                     <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you apply.</p>
                 </div>
                 <RowGroup flat label="What would land">
@@ -279,7 +279,7 @@ const cancel = (): Promise<void> =>
                         >
                         <template #description>{{ item.applicable ? item.detail : item.reason }}</template>
                         <template #meta>
-                            <StatusBadge v-if="!item.applicable" variant="info" label="Already here" />
+                            <StatusBadge v-if="!item.applicable" variant="info" label="already here" />
                         </template>
                         <template #control>
                             <Checkbox v-if="item.applicable" v-model="ticked[item.id]" binary />
@@ -307,7 +307,7 @@ const cancel = (): Promise<void> =>
                  an empty box, because "no differences" is the answer the check exists to give. -->
             <template v-if="diff !== undefined">
                 <div v-if="diff.differences.length === 0" class="flex items-center gap-2">
-                    <StatusBadge variant="success" label="In agreement" dot />
+                    <StatusBadge variant="success" label="in agreement" dot />
                     <p class="text-2xs text-subtle">This sandbox matches that definition.</p>
                 </div>
                 <RowGroup v-else flat label="Differences" :count="diff.differences.length">
@@ -326,7 +326,7 @@ const cancel = (): Promise<void> =>
              and what still needs a person. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
-                <StatusBadge variant="success" label="Applied" dot />
+                <StatusBadge variant="success" label="applied" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }} landed.</p>
             </div>
             <!-- The failure group wears the tone its heading always did: <RowGroup>'s label is a slot precisely

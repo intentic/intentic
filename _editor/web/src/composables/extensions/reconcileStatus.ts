@@ -25,18 +25,18 @@ interface Reading {
     readonly gerund: string;
 }
 
-const CREATE: Reading = { live: `To create`, plan: `Create`, variant: `info`, dot: `bg-info`, gerund: `Creating` };
-const UPDATE: Reading = { live: `Drift`, plan: `Update`, variant: `info`, dot: `bg-info`, gerund: `Updating` };
-const REMOVE: Reading = { live: `To remove`, plan: `Remove`, variant: `danger`, dot: `bg-danger`, gerund: `Removing` };
+const CREATE: Reading = { live: `to create`, plan: `create`, variant: `info`, dot: `bg-info`, gerund: `creating` };
+const UPDATE: Reading = { live: `drift`, plan: `update`, variant: `info`, dot: `bg-info`, gerund: `updating` };
+const REMOVE: Reading = { live: `to remove`, plan: `remove`, variant: `danger`, dot: `bg-danger`, gerund: `removing` };
 
 // An action nothing here recognises. Named rather than neutral: `unknown` is the daemon SAYING it could not
 // read the resource, which is worth its own muted treatment, while an action we simply have no row for is
 // still a change of some sort, so it keeps the info colouring and only its wording gives up.
-const UNREADABLE: Reading = { live: `Unknown`, plan: `Unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `Working` };
-const UNRECOGNISED: Reading = { live: `Unknown`, plan: `Unknown`, variant: `info`, dot: `bg-info`, gerund: `Working` };
+const UNREADABLE: Reading = { live: `unknown`, plan: `unknown`, variant: `neutral`, dot: `bg-subtle`, gerund: `working` };
+const UNRECOGNISED: Reading = { live: `unknown`, plan: `unknown`, variant: `info`, dot: `bg-info`, gerund: `working` };
 
 const READINGS: Record<string, Reading> = {
-    noop: { live: `In sync`, plan: `No change`, variant: `success`, dot: `bg-success`, gerund: `Working` },
+    noop: { live: `in sync`, plan: `no change`, variant: `success`, dot: `bg-success`, gerund: `working` },
     create: CREATE,
     update: UPDATE,
     diff: UPDATE,
@@ -143,5 +143,5 @@ export const convergedBadge = (converged: boolean | undefined): { label: string;
     if (converged === undefined) {
         return undefined;
     }
-    return converged ? { label: `Up to date`, variant: `success` } : { label: `Changes pending`, variant: `info` };
+    return converged ? { label: `up to date`, variant: `success` } : { label: `changes pending`, variant: `info` };
 };

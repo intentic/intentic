@@ -250,7 +250,7 @@ const cancel = (): Promise<void> =>
             <!-- The plan: every item a row with its tick. Nothing below this writes until Apply. -->
             <template v-else>
                 <div class="flex items-center gap-2">
-                    <StatusBadge variant="info" :label="plan.source === `hermes` ? `Hermes` : `OpenClaw`" />
+                    <StatusBadge variant="info" :label="plan.source === `hermes` ? `hermes` : `openclaw`" />
                     <p class="text-2xs text-subtle">Untick anything you don't want. Nothing is written until you import.</p>
                 </div>
                 <RowGroup flat label="What would come in">
@@ -260,8 +260,8 @@ const cancel = (): Promise<void> =>
                         >
                         <template v-if="item.detail" #description>{{ item.detail }}</template>
                         <template #meta>
-                            <StatusBadge v-if="item.secrets.length > 0" variant="warning" label="Secret" />
-                            <StatusBadge v-if="!item.recommended" variant="info" label="Check first" />
+                            <StatusBadge v-if="item.secrets.length > 0" variant="warning" label="secret" />
+                            <StatusBadge v-if="!item.recommended" variant="info" label="check first" />
                         </template>
                         <template #control>
                             <Checkbox v-model="ticked[item.id]" binary />
@@ -320,7 +320,7 @@ const cancel = (): Promise<void> =>
         <!-- The fidelity report: what landed, what did not and why, and what still needs a person. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
-                <StatusBadge variant="success" label="Imported" dot />
+                <StatusBadge variant="success" label="imported" dot />
                 <p class="text-2xs text-subtle">{{ report.applied.length }} item{{ report.applied.length === 1 ? `` : `s` }} landed.</p>
             </div>
             <RowGroup v-if="report.failed.length > 0" flat>

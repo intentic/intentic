@@ -125,7 +125,7 @@ const logoFailed = reactive(new Set<string>());
         <div v-if="deployment" class="border-t border-line-subtle pt-2">
             <div class="flex items-center gap-2">
                 <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">Running now</h4>
-                <StatusBadge :variant="deployment.live ? 'success' : 'neutral'" :label="deployment.live ? 'Live' : 'Not deployed'" size="xs" dot />
+                <StatusBadge :variant="deployment.live ? 'success' : 'neutral'" :label="deployment.live ? 'live' : 'not deployed'" size="xs" dot />
             </div>
             <p class="mt-1 truncate font-mono text-2xs text-subtle">{{ deployment.image }}</p>
         </div>

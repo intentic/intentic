@@ -1,6 +1,6 @@
 <!-- Status pill: the app-wide chrome for state labels (active/error/pending/…). Views map their own
-     domain states to a variant; this component owns only the colors and pill shape, so every view's
-     badges stay visually identical. Default slot wins over `label` for icon+text bodies. -->
+     domain states to a variant; this component owns the colors, pill shape, and lowercase label casing,
+     so every view's badges stay visually identical. Default slot wins over `label` for icon+text bodies. -->
 <script lang="ts">
 export type StatusVariant = `success` | `danger` | `warning` | `info` | `neutral` | `primary`;
 
@@ -43,7 +43,7 @@ const {
 </script>
 
 <template>
-    <span class="inline-flex items-center whitespace-nowrap rounded-full font-medium" :class="[VARIANT[variant], SIZE[size]]">
+    <span class="inline-flex items-center whitespace-nowrap rounded-full font-medium lowercase" :class="[VARIANT[variant], SIZE[size]]">
         <span v-if="dot" class="h-1.5 w-1.5 rounded-full" :class="DOT[variant]"></span>
         <slot>{{ label }}</slot>
     </span>

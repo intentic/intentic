@@ -156,9 +156,9 @@ const sizeLabel = (bytes: number): string => {
                     <template v-else>{{ sizeLabel(entry.bytes) }} · {{ formatDateTime(entry.createdAt) }}</template>
                 </template>
                 <template #meta>
-                    <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="Secrets" />
-                    <StatusBadge v-if="entry.status === 'packing'" variant="info" label="Packing" dot />
-                    <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="Failed" dot />
+                    <StatusBadge v-if="entry.secrets && entry.status === 'ready'" variant="warning" label="secrets" />
+                    <StatusBadge v-if="entry.status === 'packing'" variant="info" label="packing" dot />
+                    <StatusBadge v-else-if="entry.status === 'failed'" variant="danger" label="failed" dot />
                 </template>
                 <template #control>
                     <button
@@ -193,7 +193,7 @@ const sizeLabel = (bytes: number): string => {
         <!-- The fidelity report: what landed, and what the target cannot do for itself. -->
         <template v-if="report">
             <div class="flex items-center gap-2">
-                <StatusBadge variant="success" label="Restored" dot />
+                <StatusBadge variant="success" label="restored" dot />
                 <p class="text-2xs text-subtle">
                     {{ report.restored.workspaceFiles }} workspace files, {{ report.restored.historyFiles }} history files,
                     {{ report.restored.repos.length }} repos ({{ report.restored.repos.join(`, `) }}).

@@ -84,9 +84,9 @@ const reject = (): Promise<void> => decide(`/environment/reject`);
         <Row flush :heading="2" icon="box" title="Environment">
             <template #control>
                 <SegmentedControl v-if="!unsupported" v-model="view" :options="VIEWS" />
-                <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="Applied" dot />
-                <StatusBadge v-else-if="pending && !proposal" variant="warning" label="Pending rebuild" dot />
-                <StatusBadge v-else variant="warning" label="Awaiting review" dot />
+                <StatusBadge v-if="applied && !proposal && !pending" variant="success" label="applied" dot />
+                <StatusBadge v-else-if="pending && !proposal" variant="warning" label="pending rebuild" dot />
+                <StatusBadge v-else variant="warning" label="awaiting review" dot />
                 <button type="button" :class="ui.iconButton()" aria-label="Refresh" v-tooltip.top="'Refresh'" @click="load">
                     <!-- `isFetching`, not `query.isFetching`: reaching through vue-query's object does not
                          unwrap in a template, so this handed <Icon> the REF — an object, therefore always

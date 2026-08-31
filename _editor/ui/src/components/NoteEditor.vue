@@ -61,7 +61,7 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
              pane that had to remember to render it is a pane that will forget. -->
         <template #badges>
             <slot name="badges" />
-            <StatusBadge v-if="editing" variant="warning" size="xs" label="Unsaved" />
+            <StatusBadge v-if="editing" variant="warning" size="xs" label="unsaved" />
         </template>
 
         <template v-if="$slots[`description`]" #description><slot name="description" /></template>

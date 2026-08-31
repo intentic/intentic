@@ -142,7 +142,7 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
                                     >{{ timesWords(issue.count) }} · {{ timeAgo(issue.lastSeen, { now }) }}</span
                                 >
                                 <!-- The one fact a status cannot carry: this was fixed and it is back. -->
-                                <StatusBadge v-if="returned(issue)" variant="warning" label="Came back" size="sm" />
+                                <StatusBadge v-if="returned(issue)" variant="warning" label="came back" size="sm" />
                                 <template v-if="canShip">
                                     <Button
                                         label="Investigate"

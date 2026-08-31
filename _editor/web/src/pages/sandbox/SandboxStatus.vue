@@ -78,7 +78,7 @@ const stateVariant = (state: string): StatusVariant =>
                         >
                             Preview<Icon name="external-link" class="text-2xs" />
                         </a>
-                        <StatusBadge :variant="panel.healthy ? 'success' : 'warning'" :label="panel.healthy ? 'Healthy' : 'Starting'" size="xs" dot />
+                        <StatusBadge :variant="panel.healthy ? 'success' : 'warning'" :label="panel.healthy ? 'healthy' : 'starting'" size="xs" dot />
                     </template>
                 </Row>
                 <!-- Service-type capabilities reporting active (self-hosted stacks, ssh, docker). VPNs are NOT
