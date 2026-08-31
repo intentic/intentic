@@ -331,8 +331,8 @@ export interface AgentsRegistry {
     readonly clearSession: (id: string) => Promise<void>;
     // "Mark all read", one stamp across the whole fleet, so a board full of badges has a single escape hatch.
     readonly markAllSeen: (now: number) => Promise<void>;
-    // Persist a land's outcome: the advanced per-repo landedTips (partial lands included, conflicted repos
-    // keep theirs), the refreshed cumulative diffstat, and the conflict report behind the `conflict` status.
+    // Persist a land's outcome: a successful composition's per-repo landedTips arrive together and a refusal
+    // advances none, alongside the refreshed cumulative diffstat and the conflict report behind the status.
     // Takes the whole outcome rather than its pieces so the report cannot drift from the tips it belongs to,
     // an outcome with no conflicts CLEARS the stored one, which is what makes a resolved conflict resolve.
     readonly recordLanded: (id: string, outcome: LandOutcome) => Promise<void>;

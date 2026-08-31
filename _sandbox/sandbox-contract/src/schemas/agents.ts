@@ -701,11 +701,11 @@ export const LandConflictPathSchema = z.object({
         "Why it would not merge, and the three have nothing in common but the symptom. Your own uncommitted edits on that path, where yours is the copy at risk. The shared tree having moved under the conversation since it started, where nothing of yours is at risk. Or a file git cannot merge at all, where no automatic answer exists.",
     ),
 });
-/* land's outcome, per repo of the composition. `paths` is the set that genuinely failed to apply. NOT the
+/* A composed land's refusal, grouped per repo. `paths` is the set that genuinely failed to apply. NOT the
  * whole delta, which is what the first version reported whenever it could not pin the cause down, turning
- * four real conflicts into a wall of fourteen. `clean` counts what would land regardless, so the UI can say
- * how much is being held back by how little, and offer to take it. An empty `paths` with `clean: 0` is the
- * repo-unavailable case: the main checkout is gone, and no path-level account exists. */
+ * four real conflicts into a wall of fourteen. `clean` counts what passed in that repo but stays on the branch
+ * with the rest of the composition. An empty `paths` with `clean: 0` is the repo-unavailable case: the main
+ * checkout is gone, and no path-level account exists. */
 export const LandConflictSchema = z.object({
     repo: z.string().describe("Which repository."),
     paths: z
@@ -716,7 +716,7 @@ export const LandConflictSchema = z.object({
     clean: z
         .number()
         .describe(
-            "How many files would apply regardless, so a screen can say how much is being held back by how little and offer to take it. Zero alongside an empty list means the repository could not be reached at all.",
+            "How many files in this repository passed but remain held with the refused composition. Zero alongside an empty list means the repository could not be reached at all.",
         ),
     // The branch the user's checkout is on, the thing the agent has to rebase onto. Carried because only the
     // daemon can see it: an isolated turn's worktree is mounted over the agent's whole view, so the resolution
@@ -730,13 +730,13 @@ export const LandConflictSchema = z.object({
         ),
 });
 export type LandConflict = z.infer<typeof LandConflictSchema>;
-// land's outcome; landed only when every repo with changes applied cleanly. Conflicted repos keep their
-// worktree state, nothing is lost, and "Land now" stays available. `resolving` is populated only by a
-// `merge` land: the paths written into the workspace carrying conflict markers, which the user finishes by
-// hand in their own editor exactly as they would any merge.
+// Land's outcome for the whole frozen repo composition. The ordinary mode preflights every repo before it
+// writes any main tree: landed means all of them applied, and a conflict means none did. Every worktree keeps
+// its state, nothing is lost, and "Land now" stays available. `resolving` is populated only by a `merge` land:
+// the paths written into the workspace carrying conflict markers, which the user finishes by hand.
 export const LandResultSchema = z.object({
-    landed: z.boolean().describe("Whether anything was applied."),
-    conflicts: z.array(LandConflictSchema).optional().describe("What stopped it, per repository."),
+    landed: z.boolean().describe("Whether the entire composed change was applied."),
+    conflicts: z.array(LandConflictSchema).optional().describe("What stopped the whole composed change, grouped per repository."),
     resolving: z
         .array(
             z.object({
@@ -745,7 +745,7 @@ export const LandResultSchema = z.object({
             }),
         )
         .optional()
-        .describe("Files left half-merged, when you asked for the mode that lands what it can and leaves the rest marked up."),
+        .describe("Files left half-merged when you asked to carry the whole composition with its conflicts marked for resolution."),
     // A `measure` outcome with an outstanding delta: nothing was applied and nothing failed, the work is
     // waiting on the branch for a deliberate Land. `landed: false` alone can't say that (it means refusal).
     held: z
@@ -756,14 +756,13 @@ export const LandResultSchema = z.object({
         ),
 });
 export type LandResult = z.infer<typeof LandResultSchema>;
-/* land's input. `check` is the safe default and the historical behaviour: the delta is applied only if ALL of
- * it applies, so a refusal leaves the workspace byte-identical. `merge` is the escape hatch the conflict
- * report offers, a three-way apply that lands every clean path and leaves the rest with conflict markers to
- * resolve in place. It is opt-in because it WRITES on failure, which is the one thing `check` promises not
- * to do. `measure` is the auto-land-off mode: everything a land does EXCEPT touching the main tree, the
- * provenance commit onto agent/<id>, the cumulative diffstat, and the bookkeeping for work that reached the
- * main line by another road, so a held agent's card stays as current as a landed one's while its delta waits
- * on the branch for a deliberate Land. */
+/* Land's input. `check` is the safe default: every repo is preflighted and the composition is applied only if
+ * ALL of it applies, so a refusal leaves every main tree byte-identical. `merge` is the escape hatch the
+ * conflict report offers, a three-way apply that carries the whole composition and leaves conflicted paths
+ * with markers to resolve in place. It is opt-in because it writes those markers. `measure` is the
+ * auto-land-off mode: everything a land does EXCEPT touching the main trees, the provenance commit onto
+ * agent/<id>, the cumulative diffstat, and the bookkeeping for work that reached main by another road, so a
+ * held agent's card stays current while its composed delta waits for a deliberate Land. */
 export const LandModeSchema = z.enum(["check", "merge", "measure"]);
 export type LandMode = z.infer<typeof LandModeSchema>;
 /* WHICH RUNG OF AN AGENT'S HISTORY A READING, or a land. STARTS AT.
@@ -795,7 +794,7 @@ export type AgentSpan = z.infer<typeof AgentSpanSchema>;
 export const AgentLandSchema = z.object({
     id: z.string().min(1).describe("Which conversation's work to merge."),
     mode: LandModeSchema.optional().describe(
-        "How to apply it. The default applies all of it or none, so a refusal leaves the workspace exactly as it was. The other lands every clean file and leaves the rest with conflict markers to resolve by hand.",
+        "How to apply it. The default applies every repository or none, so a refusal leaves the workspace exactly as it was. The other carries the whole composition and leaves conflicted paths with markers to resolve by hand.",
     ),
     span: AgentSpanSchema.optional().describe("How much of the work to take. Leave it out for everything not yet merged."),
     force: z.boolean().optional().describe("Go ahead despite a check that would otherwise refuse."),

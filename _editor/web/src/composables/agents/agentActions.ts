@@ -106,11 +106,10 @@ export const revealConversation = (conversation: Conversation): void => {
     }
 };
 
-// Land: merge the agent's worktree branches into the main tree. A partial result reports per-repo conflicts,
-// the worktree keeps everything, so the user can resolve (main-side), discard, or keep working.
-// `check` (the default) applies the delta only if ALL of it applies, so a refusal leaves the workspace
-// byte-identical. `merge` is what the conflict report offers once the user has read it: a three-way apply that
-// lands every clean path and leaves the rest carrying conflict markers to finish in place.
+// Land: carry the agent's worktree branches into the main trees. The daemon preflights the whole frozen repo
+// composition, so a per-repo conflict refuses every write and every worktree keeps its delta. The user can
+// resolve (main-side), discard, or keep working. `merge` is what the conflict report offers once the user has
+// read it: the whole composition lands, with conflicted paths carrying markers to finish in place.
 //
 // The content-type is NOT optional. Without it `fetch` labels a string body `text/plain`, and the daemon's oRPC
 // handler then parses the body as a STRING rather than an object, at which point its compact-input codec

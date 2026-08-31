@@ -23,9 +23,9 @@ import { agentBlockers, type Blocker, blockerLabel, blockersOf, REASON_COPY, use
  *   2. THE USER, for `workspace`. Their uncommitted edits are invisible from the agent's checkout and a
  *      three-way apply goes through the main index, so no amount of rebasing clears it: commit or stash.
  *      Previously prose, with the Changes panel left to be found.
- *   3. THE USER'S EDITOR: `merge`, which lands what fits and leaves the rest carrying markers. Kept, because
- *      someone who wants the merge in their own hands should have it, but demoted out of the primary slot it
- *      had no business holding: it is the only option here that WRITES to the workspace on failure.
+ *   3. THE USER'S EDITOR: `merge`, which carries the whole composition and leaves its conflicted paths with
+ *      markers. Kept, because someone who wants the merge in their own hands should have it, but demoted out
+ *      of the primary slot it had no business holding: it is the only option here that writes markers.
  *
  * A component of its own, rather than a fourth of the review panel's template, because it is the one part of
  * that panel with a decision tree in it: five states over three causes, and the pair (asked, streaming):
@@ -157,9 +157,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
                  both are one switch away, so the report says so once instead of offering two buttons that would
                  each address the wrong sandbox. -->
             <div v-if="box !== undefined && (mine.length > 0 || theirs.length > 0)" :class="ROW">
-                <Button size="small" :class="INLINE" @click="emit('cross')">
-                    <Icon name="arrow-right" />Open in {{ box }}
-                </Button>
+                <Button size="small" :class="INLINE" @click="emit('cross')"> <Icon name="arrow-right" />Open in {{ box }} </Button>
                 <!-- The trailing promise is gated on `mergeable`, and it has to be: a three-way apply goes
                      through the index, so git refuses it outright while any path is held by uncommitted work,
                      which is exactly the case that puts a `workspace` blocker in this report. Saying "landing

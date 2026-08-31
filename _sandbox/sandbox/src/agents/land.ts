@@ -12,12 +12,13 @@ import type { AgentWorktrees } from "./worktrees.js";
 
 // Land a conversation's work into the main tree as UNCOMMITTED changes, the Claude Code review model: the
 // agent's finished delta appears in the user's normal Changes panel and their own commit is the review
-// boundary. Per repo of the composition: preserve the worktree's dirty state as an agent-authored commit on
-// agent/<id> (provenance, nothing is ever lost), take the delta from its anchor to the tip (see anchorOf) as
-// a binary rename-aware patch, `git apply --check` it against the main tree, and apply working-tree-only.
-// Main's HEAD never moves; landedTip advances so the next land applies only the new delta. A patch that can't
-// apply (the user edited the same lines, or an overlapping dirty/untracked path) lands NOTHING for that repo
-// and reports it, the worktree keeps everything and "Land now" recovers once the user resolves. Called
+// boundary. Preserve every worktree's dirty state as an agent-authored commit on agent/<id> (provenance,
+// nothing is ever lost), take each repo's delta from its anchor to the tip (see anchorOf) as a binary
+// rename-aware patch, and preflight the WHOLE composition before writing any main tree. Only when every repo
+// passes does the second phase apply every patch working-tree-only. Main's HEAD never moves; landedTip
+// advances so the next land applies only the new delta. A patch that cannot apply (the user edited the same
+// lines, or an overlapping dirty/untracked path) refuses the WHOLE composition and reports the precise repo
+// and paths; every worktree keeps everything and "Land now" recovers once the user resolves. Called
 // automatically at clean turn completion (streamAgent) and manually from the /agents land route.
 //
 // The one thing land must never call a conflict is work that ALREADY REACHED the main tree by another road,
@@ -342,6 +343,73 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
     return conflicts;
 };
 
+interface RepoLandTarget {
+    readonly main: string;
+    readonly repo: string;
+    readonly base: string;
+    readonly tip: string;
+}
+
+type RepoLandWrite =
+    | (RepoLandTarget & { readonly kind: "whole"; readonly patchPath: string })
+    | (RepoLandTarget & { readonly kind: "subset"; readonly from: string; readonly changes: readonly DeltaChange[] })
+    | (RepoLandTarget & { readonly kind: "merge"; readonly patchPath: string; readonly paths: readonly string[] });
+
+interface RepoLandPlan {
+    next: PersistedAgent["repos"][number];
+    readonly write?: RepoLandWrite;
+}
+
+/* HOLD EVERY REPOSITORY LOCK FOR BOTH PHASES. Preflighting all repos and then releasing their locks before
+ * applying would only move the partial-land race: another browser could stage, discard or land between the
+ * check and the write. A stable alphabetical order makes two composed lands queue rather than deadlock, while
+ * single-repo operations simply wait on whichever member of the composition they address. */
+const withRepoLocks = async <T>(worktrees: AgentWorktrees, repos: readonly string[], task: () => Promise<T>): Promise<T> => {
+    const ordered = [...new Set(repos)].sort();
+    const acquire = async (index: number): Promise<T> => {
+        const repo = ordered[index];
+        return repo === undefined ? task() : worktrees.withRepoLock(repo, async () => acquire(index + 1));
+    };
+    return acquire(0);
+};
+
+const advancedRepo = async (target: RepoLandTarget, git: GitRunner): Promise<PersistedAgent["repos"][number]> => {
+    const landedHead = await headSha(target.main, git);
+    return {
+        repo: target.repo,
+        base: target.base,
+        landedTip: target.tip,
+        ...(landedHead !== undefined ? { landedHead } : {}),
+        landedAt: Date.now(),
+    };
+};
+
+const applyRepoWrite = async (
+    write: RepoLandWrite,
+    patchDir: string,
+    resolving: { repo: string; paths: string[] }[],
+    git: GitRunner,
+): Promise<void> => {
+    switch (write.kind) {
+        case "whole":
+            await git(write.main, ["apply", write.patchPath]);
+            return;
+        case "subset":
+            await applyChanges(write.main, write.from, write.tip, write.changes, patchDir, write.repo, git);
+            return;
+        case "merge":
+            /* `--3way` exits non-zero precisely BECAUSE it left conflicts, so the throw is the intended
+             * result. Preflight already proved this repo has no workspace blocker; the paths named here are
+             * therefore the marker-bearing result the user explicitly requested. */
+            try {
+                await git(write.main, ["apply", "--3way", write.patchPath]);
+            } catch {
+                // The preflight report already names every path the three-way apply leaves open.
+            }
+            resolving.push({ repo: write.repo, paths: [...write.paths] });
+    }
+};
+
 export const landAgent = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
@@ -382,125 +450,157 @@ export const landAgent = async (
     const rejudging = mode === "measure" && (entry.conflicts?.length ?? 0) > 0;
     // Only a `measure` land sets this: an outstanding delta it deliberately left on the branch (see LandModeSchema).
     let held = false;
-    // Only a `merge` land fills this: the paths now sitting in the workspace with conflict markers on them.
+    // Only a `merge` land fills this, and only in phase two after every repository passed phase one.
     const resolving: { repo: string; paths: string[] }[] = [];
-    const repos: PersistedAgent["repos"] = [];
+    const plans: RepoLandPlan[] = [];
     const diff = { files: 0, insertions: 0, deletions: 0 };
     let changed = false;
     // One temp dir for the run's patch files, removed whole in the finally.
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-land-"));
     try {
-        for (const composed of entry.repos) {
-            const { repo, base } = composed;
-            let next: PersistedAgent["repos"][number] = composed;
-            await worktrees.withRepoLock(repo, async () => {
-                const main = worktrees.mainDir(repo);
-                if (!(await exists(join(main, ".git")))) {
-                    // The main checkout vanished, nothing to apply into; surfaced, not silently skipped. No
-                    // path-level account exists for it, which is what an empty `paths` with nothing clean says.
-                    conflicts.push({ repo, paths: [], clean: 0 });
-                    changed = true;
-                    return;
-                }
-                /* Which checkout answers for the branch. A retired one (an archived agent, or a restored one
-                 * whose next turn hasn't re-attached it yet) is NOT "nothing to land": the branch still holds
-                 * everything, retire commits the worktree's remainder before reclaiming it, and the shared
-                 * object store makes all of it readable from the main repo. Skipping here was how landing an
-                 * archived agent "succeeded" while landing nothing, and stamped the card Landed over a review
-                 * still counting every file as pending. */
-                const attached = await worktrees.attached(entry.id, repo);
-                const worktree = worktrees.worktreeDir(entry.id, repo);
-                // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch,
-                // staged, unstaged and untracked alike (`add -A` sweeps all three), and a no-op when staging
-                // leaves the index empty. That last case is the ROOT repo of a workspace whose only change
-                // lives inside a NESTED repo of the composition: root sees "modified: <repo> (modified
-                // content)" but can stage nothing, because a gitlink moves only when that repo's own HEAD
-                // does. The nested repo lands its own work below; root's gitlink follows whenever someone
-                // commits there. (A retired checkout has nothing uncommitted to preserve, its retire did this.)
-                if (attached) {
-                    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
-                }
-                const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
-                if (tip === undefined) {
-                    return;
-                }
-                // Ref-only reads run wherever the refs live: the worktree while attached, the main repo after.
-                const refDir = attached ? worktree : main;
-                /* The card's counter, totalled over the very rows the REVIEW lists (agent-changes.ts), the
-                 * agent's cumulative output, landed work included. Read here because a land is where a turn's
-                 * work becomes final and the shas are already in hand, but computed by the review's own
-                 * reader: a second, independent diffstat is how the card came to claim 336 files over a review
-                 * showing 6, having measured from the frozen base while the review measured from the anchor. */
-                for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
-                    diff.files += 1;
-                    diff.insertions += change.additions ?? 0;
-                    diff.deletions += change.deletions ?? 0;
-                }
-                const from = await anchorOf(refDir, main, tip, span === "cumulative" ? undefined : composed.landedTip, base, git);
-                if (tip === from) {
-                    /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
-                     * the tip) and this land is a true no-op, but when ANCESTRY says so, the registry is
-                     * hearing it for the first time: the main line merged the branch, or fast-forwarded onto
-                     * it, since the last land, an agent told to "land on main" that ran the merge itself.
-                     * That is a real outcome and must be persisted like one: with landedTip left behind, the
-                     * review re-offers the whole delta as "not landed" forever and a conflict report from
-                     * before the merge never clears. No landedHead/landedAt, as with the net-zero delta:
-                     * nothing here arrived as uncommitted content to attribute. */
-                    if ((composed.landedTip ?? base) !== tip) {
-                        next = { repo, base, landedTip: tip };
+        return await withRepoLocks(
+            worktrees,
+            entry.repos.map(({ repo }) => repo),
+            async () => {
+                /* PHASE ONE: preserve branch work and build a complete, read-only verdict. Plans may compute
+                 * the landedTip each repo would receive, but none is returned and no main tree is written if
+                 * even one conflict is found anywhere in the composition. */
+                for (const composed of entry.repos) {
+                    const { repo, base } = composed;
+                    let next: PersistedAgent["repos"][number] = composed;
+                    const main = worktrees.mainDir(repo);
+                    if (!(await exists(join(main, ".git")))) {
+                        // The main checkout vanished, nothing to apply into; surfaced, not silently skipped. No
+                        // path-level account exists for it, which is what an empty `paths` with nothing clean says.
+                        conflicts.push({ repo, paths: [], clean: 0 });
                         changed = true;
+                        plans.push({ next });
+                        continue;
                     }
-                    return;
-                }
-                changed = true;
-                // How this delta gets marked accounted-for, every ending below that puts it in the main tree
-                // finishes here. `landedTip` stops it being re-offered; `landedHead`/`landedAt` record where the
-                // main tree stood when it went in. That stamp dates the per-file attribution the Changes
-                // panel draws: while HEAD still stands here, this agent's delta IS part of the repo's
-                // uncommitted content, so those paths can be credited to it. Once the user commits, HEAD moves
-                // and the claim expires rather than following a path they may since have re-edited themselves
-                // (agents/origins.ts). An unborn HEAD records none, and claims nothing.
-                const advanced = async (): Promise<PersistedAgent["repos"][number]> => {
-                    const landedHead = await headSha(main, git);
-                    return { repo, base, landedTip: tip, ...(landedHead !== undefined ? { landedHead } : {}), landedAt: Date.now() };
-                };
-                // 2. Patch-apply the delta onto the main WORKING TREE only, no index, no commit: the result
-                // is plain unstaged changes, exactly what the Changes panel reviews. `apply --check` is the
-                // conflict gate, and it is CONTEXT-based, which is what makes incremental landing work: a
-                // main file still holding the previously-landed (`from`) content matches the patch context and
-                // applies cleanly, while a user edit on the same lines mismatches and applies NOTHING. A
-                // path-set overlap test can't make that distinction (it would flag every re-touched file).
-                const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
-                if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
-                    // A net-zero delta, the agent reverted everything it did since the last land. There is
-                    // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
-                    // or every future land re-reports this range as a phantom conflict nothing can resolve.
-                    // No provenance: nothing of this agent's is in the main tree to attribute.
-                    next = { repo, base, landedTip: tip };
-                    return;
-                }
-                /* `measure`: auto-land is off, so an outstanding delta STAYS on the branch, everything above
-                 * this line already ran (the provenance commit, the diffstat, the tip===from and net-zero
-                 * bookkeeping), and everything below is exactly what "don't touch the main tree" forbids. The
-                 * one question still worth asking is the reverse probe: a delta that un-applies cleanly is
-                 * already sitting in the main tree by another road (the agent committed onto the main line
-                 * itself, a user applied the branch by hand), and holding THAT "ready to land" would offer a
-                 * land that can never do anything, so it advances like any other already-in-main outcome.
-                 * Anything else is genuinely outstanding: held, tips untouched, and the eventual deliberate
-                 * land runs the full conflict gate on the cumulative delta. */
-                if (mode === "measure") {
-                    if (await applies(main, patchPath, "reverse", git)) {
-                        next = await advanced();
-                        return;
+                    /* Which checkout answers for the branch. A retired one (an archived agent, or a restored one
+                     * whose next turn hasn't re-attached it yet) is NOT "nothing to land": the branch still holds
+                     * everything, retire commits the worktree's remainder before reclaiming it, and the shared
+                     * object store makes all of it readable from the main repo. Skipping here was how landing an
+                     * archived agent "succeeded" while landing nothing, and stamped the card Landed over a review
+                     * still counting every file as pending. */
+                    const attached = await worktrees.attached(entry.id, repo);
+                    const worktree = worktrees.worktreeDir(entry.id, repo);
+                    // 1. Preserve the worktree's uncommitted state as an agent-authored commit on its branch,
+                    // staged, unstaged and untracked alike (`add -A` sweeps all three), and a no-op when staging
+                    // leaves the index empty. That last case is the ROOT repo of a workspace whose only change
+                    // lives inside a NESTED repo of the composition: root sees "modified: <repo> (modified
+                    // content)" but can stage nothing, because a gitlink moves only when that repo's own HEAD
+                    // does. The nested repo lands its own work below; root's gitlink follows whenever someone
+                    // commits there. (A retired checkout has nothing uncommitted to preserve, its retire did this.)
+                    if (attached) {
+                        await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
                     }
-                    /* The re-judgement (see `rejudging`). A delta that applies now carries no verdict at all,
-                     * which is what retires the stored one; anything still blocked is reported exactly as the
-                     * conflict gate below reports it, because it IS that gate, asked without applying. `held`
-                     * is set either way and the return suppresses it wherever a conflict was found, so the
-                     * outcome reads the same as a real land's for the same tree. */
-                    if (rejudging && !(await applies(main, patchPath, "forward", git))) {
+                    const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
+                    if (tip === undefined) {
+                        plans.push({ next });
+                        continue;
+                    }
+                    // Ref-only reads run wherever the refs live: the worktree while attached, the main repo after.
+                    const refDir = attached ? worktree : main;
+                    /* The card's counter, totalled over the very rows the REVIEW lists (agent-changes.ts), the
+                     * agent's cumulative output, landed work included. Read here because a land is where a turn's
+                     * work becomes final and the shas are already in hand, but computed by the review's own
+                     * reader: a second, independent diffstat is how the card came to claim 336 files over a review
+                     * showing 6, having measured from the frozen base while the review measured from the anchor. */
+                    for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
+                        diff.files += 1;
+                        diff.insertions += change.additions ?? 0;
+                        diff.deletions += change.deletions ?? 0;
+                    }
+                    const from = await anchorOf(refDir, main, tip, span === "cumulative" ? undefined : composed.landedTip, base, git);
+                    if (tip === from) {
+                        /* Everything already landed for this repo. Usually that is a recorded fact (landedTip is
+                         * the tip) and this land is a true no-op, but when ANCESTRY says so, the registry is
+                         * hearing it for the first time: the main line merged the branch, or fast-forwarded onto
+                         * it, since the last land, an agent told to "land on main" that ran the merge itself.
+                         * That is a real outcome and must be persisted like one: with landedTip left behind, the
+                         * review re-offers the whole delta as "not landed" forever and a conflict report from
+                         * before the merge never clears. No landedHead/landedAt, as with the net-zero delta:
+                         * nothing here arrived as uncommitted content to attribute. */
+                        if ((composed.landedTip ?? base) !== tip) {
+                            next = { repo, base, landedTip: tip };
+                            changed = true;
+                        }
+                        plans.push({ next });
+                        continue;
+                    }
+                    changed = true;
+                    const target = { main, repo, base, tip } satisfies RepoLandTarget;
+                    // The patch is checked now and written only in phase two. `apply --check` is CONTEXT-based,
+                    // which keeps incremental landing valid: a previously landed copy matches, while a user's
+                    // edit to the same lines refuses the entire composition before any repo is touched.
+                    const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
+                    if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
+                        // A net-zero delta, the agent reverted everything it did since the last land. There is
+                        // nothing to apply (`git apply` rejects an empty patch), but the tip must still advance,
+                        // or every future land re-reports this range as a phantom conflict nothing can resolve.
+                        // No provenance: nothing of this agent's is in the main tree to attribute.
+                        next = { repo, base, landedTip: tip };
+                        plans.push({ next });
+                        continue;
+                    }
+                    /* `measure`: auto-land is off, so an outstanding delta STAYS on the branch, everything above
+                     * this line already ran (the provenance commit, the diffstat, the tip===from and net-zero
+                     * bookkeeping), and everything below is exactly what "don't touch the main tree" forbids. The
+                     * one question still worth asking is the reverse probe: a delta that un-applies cleanly is
+                     * already sitting in the main tree by another road (the agent committed onto the main line
+                     * itself, a user applied the branch by hand), and holding THAT "ready to land" would offer a
+                     * land that can never do anything, so it advances like any other already-in-main outcome.
+                     * Anything else is genuinely outstanding: held, tips untouched, and the eventual deliberate
+                     * land runs the full conflict gate on the cumulative delta. */
+                    if (mode === "measure") {
+                        if (await applies(main, patchPath, "reverse", git)) {
+                            next = await advancedRepo(target, git);
+                            plans.push({ next });
+                            continue;
+                        }
+                        /* The re-judgement (see `rejudging`). A delta that applies now carries no verdict at all,
+                         * which is what retires the stored one; anything still blocked is reported exactly as the
+                         * conflict gate below reports it, because it IS that gate, asked without applying. `held`
+                         * is set either way and the return suppresses it wherever a conflict was found, so the
+                         * outcome reads the same as a real land's for the same tree. */
+                        if (rejudging && !(await applies(main, patchPath, "forward", git))) {
+                            const report = await classifyDelta(main, from, tip, patchDir, repo, git);
+                            if (report.blocked.length > 0) {
+                                const mainBranch = await mainBranchOf(main, git);
+                                conflicts.push({
+                                    repo,
+                                    paths: report.blocked,
+                                    clean: report.clean.length,
+                                    ...(mainBranch !== undefined ? { mainBranch } : {}),
+                                });
+                            }
+                        }
+                        held = true;
+                        plans.push({ next });
+                        continue;
+                    }
+                    if (!(await applies(main, patchPath, "forward", git))) {
                         const report = await classifyDelta(main, from, tip, patchDir, repo, git);
-                        if (report.blocked.length > 0) {
+                        /* NOTHING here is in conflict, the atomic check failed only because part of this delta is
+                         * already in the main tree. That is a land, not a refusal: apply whatever is genuinely
+                         * outstanding (nothing at all, when the agent put its whole delta on the main line itself)
+                         * and advance, so the work stops being re-offered on every future land. */
+                        if (report.blocked.length === 0) {
+                            plans.push({ next, write: { ...target, kind: "subset", from, changes: report.clean } });
+                            continue;
+                        }
+                        /* A three-way apply merges THROUGH THE INDEX, so git refuses it outright, applying not
+                         * one file, not even the clean ones, as soon as any path it must fall back on differs
+                         * between the working tree and the index ("does not match index"). That is precisely the
+                         * `workspace` cause. So merge mode is offered only where git can actually merge: the
+                         * user's own uncommitted copy has to be committed or stashed first, and saying so beats
+                         * attempting it and reporting a failure they cannot read. */
+                        const mergeable = report.blocked.every((conflict) => conflict.reason !== "workspace");
+                        if (mode === "check" || !mergeable) {
+                            // What `check` promises is that a refusal leaves the workspace byte-identical. Report
+                            // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
+                            // Only `blocked` is reported: an already-in-main path is not something to resolve.
                             const mainBranch = await mainBranchOf(main, git);
                             conflicts.push({
                                 repo,
@@ -508,82 +608,57 @@ export const landAgent = async (
                                 clean: report.clean.length,
                                 ...(mainBranch !== undefined ? { mainBranch } : {}),
                             });
+                            plans.push({ next });
+                            continue;
                         }
-                    }
-                    held = true;
-                    return;
-                }
-                if (!(await applies(main, patchPath, "forward", git))) {
-                    const report = await classifyDelta(main, from, tip, patchDir, repo, git);
-                    /* NOTHING here is in conflict, the atomic check failed only because part of this delta is
-                     * already in the main tree. That is a land, not a refusal: apply whatever is genuinely
-                     * outstanding (nothing at all, when the agent put its whole delta on the main line itself)
-                     * and advance, so the work stops being re-offered on every future land. */
-                    if (report.blocked.length === 0) {
-                        await applyChanges(main, from, tip, report.clean, patchDir, repo, git);
-                        next = await advanced();
-                        return;
-                    }
-                    /* A three-way apply merges THROUGH THE INDEX, so git refuses it outright, applying not
-                     * one file, not even the clean ones, as soon as any path it must fall back on differs
-                     * between the working tree and the index ("does not match index"). That is precisely the
-                     * `workspace` cause. So merge mode is offered only where git can actually merge: the
-                     * user's own uncommitted copy has to be committed or stashed first, and saying so beats
-                     * attempting it and reporting a failure they cannot read. */
-                    const mergeable = report.blocked.every((conflict) => conflict.reason !== "workspace");
-                    if (mode === "check" || !mergeable) {
-                        // What `check` promises is that a refusal leaves the workspace byte-identical. Report
-                        // and stop: the worktree keeps everything, and "Land now" recovers once the user acts.
-                        // Only `blocked` is reported: an already-in-main path is not something to resolve.
-                        const mainBranch = await mainBranchOf(main, git);
-                        conflicts.push({
-                            repo,
-                            paths: report.blocked,
-                            clean: report.clean.length,
-                            ...(mainBranch !== undefined ? { mainBranch } : {}),
+                        /* `merge`: the user asked for the whole composition to arrive even though this repo
+                         * needs markers. Queue it, but write nothing until every other repo has also proved it
+                         * can either apply or produce its own requested markers. */
+                        plans.push({
+                            next,
+                            write: { ...target, kind: "merge", patchPath, paths: report.blocked.map((conflict) => conflict.path) },
                         });
-                        return;
+                        continue;
                     }
-                    /* `merge`: the user has read the report and asked for the three-way anyway. Every clean
-                     * path lands, and each conflicted one arrives carrying the standard markers to be finished
-                     * in place, the shape any merge leaves behind, in the editor they already use.
-                     *
-                     * `--3way` exits non-zero precisely BECAUSE it left conflicts, so a throw here is the
-                     * intended outcome rather than a failure; the delta is in the tree either way. It needs
-                     * both blobs to merge against, which the object store shared with the worktree has. */
-                    try {
-                        await git(main, ["apply", "--3way", patchPath]);
-                    } catch {
-                        // Nothing to add: `report` already names what was left open, and it is reported below.
-                    }
-                    resolving.push({ repo, paths: report.blocked.map((conflict) => conflict.path) });
-                    // The tip advances even with paths still open, because the delta IS in the main tree now.
-                    // Holding it back would re-apply the whole thing over the user's half-finished resolution
-                    // the next time anything lands.
-                    next = await advanced();
-                    return;
+                    plans.push({ next, write: { ...target, kind: "whole", patchPath } });
                 }
-                await git(main, ["apply", patchPath]);
-                next = await advanced();
-            });
-            repos.push(next);
-        }
+
+                /* A REFUSAL RETURNS THE ORIGINAL REPO RECORDS. The prepared tips stay outstanding together,
+                 * so a later successful land applies the same composed change rather than treating the clean
+                 * repos as already delivered. The only writes phase one made were provenance commits inside
+                 * the agent's own worktrees. */
+                if (conflicts.length > 0) {
+                    return {
+                        landed: false,
+                        changed,
+                        repos: [...entry.repos],
+                        diff,
+                        adjudicated: mode !== "measure" || rejudging,
+                        conflicts,
+                    };
+                }
+
+                // PHASE TWO: the complete preflight passed while every repo lock remained held. Apply every
+                // plan, then and only then stamp every landed tip as one outcome.
+                for (const plan of plans) {
+                    if (plan.write === undefined) {
+                        continue;
+                    }
+                    await applyRepoWrite(plan.write, patchDir, resolving, git);
+                    plan.next = await advancedRepo(plan.write, git);
+                }
+                return {
+                    landed: !held,
+                    changed,
+                    repos: plans.map(({ next }) => next),
+                    diff,
+                    adjudicated: mode !== "measure" || rejudging,
+                    ...(resolving.length > 0 ? { resolving } : {}),
+                    ...(held ? { held: true } : {}),
+                };
+            },
+        );
     } finally {
         await rm(patchDir, { recursive: true, force: true });
     }
-    return {
-        // A held delta is not landed, but a conflict is the louder fact, so `held` reports only when it is
-        // the outcome (the wire contract: held ⇒ nothing was applied and nothing failed).
-        landed: conflicts.length === 0 && !held,
-        changed,
-        repos,
-        diff,
-        // `measure` never reaches the conflict gate, so it has no verdict to offer and must not retire the
-        // last one: see the field's own note above. Unless it was re-judging, which is the gate, asked without
-        // applying, and therefore a verdict like any other.
-        adjudicated: mode !== "measure" || rejudging,
-        ...(conflicts.length > 0 ? { conflicts } : {}),
-        ...(resolving.length > 0 ? { resolving } : {}),
-        ...(held && conflicts.length === 0 ? { held: true } : {}),
-    };
 };

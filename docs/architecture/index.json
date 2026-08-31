@@ -53,6 +53,11 @@
     {
       "dev": false,
       "from": "_computers/machine",
+      "to": "_sandbox/sandbox-run"
+    },
+    {
+      "dev": false,
+      "from": "_computers/machine",
       "to": "_tools/constants"
     },
     {
@@ -2090,14 +2095,14 @@
       "behind": 0,
       "component": "computers",
       "dir": "_computers/machine",
-      "files": 58,
+      "files": 60,
       "hasTests": true,
-      "loc": 10252,
+      "loc": 10903,
       "name": "@intentic/machine",
       "oneLiner": "The one agent that lives on a user's own computer: it lets a sandbox's agent work on the machine, and keeps the machine's folders and ports mirrored with the sandbox — one binary, one resident loop,…",
-      "readmeRev": "1634f6d68ac0225797e3ea48705e6cb14f290d71",
+      "readmeRev": "674ab618b670181c041a676930a006dd088831a6",
       "stale": false,
-      "updatedAt": 1788186020000
+      "updatedAt": 1788208943000
     },
     {
       "anchors": [
@@ -2207,16 +2212,16 @@
           "what": ": the post-apply Access summary + access.md; src/lib/known-hosts.ts, TOFU host-key pinning."
         }
       ],
-      "behind": 1,
+      "behind": 2,
       "component": "deploy",
       "dir": "_deploy/cli",
-      "files": 67,
+      "files": 64,
       "hasTests": true,
-      "loc": 6559,
+      "loc": 6250,
       "name": "@intentic/cli",
       "oneLiner": "The intentic command: tunnels, deployment and scaffolding, in one toolbox.",
       "readmeRev": "693fb0978ccb163234326d043889a7873b5cd412",
-      "reason": "1 commit has touched this package since its README was written",
+      "reason": "2 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788085991000
     },
@@ -2530,16 +2535,16 @@
           "what": ": the shared formatters, so two extensions render a duration the same way."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "editor",
       "dir": "_editor/extension-ui",
       "files": 4,
       "hasTests": false,
-      "loc": 686,
+      "loc": 696,
       "name": "@intentic/extension-ui",
       "oneLiner": "The UI kit an extension renders with, so its views look like the app rather than like a website.",
       "readmeRev": "4a1136063a6db1d3bec96653c5532c38137566ef",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306217000
     },
@@ -2604,17 +2609,18 @@
           "what": ": design tokens + theme.ts (the Theme preset that bridges Tailwind vars ↔ PrimeVue --p-), PrimeVue overrides (@layer primeng), semantic colors. index.css is the whole design system in one import; opt-in/ holds the two sheets only some consumers pay for (prose.css, extension-surface.css)."
         }
       ],
-      "behind": 0,
+      "behind": 1,
       "component": "editor",
       "dir": "_editor/ui",
-      "files": 143,
+      "files": 145,
       "hasTests": false,
-      "loc": 16623,
+      "loc": 16871,
       "name": "@intentic/ui",
       "oneLiner": "Shared Vue UI primitives + theme for the platform web app.",
-      "readmeRev": "1634f6d68ac0225797e3ea48705e6cb14f290d71",
-      "stale": false,
-      "updatedAt": 1788186020000
+      "readmeRev": "43cab0246abf1f64e1d6d57b831235e5c008cc01",
+      "reason": "1 commit has touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788197335000
     },
     {
       "anchors": [
@@ -2643,16 +2649,16 @@
           "what": ": the full route table."
         }
       ],
-      "behind": 30,
+      "behind": 34,
       "component": "editor",
       "dir": "_editor/web",
       "files": 1049,
       "hasTests": true,
-      "loc": 183273,
+      "loc": 183338,
       "name": "@intentic-app/web",
       "oneLiner": "The Vue 3 SPA (Vite + PrimeVue), the platform's workspace UI.",
       "readmeRev": "f6b84f9fbf16ef617f1d4c491af94298ddab2415",
-      "reason": "30 commits have touched this package since its README was written",
+      "reason": "34 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788115577000
     },
@@ -2921,16 +2927,16 @@
           "what": ": activation, and why it is one tile per connection."
         }
       ],
-      "behind": 10,
+      "behind": 11,
       "component": "extensions",
       "dir": "_extensions/deployments",
       "files": 30,
       "hasTests": true,
-      "loc": 3142,
+      "loc": 3146,
       "name": "@intentic/ext-deployments",
       "oneLiner": "What is actually running on the servers you own, read from a Komodo you already operate.",
       "readmeRev": "2bbeca94d85e7462e6febdae183681d12285eeb2",
-      "reason": "10 commits have touched this package since its README was written",
+      "reason": "11 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306242000
     },
@@ -3001,16 +3007,16 @@
           "what": ": the conventions, taught to every turn"
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "extensions",
       "dir": "_extensions/documentation",
       "files": 31,
       "hasTests": true,
-      "loc": 3902,
+      "loc": 3919,
       "name": "@intentic/ext-documentation",
       "oneLiner": "Plain-language architecture documentation for every repository and package in the workspace.",
       "readmeRev": "a14873a7a7478c1629672306527d08ff07d701fc",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787350005000
     },
@@ -3033,15 +3039,15 @@
           "what": ": activation, and the badge, which the queue's own files refresh (the"
         }
       ],
-      "behind": 2,
+      "behind": 3,
       "dir": "_extensions/drafts",
       "files": 18,
       "hasTests": true,
-      "loc": 1959,
+      "loc": 1966,
       "name": "@intentic/ext-drafts",
       "oneLiner": "The approval inbox for posts the agent proposed during its scheduled work.",
       "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
-      "reason": "2 commits have touched this package since its README was written",
+      "reason": "3 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787652437000
     },
@@ -3179,15 +3185,15 @@
           "what": ": activation, and the badge that seats the rail tile."
         }
       ],
-      "behind": 3,
+      "behind": 4,
       "dir": "_extensions/issues",
       "files": 10,
       "hasTests": true,
-      "loc": 633,
+      "loc": 638,
       "name": "@intentic/ext-issues",
       "oneLiner": "Issues — the inbox of bugs the owner's own users hit, arriving from the reporter SDK embedded on their sites and apps.",
       "readmeRev": "60087c1df99a73b9cf0112841f964b3ffe503e2f",
-      "reason": "3 commits have touched this package since its README was written",
+      "reason": "4 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788069688000
     },
@@ -3258,15 +3264,15 @@
           "what": ": when the agent reads the knowledge base and"
         }
       ],
-      "behind": 7,
+      "behind": 8,
       "dir": "_extensions/knowledge",
       "files": 45,
       "hasTests": true,
-      "loc": 5322,
+      "loc": 5396,
       "name": "@intentic/ext-knowledge",
       "oneLiner": "A folder of markdown notes that is also a typed graph: the people, projects, decisions and words this work happens among, browsable here and queryable by the agent.",
       "readmeRev": "4cb4713498d144f29eb7cc3e27aa045aec43bd7a",
-      "reason": "7 commits have touched this package since its README was written",
+      "reason": "8 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788023900000
     },
@@ -3293,16 +3299,16 @@
           "what": ": activation, and three decisions that could each have gone the other way."
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "extensions",
       "dir": "_extensions/maintenance",
       "files": 15,
       "hasTests": true,
-      "loc": 1838,
+      "loc": 1844,
       "name": "@intentic/ext-maintenance",
       "oneLiner": "The chore book: what this workspace is owed, why, and the evidence behind each answer.",
       "readmeRev": "775111ae1d4b957f575e2bf345e2642a0f5c2269",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787652437000
     },
@@ -3365,16 +3371,16 @@
           "what": ": one mapping from status to appearance."
         }
       ],
-      "behind": 11,
+      "behind": 12,
       "component": "extensions",
       "dir": "_extensions/pipelines",
       "files": 24,
       "hasTests": true,
-      "loc": 2559,
+      "loc": 2567,
       "name": "@intentic/ext-pipelines",
       "oneLiner": "CI as it actually went: runs, their jobs, and which failures are a streak rather than a blip.",
       "readmeRev": "bec7441f4ec45cadbb78ee452628d0df67918457",
-      "reason": "11 commits have touched this package since its README was written",
+      "reason": "12 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787306246000
     },
@@ -3673,18 +3679,17 @@
           "what": "(@puristic/env config; src/prisma.ts) client factory; src/types.ts: the shared Prisma type."
         }
       ],
-      "behind": 4,
+      "behind": 0,
       "component": "platform",
       "dir": "_platform/api",
       "files": 122,
       "hasTests": true,
-      "loc": 22480,
+      "loc": 22470,
       "name": "@intentic-app/api",
       "oneLiner": "The platform backend, Hono + oRPC + Prisma + Better Auth.",
-      "readmeRev": "82ab5e3b25875e59f8a0ef03f3cad41746fb8813",
-      "reason": "4 commits have touched this package since its README was written",
-      "stale": true,
-      "updatedAt": 1788123548000
+      "readmeRev": "674ab618b670181c041a676930a006dd088831a6",
+      "stale": false,
+      "updatedAt": 1788208943000
     },
     {
       "anchors": [
@@ -3697,7 +3702,7 @@
           "what": ": the Zod schemas and inferred types."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "component": "platform",
       "dir": "_platform/api-contract",
       "files": 2,
@@ -3706,7 +3711,7 @@
       "name": "@intentic-app/api-contract",
       "oneLiner": "The single source of truth for the platform's API surface: the oRPC contract and its Zod schemas.",
       "readmeRev": "7c01f0cdaded72a0f57693c2dff16b96527c7ab0",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787693186000
     },
@@ -3771,14 +3776,14 @@
       "behind": 0,
       "component": "platform",
       "dir": "_platform/prisma",
-      "files": 71,
+      "files": 72,
       "hasTests": false,
-      "loc": 58632,
+      "loc": 58663,
       "name": "@intentic-app/prisma",
       "oneLiner": "The database layer: the Prisma schema, the generated client, and the migrations.",
-      "readmeRev": "7c01f0cdaded72a0f57693c2dff16b96527c7ab0",
+      "readmeRev": "674ab618b670181c041a676930a006dd088831a6",
       "stale": false,
-      "updatedAt": 1787693186000
+      "updatedAt": 1788208943000
     },
     {
       "anchors": [
@@ -4257,17 +4262,18 @@
           "what": ": workflow scheduling, immutable run snapshots, restart recovery, run-ledger"
         }
       ],
-      "behind": 0,
+      "behind": 2,
       "component": "sandbox",
       "dir": "_sandbox/sandbox",
       "files": 1101,
       "hasTests": true,
-      "loc": 197790,
+      "loc": 198062,
       "name": "@intentic/sandbox",
       "oneLiner": "The per-project AI-agent dev daemon, a Docker image that runs as the project's workspace container on the customer's host.",
-      "readmeRev": "e3d55d08015e361fc62ae5b8c05854cb18cc3edd",
-      "stale": false,
-      "updatedAt": 1788194674000
+      "readmeRev": "f360371207cd333478f51ad8dedba7de35d1fbbe",
+      "reason": "2 commits have touched this package since its README was written",
+      "stale": true,
+      "updatedAt": 1788195463000
     },
     {
       "anchors": [
@@ -4320,16 +4326,16 @@
           "what": "and contract.lock.json: every exported"
         }
       ],
-      "behind": 8,
+      "behind": 10,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-contract",
-      "files": 177,
+      "files": 179,
       "hasTests": true,
-      "loc": 30155,
+      "loc": 31239,
       "name": "@intentic/sandbox-contract",
       "oneLiner": "The wire between the sandbox daemon and its browser client: change it here, and both sides follow.",
       "readmeRev": "9db35f6d7265e18781c65cc1816c5e68bc611e23",
-      "reason": "8 commits have touched this package since its README was written",
+      "reason": "10 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1788175597000
     },
@@ -4352,16 +4358,16 @@
           "what": ": the emitted command run for"
         }
       ],
-      "behind": 4,
+      "behind": 5,
       "component": "sandbox",
       "dir": "_sandbox/sandbox-run",
       "files": 10,
       "hasTests": true,
-      "loc": 1413,
+      "loc": 1415,
       "name": "@intentic/sandbox-run",
       "oneLiner": "The sandbox container's run contract: every path that creates a sandbox composes its docker run from here.",
       "readmeRev": "0eaceefabf0737aa67a64eb18d70a872fad49b3b",
-      "reason": "4 commits have touched this package since its README was written",
+      "reason": "5 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787691398000
     },
@@ -4851,7 +4857,7 @@
           "what": ": where the build-time integrations are wired in."
         }
       ],
-      "behind": 48,
+      "behind": 49,
       "component": "site",
       "dir": "_site/site",
       "files": 24,
@@ -5009,7 +5015,7 @@
           "what": ": what Windows, Docker, and the desktop say is true."
         }
       ],
-      "behind": 5,
+      "behind": 6,
       "dir": "_tools/desktop-smoke-windows",
       "files": 18,
       "hasTests": true,
@@ -5017,7 +5023,7 @@
       "name": "@intentic/desktop-smoke-windows",
       "oneLiner": "The tiers that meet the Windows installer the way a user's machine does: by running it.",
       "readmeRev": "d228d2676c5dae2482c9716a81394bfcc514d83e",
-      "reason": "5 commits have touched this package since its README was written",
+      "reason": "6 commits have touched this package since its README was written",
       "stale": true,
       "updatedAt": 1787353077000
     },
@@ -5282,12 +5288,12 @@
       "dir": "_tools/onboarding",
       "files": 13,
       "hasTests": true,
-      "loc": 1379,
+      "loc": 1370,
       "name": "@intentic-app/onboarding",
       "oneLiner": "The onboarding tier: one journey through the product's front door, run once per way of getting a sandbox.",
-      "readmeRev": "0cc2c48f3876e610bfa5203c1e5b5b20ee076ce5",
+      "readmeRev": "674ab618b670181c041a676930a006dd088831a6",
       "stale": false,
-      "updatedAt": 1787348931000
+      "updatedAt": 1788208943000
     },
     {
       "anchors": [
@@ -5382,7 +5388,7 @@
       "updatedAt": 1787306252000
     }
   ],
-  "generatedAt": 1788194681319,
+  "generatedAt": 1788211100028,
   "orphans": [],
   "repo": "intentic",
   "undocumented": [

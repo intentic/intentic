@@ -185,8 +185,9 @@ const lanes = [
 
     <h3>When it conflicts</h3>
     <p>
-        If the patch cannot apply because you edited the same lines or an overlapping file is dirty, then <strong>nothing lands for that
-        repo</strong> and the card says so. The worktree keeps everything, and landing again works the moment you resolve your side. Work that reached the main tree by another road is not a conflict: an agent that committed onto the main line, or a branch you merged by hand, resolves as "already there" rather than stranding the card.
+        Before writing anything, landing checks every repository the conversation spans. If any patch cannot apply because you edited the same
+        lines or an overlapping file is dirty, then <strong>nothing lands anywhere</strong> and the card names the repository and paths that
+        stopped it. Every worktree keeps everything, and landing again works the moment you resolve your side. Work that reached the main tree by another road is not a conflict: an agent that committed onto the main line, or a branch you merged by hand, resolves as "already there" rather than stranding the card.
     </p>
 
     <h3>Landing automatically</h3>

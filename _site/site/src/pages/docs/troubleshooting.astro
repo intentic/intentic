@@ -185,7 +185,9 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
 
     <h3>Nothing landed and the card says conflict</h3>
     <p>
-        The agent's patch could not apply: you edited the same lines, or an overlapping file is dirty. Nothing lands for that repo and the card says so, rather than landing half of it. The worktree keeps everything, so resolve your side and land again. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
+        One of the agent's repository patches could not apply: you edited the same lines, or an overlapping file is dirty. Landing checks the
+        whole composition first, so nothing reaches any repository. The card names what stopped it and every worktree keeps everything; resolve
+        your side and land again. <a href="/docs/parallel-agents/">Parallel agents</a> covers the whole flow.
     </p>
 
     <h3>Work is already in main and the card still wants to land</h3>

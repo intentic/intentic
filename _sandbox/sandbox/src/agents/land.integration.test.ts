@@ -371,6 +371,50 @@ test("a delta living only in a NESTED repo lands: root has nothing it can stage,
     expect(result.repos.find((repo) => repo.repo === "inner")?.landedTip).toBe(await sh(worktrees.worktreeDir("c2", "inner"), "rev-parse", "HEAD"));
 });
 
+test("a conflict in one repository refuses the whole composition without advancing any landed tip", async () => {
+    const { work, worktrees } = await setup();
+    const inner = join(work, "inner");
+    await mkdir(inner, { recursive: true });
+    await writeFile(join(inner, "lib.ts"), "inner one\ninner two\n");
+    await sh(inner, "init", "-q", "--initial-branch=main");
+    await sh(inner, "add", "-A");
+    await sh(inner, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "inner baseline");
+
+    const conversation = await worktrees.ensure("c2", []);
+    const rootWorktree = worktrees.worktreeDir("c2", "root");
+    const innerWorktree = worktrees.worktreeDir("c2", "inner");
+    await writeFile(join(rootWorktree, "app.ts"), "line one AGENT\nline two\nline three\n");
+    await writeFile(join(innerWorktree, "lib.ts"), "inner one AGENT\ninner two\n");
+    await writeFile(join(inner, "lib.ts"), "inner one USER\ninner two\n");
+
+    const result = await landAgent(worktrees, { ...isolatedAgent(conversation.repos), id: "c2", branch: "agent/c2" });
+
+    expect(result.landed).toBe(false);
+    expect(result.conflicts).toEqual([{ repo: "inner", paths: [{ path: "lib.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
+    // Root passed its own patch check, but the composed land is one transaction: the nested refusal keeps
+    // both main trees byte-identical and both deltas outstanding for the next attempt.
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one\nline two\nline three\n");
+    expect(await readFile(join(inner, "lib.ts"), "utf8")).toBe("inner one USER\ninner two\n");
+    expect(result.repos.map(({ repo, landedTip }) => ({ repo, landedTip }))).toEqual([
+        { repo: "root", landedTip: undefined },
+        { repo: "inner", landedTip: undefined },
+    ]);
+
+    await writeFile(join(inner, "lib.ts"), "inner one\ninner two\n");
+    const recovered = await landAgent(worktrees, {
+        ...isolatedAgent(result.repos),
+        id: "c2",
+        branch: "agent/c2",
+    });
+    expect(recovered.landed).toBe(true);
+    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
+    expect(await readFile(join(inner, "lib.ts"), "utf8")).toBe("inner one AGENT\ninner two\n");
+    expect(recovered.repos.map(({ repo, landedTip }) => ({ repo, landedTip }))).toEqual([
+        { repo: "root", landedTip: await sh(rootWorktree, "rev-parse", "HEAD") },
+        { repo: "inner", landedTip: await sh(innerWorktree, "rev-parse", "HEAD") },
+    ]);
+});
+
 /* A RETIRED checkout (an archived agent, or a restored one whose next turn hasn't re-attached it yet) is not
  * "nothing to land": retire commits the worktree's remainder onto agent/<id>, so the branch holds everything
  * and the shared object store makes it readable from the main repo. Skipping the repo: the old behavior:
