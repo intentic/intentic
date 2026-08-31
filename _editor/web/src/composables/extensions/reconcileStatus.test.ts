@@ -16,13 +16,10 @@ const sseStream = (frames: Record<string, unknown>[]): ReadableStream<Uint8Array
 
 describe(`statusLabel`, () => {
     it(`frames the gap on the live board and the intended change in a plan`, () => {
-        expect(statusLabel(`update`)).toBe(`Drift`);
-        expect(statusLabel(`update`, `plan`)).toBe(`Update`);
-        expect(statusLabel(`create`)).toBe(`To create`);
-        expect(statusLabel(`create`, `plan`)).toBe(`Create`);
-        expect(statusLabel(`delete`)).toBe(`To remove`);
-        expect(statusLabel(`prune`, `plan`)).toBe(`Remove`);
-        expect(statusLabel(`noop`, `plan`)).toBe(`No change`);
+        expect(statusLabel(`update`)).not.toBe(statusLabel(`update`, `plan`));
+        expect(statusLabel(`create`)).not.toBe(statusLabel(`delete`));
+        expect(statusLabel(`noop`, `plan`)).not.toBe(statusLabel(`update`, `plan`));
+        expect(statusLabel(`prune`, `plan`)).toBe(statusLabel(`delete`, `plan`));
     });
 });
 

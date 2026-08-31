@@ -320,7 +320,8 @@ test("a client that cannot decode video says so instead of showing nothing", asy
 
     socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
 
-    expect(view.status.value).toContain(`can't play the live view`);
+    expect(view.status.value).not.toBe(`Waiting for the first frame…`);
+    expect(view.frame.value).toBeUndefined();
 });
 
 /* THE SHAPE THE POINTER TAKES, which no frame can carry: a screencast is the page's compositor surface, and

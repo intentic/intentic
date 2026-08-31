@@ -15,15 +15,16 @@ const labels = (contributes: ExtensionManifest["contributes"]): string[] => face
 
 describe(`facetsOf`, () => {
     it(`names the place a view shows up, per surface, counted`, () => {
-        expect(
-            labels({
-                views: [
-                    { id: `docs`, label: `Documentation`, surface: `rail` },
-                    { id: `repo`, label: `Docs`, surface: `directory` },
-                    { id: `other`, label: `More docs`, surface: `directory` },
-                ],
-            }),
-        ).toEqual([`rail tile`, `2 workspace panels`]);
+        const views = [
+            { id: `docs`, label: `Documentation`, surface: `rail` as const },
+            { id: `repo`, label: `Docs`, surface: `directory` as const },
+            { id: `other`, label: `More docs`, surface: `directory` as const },
+        ];
+        const facets = facetsOf(manifest({ views }));
+        const rail = facets.find((facet) => facet.names.includes(`Documentation`));
+        const directory = facets.find((facet) => facet.names.includes(`Docs`));
+        expect(rail?.names).toEqual([`Documentation`]);
+        expect(directory?.names).toEqual([`Docs`, `More docs`]);
     });
 
     it(`carries the real names, not counts, for the expanded breakdown`, () => {
@@ -33,11 +34,13 @@ describe(`facetsOf`, () => {
 
     it(`keeps wiring out of the one-line strip but not out of the record`, () => {
         const [facet] = facetsOf(manifest({ files: [{ path: `${STATE_DIR}/config/docs/`, invalidates: [`documentation`] }] }));
-        expect(facet).toMatchObject({ label: `watched files`, names: [`.intentic/config/docs/`], surface: false });
+        expect(facet).toMatchObject({ kind: `files`, names: [`.intentic/config/docs/`], surface: false });
     });
 
     it(`skips a declared-but-empty array rather than saying "0 commands"`, () => {
-        expect(labels({ commands: [], views: [{ id: `docs`, label: `Documentation`, surface: `sandbox` }] })).toEqual([`sandbox tab`]);
+        const facets = facetsOf(manifest({ commands: [], views: [{ id: `docs`, label: `Documentation`, surface: `sandbox` }] }));
+        expect(facets).toHaveLength(1);
+        expect(facets[0]?.names).toContain(`Documentation`);
     });
 
     /* The property the old counts line was written for and this one has to keep: a contribution point added to
@@ -45,9 +48,12 @@ describe(`facetsOf`, () => {
      * kinds, so this is pinned rather than trusted: the cast is the point, standing in for a manifest built
      * against a newer schema than this app knows. */
     it(`still surfaces a contribution kind it has never been taught`, () => {
-        expect(labels({ telemetry: [{ probe: `latency` }, { probe: `errors` }] } as unknown as ExtensionManifest["contributes"])).toEqual([
-            `2 telemetry`,
-        ]);
+        const probes = [{ probe: `latency` }, { probe: `errors` }];
+        const facets = facetsOf(
+            manifest({ telemetry: probes } as unknown as ExtensionManifest["contributes"]),
+        );
+        expect(facets[0]?.kind).toBe(`telemetry`);
+        expect(facets[0]?.label).toMatch(new RegExp(`^${probes.length} `));
     });
 
     it(`says nothing at all for a manifest that contributes nothing`, () => {

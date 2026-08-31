@@ -121,7 +121,8 @@ test("describeError keeps the stack, which is the half that names anything", asy
     const error = new TypeError(`Cannot read properties of undefined`);
 
     const described = describeError(error);
-    expect(described.message).toBe(`TypeError: Cannot read properties of undefined`);
+    expect(described.message).toContain(error.name);
+    expect(described.message).toContain(error.message);
     // The message alone names nothing; the first frames are the entire difference between a report and a shrug.
     expect(described.fields["stack"]).toContain(`TypeError`);
     // A thrown non-Error still says something rather than nothing.

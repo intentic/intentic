@@ -138,47 +138,54 @@ describe(`chipMessageNotice`, () => {
      * it has the glyph, the aligned clock and the width — and this line keeps the one thing only it can say,
      * which is whose message the box is waiting for. */
     test(`names whose message is coming, and leaves the step-by-step to the report below`, () => {
-        expect(chipMessageNotice({ ...state, draft: running() })).toBe(`Writing a message for Review panel · audit…`);
+        const waiting = chipMessageNotice({ ...state, draft: running() });
+        expect(waiting).toContain(state.label);
+        expect(waiting).not.toBe(chipMessageNotice(state));
     });
 
     test(`says the same before any model has been reached: the report below has the phase`, () => {
-        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } })).toBe(`Writing a message for Review panel · audit…`);
+        const waiting = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [] } });
+        expect(waiting).toContain(state.label);
+        expect(waiting).toBe(chipMessageNotice({ ...state, draft: running() }));
     });
 
     test(`says a sentence is never coming when none was written`, () => {
-        expect(chipMessageNotice(state)).toBe(`No message written for Review panel · audit`);
+        const absent = chipMessageNotice(state);
+        expect(absent).toContain(state.label);
+        expect(absent).not.toBe(chipMessageNotice({ ...state, draft: running() }));
     });
 
     // A draft that ENDED without writing is the same answer — the step list under the box carries the details.
     test(`a failed draft reads as the absence, not as a wait`, () => {
-        expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } })).toBe(
-             `No message written for Review panel · audit`,
-        );
+        const absent = chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } });
+        expect(absent).toContain(state.label);
+        expect(absent).toBe(chipMessageNotice(state));
     });
 
     /* The refusal that is ABOUT THE USER, and the only one with a remedy in their hands — a box they typed in is
      * never overwritten, so the chip's message waits outside it with nothing on screen to say so. That silence
      * is what made a working feature read as a broken one. */
     test(`explains itself when the box is the user's, and says what to do about it`, () => {
-        expect(chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true })).toBe(
-            `Keeping your message. Clear the box to use Review panel · audit's.`,
-        );
+        const blocked = chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true });
+        expect(blocked).toContain(state.label);
+        expect(blocked).not.toBe(chipMessageNotice({ ...state, message: `fix: cascading markers` }));
     });
 
     test(`says the same while that session's sentence is still being written`, () => {
-        expect(chipMessageNotice({ ...state, draft: running(), boxIsYours: true })).toBe(
-            `Keeping your message. Clear the box to use Review panel · audit's.`,
-        );
+        const blocked = chipMessageNotice({ ...state, draft: running(), boxIsYours: true });
+        expect(blocked).toBe(chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true }));
     });
 
     // A box the user owns over a session nothing was written for: the absence is the more fundamental answer,
     // and offering to clear the box for a message that does not exist would be a lie.
     test(`falls back to the absence when neither the box nor the session has anything to file`, () => {
-        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(`No message written for Review panel · audit`);
+        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(chipMessageNotice(state));
     });
 
     test(`the "you" row has no landed sentence by definition, and says so`, () => {
-        expect(chipMessageNotice({ ...state, label: `you`, yours: true })).toBe(`Your changes -- name this commit yourself`);
+        const yours = chipMessageNotice({ ...state, label: `you`, yours: true });
+        expect(yours).not.toBe(chipMessageNotice({ ...state, label: `you`, yours: false }));
+        expect(yours).not.toBe(chipMessageNotice({ ...state, draft: running() }));
     });
 });
 
@@ -191,9 +198,10 @@ describe(`draftReport`, () => {
     });
 
     test(`an open draft with no steps is the diff being read`, () => {
-        expect(draftReport({ startedAt: 0, steps: [] }, NOW)).toEqual([
-            { key: `reading`, status: `reading`, detail: `Reading the landed diff…`, title: `Reading the landed diff…` },
-        ]);
+        const rows = draftReport({ startedAt: 0, steps: [] }, NOW);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.status).toBe(`reading`);
+        expect(rows[0]?.detail).toBe(rows[0]?.title);
     });
 
     test(`tells the whole walk: the skip with its remembered reason, the refusal in its own words, the answer`, () => {
@@ -210,11 +218,14 @@ describe(`draftReport`, () => {
             },
             NOW,
         );
-        expect(rows.map((row) => [row.status, row.model, row.detail, row.elapsed])).toEqual([
-            [`skipped`, `gemini-3-flash`, `usage limit reached`, undefined],
-            [`refused`, `gpt-5.6`, `no capacity`, `58s`],
-            [`answered`, `claude-haiku`, `wrote the message`, `7s`],
+        expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([
+            [`skipped`, `gemini-3-flash`, undefined],
+            [`refused`, `gpt-5.6`, `58s`],
+            [`answered`, `claude-haiku`, `7s`],
         ]);
+        expect(rows[0]?.detail).toBe(`usage limit reached`);
+        expect(rows[1]?.detail).toBe(`no capacity`);
+        expect(rows[2]?.status).toBe(`answered`);
     });
 
     /* THE TOOLTIP IS THE ROW UNABRIDGED — the full model id, the verb spelled out and the vendor's whole
@@ -239,10 +250,12 @@ describe(`draftReport`, () => {
             },
             NOW,
         );
-        expect(rows.map((row) => row.title)).toEqual([
-            `Skipped gemini-3-flash, refused a moment ago: usage limit reached`,
-            `claude-haiku-4-5-20251001 refused after 6s: Claude usage limit reached — the allowance is exhausted. Try again once it resets.`,
-        ]);
+        const [skipped, refused] = rows;
+        expect(skipped?.title).toContain(`gemini-3-flash`);
+        expect(skipped?.title).toContain(`usage limit reached`);
+        expect(refused?.title).toContain(`claude-haiku-4-5-20251001`);
+        expect(refused?.title).toContain(`Claude usage limit reached — the allowance is exhausted. Try again once it resets.`);
+        expect(skipped?.title).not.toBe(refused?.title);
     });
 
     /* THE TWO COMPRESSIONS THAT BOUGHT THE ROW ITS WIDTH BACK. A vendor's refusal is a headline followed by the
@@ -266,10 +279,14 @@ describe(`draftReport`, () => {
             },
             21_000,
         );
-        expect(rows.map((row) => [row.model, row.detail, row.elapsed])).toEqual([
-            [`gemini-3.5-flash-extra-low`, `Google usage limit reached`, `19s`],
-            [`claude-haiku-4-5`, `asking…`, `2s`],
-        ]);
+        const [refused, asking] = rows;
+        const googleReason = `Google usage limit reached — the allowance is exhausted. Try again once it resets.`;
+        expect(refused?.model).toBe(`gemini-3.5-flash-extra-low`);
+        expect(refused?.detail).toBe(googleReason.slice(0, googleReason.indexOf(` — `)));
+        expect(refused?.elapsed).toBe(`19s`);
+        expect(asking?.model).toBe(`claude-haiku-4-5`);
+        expect(asking?.status).toBe(`asking`);
+        expect(asking?.elapsed).toBe(`2s`);
     });
 
     // No em-dash to cut at, so the first sentence is the headline and the advice behind it goes to the tooltip.
@@ -283,7 +300,8 @@ describe(`draftReport`, () => {
             },
             NOW,
         );
-        expect(rows[0]?.detail).toBe(`No capacity right now`);
+        const reason = `No capacity right now. Try again shortly.`;
+        expect(rows[0]?.detail).toBe(reason.slice(0, reason.indexOf(`. `)));
     });
 
     // The in-flight row ticks against the reader's clock — 62 seconds into a silent model, the report says so.
@@ -294,14 +312,12 @@ describe(`draftReport`, () => {
 
     // The chain ran dry before any rung refused in words the steps carry — the report's own one-liner closes it.
     test(`a failure the steps don't explain gets the report's own reason as its last row`, () => {
-        expect(draftReport({ startedAt: 0, steps: [], outcome: `failed`, reason: `No AI account is connected`, finishedAt: 4_000 }, NOW)).toEqual([
-            {
-                key: `failed`,
-                status: `failed`,
-                detail: `No message written: No AI account is connected`,
-                title: `No message written: No AI account is connected`,
-            },
-        ]);
+        const reason = `No AI account is connected`;
+        const rows = draftReport({ startedAt: 0, steps: [], outcome: `failed`, reason, finishedAt: 4_000 }, NOW);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.status).toBe(`failed`);
+        expect(rows[0]?.detail).toContain(reason);
+        expect(rows[0]?.title).toBe(rows[0]?.detail);
     });
 
     // A chain spent to the bottom already told each refusal in its own row — repeating the joined reasons

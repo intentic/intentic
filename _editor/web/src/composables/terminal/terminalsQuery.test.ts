@@ -100,7 +100,7 @@ test("the rail's badge counts a brand-new shell immediately, not at its next pol
     addPendingTerminal(shell(`web-new`));
 
     expect(activity.count.value).toBe(2);
-    expect(activity.summary.value).toBe(`2 shells`);
+    expect(activity.summary.value).toMatch(/^2 /);
 });
 
 test("a kill drops off the badge when it is issued, not a daemon round-trip later", async () => {

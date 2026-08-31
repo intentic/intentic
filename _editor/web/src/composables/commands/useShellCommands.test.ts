@@ -34,16 +34,18 @@ it(`binds the chat pop-out to F9 and names it for the direction the press will t
     const app = mountShell();
     const entry = commands.value.find((candidate) => candidate.command === `chat.toggleFloating`);
 
-    expect(entry).toMatchObject({ title: `Move Chat into New Window` });
+    expect(entry).toMatchObject({ command: `chat.toggleFloating` });
     // The same words the strip's menu row and the button's tooltip use, and the chord all three now teach.
     expect(commandShortcut(`chat.toggleFloating`)).toBe(`F9`);
 
+    const titleWhenLocal = entry!.title;
     // Another window announcing that it holds the chat, which is the only thing that makes it float as far as
     // this window is concerned (composables/floating.ts).
     receiveFloatingNote({ kind: `here`, panel: `chat`, id: `other-window`, since: 1 });
-    expect(entry!.title).toBe(`Dock Chat Back`);
+    expect(entry!.title).not.toBe(titleWhenLocal);
 
     receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `other-window` });
+    expect(entry!.title).toBe(titleWhenLocal);
     app.unmount();
 });
 

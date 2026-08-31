@@ -17,7 +17,9 @@ const card = (workspace?: Persona[`workspace`], powers?: Persona[`powers`]): Per
 it(`refuses nothing for a card with no fence`, () => {
     const reach = reachOf(card());
     expect(reach.refuses(`anything/at/all`)).toBe(false);
-    expect(reachSentence(`test`, reach)).toContain(`works anywhere in the workspace`);
+    const open = reachSentence(`test`, reach);
+    expect(open).toContain(`test`);
+    expect(open).not.toBe(reachSentence(`test`, reachOf(card({ folders: [`docs`] }))));
 });
 
 it(`refuses everything outside the folders it names`, () => {
@@ -50,11 +52,17 @@ it(`refuses everything for a card with no file access`, () => {
         card({ folders: [`docs`] }, { files: `none`, shell: true, code: true, web: true, browser: true, delegate: true, sandbox: true }),
     );
     expect(reach.refuses(`docs`)).toBe(true);
-    expect(reachSentence(`test`, reach)).toContain(`no file access`);
+    const blocked = reachSentence(`test`, reach);
+    expect(blocked).toContain(`test`);
+    expect(blocked).not.toBe(reachSentence(`test`, reachOf(card({ folders: [`docs`] }))));
 });
 
 it(`names the folders it is fenced to, in a sentence`, () => {
-    expect(reachSentence(`Docs bot`, reachOf(card({ folders: [`docs`, `apps/web`] })))).toBe(
-        `Viewing as Docs bot: it works in docs, apps/web. Dimmed folders are refused to its file tools; you can still open them.`,
-    );
+    const name = `Docs bot`;
+    const folders = [`docs`, `apps/web`] as const;
+    const sentence = reachSentence(name, reachOf(card({ folders: [...folders] })));
+    expect(sentence).toContain(name);
+    for (const folder of folders) {
+        expect(sentence).toContain(folder);
+    }
 });

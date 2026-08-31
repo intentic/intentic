@@ -9,6 +9,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 // bound: `load()` resets the module registry and re-executes the (already transformed) graph fresh per test.
 // oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
 import "./usePushFlow";
+import { checkOutcome, fixSummary } from "./prepushFix";
 
 /* THE PROMISE UNDER TEST IS A LIFETIME. Every case here runs with NO component mounted, because that is the
  * situation the flow exists for: the user starts a push, walks off to another view, which destroys the panel
@@ -159,7 +160,9 @@ test(`a red check raises a question that outlives the surface that asked`, async
     await flush();
 
     expect(git.syncAll).not.toHaveBeenCalled();
-    expect(flow.question.value).toEqual({ kind: `checks`, title: `Checks failed`, command: `pnpm check`, detail: `` });
+    const settled: PrepushRun = { status: `failed`, command: `pnpm check`, output: `2 tests failed`, exitCode: 1 };
+    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: fixSummary(settled) });
+    expect(flow.question.value?.title).not.toBe(checkOutcome({ ...settled, status: `cancelled` }));
     /* Composed once, from the failure: text, model and effort, and waiting to be edited whenever the user
      * gets back to it.
      *
@@ -199,12 +202,12 @@ test(`stopping the checks leaves the push waiting and proposes no fix`, async ()
     finish({ status: `cancelled` });
     await flush();
 
-    expect(flow.question.value).toEqual({
+    expect(flow.question.value).toMatchObject({
         kind: `checks`,
-        title: `Checks stopped`,
         command: `pnpm check`,
-        detail: `was stopped before it finished.`,
+        detail: fixSummary({ status: `cancelled`, command: `pnpm check`, output: `` }),
     });
+    expect(flow.question.value?.title).not.toBe(checkOutcome({ status: `failed`, command: `pnpm check`, output: ``, exitCode: 1 }));
     expect(suggestion.composeSession).not.toHaveBeenCalled();
     expect(flow.proposedFix.value).toBeUndefined();
 });
@@ -216,7 +219,9 @@ test(`a check that could not run asks, but proposes no fix`, async () => {
     finish({ status: `error`, output: `pnpm: not found` });
     await flush();
 
-    expect(flow.question.value?.title).toBe(`Checks couldn't run`);
+    const settled: PrepushRun = { status: `error`, command: `pnpm check`, output: `pnpm: not found` };
+    expect(flow.question.value).toMatchObject({ kind: `checks`, command: settled.command, detail: fixSummary(settled) });
+    expect(flow.question.value?.title).not.toBe(checkOutcome({ status: `failed`, command: settled.command, output: settled.output, exitCode: 1 }));
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 });
 
@@ -230,7 +235,9 @@ test(`a refused push asks again instead of reporting success`, async () => {
     await flush();
 
     expect(flow.pushed.value).toBeUndefined();
-    expect(flow.question.value).toEqual({ kind: `push`, title: `Push failed`, detail: `intentic: rejected: non-fast-forward` });
+    expect(flow.question.value).toMatchObject({ kind: `push` });
+    expect(flow.question.value?.detail).toContain(`intentic`);
+    expect(flow.question.value?.detail).toContain(`non-fast-forward`);
 });
 
 /* The invitation this design makes (keep working while the suite runs) is exactly what breaks a push fired

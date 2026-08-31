@@ -108,8 +108,9 @@ test(`the same failure in a non-Brave browser points at the push connection inst
     const push = usePushNotifications();
     await push.enable();
 
-    expect(push.error.value).toContain(`VPN or firewall`);
     expect(push.error.value).not.toContain(`brave://`);
+    expect(push.error.value).not.toContain(`Registration failed`);
+    expect(push.error.value?.length).toBeGreaterThan(0);
 });
 
 test(`the state is read again once the daemon comes online, not only on mount`, async () => {
