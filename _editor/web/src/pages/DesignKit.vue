@@ -591,7 +591,7 @@ const pickedTier = ref(`collaborator`);
                     button that repaints itself as unavailable the instant it is pressed is answering the wrong question.
                 </p>
 
-                <!-- ── AND THE FOUR CONTROLS THAT ARE NOT IT ────────────────────────────────────────────
+                <!-- ── AND THE FIVE CONTROLS THAT ARE NOT IT ────────────────────────────────────────────
                      Each is here beside the button on purpose: the reason a hand-styled `<button>` gets
                      written is that somebody could not see what the alternative was. -->
                 <div class="flex flex-wrap items-center gap-4">
@@ -602,6 +602,7 @@ const pickedTier = ref(`collaborator`);
                     <button type="button" class="ui-chip ui-chip-on"><Icon name="filter" />ui-chip-on</button>
                     <button type="button" class="ui-chip" disabled><Icon name="filter" />disabled</button>
                     <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
+                    <button type="button" :class="ui.overlayChip()"><Icon name="copy" class="text-2xs" />ui.overlayChip</button>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
                     <PageAction label="Refresh" icon="refresh" hint="Re-read everything" />

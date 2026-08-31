@@ -2,9 +2,9 @@
 /* EVERY BUTTON IN THIS APP IS <Button>, AND THIS IS THE GATE THAT KEEPS IT.
  *
  * The design system has one action button in four tiers and two sizes (_editor/ui/src/lib/ui.ts holds the
- * vocabulary and the argument for it), plus four controls that are deliberately NOT it: `ui.iconButton`,
- * `ui.linkButton`, `ui.textAction` and `.ui-chip`. Between them there is nothing left for a hand-styled
- * `<button class="…">` to be.
+ * vocabulary and the argument for it), plus five controls that are deliberately NOT it: `ui.iconButton`,
+ * `ui.linkButton`, `ui.textAction`, `ui.overlayChip` and `.ui-chip`. Between them there is nothing left for a
+ * hand-styled `<button class="…">` to be.
  *
  * WHY A GATE AND NOT A CONVENTION. The audit that produced this counted 369 <Button> against 117 bare
  * <button>s drawing a button by hand — 68 action buttons, 20 pills and 29 icon affordances — between them
@@ -77,7 +77,7 @@ const ICON_BOX_W = /(?:^|\s)(?:[\w@-]+:)*w-\d[\d.]*(?:\s|$)/u;
 
 /** The kit's own controls. A <button> wearing one of these has already made every decision this gate is about. */
 const RECIPES =
-    /ui\.(?:iconButton|linkButton|textAction|addTile|emptyState)\s*\(|(?:^|\s)ui-(?:row-select|chip)(?:-[\w-]+)?(?:\s|$)|\bICON_BUTTON\b|\bROW_ACTION\b/u;
+    /ui\.(?:iconButton|linkButton|textAction|addTile|emptyState|overlayChip)\s*\(|(?:^|\s)ui-(?:row-select|chip)(?:-[\w-]+)?(?:\s|$)|\bICON_BUTTON\b|\bROW_ACTION\b/u;
 
 /** Retired <Button> props and the severity PrimeVue 4 renamed. */
 const RETIRED = /(?:^|\s):?(?:outlined|raised|rounded)(?:=|[\s>])|severity="warning"/u;

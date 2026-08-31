@@ -89,7 +89,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
             <!-- Positioned by a box of its own: the button's root wears `relative` for its press spinner, and
                  an `absolute` handed to it from here is settled by Tailwind's utility order rather than by
                  this call site. -->
-            <div class="absolute top-1.5 right-1.5">
+            <div class="absolute top-1.5 right-1.5 flex">
                 <CopyButton :text="program.text" label="Copy" class="bg-canvas" />
             </div>
             <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering fault. -->

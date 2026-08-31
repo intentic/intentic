@@ -124,7 +124,10 @@ watch(
                      lands in the same class attribute — where Tailwind's own utility order decides the
                      winner, not the call site. That is how this chip once fell out of its corner and back
                      into the flow, under the block. A box of its own cannot lose that argument. -->
-                <div v-if="copyable" class="absolute top-1.5 right-1.5">
+                <!-- `flex` and not a bare block: the chip is inline-flex, and in a block box it sits on a text
+                     line, which lends it the line box's leading — 1.5px of it above, which is what made a
+                     corner inset of exactly 6px measure 7.5 above and 4.5 below. -->
+                <div v-if="copyable" class="absolute top-1.5 right-1.5 flex">
                     <CopyButton :text="code" label="Copy" class="bg-canvas" @copied="emit(`copied`)" />
                 </div>
                 <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering bug. -->

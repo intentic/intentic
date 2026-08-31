@@ -84,6 +84,8 @@ import { twMerge } from "tailwind-merge";
  *   • `ui.textAction()` — the same control in the quiet tone, for a verb that acts in place. No underline.
  *   • `.ui-chip` / `.ui-chip-on` (styles/utilities.css) — a pill that carries a STATE. A filter, a lane, a
  *     mode. Not a button, because a button's tiers are ranks and a set of chips are equals.
+ *   • `ui.overlayChip()` — a labelled affordance that floats ON content it must not cover: the Copy chip in a
+ *     code block's corner. Its size is set by the CONTENT's box, not by the button scale.
  *
  * Between them and <Button> there is nothing left for a bare `<button class="…">` to be, which is the point:
  * a hand-styled control is invisible to the SKINS (skins/README.md), so it is not merely inconsistent, it is
@@ -201,6 +203,27 @@ const addTile = (...twClasses: string[]) =>
         ...twClasses,
     );
 
+/* A LABELLED AFFORDANCE THAT FLOATS ON CONTENT, and the one control in the app whose height is dictated by
+ * something other than the button scale. The Copy chip in a code block's top-right corner is the whole case:
+ * a one-line command's block is 34px tall, and the compact action button is 26px of it — a control wearing
+ * the block like a coat, with 4px of air under it. It has to be small the way a scrollbar has to be thin.
+ *
+ * SO IT IS NOT A <Button>, deliberately, and it costs nothing that a Button was buying. The tiers are RANKS —
+ * "this is the commit, that is the escape" — and an overlay is not competing for rank with anything; it is
+ * the only control on the surface it sits on. What the tiers do own, and what this must not restate, is the
+ * geometry of a control in a ROW, which this never is.
+ *
+ * Chrome at rest, unlike `iconButton`: the affordance sits on top of text, where "no border until you hover"
+ * means the reader has to already know it is there. The caller brings the fill (`bg-canvas` on a code block),
+ * because what it must be opaque against is the caller's surface, not this recipe's guess at one. */
+const overlayChip = (...twClasses: string[]) =>
+    twMerge(
+        `touch-target inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line px-2 py-0.5`,
+        `text-2xs text-muted transition-colors hover:border-line-strong hover:text-content`,
+        OFF,
+        ...twClasses,
+    );
+
 /** Uppercase section heading label (e.g. "CONNECTIONS", "YOUR APPS"). */
 const sectionLabel = (...twClasses: string[]) => twMerge(`text-xs font-semibold uppercase tracking-wide text-subtle`, ...twClasses);
 
@@ -211,5 +234,6 @@ export const ui = {
     input,
     emptyState,
     addTile,
+    overlayChip,
     sectionLabel,
 };
