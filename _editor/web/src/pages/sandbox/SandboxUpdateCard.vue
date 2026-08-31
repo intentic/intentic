@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Card, Row, StatusBadge, useOsPreference } from "@intentic/ui";
+import { Button, Card, DisclosureRow, Row, RowGroup, StatusBadge, useOsPreference } from "@intentic/ui";
 import { computed, ref } from "vue";
 import HostRecreate from "../../components/HostRecreate.vue";
 import { turnInFlight } from "../../composables/agents/agentStatus";
@@ -16,7 +16,9 @@ import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
  * naming: an update that turns out badly used to have no answer short of re-running the connect wizard, which
  * is a heavy thing to ask of someone whose sandbox just got worse. recreate.sh now records the image it
  * replaced, the daemon reports it, and the way back is one command, but only if it is visible at the moment
- * it is wanted, which is precisely when there is no update to advertise.
+ * it is wanted, which is precisely when there is no update to advertise. Visible, not promoted: the offer sits
+ * behind one disclosure click, because a rollback shown at full weight on a healthy sandbox reads as "we
+ * expect this to break" and out-shouts the all-clear it shares the card with.
  *
  * AND IT SPLITS THE OFFER IN TWO, because updating was never one kind of work. Downloading the new image and
  * rebuilding the environment recipe are the minutes, and the sandbox is up and serving through both of them;
@@ -45,7 +47,18 @@ const acknowledged = ref(false);
  * Windows shell there is no command to hand over. Hidden rather than shown-and-broken: an offer that fails
  * when taken is worse than no offer, and this one would fail at the moment the user most needs it to work. */
 const rollbackTo = computed(() => (cmdOs.value === `windows` ? undefined : info.value?.previousImage));
+/* The full image id is internal noise at the card's reading distance: `intentic-sandbox-rollback-sandbox-
+ * 0738cd6b5027:3811c6130bee` tells a person nothing the word "previous" doesn't. The digest survives inside
+ * the expanded section, where someone mid-rollback can quote it at support. */
+const rollbackDigest = computed(() => rollbackTo.value?.split(`:`).pop());
 const channel = computed(() => info.value?.channel);
+
+/* ROLLBACK IS A RECOVERY AFFORDANCE, NOT A STATUS, so it is collapsed by default. Shown at full weight in the
+ * all-clear state (its old rendering) it did three kinds of harm: it out-shouted the "everything is fine"
+ * sentence on its own card, it read as "we expect this to break" two lines under a `stable` badge, and it
+ * trained the reader to skip a card whose one job is to be read on the day a real update ships. The way back
+ * stays one click away, which is all a once-per-bad-release action earns. */
+const rollbackOpen = ref(false);
 
 /* Recreating kills whatever the fleet is doing RIGHT NOW: resume-after-restart is off by default (it spends
  * the owner's own allowance), so the default cost of updating mid-run is the run. The card said "your files
@@ -90,9 +103,9 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                     A newer sandbox image has been released. Downloading it interrupts nothing: your sandbox keeps working until you apply it, and
                     your files (in /work) are kept.
                 </template>
-                <template v-else>
-                    You are on the newest image for this channel. If the last update caused trouble, you can go back to the one before it.
-                </template>
+                <!-- The all-clear state says only that it is all clear. The way back lives one click below;
+                     advertising it here would put a recovery offer in the status line. -->
+                <template v-else>You are on the newest image for this channel.</template>
             </template>
             <template #meta>
                 <StatusBadge v-if="updateAvailable && updateStaged && !breaking" variant="success" label="Downloaded" dot />
@@ -141,12 +154,12 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
 
         <!-- The restart is what costs a turn, and it is now the only part that does, so the way out of this
              warning is no longer "come back later", it is the button above that downloads without restarting.
-             Only offered where there is something to download: on a card showing nothing but a rollback, that
-             sentence would be advice about work that does not exist. -->
-        <p v-if="midTurn > 0" class="text-2xs text-warning">
+             Shown at this level only when an update is on offer: on a card showing nothing but a collapsed
+             rollback, the warning belongs inside that disclosure, next to the one action it cautions about. -->
+        <p v-if="midTurn > 0 && updateAvailable" class="text-2xs text-warning">
             {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, restarting the sandbox interrupts
             {{ midTurn === 1 ? `its` : `their` }} work.
-            <template v-if="updateAvailable && !updateStaged">
+            <template v-if="!updateStaged">
                 Downloading it now costs {{ midTurn === 1 ? `it` : `them` }} nothing, and the restart can wait.
             </template>
             <template v-else>Wait for the fleet to settle, or continue if that is acceptable.</template>
@@ -186,14 +199,33 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
                 <HostRecreate :slug="slug" action="Update" />
             </template>
             <!-- Offered alongside an available update too: "this one broke it, put it back" is exactly as
-                 likely to be the reason someone opened this card as "give me the new one". -->
-            <template v-if="rollbackTo">
-                <p class="text-xs font-medium text-content">
-                    Roll back to <span class="font-mono text-2xs">{{ rollbackTo }}</span
-                    >:
-                </p>
-                <HostRecreate :slug="slug" action="Roll back" />
-            </template>
+                 likely to be the reason someone opened this card as "give me the new one". Collapsed either
+                 way: it is the answer to a question the reader brings ("did the last update break this?"), not
+                 a suggestion the card should be making on a healthy sandbox. -->
+            <RowGroup v-if="rollbackTo" flat undivided>
+                <DisclosureRow
+                    v-model:open="rollbackOpen"
+                    icon="history"
+                    :title="updateAvailable ? `Or go back to the previous image` : `Something wrong since the last update?`"
+                    :description="updateAvailable ? `Roll back instead of updating.` : `Roll back to the image this sandbox ran before.`"
+                >
+                    <template #below>
+                        <div class="flex flex-col gap-2">
+                            <!-- The mid-turn warning lives HERE in the all-clear state: it cautions about a
+                                 restart, and the collapsed card proposes none. -->
+                            <p v-if="midTurn > 0 && !updateAvailable" class="text-2xs text-warning">
+                                {{ midTurn === 1 ? `An agent is` : `${midTurn} agents are` }} mid-turn right now, rolling back interrupts
+                                {{ midTurn === 1 ? `its` : `their` }} work.
+                            </p>
+                            <p class="text-2xs text-subtle">
+                                Rolls back to <span class="font-mono">…{{ rollbackDigest }}</span
+                                >. Your files (in /work) are kept either way.
+                            </p>
+                            <HostRecreate :slug="slug" action="Roll back" />
+                        </div>
+                    </template>
+                </DisclosureRow>
+            </RowGroup>
         </template>
     </Card>
 </template>
