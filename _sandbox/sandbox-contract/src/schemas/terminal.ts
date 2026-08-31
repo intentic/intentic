@@ -10,10 +10,12 @@ import { z } from "zod";
 // Bash commands run in (live-watchable, AI-marked in the UI; running:false once every window is a finished
 // command's dead pane, which is what lets the panel sweep it), `job` = a job-* session the daemon's terminal
 // runner executes user-triggered flows in (capability adds, infra check), `process` = a managed background
-// process riding a panel session (an extension's declared processes, dockerd), surfaced in the panel's
-// background-processes popover with read-only log views, never as a killable tab; running is the actual
-// process (a lingering shell after a crash reads false). A process row that maps to an installed extension's
-// declared process carries extensionId+processName, the address for its /extensions start/stop routes. The
+// process: a supervised daemon child for an extension's declared processes (name `svc-<key>`, whose
+// "terminal" is a tail of the service's log file), or a tmux-riding one for dockerd and the local model
+// servers, which outlive daemon restarts on purpose. Surfaced in the panel's background-processes popover
+// with read-only log views, never as a killable tab; running is the actual process. A process row that maps
+// to an installed extension's declared process carries extensionId+processName, the address for its
+// /extensions start/stop routes. The
 // `{name}` kill-route param is a bare string validated in the handler (a bad name is a BAD_REQUEST) since the
 // same charset gates a `tmux kill-session -t` shell-out. The agent's BROWSER is deliberately NOT one of these
 // kinds: a Chromium with its own tab strip is a surface in its own right, not a pane in the terminal panel, so

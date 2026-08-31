@@ -7,6 +7,7 @@ import { type IPty, spawn } from "node-pty";
 import type { WebSocket } from "ws";
 import type { Services } from "../composition.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
+import { SERVICE_SESSION_PREFIX } from "../processes/service-processes.js";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { isValidSessionName } from "./terminal-session.js";
 import { redeemTicket } from "../auth/ws-tickets.js";
@@ -45,9 +46,20 @@ let active = 0;
 // create-on-attach would spawn a bare zsh masquerading as the dev server / agent terminal / job when it isn't
 // running, instead tmux prints "no such session" and exits, which the pty's exit frame relays honestly. `=`
 // forces an exact target match.
-const spawnShell = (root: string, session: string, cwd: string | undefined, cols: number, rows: number): IPty => {
+//
+// A `svc-<key>` name is not a tmux session at all: it is a supervised service's read-only log view (the
+// processes popover's "View logs"), and the pty runs `tail -F` on the service's log file — from the top, and
+// following, so the tab shows history and live output the way the old scrollback attach did. A key the
+// supervisor doesn't track gets an honest one-liner and an exit, the "no such session" of this branch.
+const spawnShell = (services: Services, session: string, cwd: string | undefined, cols: number, rows: number): IPty => {
+    const root = services.workspace.root;
     const requested = cwd !== undefined && cwd !== "" ? resolveWithin(root, cwd) : undefined;
     const dir = requested !== undefined && existsSync(requested) ? requested : root;
+    if (session.startsWith(SERVICE_SESSION_PREFIX)) {
+        const logPath = services.serviceProcesses.logPathOf(session.slice(SERVICE_SESSION_PREFIX.length));
+        const argv = logPath === undefined ? ["-c", "echo no such service"] : ["-c", `exec tail -n +1 -F "$0"`, logPath];
+        return spawn("sh", argv, { name: "xterm-256color", cwd: dir, env: process.env, cols, rows });
+    }
     const argv =
         session.startsWith(PANEL_SESSION_PREFIX) || session.startsWith(AGENT_SESSION_PREFIX) || session.startsWith(JOB_SESSION_PREFIX)
             ? ["attach-session", "-t", `=${session}`]
@@ -133,7 +145,7 @@ export const createTerminalRoute = (services: Services) =>
                 counted = true;
                 const cols = dimension(url.searchParams.get("cols") ?? undefined, 80);
                 const rows = dimension(url.searchParams.get("rows") ?? undefined, 24);
-                const shell = spawnShell(services.workspace.root, session, url.searchParams.get("cwd") ?? undefined, cols, rows);
+                const shell = spawnShell(services, session, url.searchParams.get("cwd") ?? undefined, cols, rows);
                 pty = shell;
                 // node-server hands the real `ws` socket on .raw; WebSocketLike just types a subset (main.ts
                 // makes the mirror assertion for the server). Needed for bufferedAmount/ping/terminate.

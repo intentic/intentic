@@ -4,7 +4,7 @@ import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contra
 import { expect, test } from "vitest";
 import { workspacePaths } from "../workspace/workspace.js";
 import { testConfig } from "../testing.js";
-import { errorCode, routesClient } from "../route-testing.js";
+import { errorCode, fakeServiceProcesses, routesClient } from "../route-testing.js";
 import { createPortForwards } from "./port-forwards.js";
 import { createPortsRoutes, type PortsRoutesDeps } from "./ports.routes.js";
 
@@ -33,6 +33,7 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     // from its own command and session (port-identity.ts owns that reasoning and is tested beside it).
     files: { read: async () => undefined },
     capabilities: { list: async () => [] },
+    serviceProcesses: fakeServiceProcesses(),
     ...overrides,
 });
 

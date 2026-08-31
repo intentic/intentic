@@ -6,11 +6,11 @@ import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
-// The panel key (→ tmux session `panel-ext-<id>-<name>`) for one declared extension process. tmux session
-// names reject dots and a baked extension's id is publisher.name, so dots are sanitized. Extension processes
-// ride the panel manager unchanged, port assignment (PORT env), the liveness sweep, boot's stale-session
-// kill, and the preview proxy all apply with no new machinery. The prefix is how the terminals list tells an
-// extension process apart from a dev-server panel (kind "process" vs "panel").
+// The service key (→ log view `svc-ext-<id>-<name>`) for one declared extension process. Key grammars reject
+// dots and a baked extension's id is publisher.name, so dots are sanitized. Extension processes run under the
+// service supervisor (processes/service-processes.ts): the daemon's own children, respawned with backoff,
+// PORT-assigned, one log file each — never tmux sessions. The prefix is how the terminals list and the
+// preview proxy tell an extension process apart from a dev-server panel.
 export const EXTENSION_PROCESS_PREFIX = "ext-";
 export const extensionProcessKey = (id: string, name: string): string => `${EXTENSION_PROCESS_PREFIX}${id.replaceAll(".", "-")}-${name}`;
 
@@ -21,7 +21,7 @@ export const startExtensionProcess = async (services: Services, extension: Insta
         // process bind doesn't need the route, only a later browser load does.
         void services.ensurePreviewRoutes([previewLabel(key)]);
     }
-    await services.processes.start(key, {
+    await services.serviceProcesses.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),
         // A declared process reaches the daemon's own routes (a listener gateway posting to /listeners/<provider>)
@@ -41,10 +41,11 @@ export const startExtensionProcess = async (services: Services, extension: Insta
  * all (listenerProcessesDesired, which is the half the gateway's own /state feed shares).
  *
  * The runtime half is what keeps a core image from running a messaging gateway: those extensions bake their
- * manifests without the trees behind them, and a declared process is started by TYPING its command into a
- * shell in a tmux session. `node dist/gateway.js` with no dist/ prints a module-not-found, the shell returns to
- * its prompt, and the session lives on, so the manager, which tracks the SESSION, would report that gateway
- * running for the life of the container. Not spawning it at all is the only honest answer available here.
+ * manifests without the trees behind them, and `node dist/gateway.js` with no dist/ can only ever exit with
+ * module-not-found. The supervisor would report that honestly now (a crash, a backoff, a growing restart
+ * count) — but a gateway that CANNOT run here is not a failing service, it is an absent one, and not
+ * spawning it is still the true answer plus the difference between a quiet core image and one that logs a
+ * respawn a minute forever.
  *
  * Exported for the post-update health watch, which must ask the same question in reverse: a declared process
  * that is NOT running is only evidence against the new version if this gate would have started it. */
@@ -92,7 +93,7 @@ const GATEWAY_POKE_TIMEOUT_MS = 10_000;
  * Best-effort by construction: a gateway that just started reconciles at boot anyway, and a poke that fails
  * leaves the poll to do what it always did. */
 const pokeListenerGateway = async (services: Services, key: string): Promise<void> => {
-    const port = services.processes.portOf(key);
+    const port = services.serviceProcesses.portOf(key);
     if (port === undefined) {
         return;
     }
@@ -102,10 +103,9 @@ const pokeListenerGateway = async (services: Services, key: string): Promise<voi
 };
 
 // Converge listener-extension processes after an automations or capabilities mutation: bring a now-wanted
-// gateway up, stop a no-longer-wanted one (start is a no-op when already running), and poke whatever is left
-// running so it picks the change up at once. Best-effort and detached, a reconcile failure logs, it never
-// fails the mutation that triggered it. Stops only what the manager tracks (`running`): an untracked key has
-// no session left to kill.
+// gateway up, stop a no-longer-wanted one (start is a no-op when already tracked, including one the
+// supervisor is mid-backoff on), and poke whatever is left running so it picks the change up at once.
+// Best-effort and detached, a reconcile failure logs, it never fails the mutation that triggered it.
 export const reconcileListenerProcesses = async (services: Services): Promise<void> => {
     try {
         for (const extension of await enabledExtensions(services)) {
@@ -122,8 +122,8 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
                 if (desired) {
                     await startExtensionProcess(services, extension, process);
                     await pokeListenerGateway(services, key);
-                } else if (services.processes.running(key)) {
-                    services.processes.stop(key);
+                } else {
+                    services.serviceProcesses.stop(key);
                 }
             }
         }

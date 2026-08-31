@@ -6,9 +6,13 @@ import type { ListeningPort } from "./port-scan.js";
  * confusing part. Each case below is a listener a stock sandbox actually has, so the assertions double as the
  * inventory of what a reader sees on a box where they have started nothing themselves. */
 
-const attribution = (extensions: Record<string, { extensionId: string; processName: string }> = {}): PortAttribution => ({
+const attribution = (
+    extensions: Record<string, { extensionId: string; processName: string }> = {},
+    servicePorts: Record<number, string> = {},
+): PortAttribution => ({
     workspaceRoot: "/work",
     extensionProcesses: new Map(Object.entries(extensions)),
+    servicePorts: new Map(Object.entries(servicePorts).map(([port, key]) => [Number(port), key])),
 });
 
 const listener = (over: Partial<ListeningPort>): ListeningPort => ({ port: 3000, host: "127.0.0.1", forwardable: true, ...over });
@@ -71,10 +75,12 @@ test("a published container port says which port answers inside the container", 
 });
 
 test("an extension's background service is named after the extension, not after its command", () => {
+    // Supervised services descend from the daemon, not from any tmux pane, so the row is recognised by the
+    // PORT the supervisor assigned rather than by a session it does not have.
     expect(
         identifyPort(
-            listener({ port: 40085, command: "node dist/gateway.js", cwd: "/opt/extensions/discord", session: "panel-ext-intentic-discord-gateway" }),
-            attribution({ "ext-intentic-discord-gateway": { extensionId: "intentic.discord", processName: "gateway" } }),
+            listener({ port: 40085, command: "node dist/gateway.js", cwd: "/opt/extensions/discord" }),
+            attribution({ "ext-intentic-discord-gateway": { extensionId: "intentic.discord", processName: "gateway" } }, { 40085: "ext-intentic-discord-gateway" }),
         ),
     ).toEqual({
         title: "Discord gateway",
@@ -82,8 +88,8 @@ test("an extension's background service is named after the extension, not after 
         origin: "extension",
         kind: "system",
     });
-    // An orphan (the extension was removed while its session lingers) still reads as what it is.
-    expect(identifyPort(listener({ command: "node dist/gateway.js", session: "panel-ext-gone-thing" }), attribution()).title).toBe(
+    // A service whose extension index entry is gone (uninstalled mid-scan) still reads as what it is.
+    expect(identifyPort(listener({ port: 40086, command: "node dist/gateway.js" }), attribution({}, { 40086: "ext-gone-thing" })).title).toBe(
         "Extension service",
     );
 });

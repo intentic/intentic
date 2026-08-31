@@ -6,8 +6,9 @@ import { useTerminalPanel } from "./useTerminalPanel";
 
 /* The managed background processes, as rows any surface can render: the installed extensions' DECLARED
  * processes (listed even while stopped, a gated-off gateway shows as a startable row, pm2-style) merged with
- * the live "process" sessions the daemon's terminal list reports (running state + the tmux session for log
- * views; whatever maps to no declared process is dockerd or an orphaned session of an uninstalled extension).
+ * the live "process" rows the daemon's terminal list reports (running state + the session name the log view
+ * opens: a supervised service's `svc-*` log tail, or dockerd's tmux session; whatever maps to no declared
+ * process is dockerd or a local model server).
  * Extension rows start/stop through their /extensions process routes; session-only rows can only be stopped
  * (dockerd is daemon-owned, part of the base sandbox, so its converge path is the daemon's boot).
  *
@@ -28,8 +29,8 @@ export interface BackgroundProcessRow {
     readonly running: boolean;
 }
 
-// The daemon reports a just-started process as stopped until its shell consumes the buffered command
-// (pane_current_command is still the shell), one delayed relist settles the row.
+// One delayed relist after an action: a supervised service reports running the moment it spawns, so this
+// only ever catches the instant-crash case (started, then dead by the time anyone looks).
 const SETTLE_MS = 1500;
 const processRoute = (row: BackgroundProcessRow, action: string): string =>
     `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
@@ -93,9 +94,9 @@ export function useBackgroundProcesses(): {
         }
     };
 
-    // Always stop→start (both idempotent): a crashed process leaves its session alive at a shell prompt, which
-    // the panel manager still tracks, a bare start would no-op against it. Stop first covers fresh, crashed,
-    // and running alike, so Start and Restart are the same call.
+    // Always stop→start (both idempotent): the supervisor's start no-ops on a tracked key — including one it
+    // is mid-backoff on — so a bare start of a crashed-and-retrying service would change nothing. Stop first
+    // covers fresh, crashed, and running alike, so Start and Restart are the same call.
     const start = (row: BackgroundProcessRow): Promise<void> =>
         act(row, async () => {
             await sandboxJson(processRoute(row, `stop`), { method: `POST` });

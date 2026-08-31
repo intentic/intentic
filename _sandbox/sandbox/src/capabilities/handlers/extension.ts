@@ -48,7 +48,7 @@ export const extensionHandler: CapabilityHandler = {
             const root = extensionsRoot(ctx.workspace.root);
             const manifest = await readExtensionManifest(extensionRootOf(extensionDir(ctx.workspace.root, from), (config as ExtensionConfig).path));
             for (const process of manifest?.contributes?.processes ?? []) {
-                ctx.panels.stop(extensionProcessKey(from, process.name));
+                ctx.serviceProcesses.stop(extensionProcessKey(from, process.name));
             }
             await ctx.files.move(extensionDir(ctx.workspace.root, from), extensionDir(ctx.workspace.root, to));
             await ctx.files.move(previousDir(root, from), previousDir(root, to)).catch(() => undefined);
@@ -81,7 +81,7 @@ export const extensionHandler: CapabilityHandler = {
                 const livePath = current?.kind === "extension" ? current.config.path : path;
                 const outgoing = await readExtensionManifest(extensionRootOf(extensionDir(ctx.workspace.root, id), livePath));
                 for (const process of outgoing?.contributes?.processes ?? []) {
-                    await ctx.panels.stop(extensionProcessKey(id, process.name));
+                    ctx.serviceProcesses.stop(extensionProcessKey(id, process.name));
                 }
             },
             validate: async (staging) => {
@@ -154,7 +154,7 @@ export const extensionHandler: CapabilityHandler = {
         // Stop declared background processes before the checkout (and with it the manifest) disappears.
         const manifest = await readExtensionManifest(extensionRootOf(dir, path));
         for (const process of manifest?.contributes?.processes ?? []) {
-            ctx.panels.stop(extensionProcessKey(id, process.name));
+            ctx.serviceProcesses.stop(extensionProcessKey(id, process.name));
         }
         await ctx.files.remove(dir);
         // The kept-aside previous version goes with it, a removed extension has nothing to revert to.

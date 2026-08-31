@@ -1,7 +1,6 @@
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.js";
-import { EXTENSION_PROCESS_PREFIX } from "../extensions/extension-processes.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
 import type { ListeningPort } from "./port-scan.js";
 
@@ -199,11 +198,15 @@ const panelKeyOf = (session: string | undefined): string | undefined =>
 
 export interface PortAttribution {
     readonly workspaceRoot: string;
-    /* Panel key → the extension process running in it (extensionProcessIndex). Without it a
-     * `panel-ext-intentic-discord-gateway` session cannot be split back into an extension and a process name:
-     * the dashes are ambiguous, and the row would be left calling somebody's gateway "node dist/gateway.js".
+    /* Service key → the extension process behind it (extensionProcessIndex). Without it an
+     * `ext-intentic-discord-gateway` key cannot be split back into an extension and a process name: the
+     * dashes are ambiguous, and the row would be left calling somebody's gateway "node dist/gateway.js".
      * An empty map is fine: those rows fall back to the generic extension-service wording. */
     readonly extensionProcesses: ReadonlyMap<string, { readonly extensionId: string; readonly processName: string }>;
+    /* Port → the supervised service that was assigned it (serviceProcesses.list()). The supervisor's children
+     * descend from the daemon, not from any tmux pane, so a session can never claim them; the assigned PORT
+     * is what does. */
+    readonly servicePorts: ReadonlyMap<number, string>;
 }
 
 // The tool name, or the bare binary as its own title. Never empty: a listener with no readable argv at all is
@@ -254,8 +257,9 @@ const kindOf = (origin: PortOrigin, listener: Pick<ListeningPort, "cwd">, worksp
 
 /* One listener, named. The order below IS the argument: the sandbox's own processes and a container's
  * published port are recognised from their argv (they can be started from anywhere, and a session tells you
- * nothing true about them), an extension service and a panel are recognised from the session the manager
- * started them in, and only what is left over is read off its command and working directory. */
+ * nothing true about them), an extension service is recognised from the PORT the supervisor assigned it, a
+ * panel from the session the manager started it in, and only what is left over is read off its command and
+ * working directory. */
 export const identifyPort = (listener: ListeningPort, attribution: PortAttribution): PortIdentity => {
     const command = listener.command ?? "";
     const binary = binaryOf(listener.command);
@@ -296,9 +300,11 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
         };
     }
 
-    const key = panelKeyOf(listener.session);
-    if (key !== undefined && key.startsWith(EXTENSION_PROCESS_PREFIX)) {
-        const owner = attribution.extensionProcesses.get(key);
+    // A supervised service's assigned port: the daemon's own child, recognised by the PORT it was handed
+    // rather than by a session it does not have.
+    const serviceKey = attribution.servicePorts.get(listener.port);
+    if (serviceKey !== undefined) {
+        const owner = attribution.extensionProcesses.get(serviceKey);
         return {
             title: owner === undefined ? "Extension service" : extensionTitle(owner.extensionId, owner.processName),
             purpose:
@@ -309,6 +315,7 @@ export const identifyPort = (listener: ListeningPort, attribution: PortAttributi
             kind: "system",
         };
     }
+    const key = panelKeyOf(listener.session);
     if (key !== undefined && key.startsWith(LOCAL_MODEL_PREFIX)) {
         return {
             title: "Local model server",

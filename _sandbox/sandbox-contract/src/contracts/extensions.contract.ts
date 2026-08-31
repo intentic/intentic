@@ -162,8 +162,9 @@ export const extensionsContract = {
         })
         .input(ExtensionUpdatePolicyInputSchema)
         .output(OkSchema),
-    // Declared background processes (contributes.processes): tmux-managed through the panel machinery
-    // (session `panel-ext-<id>-<name>`, PORT-assigned, optional tunneled preview route).
+    // Declared background processes (contributes.processes): supervised children of the daemon (respawned
+    // with backoff, PORT-assigned, one log file each — the terminals list carries their `svc-ext-<id>-<name>`
+    // log-view rows), with an optional tunneled preview route.
     processStatus: oc
         .route({
             method: "GET",

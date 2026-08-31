@@ -311,7 +311,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 await startAutoStartProcesses(services, extension);
             } else {
                 for (const process of extension.manifest.contributes?.processes ?? []) {
-                    services.processes.stop(extensionProcessKey(input.id, process.name));
+                    services.serviceProcesses.stop(extensionProcessKey(input.id, process.name));
                 }
             }
             // A listener extension's gateway is wanted only while its provider is (an enabled automation + a
@@ -325,25 +325,26 @@ export const createExtensionsRoutes = (services: Services) => {
         processStatus: i.processStatus.handler(async ({ input }) => {
             const { process } = await processOf(input.id, input.name);
             const key = extensionProcessKey(input.id, input.name);
-            const port = services.processes.portOf(key);
+            const service = services.serviceProcesses.statusOf(key);
             const url = process.preview === true ? previewUrl(key, zone, sandboxId) : undefined;
             return {
                 name: input.name,
-                running: services.processes.running(key),
-                ...(port !== undefined ? { port } : {}),
+                running: service?.state === "running",
+                ...(service !== undefined ? { port: service.port, restarts: service.restarts } : {}),
+                ...(service?.lastExitCode !== undefined ? { lastExitCode: service.lastExitCode } : {}),
                 ...(url !== undefined ? { previewUrl: url } : {}),
             };
         }),
         processStart: i.processStart.handler(async ({ input }) => {
             const { extension, process } = await processOf(input.id, input.name);
-            // Stop and status stay reachable while disabled (a leftover session still needs killing); starting
+            // Stop and status stay reachable while disabled (a lingering process still needs killing); starting
             // one would be the daemon running a contribution the owner switched off.
             if (!extension.enabled) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "the extension is disabled" });
             }
             // The autoStart path skips a runtime-less extension silently (nothing asked for it); a button press
-            // asked for it, so it gets the reason instead of a start that would leave a shell sitting at a
-            // module-not-found and a row that reads "running".
+            // asked for it, so it gets the reason instead of a service the supervisor would respawn into the
+            // same module-not-found forever.
             if (await extensionRuntimeAbsent(extension)) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: `this extension's code is ${RUNTIME_ABSENT_DETAIL}` });
             }
@@ -352,7 +353,7 @@ export const createExtensionsRoutes = (services: Services) => {
         }),
         processStop: i.processStop.handler(async ({ input }) => {
             await processOf(input.id, input.name);
-            services.processes.stop(extensionProcessKey(input.id, input.name));
+            services.serviceProcesses.stop(extensionProcessKey(input.id, input.name));
             return { ok: true } as const;
         }),
     };

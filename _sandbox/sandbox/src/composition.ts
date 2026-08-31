@@ -157,6 +157,7 @@ import { type ProviderCatalog, providerCatalogsOf } from "./agent/provider-regis
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
+import { createServiceProcesses, type ServiceProcesses } from "./processes/service-processes.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
 import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
 import { discoverRepos } from "./workspace/repo-discovery.js";
@@ -288,6 +289,11 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Per-repository operator panels: the in-memory process manager the /panels routes and the preview proxy
     // drive (discovery of which repo has a panel is convention-only, see panels/panels.ts).
     readonly processes: ManagedProcesses;
+    // Supervised background services — the extensions' declared processes (connector gateways and kin) as the
+    // daemon's own children: real exits, respawn with backoff, one log file each. The interactive/adoptable
+    // tmux surfaces (panels, dockerd, local models, one-shot jobs) stay on `processes` above; the split and
+    // its reasons are the header of processes/service-processes.ts.
+    readonly serviceProcesses: ServiceProcesses;
     // The single owner of dependency status, durable setup requests, watcher reconciliation and installs.
     readonly dependencies: DependencyCoordinator;
     // The extension backend host's supervisor: one separate node process running every enabled extension's
@@ -904,6 +910,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     const terminalRun = createTerminalRunner();
     const acpConnections = createAcpConnections(logger, terminalRun);
     const processes = createManagedProcesses();
+    const serviceProcesses = createServiceProcesses(join(config.historyRoot, "logs", "services"), logger);
     const dependencies = createDependencyCoordinator({
         workspace,
         processes,
@@ -1225,6 +1232,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // cards that converge skill files and splice the AGENTS.md index, writes into it.
         workspaceArrivedEmpty: workspaceArrivedEmpty(workspace.root),
         processes,
+        serviceProcesses,
         dependencies,
         extensionBackend: createExtensionBackend(
             () => {
@@ -1494,7 +1502,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
             workspaceRoot: workspace.root,
             repos: () => discoverRepos(workspace.root),
             listeners: () => services.scanPorts(),
-            portOf: (key) => processes.portOf(key),
+            // Panels answer from the panel manager; an extension process's preview (`ext-*` keys, preview:
+            // true in its manifest) answers from the service supervisor that assigned its port.
+            portOf: (key) => processes.portOf(key) ?? serviceProcesses.portOf(key),
         }),
         members,
         auth,

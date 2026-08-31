@@ -23,7 +23,7 @@ const exec = promisify(execFile);
 const git = (dir: string, ...args: string[]) => exec("git", ["-C", dir, ...args]);
 
 // A ctx exposing only what extensionHandler touches, over a fresh temp workspace (the plugin.integration.test.ts pattern).
-// `stopped` records ctx.panels.stop calls for the remove/update quiesce tests; `stored` is the capability store
+// `stopped` records ctx.serviceProcesses.stop calls for the remove/update quiesce tests; `stored` is the capability store
 // the update path reads the OUTGOING config from (empty ⇒ a first install); `donatedTo` records the donation
 // gate's calls (the premium install/update path).
 const tempCtx = (member = false): { ctx: CapabilityCtx; root: string; stopped: string[]; stored: Map<string, Capability>; donatedTo: string[] } => {
@@ -36,7 +36,7 @@ const tempCtx = (member = false): { ctx: CapabilityCtx; root: string; stopped: s
         files: { read: readWorkspaceFile, mkdir: makeWorkspaceDir, remove: removeWorkspacePath, move: moveWorkspacePath },
         git: { head: gitHead },
         terminalRun: createTerminalRunner(),
-        panels: { stop: (key: string) => stopped.push(key) },
+        serviceProcesses: { stop: (key: string) => stopped.push(key) },
         capabilities: { get: async (id: string) => stored.get(id) },
         donatePremium: async (extensionId: string) => {
             if (!member) {

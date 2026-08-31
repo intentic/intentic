@@ -49,4 +49,4 @@ been written five times.
 - The painters are **best-effort by design**: a failed paint kills that painter and reports once, because a
   lost live update must never crash the turn that produced it.
 - Shutdown is capped at three seconds: a wedged provider close must not hold the process hostage, since the
-  daemon's stop is `tmux kill-session`.
+  daemon's supervisor SIGTERMs the process group and follows with SIGKILL after a grace of its own.

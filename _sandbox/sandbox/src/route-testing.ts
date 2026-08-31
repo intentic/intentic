@@ -33,6 +33,7 @@ import type { SecretVault } from "./capabilities/secret-vault.js";
 import type { Services } from "./composition.js";
 import { createLogger } from "./logger.js";
 import type { ManagedProcesses } from "./processes/managed-processes.js";
+import type { ServiceProcesses, ServiceStatus } from "./processes/service-processes.js";
 import { createPortForwards } from "./ports/port-forwards.js";
 import { createAnnouncer } from "./platform/announce.js";
 import { createReachReporter } from "./platform/reach-report.js";
@@ -204,6 +205,34 @@ const memoryThreadSessionsStore = (): ThreadSessionsStore => {
     };
 };
 
+// The service supervisor's fake, same recording shape as fakeProcesses below: seeded keys read as running
+// services on the seeded port.
+export const fakeServiceProcesses = (
+    ports: Record<string, number> = {},
+): ServiceProcesses & { started: { key: string; cwd: string }[]; stopped: string[] } => {
+    const started: { key: string; cwd: string }[] = [];
+    const stopped: string[] = [];
+    const statusOf = (key: string): ServiceStatus | undefined =>
+        key in ports ? { key, state: "running", port: ports[key] ?? 0, restarts: 0, since: 0 } : undefined;
+    return Object.assign(
+        unstubbed<ServiceProcesses>("serviceProcesses", {
+            start: async (key, spec) => {
+                started.push({ key, cwd: spec.cwd });
+            },
+            stop: (key) => {
+                stopped.push(key);
+            },
+            running: (key) => key in ports,
+            portOf: (key) => ports[key],
+            statusOf,
+            list: () => Object.keys(ports).flatMap((key) => statusOf(key) ?? []),
+            logPathOf: () => undefined,
+            stopAll: () => {},
+        }),
+        { started, stopped },
+    );
+};
+
 // Records starts/stops; `portOf` returns the seeded port so a repo reads as running (the list route derives
 // running/healthy from portOf, not running()).
 export const fakeProcesses = (
@@ -361,6 +390,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             decline: async () => {},
         },
         processes: fakeProcesses(),
+        serviceProcesses: fakeServiceProcesses(),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {
             status: async () => [],
             issueAt: async () => undefined,

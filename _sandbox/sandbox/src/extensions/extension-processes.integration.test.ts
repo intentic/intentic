@@ -37,11 +37,10 @@ const writeManifest = async (dir: string, body: object): Promise<void> => {
     await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(body));
 };
 
-// A recording panel-process fake + the narrow Services slice the extension-process functions touch.
+// A recording service-supervisor fake + the narrow Services slice the extension-process functions touch.
 const fakeServices = (extensionsDir: string, automations: AutomationRecord[], capabilities: Capability[]) => {
     const started: string[] = [];
     const stopped: string[] = [];
-    const running = new Set<string>();
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "ext-proc-work-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
@@ -49,20 +48,18 @@ const fakeServices = (extensionsDir: string, automations: AutomationRecord[], ca
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         config: { ...testConfig, extensionsDir },
         panelToken: "panel-token",
-        processes: unstubbed<Services["processes"]>("processes", {
+        serviceProcesses: unstubbed<Services["serviceProcesses"]>("serviceProcesses", {
             start: async (key) => {
                 started.push(key);
-                running.add(key);
             },
             stop: (key) => {
                 stopped.push(key);
-                running.delete(key);
             },
-            running: (key) => running.has(key),
+            portOf: () => undefined,
         }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, error: () => {} }),
     });
-    return { services, started, stopped, running };
+    return { services, started, stopped };
 };
 
 const listenerAutomation = (id: string): AutomationRecord => ({
@@ -103,26 +100,19 @@ test("a non-listener extension's autoStart processes start unconditionally", asy
     expect(started).toEqual([extensionProcessKey("acme.tool", "watcher")]);
 });
 
-test("reconcile starts a wanted gateway and stops an unwanted running one", async () => {
+test("reconcile starts a wanted gateway and stops an unwanted one", async () => {
     const baked = mkdtempSync(join(tmpdir(), "ext-proc-baked-"));
     await writeManifest(join(baked, "intentic.discord"), discordManifest);
     const wanted = fakeServices(baked, [], [discordConnector]);
     await reconcileListenerProcesses(wanted.services);
     expect(wanted.started).toEqual([GATEWAY_KEY]);
 
+    // Stop is unconditional on the unwanted side: the supervisor's stop is a no-op for an untracked key, so
+    // there is no "is it running" question to get wrong here (the old tmux path had one, and lost to it).
     const unwanted = fakeServices(baked, [], []);
-    unwanted.running.add(GATEWAY_KEY);
     await reconcileListenerProcesses(unwanted.services);
+    expect(unwanted.started).toEqual([]);
     expect(unwanted.stopped).toEqual([GATEWAY_KEY]);
-});
-
-test("reconcile leaves an unwanted gateway alone when it isn't running (a lingering crashed session)", async () => {
-    const baked = mkdtempSync(join(tmpdir(), "ext-proc-baked-"));
-    await writeManifest(join(baked, "intentic.discord"), discordManifest);
-    const { services, started, stopped } = fakeServices(baked, [], []);
-    await reconcileListenerProcesses(services);
-    expect(started).toEqual([]);
-    expect(stopped).toEqual([]);
 });
 
 test("extensionProcessIndex maps each declared process's panel key to its extension id + process name", async () => {

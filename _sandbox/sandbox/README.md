@@ -339,6 +339,13 @@ reports the profile.
   is kept one version back), the post-update health watch, and the owner's per-extension policy (notify / agent-prepared
   / auto). Nothing auto-updates by default; the auto rung is opt-in and gated on a verified listing whose powers didn't
   grow, health-watched with auto-revert.
+- [src/processes/service-processes.ts](src/processes/service-processes.ts): the supervisor for extension-declared
+  background processes (the messaging connectors' gateways and kin) as the daemon's own children: real exits,
+  respawn with capped backoff, a stable PORT per start, one size-capped log file each (the terminal panel's
+  read-only log view tails it under the `svc-*` name). The interactive and daemon-restart-surviving tmux surfaces
+  — panels, dockerd, local models, one-shot jobs — stay on
+  [src/processes/managed-processes.ts](src/processes/managed-processes.ts); the split and its reasons are the
+  supervisor's header.
 - Heavy agent commands take turns, because priorities could not make them.
   [src/platform/heavy-commands.ts](src/platform/heavy-commands.ts) holds an editable rule list
   (`.intentic/config/heavy-commands.json`, tracked config the owner and the agent both edit: regex per rule,

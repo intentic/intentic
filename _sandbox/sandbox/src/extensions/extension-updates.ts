@@ -330,7 +330,7 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
         const live = extensionDir(root, id);
         const current = await readExtensionManifest(extensionRootOf(live, config.path));
         for (const process of current?.contributes?.processes ?? []) {
-            await services.processes.stop(extensionProcessKey(id, process.name));
+            services.serviceProcesses.stop(extensionProcessKey(id, process.name));
         }
         const parking = join(parent, `.${id}.reverting`);
         await services.files.remove(parking);
@@ -375,7 +375,7 @@ const healthProblem = async (services: Services, id: string): Promise<string | u
     }
     if (!(await extensionRuntimeAbsent(extension)) && (await processesDesired(services, extension))) {
         for (const process of extension.manifest.contributes?.processes ?? []) {
-            if (process.autoStart === true && !services.processes.running(extensionProcessKey(id, process.name))) {
+            if (process.autoStart === true && !services.serviceProcesses.running(extensionProcessKey(id, process.name))) {
                 return `its declared process "${process.name}" is not running`;
             }
         }
@@ -606,7 +606,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             await writeExtensionEnablement(root, target.identity, false);
             const manifest = await readExtensionManifest(extensionRootOf(extensionDir(root, target.id), target.config.path));
             for (const process of manifest?.contributes?.processes ?? []) {
-                await services.processes.stop(extensionProcessKey(target.id, process.name));
+                services.serviceProcesses.stop(extensionProcessKey(target.id, process.name));
             }
             await patchRecord(root, target.identity, (record) =>
                 record.advisory === undefined ? record : { ...record, advisory: { ...record.advisory, autoDisabled: true } },

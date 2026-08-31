@@ -29,7 +29,7 @@ export const deliverToListenerChannel = async (services: Services, provider: str
         // their gateway); no port means no running process, the automation was disabled or the sandbox is a
         // core image, and there is nothing to knock on.
         for (const process of extension.manifest.contributes?.processes ?? []) {
-            const port = services.processes.portOf(extensionProcessKey(extension.id, process.name));
+            const port = services.serviceProcesses.portOf(extensionProcessKey(extension.id, process.name));
             if (port === undefined) {
                 continue;
             }

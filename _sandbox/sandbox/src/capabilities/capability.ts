@@ -29,8 +29,10 @@ export interface CapabilityCtx {
     readonly git: Services["git"];
     readonly files: Services["files"];
     readonly terminalRun: Services["terminalRun"];
-    // Extension-declared background processes ride panel sessions, start/stop via the panel manager.
+    // The tmux-riding managed processes (dockerd, local model servers) start/stop via the panel manager.
     readonly panels: ManagedProcesses;
+    // Extension-declared background processes are supervised daemon children (processes/service-processes.ts).
+    readonly serviceProcesses: Services["serviceProcesses"];
     readonly infraApply: {
         // Launch `intentic deploy resolve && intentic deploy apply --yes && intentic deploy adopt` (resolveFirst) as the shared
         // one-shot tmux job; false when one is already running (the caller must not tail a foreign run).
@@ -157,6 +159,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         files: services.files,
         terminalRun: services.terminalRun,
         panels: services.processes,
+        serviceProcesses: services.serviceProcesses,
         infraApply: {
             start: (options) => startInfraApplyJob(services, options),
             running: () => services.processes.running(INFRA_APPLY_KEY),

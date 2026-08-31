@@ -19,8 +19,9 @@ import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../context.js";
-import { EXTENSION_PROCESS_PREFIX, extensionProcessIndex } from "../extensions/extension-processes.js";
+import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
+import { SERVICE_SESSION_PREFIX, serviceSession } from "../processes/service-processes.js";
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
 import { subscribeRepoChanges } from "../workspace/repo-watch.js";
 import { subscribeRefChanges } from "../git/ref-watch.js";
@@ -310,14 +311,14 @@ export const createSystemRoutes = (services: Services) => {
             }
             return { accounts: [...totals.values()] };
         }),
-        // Every attachable tmux session, the ONE list behind the web app's global terminal panel. Same tmux
-        // server the /system/terminal PTYs spawn (same root user, same default socket), queried by shelling
-        // out. web-* sessions are the user's shells; panel-* sessions are dev servers (labeled by panel key,
-        // `running` from the process manager, false = untracked, e.g. a finished oneShot's lingering shell)
-        //. EXCEPT managed background processes (an extension's ext-* keys, dockerd's), which read as kind
-        // "process": the panel surfaces those in its processes popover, not as killable tabs, and their
-        // `running` is the actual process, pane_current_command back at the shell means it crashed, however
-        // the manager still tracks the session. agent-* sessions are the Claude agent's Bash terminals
+        // Every attachable session, the ONE list behind the web app's global terminal panel: the tmux
+        // sessions (same server the /system/terminal PTYs spawn, queried by shelling out) plus the supervised
+        // services' svc-* rows. web-* sessions are the user's shells; panel-* sessions are dev servers
+        // (labeled by panel key, `running` from the process manager, false = untracked, e.g. a finished
+        // oneShot's lingering shell). EXCEPT dockerd's and the local models', which read as kind "process":
+        // the panel surfaces those in its processes popover, not as killable tabs, and their `running` is the
+        // actual process, pane_current_command back at the shell means it crashed, however the manager still
+        // tracks the session. agent-* sessions are the Claude agent's Bash terminals
         // (tmux-run): they are `running` while their agent has a turn in flight (the fleet registry's
         // liveSessionIds, an agent between two commands is still working) or any pane in them is alive (see
         // paneStates, a turn nothing tracks, e.g. the CLI's own, still reads honestly). Once neither holds,
@@ -328,10 +329,23 @@ export const createSystemRoutes = (services: Services) => {
         // Sessions matching no prefix stay hidden. No tmux server yet makes `list-panes` exit non-zero,
         // that's an empty list, not an error.
         terminals: i.terminals.handler(async () => {
+            /* The supervised services (extension gateways and kin) are not tmux sessions: their rows come from
+             * the supervisor itself, honest by construction — `running` is a live child, `exitCode` a real
+             * exit — and the `svc-*` name is the log view the terminal socket serves with `tail -F`. Appended
+             * outside the tmux try/catch so a sandbox with no tmux server still lists its services. */
+            const extensionProcesses = await extensionProcessIndex(services);
+            const serviceRows = services.serviceProcesses.list().map((service) => ({
+                name: serviceSession(service.key),
+                label: service.key,
+                kind: "process" as const,
+                running: service.state === "running",
+                activityAt: service.since,
+                ...(service.state === "backoff" && service.lastExitCode !== undefined ? { exitCode: service.lastExitCode } : {}),
+                ...extensionProcesses.get(service.key),
+            }));
             try {
                 const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
                 const states = paneStates(stdout);
-                const extensionProcesses = await extensionProcessIndex(services);
                 const liveAgentSessions = new Set(
                     services.agents.liveSessionIds().flatMap((sessionId) => {
                         const session = agentSessionName(sessionId);
@@ -353,10 +367,10 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     if (name.startsWith(PANEL_SESSION_PREFIX)) {
                         const key = name.slice(PANEL_SESSION_PREFIX.length);
-                        if (key === DOCKER_PANEL_KEY || key.startsWith(EXTENSION_PROCESS_PREFIX) || key.startsWith(LOCAL_MODEL_PREFIX)) {
-                            // An orphan (its extension uninstalled while the session lingers) has no index entry,
-                            // still a process row, addressable only by its session name.
-                            const owner = extensionProcesses.get(key);
+                        // The tmux-riding background processes: dockerd and the local model servers, the two
+                        // that deliberately outlive a daemon restart (main.ts adopts them at boot). Extension
+                        // processes are supervised daemon children now, their rows are appended below.
+                        if (key === DOCKER_PANEL_KEY || key.startsWith(LOCAL_MODEL_PREFIX)) {
                             return [
                                 {
                                     name,
@@ -364,7 +378,6 @@ export const createSystemRoutes = (services: Services) => {
                                     kind: "process" as const,
                                     running: services.processes.running(key) && command !== SHELL,
                                     ...seen,
-                                    ...(owner !== undefined ? owner : {}),
                                 },
                             ];
                         }
@@ -401,10 +414,10 @@ export const createSystemRoutes = (services: Services) => {
                     }
                     return [];
                 });
-                return { sessions };
+                return { sessions: [...sessions, ...serviceRows] };
             } catch {
-                // No tmux server yet, nothing has opened a shell in this sandbox.
-                return { sessions: [] };
+                // No tmux server yet, nothing has opened a shell in this sandbox; the services don't need one.
+                return { sessions: serviceRows };
             }
         }),
         // The agent's Chromiums and the pages each holds open. Nothing to shell out to: these are records this
@@ -455,6 +468,11 @@ export const createSystemRoutes = (services: Services) => {
             // right after × must not no-op for the sweep interval). stop() kills lingering sessions too.
             if (input.name.startsWith(PANEL_SESSION_PREFIX)) {
                 services.processes.stop(input.name.slice(PANEL_SESSION_PREFIX.length));
+                return { ok: true };
+            }
+            // A service row's name is its log view, not a tmux session; killing it means stopping the service.
+            if (input.name.startsWith(SERVICE_SESSION_PREFIX)) {
+                services.serviceProcesses.stop(input.name.slice(SERVICE_SESSION_PREFIX.length));
                 return { ok: true };
             }
             // `=` forces an exact target match, a bare `-t web-a` would prefix-match `web-ab` once `web-a` is gone.

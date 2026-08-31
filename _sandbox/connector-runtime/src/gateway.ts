@@ -22,7 +22,8 @@ import { createLog } from "./log.js";
 const FATAL_RETRY_MS = 300_000;
 const RECONCILE_MS = 30_000;
 const STATUS_MS = 30_000;
-// A wedged close must not hold shutdown hostage, the daemon's stop is `tmux kill-session`.
+// A wedged close must not hold shutdown hostage: the daemon's supervisor SIGTERMs the process group and
+// SIGKILLs whatever is left after its own grace, so a shutdown slower than this never finishes anyway.
 const SHUTDOWN_TIMEOUT_MS = 3_000;
 
 export interface ConnectorEntry<TConfig> {
@@ -347,7 +348,8 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     };
     process.on("SIGTERM", shutdown);
     process.on("SIGINT", shutdown);
-    // A managed stop is `tmux kill-session`, which delivers SIGHUP (the pty vanishing), not SIGTERM.
+    // SIGTERM is what the daemon's supervisor sends now; SIGHUP stays handled for anything that still runs a
+    // gateway under a pty (a developer's terminal), where the pty vanishing delivers exactly that.
     process.on("SIGHUP", shutdown);
 
     await reconcileNow();

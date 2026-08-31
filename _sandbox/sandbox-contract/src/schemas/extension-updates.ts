@@ -315,8 +315,10 @@ export const ExtensionProcessParamSchema = z.object({
 });
 export const ExtensionProcessStatusSchema = z.object({
     name: z.string().describe("Which process."),
-    running: z.boolean().describe("Whether it is up."),
+    running: z.boolean().describe("Whether it is up. False with a port means it crashed and the supervisor is waiting to retry it."),
     port: z.number().optional().describe("The port it was given."),
+    restarts: z.number().optional().describe("How many times it died and was brought back since it was started. A growing number is a service in trouble."),
+    lastExitCode: z.number().optional().describe("How it last exited, when it has crashed at least once."),
     previewUrl: z.string().optional().describe("Where to open it, when it has an address."),
 });
 export type ExtensionProcessStatus = z.infer<typeof ExtensionProcessStatusSchema>;

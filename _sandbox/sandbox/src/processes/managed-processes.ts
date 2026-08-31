@@ -23,10 +23,13 @@ export interface ProcessSpec {
     readonly oneShot?: true;
 }
 
-// Every managed process (panel/app dev server, extension gateway, docker daemon, infra-apply job) runs inside
+// Every managed process (panel/app dev server, docker daemon, local model server, infra-apply job) runs inside
 // tmux session `panel-<key>` so the owner can attach the existing /system/terminal WebSocket to it, live output
 // with full scrollback replaces the old captured-tail logs. The `panel-` prefix predates the generic manager and
 // is wire data (session names reach the browser and are string-built in web/_extensions), do not rename.
+// Extension-declared processes do NOT ride this manager: they are supervised daemon children
+// (service-processes.ts), which is the right shape for a service and the wrong one for these interactive and
+// daemon-restart-surviving surfaces.
 export const PANEL_SESSION_PREFIX = "panel-";
 export const panelSession = (key: string): string => `${PANEL_SESSION_PREFIX}${key}`;
 
@@ -172,8 +175,8 @@ export interface ManagedProcesses {
     readonly stopAll: () => void;
 }
 
-// Manages the sandbox's long-running tmux sessions (operator panels, app dev servers, extension gateway
-// processes, dockerd, one-shot infra jobs), keyed by process key. A session
+// Manages the sandbox's long-running tmux sessions (operator panels, app dev servers, dockerd, local model
+// servers, one-shot infra jobs), keyed by process key. A session
 // that ends (its shell exited or was ×-killed) drops out of `running` on the next liveness sweep, `running`
 // means "session alive", not "dev process alive": a Ctrl+C'd dev server sits at a usable prompt and stays
 // running. A oneShot job additionally completes when its shell is back at the prompt; the session lingers

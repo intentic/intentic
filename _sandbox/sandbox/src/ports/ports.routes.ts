@@ -12,11 +12,12 @@ import type { OrpcContext } from "../context.js";
 // public, so a port is reachable from outside only after the owner (or an agent acting for them) forwards it,
 // and the daemon's own surfaces are never listed or forwardable at all.
 
-// The `ExtensionHost` half is for the extension process index alone: it is what turns a
-// `panel-ext-intentic-discord-gateway` session into "the discord extension's gateway" instead of leaving the
-// row to describe somebody's background service as `node dist/gateway.js`. Taken as the narrow host interface
-// rather than as more of `Services`, so this file's blast radius stays what the type says it is.
-export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "workspace"> & ExtensionHost;
+// The `ExtensionHost` half is for the extension process index alone: it is what turns the supervised
+// service on port 40085 into "the discord extension's gateway" instead of leaving the row to describe
+// somebody's background service as `node dist/gateway.js`. Taken as the narrow host interface rather than as
+// more of `Services`, so this file's blast radius stays what the type says it is.
+export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
+    ExtensionHost;
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
     const i = implement(portsContract).$context<OrpcContext>();
@@ -37,7 +38,8 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
              * mirroring every port on somebody's machine over a cosmetic lookup. Those rows just read as the
              * generic extension service. */
             const extensionProcesses = await extensionProcessIndex(services).catch(() => new Map());
-            const attribution = { workspaceRoot: services.workspace.root, extensionProcesses };
+            const servicePorts = new Map(services.serviceProcesses.list().map((service) => [service.port, service.key]));
+            const attribution = { workspaceRoot: services.workspace.root, extensionProcesses, servicePorts };
             return {
                 ports: listeners
                     .filter(({ port }) => !reserved.has(port))

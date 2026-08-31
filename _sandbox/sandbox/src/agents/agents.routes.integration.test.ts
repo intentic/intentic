@@ -18,7 +18,7 @@ import {
     collect,
     errorCode,
     fakeHistory,
-    fakeProcesses,
+    fakeServiceProcesses,
     runAgentTurn,
     services,
     withTranslator,
@@ -545,8 +545,8 @@ test("agents.place appends the user's words as the agent's, retires the session,
  * get. These suites run against the repo's real _extensions manifests (testConfig.extensionsDir), which is how
  * "discord has a gateway extension, webchat does not" is the same fact production reads. */
 
-// The in-memory record + one-frame turn the channel-place tests share; `ports` seeds the fake process table so
-// a test decides whether the discord gateway "runs" (and where its /deliver door answers).
+// The in-memory record + one-frame turn the channel-place tests share; `ports` seeds the fake service
+// supervisor so a test decides whether the discord gateway "runs" (and where its /deliver door answers).
 const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]) => {
     const records = new Map<string, RestoredMessage[]>();
     const client = clientFor(
@@ -564,7 +564,7 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
                     count: async (agent) => (records.get(agent.id) ?? []).length,
                     truncate: async () => 0,
                 },
-                processes: fakeProcesses(ports),
+                serviceProcesses: fakeServiceProcesses(ports),
                 ...(activity !== undefined
                     ? { activity: { append: async (event: unknown) => void activity.push(event), list: async () => [] } }
                     : {}),

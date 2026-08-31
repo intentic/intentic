@@ -53,6 +53,7 @@ import { applyEventsPath, applyRunLive } from "./intentic/apply-events.js";
 import { checkEventsDir } from "./intentic/check-run.js";
 import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
 import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
+import { killOrphanServiceProcesses } from "./processes/service-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
 import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { publicRoot } from "./public/public-files.js";
@@ -228,9 +229,11 @@ const main = async (): Promise<void> => {
     shutdown.push(() => services.announcer.stop());
     shutdown.push(() => services.reach.stop());
     shutdown.push(() => services.history.stop());
-    // Stops the extension gateway processes too (tmux kill-session ⇒ SIGHUP), each flushes its own in-flight
-    // voice transcript on the way down.
     shutdown.push(() => services.processes.stopAll());
+    // The extension gateways are supervised direct children (SIGTERM to each group ⇒ every gateway flushes
+    // its own in-flight voice transcript on the way down), stopped here or they outlive the daemon in their
+    // own process groups — killOrphanServiceProcesses at the next boot is the backstop, not the plan.
+    shutdown.push(() => services.serviceProcesses.stopAll());
     // The backend host is a direct child, not a tmux session, stopped here or it outlives the daemon.
     shutdown.push(() => services.extensionBackend.stop());
     /* AM I THIS SANDBOX'S DAEMON, OR A RUN OF ITS CODE, asked before anything is claimed, swept or announced,
@@ -722,6 +725,10 @@ const main = async (): Promise<void> => {
             ...(dockerAlive ? [panelSession(DOCKER_PANEL_KEY)] : []),
             ...modelsAlive,
         ]).catch(() => undefined);
+        // Service children (extension gateways) of a daemon that died WITHOUT unwinding: they live in their
+        // own process groups, so they survived it, holding provider connections the restore below would
+        // duplicate. A clean shutdown already stopped them; this only ever finds crash leftovers.
+        await killOrphanServiceProcesses(logger).catch(() => undefined);
     });
     // A previous boot's check runs left per-run event files behind (their streams died with the daemon).
     if (role.roots) {
