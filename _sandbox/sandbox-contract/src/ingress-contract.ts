@@ -120,8 +120,8 @@ export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 
 // ── The daemon-side surface (pinned for the boot wiring) ────────────────────────────────────────────────
 
-/* What the daemon's boot wires up (implemented in the daemon's platform/ingress-tunnel.ts, on the protocol in
- * ./ingress-protocol.ts). Dial, register, forward to the loopback listener, reconnect forever with backoff —
+/* The daemon-side tunnel behavior this contract requires. Dial, register, forward to the loopback listener,
+ * reconnect forever with backoff —
  * the tunnel is the sandbox's reachability, so like the zrok agent's restart loop it never gives up, it only
  * ever waits longer. close() is for shutdown and tests. */
 export interface IngressTunnelOptions {
