@@ -381,17 +381,11 @@ export const startNotificationSources = (): void => {
             // ordinary width is a model picker with no room for a model.
             wide: pushFlow.proposedFix.value !== undefined,
             body: PushQuestionBody,
-            actions: [
-                {
-                    // Push anyway, and it never asks twice. The user knows things the check does not: that this
-                    // IS the fix for the failure, that the suite is flaky, that they want it on a branch to look
-                    // at in CI. After a failed PUSH there is nothing to override — the send itself is what
-                    // refused — so the same button becomes the retry, which is the only useful thing left.
-                    label: question.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`,
-                    severity: `warn` as const,
-                    run: pushFlow.pushAnyway,
-                },
-            ],
+            // NO LANE ACTION, deliberately: "Push anyway" lives in the body, on the same row as "Show
+            // terminal" (shell/PushQuestionBody.vue). As an action here the lane gave it a strip of its own
+            // under the body, so the two answers to this question — go and look, or override — sat on two
+            // rows of chrome instead of reading as the pair they are.
+            actions: [],
             // It waits. Nothing retires it but the user: a question that timed out would be a decision nobody
             // made.
             dismiss: pushFlow.dismiss,

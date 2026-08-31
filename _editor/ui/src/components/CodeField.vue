@@ -101,7 +101,15 @@ defineExpose({ field });
         <div v-if="html" class="ui-code-field-html [grid-area:1/1] min-w-0" v-html="html"></div>
         <pre v-else class="ui-code-field-box [grid-area:1/1] min-w-0">{{ shown }}</pre>
         <!-- The half that takes the keystrokes. Transparent text over its own colours; the caret and the
-             selection are the only ink it contributes, and reading turns the caret off too. -->
+             selection are the only ink it contributes, and reading turns the caret off too.
+
+             `field-bare` IS PART OF THE CONTRACT, not a tweak: this textarea has no frame of its own — it is a
+             transparent sheet stacked over the coloured <pre>, and the border, the fill and the rounding all
+             belong to whatever box the caller wrapped the pair in. Without it the skins treat it as an ordinary
+             field and cut a recess into it (a dark inset strip across the top of the colours) and, on focus,
+             draw a gold rim plus a 3px accent halo — square-cornered, inside the caller's rounded frame, around
+             the whole scroll area. That is the highlight that appeared around the agent-fix composer the moment
+             the caret landed in it. Same class and same reason as the chat composer's textarea. -->
         <textarea
             ref="field"
             v-bind="forwarded"
@@ -109,7 +117,7 @@ defineExpose({ field });
             spellcheck="false"
             :readonly="readonly"
             :class="[
-                `ui-code-field-box ui-code-field-input [grid-area:1/1] min-w-0 resize-none overflow-hidden focus:outline-none`,
+                `field-bare ui-code-field-box ui-code-field-input [grid-area:1/1] min-w-0 resize-none overflow-hidden focus:outline-none`,
                 readonly ? `caret-transparent` : ``,
             ]"
         ></textarea>

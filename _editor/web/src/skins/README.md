@@ -237,5 +237,7 @@ Two hooks the app maintains **for** the skins, and both were bugs first:
   utilities the board card happened to write, which reached the two board cards and left every rail row in raw
   accent beside them.
 - `.field-bare` marks a field whose frame belongs to the box **around** it — the chat composer's textarea inside
-  its rounded form. The field rules must exclude it, base and focus both: cutting a recess into one puts a
-  square-cornered slot, and on focus a square-cornered halo, inside a rounded box.
+  its rounded form, the command palette's input inside its search band, and `<CodeField>`'s textarea, which is a
+  transparent sheet stacked over a coloured `<pre>` and has no frame it could carry. The field rules must
+  exclude it, base and focus both: cutting a recess into one puts a square-cornered slot, and on focus a
+  square-cornered halo, inside a rounded box.

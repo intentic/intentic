@@ -25,6 +25,9 @@ const emit = defineEmits<{ start: [] }>();
 const { mobile } = useDevice();
 
 const codeField = ref<InstanceType<typeof CodeField>>();
+// The frame the field scrolls inside, held so the view can be put back at the top of the proposal after the
+// caret has been placed at its end (see onMounted).
+const scroller = ref<HTMLDivElement>();
 // The pill IS the anchor, which is why the component hands its element back: the overlay derives the document
 // it teleports into, the viewport it measures the room against, and the click that never dismisses it, all from
 // that element, so this box works unchanged wherever it is mounted (the app-wide dialog, the push dialog, a
@@ -61,13 +64,21 @@ onMounted(() => {
             el.focus();
             el.setSelectionRange(el.value.length, el.value.length);
         }
+        /* BUT THE VIEW OPENS AT THE TOP, because placing that caret scrolls the frame to it and a proposal
+         * longer than the box then opened on its own last line: the first thing on screen was the tail of a
+         * fenced stack trace, clipped mid-line against the top edge, with no padding above it at all — the
+         * field's own 12px had been scrolled out of view, so the box read 0px at the top against 12px at the
+         * bottom. Reset after BOTH calls: focus() and setSelectionRange() each scroll the caret into view. */
+        if (scroller.value !== undefined) {
+            scroller.value.scrollTop = 0;
+        }
     });
 });
 </script>
 
 <template>
     <div class="rounded-xl border border-line bg-canvas">
-        <div class="scrollbar-thin max-h-64 overflow-y-auto px-1 pt-1">
+        <div ref="scroller" class="scrollbar-thin max-h-64 overflow-y-auto">
             <CodeField
                 ref="codeField"
                 v-model="conversation.draft.value"
@@ -78,7 +89,12 @@ onMounted(() => {
             />
         </div>
 
-        <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2 pb-2">
+        <!-- THE BOX'S BOTTOM INSET IS THIS ROW'S PADDING, which is why the vertical is 3 and not 2: the field
+             above contributes 12px of its own above the first line (`.ui-code-field-box` in code.css), and a
+             strip padded 8px underneath made the box 12px at the top and 8px at the bottom — close enough to
+             equal to look like a mistake rather than a decision. The horizontal stays 2: it puts the model
+             pill's glyph on the same 16px column the text starts at, since the pill carries 8px of its own. -->
+        <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2 py-3">
             <div class="flex min-w-0 items-center gap-1">
                 <ComposerModelPill ref="modelPill" :conversation="conversation" :expanded="modelOpen" @click="modelOpen = !modelOpen" />
 

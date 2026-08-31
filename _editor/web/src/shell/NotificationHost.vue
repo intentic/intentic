@@ -128,10 +128,16 @@ const press = (entry: Notification, action: NotificationAction): void => {
         :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
     >
         <TransitionGroup name="lane">
+            <!-- TWO COLUMNS, NOT AN ICON BESIDE A STACK. The glyph is a grid item in the TITLE'S OWN ROW, so
+                 `self-center` centres it against that row's real height and nothing has to guess an offset — the
+                 nudge this was (`mt-0.5`, then `mt-1`) could only ever be right for one combination of type
+                 scale and dismiss-button size, and it was wrong for the one shipping. Everything under the title
+                 is `col-start-2`, which is what keeps the body indented past the glyph now that the text is no
+                 longer wrapped in a column of its own. -->
             <div
                 v-for="entry in notifications"
                 :key="entry.id"
-                class="pointer-events-auto flex max-w-full items-start gap-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
+                class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
                 :role="roleOf(entry)"
                 @mouseenter="entry.kind === `receipt` && (hovered = true)"
@@ -139,66 +145,64 @@ const press = (entry: Notification, action: NotificationAction): void => {
             >
                 <Icon
                     :name="entry.icon ?? GLYPH[entry.tone]"
-                    class="shrink-0 text-xs"
+                    class="self-center text-xs"
                     :class="TINT[entry.tone]"
                     :spin="entry.spin === true"
                     aria-hidden="true"
                 />
-                <div class="min-w-0 flex-1">
-                    <div class="flex min-w-0 items-center gap-2">
-                        <!-- A completion is three words and wrapping it never bites; a problem or a condition
-                             has to say what and why, so it wraps rather than ending in an ellipsis mid-reason. -->
-                        <p class="min-w-0 flex-1 text-xs font-medium text-content">{{ entry.title }}</p>
-                        <!-- The one-line card keeps its press on the sentence's own row. -->
-                        <Button
-                            v-for="action in compact(entry) ? (entry.actions ?? []) : []"
-                            :key="action.label"
-                            size="small"
-                            :severity="action.severity ?? `secondary`"
-                            :label="action.label"
-                            class="shrink-0"
-                            v-tooltip.top="action.hint"
-                            @click="press(entry, action)"
-                        />
-                        <!-- The paragraph nobody needs but somebody will want, kept off the card until it is
-                             asked for. -->
-                        <InfoHint v-if="entry.hint" class="shrink-0" :label="entry.title">
-                            <span class="block text-xs text-content">{{ entry.hint }}</span>
-                        </InfoHint>
-                        <!-- Dismiss is the OWNER'S to record, never the host's to fake: it runs their callback
-                             and the card leaves on the next tick because their source has gone quiet.
+                <div class="flex min-w-0 items-center gap-2">
+                    <!-- A completion is three words and wrapping it never bites; a problem or a condition
+                         has to say what and why, so it wraps rather than ending in an ellipsis mid-reason. -->
+                    <p class="min-w-0 flex-1 text-xs font-medium text-content">{{ entry.title }}</p>
+                    <!-- The one-line card keeps its press on the sentence's own row. -->
+                    <Button
+                        v-for="action in compact(entry) ? (entry.actions ?? []) : []"
+                        :key="action.label"
+                        size="small"
+                        :severity="action.severity ?? `secondary`"
+                        :label="action.label"
+                        class="shrink-0"
+                        v-tooltip.top="action.hint"
+                        @click="press(entry, action)"
+                    />
+                    <!-- The paragraph nobody needs but somebody will want, kept off the card until it is
+                         asked for. -->
+                    <InfoHint v-if="entry.hint" class="shrink-0" :label="entry.title">
+                        <span class="block text-xs text-content">{{ entry.hint }}</span>
+                    </InfoHint>
+                    <!-- Dismiss is the OWNER'S to record, never the host's to fake: it runs their callback
+                         and the card leaves on the next tick because their source has gone quiet.
 
-                             THESE TWO RIDE THE TITLE'S ROW rather than the card's full height, which is not a
-                             cosmetic choice. As siblings of the whole text column they took a 24px gutter down
-                             the ENTIRE card: the progress bar of an upload stopped 24px short of the padding it
-                             was supposed to meet, every detail line wrapped early against nothing, and the card
-                             had a ragged right edge that no amount of padding could explain. They are one line
-                             tall, so they may only cost one line's width. -->
-                        <button
-                            v-if="entry.dismiss"
-                            type="button"
-                            class="shrink-0 cursor-pointer rounded p-0.5 text-muted transition-colors hover:text-content"
-                            aria-label="Dismiss"
-                            @click="entry.dismiss()"
-                        >
-                            <Icon name="times" class="text-2xs" />
-                        </button>
-                    </div>
-                    <p v-if="entry.detail" class="mt-0.5 break-words text-2xs text-muted">{{ entry.detail }}</p>
-                    <!-- The escape hatch, under the text where a caption belongs: the items whose content is not
-                         two strings (a composed agent turn, an upload's per-folder progress). -->
-                    <component :is="entry.body" v-if="entry.body" class="mt-2" />
-                    <div v-if="!compact(entry) && entry.actions && entry.actions.length > 0" class="mt-2 flex items-center justify-end gap-1">
-                        <Button
-                            v-for="action in entry.actions"
-                            :key="action.label"
-                            size="small"
-                            :severity="action.severity ?? `secondary`"
-                            :label="action.label"
-                            v-tooltip.top="action.hint"
-                            @click="press(entry, action)"
-                        />
-                    </div>
+                         THESE TWO RIDE THE TITLE'S ROW rather than the card's full height, which is not a
+                         cosmetic choice. As siblings of the whole text column they took a 24px gutter down
+                         the ENTIRE card: the progress bar of an upload stopped 24px short of the padding it
+                         was supposed to meet, every detail line wrapped early against nothing, and the card
+                         had a ragged right edge that no amount of padding could explain. They are one line
+                         tall, so they may only cost one line's width. -->
+                    <button
+                        v-if="entry.dismiss"
+                        type="button"
+                        class="shrink-0 cursor-pointer rounded p-0.5 text-muted transition-colors hover:text-content"
+                        aria-label="Dismiss"
+                        @click="entry.dismiss()"
+                    >
+                        <Icon name="times" class="text-2xs" />
+                    </button>
+                </div>
+                <p v-if="entry.detail" class="col-start-2 mt-0.5 break-words text-2xs text-muted">{{ entry.detail }}</p>
+                <!-- The escape hatch, under the text where a caption belongs: the items whose content is not
+                     two strings (a composed agent turn, an upload's per-folder progress). -->
+                <component :is="entry.body" v-if="entry.body" class="col-start-2 mt-2" />
+                <div v-if="!compact(entry) && entry.actions && entry.actions.length > 0" class="col-start-2 mt-2 flex items-center justify-end gap-1">
+                    <Button
+                        v-for="action in entry.actions"
+                        :key="action.label"
+                        size="small"
+                        :severity="action.severity ?? `secondary`"
+                        :label="action.label"
+                        v-tooltip.top="action.hint"
+                        @click="press(entry, action)"
+                    />
                 </div>
             </div>
         </TransitionGroup>
