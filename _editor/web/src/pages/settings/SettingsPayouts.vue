@@ -58,8 +58,10 @@ const load = async (): Promise<void> => {
 
 onMounted(load);
 
-/* Whether the wait has lasted long enough to be worth drawing. The subject is fixed because there is only ever
- * one: this tab reads the signed-in account's creator status and nothing switches underneath it. */
+/* Whether the wait has lasted long enough to be worth drawing. Gates ONLY the payout row's outline: the
+ * group's label and the claim step are on screen from the first frame, so a fast answer paints no grey at
+ * all. The subject is fixed because there is only ever one: this tab reads the signed-in account's creator
+ * status and nothing switches underneath it. */
 const outline = useLoadingReveal(
     computed(() => state.value === null && loadError.value === undefined),
     computed(() => `creator-status`),
@@ -143,30 +145,13 @@ const connect = async (): Promise<void> => {
         <Notice v-if="loadError" :of="loadError" />
         <p v-else-if="state && !state.enabled" :class="ui.emptyState()">This platform doesn't run a creator pool.</p>
 
-        <template v-else-if="outline">
-            <!-- THE WAIT IS DRAWN, NOT SKIPPED, and it is drawn as the GROUPS that are coming rather than as a
-                 column of loose bars. The two below are the two that always land once the read does (the names
-                 you hold and where they get paid); earnings and receipts are not promised here, because a
-                 creator on their first visit has neither, and an outline showing blocks that never arrive is a
-                 worse lie than the blank it replaced.
-
-                 <SkeletonRows> rather than hand-cut bars: it renders REAL <Row>s, so the outline inherits this
-                 page's padding and density by construction instead of drifting from it the next time a tier
-                 changes. -->
-            <div class="flex flex-col gap-6" role="status" aria-busy="true">
-                <span class="sr-only">Reading your creator status…</span>
-                <RowGroup>
-                    <template #label><span class="skeleton block h-2.5 w-32" aria-hidden="true" /></template>
-                    <SkeletonRows :rows="2" description />
-                </RowGroup>
-                <RowGroup>
-                    <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
-                    <SkeletonRows :rows="1" description control />
-                </RowGroup>
-            </div>
-        </template>
-
-        <template v-else-if="state">
+        <template v-else>
+            <!-- WHAT DOES NOT WAIT ON THE READ: the claim step and the payout group's own label are the same
+                 before the answer as after it, so they paint with the tab rather than after a beat of grey.
+                 The claim step is also self-sufficient — it reads the workspace's repositories and the
+                 registry's names on its own — so mounting it here runs its fetches in parallel with the
+                 status read instead of queued behind it. What still waits is only what the answer can
+                 change: earnings, names held, the payout row itself, and receipts. -->
             <!-- ══ EARNINGS ═══════════════════════════════════════════════════════════════════════════════
                  THE NUMBER IS A NUMBER, at the size the membership tab sets its own headline figure. It used
                  to be `text-sm` inside a sentence ("$40.00 across 2 closed months"), which is the one fact
@@ -205,7 +190,7 @@ const connect = async (): Promise<void> => {
             <!-- ══ PUBLISHER NAMES ════════════════════════════════════════════════════════════════════════
                  Absent for most first visits, which is why it renders nothing at all rather than an empty-state
                  box competing with the claim step directly under it. -->
-            <RowGroup v-if="state.claims.length > 0" label="Publisher names" :count="state.claims.length">
+            <RowGroup v-if="state !== null && state.claims.length > 0" label="Publisher names" :count="state.claims.length">
                 <Row v-for="claim in state.claims" :key="claim.publisher" icon="check-circle" tone="success" :title="claim.publisher">
                     <template #description
                         >proved with <span class="font-mono">{{ claim.repo }}</span></template
@@ -223,7 +208,7 @@ const connect = async (): Promise<void> => {
                  which is the same silhouette a "Copy" chip wears: the single thing standing between a creator
                  and their money looked exactly as optional as everything beside it. -->
             <RowGroup label="Payout account">
-                <Row :icon="payout.icon" :tone="payout.tone" :title="payout.title" :description="payout.line">
+                <Row v-if="state" :icon="payout.icon" :tone="payout.tone" :title="payout.title" :description="payout.line">
                     <template #control>
                         <Button
                             :label="payouts?.connected ? `Continue on Stripe` : `Set up payouts`"
@@ -245,6 +230,13 @@ const connect = async (): Promise<void> => {
                         </div>
                     </template>
                 </Row>
+                <!-- THE ONE ROW THAT WAITS, drawn inside its own group once the wait has earned it, so a fast
+                     read paints the label alone and a slow one promises exactly what lands: one row with a
+                     description and a button. -->
+                <template v-else-if="outline">
+                    <span class="sr-only" role="status">Reading your creator status…</span>
+                    <SkeletonRows :rows="1" description control />
+                </template>
             </RowGroup>
 
             <!-- ══ RECEIPTS ═══════════════════════════════════════════════════════════════════════════════

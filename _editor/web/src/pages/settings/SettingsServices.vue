@@ -229,23 +229,11 @@ const rotate = (slug: string) =>
             This platform doesn't take self-serve service listings. Its catalog is written by its operator.
         </p>
 
-        <template v-else-if="outline">
-            <!-- THE WAIT IS DRAWN AS THE GROUPS THAT ARE COMING. What is promised is only what every provider
-                 gets: the admission rules, which are rendered from the platform's own numbers and are therefore
-                 the one block guaranteed to land. Listings and the create form are withheld — most providers
-                 have neither, and promising rows that never arrive is worse than promising nothing. -->
-            <!-- A <RowGroup> outline for a <RowGroup> of rows, so it promises the height that lands. It used to
-                 state a tier of its own and state it differently, and the list jumped as it arrived. -->
-            <div class="flex flex-col gap-6" role="status" aria-busy="true">
-                <span class="sr-only">Reading your service listings…</span>
-                <RowGroup>
-                    <template #label><span class="skeleton block h-2.5 w-40" aria-hidden="true" /></template>
-                    <SkeletonRows :rows="4" :lead="false" description control />
-                </RowGroup>
-            </div>
-        </template>
-
-        <template v-else-if="state && rules">
+        <template v-else>
+            <!-- WHAT DOES NOT WAIT ON THE READ: "How admission works" keeps its label and its prose on screen
+                 from the first frame, because neither the group's name nor the explanation of the health
+                 check changes with anything the answer can say. What still waits is what the answer carries:
+                 the gates, the thresholds' figures, the listings and the form. -->
             <!-- ══ THE UNRECOVERABLE VALUE ════════════════════════════════════════════════════════════════
                  The app's one tinted message box, in the tone that means "this will cost you something if you
                  ignore it". Dismissed by the provider and by nothing else. -->
@@ -269,7 +257,7 @@ const rotate = (slug: string) =>
                  "both live on Getting paid" and left the reader to find it. The literal "✓" and "1." typed
                  into a span are gone with it; a passed gate was painted `text-ok`, which is not a colour this
                  app has, so it rendered in the paragraph's own colour and said nothing at all. -->
-            <RowGroup v-if="!ready" label="Before you can list">
+            <RowGroup v-if="state && !ready" label="Before you can list">
                 <RouterLink :to="{ name: `settings`, params: { tab: `payouts` } }" class="block">
                     <Row
                         interactive
@@ -301,11 +289,20 @@ const rotate = (slug: string) =>
                     No review queue. Prove your publisher name, connect payouts, and pass a health check: one signed call that succeeds, two bad ones
                     that fail. Pass and you're live on probation. Same five-minute timeout as a paid run, so slow endpoints take time.
                 </RowNote>
-                <Row v-for="rule in ruleRows" :key="rule.key" :title="rule.title" :description="rule.description">
-                    <template #meta
-                        ><span class="text-content">{{ rule.fact }}</span></template
-                    >
-                </Row>
+                <template v-if="rules">
+                    <Row v-for="rule in ruleRows" :key="rule.key" :title="rule.title" :description="rule.description">
+                        <template #meta
+                            ><span class="text-content">{{ rule.fact }}</span></template
+                        >
+                    </Row>
+                </template>
+                <!-- THE THRESHOLDS ARE THE ONE PART OF THIS GROUP THAT WAITS: the figures are the platform's
+                     own numbers, so before the read lands the group stands with its label and prose and, once
+                     the wait has earned it, an outline of exactly the five rows that are coming. -->
+                <template v-else-if="outline">
+                    <span class="sr-only" role="status">Reading your service listings…</span>
+                    <SkeletonRows :rows="5" :lead="false" description control />
+                </template>
             </RowGroup>
 
             <!-- ══ WHAT YOU ALREADY HOLD ══════════════════════════════════════════════════════════════════
@@ -398,7 +395,7 @@ const rotate = (slug: string) =>
                  blob with no label and no placeholder at all. The rules the platform will apply are stated at
                  the field they apply to, so a malformed slug is caught here rather than by a red box after a
                  round trip. -->
-            <RowGroup v-if="ready" label="List a service">
+            <RowGroup v-if="ready && rules" label="List a service">
                 <RowNote variant="block">
                     <form class="flex flex-col gap-4" @submit.prevent="create">
                         <div class="grid gap-4 @xl:grid-cols-2">
