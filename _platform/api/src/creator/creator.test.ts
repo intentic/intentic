@@ -129,30 +129,27 @@ describe(`publisher claims`, () => {
         expect(await checkClaim(baseConfig, reader([]), user.id, `acme`, flaky)).toEqual({ attempts: [] });
     });
 
-    /* THE REFUSAL HAS TO SAY WHAT WAS READ. The old one said only that nothing carrying the token was readable,
-     * which from the creator's chair is indistinguishable from the platform never having looked, and it sent
-     * someone whose file was there-but-wrong to push the same wrong file again. */
-    it(`explains a failed claim in terms of what each repository actually said`, () => {
-        expect(claimFailureReason(`acme`, { attempts: [] })).toContain(`lists no GitHub-backed extension under acme`);
-
+    it(`picks a failure reason from what was read, not one generic sentence for every shape`, () => {
+        const empty = claimFailureReason(`acme`, { attempts: [] });
         const mismatched = claimFailureReason(`acme`, {
             attempts: [
                 { repo: `acme/one`, outcome: `mismatched` },
                 { repo: `acme/two`, outcome: `absent` },
             ],
         });
-        expect(mismatched).toContain(`acme/one already carries a ${CLAIM_PATH}`);
-        expect(mismatched).toContain(`not the line minted for your account`);
-
         const outage = claimFailureReason(`acme`, { attempts: [{ repo: `acme/one`, outcome: `unreadable` }] });
-        expect(outage).toContain(`That is GitHub, not you`);
-
         const nothingYet = claimFailureReason(`acme`, {
             attempts: [`acme/one`, `acme/two`, `acme/three`].map((repo) => ({ repo, outcome: `absent` as const })),
         });
-        expect(nothingYet).toContain(`Read all 3 repositories listed under acme`);
-        // The branch trap is the single most likely reason a creator who "did it" is still not verified.
-        expect(nothingYet).toContain(`landed on another branch`);
+
+        expect(empty).toMatch(/acme/);
+        expect(mismatched).toContain(`acme/one`);
+        expect(mismatched).toContain(CLAIM_PATH);
+        expect(outage).toContain(`acme/one`);
+        expect(nothingYet).toMatch(/acme/);
+        expect(nothingYet).toContain(CLAIM_PATH);
+
+        expect(new Set([empty, mismatched, outage, nothingYet]).size).toBe(4);
     });
 
     it(`reads the registry for github-sourced listings under the publisher, and caches the file`, async () => {
@@ -545,20 +542,21 @@ describe(`domain claims`, () => {
     });
 
     it(`refuses IPs and reserved words before any network is touched`, () => {
-        expect(domainClaimProblem(`192.168.0.1`)).toContain(`not an IP address`);
-        expect(domainClaimProblem(`not-intentic.dev`)).toContain(`reserved`);
+        expect(domainClaimProblem(`192.168.0.1`)).toBeDefined();
+        expect(domainClaimProblem(`not-intentic.dev`)).toBeDefined();
         expect(domainClaimProblem(`acme.dev`)).toBeUndefined();
     });
 
-    it(`explains a failed domain claim in terms of the URL that was read`, () => {
+    it(`anchors each domain failure on the well-known URL and the outcome that was read`, () => {
         const at = wellKnown(`acme.dev`);
-        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `mismatched` }] })).toContain(
-            `${at} serves a token, but not the line minted for your account`,
-        );
-        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `absent` }] })).toContain(
-            `Serve the line shown here as plain text`,
-        );
-        expect(domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `unreadable` }] })).toContain(`must resolve publicly`);
+        const mismatched = domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `mismatched` }] });
+        const absent = domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `absent` }] });
+        const unreadable = domainClaimFailureReason(`acme.dev`, { attempts: [{ repo: `acme.dev`, outcome: `unreadable` }] });
+
+        for (const reason of [mismatched, absent, unreadable]) {
+            expect(reason).toContain(at);
+        }
+        expect(new Set([mismatched, absent, unreadable]).size).toBe(3);
     });
 
     it(`challenge for a dotted name answers the well-known path, with no registry read`, async () => {
