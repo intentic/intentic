@@ -100,6 +100,9 @@ export {
     type MachineSandboxGroup,
     type MachineSandboxRow,
     type MachineWatcherState,
+    // Whether that computer is off this sandbox's ports, for a caller that has to decide which way its own
+    // button points: the Computers tab offers Stop or Start mirroring off exactly this answer.
+    mirroringOff,
     // The same grouping the view draws, for a caller that has to COUNT what it is about to draw, the
     // Computers tab's folded machine line says how many sandboxes are under it and how many want attention.
     sandboxGroups,

@@ -5,10 +5,10 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
-import { buildCommand, type CommandContext } from "@stricli/core";
+import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { prepareSetup } from "../install.js";
-import { machineLauncher, reconcileResidency } from "../resident.js";
-import { type Pairing, readState, removePairing, type SyncMode, type SyncState, upsertPairing } from "./config.js";
+import { machineLauncher, readResidentPid, reconcileResidency } from "../resident.js";
+import { type Pairing, readState, removePairing, setMirrorOff, type SyncMode, type SyncState, upsertPairing } from "./config.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
@@ -348,6 +348,63 @@ const fileSyncOnly = (brief: string, verb: "pause" | "resume") =>
 const pause = fileSyncOnly("Pause file syncing", "pause");
 const resume = fileSyncOnly("Resume file syncing", "resume");
 
+/* PORT MIRRORING, ON OR OFF, the twin of pause/resume above for the other half of what this agent does.
+ *
+ * Mirroring is the half that changes THIS computer: a sandbox's dev server takes localhost:5173 here, where the
+ * user's own was going to go. Stopping it used to mean unpairing the sandbox (which takes the file sync, the
+ * state backup and the git bridge with it) or revoking every machine's enrollment from the browser, so the
+ * ordinary ask — "keep these ports off my localhost, keep syncing my files" — could not be said at all.
+ *
+ * Bare, it acts on every sandbox this machine pairs, which is the "turn it off entirely" case; `--sandbox` takes
+ * one. The state is local and durable (config.ts setMirrorOff), so it holds through a reboot and while the
+ * sandbox is unreachable, and the watcher reads it on every pass. */
+const mirrorSwitch = (brief: string, off: boolean) =>
+    buildCommand<SandboxFlags>({
+        docs: { brief },
+        parameters: { flags: sandboxFlag },
+        async func(this: CommandContext, flags: SandboxFlags) {
+            const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+            const selected = selectPairings(await readState(), flags.sandbox);
+            if (selected.length === 0) {
+                out("no sandboxes are paired on this machine: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
+                return;
+            }
+            const mutagen = await ensureMutagen();
+            for (const pairing of selected) {
+                // oxlint-disable-next-line eslint/no-await-in-loop -- state is a single file; serial keeps the writes ordered
+                await setMirrorOff(pairing.sandboxId, off);
+                /* OFF TAKES EFFECT NOW, not on the watcher's next pass: somebody who just asked for their
+                 * localhost back should have it before they can alt-tab, and this command may well be running
+                 * BECAUSE the port is wanted by something else this second. Turning it back ON is left to the
+                 * watcher, which re-mirrors within one poll: creating a forward dials the sandbox over the
+                 * transport that loop holds, so it is the only thing that can. */
+                if (off) {
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's teardown at a time, as everywhere else here
+                    await retirePairingMirror(mutagen, pairing.sandboxId);
+                }
+            }
+            const named = selected.map((pairing) => pairing.sandboxId).join(", ");
+            if (off) {
+                out(`Port mirroring OFF for: ${named}. Those ports are off this computer's localhost. File syncing is untouched.`);
+                return;
+            }
+            out(`Port mirroring on for: ${named}. Their ports return to localhost within a few seconds.`);
+            // The watcher is what puts them back, so a stopped agent turns this command into a promise nothing
+            // keeps. Said here rather than left for the user to discover by refreshing a browser tab.
+            if ((await readResidentPid()) === undefined) {
+                out("Note: this machine's agent is NOT running, so nothing will mirror until you start it: `intentic-machine run`.");
+            }
+        },
+    });
+
+const mirror = buildRouteMap({
+    routes: {
+        off: mirrorSwitch("Stop putting a sandbox's ports on this computer's localhost (file syncing continues)", true),
+        on: mirrorSwitch("Put a sandbox's ports back on this computer's localhost", false),
+    },
+    docs: { brief: "Turn this computer's port mirroring off or on, for one paired sandbox or all of them" },
+});
+
 /* The sync half's teardown, callable from the top-level `uninstall` too. With a selector it unpairs ONE
  * sandbox and leaves every other pairing (and the computer half's links) served; bare, it removes every pairing
  * and sync's whole residue. Either way the pairings it drops are self-revoked on their sandboxes, so a machine
@@ -418,4 +475,4 @@ const uninstall = buildCommand<SandboxFlags>({
     },
 });
 
-export const syncCommands = { setup, pause, resume, uninstall };
+export const syncCommands = { setup, pause, resume, mirror, uninstall };

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 // (dynamic import, after the env is set): then the state file lands in temp, not the real ~/.intentic/machine.
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-config-"));
 process.env["USERPROFILE"] = process.env["HOME"];
-const { readState, removePairing, updateState, upsertPairing } = await import("./config.js");
+const { readState, removePairing, setMirrorOff, updateState, upsertPairing } = await import("./config.js");
 const { rm, writeFile } = await import("node:fs/promises");
 const { agentHome } = await import("@intentic/local-agent");
 const syncStatePath = join(agentHome("machine").dir, "sync.json");
@@ -89,6 +89,41 @@ describe("removePairing", () => {
         await upsertPairing(local);
         await removePairing("sandbox-never-paired");
         expect((await readState()).pairings).toEqual([local]);
+    });
+});
+
+/* THE OWNER OF THIS COMPUTER SAYING "NOT ON MY LOCALHOST". Durable and per pairing, because the whole point is
+ * that it holds while the sandbox is asleep or unreachable, and because a machine mirroring three sandboxes has
+ * three answers to the question. */
+describe("setMirrorOff", () => {
+    it("switches one pairing's mirroring off and leaves its siblings alone", async () => {
+        await upsertPairing(local);
+        await upsertPairing(web);
+
+        await setMirrorOff(local.sandboxId, true);
+
+        const { pairings } = await readState();
+        expect(pairings.find((held) => held.sandboxId === local.sandboxId)?.mirrorOff).toBe(true);
+        expect(pairings.find((held) => held.sandboxId === web.sandboxId)).toEqual(web);
+    });
+
+    // Back on is an ABSENT flag rather than `false`, so a pairing that was never switched off and one that was
+    // switched back on are the same record, and nothing downstream has two shapes of "on" to tell apart.
+    it("clears the flag rather than storing a false", async () => {
+        await upsertPairing(local);
+        await setMirrorOff(local.sandboxId, true);
+        await setMirrorOff(local.sandboxId, false);
+
+        expect((await readState()).pairings).toEqual([local]);
+    });
+
+    it("keeps file sync's own fields untouched: this stops forwards and nothing else", async () => {
+        await upsertPairing(local);
+        await setMirrorOff(local.sandboxId, true);
+
+        const held = (await readState()).pairings[0];
+        expect(held?.localDir).toBe(local.localDir);
+        expect(held?.syncToken).toBe(local.syncToken);
     });
 });
 

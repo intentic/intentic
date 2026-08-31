@@ -40,6 +40,7 @@ import {
     type MachineSandboxGroup,
     type MachineSandboxRow,
     type MachineWatcherState,
+    mirroringOff,
     portHolder,
     portNote,
     sandboxGroups,
@@ -88,6 +89,16 @@ defineSlots<{
     badges?: (props: { group: MachineSandboxGroup }) => unknown;
     /** What can be DONE to it, right-aligned on the same line. The caller owns the verbs. */
     actions?: (props: { group: MachineSandboxGroup }) => unknown;
+    /* What can be done about this row's PORTS, at the end of the ports line rather than up in `actions`.
+     *
+     * Its own slot because the row's verbs are its CONTAINER's: a "Stop mirroring" sitting beside the Stop that
+     * stops the sandbox is two different stops a pixel apart, and the one that only clears a localhost would be
+     * read as the one that kills the box. Down here it is attached to the thing it changes, which is the same
+     * argument the "show it" link in the port notes already makes.
+     *
+     * The caller owns it for the usual reason: this package knows what mirroring IS and nothing about the door
+     * to the machine that turns it off. */
+    ports?: (props: { group: MachineSandboxGroup }) => unknown;
     /** What follows the row while it is working: a run log, the result of the last action. */
     footer?: (props: { group: MachineSandboxGroup }) => unknown;
 }>();
@@ -383,9 +394,24 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         </div>
                     </template>
 
-                    <template v-if="group.ports.length > 0">
+                    <!-- The ports line survives having NO PORTS, which is the one case it used to render as
+                         nothing at all. An empty list has two opposite causes, this sandbox is serving nothing,
+                         or this computer was told to keep its localhost clear, and the row that draws neither
+                         sends whoever came asking "why is localhost empty" away with the question intact. So the
+                         second one keeps the line and says so; the first is still silence, because there is
+                         genuinely nothing to report and a "no ports" on every quiet row is the noise this view
+                         spends its whole design deleting. -->
+                    <template v-if="group.ports.length > 0 || mirroringOff(group.folder)">
                         <span class="text-2xs text-subtle">Ports</span>
-                        <!-- ONE PORT PER LINE, IN TWO ALIGNED COLUMNS: the address, then what is on it or why
+                        <div class="flex min-w-0 flex-col gap-1">
+                            <!-- SAID AS A STATE, NOT AS A FAULT: quiet ink, no badge, no colour. Somebody threw
+                                 this switch on purpose and the row's job is to remember it out loud, which is
+                                 exactly what the sandbox could not do for itself, the flag lives on the computer
+                                 (that is where the localhost is) and this is the only place it surfaces. -->
+                            <p v-if="mirroringOff(group.folder)" class="text-xs text-muted">
+                                Off: this computer isn't putting this sandbox's ports on its own localhost. File syncing is unaffected.
+                            </p>
+                            <!-- ONE PORT PER LINE, IN TWO ALIGNED COLUMNS: the address, then what is on it or why
                              it never arrived.
                              It used to be a wrapping row of tinted chips, each trailed by a program name in a
                              smaller mono: three addresses and three programs ran together as one string, and
@@ -395,21 +421,30 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                              plus a green running dot, green had stopped meaning anything at all: it was just
                              the colour ports are. The ink carries it now: content for one you can open, warning
                              for one you cannot, and nothing in this block has a background any more. -->
-                        <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
-                            <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
-                                <!-- Only a port that MADE IT says "localhost". One that never reached it is a
+                            <!-- Suppressed while the switch is off, rather than printed under the sentence that
+                                 contradicts it. The machine tears its forwards down on the same tick it reads
+                                 the flag, so a row here could only ever be a reading from BEFORE that, and
+                                 `localhost:5173` against a localhost that no longer has it is the one thing this
+                                 block must never hand anybody (the same rule as "only a port that MADE IT says
+                                 localhost", one tick further on). -->
+                            <div v-else class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1">
+                                <template v-for="port in group.ports" :key="`${port.port}:${port.state}`">
+                                    <!-- Only a port that MADE IT says "localhost". One that never reached it is a
                                      bare number, not an address nobody can open. -->
-                                <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
-                                    >{{ port.state === `mirrored` ? `localhost:` : `` }}{{ port.port }}</span
-                                >
-                                <!-- What is listening on the sandbox side, named rather than quoted: the whole
+                                    <span class="shrink-0 font-mono text-xs" :class="port.state === `mirrored` ? `text-content` : `text-warning`"
+                                        >{{ port.state === `mirrored` ? `localhost:` : `` }}{{ port.port }}</span
+                                    >
+                                    <!-- What is listening on the sandbox side, named rather than quoted: the whole
                                      command line is on the hover, where its width costs nothing. -->
-                                <span v-if="port.state === `mirrored`" class="min-w-0 truncate font-mono text-xs text-subtle" :title="port.command">{{
-                                    shortCommand(port.command)
-                                }}</span>
-                                <span v-else class="min-w-0 text-xs text-muted">
-                                    {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
-                                    <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence names the winner and
+                                    <span
+                                        v-if="port.state === `mirrored`"
+                                        class="min-w-0 truncate font-mono text-xs text-subtle"
+                                        :title="port.command"
+                                        >{{ shortCommand(port.command) }}</span
+                                    >
+                                    <span v-else class="min-w-0 text-xs text-muted">
+                                        {{ portNote(port, portHolder(groups, port), shortCommand(port.command)) }}
+                                        <!-- THE ONE THING THERE IS TO DO ABOUT IT. The sentence names the winner and
                                          used to stop there, which left a reader who wanted their port back with a
                                          name and no idea it was a row on this very card. This goes to the
                                          holder's block, where its Stop button is, and stopping it hands the
@@ -420,16 +455,34 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                                          sandbox and read as one of them. Absent when the holder is not on this
                                          report: there is nothing to scroll to, and a dead link is worse than the
                                          sentence alone. -->
-                                    <button
-                                        v-if="portHolder(groups, port)"
-                                        type="button"
-                                        class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
-                                        @click="showHolder(portHolder(groups, port)!)"
-                                    >
-                                        show it
-                                    </button>
-                                </span>
-                            </template>
+                                        <button
+                                            v-if="portHolder(groups, port)"
+                                            type="button"
+                                            class="ml-1 rounded underline decoration-dotted underline-offset-2 transition-colors hover:text-content"
+                                            @click="showHolder(portHolder(groups, port)!)"
+                                        >
+                                            show it
+                                        </button>
+                                    </span>
+                                </template>
+                            </div>
+                            <!-- THE ONE THING TO DO ABOUT ALL OF THEM, under the list rather than beside any
+                                 single line: mirroring is a per-pairing switch, not a per-port one. Empty for
+                                 every caller that has no door to the machine, and `empty:hidden` keeps a caller
+                                 that renders nothing from paying a gap for the privilege.
+
+                                 `-ml-2.5` PUTS THE LABEL BACK IN THE COLUMN, and it is the whole reason this
+                                 wrapper has a class at all. Every value in this block starts at one x, the path,
+                                 the port numbers, the sentence, the image, because alignment is what makes a
+                                 block of small facts scannable rather than a pile. A small text button carries
+                                 10px of its own padding, so left-aligning its BOX indents its WORDS out of that
+                                 column by exactly that much, which is visible the moment it sits under a list of
+                                 monospaced addresses. The offset cancels the app's own `size="small"` text-button
+                                 padding; a caller putting something else here (a plain link, an icon) should
+                                 expect to want its own. -->
+                            <span v-if="$slots[`ports`]" class="-ml-2.5 flex flex-wrap items-center gap-x-1 gap-y-1 empty:hidden">
+                                <slot name="ports" :group="group" />
+                            </span>
                         </div>
                     </template>
 

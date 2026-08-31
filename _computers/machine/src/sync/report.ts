@@ -47,10 +47,16 @@ const watcherState = async (): Promise<MachineReport["watcher"]> => {
 };
 
 const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePairing => {
+    /* Whether this computer is putting the sandbox's ports on its localhost at all, stated on EVERY pairing
+     * rather than left to be inferred from an empty port list. The two look identical from the sandbox's side
+     * and mean opposite things: "nothing is listening over there" versus "this computer was told not to", and
+     * only the second has anything for a reader to do about it. It is also what lets the browser's Stop button
+     * know which way to point (sync/config.ts setMirrorOff owns the switch itself). */
+    const mirroring = pairing.mirrorOff === true ? "off" : "on";
     // A mirror-only enrollment has no file sync at all, so there is no session to ask about, its absent status
     // is a fact about the mode, not a failure to read one.
     if (pairing.mode !== "sync" || mutagen === undefined) {
-        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir };
+        return { sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, mirroring };
     }
     /* A sync pairing with NO session is the state this report exists to make visible, so it is carried as the
      * ABSENCE of a status rather than as some word for it: nothing is syncing that folder, whatever the ports and
@@ -64,6 +70,7 @@ const pairingReport = (mutagen: string | undefined, pairing: Pairing): MachinePa
         sandboxId: pairing.sandboxId,
         mode: pairing.mode,
         localDir: pairing.localDir,
+        mirroring,
         mutagenStatus: session.status,
         conflicts: session.conflicts,
         paused: session.paused,

@@ -117,6 +117,53 @@ export const MachineFlowLineSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("error"), message: z.string() }),
 ]);
 export type MachineFlowLine = z.infer<typeof MachineFlowLineSchema>;
+/* RUNNING ONE OF THIS PRODUCT'S OWN CLIs ON A CONNECTED COMPUTER, FROM A BUTTON, with no agent in the loop.
+ *
+ * A machine that is connected as a computer can already be told things: the ops above drive its docker, and an
+ * agent with the `host` capability can run whatever it likes through `run_command`. What had no door was the
+ * ordinary case in between — the user wants the thing the CLI on their machine already does, and the sandbox is
+ * where they are looking. Their alternatives were to go and find a terminal, or to ask an agent to do it, which
+ * spends a turn and a model's judgement on a decision that has none in it.
+ *
+ * So: a CLOSED SET OF NAMES, and the argv is built on the daemon from the name alone (hosts/machine-commands.ts).
+ * The browser sends `mirror-off`, never a command line. That is the whole security property, and it is the
+ * reason this is an enum rather than a string: the same socket carries `run_command`, so a route that forwarded
+ * caller-supplied text would hand every browser session a shell on the user's laptop, which is a grant the
+ * capability card never made.
+ *
+ * The machine still enforces its own switches. "Run commands" being off comes back as its own refusal, in its
+ * own words, naming the control to flip — exactly as it does for the sandbox ops. */
+export const MachineCommandSchema = z.enum(["mirror-off", "mirror-on"]);
+export type MachineCommand = z.infer<typeof MachineCommandSchema>;
+/* Which paired sandbox the command acts on: the machine's own id for it, as it appears in that machine's report,
+ * so nothing here has to re-derive the sanitizing the agent applied. Absent means every sandbox that machine
+ * pairs, which is what the CLI does when it is run bare.
+ *
+ * Pattern-bound because it becomes an argv token. It must start with an alphanumeric, not merely consist of id
+ * characters: a value like `--takeover` is made only of legal id characters and is a FLAG by the time the CLI on
+ * the machine parses it. Real ids are `sandbox-<hex>-<zone>`-shaped, so nothing legitimate leads with a dash. */
+export const MachineSandboxIdSchema = z
+    .string()
+    .max(200)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+export const MachineCommandInputSchema = z.object({
+    id: z.string().min(1),
+    command: MachineCommandSchema,
+    sandboxId: MachineSandboxIdSchema.optional(),
+});
+export type MachineCommandInput = z.infer<typeof MachineCommandInputSchema>;
+/* What came back. `ok` is the command's own exit status, not this route's: a machine that refused the call, or a
+ * CLI that exited non-zero, is a real answer to show the person who clicked, not an exception to convert into
+ * one. Only an unreachable machine throws, because then there is nothing to report at all.
+ *
+ * `output` is what the command printed, kept because the CLI's own sentences ("Port mirroring OFF for: …") are
+ * better than anything this side would write over them. */
+export const MachineCommandResultSchema = z.object({
+    ok: z.boolean(),
+    message: z.string(),
+    output: z.string().optional(),
+});
+export type MachineCommandResult = z.infer<typeof MachineCommandResultSchema>;
 // One paired sandbox as the local agent holds it. `localDir` is the answer to the question the Desktop sync card
 // has never been able to answer: which folder on that computer this sandbox's /work actually is.
 export const MachinePairingSchema = z.object({
@@ -124,6 +171,19 @@ export const MachinePairingSchema = z.object({
     mode: z.enum(["sync", "mirror"]),
     // Set only for mode "sync", and only for the sandbox being reported to, see the redaction note above.
     localDir: z.string().optional(),
+    /* Whether that computer is putting this sandbox's ports on its own localhost, which is a switch its owner
+     * holds and not a state this sandbox can read off anything else. An empty port list means two opposite
+     * things — nothing is listening in the sandbox, or the machine was told to keep them off — and only the
+     * second is worth a word on screen or a button to undo.
+     *
+     * The MACHINE owns the flag (the agent's `sync mirror off`), because the localhost being written to is
+     * there: a computer told to keep ports off must keep them off while this sandbox is asleep, unreachable, or
+     * arguing. A browser asks for it by running that same command over the machine's `host` capability, so the
+     * button and the CLI are one gesture rather than two mechanisms that can disagree.
+     *
+     * Optional because it is a fact only an agent new enough to have the switch reports; absent is read as "on",
+     * which is what mirroring has always been. */
+    mirroring: z.enum(["on", "off"]).optional(),
     // Mutagen's own word for what the session is doing ("watching", "scanning", "transitioning", "halted-…").
     // Carried verbatim rather than mapped to a traffic light: the halted states name their own cause, and a UI
     // that reduces them to "problem" sends the user back to the terminal this report exists to replace.

@@ -171,6 +171,24 @@ describe("pairingLine", () => {
     it("leaves a ports-only enrollment alone", () => {
         expect(pairingLine({ sandboxId: "friend", mode: "mirror" })).toBe("  friend  (ports only)");
     });
+
+    /* MIRRORING OFF IS SAID ON THE LINE, because the only other evidence of it is an empty port list, which is
+     * also what a sandbox serving nothing looks like. The file sync's own words stay beside it: turning ports off
+     * does not stop the folder, and a line that dropped them would say it had. */
+    it("says so when this computer's port mirroring is switched off", () => {
+        const line = pairingLine(synced({ mirroring: "off" }));
+        expect(line).toContain("port mirroring OFF");
+        expect(line).toContain("watching");
+    });
+
+    it("says it on a ports-only enrollment too, where it is the whole of what that pairing does", () => {
+        expect(pairingLine({ sandboxId: "friend", mode: "mirror", mirroring: "off" })).toBe("  friend  (ports only)  [port mirroring OFF]");
+    });
+
+    // Absent means on: an agent reports the field only once it has the switch, and mirroring has always been on.
+    it("stays silent when mirroring is on", () => {
+        expect(pairingLine(synced({ mirroring: "on" }))).not.toContain("mirroring");
+    });
 });
 
 /* A PID IS NOT A PULSE. The watcher keeps its own tunnel listeners on the event loop, so a rejection that escapes

@@ -25,6 +25,13 @@ export interface MachineFolderRow {
     sandboxId: string;
     mode: `sync` | `mirror`;
     localDir?: string | undefined;
+    /* Whether that computer is putting this sandbox's ports on its own localhost. Absent means on, which is what
+     * mirroring has always been; only an agent new enough to have the switch says either way.
+     *
+     * It has to be carried, because "off" and "the sandbox is serving nothing" produce the SAME empty port list
+     * and mean opposite things. One is a row with nothing to say and the other is a switch somebody threw, which
+     * is the only one of the two anybody can act on. */
+    mirroring?: `on` | `off` | undefined;
     mutagenStatus?: string | undefined;
     conflicts?: number | undefined;
     paused?: boolean | undefined;
@@ -160,6 +167,14 @@ export const sandboxGroups = (
     return [...paired, ...unpaired];
 };
 
+/* WHETHER THAT COMPUTER IS PUT OFF THIS SANDBOX'S PORTS, and the reason it is a question at all: the evidence
+ * either way is the SAME empty port list. A sandbox running no server and a computer told to keep its localhost
+ * clear both report nothing, and only the second is a switch somebody threw and can throw back.
+ *
+ * Absent is read as `on`, which is what mirroring has always been and what every agent older than the switch
+ * reports. So a machine that cannot answer the question reads exactly as it did before the question existed. */
+export const mirroringOff = (folder: MachineFolderRow | undefined): boolean => folder?.mirroring === `off`;
+
 /* What a file sync is doing, in Mutagen's own words. Not mapped onto a traffic light: its halted states name
  * their own cause ("halted-on-root-emptied"), and flattening them to "problem" sends the reader back to the
  * terminal this view replaces. Paused wins, because it is the one state the user chose. */
@@ -224,11 +239,22 @@ export interface GroupSummary {
 
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
-export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
+// Split in two because the two halves are read differently and are now four independent rules each; one
+// function stating all eight was over the complexity ceiling and, more to the point, over the ceiling at which
+// "which of these colours the line" can be answered by looking.
+const summaryFacts = (group: MachineSandboxGroup): string[] => {
     const facts: string[] = [];
-    const warnings: string[] = [];
+    /* A FACT, NOT A WARNING, and the distinction is the whole of this block's rule: the reader chose this, the
+     * same way they choose to pause a sync. It goes FIRST because it explains the absence of everything else the
+     * ports half of this row would have said, and it is on the closed line because a row that says nothing at
+     * all is precisely how "why is my localhost empty" became a question with no answer on screen.
+     *
+     * Uncoloured and non-opening: the warnings below are also the open-by-default rule, and unfolding a row
+     * forever to report a switch working as asked is a nag, not a signal. */
+    if (mirroringOff(group.folder)) {
+        facts.push(`mirroring off`);
+    }
     const reached = group.ports.filter((port) => port.state === `mirrored`).length;
-    const missed = group.ports.length - reached;
     if (reached > 0) {
         facts.push(plural(reached, `port`, `ports`));
     }
@@ -237,7 +263,18 @@ export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
     if (group.folder?.mode === `mirror`) {
         facts.push(`ports only`);
     }
-    if (missed > 0) {
+    return facts;
+};
+
+const summaryWarnings = (group: MachineSandboxGroup): string[] => {
+    const warnings: string[] = [];
+    const missed = group.ports.filter((port) => port.state !== `mirrored`).length;
+    /* Silent while mirroring is off, because then it is not a fault: OF COURSE nothing is on localhost, the
+     * computer was told to keep it that way, and the fact above says so in the words that name the remedy. The
+     * guard is not decoration, a reading captured in the tick between the switch and the teardown carries both,
+     * and without it every such row would warn, colour itself and unfold about the thing it was just asked to
+     * do. */
+    if (missed > 0 && !mirroringOff(group.folder)) {
         warnings.push(`${plural(missed, `port`, `ports`)} not on localhost`);
     }
     if (group.folder?.conflicts) {
@@ -252,8 +289,10 @@ export const groupSummary = (group: MachineSandboxGroup): GroupSummary => {
     if (sync !== undefined && folderTone(sync) === `warning`) {
         warnings.push(sync);
     }
-    return { facts, warnings };
+    return warnings;
 };
+
+export const groupSummary = (group: MachineSandboxGroup): GroupSummary => ({ facts: summaryFacts(group), warnings: summaryWarnings(group) });
 
 /* WHICH ROWS OPEN THEMSELVES. Deliberately NOT "stopped": plenty of sandboxes are stopped on purpose, and a rule
  * that unfolds every one of them hands back the wall this view exists to fold away. What opens is what somebody

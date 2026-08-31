@@ -30,6 +30,11 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   a one-way backup of the sandbox's own state.
 - Serve the SSH transport itself on loopback (the sandbox's sshd reached over its HTTPS surface), mirror every
   workspace port onto this machine's localhost, and bridge git so commits appear in local clones.
+- Own the **port-mirroring switch** (`sync mirror off|on`, optionally `--sandbox <id>`): mirroring is the one
+  thing here that writes to *this* computer's localhost, so the flag lives on this side, survives a restart, and
+  is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop
+  the ports without unpairing the sandbox. The sandbox's Computers tab has a button for it, and that button runs
+  this very command over the `host` capability, so the two can never disagree.
 - Register Mutagen's daemon for login autostart — on Windows through the launcher stub, because Mutagen's own
   registration flashes a console window at every boot.
 
@@ -49,7 +54,7 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 
 ## Key files
 
-- [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|uninstall`, shared `run|status|version|upgrade|uninstall`.
+- [src/commands.ts](src/commands.ts) — the CLI surface: `computer setup|uninstall|updates`, `sync setup|pause|resume|mirror|uninstall`, shared `run|status|version|upgrade|uninstall`.
 - [src/install.ts](src/install.ts) — what every `setup` runs first: self-update (then re-exec), PATH repair, the Windows launcher stub. Everything the install scripts used to decide, decided once here.
 - [src/upgrade.ts](src/upgrade.ts) — `upgrade`: what is published, then download → probe → stop → swap → start, with a rollback behind every step.
 - [src/resident.ts](src/resident.ts) — the one loop, its pidfile, and `reconcileResidency`.

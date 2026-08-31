@@ -1,7 +1,12 @@
 import { eventIterator, oc } from "@orpc/contract";
 import { z } from "zod";
 import { SessionTranscriptSchema, SystemEventSchema } from "../events.js";
-import { MachineFlowLineSchema, MachineSandboxFlowInputSchema } from "../schemas/computers.js";
+import {
+    MachineCommandInputSchema,
+    MachineCommandResultSchema,
+    MachineFlowLineSchema,
+    MachineSandboxFlowInputSchema,
+} from "../schemas/computers.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema } from "../schemas/system.js";
@@ -187,4 +192,20 @@ export const systemContract = {
         })
         .input(MachineSandboxFlowInputSchema)
         .output(eventIterator(MachineFlowLineSchema)),
+    /* Run one of this product's own CLI actions on a connected computer, from a button rather than through an
+     * agent. A closed set of names, and the daemon builds the command line from the name (see the schema): the
+     * browser never sends one, because the socket underneath also carries `run_command`.
+     *
+     * Not a stream, unlike the sandbox ops beside it: these are seconds-long CLI calls whose whole answer is the
+     * sentence they print at the end, and a stream for that is a shape with nothing to put in it. */
+    runMachineCommand: oc
+        .route({
+            method: "POST",
+            path: "/system/computers/{id}/commands/{command}",
+            summary: "Run one of your computer's own CLI actions",
+            description:
+                "Performs a named action on a machine you own by running its own intentic-machine command there — turning that computer's port mirroring off, say — over the connection it holds open. The set of actions is fixed and the command line is built here from the name, never sent by the caller. The machine enforces its own permissions and a refusal comes back as its own sentence, naming the switch to flip.",
+        })
+        .input(MachineCommandInputSchema)
+        .output(MachineCommandResultSchema),
 };

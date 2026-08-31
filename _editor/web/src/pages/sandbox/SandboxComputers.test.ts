@@ -6,7 +6,7 @@
 // derivation (computerFacts.test.ts has that) but that the row actually PUTS it on screen, next to the name, for a
 // computer that has nothing else to show.
 import type { Computer } from "@intentic/sandbox-contract";
-import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb } from "@intentic/ui";
+import { DESTRUCTIVE_VERB, groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 
@@ -18,6 +18,14 @@ const computers = ref<Computer[]>([]);
 // The FIRST read, not the ten-second poll. Every test below is about a list that has already arrived, so this
 // stays false for them; the pair at the bottom drives it to pin what the tab may say before it has.
 const computersLoading = ref(false);
+/* THE MACHINE'S OWN CLI, RUN FROM A BUTTON, recorded rather than performed. The real one POSTs to the daemon,
+ * which runs `intentic-machine sync mirror off` over the computer connection; what is worth pinning on this side
+ * is the three things the button decides: that it is offered at all, which way it points, and that what leaves
+ * here names the row's OWN sandbox rather than every pairing on that machine. */
+const mirrorCalls: { hostId: string; command: string; sandboxId?: string | undefined }[] = [];
+// What the machine answers. `ok: false` is a machine explaining itself (its "Run commands" switch is off, its
+// CLI exited non-zero) and reaches the row as words rather than as a throw, so a test can swap this and pin it.
+let mirrorAnswer: { ok: boolean; message: string } = { ok: true, message: `Port mirroring OFF for: work-abc` };
 vi.mock(`../../composables/sandbox/useComputers`, async () => {
     // reportStale is a plain function of the row and the clock: real, so a row's staleness line is decided the
     // way it is in the app rather than by this file's idea of it.
@@ -25,6 +33,10 @@ vi.mock(`../../composables/sandbox/useComputers`, async () => {
     return {
         ...real,
         useComputers: () => ({ computers, error: ref(undefined), isLoading: computersLoading, refetch: () => {} }),
+        runMachineCommand: (hostId: string, command: string, sandboxId?: string) => {
+            mirrorCalls.push({ hostId, command, sandboxId });
+            return Promise.resolve(mirrorAnswer);
+        },
     };
 });
 // `sandboxKey` is reached at module eval by the real useComputers above, which is why it is here as well as the
@@ -112,6 +124,8 @@ afterEach(() => {
     runnersList.value = [];
     computersLoading.value = false;
     capabilities.value = [];
+    mirrorCalls.length = 0;
+    mirrorAnswer = { ok: true, message: `Port mirroring OFF for: work-abc` };
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -654,4 +668,122 @@ it(`says nothing about the build of a runner that matches`, async () => {
     await nextTick();
     expect(el.textContent ?? ``).not.toContain(`outdated`);
     expect(el.textContent ?? ``).not.toContain(`Update`);
+});
+
+/* ---- port mirroring, the switch on the user's OWN localhost ----
+ *
+ * The complaint this closes: a sandbox's dev server takes localhost:5173 on somebody's own desk, where their own
+ * was going to go, and the only ways to stop it were to unpair the sandbox or revoke the enrollment, each of
+ * which takes the file sync and the git bridge with it. "Not on my localhost today" had no expression anywhere.
+ *
+ * The switch lives on the MACHINE, because the localhost being written to is there, and it must hold while this
+ * sandbox is asleep or unreachable. So this button does not set a flag here: it runs that machine's own CLI over
+ * the computer connection, which is why the tests below are about what LEAVES rather than about local state. */
+// `null` for "no computer door", not `undefined`: an explicit `undefined` argument takes the default, which is
+// the opposite of what the sync-only test is asking for.
+const mirrored = (state: `on` | `off`, door: { hostId: string; online: boolean } | null = { hostId: `host-1`, online: true }): Computer => ({
+    key: `laptop`,
+    label: `laptop`,
+    syncEnrolled: true,
+    platform: `linux`,
+    ...door,
+    report: {
+        hostname: `laptop`,
+        os: `linux`,
+        agents: { sync: `1.183.0` },
+        sandboxes: [{ slug: `work`, container: `intentic-sandbox-work`, running: true, image: `img:a` }],
+        pairings: [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: state }],
+        /* THE PORT IS CARRIED IN BOTH STATES ON PURPOSE. Once the switch is off the machine reports none, it
+         * tears its forwards down on the same tick it reads the flag, so a report holding both is the one-tick
+         * reading in between, and that is precisely the state whose row must not print `localhost:5173` at an
+         * address that no longer answers. */
+        ports: [{ port: 5173, host: `127.0.0.1`, sandboxId: `work-abc`, state: `mirrored`, command: `node vite` }],
+        watcher: { running: true },
+        capturedAt: Date.now(),
+    },
+});
+
+/* THE ROW THAT USED TO DRAW NOTHING. With mirroring off the machine reports no ports, and no ports rendered as
+ * no ports line at all: identical to a sandbox serving nothing, which is how "why is localhost empty" became a
+ * question with no answer on screen. */
+it(`says a computer was told to keep its localhost clear, and offers the way back`, async () => {
+    const el = mount([mirrored(`off`)]);
+    await openRow(el, `work`);
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`isn't putting this sandbox's ports on its own localhost`);
+    // The switch points the other way, because the machine says it is already off.
+    expect(labels(el)).toContain(`Start mirroring`);
+    expect(labels(el)).not.toContain(`Stop mirroring`);
+    // And the stale address is suppressed rather than printed under the sentence contradicting it.
+    expect(text).not.toContain(`localhost:5173`);
+});
+
+/* WHAT LEAVES WHEN IT IS PRESSED. Bare, the machine's CLI acts on every sandbox it pairs, which is a reasonable
+ * thing to want from a terminal and never what a button on one row should do to a colleague's pairing on the
+ * same laptop. So the row's own sandbox id travels with the name. */
+it(`takes this sandbox's ports off that computer's localhost, and nobody else's`, async () => {
+    const el = mount([mirrored(`on`)]);
+    await openRow(el, `work`);
+    expect(el.textContent ?? ``).toContain(`localhost:5173`);
+    const button = [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`));
+    button?.click();
+    await nextTick();
+    expect(mirrorCalls).toEqual([{ hostId: `host-1`, command: `mirror-off`, sandboxId: `work-abc` }]);
+});
+
+/* THE CLI'S OWN SENTENCE, KEPT. It names the ports it actually took off localhost, which is more than this side
+ * knows, and it is the same sentence the reader would have got from the terminal this button replaces. */
+it(`shows the machine's own answer under the row that was pressed`, async () => {
+    const el = mount([mirrored(`on`)]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`))?.click();
+    await nextTick();
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Port mirroring OFF for: work-abc`);
+});
+
+// A refusal is an ANSWER, not a crash: the machine's switches are its own, and it says which one to flip. It
+// arrives as the machine explaining itself rather than as this page reporting a failure.
+it(`keeps the machine's words when it declines to do it`, async () => {
+    mirrorAnswer = { ok: false, message: `Turn on "Run commands" for this computer.` };
+    const el = mount([mirrored(`on`)]);
+    await openRow(el, `work`);
+    [...el.querySelectorAll(`button`)].find((control) => (control.textContent ?? ``).includes(`Stop mirroring`))?.click();
+    await nextTick();
+    await nextTick();
+    expect(el.textContent ?? ``).toContain(`Turn on "Run commands" for this computer.`);
+});
+
+/* NO DOOR, NO BUTTON. Desktop sync carries the pairing and its state, so the row can still SAY mirroring is off,
+ * but the switch travels over the computer connection and there isn't one: a button that fails when taken is
+ * worse than the CLI line it replaced. This is the "only if the sandbox has that computer capability" rule. */
+it(`states mirroring without offering the switch on a computer it cannot run commands on`, async () => {
+    const el = mount([mirrored(`off`, null)]);
+    await openRow(el, `work`);
+    expect(el.textContent ?? ``).toContain(`isn't putting this sandbox's ports on its own localhost`);
+    expect(labels(el)).not.toContain(`Start mirroring`);
+});
+
+/* A SWITCH SOMEBODY THREW IS NOT A FAULT, pinned on the derivation both the folded line and the open-by-default
+ * rule read. Mirroring off is a FACT: uncoloured, and it must not unfold the row forever to report the thing it
+ * was just asked to do. The contended port alongside it is the one-tick reading again, and it must not warn
+ * either, because "not on localhost" is exactly what was asked for. */
+it(`counts mirroring off as a fact rather than something to fix`, () => {
+    const groups = sandboxGroups(
+        [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `off` }],
+        [{ port: 5173, sandboxId: `work-abc`, state: `busy` }],
+    );
+    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [`mirroring off`], warnings: [] }]);
+    expect(groups.filter(groupNeedsAttention)).toEqual([]);
+});
+
+// And the same port with mirroring ON still warns, which is what stops the guard above from swallowing the
+// signal this view was built for: a dev server that never reached localhost because something else holds 5173.
+it(`still warns about a port that missed localhost while mirroring is on`, () => {
+    const groups = sandboxGroups(
+        [{ sandboxId: `work-abc`, mode: `sync`, localDir: `/home/ada/work`, mutagenStatus: `watching`, mirroring: `on` }],
+        [{ port: 5173, sandboxId: `work-abc`, state: `busy` }],
+    );
+    expect(groups.map((group) => groupSummary(group))).toEqual([{ facts: [], warnings: [`1 port not on localhost`] }]);
+    expect(groups.filter(groupNeedsAttention)).toHaveLength(1);
 });

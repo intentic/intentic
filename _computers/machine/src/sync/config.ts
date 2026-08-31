@@ -77,7 +77,8 @@ export type SyncMode = "sync" | "mirror";
  * why a pairing without one can do nothing but exist. localDir is set only for mode "sync" (mirror-only has no
  * file sync). mirroredPorts is the set of Mutagen forward sessions the last reconcile left alive, the baseline,
  * so vanished ports get terminated; skippedPorts is its negative, the ports that same reconcile wanted and could
- * not have. fileSyncAutoPaused marks a pairing the watcher paused after an hour continuously unreachable: it
+ * not have. mirrorOff is this computer's owner saying "not on my localhost" (see setMirrorOff).
+ * fileSyncAutoPaused marks a pairing the watcher paused after an hour continuously unreachable: it
  * suppresses Mutagen's permanent reconnect loop while retaining enough intent to resume automatically when the
  * sandbox answers again. It is distinct from a person's `pause`, which carries no marker and is never undone by
  * the watcher.
@@ -93,6 +94,7 @@ export interface Pairing {
     readonly syncToken?: string;
     readonly mirroredPorts?: readonly MirroredPort[];
     readonly skippedPorts?: readonly SkippedPort[];
+    readonly mirrorOff?: boolean | undefined;
     readonly fileSyncAutoPaused?: boolean | undefined;
 }
 
@@ -144,6 +146,27 @@ export const upsertPairing = async (pairing: Pairing): Promise<void> =>
 
 export const removePairing = async (sandboxId: string): Promise<void> =>
     await updateState((state) => ({ pairings: state.pairings.filter((held) => held.sandboxId !== sandboxId) }));
+
+/* PORT MIRRORING, OFF, and the switch lives HERE because the localhost being written to is here.
+ *
+ * Mirroring is the one half of this agent that changes the computer it runs on: a sandbox's dev server takes
+ * localhost:5173 on somebody's own machine, where their own dev server was going to go. Until now the only ways
+ * to stop that were to unpair the sandbox (which takes the file sync and the git bridge with it) or to revoke
+ * the enrollment from the browser (same, for every machine at once), so "I just don't want these ports today"
+ * had no expression at all.
+ *
+ * Deliberately NOT a fact the sandbox decides. A machine that has been told to keep ports off its localhost
+ * must keep them off while the sandbox is asleep, unreachable, or arguing, so the flag is local, it survives a
+ * restart, and the watcher reads it every tick. The sandbox's Computers view can still ask for it (the daemon
+ * runs this agent's own `sync mirror` command over the host capability), which makes the button and the CLI the
+ * same gesture rather than two mechanisms that can disagree.
+ *
+ * Scoped to one pairing, because a computer mirroring three sandboxes has three answers to this question. File
+ * sync, the state backup and the git bridge are untouched: this stops forwards and nothing else. */
+export const setMirrorOff = async (sandboxId: string, off: boolean): Promise<void> =>
+    await updateState((state) => ({
+        pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? { ...held, mirrorOff: off ? true : undefined } : held)),
+    }));
 
 export const setFileSyncAutoPaused = async (sandboxId: string, paused: boolean): Promise<void> =>
     await updateState((state) => ({

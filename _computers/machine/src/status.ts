@@ -89,25 +89,30 @@ const portLine = (port: MachinePort): string => {
  *   A missing session is SHOUTED, not blanked. A sync pairing whose session was never created (or was terminated
  *   and could not be recreated) has no status to print, and printing nothing put "this folder is not syncing at
  *   all" and "this folder is fine" one space apart. */
+// The two sessions a SYNC pairing runs, in the words this line has always used. Split out of pairingLine so the
+// sentence below stays a list of the things that can be wrong rather than a nest of conditionals.
+const fileSyncState = (pairing: MachineReport["pairings"][number]): (string | undefined)[] => [
+    // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts
+    // rather than clobbering, and nothing else in the product has ever said one was waiting.
+    pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION, this folder is not syncing"),
+    pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
+    /* The backup's own word, and it is SHOUTED when missing for the same reason the line above is:
+     * the whole value of this session is being there on the day the sandbox is not, and a silent
+     * absence reads identically to a healthy one. Named "backup" rather than shown as a bare second
+     * status so the line says which of the two is in trouble. A paused pairing pauses both, so it
+     * is not repeated here. */
+    pairing.paused === true ? undefined : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
+];
+
 export const pairingLine = (pairing: MachineReport["pairings"][number]): string => {
     const where = pairing.mode === "sync" ? (pairing.localDir ?? "(no folder)") : "(ports only)";
-    const state =
-        pairing.mode !== "sync"
-            ? []
-            : [
-                  // Mutagen's own word, and the conflict count beside it: a two-way-safe session flags conflicts
-                  // rather than clobbering, and nothing else in the product has ever said one was waiting.
-                  pairing.paused === true ? "paused" : (pairing.mutagenStatus ?? "NO FILE-SYNC SESSION, this folder is not syncing"),
-                  pairing.conflicts === undefined || pairing.conflicts === 0 ? undefined : `${pairing.conflicts} conflict(s)`,
-                  /* The backup's own word, and it is SHOUTED when missing for the same reason the line above is:
-                   * the whole value of this session is being there on the day the sandbox is not, and a silent
-                   * absence reads identically to a healthy one. Named "backup" rather than shown as a bare second
-                   * status so the line says which of the two is in trouble. A paused pairing pauses both, so it
-                   * is not repeated here. */
-                  pairing.paused === true
-                      ? undefined
-                      : `backup ${pairing.backupStatus ?? "NOT RUNNING, this sandbox's own state is not being copied here"}`,
-              ].filter((part) => part !== undefined);
+    const state = [
+        /* Mirroring being off is stated on BOTH modes and stated loudly, because it is a switch somebody threw
+         * and the evidence of it (an empty port list further down) is identical to a sandbox that happens to be
+         * serving nothing. Absent means on, which is what mirroring has always been, so a healthy row is silent. */
+        pairing.mirroring === "off" ? "port mirroring OFF" : undefined,
+        ...(pairing.mode === "sync" ? fileSyncState(pairing) : []),
+    ].filter((part) => part !== undefined);
     return `  ${pairing.sandboxId}  ${where}${state.length === 0 ? "" : `  [${state.join(", ")}]`}`;
 };
 
@@ -148,6 +153,12 @@ const printReport = (report: MachineReport, out: (message: string) => void): voi
     out(`Ports (${report.ports.length}):`);
     for (const port of report.ports) {
         out(portLine(port));
+    }
+    // A pairing whose mirroring is off has no rows above, and no rows is exactly what a sandbox serving nothing
+    // looks like. Say which it is, and say the command that undoes it: this list is where somebody arrives
+    // asking why localhost is empty.
+    for (const pairing of report.pairings.filter((held) => held.mirroring === "off")) {
+        out(`  ${pairing.sandboxId}: port mirroring is OFF here. Put its ports back with \`intentic-machine sync mirror on --sandbox ${pairing.sandboxId}\`.`);
     }
 };
 

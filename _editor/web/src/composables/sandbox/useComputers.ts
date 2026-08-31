@@ -1,4 +1,12 @@
-import { type Computer, type MachineSandboxOp, ComputersListSchema, SyncStatusSchema } from "@intentic/sandbox-contract";
+import {
+    type Computer,
+    type MachineCommand,
+    type MachineCommandResult,
+    type MachineSandboxOp,
+    ComputersListSchema,
+    MachineCommandResultSchema,
+    SyncStatusSchema,
+} from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { sandboxError, sandboxJson, sandboxRequest } from "./sandboxClient";
 import { readIntenticLines } from "../intenticStream";
@@ -93,6 +101,36 @@ export async function manageMachineSandbox(
         throw new Error(`Lost contact with that computer while this was running: it may still have finished. Refresh to see where it got to.`);
     }
     return outcome;
+}
+
+/* ONE OF THAT COMPUTER'S OWN CLI ACTIONS, RUN FROM A BUTTON, with no terminal and no agent in the middle.
+ *
+ * The gap it closes: the thing somebody wants ("stop putting these ports on my localhost") is one command on
+ * their own machine, that machine is already connected, and the only two ways to reach it were to go and find a
+ * terminal or to ask a model, which spends a turn and somebody's judgement on a decision that has none in it.
+ *
+ * NOT A COMMAND LINE. What travels is a NAME from a closed set and, at most, the sandbox id the row is about;
+ * the daemon builds the argv from the name (hosts/machine-commands.ts). The socket underneath also carries
+ * `run_command`, so a route that forwarded text typed on this side would be a shell on the user's laptop handed
+ * out with a browser session, which is a grant no capability card ever made.
+ *
+ * NOT A STREAM, unlike manageMachineSandbox above: these are seconds-long calls whose whole answer is the
+ * sentence the CLI prints at the end, and a progress pane for that is a shape with nothing to put in it.
+ *
+ * `ok: false` is a RESULT, not a throw: the machine refusing (its "Run commands" switch is off) or its CLI
+ * exiting non-zero is a real answer in the machine's own words, and the caller shows it. Only a machine that
+ * could not be reached at all rejects, because then there is nothing to report. */
+export async function runMachineCommand(hostId: string, command: MachineCommand, sandboxId?: string): Promise<MachineCommandResult> {
+    const path = `/system/computers/${encodeURIComponent(hostId)}/commands/${encodeURIComponent(command)}`;
+    const response = await sandboxRequest(path, {
+        method: `POST`,
+        headers: { "content-type": `application/json` },
+        body: JSON.stringify({ id: hostId, command, ...(sandboxId === undefined ? {} : { sandboxId }) }),
+    });
+    if (!response.ok) {
+        throw await sandboxError(response, { method: `POST`, path: `/system/computers/{id}/commands/{command}` });
+    }
+    return MachineCommandResultSchema.parse(await response.json());
 }
 
 /* THE CONNECTED COMPUTER THAT RUNS A GIVEN SANDBOX, when there is one, the fact that turns "paste this command

@@ -12,6 +12,7 @@ import { AGENT_SESSION_PREFIX, agentSessionName, JOB_SESSION_PREFIX, WEB_SESSION
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, type Caller, bearerFrom } from "../auth/auth.js";
 import { listSubagentSessions } from "../agent/subagents.js";
+import { runMachineCommand } from "../hosts/machine-commands.js";
 import { manageMachineSandbox } from "../hosts/machine-reports.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/browser-sessions.js";
 import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
@@ -456,6 +457,20 @@ export const createSystemRoutes = (services: Services) => {
                 slug: input.slug,
                 ...(input.hash === undefined ? {} : { hash: input.hash }),
             });
+        }),
+        /* One named CLI action on one connected computer — the Computers tab's Stop-mirroring button, and the
+         * door every button like it should take (hosts/machine-commands.ts). Maintainer-floored like the sandbox
+         * ops above: acting on somebody's own machine is operator territory, and the same check is written here
+         * rather than inferred from the method so the two routes refuse identically. */
+        runMachineCommand: i.runMachineCommand.handler(async ({ input, context }) => {
+            if (services.auth !== undefined) {
+                try {
+                    await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
+                } catch {
+                    throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can act on connected computers" });
+                }
+            }
+            return await runMachineCommand(services, input);
         }),
         // Destroy one session (its tab's close button). Validate the name before it reaches the `kill-session`
         // argv, the security guard against a name like `-C` being read as a flag. Killing a session that already

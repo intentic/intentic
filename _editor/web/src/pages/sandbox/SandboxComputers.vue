@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type Computer, type MachineSandboxOp, type MachineWatcher, watcherStalled } from "@intentic/sandbox-contract";
+import { type Computer, type MachineCommand, type MachineSandboxOp, type MachineWatcher, watcherStalled } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
@@ -9,6 +9,7 @@ import {
     MachineDetail,
     MachineRunLog,
     type MachineSandboxGroup,
+    mirroringOff,
     Notice,
     type NoticeModel,
     RowGroup,
@@ -44,7 +45,7 @@ import {
 } from "./computerFacts";
 import DesktopSyncCard from "./DesktopSyncCard.vue";
 import { useCapabilities } from "../../composables/extensions/useCapabilities";
-import { manageMachineSandbox, reportStale, useComputers } from "../../composables/sandbox/useComputers";
+import { manageMachineSandbox, reportStale, runMachineCommand, useComputers } from "../../composables/sandbox/useComputers";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import { useSandboxVersion } from "../../composables/sandbox/useSandboxVersion";
@@ -415,6 +416,15 @@ const inDesktopApp = desktopApp() !== undefined;
 
 const rowKey = (computer: Computer, group: MachineSandboxGroup): string => `${computer.key}:${group.sandboxId}`;
 const busy = ref<string | undefined>();
+/* The mirroring switch's own in-flight row, kept OUT of `busy` rather than folded into it. `busy` is
+ * `${row}:${verb}`, and the row splits its own verb back out of it to decide which button spins
+ * (`runningVerb`): a value in there that is not a container verb makes <SandboxVerbs> spin its ⋯ menu for
+ * something that is not in the menu. Two refs, one meaning, read through `working`. */
+const mirrorBusy = ref<string | undefined>();
+// Something is running on some machine. Every button on this tab drives one socket per computer, and the tab
+// has always taken the simple rule: one at a time, everything else waits. A mirroring switch and a container
+// verb racing on the same pairing would be two answers about the same ports.
+const working = computed(() => busy.value !== undefined || mirrorBusy.value !== undefined);
 const actionError = ref<{ key: string; notice: NoticeModel } | undefined>();
 const actionDone = ref<{ key: string; message: string } | undefined>();
 // The running operation's output, keyed by row so leaving a log on screen while reading another row's is fine.
@@ -471,7 +481,7 @@ const confirmAct = (): void => {
 };
 
 const act = (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): void => {
-    if (computer.hostId === undefined || group.sandbox === undefined || busy.value !== undefined) {
+    if (computer.hostId === undefined || group.sandbox === undefined || working.value) {
         return;
     }
     // The log button is a toggle: a pane the reader opened is theirs to close, and re-reading is the same click
@@ -491,7 +501,7 @@ const act = (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): v
 };
 
 const runAct = async (computer: Computer, group: MachineSandboxGroup, op: SandboxVerb): Promise<void> => {
-    if (computer.hostId === undefined || group.sandbox === undefined || busy.value !== undefined) {
+    if (computer.hostId === undefined || group.sandbox === undefined || working.value) {
         return;
     }
     const key = rowKey(computer, group);
@@ -523,6 +533,59 @@ const runAct = async (computer: Computer, group: MachineSandboxGroup, op: Sandbo
         if (op !== `logs`) {
             refetch();
         }
+    }
+};
+
+/* --- PORT MIRRORING, OFF AND ON AGAIN ---------------------------------------------------------------------
+ *
+ * The one control on this tab that changes the COMPUTER rather than a container on it. Mirroring is the half of
+ * the sync agent that writes to somebody's own localhost: a sandbox's dev server takes localhost:5173 on their
+ * desk, where their own was going to go, and until now the only ways to stop that were to unpair the sandbox
+ * (which takes the file sync and the git bridge with it) or to revoke the enrollment (the same, for every
+ * machine at once). "Not on my localhost today" had no expression anywhere in the product.
+ *
+ * THE MACHINE OWNS THE SWITCH, and this button asks for it by running that machine's OWN CLI over the computer
+ * connection (`intentic-machine sync mirror off`, built daemon-side from a name). So the button and the command
+ * are one gesture rather than two mechanisms that can disagree, and a computer told to keep ports off keeps
+ * them off while this sandbox is asleep, unreachable, or arguing.
+ *
+ * WHERE IT CAN BE OFFERED: the computer door (`hostId`), the machine awake, and no `gap` in the way, which is
+ * where "Run commands is off" already lands and is stated in the row's own line above. A pairing is required
+ * too: mirroring belongs to one, and a container this sandbox never paired with has no ports of ours to place. */
+const mirrorable = (computer: Computer, group: MachineSandboxGroup): boolean =>
+    computer.hostId !== undefined && computer.online === true && computer.gap === undefined && group.folder !== undefined;
+
+// No confirmation, deliberately: it takes ports off a localhost and puts them back, changes no file and destroys
+// nothing, and the button that undoes it is the one that appears in its place.
+const toggleMirror = async (computer: Computer, group: MachineSandboxGroup): Promise<void> => {
+    if (computer.hostId === undefined || working.value) {
+        return;
+    }
+    const key = rowKey(computer, group);
+    // Scoped to the row that was clicked. Bare, the machine's CLI acts on every sandbox it pairs, which is a
+    // reasonable thing to want from a terminal and never what a button on one row should do to a colleague's.
+    const command: MachineCommand = mirroringOff(group.folder) ? `mirror-on` : `mirror-off`;
+    mirrorBusy.value = key;
+    actionError.value = undefined;
+    actionDone.value = undefined;
+    try {
+        const result = await runMachineCommand(computer.hostId, command, group.sandboxId);
+        /* THE MACHINE'S OWN SENTENCE, either way. It names the ports it actually took off localhost, which is
+         * more than this side knows, and a refusal names the switch to flip. `ok: false` is a real answer rather
+         * than a throw (see runMachineCommand), so it is shown as the machine explaining itself: amber, because
+         * nothing here broke, the computer simply did not do it. */
+        actionDone.value = result.ok ? { key, message: result.message } : undefined;
+        actionError.value = result.ok
+            ? undefined
+            : { key, notice: { tone: `warning`, title: `That computer didn't change its port mirroring.`, detail: result.message } };
+    } catch (failure) {
+        actionError.value = { key, notice: noticeFrom(failure, `Couldn't reach that computer to change its port mirroring.`) };
+    } finally {
+        mirrorBusy.value = undefined;
+        /* The ports on this row are exactly what just changed, and the daemon dropped its cached reading of this
+         * machine as the command ran, so this re-read blocks on a real answer rather than serving the list from
+         * before the click. Always, including after a failure: a call that timed out from here still ran there. */
+        refetch();
     }
 };
 </script>
@@ -752,9 +815,31 @@ const runAct = async (computer: Computer, group: MachineSandboxGroup, op: Sandbo
                                         v-if="manageable(row.computer, group)"
                                         :running="group.sandbox?.running === true"
                                         :busy="runningVerb(row.computer, group)"
-                                        :disabled="busy !== undefined"
+                                        :disabled="working"
                                         :logs-open="logShown(row.computer, group)"
                                         @act="(verb) => act(row.computer, group, verb)"
+                                    />
+                                </template>
+                                <!-- THE SWITCH THAT CLEARS THE USER'S OWN LOCALHOST, under the ports it is about
+                                 rather than up in the verbs, which act on the container. Two "Stop"s a pixel
+                                 apart would be read as one, and this one stops nothing in the sandbox: the dev
+                                 server keeps serving, the files keep syncing, the number leaves the machine's
+                                 localhost. Its label points whichever way the machine currently says. -->
+                                <template #ports="{ group }">
+                                    <Button
+                                        v-if="mirrorable(row.computer, group)"
+                                        size="small"
+                                        severity="secondary"
+                                        :text="true"
+                                        :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
+                                        :loading="mirrorBusy === rowKey(row.computer, group)"
+                                        :disabled="working"
+                                        v-tooltip.top="
+                                            mirroringOff(group.folder)
+                                                ? `Put this sandbox's ports back on this computer's localhost`
+                                                : `Take this sandbox's ports off this computer's localhost. Files keep syncing.`
+                                        "
+                                        @click="void toggleMirror(row.computer, group)"
                                     />
                                 </template>
                                 <!-- The machine's own output: while a row works, and afterwards for as long as a log

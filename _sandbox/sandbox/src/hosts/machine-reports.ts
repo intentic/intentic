@@ -80,6 +80,11 @@ interface PullEntry {
 
 const pulled = new Map<string, PullEntry>();
 
+/* DROP WHAT WE REMEMBER OF THIS MACHINE, for anything that just CHANGED it. Deleted rather than aged out, so the
+ * re-read that follows a button has nothing stale to serve and blocks on a real answer, which is exactly what
+ * somebody who just pressed Stop is owed (the same rule manageMachineSandbox states from its own `finally`). */
+export const forgetPull = (id: string): void => void pulled.delete(id);
+
 /* `run_command` answers in PROSE, an exit line, then the streams under `--- stdout ---` fences (see the host
  * agent's describeResult). That is right for the agent, which is its only other caller, and it means a machine
  * reader has to find its JSON inside a human answer.
@@ -125,7 +130,9 @@ const toolText = (answer: unknown): { text: string; refused: boolean } => {
     return { text, refused: result?.isError === true };
 };
 
-const callTool = async (
+// Exported for machine-commands.ts, which runs the user's own CLI on the same socket and reads its answer the
+// same way. One caller of the hub's MCP door per file would be two spellings of the same three lines.
+export const callTool = async (
     services: Services,
     id: string,
     name: string,

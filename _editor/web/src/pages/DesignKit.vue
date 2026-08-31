@@ -39,6 +39,7 @@ import {
     MachineDetail,
     type MachineFolderRow,
     MachineRunLog,
+    mirroringOff,
     type MachinePortRow,
     type MachineSandboxRow,
     Modal,
@@ -124,14 +125,27 @@ const STATUS_VARIANTS: readonly StatusVariant[] = [`success`, `danger`, `warning
 const KIT_SANDBOXES: readonly MachineSandboxRow[] = [
     { slug: `work`, name: `work`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
     { slug: `lab`, name: `lab`, running: false, image: `ghcr.io/intentic/sandbox:2.2.9`, tunnelRunning: false },
+    { slug: `hold`, name: `hold`, running: true, image: `ghcr.io/intentic/sandbox:2.3.1`, tunnelRunning: true },
 ];
 /* BOTH SESSIONS ON BOTH ROWS, because a pairing now runs two: the workspace sync and the one-way mirror that
  * carries the sandbox's own state down. The healthy row states its backup explicitly rather than omitting it:
  * an omitted one reads as "not backed up" and would draw a warning on the sample whose whole job is to show
  * what a well pairing looks like, which is how a fixture starts lying about the component it demonstrates. */
+/* THE THIRD ROW IS THE ONE WITH MIRRORING OFF, and it carries no ports for the same reason the real thing does:
+ * a computer told to keep its localhost clear reports none. That is exactly why the state has to be on the row
+ * at all, an empty port list is also what a sandbox serving nothing looks like, and it is the variant worth
+ * having here: healthy-and-quiet reads as a fault unless you can see the two next to each other. */
 const KIT_PAIRINGS: readonly MachineFolderRow[] = [
     { sandboxId: `work-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/work`, mutagenStatus: `watching`, backupStatus: `watching` },
     { sandboxId: `lab-intentic-dev`, mode: `sync`, localDir: `/home/ada/intentic/lab`, mutagenStatus: `halted-on-root-emptied`, conflicts: 2 },
+    {
+        sandboxId: `hold-intentic-dev`,
+        mode: `sync`,
+        localDir: `/home/ada/intentic/hold`,
+        mutagenStatus: `watching`,
+        backupStatus: `watching`,
+        mirroring: `off`,
+    },
 ];
 /* SEVERAL PORTS, NOT ONE, because one is the case that never went wrong. A sandbox routinely serves three or
  * four, and the layout that broke was exactly that: a wrapping row of tinted chips each trailed by a program
@@ -484,6 +498,18 @@ const pickedTier = ref(`collaborator`);
                         <template #heading><span :class="ui.sectionLabel()">Sandboxes on this computer</span></template>
                         <template #actions="{ group }">
                             <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
+                        </template>
+                        <!-- The ports' own verb, which is NOT one of the container's above: it clears this
+                             computer's localhost and stops nothing in the sandbox. Both directions are on this
+                             page at once (the third row's mirroring is off), which is the whole reason the
+                             fixture has three rows rather than two. -->
+                        <template #ports="{ group }">
+                            <Button
+                                size="small"
+                                severity="secondary"
+                                :text="true"
+                                :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
+                            />
                         </template>
                     </MachineDetail>
                 </div>

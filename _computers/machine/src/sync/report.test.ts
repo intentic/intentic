@@ -19,7 +19,20 @@ const report = (state: SyncState) => buildReport(state, undefined, WATCHER, 1_70
 describe("buildReport", () => {
     it("names the folder each paired sandbox syncs into", () => {
         const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] });
-        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work" }]);
+        // `mirroring: "on"` on a pairing nobody has touched: the flag is stated on every one of them rather than
+        // left to be inferred, because an absent port list means "off" and "nothing is listening" alike.
+        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", mirroring: "on" }]);
+    });
+
+    /* THE SWITCH, AS THE SANDBOX SEES IT. Off, this computer stops putting that sandbox's ports on its own
+     * localhost and reports none, which is byte-for-byte what a sandbox serving nothing looks like. So the state
+     * itself is carried: it is the only thing that tells the two apart, and the only thing a Stop-mirroring
+     * button can point off. */
+    it("says when this computer has been told to keep its localhost clear", () => {
+        const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", mirrorOff: true })] });
+        expect(built.pairings.map((entry) => entry.mirroring)).toEqual(["off"]);
+        // File syncing is untouched by it, which is the whole reason this is not just "unpair the sandbox".
+        expect(built.pairings.map((entry) => entry.localDir)).toEqual(["/home/me/intentic/work"]);
     });
 
     // The whole point of the skip set: a port the sandbox serves that never reached localhost is IN the report,
@@ -78,7 +91,7 @@ describe("scopedReport", () => {
      * that stops being true, this is the test that says so. */
     it("carries no local folder to a sandbox that only mirrors ports", () => {
         const scoped = scopedReport(report(machine), "theirs");
-        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined }]);
+        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined, mirroring: "on" }]);
         expect(scoped.ports.map((port) => port.sandboxId)).toEqual(["theirs"]);
     });
 });

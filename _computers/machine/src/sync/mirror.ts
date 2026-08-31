@@ -287,7 +287,23 @@ const servePairing = async (
     log: Log,
 ): Promise<readonly MirroredPort[]> => {
     const baseline = pairing.mirroredPorts ?? [];
+    /* THE POLL HAPPENS EVEN WITH MIRRORING OFF, and it is worth saying why the switch is not simply a `continue`
+     * further up: this read is also the pairing's liveness probe (the sandbox stamps its enrollment's heartbeat
+     * on it, platform/sync.ts) and the only thing that ever notices a revoked enrollment. A machine that stopped
+     * polling would go quiet on the Desktop sync card and keep a dead pairing forever. What the switch changes is
+     * what is DONE with the answer. */
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(pairing.sandboxUrl, pairing.syncToken);
+    if (pairing.mirrorOff === true) {
+        /* Torn down ONCE, on the first pass after the switch was thrown: `sync mirror off` tears down for itself,
+         * so the ordinary path finds nothing left and this costs a length check. Said in the words of the switch
+         * rather than through the reconcile below, whose "no longer listening in the sandbox" would be a lie
+         * about a sandbox that is serving those ports perfectly well. */
+        if (baseline.length > 0 || (pairing.skippedPorts ?? []).length > 0) {
+            await retirePairingMirror(mutagen, pairing.sandboxId);
+            log(`  ${pairing.sandboxId}: port mirroring is off on this computer; took ${baseline.length} port(s) off localhost.`);
+        }
+        return [];
+    }
     const next = await reconcileForwards(mutagenExecutor(mutagen, pairing, log), baseline, ports, claimedBy, log);
     const skipped = skippedPortsOf(ports, next, claimedBy);
     // Either half changing is a write: a port that flipped from mirrored to contended leaves the mirror set the
