@@ -72,7 +72,7 @@ const midTurn = computed(() => fleet.value.filter(turnInFlight).length);
         <Row
             flush
             :heading="2"
-            :icon="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `history`"
+            :icon="breaking ? `exclamation-triangle` : updateAvailable ? `arrow-circle-up` : `image`"
             :tone="breaking ? `danger` : `default`"
             :title="
                 breaking
