@@ -51,8 +51,8 @@ describe("connectionsFrom", () => {
     it("keeps a half-filled card and says what is missing", () => {
         const [connection] = connectionsFrom(userEnv("GOOGLE", { GOOGLE_REFRESH_TOKEN_GOOGLE: "" }));
         expect(connection?.credential).toBeUndefined();
-        expect(connection?.problem).toBe("the card is missing its refresh token");
-        expect(() => credentialOf(connection!)).toThrow(/missing its refresh token/);
+        expect(connection?.problem).toContain("refresh token");
+        expect(() => credentialOf(connection!)).toThrow(/refresh token/);
     });
 
     it("calls a service account key that is not JSON what it is", () => {

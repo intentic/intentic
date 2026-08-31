@@ -60,11 +60,15 @@ describe("collectAccess", () => {
 
 describe("formatAccessSummary", () => {
     it("shows the generated value and the env reference", () => {
-        const summary = formatAccessSummary(collectAccess(graph, outputs, secretsEnv));
-        expect(summary).toContain("user: intentic");
-        expect(summary).toContain("password: fj-generated-value  (saved in .secrets.json)");
-        expect(summary).toContain("password: $KOMODO_ADMIN_PASSWORD");
-        expect(summary).toContain("https://app.example.com");
+        const entries = collectAccess(graph, outputs, secretsEnv);
+        const summary = formatAccessSummary(entries);
+        const forgejo = entries.find((entry) => entry.id === "host-git")!;
+        const komodo = entries.find((entry) => entry.id === "host-deploy")!;
+        const app = entries.find((entry) => entry.id === "my-app.production")!;
+        expect(summary).toContain(forgejo.username!);
+        expect(summary).toContain(forgejo.password!.value!);
+        expect(summary).toContain(`$${komodo.password!.key}`);
+        expect(summary).toContain(app.url);
     });
 });
 

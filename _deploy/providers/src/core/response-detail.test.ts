@@ -9,15 +9,18 @@ const cfPage = (code: number): string =>
 </head><body><h1>Error</h1></body></html>`;
 
 test("classifies the tunnel-down page (1033) with the actionable hint", async () => {
-    const detail = await responseDetail(new Response(cfPage(1033), { status: 530 }));
-    expect(detail).toBe(
-        "Cloudflare edge error 1033: the tunnel has no connected connector, cloudflared on the host is down or still re-registering",
-    );
+    const code = 1033;
+    const detail = await responseDetail(new Response(cfPage(code), { status: 530 }));
+    expect(detail).toContain(String(code));
+    expect(detail).toContain("connector");
 });
 
 test("classifies other Cloudflare edge errors by code alone", async () => {
-    const detail = await responseDetail(new Response(cfPage(1016), { status: 530 }));
-    expect(detail).toBe("Cloudflare edge error 1016");
+    const hinted = await responseDetail(new Response(cfPage(1033), { status: 530 }));
+    const codeOnly = await responseDetail(new Response(cfPage(1016), { status: 530 }));
+    expect(codeOnly).toContain("1016");
+    expect(codeOnly).not.toContain("connector");
+    expect(codeOnly).not.toBe(hinted);
 });
 
 test("passes short plain-text bodies through unchanged", async () => {

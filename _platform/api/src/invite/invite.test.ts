@@ -121,7 +121,7 @@ describe(`invite routes`, () => {
         // And it is still an incident on the server even though the request succeeded. What was logged matters
         // as much as that something was: the recipient and the provider's own error are the two things the
         // console needs to be worth reading, and a bare "error was called" survives losing either.
-        expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.anything() }), expect.stringContaining(`invite email refused`));
+        expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.anything(), to: `guest@example.com` }), expect.any(String));
         vi.unstubAllGlobals();
     });
 

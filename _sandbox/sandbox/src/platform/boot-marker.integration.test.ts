@@ -44,29 +44,32 @@ test("a marker still saying running is reported as an unannounced death", async 
     claimBootMarker(dir, logger);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({ level: 50, diedPid: died });
-    expect(JSON.stringify(lines[0])).toContain("killed without warning");
+    expect(lines[0]).not.toHaveProperty("fatalReports");
+    expect(lines[0]).not.toHaveProperty("ownerPid");
 });
 
 test("a fatal-error report left by the dead pid is named in the death certificate", async () => {
     const { dir, lines, logger } = await setup();
     const died = deadPid();
     const other = died + 1;
+    const report = `report.20260730.161314.${died}.0.json`;
     await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 1_000 }));
-    await writeFile(join(dir, `report.20260730.161314.${died}.0.json`), "{}");
+    await writeFile(join(dir, report), "{}");
     // Another pid's report must not be attributed to this death.
     await writeFile(join(dir, `report.20260730.161314.${other}.0.json`), "{}");
     claimBootMarker(dir, logger);
-    expect(JSON.stringify(lines[0])).toContain(`report.20260730.161314.${died}.0.json`);
+    expect(lines[0]).toMatchObject({ level: 50, diedPid: died, fatalReports: [report] });
     expect(JSON.stringify(lines[0])).not.toContain(`${other}.0.json`);
-    expect(JSON.stringify(lines[0])).toContain("died on a fatal error");
 });
 
 test("a marker whose owner is still running is a co-tenant, not a corpse, and its record is left alone", async () => {
     const { dir, lines, logger } = await setup();
-    const owner = JSON.stringify({ state: "running", ...self(), startedAt: 1_000 });
+    const identity = self();
+    const owner = JSON.stringify({ state: "running", ...identity, startedAt: 1_000 });
     await writeFile(join(dir, "daemon-exit.json"), owner);
     const marker = claimBootMarker(dir, logger);
-    expect(JSON.stringify(lines[0])).toContain("another live daemon owns this history root");
+    expect(lines[0]).toMatchObject({ level: 40, ownerPid: identity.pid, logsDir: dir });
+    expect(lines[0]).not.toHaveProperty("diedPid");
     expect(await readFile(join(dir, "daemon-exit.json"), "utf8")).toBe(owner);
 
     // And its exit hook stays a no-op: this run's end says nothing about the run that owns the marker.
@@ -94,5 +97,6 @@ test("a running marker whose pid was recycled is a death certificate, not a live
 
     claimBootMarker(dir, logger);
 
-    expect(JSON.stringify(lines[0])).toContain("killed without warning");
+    expect(lines[0]).toMatchObject({ level: 50, diedPid: identity.pid });
+    expect(lines[0]).not.toHaveProperty("ownerPid");
 });

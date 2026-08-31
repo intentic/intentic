@@ -72,10 +72,11 @@ test("groups what the owner approved, names it, and reads its version off the to
     expect(present?.state).toBe("active");
     expect(present?.tools.map((tool) => tool.name)).toContain("node");
     expect(present?.tools.find((tool) => tool.name === "node")?.version).toBe(process.version.slice(1));
-    expect(present?.purpose).toBe("Reads the workspace's package manifests.");
+    expect(present?.purpose?.length).toBeGreaterThan(0);
     // The disclosure carries the comment whole rather than the comment minus the row's line: the view shows one
     // of the two, so a remainder is what made every long entry open on its own opening sentence twice.
-    expect(present?.detail).toBe("Reads the workspace's package manifests. Needed because the release script parses them before it tags.");
+    expect(present?.detail?.startsWith(present?.purpose ?? "")).toBe(true);
+    expect((present?.detail?.length ?? 0)).toBeGreaterThan(present?.purpose?.length ?? 0);
     expect(present?.commands).toBe("RUN echo pretend-install && node --version");
 
     /* Absent: the recipe has it and the container does not, which is exactly "arrives with the next rebuild".

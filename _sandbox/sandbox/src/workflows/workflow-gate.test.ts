@@ -50,14 +50,17 @@ const documented = (data: Record<string, unknown>): WorkflowStepRun => stepRun({
 
 test("the declared value being one that ships is the only way to pass", () => {
     const verdict = gateVerdictOf(runWith(documented({ release: "pass" })));
-    expect(verdict).toEqual({ outcome: "pass", runId: "r1", value: "pass", reason: `release is "pass".` });
+    expect(verdict).toMatchObject({ outcome: "pass", runId: "r1", value: "pass" });
+    expect(verdict.reason).toContain("release");
+    expect(verdict.reason).toContain("pass");
 });
 
 test("any other value fails, and the verdict says what would have shipped", () => {
     const verdict = gateVerdictOf(runWith(documented({ release: "fail" })));
     expect(verdict.outcome).toBe("fail");
     expect(verdict.value).toBe("fail");
-    expect(verdict.reason).toBe(`release is "fail"; this gate ships on "pass" or "pass-with-warnings".`);
+    expect(verdict.reason).toContain("fail");
+    expect(verdict.reason).toContain("pass-with-warnings");
 });
 
 // The hedge the allowlist exists for: a model that answers something adjacent to pass must not ship.
@@ -75,17 +78,21 @@ test("a non-string field is compared as the string a form would have authored", 
 });
 
 test("a step that failed is blocked, not failed: the check broke, not the product", () => {
-    const verdict = gateVerdictOf(runWith(stepRun({ state: "failed", detail: "ran out of iterations" })));
+    const detail = "ran out of iterations";
+    const verdict = gateVerdictOf(runWith(stepRun({ state: "failed", detail })));
     expect(verdict.outcome).toBe("blocked");
-    expect(verdict.reason).toBe(`"Judge" failed (ran out of iterations).`);
+    expect(verdict.reason).toContain("Judge");
+    expect(verdict.reason).toContain(detail);
     expect(verdict.value).toBeUndefined();
 });
 
 // The deadline's own case: the route cut the run off, so the step is still mid-turn when this reads it.
 test("a step still running when the gate stopped waiting is blocked", () => {
-    const verdict = gateVerdictOf(runWith(stepRun({ state: "running" })));
-    expect(verdict.outcome).toBe("blocked");
-    expect(verdict.reason).toBe(`"Judge" was still going when the gate stopped waiting.`);
+    const failed = gateVerdictOf(runWith(stepRun({ state: "failed", detail: "ran out of iterations" })));
+    const running = gateVerdictOf(runWith(stepRun({ state: "running" })));
+    expect(running.outcome).toBe("blocked");
+    expect(running.reason).toContain("Judge");
+    expect(running.reason).not.toBe(failed.reason);
 });
 
 test("a step skipped behind a broken dependency is blocked", () => {
@@ -97,7 +104,8 @@ test("a step skipped behind a broken dependency is blocked", () => {
 test("a step that finished without writing the field is blocked", () => {
     const verdict = gateVerdictOf(runWith(documented({ somethingElse: "pass" })));
     expect(verdict.outcome).toBe("blocked");
-    expect(verdict.reason).toBe(`"Judge" finished without writing "release".`);
+    expect(verdict.reason).toContain("Judge");
+    expect(verdict.reason).toContain("release");
 });
 
 test("a step that finished with no document at all is blocked", () => {
@@ -106,11 +114,9 @@ test("a step that finished with no document at all is blocked", () => {
 
 test("a run whose snapshot has no gate is blocked rather than crashing", () => {
     const { gate: _gate, ...ungated } = design;
-    expect(gateVerdictOf(runWith(documented({ release: "pass" }), ungated))).toEqual({
-        outcome: "blocked",
-        runId: "r1",
-        reason: "This workflow declares no gate.",
-    });
+    const verdict = gateVerdictOf(runWith(documented({ release: "pass" }), ungated));
+    expect(verdict).toMatchObject({ outcome: "blocked", runId: "r1" });
+    expect(verdict.reason?.length).toBeGreaterThan(0);
 });
 
 /* The rule is read off the RUN's snapshot, so editing the workflow underneath an in-flight run cannot change

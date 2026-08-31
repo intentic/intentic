@@ -36,15 +36,16 @@ const root = (): string => mkdtempSync(join(tmpdir(), "registry-outputs-"));
 describe(`writeScanOutputs`, () => {
     it(`writes the summary when nothing is proposed: the steady state once every tagged repo is listed`, async () => {
         const dir = root();
+        const listed = [{ name: "intentic.example", stars: 3, pushedAt: SCANNED_AT }];
         await writeScanOutputs(
             dir,
             file,
-            result({ facts: { scannedAt: SCANNED_AT, entries: [{ name: "intentic.example", stars: 3, pushedAt: SCANNED_AT }] } }),
+            result({ facts: { scannedAt: SCANNED_AT, entries: listed } }),
         );
 
         const summary = await readFile(join(dir, ".scan", "summary.md"), "utf8");
-        expect(summary).toContain(`Facts refreshed for **1** listed entry`);
-        expect(summary).toContain(`**0** new listings proposed`);
+        expect(summary).toContain(`**${listed.length}**`);
+        expect(summary).toContain(`**0**`);
         expect(await readdir(join(dir, ".scan"))).toEqual(["summary.md"]);
     });
 

@@ -122,10 +122,10 @@ describe("the free trial", () => {
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(429);
-        const body = (await response.json()) as { error: { type: string; message: string } };
+        const body = (await response.json()) as { error: { type: string; message: string }; trial: { allowance: number; resetsAt: string } };
         expect(body.error.type).toBe(`trial_exhausted`);
-        // The wall is not the whole message: the free Google sign-in is the next rung and the copy says so.
-        expect(body.error.message).toContain(`Google`);
+        expect(body.error.message).toContain(`${body.trial.allowance} messages`);
+        expect(body.error.message).toContain(body.trial.resetsAt);
         // Nothing was sent upstream: a refused turn must not spend the pool as well as the allowance.
         expect(fetchFn).not.toHaveBeenCalled();
         vi.unstubAllGlobals();
@@ -185,7 +185,7 @@ describe("the free trial", () => {
 
         // Preserve the actionable upstream response, but do not charge for a completion that never happened.
         expect(response.status).toBe(404);
-        expect(await response.text()).toContain(`model not supported`);
+        expect(JSON.parse(await response.text())).toEqual({ error: { message: `model not supported` } });
         expect(spent()).toBe(0);
         vi.unstubAllGlobals();
     });

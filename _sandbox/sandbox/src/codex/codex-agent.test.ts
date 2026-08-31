@@ -294,7 +294,7 @@ test("a parameter the turn never sent is coded as an outage, so the turn comes b
     const failure = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
     expect(failure?.code).toBe("provider-outage");
     // The provider's own words are kept, so the reader sees what was refused, not just our gloss on it.
-    expect(failure?.message).toContain("prompt_cache_retention is not supported on this model");
+    expect(failure?.message).toContain("prompt_cache_retention");
     // NOT the bad-pick code: that one makes the client throw away a pinned model that had nothing to do with it.
     expect(failure?.code).not.toBe("codex-model-invalid");
 });

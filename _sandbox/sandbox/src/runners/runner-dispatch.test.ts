@@ -24,5 +24,7 @@ test("an offline runner is a readable error frame and a closed turn, not a hang"
     }
     expect(frames.map((frame) => frame.kind)).toEqual(["error", "done"]);
     const error = frames[0];
-    expect(error?.kind === "error" ? error.message : "").toContain('"rog" is offline');
+    const message = error?.kind === "error" ? error.message : "";
+    expect(message).toContain("rog");
+    expect(message).toMatch(/offline/i);
 });

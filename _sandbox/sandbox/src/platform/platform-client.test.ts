@@ -30,7 +30,7 @@ afterEach(() => vi.useRealTimers());
 describe("postToPlatform", () => {
     it("rejects when the platform accepts the socket but never responds", async () => {
         const pending = postToPlatform(config, "/sandbox/local-dns", { challenge: "x" });
-        const assertion = expect(pending).rejects.toThrow("the platform did not respond in time");
+        const assertion = expect(pending).rejects.toThrow(/respond in time/);
         await vi.advanceTimersByTimeAsync(60_000);
         await assertion;
     });

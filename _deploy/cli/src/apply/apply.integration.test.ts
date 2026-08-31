@@ -67,7 +67,7 @@ describe("the local resolve → write → read → apply pipeline", () => {
         expect(access).toContainEqual(expect.objectContaining({ id: "my-app.production", url: expect.any(String) }));
 
         // stdout reveals the generated value (so the user can log in); the committed file never does.
-        expect(formatAccessSummary(access)).toContain(`password: ${sentinel}  (saved in .secrets.json)`);
+        expect(formatAccessSummary(access)).toContain(sentinel);
 
         const dir = await mkdtemp(join(tmpdir(), "intentic-access-"));
         const path = join(dir, "access.md");

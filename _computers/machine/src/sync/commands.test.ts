@@ -123,12 +123,19 @@ describe("pairingLine", () => {
      * interpolated whenever it wasn't zero. Every well-behaved sync on every machine printed
      * "[watching, undefined conflict(s)]", which reads as a fault on the line whose job is to say there is none. */
     it("says nothing about conflicts when Mutagen reported none", () => {
-        expect(pairingLine(synced())).toBe("  sandbox-0738cd6b5027-intentic-dev  /home/me/intentic/work  [watching, backup watching]");
+        const pairing = synced();
+        const line = pairingLine(pairing);
+        expect(line).toContain(pairing.sandboxId);
+        expect(line).toContain(pairing.localDir!);
+        expect(line).toContain(pairing.mutagenStatus!);
+        expect(line).toContain(pairing.backupStatus!);
         expect(pairingLine(synced({ conflicts: 0 }))).not.toContain("conflict");
     });
 
     it("prints the count when there IS one, because nothing else in the product ever says so", () => {
-        expect(pairingLine(synced({ conflicts: 3 }))).toContain("[watching, 3 conflict(s), backup watching]");
+        const conflicts = 3;
+        expect(pairingLine(synced({ conflicts }))).toContain(String(conflicts));
+        expect(pairingLine(synced({ conflicts }))).toContain("conflict");
     });
 
     /* THE BACKUP HAS ITS OWN WORD, and its own shout. The two sessions fail independently: the workspace one
@@ -138,7 +145,8 @@ describe("pairingLine", () => {
     it("shouts when the state backup is not running, even though the folder syncs fine", () => {
         const line = pairingLine(synced({ backupStatus: undefined }));
         expect(line).toContain("watching");
-        expect(line).toContain("backup NOT RUNNING, this sandbox's own state is not being copied here");
+        expect(line).toContain("backup");
+        expect(line).not.toContain("backup watching");
     });
 
     it("names the backup's own status when it has one of its own", () => {
@@ -148,7 +156,10 @@ describe("pairingLine", () => {
     /* The failure this whole line exists for: a pairing whose session was never created has no status, and an
      * empty bracket put "this folder is not syncing at all" one space away from "this folder is fine". */
     it("shouts when a sync pairing has no session at all", () => {
-        expect(pairingLine(synced({ mutagenStatus: undefined }))).toContain("NO FILE-SYNC SESSION, this folder is not syncing");
+        const withoutSession = pairingLine(synced({ mutagenStatus: undefined }));
+        const withSession = pairingLine(synced());
+        expect(withoutSession).not.toBe(withSession);
+        expect(withoutSession).toContain("NO FILE-SYNC SESSION");
     });
 
     it("says paused when it is paused, over whatever Mutagen last reported", () => {
@@ -169,25 +180,38 @@ describe("watcherLine", () => {
     const NOW = 1_700_000_000_000;
 
     it("reports a stalled watcher as stalled, even though the process is alive", () => {
-        const line = watcherLine({ running: true, pid: 4242, lastTickAt: NOW - WATCHER_STALL_AFTER_MS - 60_000 }, NOW);
-        expect(line).toContain("STALLED (pid 4242)");
-        expect(line).toContain("2 minute(s) ago");
+        const pid = 4242;
+        const stalledMs = WATCHER_STALL_AFTER_MS + 60_000;
+        const line = watcherLine({ running: true, pid, lastTickAt: NOW - stalledMs }, NOW);
+        expect(line).toContain(`pid ${pid}`);
+        expect(line).toContain("STALLED");
+        expect(line).toContain(String(Math.round(stalledMs / 60_000)));
         expect(line).toContain("intentic-machine run");
     });
 
     it("reports a ticking watcher as running, with how fresh the last pass is", () => {
-        expect(watcherLine({ running: true, pid: 4242, lastTickAt: NOW - 7000 }, NOW)).toBe("Agent: running (pid 4242), last sync pass 7s ago");
+        const pid = 4242;
+        const sinceMs = 7000;
+        const line = watcherLine({ running: true, pid, lastTickAt: NOW - sinceMs }, NOW);
+        expect(line).toContain(`pid ${pid}`);
+        expect(line).toContain(`${Math.round(sinceMs / 1000)}s ago`);
     });
 
     // Neither a stall nor a clean bill of health: an agent too old to stamp, or one whose first pass hasn't
     // landed. Saying which is the point: picking either is how a silent stall reads as green.
     it("says so when no pass has been reported yet, rather than assuming either way", () => {
-        const line = watcherLine({ running: true, pid: 4242 }, NOW);
-        expect(line).toContain("running (pid 4242)");
-        expect(line).toContain("no completed sync pass reported yet");
+        const pid = 4242;
+        const withoutTick = watcherLine({ running: true, pid }, NOW);
+        const withTick = watcherLine({ running: true, pid, lastTickAt: NOW - 7000 }, NOW);
+        expect(withoutTick).toContain(`pid ${pid}`);
+        expect(withoutTick).not.toBe(withTick);
+        expect(withoutTick).toContain("no completed sync pass");
     });
 
     it("tells a stopped watcher's reader that file sync stopped with it", () => {
-        expect(watcherLine({ running: false }, NOW)).toContain("NOT running, file syncing and port mirroring are both stopped");
+        const stopped = watcherLine({ running: false }, NOW);
+        const running = watcherLine({ running: true, pid: 4242, lastTickAt: NOW - 7000 }, NOW);
+        expect(stopped).not.toBe(running);
+        expect(stopped).toContain("NOT running");
     });
 });

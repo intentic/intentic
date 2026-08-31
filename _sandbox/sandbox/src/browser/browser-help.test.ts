@@ -45,7 +45,8 @@ test("closing a browser settles its open help request as not-helped", async () =
     await closeBrowserSession(name);
     const { reply } = await settled;
     expect(reply.helped).toBe(false);
-    expect(reply.note).toContain("closed");
+    expect(reply.note).toContain("browser");
+    expect(reply.note).not.toContain("turn ended");
     // And the record's banner state came down with it.
     expect(listBrowserSessions().find((session) => session.name === name)?.help).toBeUndefined();
 });

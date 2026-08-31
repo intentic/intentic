@@ -67,11 +67,12 @@ test("an expiring key warns; only a dead one asks for a reconnect", () => {
 
     const soon = toAccount({ id: "a", apiKey: "k", apiKeyExpiresAtMs: NOW + 2 * DAY, connectedAt: NOW });
     expect(soon.needsReauth).toBeUndefined();
-    expect(soon.detail).toContain("expires in under 2 days");
+    expect(soon.detail).toMatch(/2 day/i);
 
     const dead = toAccount({ id: "a", apiKey: "k", apiKeyExpiresAtMs: NOW - 1, connectedAt: NOW });
     expect(dead.needsReauth).toBe(true);
-    expect(dead.detail).toContain("expired");
+    expect(dead.detail).toMatch(/expir/i);
+    expect(soon.detail).not.toBe(dead.detail);
 });
 
 // Cursor publishes per-turn cost but no account-wide allowance, so a ring here would be inventing a

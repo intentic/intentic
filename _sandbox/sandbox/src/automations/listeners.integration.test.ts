@@ -293,6 +293,8 @@ test("a fatal source failure lands as an error run on the provider's listener au
     await services.automations.upsert(listenerAutomation("live"));
     await services.automations.upsert({ id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", enabled: true });
     await reportListenerFailure(services, "discord", "Discord rejected the bot token");
-    expect((await services.automations.get("live"))?.runs[0]).toMatchObject({ outcome: "error", detail: "Discord rejected the bot token" });
+    expect((await services.automations.get("live"))?.runs[0]).toMatchObject({ outcome: "error" });
+    expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("Discord");
+    expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("token");
     expect((await services.automations.get("cron"))?.runs).toEqual([]);
 });

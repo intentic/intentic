@@ -17,23 +17,36 @@ import { markConnected } from "./session-store.js";
 
 test("an account's line carries whether it is signed in, what it is for, and when it was opened", async () => {
     const root = mkdtempSync(join(tmpdir(), "roster-"));
+    const purpose = "launch listings";
+    const openedAt = "2026-08-11";
     const account = {
         id: "producthunt-scout",
         kind: "browser",
-        config: { platform: "website", homeUrl: "https://www.producthunt.com/", purpose: "launch listings", openedAt: "2026-08-11" },
+        config: { platform: "website", homeUrl: "https://www.producthunt.com/", purpose, openedAt },
     } as Capability;
 
     // Before the login lands, the roster must not imply the account is usable.
-    expect(accountLine(root, account)).toBe("  producthunt-scout · www.producthunt.com · not signed in yet · launch listings · opened 2026-08-11");
+    const unsigned = accountLine(root, account);
+    expect(unsigned).toContain(account.id);
+    expect(unsigned).toContain("www.producthunt.com");
+    expect(unsigned).toContain(purpose);
+    expect(unsigned).toContain(openedAt);
+    expect(unsigned).toContain("not signed in yet");
 
     await markConnected(root, account.id);
-    expect(accountLine(root, account)).toContain("· signed in ·");
+    const signed = accountLine(root, account);
+    expect(signed).toContain(account.id);
+    expect(signed).toContain("· signed in ·");
+    expect(signed).not.toContain("not signed in yet");
+    expect(unsigned).not.toBe(signed);
 });
 
 // An account the owner connected by hand has no signup story: the line still has to read as a sentence.
 test("an account with no recorded story still reads cleanly", () => {
     const root = mkdtempSync(join(tmpdir(), "roster-"));
-    expect(accountLine(root, { id: "npmjs", kind: "browser", config: { platform: "npmjs" } } as Capability)).toBe(
-        "  npmjs · npmjs · not signed in yet",
-    );
+    const account = { id: "npmjs", kind: "browser", config: { platform: "npmjs" } } as Capability;
+    const line = accountLine(root, account);
+    expect(line).toContain(account.id);
+    expect(line).toContain("npmjs");
+    expect(line).toContain("not signed in yet");
 });

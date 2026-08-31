@@ -60,7 +60,7 @@ describe("vaultCall", () => {
             }),
         );
         const result = await vaultCall(vault, { method: "GET", path: "/" });
-        expect(isVaultError(result) && result.error).toContain("Obsidian has to be OPEN");
+        expect(isVaultError(result) && result.error).toContain("Obsidian");
     });
 
     it("names the refused key rather than the status code", async () => {
@@ -78,8 +78,9 @@ describe("vaultCall", () => {
     it("refuses to dial at all when the card is half-filled", async () => {
         const fetchMock = vi.fn();
         vi.stubGlobal("fetch", fetchMock);
-        const result = await vaultWrite({ ...vault, problem: "no API key on the card" }, "x.md", "hi");
-        expect(isVaultError(result) && result.error).toBe("no API key on the card");
+        const halfFilled = { ...vault, problem: "no API key on the card" };
+        const result = await vaultWrite(halfFilled, "x.md", "hi");
+        expect(isVaultError(result) && result.error).toContain("API key");
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });

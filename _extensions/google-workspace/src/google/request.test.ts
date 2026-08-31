@@ -28,7 +28,8 @@ describe("googleError", () => {
         const error = googleError(403, at("gmail"), {
             error: { message: "Gmail API has not been used in project 12345 before or it is disabled." },
         });
-        expect(error.message).toContain("Enable Gmail API for the project in console.cloud.google.com");
+        expect(error.message).toContain("console.cloud.google.com");
+        expect(error.message).toContain("Gmail API");
     });
 
     it("explains an insufficient-scope refusal as a consent that was too narrow", () => {

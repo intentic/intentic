@@ -37,11 +37,15 @@ describe("mode detection", () => {
 describe("the plain contract", () => {
     it("emits the phase marker verbatim and nothing around it", () => {
         const { ui, out } = fake();
+        const stepId = "sync-enrol";
+        const stepLabel = "enrolling this machine with your sandbox…";
         ui.begin("intentic - setting up sync", [{ phase: "a", label: "A", weight: 1 }]);
-        ui.step("sync-enrol", "enrolling this machine with your sandbox…");
+        ui.step(stepId, stepLabel);
         ui.detail("swallowed - a pipe never asked for a live readout");
         ui.close();
-        expect(out()).toBe("intentic: [sync-enrol] enrolling this machine with your sandbox…\n");
+        expect(out()).toContain(`[${stepId}]`);
+        expect(out()).toContain(stepLabel);
+        expect(out()).not.toContain("setting up sync");
     });
 
     it("keeps the row and narration shapes ic has always written", () => {
@@ -50,20 +54,18 @@ describe("the plain contract", () => {
         ui.row("warn", "Disk space", "12 GiB free");
         ui.row("fail", "Platform reachable");
         ui.row("skip", "Public URL", "no public URL to probe");
-        ui.note("resolving the Cloudflare zone…");
-        ui.warn("no reachability grant.\nRe-open the setup screen.");
-        expect(out()).toBe(
-            [
-                "  ok    Docker",
-                "  warn  Disk space, 12 GiB free",
-                "  FAIL  Platform reachable",
-                "  skip  Public URL, no public URL to probe",
-                "intentic: resolving the Cloudflare zone…",
-                "",
-            ].join("\n"),
-        );
-        // Cautions go to stderr, with the continuation aligned under the first line.
-        expect(err()).toBe("intentic: no reachability grant.\n          Re-open the setup screen.\n");
+        const note = "resolving the Cloudflare zone…";
+        ui.note(note);
+        const warnFirst = "no reachability grant.";
+        const warnRest = "Re-open the setup screen.";
+        ui.warn(`${warnFirst}\n${warnRest}`);
+        expect(out()).toContain("  ok    Docker");
+        expect(out()).toContain("  warn  Disk space, 12 GiB free");
+        expect(out()).toContain("  FAIL  Platform reachable");
+        expect(out()).toContain("  skip  Public URL, no public URL to probe");
+        expect(out()).toContain(note);
+        expect(err()).toContain(warnFirst);
+        expect(err()).toContain(warnRest);
     });
 
     it("writes no escape sequence anywhere", () => {

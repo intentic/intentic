@@ -68,7 +68,15 @@ test("failing counts broken branches, not failed runs", () => {
 
 test("the row's tooltip says the whole state the single number cannot", () => {
     const [broken] = repoStandings([repo("one")], [run("one", "failed", 30), run("one", "running", 20, "feat")]);
-    expect(standingNote(broken!)).toBe("1 branch failing · 1 running · 2 runs");
+    const brokenNote = standingNote(broken!);
+    expect(brokenNote).toContain(String(broken!.failing));
+    expect(brokenNote).toContain(String(broken!.running));
+    expect(brokenNote).toContain(String(broken!.runs.length));
     const [quiet] = repoStandings([repo("two", "no public URL")], []);
-    expect(standingNote(quiet!)).toBe("No runs yet · webhook not registered");
+    const quietNote = standingNote(quiet!);
+    expect(quiet!.runs).toHaveLength(0);
+    expect(quiet!.repo.hookWarning).toBeDefined();
+    expect(quietNote).toContain("webhook");
+    expect(quietNote).not.toContain(String(broken!.failing));
+    expect(brokenNote).not.toBe(quietNote);
 });

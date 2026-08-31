@@ -842,14 +842,15 @@ describe("agents registry", () => {
         await registry.begin(turn(), 1_000);
         registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
         await registry.finish("c1", 2_000);
-        expect(await registry.abandonResume("c1", 3_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
+        const failure = "The Claude sign-in this turn ran on could not be renewed.";
+        expect(await registry.abandonResume("c1", 3_000, failure)).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
         // And it says which ending this was. The card has been promising to come back for as long as the
         // scheduler kept trying; "error" alone, at the end of that, is the least it could tell the reader.
-        expect(registry.get("c1")?.failure).toBe("The Claude sign-in this turn ran on could not be renewed.");
+        expect(registry.get("c1")?.failure).toBe(failure);
         // Idempotent, because the scheduler's passes are: a second call has no wait left to close, which is
         // still the wait being over, so it answers true and the caller stops carrying the entry.
-        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
+        expect(await registry.abandonResume("c1", 4_000, failure)).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
@@ -880,14 +881,15 @@ describe("agents registry", () => {
         const registry = createAgentsRegistry(memoryStore(), standings(), presences());
         await registry.init();
         await registry.begin(turn(), 1_000);
+        const message = "Your organization has disabled Claude subscription access for Claude Code";
         registry.observe("c1", {
             kind: "error",
             code: "claude-not-entitled",
-            message: "Your organization has disabled Claude subscription access for Claude Code",
+            message,
         });
         await registry.finish("c1", 2_000);
         expect(registry.get("c1")?.status).toBe("error");
-        expect(registry.get("c1")?.failure).toBe("Your organization has disabled Claude subscription access for Claude Code");
+        expect(registry.get("c1")?.failure).toBe(message);
     });
 
     // The other half, and the one that keeps the field honest: an explanation is about the LAST turn, so a

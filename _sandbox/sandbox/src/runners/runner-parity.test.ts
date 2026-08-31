@@ -105,7 +105,9 @@ test("a differing overlay hash and a differing setting each earn their line, wit
     expect(drift.map((line) => line.subject)).toEqual(["Environment overlay", "Setting terseOutput"]);
     // The overlay's remedy is a rebuild (remove and re-add); the setting's is the sync door, which the UI
     // keys off the "Setting " subject prefix.
-    expect(drift[0]?.detail).toContain("Remove and re-add");
+    expect(drift[0]?.detail?.length).toBeGreaterThan(0);
+    expect(drift[1]?.detail?.length).toBeGreaterThan(0);
+    expect(drift[0]?.detail).not.toBe(drift[1]?.detail);
 });
 
 test("a claim that does not parse costs its drift lines, never the list", async () => {

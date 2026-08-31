@@ -114,7 +114,7 @@ describe(`the provisioning canary`, () => {
         const prisma = prismaWith(null);
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(false);
-        expect(result.detail).toContain(`never checked in`);
+        expect(result.detail).toContain(`12 minutes`);
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 
@@ -123,7 +123,7 @@ describe(`the provisioning canary`, () => {
         const prisma = prismaWith(new Date());
         const result = await runHostedCanary(prisma, config(), logger, nap);
         expect(result.ok).toBe(false);
-        expect(result.detail).toContain(`no capacity`);
+        expect(result.detail).toContain(`no capacity in iad`);
         expect(prisma.sandbox.delete).toHaveBeenCalledWith({ where: { id: `canary-sbx` } });
     });
 

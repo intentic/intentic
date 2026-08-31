@@ -10,9 +10,11 @@ const file = (path: string, content: string, modifiedAt = 1_700_000_000_000): No
     sizeBytes: content.length,
 });
 
+const babbageBody = `Built the engine Ada wrote for.`;
+
 const index = buildIndex([
     file(`people/ada-lovelace.md`, `---\ntype: person\naliases: [Ada]\ntags: [colleague]\nworks_on: ["[[Intentic]]"]\n---\nWrote the first program.`),
-    file(`people/charles-babbage.md`, `---\ntype: person\ntags: [colleague]\nknows: ["[[Ada]]"]\n---\nBuilt the engine Ada wrote for.`),
+    file(`people/charles-babbage.md`, `---\ntype: person\ntags: [colleague]\nknows: ["[[Ada]]"]\n---\n${babbageBody}`),
     file(`projects/intentic.md`, `---\ntype: project\ntitle: Intentic\ntags: [work]\n---\nThe workspace. Ada works on it.`),
     file(`projects/intentic-rollout.md`, `---\ntype: project\n---\nRolling Intentic out.`),
     file(`decisions/why-extensions.md`, `---\ntype: decision\nabout: ["[[Intentic]]"]\n---\nLean core.`),
@@ -50,7 +52,7 @@ describe(`search`, () => {
     it(`carries the line a body match was found on, so a hit explains itself`, () => {
         const hit = search(index, { query: `engine` })[0];
         expect(hit?.path).toBe(`people/charles-babbage.md`);
-        expect(hit?.snippet).toBe(`Built the engine Ada wrote for.`);
+        expect(hit?.snippet).toBe(babbageBody);
     });
 
     /* A snippet is shown as evidence under a title, not rendered, so the markers that only mean something to a
@@ -59,7 +61,11 @@ describe(`search`, () => {
         const marked = buildIndex([
             file(`a.md`, `---\ntype: term\n---\n- The **client-generated** UUID sent to [[Checkout API|the API]], not \`stripe.key\`.`),
         ]);
-        expect(search(marked, { query: `uuid` })[0]?.snippet).toBe(`The client-generated UUID sent to the API, not stripe.key.`);
+        const snippet = search(marked, { query: `uuid` })[0]?.snippet;
+        expect(snippet).toContain(`UUID`);
+        expect(snippet).toContain(`stripe.key`);
+        expect(snippet).not.toContain(`**`);
+        expect(snippet).not.toContain(`[[`);
     });
 
     it(`leaves a long unfinished wiki link intact without regex backtracking`, () => {

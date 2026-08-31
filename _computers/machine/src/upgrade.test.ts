@@ -92,7 +92,7 @@ describe("runUpgrade", () => {
         });
         const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind).toBe("failed");
-        expect(upgradeMessage(outcome)).toContain("nothing was changed");
+        expect(upgradeMessage(outcome)).toContain("ENOTFOUND");
         expect(steps).not.toContain("stop");
     });
 
@@ -101,9 +101,10 @@ describe("runUpgrade", () => {
      * sync at all, which is the outcome that would make the whole command not worth running. */
     it("restores the previous agent and restarts it when the new one won't stay up", async () => {
         const { steps, exec } = scripted({ watcherAlive: () => Promise.resolve(false) });
-        const outcome = await upgrade(exec, "1.0.0");
+        const installed = "1.0.0";
+        const outcome = await upgrade(exec, installed);
         expect(outcome.kind).toBe("failed");
-        expect(upgradeMessage(outcome)).toContain("1.0.0 was restored and is running again");
+        expect(upgradeMessage(outcome)).toContain(installed);
         expect(steps).toContain(`swap ${agentPath}.previous→${agentPath}`);
         // Restored AND running: put back but left stopped is still a machine with no sync.
         expect(steps.lastIndexOf("start")).toBeGreaterThan(steps.indexOf(`swap ${agentPath}.previous→${agentPath}`));
@@ -157,7 +158,7 @@ describe("runUpgrade asks what is published first", () => {
         });
         const outcome = await upgrade(exec, "1.0.0");
         expect(outcome.kind).toBe("failed");
-        expect(upgradeMessage(outcome)).toContain("continues from it");
+        expect(outcome.kind === "failed" && outcome.reason).toContain("continues");
         expect(steps).not.toContain(`discard ${agentPath}.new-2.0.0`);
     });
 

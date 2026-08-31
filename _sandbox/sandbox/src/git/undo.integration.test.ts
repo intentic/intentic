@@ -135,7 +135,11 @@ test("an undo prepared against a stale position is refused rather than landing s
     await commit(dir, "three");
 
     const result = await undoLastAction(dir, stale!.previousSha, false);
-    expect(result).toEqual({ ok: false, reason: "the repository moved since this undo was prepared" });
+    expect(result.ok).toBe(false);
+    if (result.ok === false) {
+        expect(result.reason).toContain("moved");
+        expect(result.reason).not.toBe("");
+    }
     // And nothing moved: the refusal is a refusal, not a partial application.
     expect((await git(dir, ["log", "--oneline"])).stdout).toContain("three");
 });

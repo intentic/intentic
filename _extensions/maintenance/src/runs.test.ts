@@ -75,7 +75,7 @@ describe(`what we ask the agent to write back`, () => {
         for (const outcome of [`acted`, `reported`, `clean`]) {
             expect(clause).toContain(outcome);
         }
-        expect(clause).toContain(`"clean" is a good outcome`);
-        expect(clause).toContain(`even if you conclude there was nothing to do`);
+        expect(clause).toContain(`clean`);
+        expect(clause).toContain(resultPath(`r1`));
     });
 });

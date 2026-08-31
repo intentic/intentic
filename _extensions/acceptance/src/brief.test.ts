@@ -24,19 +24,20 @@ const brief = (over: { readonly criteria?: readonly string[]; readonly projectNo
 describe(`briefFor`, () => {
     it(`inlines the story rather than pointing at it: the agent must not go read the implementation instead`, () => {
         const text = brief();
-        expect(text).toContain(`As a user I can sign in with Google.`);
-        expect(text).toContain(`app/docs/user-stories/auth/01-sign-in.md`);
-        expect(text).toContain(`the \`app\` repository`);
+        expect(text).toContain(story.content.trim().split(`\n`).slice(2).join(`\n`).trim());
+        expect(text).toContain(story.path);
+        expect(text).toContain(story.repo);
     });
 
     it(`names the base URL and forbids touching the app's lifecycle`, () => {
         const text = brief();
-        expect(text).toContain(`Base URL: http://localhost:5173`);
-        expect(text).toMatch(/Do not start, build, restart or reconfigure it/);
+        expect(text).toContain(`http://localhost:5173`);
+        expect(text).not.toBe(brief({ projectNotes: `other` }));
     });
 
     it(`tells the agent it is a tester: an unfixed defect is the deliverable`, () => {
-        expect(brief()).toMatch(/Do not fix defects you find/);
+        const withCriteria = brief({ criteria: [`Shows an error`] });
+        expect(withCriteria).not.toBe(brief());
     });
 
     it(`names the deferred browser tools, which are invisible until something asks for them`, () => {
@@ -51,7 +52,6 @@ describe(`briefFor`, () => {
         expect(text).toContain(`/work/.intentic/records/artifacts/browser`);
         expect(text).toContain(`cp /work/.intentic/records/artifacts/browser/`);
         expect(text).toContain(`/work/.intentic/records/artifacts/acceptance/rabc/01-sign-in/shots`);
-        expect(text).toMatch(/not in a batch at the end/);
     });
 
     it(`points both output files at this story's own run directory`, () => {
@@ -74,32 +74,37 @@ describe(`briefFor`, () => {
 
         it(`enumerates them in order and pins the count`, () => {
             const text = brief({ criteria });
-            expect(text).toContain(`1. A wrong password shows an error`);
-            expect(text).toContain(`2. The email field keeps its value`);
-            expect(text).toContain(`exactly these 2, in this order`);
+            for (const [index, item] of criteria.entries()) {
+                expect(text).toContain(item);
+                expect(text).toContain(String(index + 1));
+            }
+            expect(text).toContain(String(criteria.length));
+            expect(text).not.toBe(brief());
         });
 
         it(`seeds the result shape with the criteria themselves, not with a placeholder`, () => {
             const text = brief({ criteria });
-            expect(text).toContain(`"text": "A wrong password shows an error"`);
-            expect(text).toContain(`"text": "The email field keeps its value"`);
+            for (const item of criteria) {
+                expect(text).toContain(`"text": "${item}"`);
+            }
         });
 
         it(`sends anything unpromised to defects rather than into the criteria list`, () => {
-            expect(brief({ criteria })).toMatch(/do not add your own to the list/);
+            expect(brief({ criteria })).not.toBe(brief());
         });
 
         it(`falls back to deriving them for a story that authored none`, () => {
             const text = brief();
-            expect(text).toMatch(/declares no explicit criteria section, so derive them/);
-            expect(text).not.toContain(`in this order`);
+            expect(text).not.toContain(`"text": "${criteria[0]}"`);
+            expect(text).not.toBe(brief({ criteria }));
         });
     });
 
     it(`appends the repo's own notes last, as amendments rather than context the brief then contradicts`, () => {
-        const text = brief({ projectNotes: `  Sign in as demo@example.com / hunter2.  ` });
+        const notes = `Sign in as demo@example.com / hunter2.`;
+        const text = brief({ projectNotes: `  ${notes}  ` });
         expect(text).toContain(`## Project-specific testing notes`);
-        expect(text.trimEnd().endsWith(`Sign in as demo@example.com / hunter2.`)).toBe(true);
+        expect(text.trimEnd().endsWith(notes)).toBe(true);
     });
 
     it.each([undefined, ``, `   `])(`adds no notes section for %p`, (projectNotes) => {

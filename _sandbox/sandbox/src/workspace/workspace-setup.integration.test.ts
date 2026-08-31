@@ -148,14 +148,18 @@ const status = (over: Partial<ProjectSetupStatus>): ProjectSetupStatus =>
     }) as ProjectSetupStatus;
 
 test("the agent notice names the exact command, so the model doesn't rediscover it through failing tools", () => {
-    const notice = setupNoticeFor([status({})]);
-    expect(notice).toContain("app: has never been set up and needs `pnpm install`");
+    const project = status({});
+    const notice = setupNoticeFor([project]);
+    expect(notice).toContain(`${project.dir}: has never been set up and needs \`${project.recipe.command}\``);
+    expect(notice).toContain(SETUP_NOTICE_HEADER);
     expect(notice).toContain("ask the owner to install it");
 });
 
 test("an unsupported project tells the agent NOT to try, and names the missing binary", () => {
-    const notice = setupNoticeFor([status({ state: "unsupported" })]);
-    expect(notice).toContain("needs `pnpm`, which is not installed in this sandbox");
+    const project = status({ state: "unsupported" });
+    const notice = setupNoticeFor([project]);
+    expect(notice).toContain(`needs \`${project.recipe.manager}\``);
+    expect(notice).toContain("not installed in this sandbox");
     expect(notice).toContain("Do not attempt the install");
 });
 
@@ -172,10 +176,12 @@ test("a fully-installed workspace adds nothing to the turn", () => {
  * the reconciler defers while a turn is live, so the agent reading it is the reason it cannot fire. Told to
  * wait with no end to the wait, a model stops verifying anything and reports on reasoning alone. */
 test("a stale project tells the turn why an import fails, and asks it to do nothing about it", () => {
-    const notice = setupNoticeFor([status({ state: "stale", unresolved: [{ dir: "", names: ["left-pad", "zod"] }] })]);
-    expect(notice).toContain("app: 2 declared dependencies are not installed (left-pad, zod)");
+    const deps = ["left-pad", "zod"] as const;
+    const project = status({ state: "stale", unresolved: [{ dir: "", names: [...deps] }] });
+    const notice = setupNoticeFor([project]);
+    expect(notice).toContain(`${project.dir}: ${deps.length} declared dependencies are not installed (${deps.join(", ")})`);
     expect(notice).toContain("do not run an install");
-    expect(notice).toContain("ready on the NEXT turn, not this one");
+    expect(notice).toContain("NEXT turn");
     // The wait has to end somewhere the agent can act on. A promise keyed to the workspace going idle is keyed
     // to the reader stopping, which is the one thing it cannot observe.
     expect(notice).not.toContain("once it is idle");
@@ -185,11 +191,18 @@ test("a stale project tells the turn why an import fails, and asks it to do noth
 });
 
 test("stale and never-installed projects can both be true at once, and each gets its own paragraph", () => {
-    const notice = setupNoticeFor([status({ dir: "fresh" }), status({ dir: "drifted", state: "stale", unresolved: [{ dir: "", names: ["vue"] }] })]);
-    expect(notice).toContain("fresh: has never been set up and needs `pnpm install`");
-    expect(notice).toContain("drifted: 1 declared dependencies are not installed (vue)");
+    const fresh = status({ dir: "fresh" });
+    const drifted = status({ dir: "drifted", state: "stale", unresolved: [{ dir: "", names: ["vue"] }] });
+    const notice = setupNoticeFor([fresh, drifted]);
+    expect(notice).toContain(`${fresh.dir}: has never been set up and needs \`${fresh.recipe.command}\``);
+    expect(notice).toContain(`${drifted.dir}: 1 declared dependencies are not installed (vue)`);
+    expect(setupNoticeFor([fresh])).not.toEqual(setupNoticeFor([drifted]));
 });
 
 test("the workspace root owning the manifest reads as the root, not an empty name", () => {
-    expect(setupNoticeFor([status({ dir: "" })])).toContain("the workspace root: has never been set up");
+    const root = status({ dir: "" });
+    const notice = setupNoticeFor([root]);
+    expect(notice).toContain("the workspace root:");
+    expect(notice).toContain(`needs \`${root.recipe.command}\``);
+    expect(notice).not.toContain("- :");
 });

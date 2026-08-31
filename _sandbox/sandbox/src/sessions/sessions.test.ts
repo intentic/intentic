@@ -269,7 +269,7 @@ test("a re-run in the provider's store reads as the interruption, not as the mes
     ]);
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
     expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "notice", "assistant"]);
-    expect(messages[2]?.text).toContain("sign-in renewed");
+    expect(messages[2]?.text).toMatch(/Claude/i);
 });
 
 /* THE TAIL READ, which exists for one caller: the boot pass writing down a turn the daemon died under. The

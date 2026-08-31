@@ -40,17 +40,20 @@ const fakeSsh = (): { executor: SshExecutor; commands: string[] } => {
 
 test("readinessDiagnostics sweeps docker state, logs, listeners, addresses, and a probe attempt", async () => {
     const { executor, commands } = fakeSsh();
-    const report = await readinessDiagnostics([target("10.0.0.5")], executor, FAILURE);
-    expect(report).toContain('--- readiness diagnostics: root@10.0.0.5 (resource "host-git", url http://10.0.0.5:3000) ---');
+    const host = "10.0.0.5";
+    const report = await readinessDiagnostics([target(host)], executor, FAILURE);
+    expect(report).toContain(`root@${host}`);
+    expect(report).toContain(`"${FAILURE.id}"`);
+    expect(report).toContain(FAILURE.url);
     expect(report).toContain("intentic-forgejo\tUp 2 minutes");
     expect(report).toContain("$ docker logs --tail 50 intentic-forgejo");
     expect(report).toContain("Starting new Web server: tcp:0.0.0.0:3000");
     expect(report).toContain("*:3000");
     expect(report).toContain("172.17.0.2/16");
-    expect(report).toContain("$ wget -S -T 5 -O /dev/null http://10.0.0.5:3000 2>&1");
+    expect(report).toContain(`$ wget -S -T 5 -O /dev/null ${FAILURE.url} 2>&1`);
     expect(report).toContain("wget: download timed out");
     expect(report).toContain("(exit 1)");
-    expect(commands.some((command) => command.includes("--filter label=intentic.id=host-git"))).toBe(true);
+    expect(commands.some((command) => command.includes(`--filter label=intentic.id=${FAILURE.id}`))).toBe(true);
 });
 
 test("readinessDiagnostics degrades an unreachable host to one line and still reports the others", async () => {
@@ -63,9 +66,14 @@ test("readinessDiagnostics degrades an unreachable host to one line and still re
             return executor.connect(to);
         },
     };
-    const report = await readinessDiagnostics([target("10.0.0.9"), target("10.0.0.5")], both, FAILURE);
-    expect(report).toContain("host 10.0.0.9 unreachable over SSH: connect ECONNREFUSED");
-    expect(report).toContain('--- readiness diagnostics: root@10.0.0.5 (resource "host-git", url http://10.0.0.5:3000) ---');
+    const unreachable = "10.0.0.9";
+    const reachable = "10.0.0.5";
+    const sshError = "connect ECONNREFUSED";
+    const report = await readinessDiagnostics([target(unreachable), target(reachable)], both, FAILURE);
+    expect(report).toContain(unreachable);
+    expect(report).toContain(sshError);
+    expect(report).toContain(`root@${reachable}`);
+    expect(report).toContain(FAILURE.id);
     expect(report).toContain("$ docker logs --tail 50 intentic-forgejo");
 });
 
@@ -78,6 +86,7 @@ test("readinessDiagnostics never throws when every command fails", async () => {
             throw new Error("already disposed");
         },
     };
+    const execError = "session channel closed";
     const report = await readinessDiagnostics([target("10.0.0.5")], { connect: async () => session }, FAILURE);
-    expect(report).toContain("failed: session channel closed");
+    expect(report).toContain(execError);
 });

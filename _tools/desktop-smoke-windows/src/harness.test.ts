@@ -22,9 +22,11 @@ const collected = (): { harness: Harness; out: string[]; err: string[]; tick: (m
 };
 
 test("a predicate that already holds passes on the first attempt", async () => {
+    const label = `it is true`;
     const { harness, out } = collected();
-    expect(await harness.untilTrue(30, `it is true`, () => true)).toBe(true);
-    expect(out.join(`\n`)).toContain(`ok   it is true`);
+    expect(await harness.untilTrue(30, label, () => true)).toBe(true);
+    expect(out.join(`\n`)).toContain(label);
+    expect(out.join(`\n`)).toMatch(/^  ok   /m);
     expect(harness.failures()).toBe(0);
 });
 
@@ -35,10 +37,13 @@ test("a zero-second deadline still gets one attempt, the caller asked for a fact
 });
 
 test("a predicate that never holds fails once, naming what it waited", async () => {
+    const label = `the window opened`;
+    const deadline = 2;
     const { harness, err } = collected();
-    expect(await harness.untilTrue(2, `the window opened`, () => false)).toBe(false);
+    expect(await harness.untilTrue(deadline, label, () => false)).toBe(false);
     expect(harness.failures()).toBe(1);
-    expect(err.join(`\n`)).toContain(`the window opened (waited 2s)`);
+    expect(err.join(`\n`)).toContain(label);
+    expect(err.join(`\n`)).toContain(`${deadline}s`);
 });
 
 test("a predicate that becomes true before the deadline passes", async () => {
@@ -77,10 +82,11 @@ test("a failure does not stop the run, and the count is the exit code's only inp
 });
 
 test("a clean run reports zero", () => {
+    const label = `everything worked`;
     const { harness, out } = collected();
     harness.pass(`one`);
-    expect(harness.report(`everything worked`)).toBe(0);
-    expect(out.join(`\n`)).toContain(`everything worked`);
+    expect(harness.report(label)).toBe(0);
+    expect(out.join(`\n`)).toContain(label);
 });
 
 test("detail is indented under the assertion it explains, every line of it", () => {

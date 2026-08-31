@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { hostedFleet, renderHostedFleet } from "./hosted-fleet.js";
+import { hostedFleet, renderHostedFleet, type HostedFleetRole } from "./hosted-fleet.js";
 
 /* WHAT THE FLY CONSOLE CANNOT SAY. The fleet view exists for exactly one confusion: a warm machine's app is
  * named `<prefix>-pool-<hex>` before anybody claims it, and Fly never lets a name change, so after a claim
@@ -74,22 +74,24 @@ describe(`hostedFleet`, () => {
 
 describe(`renderHostedFleet`, () => {
     it(`puts people's machines first and ends with the tally an operator actually reads`, () => {
-        const text = renderHostedFleet([
+        const entries = [
             {
                 appName: `intentic-sbx-pool-a`,
-                role: `taken`,
+                role: `taken` as const,
                 region: `iad`,
                 owner: `owner@example.com`,
                 sandboxId: `s1`,
                 awake: false,
                 missing: false,
             },
-            { appName: `intentic-sbx-pool-b`, role: `warm`, region: `arn`, missing: false },
-        ]);
+            { appName: `intentic-sbx-pool-b`, role: `warm` as const, region: `arn`, missing: false },
+        ];
+        const text = renderHostedFleet(entries);
         const lines = text.split(`\n`);
+        const tally = (role: HostedFleetRole) => entries.filter((entry) => entry.role === role).length;
         expect(lines[0]).toMatch(/^ROLE\s+REGION\s+APP\s+OWNER\s+POWER$/);
         expect(lines[1]).toContain(`owner@example.com`);
         expect(lines[1]).toContain(`asleep`);
-        expect(lines.at(-1)).toBe(`1 taken · 1 warm · 0 claiming · 0 orphaned`);
+        expect(lines.at(-1)).toBe(`${tally(`taken`)} taken · ${tally(`warm`)} warm · ${tally(`claiming`)} claiming · ${tally(`orphan`)} orphaned`);
     });
 });

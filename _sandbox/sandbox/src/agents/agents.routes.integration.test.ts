@@ -514,12 +514,13 @@ test("agents.place appends the user's words as the agent's, retires the session,
     await runAgentTurn(client, { prompt: "map the login flow", conversationId: "conv1", isolated: true });
     expect((await client.agents.list()).agents[0]).toMatchObject({ id: "conv1", sessionId: "sess-live" });
 
-    expect(await client.agents.place({ id: "conv1", text: "I checked the tests and they pass." })).toEqual({ ok: true });
+    const placed = "I checked the tests and they pass.";
+    expect(await client.agents.place({ id: "conv1", text: placed })).toEqual({ ok: true });
 
     // The record's newest row is the placed line, marked: the transcript route serves it to every reopening tab.
     expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
         role: "assistant",
-        text: "I checked the tests and they pass.",
+        text: placed,
         placed: true,
     });
     // The session pointer is gone (only the pointer: the record above is what the conversation reads back as).
@@ -530,7 +531,7 @@ test("agents.place appends the user's words as the agent's, retires the session,
     // Resumed nothing…
     expect(next?.sessionId).toBeUndefined();
     // …so the fresh session is seeded from the record, where the planted line is the agent's own words…
-    expect(next?.prompt).toContain("Assistant: I checked the tests and they pass.");
+    expect(next?.prompt).toContain(`Assistant: ${placed}`);
     // …and the human-facing mark is nowhere in what the model reads.
     expect(next?.prompt).not.toContain("placed");
 
@@ -643,7 +644,8 @@ test("agents.place refuses a channel conversation whose gateway is not running, 
 });
 
 test("agents.place surfaces the gateway's own refusal sentence", async () => {
-    const gateway = await fakeGateway({ status: 500, body: "no connected Discord bot can post in this channel" });
+    const gatewayBody = "no connected Discord bot can post in this channel";
+    const gateway = await fakeGateway({ status: 500, body: gatewayBody });
     try {
         const { client } = channelPlaceHarness({ [extensionProcessKey("intentic.discord", "gateway")]: gateway.port });
         await runAgentTurn(client, {
@@ -656,7 +658,7 @@ test("agents.place surfaces the gateway's own refusal sentence", async () => {
             () => undefined,
             (error: unknown) => (error as Error).message,
         );
-        expect(message).toBe("no connected Discord bot can post in this channel");
+        expect(message).toBe(gatewayBody);
     } finally {
         gateway.close();
     }

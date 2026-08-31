@@ -34,7 +34,8 @@ test("killing the session settles its open ask as not-helped", async () => {
     settleTerminalHelpFor("agent-he1p0002");
     const { reply } = await settled;
     expect(reply.helped).toBe(false);
-    expect(reply.note).toContain("closed");
+    expect(reply.note).toContain("terminal");
+    expect(reply.note).not.toContain("turn ended");
     // And the banner state came down with it.
     expect(terminalHelpFor("agent-he1p0002")).toBeUndefined();
 });
@@ -78,7 +79,8 @@ test("a turn aborting under the ask settles the waiter, and clearing takes the b
     abort.abort();
     const { reply } = await settled;
     expect(reply.helped).toBe(false);
-    expect(reply.note).toContain("the turn ended");
+    expect(reply.note).toContain("turn ended");
+    expect(reply.note).not.toContain("terminal was closed");
 
     clearTerminalHelp(id);
     expect(terminalHelpFor("agent-he1p0004")).toBeUndefined();

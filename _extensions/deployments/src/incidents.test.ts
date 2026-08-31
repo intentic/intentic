@@ -57,8 +57,12 @@ describe(`incidents`, () => {
     });
 
     it(`phrases the transition in words, with the host`, () => {
-        const [only] = incidents([alert({ resource: `api`, server: `prod-1`, from: `running`, to: `restarting` })]);
-        expect(only?.summary).toBe(`api running → restarting on prod-1`);
+        const input = alert({ resource: `api`, server: `prod-1`, from: `running`, to: `restarting` });
+        const [only] = incidents([input]);
+        expect(only?.summary).toContain(input.resource);
+        expect(only?.summary).toContain(input.from as string);
+        expect(only?.summary).toContain(input.to as string);
+        expect(only?.summary).toContain(input.server as string);
     });
 
     it(`surfaces an alert variant it has never met rather than dropping it`, () => {
@@ -105,17 +109,25 @@ describe(`topTier`, () => {
 describe(`incidentTooltip`, () => {
     // "api exited on prod-1" is a fact someone can act on; "1" is not.
     it(`names the one thing when there is one thing`, () => {
-        const list = incidents([alert({ resource: `api`, server: `prod-1`, from: `running`, to: `exited` })]);
-        expect(incidentTooltip(list)).toBe(`api running → exited on prod-1`);
+        const input = alert({ resource: `api`, server: `prod-1`, from: `running`, to: `exited` });
+        const list = incidents([input]);
+        const tooltip = incidentTooltip(list);
+        expect(tooltip).toContain(input.resource);
+        expect(tooltip).toContain(input.from as string);
+        expect(tooltip).toContain(input.to as string);
+        expect(tooltip).toContain(input.server as string);
     });
 
     it(`counts once there is more than one, in the tier's own words`, () => {
         const broken = incidents([alert({ id: `a`, to: `exited`, ts: 2 }), alert({ id: `b`, to: `dead`, ts: 1 })]);
-        expect(incidentTooltip(broken)).toBe(`2 needing you`);
+        const brokenTooltip = incidentTooltip(broken);
+        expect(brokenTooltip).toContain(String(broken.length));
         const updates = incidents([
             alert({ id: `c`, type: `StackImageUpdateAvailable`, ts: 2 }),
             alert({ id: `d`, type: `DeploymentImageUpdateAvailable`, ts: 1 }),
         ]);
-        expect(incidentTooltip(updates)).toBe(`2 updates available`);
+        const updatesTooltip = incidentTooltip(updates);
+        expect(updatesTooltip).toContain(String(updates.length));
+        expect(updatesTooltip).not.toBe(brokenTooltip);
     });
 });

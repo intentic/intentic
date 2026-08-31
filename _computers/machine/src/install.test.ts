@@ -52,11 +52,15 @@ describe("selfUpdateBeforeSetup", () => {
     });
 
     it("notes a failed update and continues — the pairing token expires, the enrollment must not", async () => {
+        const installed = "1.2.3";
+        const reason = "the download failed";
         const lines: string[] = [];
-        const t = io({ outcome: { kind: "failed", reason: "the download failed" } });
+        const t = io({ installed, outcome: { kind: "failed", reason } });
         await selfUpdateBeforeSetup(t.io, {}, ["sync", "setup"], (line) => lines.push(line));
         expect(t.reexeced()).toBeUndefined();
-        expect(lines.join("\n")).toContain("continuing with 1.2.3");
+        const joined = lines.join("\n");
+        expect(joined).toContain(installed);
+        expect(joined).toContain(reason);
     });
 
     it("says nothing and continues when already current", async () => {

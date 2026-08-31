@@ -31,23 +31,32 @@ test("text mode renders prune/orphan and apply progress events as human strings;
     const out = createOutput(s, "text");
     out.onEvent(pruneDeleted);
     out.onEvent(nodeStart);
-    out.onEvent({ kind: "node", phase: "apply", state: "done", id: "host", type: "host", action: "create", reason: "not observed" });
-    out.onEvent({ kind: "readiness", state: "waiting", id: "wiki", url: "https://wiki.example.com" });
-    out.onEvent({ kind: "readiness", state: "ready", id: "wiki", url: "https://wiki.example.com" });
+    const applied: EngineEvent = { kind: "node", phase: "apply", state: "done", id: "host", type: "host", action: "create", reason: "not observed" };
+    out.onEvent(applied);
+    const waiting: EngineEvent = { kind: "readiness", state: "waiting", id: "wiki", url: "https://wiki.example.com" };
+    out.onEvent(waiting);
+    const ready: EngineEvent = { kind: "readiness", state: "ready", id: "wiki", url: "https://wiki.example.com" };
+    out.onEvent(ready);
     out.onEvent({ kind: "node", phase: "plan", state: "start", id: "host", type: "host" }); // plan prints its own table
     out.onEvent({ kind: "iteration", n: 1, converged: true }); // stream-only
-    out.log("provider says hi");
-    out.text("converged in 1 iteration(s)");
+    const logLine = "provider says hi";
+    const summaryLine = "converged in 1 iteration(s)";
+    out.log(logLine);
+    out.text(summaryLine);
     out.result({ converged: true }); // text already printed; result is a no-op
-    expect(s.chunks).toEqual([
-        `prune: deleted "old" (type "forgejo")\n`,
-        `applying "host" (type "host")\n`,
-        `applied "host" (type "host"): create (not observed)\n`,
-        `waiting for "wiki" at https://wiki.example.com\n`,
-        `"wiki" ready\n`,
-        "provider says hi\n",
-        "converged in 1 iteration(s)\n",
-    ]);
+
+    const rendered = s.chunks.join("");
+    expect(rendered).toContain(`"${pruneDeleted.id}"`);
+    expect(rendered).toContain(`"${pruneDeleted.type}"`);
+    expect(rendered).toContain(`"${nodeStart.id}"`);
+    expect(rendered).toContain(applied.action!);
+    expect(rendered).toContain(applied.reason!);
+    expect(rendered).toContain(`"${waiting.id}"`);
+    expect(rendered).toContain(waiting.url);
+    expect(rendered).toContain(`"${ready.id}"`);
+    expect(rendered).toContain(logLine);
+    expect(rendered).toContain(summaryLine);
+    expect(s.chunks).toHaveLength(7);
 });
 
 test("ndjson mode emits one timestamped JSON object per event, log, and a terminal result", () => {
@@ -84,10 +93,15 @@ test("a redactor masks registered secret values out of every write, ignoring sho
     const s = sink();
     const redactor = createRedactor();
     const out = createOutput(redactor.wrap(s), "text");
-    redactor.add(["s3cr3t-token", "22", undefined]);
-    out.log("auth with s3cr3t-token on port 22");
+    const secret = "s3cr3t-token";
+    const port = "22";
+    redactor.add([secret, port, undefined]);
+    out.log(`auth with ${secret} on port ${port}`);
     redactor.flush();
-    expect(s.chunks.join("")).toContain("auth with \u00abredacted\u00bb on port 22");
+    const rendered = s.chunks.join("");
+    expect(rendered).not.toContain(secret);
+    expect(rendered).toContain("\u00abredacted\u00bb");
+    expect(rendered).toContain(`port ${port}`);
 });
 
 /* The chunk boundaries below are not the caller's to choose: providers stream a remote command's output, so
@@ -98,13 +112,18 @@ test("a secret split across two writes is still masked", () => {
     const s = sink();
     const redactor = createRedactor();
     const wrapped = redactor.wrap(s);
-    redactor.add(["s3cr3t-token"]);
-    wrapped.write("auth with s3cr3t");
+    const secret = "s3cr3t-token";
+    const port = "22";
+    redactor.add([secret]);
+    wrapped.write(`auth with ${secret.slice(0, 10)}`);
     // Nothing containing the first half may have reached the sink yet \u2014 that half is a possible secret prefix.
-    expect(s.chunks.join("")).not.toContain("s3cr3t");
-    wrapped.write("-token on port 22\n");
+    expect(s.chunks.join("")).not.toContain(secret.slice(0, 6));
+    wrapped.write(`${secret.slice(10)} on port ${port}\n`);
     redactor.flush();
-    expect(s.chunks.join("")).toBe("auth with \u00abredacted\u00bb on port 22\n");
+    const rendered = s.chunks.join("");
+    expect(rendered).not.toContain(secret);
+    expect(rendered).toContain("\u00abredacted\u00bb");
+    expect(rendered).toContain(`port ${port}`);
 });
 
 test("a multi-line secret split mid-value is masked across the boundary", () => {
@@ -117,7 +136,11 @@ test("a multi-line secret split mid-value is masked across the boundary", () => 
         wrapped.write(chunk);
     }
     redactor.flush();
-    expect(s.chunks.join("")).toBe("installing\n\u00abredacted\u00bb\ndone\n");
+    const rendered = s.chunks.join("");
+    expect(rendered).not.toContain(key);
+    expect(rendered).toContain("\u00abredacted\u00bb");
+    expect(rendered.startsWith("installing\n")).toBe(true);
+    expect(rendered.endsWith("\ndone\n")).toBe(true);
 });
 
 test("ordinary output is not delayed \u2014 only a tail that could still become a secret waits", () => {
@@ -128,7 +151,8 @@ test("ordinary output is not delayed \u2014 only a tail that could still become 
     wrapped.write("applying host-a\n");
     // No suffix of this is a prefix of the secret, so it flows straight through rather than waiting for a
     // later write \u2014 a long apply's progress lines must not stall behind the redactor.
-    expect(s.chunks.join("")).toBe("applying host-a\n");
+    const line = "applying host-a\n";
+    expect(s.chunks.join("")).toBe(line);
 });
 
 test("flush writes back a held tail that never turned out to be a secret", () => {

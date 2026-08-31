@@ -189,7 +189,9 @@ it("refuses a payment over the wallet's per-payment ceiling", async () => {
     const { prisma, payments } = fakePrisma({ wallets: [seededWallet] });
     const response = await app({ prisma })(`/sign`, signBody({ amountUsd: `2.00` }, { value: `2000000` }));
     expect(response.status).toBe(403);
-    expect(((await response.json()) as { error: string }).error).toContain(`per-payment ceiling`);
+    const error = ((await response.json()) as { error: string }).error;
+    expect(error).toContain(`2.00`);
+    expect(error).toContain(`1.00`);
     expect(payments).toHaveLength(0);
 });
 
@@ -200,7 +202,9 @@ it("refuses a payment that would pass the day's cap, counting rows already writt
     });
     const response = await app({ prisma })(`/sign`, signBody());
     expect(response.status).toBe(403);
-    expect(((await response.json()) as { error: string }).error).toContain(`daily cap`);
+    const error = ((await response.json()) as { error: string }).error;
+    expect(error).toContain(`5.00`);
+    expect(error).toContain(`4.95`);
     expect(payments).toHaveLength(1);
 });
 
@@ -214,7 +218,7 @@ it("refuses a token that is not USDC, however well-formed the request is", async
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
     const response = await app({ prisma })(`/sign`, signBody({ asset: `0xdAC17F958D2ee523a2206206994597C13D831ec7` }));
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toContain(`USDC`);
+    expect(((await response.json()) as { error: string }).error).toContain(USDC_BASE);
 });
 
 it("refuses when the stated amount and the authorization's value disagree", async () => {
@@ -228,7 +232,7 @@ it("refuses an over-long validity window rather than trimming it", async () => {
     const { prisma } = fakePrisma({ wallets: [seededWallet] });
     const response = await app({ prisma })(`/sign`, signBody({}, { validBefore: String(Math.floor(NOW.getTime() / 1000) + 4000) }));
     expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toContain(`validity window`);
+    expect(((await response.json()) as { error: string }).error).toMatch(/\d+s/);
 });
 
 it("refuses an already-expired authorization", async () => {

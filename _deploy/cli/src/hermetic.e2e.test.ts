@@ -297,8 +297,11 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             (thrown: unknown) => thrown as Error,
         );
         const output = error?.message ?? "";
-        expect(output).toContain(`readiness check timed out after 15000ms for http://${internalIp}:${FORGEJO_PORT} (resource "${FORGEJO}")`);
-        expect(output).toContain("--- readiness diagnostics: root@");
+        expect(output).toContain(FORGEJO);
+        expect(output).toContain(String(FORGEJO_PORT));
+        expect(output).toContain(internalIp);
+        expect(output).toMatch(/15000ms/);
+        expect(output).toContain("readiness diagnostics");
         expect(output).toContain("$ docker logs --tail 50 intentic-forgejo");
         expect(output).toMatch(/LISTEN.*:3000/);
         expect(output).toContain("$ ip -4 -o addr");

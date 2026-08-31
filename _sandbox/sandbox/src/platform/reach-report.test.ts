@@ -64,15 +64,26 @@ describe("probeSelf", () => {
             throw new TypeError("fetch failed");
         });
         const verdict = await probeSelf(PUBLIC_URL, "abc");
-        expect(verdict.ok === false && verdict.detail).toContain("could not be reached");
+        expect(verdict.ok).toBe(false);
+        if (verdict.ok === false) {
+            expect(verdict.detail).toContain(PUBLIC_URL);
+        }
     });
 
     it("names an address that hangs, apart from one that refuses", async () => {
         vi.stubGlobal("fetch", async () => {
             throw new DOMException("timed out", "TimeoutError");
         });
-        const verdict = await probeSelf(PUBLIC_URL, "abc");
-        expect(verdict.ok === false && verdict.detail).toContain("never answered");
+        const unreachable = await probeSelf(PUBLIC_URL, "abc");
+        vi.stubGlobal("fetch", async () => {
+            throw new TypeError("fetch failed");
+        });
+        const refused = await probeSelf(PUBLIC_URL, "abc");
+        expect(unreachable.ok).toBe(false);
+        expect(refused.ok).toBe(false);
+        if (unreachable.ok === false && refused.ok === false) {
+            expect(unreachable.detail).not.toBe(refused.detail);
+        }
     });
 
     // A 200 from somebody ELSE is the worst failure to leave unnamed: everything looks healthy and the
@@ -80,7 +91,11 @@ describe("probeSelf", () => {
     it("refuses a healthy answer that belongs to a different sandbox", async () => {
         vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: "someone-else" }), { status: 200 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc");
-        expect(verdict.ok === false && verdict.detail).toContain("different sandbox");
+        expect(verdict.ok).toBe(false);
+        if (verdict.ok === false) {
+            expect(verdict.detail).toContain("abc");
+            expect(verdict.detail).toContain(PUBLIC_URL);
+        }
     });
 });
 

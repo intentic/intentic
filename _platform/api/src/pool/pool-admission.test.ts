@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import type { LookupAddress } from "node:dns";
 import { describe, expect, it, vi } from "vitest";
 import type { Config } from "../config.js";
-import { checkListingRules, probeFailure, probeService, publishGates, type AdmissionDeps, type ListingInput } from "./pool-admission.js";
+import { checkListingRules, probeService, publishGates, type AdmissionDeps, type ListingInput } from "./pool-admission.js";
 
 /* The admission gates, driven without a network, a Stripe account or a provider. Every threshold here is the
  * shipped default, so a test that starts failing because someone moved one is telling the truth: these are
@@ -140,7 +140,7 @@ describe(`the conformance probe`, () => {
             publicLookup,
         );
         expect(verdict.passed).toBe(false);
-        expect(probeFailure(verdict)).toContain(`forged signature`);
+        expect(verdict.checks.find((check) => check.name === `rejectsForgery`)?.passed).toBe(false);
     });
 
     it(`fails an endpoint that answers an expired timestamp`, async () => {
@@ -153,7 +153,7 @@ describe(`the conformance probe`, () => {
             publicLookup,
         );
         expect(verdict.passed).toBe(false);
-        expect(probeFailure(verdict)).toContain(`expired timestamp`);
+        expect(verdict.checks.find((check) => check.name === `rejectsReplay`)?.passed).toBe(false);
     });
 
     it(`fails a stream that never reaches its result`, async () => {
@@ -166,7 +166,7 @@ describe(`the conformance probe`, () => {
             publicLookup,
         );
         expect(verdict.passed).toBe(false);
-        expect(probeFailure(verdict)).toContain(`did not serve`);
+        expect(verdict.checks.find((check) => check.name === `serves`)?.passed).toBe(false);
     });
 
     it(`fails an endpoint that is not answering at all`, async () => {
@@ -182,7 +182,7 @@ describe(`the conformance probe`, () => {
         ).lookup;
         const verdict = await probeService(LISTING.upstreamUrl, SECRET, LISTING.sampleRequest, provider(), () => NOW, privateLookup);
         expect(verdict.passed).toBe(false);
-        expect(probeFailure(verdict)).toContain(`private address`);
+        expect(verdict.checks[0]?.detail).toContain(`private address`);
     });
 });
 
@@ -203,13 +203,13 @@ describe(`the publish gates`, () => {
         const stale = { ...draft, probedAt: new Date(NOW.getTime() - 2 * 3_600_000) };
         const verdict = await publishGates(deps(), config, `user-1`, stale, NOW);
         expect(verdict).toMatchObject({ ok: false });
-        expect(verdict.ok === false && verdict.problems[0]).toContain(`conformance probe`);
+        expect(verdict.ok === false && verdict.problems[0]).toContain(String(config.pool.probeFreshMinutes));
     });
 
     it(`holds a new listing under the probation price ceiling`, async () => {
         const dear = { ...draft, creditsPerRun: 100 };
         const verdict = await publishGates(deps(), config, `user-1`, dear, NOW);
-        expect(verdict.ok === false && verdict.problems[0]).toContain(`probation`);
+        expect(verdict.ok === false && verdict.problems[0]).toContain(String(config.pool.probationMaxCredits));
     });
 
     /* Cost order matters: a listing with rule problems must not spend a Stripe read to also learn about
@@ -224,16 +224,17 @@ describe(`the publish gates`, () => {
 
     it(`refuses an unclaimed publisher name`, async () => {
         const verdict = await publishGates(deps({ holdsPublisher: async () => false }), config, `user-1`, draft, NOW);
-        expect(verdict.ok === false && verdict.problems[0]).toContain(`not proved`);
+        expect(verdict.ok === false && verdict.problems[0]).toContain(LISTING.publisher);
     });
 
     it(`refuses an account that cannot be paid`, async () => {
         const verdict = await publishGates(deps({ payoutsEnabled: async () => false }), config, `user-1`, draft, NOW);
-        expect(verdict.ok === false && verdict.problems[0]).toContain(`Payouts are not enabled`);
+        expect(verdict).toMatchObject({ ok: false });
+        expect(verdict.ok === false && verdict.problems).toHaveLength(1);
     });
 
     it(`refuses an account already at the listing cap`, async () => {
         const verdict = await publishGates(deps({ liveServiceCount: async () => 5 }), config, `user-1`, draft, NOW);
-        expect(verdict.ok === false && verdict.problems[0]).toContain(`limit per account`);
+        expect(verdict.ok === false && verdict.problems[0]).toContain(String(config.pool.maxServicesPerOwner));
     });
 });

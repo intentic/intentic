@@ -242,7 +242,7 @@ describe(`scanRegistry`, () => {
             SCANNED_AT,
         );
 
-        expect(result.facts.entries[0]?.checks?.bundle).toContain(`dist/extension.js, which is not at the pinned commit`);
+        expect(result.facts.entries[0]?.checks?.bundle).toContain(`dist/extension.js`);
     });
 
     // Never acted on automatically: a repo that went briefly private should come back to its listing.

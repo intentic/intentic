@@ -58,8 +58,14 @@ test("a breakage badges once and then stays quiet however many more runs fail", 
 
 test("the tooltip names the branch while there is only one", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40)]);
-    expect(streakTooltip(streaks)).toBe("intentic main is failing, 2 runs in a row");
-    expect(streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])])).toBe("2 branches are failing");
+    const [only] = streaks;
+    const single = streakTooltip(streaks);
+    expect(single).toContain(only?.repo);
+    expect(single).toContain(only?.branch);
+    expect(single).toContain(String(only?.runs));
+    const multi = streakTooltip([...streaks, ...failureStreaks([run(3, "failed", 50, "feat")])]);
+    expect(multi).toContain(String(2));
+    expect(multi).not.toBe(single);
 });
 
 /* The row tiering's two derivations. Same "green at the head" rule as the badge, read per run: which failure

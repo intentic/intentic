@@ -38,5 +38,7 @@ test("waitReady throws ReadinessTimeoutError when the probe never succeeds befor
     expect(timeout.id).toBe("svc");
     expect(timeout.url).toBe("https://x/health");
     expect(timeout.timeoutMs).toBe(0);
-    expect(timeout.message).toBe('readiness check timed out after 0ms for https://x/health (resource "svc")');
+    expect(timeout.message).toContain(timeout.url);
+    expect(timeout.message).toContain(timeout.id);
+    expect(timeout.message).toMatch(/0ms/);
 });

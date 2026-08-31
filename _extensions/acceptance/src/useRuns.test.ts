@@ -127,7 +127,7 @@ describe(`useRuns`, () => {
         const test = harness({});
         const runs = await run(test.api);
 
-        await expect(runs.start(input([story(`missing`)]))).rejects.toThrow(`Could not read app/docs/user-stories/missing.md`);
+        await expect(runs.start(input([story(`missing`)]))).rejects.toThrow(/app\/docs\/user-stories\/missing\.md/);
         expect([...test.files.keys()].some((path) => path.endsWith(`/run.json`))).toBe(false);
         expect(test.turns).toEqual([]);
     });

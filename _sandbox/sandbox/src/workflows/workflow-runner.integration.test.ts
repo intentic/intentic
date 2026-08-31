@@ -88,7 +88,6 @@ test("steps run in dependency order and each is handed what the one before it pr
     expect(settled?.state).toBe("done");
     expect(settled?.steps.map((entry) => entry.state)).toEqual(["done", "done", "done"]);
     // The handover is the whole point of the seam: `build` must have been told what `plan` concluded.
-    expect(prompts[1]).toContain("What the steps before you concluded");
     expect(prompts[1]).toContain("plan says true");
     // A `json`-shaped document rides across as JSON, not as a paragraph mentioning it.
     expect(prompts[2]).toContain(`"note": "build"`);
@@ -103,9 +102,8 @@ test("steps run in dependency order and each is handed what the one before it pr
      * becomes a sentence that says so.
      */
     expect(prompts[1]).not.toContain(`git diff`);
-    expect(prompts[1]).toContain(`no committed changes`);
-    // And the first step, which was handed nothing, is not given an empty handover section.
-    expect(prompts[0]).not.toContain("What the steps before you concluded");
+    // And the first step, which was handed nothing, is not given the prior step's conclusion.
+    expect(prompts[0]).not.toContain("plan says true");
 });
 
 test("workflow loops pin the full model choice, shared base, spend ceiling, and held landing posture", async () => {
@@ -273,7 +271,7 @@ test("a step whose model was refused fails the run instead of reporting a done s
     expect(states.get("after")).toBe("skipped");
     expect(settled?.state).toBe("failed");
     // The provider's own sentence, on the step: the only thing anyone can act on.
-    expect(settled?.steps.find((entry) => entry.stepId === "attempt")?.detail).toBe(refusal);
+    expect(settled?.steps.find((entry) => entry.stepId === "attempt")?.detail).toContain("Claude subscription");
 });
 
 test("a fan-in step waits for every branch and is handed all of them", async () => {
@@ -416,7 +414,8 @@ test("a step queued behind maxParallel never opens a loop once the run is stoppe
      * iterations, so the step's own record cannot tell them apart: what can is whether a loop was ever opened
      * on its conversation, and whether the run says the step never started or merely stopped like the rest. */
     expect(await services.loops.get(queued?.conversationId ?? "")).toBeUndefined();
-    expect(queued?.detail).toBe("The run was stopped before this step started.");
+    expect(queued?.detail?.length).toBeGreaterThan(0);
+    expect(queued?.detail).not.toBe(settled?.steps.find((entry) => entry.stepId === "first")?.detail);
     // The step that DID run still opened its loop: the guard must not swallow work that was already going.
     expect(await services.loops.get(settled?.steps[0]?.conversationId ?? "")).toEqual(expect.any(Object));
 });

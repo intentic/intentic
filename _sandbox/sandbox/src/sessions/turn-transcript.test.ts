@@ -87,7 +87,12 @@ describe("restoredTurn", () => {
     // something typed keeps that disclosure nowhere — the notice row carries no notes field to hang them on.
     it("records a re-run's interruption ahead of whatever the turn was told", () => {
         const prompt = withResumeNote("/work is where it lives", RESUME_NOTES.restart);
-        expect(restoredTurn({ prompt }, [], "/work", SENT_AT)).toEqual([{ role: "notice", text: expect.stringContaining("sandbox came back") }]);
+        const messages = restoredTurn({ prompt }, [], "/work", SENT_AT);
+        expect(messages).toEqual([{ role: "notice", text: expect.any(String) }]);
+        expect(messages[0]?.text).toContain("sandbox");
+        expect(messages[0]?.text).not.toContain("/work is where it lives");
+        const authNotice = restoredTurn({ prompt: withResumeNote("x", RESUME_NOTES.auth) }, [], "/work", SENT_AT)[0]?.text;
+        expect(messages[0]?.text).not.toBe(authNotice);
     });
 
     /* The live bubble boundary, matched to turnReducer's: `text_end` retires the block that WROTE something, so

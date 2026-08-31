@@ -50,7 +50,8 @@ test("a live daemon on other roots keeps the container: the guest still owns the
 
     // Refused means UNTOUCHED: the owner still holds the claim, so its next boot still converges HOME.
     expect(await claimOf(home)).toEqual({ ...self(), ...CONTAINER });
-    expect(JSON.stringify(lines[0])).toContain("another live daemon owns this container");
+    expect(lines[0]).toMatchObject({ level: 40 });
+    expect(lines[0]).not.toHaveProperty("agentSession");
 });
 
 test("a live daemon on THESE roots keeps both: nothing of its state is this run's to converge", async () => {
@@ -79,8 +80,8 @@ test("a daemon started from inside an agent session is a guest even with nobody 
     // and takes no claim, so the real daemon's next boot still finds the container free.
     expect(role).toEqual({ container: false, roots: true });
     await expect(claimOf(home)).rejects.toThrow();
-    expect(JSON.stringify(lines[0])).toContain("started from inside an agent session");
     expect(lines[0]).toMatchObject({ agentSession: "a1d1e787" });
+    expect(lines[0]).not.toHaveProperty("diedPid");
 });
 
 test("a claim left by a daemon that is gone is taken over", async () => {
@@ -114,5 +115,6 @@ test("a HOME that cannot hold the claim converges nothing container-wide", async
     const role = await claimContainer(CONTAINER, logger, { home: join(tmpdir(), "container-owner-missing", "nope"), env: {} });
 
     expect(role).toEqual({ container: false, roots: true });
-    expect(JSON.stringify(lines[0])).toContain("could not claim this container");
+    expect(lines[0]).toMatchObject({ level: 40 });
+    expect(lines[0]).not.toHaveProperty("agentSession");
 });

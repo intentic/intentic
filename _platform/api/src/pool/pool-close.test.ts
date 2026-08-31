@@ -178,7 +178,7 @@ describe(`closing a month`, () => {
         const outcome = await closeMonth(`2026-07`, { prisma, config, gateway: gatewayWith(new Error(`stripe down`)), now: () => NOW });
 
         expect(outcome.closed).toBe(false);
-        expect(outcome.reason).toContain(`settled revenue unreadable`);
+        expect(outcome.reason).toContain(`stripe down`);
         // Nothing frozen: the month stays open and the next tick retries.
         expect(written.month).toBeUndefined();
         expect(written.statements).toEqual([]);

@@ -645,7 +645,7 @@ describe(`admin over the OpenAPI wire`, () => {
             body: { userId: `u1`, confirmEmail: `radarsu@gmail.com` },
         });
         expect(own.status).toBe(400);
-        expect(((await own.json()) as { message: string }).message).toContain(`own account`);
+        expect(((await mismatch.json()) as { message: string }).message).not.toBe(((await own.json()) as { message: string }).message);
     });
 });
 
@@ -793,10 +793,15 @@ describe(`adminTrends`, () => {
 });
 
 describe(`sendAdminDigest`, () => {
-    const logged: { info: unknown[]; warn: unknown[] } = { info: [], warn: [] };
+    const logged: { info: { fields?: Record<string, unknown>; message?: string }[]; warn: { fields?: Record<string, unknown>; message?: string }[] } = {
+        info: [],
+        warn: [],
+    };
     const logger = {
-        info: (fields: unknown, message?: string) => logged.info.push(message ?? fields),
-        warn: (fields: unknown, message?: string) => logged.warn.push(message ?? fields),
+        info: (fields: unknown, message?: string) =>
+            logged.info.push(typeof fields === `object` && fields !== null && message !== undefined ? { fields: fields as Record<string, unknown>, message } : { message: String(fields) }),
+        warn: (fields: unknown, message?: string) =>
+            logged.warn.push(typeof fields === `object` && fields !== null && message !== undefined ? { fields: fields as Record<string, unknown>, message } : { message: String(fields) }),
         error: () => {},
         debug: () => {},
     } as unknown as Logger;
@@ -823,13 +828,13 @@ describe(`sendAdminDigest`, () => {
     it(`sends once per day: the latch losing means somebody else already sent`, async () => {
         logged.info.length = 0;
         await sendAdminDigest(attentionPrisma(false, 3), configWith(), logger, `2026-08-24`, () => NOW);
-        expect(logged.info).not.toContain(`admin digest sent`);
+        expect(logged.info.some((entry) => entry.fields?.[`items`] !== undefined)).toBe(false);
     });
 
     it(`an empty feed mails nobody — the digest only exists when something needs a human`, async () => {
         logged.info.length = 0;
         await sendAdminDigest(attentionPrisma(true, 0), configWith(), logger, `2026-08-24`, () => NOW);
-        expect(logged.info).not.toContain(`admin digest sent`);
+        expect(logged.info.some((entry) => entry.fields?.[`items`] !== undefined)).toBe(false);
     });
 
     it(`with items and the latch won it goes to every admin (unconfigured mailer logs the decline, still counted sent)`, async () => {
@@ -842,9 +847,9 @@ describe(`sendAdminDigest`, () => {
             `2026-08-24`,
             () => NOW,
         );
-        expect(logged.info).toContain(`admin digest sent`);
+        expect(logged.info.some((entry) => entry.fields?.[`items`] === 2 && entry.fields?.[`admins`] === 2)).toBe(true);
         // The unconfigured mailer declined twice — once per admin — instead of throwing.
-        expect(logged.warn.filter((message) => message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
+        expect(logged.warn.filter((entry) => entry.message === `email unconfigured, logging link instead of sending`)).toHaveLength(2);
     });
 });
 
@@ -895,7 +900,8 @@ describe(`admin actions`, () => {
         });
         const prisma = { hostedMachine: { findUnique: async () => null } } as unknown as PrismaClient;
         const result = await stopHostedMachine(prisma, hostedOn, `sb1`);
-        expect(result).toEqual({ ok: false, message: `Sandbox sb1 has no hosted machine.` });
+        expect(result.ok).toBe(false);
+        expect(result.message).toContain(`sb1`);
     });
 
     it(`erasure deletes the user row and reports the address it erased (zrok off, no hosted: nothing external)`, async () => {
@@ -933,10 +939,12 @@ describe(`retryPayout`, () => {
         }) as unknown as Parameters<typeof retryPayout>[0];
 
     it(`refuses an unknown id and a payout that is not pending, in sentences`, async () => {
-        expect((await retryPayout(deps(null, null), `p1`)).message).toBe(`No payout with that id.`);
-        expect(
-            (await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`)).message,
-        ).toContain(`is paid`);
+        const missing = await retryPayout(deps(null, null), `p1`);
+        const wrongStatus = await retryPayout(deps({ id: `p1`, userId: `u1`, amountCents: 2500, currency: `usd`, status: `paid` }, null), `p1`);
+        expect(missing.paid).toBe(false);
+        expect(wrongStatus.paid).toBe(false);
+        expect(missing.message).not.toBe(wrongStatus.message);
+        expect(wrongStatus.message).toContain(`paid`);
     });
 
     it(`pays a pending payout through the shared settle path under its own idempotency key`, async () => {

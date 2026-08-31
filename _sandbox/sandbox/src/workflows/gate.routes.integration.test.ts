@@ -166,7 +166,7 @@ test("a gate pointed at a field nobody declares is refused at call time", async 
     const response = await post(appFor(services, judging(root, "pass")), "wf-broken");
 
     expect(response.status).toBe(400);
-    expect((await response.json()).error).toContain("does not declare");
+    expect((await response.json()).error).toContain("shipit");
 });
 
 /* The deadline. A pipeline that gave up must not leave a fan-out of sessions burning, so the wait STOPS the

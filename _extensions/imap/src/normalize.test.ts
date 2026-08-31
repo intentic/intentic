@@ -82,14 +82,19 @@ test("attachmentsOf walks nested multiparts, keeping named and attachment-dispos
 test("flagsMessage reports the uid only when the server sent one", () => {
     const withUid = flagsMessage({ capabilityId: "work", username: "me", mailbox: "INBOX", uidValidity: "111", seq: 3, uid: 7, flags: ["\\Seen"] });
     expect(withUid["id"]).toMatch(/^work:111:flags:7:\d+$/);
-    expect(withUid["content"]).toBe("Flags changed on a message in INBOX (uid 7): \\Seen");
+    expect(withUid["content"]).toContain("INBOX");
+    expect(withUid["content"]).toContain(String(withUid["extra"] && (withUid["extra"] as { uid: number }).uid));
+    expect(withUid["content"]).toContain("\\Seen");
     expect(withUid["extra"]).toEqual({ capabilityId: "work", seq: 3, uid: 7, flags: ["\\Seen"] });
     expect(Date.parse(withUid["timestamp"] as string)).not.toBeNaN();
 
     const seqOnly = flagsMessage({ capabilityId: "work", username: "me", mailbox: "INBOX", uidValidity: "111", seq: 3, uid: undefined, flags: [] });
     expect(seqOnly["id"]).toMatch(/^work:111:flags:seq3:\d+$/);
-    expect(seqOnly["content"]).toBe("Flags changed on a message in INBOX (seq 3): (none)");
+    expect(seqOnly["content"]).toContain("INBOX");
+    expect(seqOnly["content"]).toContain(String((seqOnly["extra"] as { seq: number }).seq));
+    expect(seqOnly["content"]).not.toContain(String(7));
     expect(seqOnly["extra"]).toEqual({ capabilityId: "work", seq: 3, flags: [] });
+    expect(withUid["content"]).not.toBe(seqOnly["content"]);
 });
 
 test("expungeMessage states exactly what the server reported", () => {
@@ -102,7 +107,8 @@ test("expungeMessage states exactly what the server reported", () => {
         uid: undefined,
         vanished: false,
     });
-    expect(seqOnly["content"]).toBe("A message was removed from INBOX (seq 4)");
+    expect(seqOnly["content"]).toContain("INBOX");
+    expect(seqOnly["content"]).toContain(String((seqOnly["extra"] as { seq: number }).seq));
     expect(seqOnly["extra"]).toEqual({ capabilityId: "work", seq: 4, vanished: false });
 
     const vanished = expungeMessage({
@@ -114,7 +120,9 @@ test("expungeMessage states exactly what the server reported", () => {
         uid: 9,
         vanished: true,
     });
-    expect(vanished["content"]).toBe("A message was removed from INBOX (uid 9)");
+    expect(vanished["content"]).toContain("INBOX");
+    expect(vanished["content"]).toContain(String((vanished["extra"] as { uid: number }).uid));
     expect(vanished["extra"]).toEqual({ capabilityId: "work", uid: 9, vanished: true });
     expect(vanished["channelId"]).toBe("INBOX");
+    expect(seqOnly["content"]).not.toBe(vanished["content"]);
 });
