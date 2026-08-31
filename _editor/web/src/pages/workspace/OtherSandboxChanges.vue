@@ -114,7 +114,7 @@ const detail = (row: LedgerRow): string => {
 </script>
 
 <template>
-    <section v-if="show" class="mt-2 border-t border-line px-1 pt-1">
+    <section v-if="show" data-other-sandboxes class="mt-2 border-t border-line px-1 pt-1">
         <button
             type="button"
             class="flex w-full min-w-0 items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1 text-left transition-colors hover:bg-content/5"

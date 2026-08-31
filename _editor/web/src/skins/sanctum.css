@@ -1587,7 +1587,9 @@
  * instead: turned forty-five degrees with its corner rounded off a hair, which is the same diamond every
  * section label in the app opens with, now drawn once and in the colour that means something.
  *
- * SCOPED TO `.lane > header` (RailLane) and `[data-drop] > header` (AgentsView's board lanes).
+ * SCOPED TO `.lane > header` (RailLane), `[data-drop] > header` (AgentsView's board lanes), and
+ * `[data-other-sandboxes]` (OtherSandboxChanges): each already opens its line with an icon — the lane's
+ * status dot, or the server glyph beside "In other sandboxes" — so the lozenge would read as a second bullet.
  * AgentsView's sections carry `data-drop` but NOT `.lane` — `.lane` brings in the lane background and
  * box-shadow rules (lines 534–541) that only belong on the sidebar's RailLane.
  *
@@ -1603,6 +1605,7 @@
     transform: rotate(45deg);
 }
 [data-skin="sanctum"] .lane > header .font-semibold.uppercase.tracking-wide::before,
-[data-skin="sanctum"] [data-drop] > header .font-semibold.uppercase.tracking-wide::before {
+[data-skin="sanctum"] [data-drop] > header .font-semibold.uppercase.tracking-wide::before,
+[data-skin="sanctum"] [data-other-sandboxes] .font-semibold.uppercase.tracking-wide::before {
     content: none;
 }
