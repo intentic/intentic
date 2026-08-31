@@ -22,7 +22,35 @@ export type DropAction = "land" | "resolve" | "stop" | "discard" | "unwatch";
  * card would otherwise leave its Land button spinning on work nobody asked to land. */
 export type PendingAction = DropAction | "archive" | "restore" | "reland";
 
-export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined => {
+/* THE TWO DROPS THAT CANNOT REACH ANOTHER SANDBOX, and the three that can.
+ *
+ * `resolve` sends a turn, which needs the conversation the chat singleton holds for one daemon at a time.
+ * `unwatch` writes through the fleet store, which IS the active daemon's roster and has no entry for another
+ * box's agent. Stop, land and discard are none of those: they are calls addressed by agent id, and the
+ * daemon on the other end does the work.
+ *
+ * `sandboxId` set IS the test, and it is exact rather than approximate: the field is only ever populated for a
+ * card built from another box's roster (fleetScope's otherFleet, which excludes the active one), so a local
+ * card can never fall into this and a remote one can never miss it. Read directly rather than through
+ * fleetScope's `isRemote`, because this module is a pure leaf and reaching for the app's sandbox state would
+ * make the lane rules untestable without one. */
+const NEEDS_THIS_BOX: ReadonlySet<DropAction> = new Set([`resolve`, `unwatch`]);
+
+// The action this drop would have run if the card were in the sandbox the app is pointed at, when THAT is the
+// only thing standing in its way. Both functions below read it, which is what keeps the refusal and the reason
+// for it one decision: the rejection line names exactly the drop that was withheld.
+const refusedForItsBox = (agent: FleetAgent, target: DropTarget): string | undefined => {
+    const action = dropActionHere(agent, target);
+    if (action === undefined || agent.sandboxId === undefined || !NEEDS_THIS_BOX.has(action)) {
+        return undefined;
+    }
+    return action === `resolve` ? `Asking the agent to resolve needs its own sandbox` : `Ending a watch needs the agent's own sandbox`;
+};
+
+export const dropActionFor = (agent: FleetAgent, target: DropTarget): DropAction | undefined =>
+    refusedForItsBox(agent, target) === undefined ? dropActionHere(agent, target) : undefined;
+
+const dropActionHere = (agent: FleetAgent, target: DropTarget): DropAction | undefined => {
     // A draft is an open tab that never ran, and a refused one is a tab that TRIED and was turned away: either
     // way there is no registry entry, no worktree and no turn, nothing for any of these to act on.
     if (unregistered(agent.status)) {
@@ -100,6 +128,12 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     if (dropActionFor(agent, target) !== undefined) {
         return undefined;
     }
+    // Ahead of every other reason, because it is the only one where the drop WOULD have worked and the card's
+    // box is the whole of why it did not. Naming the crossing is what makes that a rule rather than a bug.
+    const elsewhere = refusedForItsBox(agent, target);
+    if (elsewhere !== undefined) {
+        return elsewhere;
+    }
     if (unregistered(agent.status)) {
         return `This agent hasn't run yet`;
     }
@@ -115,6 +149,13 @@ export const dropRejection = (agent: FleetAgent, target: DropTarget): string | u
     if (agent.status === `resuming`) {
         return `This turn is picking itself back up`;
     }
+    return rejectionForTarget(agent, target);
+};
+
+// The half of the refusal that depends on WHERE the card was dropped, once every reason that holds whatever
+// the target is has been ruled out above. Split out for the complexity budget, and it reads better for it:
+// the caller is now "reasons about the card", this is "reasons about the lane".
+const rejectionForTarget = (agent: FleetAgent, target: DropTarget): string => {
     if (target === `discard`) {
         return agent.branch === undefined ? `Workspace conversations have no isolated branch to discard` : `Stop the turn first`;
     }

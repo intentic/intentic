@@ -20,7 +20,9 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 // resolves its href out of a router this bare mount never installs.
 vi.mock(import("vue-router"), async (importOriginal) => ({
     ...(await importOriginal()),
-    useRoute: () => ({ params: { id: `agent-1` } }) as never,
+    // `query` as well as `params`: the page reads `?sandbox=` to decide whether this review is of an agent in
+    // another box, and a route object without one is a shape vue-router never produces.
+    useRoute: () => ({ params: { id: `agent-1` }, query: {} }) as never,
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
     RouterLink: (await import("../testing/routerLinkStub")).RouterLinkStub as never,
 }));

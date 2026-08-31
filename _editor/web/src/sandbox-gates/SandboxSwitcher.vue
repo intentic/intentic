@@ -22,6 +22,7 @@ import { badgeClass, badgeText } from "../core-views/viewBadge";
 import { type SandboxAttentionItem, useSandboxAttention } from "../composables/sandbox/sandboxAttention";
 import { sandboxIdFromToken } from "../composables/sandbox/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
+import { attentionByBox, subscribe as watchOtherBoxes } from "../composables/sandbox/fleetAcross";
 import { connectedSandboxes, unfinishedSandboxes } from "../composables/sandbox/roster";
 import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
 import { useSandbox } from "../composables/sandbox/useSandbox";
@@ -75,6 +76,27 @@ const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
 const trigger = ref<HTMLButtonElement | null>(null);
 const open = ref(false);
 
+/* The counts below are read WHILE THIS POPOVER IS OPEN and not a moment longer.
+ *
+ * This control is mounted for the whole session, so subscribing on mount would poll every sandbox the account
+ * owns for as long as the app is up, to keep numbers current on a list nobody has opened. The store keeps what
+ * it last read (fleetAcross), so a second open inside its freshness window paints instantly and costs nothing,
+ * and the first one fills in within a moment of the list appearing, which is the whole time the reader is
+ * looking at it anyway. */
+let releaseBoxes: (() => void) | undefined;
+watch(open, (showing) => {
+    if (showing) {
+        releaseBoxes ??= watchOtherBoxes();
+        return;
+    }
+    releaseBoxes?.();
+    releaseBoxes = undefined;
+});
+onUnmounted(() => {
+    releaseBoxes?.();
+    releaseBoxes = undefined;
+});
+
 /* THE LIST IS TWO LISTS (roster.ts). Switching to a sandbox that has never reported in is not switching to
  * anything: it has no daemon, so the shell can only paint a connecting gate that cannot resolve, so those
  * rows are not offered as places to go. They are unfinished errands, and they get their own section below,
@@ -85,6 +107,28 @@ const open = ref(false);
  * the second threw you out of the workspace you were standing in. */
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
+
+/* HOW MUCH IS WAITING IN THE SANDBOXES THIS ONE IS NOT, one number per row.
+ *
+ * It answers the question this control could not: the rail's Agents badge is about the box you are in, so work
+ * finishing anywhere else was invisible until you happened to go and look. The count for the ACTIVE row is
+ * deliberately absent, its badge is already on the rail, and saying it twice on one screen would make the two
+ * disagree the moment one of them lagged.
+ *
+ * A NUMBER, AND ONLY INSIDE THE POPOVER. This is a statistic, and the chip's badge rule (sandboxAttention) is
+ * that a statistic must never sit on a permanently visible surface: summed onto the chip it would be lit on
+ * any account with a few sandboxes, all day, which is what teaches a reader to stop looking at the one badge
+ * that means something. Here it is read by someone who has already opened the list to decide where to go, and
+ * a count is exactly what that decision wants.
+ *
+ * A box that has not answered gets a dash, never a zero: "nothing is waiting for you" is a claim, and a failed
+ * read is not evidence for it. */
+const attentionFor = (option: SandboxSummary): number | undefined =>
+    option.id === sandbox.activeSandboxId.value ? undefined : attentionByBox.value.get(option.id);
+
+// Whether this row has ever been heard from, which is what separates "0" from "-". Split out because the
+// template asks both questions about the same row and a single number cannot carry both answers.
+const answered = (option: SandboxSummary): boolean => attentionFor(option) !== undefined;
 
 const pick = (option: SandboxSummary): void => {
     open.value = false;
@@ -325,6 +369,23 @@ const confirmRemove = async (): Promise<void> => {
                     :class="connectionDotClass"
                     v-tooltip.top="connectionLabel"
                 ></span>
+                <!-- WHAT IS WAITING IN THAT SANDBOX. Only on rows that are not the active one (see attentionFor),
+                     and only ever a count of agents that need somebody: a box with nothing waiting draws nothing
+                     at all, so the row stays quiet in the ordinary case and the numbers that do appear are the
+                     ones worth crossing to. A box that has not answered says so with a dash rather than a 0. -->
+                <span
+                    v-else-if="answered(option) && attentionFor(option)! > 0"
+                    class="shrink-0 rounded-full bg-warning/15 px-1.5 py-0.5 text-2xs font-semibold leading-4 text-warning"
+                    v-tooltip.top="`${attentionFor(option)} waiting for you in ${option.name}`"
+                    >{{ attentionFor(option) }}</span
+                >
+                <span
+                    v-else-if="!answered(option)"
+                    class="shrink-0 px-1 text-2xs leading-4 text-subtle"
+                    v-tooltip.top="`${option.name} isn't answering, so what's waiting there isn't known`"
+                    aria-label="Not answering"
+                    >&ndash;</span
+                >
                 <span v-if="option.role !== 'owner'" class="shrink-0 rounded-full bg-content/10 px-1.5 py-0.5 text-2xs font-medium text-subtle"
                     >Shared</span
                 >

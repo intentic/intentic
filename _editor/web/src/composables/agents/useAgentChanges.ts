@@ -12,7 +12,7 @@ import { computed, ref, watch, type Ref } from "vue";
 import { rendersAsBytes } from "../../pages/workspace/fileType";
 import { queryClient, UNPERSISTED } from "../queryPersistence";
 import { useCodeStats } from "../workspace/useCodeStats";
-import { sandboxJson } from "../sandbox/sandboxClient";
+import { sandboxJson, sandboxJsonAt } from "../sandbox/sandboxClient";
 import { AGENTS } from "../queryKeys";
 import { useSandboxQuery } from "../sandbox/useSandboxQuery";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent } from "./agentActions";
@@ -56,10 +56,21 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
  * the same cache entry the panel later reads, rather than a parallel one. Both halves have to be shared for
  * that to hold: the key (or the warm lands somewhere the panel never looks) and the request (or the two
  * disagree the first time one of them changes). */
-export const agentChangesKey = (agentId: string): unknown[] => AGENTS.of(agentId, `diff`);
+/* `at` NAMES THE SANDBOX THE AGENT IS IN, and undefined means the one the app is pointed at, the same
+ * convention agentActions uses for its mutations and for the same reason: every existing caller is about the
+ * active box and says so by leaving it out.
+ *
+ * It reaches the KEY as well as the request, which is what keeps one browser's review of two boxes' agents
+ * from colliding. Agent ids are minted per sandbox, so the same id can exist in two of them, and a key that
+ * named only the id would serve box A's diff to box B's review panel. `ofSandbox` puts the box in the last
+ * position, where `sandboxQueryPredicate` finds it. */
+export const agentChangesKey = (agentId: string, at?: string): unknown[] =>
+    at === undefined ? AGENTS.of(agentId, `diff`) : AGENTS.ofSandbox(at, agentId, `diff`);
 
-export const fetchAgentChanges = (agentId: string): Promise<AgentChangesResponse> =>
-    sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId)}/diff`);
+export const fetchAgentChanges = (agentId: string, at?: string): Promise<AgentChangesResponse> =>
+    at === undefined
+        ? sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId)}/diff`)
+        : sandboxJsonAt<AgentChangesResponse>(at, `/agents/${encodeURIComponent(agentId)}/diff`);
 
 /* ONE ROW'S DIFF, cached under the review's own key, so the invalidation that refreshes the file list (a land,
  * a discard, a turn settling) drops the per-file diffs with it, and a warmed row and a clicked row are one
@@ -68,8 +79,8 @@ export const fetchAgentChanges = (agentId: string): Promise<AgentChangesResponse
  *
  * UNPERSISTED, like the workspace review's: a diff is two whole file texts, and the loader reads one per
  * changed file. queryPersistence holds what putting that in the disk mirror would charge every other write. */
-export const agentFileDiffKey = (agentId: string, repo: string, path: string): unknown[] => [
-    ...agentChangesKey(agentId),
+export const agentFileDiffKey = (agentId: string, repo: string, path: string, at?: string): unknown[] => [
+    ...agentChangesKey(agentId, at),
     UNPERSISTED,
     `file`,
     repo,
@@ -78,7 +89,10 @@ export const agentFileDiffKey = (agentId: string, repo: string, path: string): u
 
 // Where this row's code-only +/− is filed (useCodeStats). Scoped to the agent, because the same path in two
 // agents' worktrees is two different changes.
-export const agentStatKey = (agentId: string, repo: string, path: string): string => `agent:${agentId}:${reviewFileKey(repo, path)}`;
+// The box qualifies the id for the same reason it qualifies the cache key above: agent ids are minted per
+// sandbox, so two boxes can hold the same one, and this key decides which +/- count a row is shown.
+export const agentStatKey = (agentId: string, repo: string, path: string, at?: string): string =>
+    `agent:${at ?? ``}:${agentId}:${reviewFileKey(repo, path)}`;
 
 /* THE CACHING TERMS, shared rather than defaulted, because the panel OBSERVES this query while the loader
  * merely fills it, and an observer that brought vue-query's defaults would undo the warming it is supposed to
@@ -96,10 +110,9 @@ export const AGENT_FILE_DIFF_OPTIONS = {
     retry: false as const,
 };
 
-export const readAgentFileDiff = async (agentId: string, repo: string, path: string): Promise<FileDiffResponse> => {
-    const body = await sandboxJson<FileDiffResponse>(
-        `/agents/${encodeURIComponent(agentId)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`,
-    );
+export const readAgentFileDiff = async (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> => {
+    const route = `/agents/${encodeURIComponent(agentId)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`;
+    const body = at === undefined ? await sandboxJson<FileDiffResponse>(route) : await sandboxJsonAt<FileDiffResponse>(at, route);
     /* Counted here rather than by whoever asked, for the reason the workspace review's read gives at length: the
      * count needs both whole sides of the file, this read just paid for them, and every caller then gets it at the
      * same price.
@@ -110,7 +123,7 @@ export const readAgentFileDiff = async (agentId: string, repo: string, path: str
      * leaving them unrecorded left the badge unable to tell them from a file whose count had not been taken yet,
      * so it printed git's number for both, and for one of the two that number was about to change. */
     const stats = useCodeStats();
-    const key = agentStatKey(agentId, repo, path);
+    const key = agentStatKey(agentId, repo, path, at);
     if (body.partial !== undefined || rendersAsBytes(path, body.binary)) {
         stats.noCode(key);
     } else {
@@ -121,16 +134,16 @@ export const readAgentFileDiff = async (agentId: string, repo: string, path: str
 
 /* The query, named apart from the call, so the background loader can be handed the QUERY rather than a function
  * that fetches it, see agentTranscriptQuery for what having those two halves separable cost. */
-export const agentFileDiffQuery = (agentId: string, repo: string, path: string) => ({
-    queryKey: agentFileDiffKey(agentId, repo, path),
-    queryFn: () => readAgentFileDiff(agentId, repo, path),
+export const agentFileDiffQuery = (agentId: string, repo: string, path: string, at?: string) => ({
+    queryKey: agentFileDiffKey(agentId, repo, path, at),
+    queryFn: () => readAgentFileDiff(agentId, repo, path, at),
     ...AGENT_FILE_DIFF_OPTIONS,
 });
 
 // Module-local: the loader takes the query above rather than a function that runs it, so the panel below is the
 // only caller left.
-const agentFileDiff = (agentId: string, repo: string, path: string): Promise<FileDiffResponse> =>
-    queryClient.fetchQuery(agentFileDiffQuery(agentId, repo, path));
+const agentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> =>
+    queryClient.fetchQuery(agentFileDiffQuery(agentId, repo, path, at));
 
 // Files/±lines of a review subset, the header's split chips total code and tests through this one shape.
 const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions: number; deletions: number } => ({
@@ -152,12 +165,24 @@ const askedByAgent = ref<ReadonlySet<string>>(new Set());
 // caller owns the review's state for the whole page (AgentDetail), so it exists before it is known whether
 // there is anything to read; without this the page would ask the daemon for the diff of an agent that has
 // never run, and be told so, once per visit.
-export function useAgentChanges(agentId: Ref<string>) {
-    const { query, error } = useSandboxQuery({
-        queryKey: computed(() => agentChangesKey(agentId.value)),
-        queryFn: () => fetchAgentChanges(agentId.value),
-        enabled: computed(() => agentId.value !== ``),
-    });
+/* `at` is the sandbox this agent lives in, undefined for the active one (see agentChangesKey). A ref because
+ * the page owning this review reads both halves off the route, and a deep link can name either.
+ *
+ * WHAT CROSSES AND WHAT DOES NOT is decided here rather than by each button. Everything that READS (the diff,
+ * a file's before/after) and everything that SETTLES WORK (land, discard) is addressed by id and crosses. The
+ * two that need a conversation do not: `askResolve` sends a message, and `setAutoLand`/`archive` go through
+ * the fleet store, which is the active daemon's roster and holds nothing about another box. Those are absent
+ * from a remote review rather than broken in it, and the panel offers the crossing in their place. */
+export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefined>) {
+    const reach = computed(() => at?.value);
+    const { query, error } = useSandboxQuery(
+        {
+            queryKey: computed(() => agentChangesKey(agentId.value, reach.value)),
+            queryFn: () => fetchAgentChanges(agentId.value, reach.value),
+            enabled: computed(() => agentId.value !== ``),
+        },
+        reach,
+    );
 
     const repos = computed<readonly AgentRepoChanges[]>(() => query.data.value?.repos ?? []);
 
@@ -278,8 +303,8 @@ export function useAgentChanges(agentId: Ref<string>) {
     // `force` carries the user's answer to the mid-write warning, see landAgent. A parked turn needs none.
     const land = (mode: LandMode = `check`, span: AgentSpan = `outstanding`, force = false): Promise<void> =>
         run(async () => {
-            resolving.value = (await landAgent(agentId.value, mode, span, force)).resolving;
-            await invalidateAgentAction(agentId.value);
+            resolving.value = (await landAgent(agentId.value, mode, span, force, reach.value)).resolving;
+            await invalidateAgentAction(agentId.value, reach.value);
         }, `Land failed.`);
 
     // The panel's hold toggle, this agent's auto-land override (null ⇒ back to inheriting the sandbox
@@ -306,9 +331,9 @@ export function useAgentChanges(agentId: Ref<string>) {
 
     const discard = (): Promise<void> =>
         run(async () => {
-            await discardAgent(agentId.value);
+            await discardAgent(agentId.value, reach.value);
             resolving.value = undefined;
-            await invalidateAgentAction(agentId.value);
+            await invalidateAgentAction(agentId.value, reach.value);
         }, `Discard failed.`);
 
     // Finishing WITH an agent, as opposed to finishing its work, the panel's counterpart to the board's

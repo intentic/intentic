@@ -6,10 +6,12 @@ import { expect, test, vi } from "vitest";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../composition.js";
 import { testConfig } from "../testing.js";
+import { SKILL_CATALOG_NOTE_HEADER } from "../settings/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../workspace/workspace-setup.js";
 import type { AgentRequest } from "./agent.js";
 import { composeWirePrompt } from "./turn-preamble.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
+import { base, codexServices, context, harnessServices, servicesWith, turn, wire } from "./turn-plan.testing.js";
 
 /* EVERY RUNTIME IS TOLD THE TREE IS BEHIND: BY WHATEVER SEAM IT HAS. Asserted here rather than in the unit
  * suite because the only way to earn a dependency notice is to have a tree that has earned one.
@@ -235,4 +237,52 @@ test("an isolated turn is not told its dependencies are missing just because the
     expect(prompt).not.toContain(SETUP_NOTICE_HEADER);
     // The worktree note is a different fact and still belongs: this runtime reaches its branch by cwd alone.
     expect(prompt.endsWith("do the thing")).toBe(true);
+});
+
+/* A SKILL CATALOGUE IS A SKILL.md ON DISK OR IT IS NOTHING, which is why this case belongs here rather than
+ * beside the other planning rules: it is the one of them that cannot be asserted against a root that does not
+ * exist. It reads the shared seams from turn-plan.testing.ts and points them at a real tree, the same shape
+ * every other case in this file takes.
+ *
+ * What it pins is the ASYMMETRY between runtimes. A runtime with no skill loader of its own has to be told the
+ * catalogue in the prompt, once, on the conversation's first turn; the runtimes that load skills themselves
+ * must not be told at all, or the same list arrives twice and the second copy is the one that is wrong. */
+test("a runtime without a skill loader receives the catalogue once; native loaders are not told twice", async () => {
+    const root = await mkdtemp(join(tmpdir(), "turn-skills-"));
+    const skillDir = join(root, ".agents", "skills", "quill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: quill\ndescription: Draws quills. Use when asked for quills.\n---\n\nDraw a quill.\n");
+    const skillContext: TurnContext = {
+        ...context,
+        base: { ...base, cwd: root },
+        localCwd: root,
+        effectiveCwd: root,
+    };
+    const workspace = unstubbed<Services["workspace"]>("workspace", { root });
+    const openCode = unstubbed<Services["openCode"]>("openCode", {
+        connected: async () => true,
+        xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
+    });
+
+    const grok = await planTurn(servicesWith({ workspace, openCode }), turn({ agent: "grok" }), skillContext);
+    expect(wire(grok)).toContain(SKILL_CATALOG_NOTE_HEADER);
+    expect(wire(grok)).toContain("Draws quills. Use when asked for quills.");
+    expect(wire(grok)).toContain(join(root, ".agents", "skills", "quill", "SKILL.md"));
+
+    const followup = await planTurn(
+        servicesWith({
+            workspace,
+            openCode,
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 2 }) as ReturnType<Services["agents"]["entry"]> }),
+        }),
+        turn({ agent: "grok", conversationId: "grok-skills" }),
+        skillContext,
+    );
+    expect(wire(followup)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
+
+    const codex = await planTurn(codexServices({ workspace }), turn({ agent: "codex" }), skillContext);
+    expect(wire(codex)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
+
+    const claude = await planTurn(harnessServices({ workspace }), turn(), skillContext);
+    expect(wire(claude)).not.toContain(SKILL_CATALOG_NOTE_HEADER);
 });

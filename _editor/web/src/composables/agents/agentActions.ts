@@ -6,7 +6,9 @@ import { summonChat } from "../chat/summon";
 import { composingConversation, draftConversation, useChat } from "../chat/useChat";
 import { queryClient } from "../queryPersistence";
 import { router } from "../../router";
-import { sandboxJson } from "../sandbox/sandboxClient";
+import { refreshAcross } from "../sandbox/fleetAcross";
+import { refreshChangesAcross } from "../workspace/changesAcross";
+import { sandboxJson, sandboxJsonAt } from "../sandbox/sandboxClient";
 import { jsonBody } from "../sandbox/jsonBody";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "./conflictResolution";
 import { useAgents } from "./useAgents";
@@ -16,6 +18,24 @@ import { AGENTS, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../queryKeys";
  * review panel (useAgentChanges, which binds one agent to its diff query) and the board's drag-to-act drops,
  * which act on whichever card was dropped and own no query at all. Land and discard are refused daemon-side
  * while the agent's turn is running: the worktree is that turn's live working state. */
+
+/* WHICH SANDBOX AN AGENT IS IN, threaded through every mutation here as a trailing optional argument.
+ *
+ * `undefined` is the active one, which is what almost every call means and what every existing call site says
+ * by omission. A value is the All-sandboxes board acting on a card whose agent lives in another box, which the
+ * daemon layer already supports whole: the bearer store is keyed by sandbox id and the fetch policy takes its
+ * target explicitly (sandboxAuthFetch), so this is an address, not a new capability.
+ *
+ * EVERY MUTATION HERE CROSSES EXCEPT THE ONE THAT STARTS A TURN. Land, discard, stop and request-land are
+ * stateless calls about one agent id: the daemon does the work and answers, and nothing in this browser has to
+ * be pointed anywhere for that to be true. `askAgentToResolve` is different in kind, it sends a MESSAGE, which
+ * needs a Conversation, which is held by the chat singleton that sandboxScope resets on every switch. So it
+ * takes no reach argument and never will: the board offers the crossing instead of a reply box that would
+ * silently re-point the whole app. */
+export type AgentReach = string | undefined;
+
+const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit): Promise<T> =>
+    at === undefined ? sandboxJson<T>(path, init) : sandboxJsonAt<T>(at, path, init);
 
 // "New agent", as ONE action for every surface that offers it: the board's header button and its empty state,
 // the chat strip's "+", and the mobile strip's "+". They all mean the same thing, a fresh isolated
@@ -109,14 +129,19 @@ export const revealConversation = (conversation: Conversation): void => {
 // `force` is the user overriding the turn guard: land while the agent is mid-write, half-finished work and
 // all. It is never a default and never inferred, the daemon lets a PARKED turn (a question, a permission
 // card) land without it, so the flag reaches the wire only from a press that showed the warning first.
-export const landAgent = (id: string, mode: LandMode = `check`, span: AgentSpan = `outstanding`, force = false): Promise<LandResult> =>
-    sandboxJson<LandResult>(`/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }));
+export const landAgent = (
+    id: string,
+    mode: LandMode = `check`,
+    span: AgentSpan = `outstanding`,
+    force = false,
+    at: AgentReach = undefined,
+): Promise<LandResult> => agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }));
 
 // A collaborator's stand-in for the land they may not perform (the daemon floors `land` at maintainer): stamp
 // the ask on the agent so every maintainer's board wears it. The daemon's roster frame carries the result,
 // same delivery as every other card fact.
-export const requestLandAgent = (id: string): Promise<AgentSummary> =>
-    sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
+export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>
+    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
 
 /* THE MAIN ROAD OUT OF A LAND CONFLICT: hand it back to the agent that wrote the work.
  *
@@ -194,28 +219,49 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
 };
 
 // Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.
-export const discardAgent = async (id: string): Promise<void> => {
-    await sandboxJson(`/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
+export const discardAgent = async (id: string, at: AgentReach = undefined): Promise<void> => {
+    await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
 };
 
-// True cancel for an in-flight turn. An open, streaming tab owns the local transcript, so its own stop() runs
-// the whole path (muted "Stopped." notice → /agent/stop → abort the stream); a card whose conversation this
-// browser never opened has no tab to speak for it, so post the cancel straight to the daemon.
-export const stopAgent = async (id: string): Promise<void> => {
+/* True cancel for an in-flight turn. An open, streaming tab owns the local transcript, so its own stop() runs
+ * the whole path (muted "Stopped." notice → /agent/stop → abort the stream); a card whose conversation this
+ * browser never opened has no tab to speak for it, so post the cancel straight to the daemon.
+ *
+ * A card in ANOTHER box never takes the first branch, and the reach is what decides that rather than the
+ * absence of a tab: two sandboxes can hold the same conversation id (a workspace cloned onto a second machine,
+ * an agent resumed there), so stopping whichever tab happened to match the id would cancel a turn in the box
+ * the user is standing in. */
+export const stopAgent = async (id: string, at: AgentReach = undefined): Promise<void> => {
     const { conversations } = useChat();
-    const conversation = conversations.value.find((candidate) => candidate.conversationId === id);
+    const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
     if (conversation !== undefined && conversation.streaming.value) {
         conversation.stop();
         return;
     }
-    await sandboxJson(`/agent/stop`, jsonBody(`POST`, { conversationId: id }));
+    await agentJson(at, `/agent/stop`, jsonBody(`POST`, { conversationId: id }));
 };
 
-// After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +
-// history, invalidate all three so every surface converges. Three disjoint caches, no ordering.
-export const invalidateAgentAction = async (id: string): Promise<void> => {
+/* After a land or discard the agent's diff changed AND the landed work now shows in the MAIN review +
+ * history, invalidate all three so every surface converges. Three disjoint caches, no ordering.
+ *
+ * The two workspace families are already `.every`, the prefix that crosses sandboxes, which is exactly right
+ * here for a reason that only became true with the wider board: a land in ANOTHER box changes that box's
+ * `/work`, and the ledger reading it is filed under that box's own key. The agent's diff is the one that has
+ * to be aimed, since it is one entry belonging to one sandbox.
+ *
+ * The roster of the box that was acted on is re-read too, and only when there was one: the active sandbox's
+ * stream frames its own roster within milliseconds, while another box's is a poll that would otherwise leave a
+ * just-landed card sitting in Attention for up to its whole interval. */
+export const invalidateAgentAction = async (id: string, at: AgentReach = undefined): Promise<void> => {
+    if (at !== undefined) {
+        refreshAcross();
+        // ...and the changes ledger with it: landing into another box's /work is exactly the event that moves
+        // its uncommitted count, and that store polls slowly on purpose (changesAcross). Both re-reads are
+        // no-ops when nothing is subscribed to them.
+        refreshChangesAcross();
+    }
     await Promise.all([
-        queryClient.invalidateQueries({ queryKey: AGENTS.of(id, `diff`) }),
+        queryClient.invalidateQueries({ queryKey: at === undefined ? AGENTS.of(id, `diff`) : AGENTS.ofSandbox(at, id, `diff`) }),
         queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
         queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every }),
     ]);

@@ -4,6 +4,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../composables/agents/agentActions";
+import { refreshAcross } from "../composables/sandbox/fleetAcross";
 import { useRole } from "../composables/sandbox/useRole";
 import OriginMark from "../components/OriginMark.vue";
 import WorkflowMark from "../components/WorkflowMark.vue";
@@ -30,6 +31,7 @@ import { sessionCategory } from "../composables/sessionCategory";
 import IdentityTile from "../components/IdentityTile.vue";
 import MatchLine from "../components/MatchLine.vue";
 import SessionChip from "./SessionChip.vue";
+import { boxImageOf, boxNameOf } from "../composables/agents/fleetScope";
 import { accountBadge } from "./accountChip";
 import { providerAccounts } from "../composables/chat/providerAccounts";
 import { createInlineRename } from "../composables/inlineRename";
@@ -97,6 +99,17 @@ const meta = computed(() => agentStatusMeta(props.agent.status));
 //: read here as well as inside IdentityTile because the tooltip (the colour's legend) is this card's to say.
 const category = computed(() => sessionCategory(props.agent.title));
 const lane = computed(() => laneOf(props.agent));
+/* THE SANDBOX CHIP'S CONTENTS, or nothing at all for a card in the box the app is pointed at, which is every
+ * card on an ordinary board.
+ *
+ * Read from the roster here rather than passed in as a prop, and that is not laziness: the name and the logo
+ * belong to the sandbox, the owner can change either at any time from the hub, and a copy threaded through the
+ * board would be a copy that goes stale on the rename. The card asks the same lookup the rail's own chip asks. */
+const box = computed(() =>
+    props.agent.sandboxId === undefined
+        ? undefined
+        : { name: boxNameOf.value.get(props.agent.sandboxId) ?? `Another sandbox`, image: boxImageOf.value.get(props.agent.sandboxId) },
+);
 const reason = computed(() => attentionReason(props.agent));
 // What the live line says: the shared derivation (agentStatus.activityLine), because the rail's cards carry
 // the same line and the two surfaces must never narrate the same turn differently.
@@ -107,7 +120,17 @@ const activityText = computed(() => activityLine(props.agent));
 // gesture: this is the routine way to end an agent (nothing is lost, the branch, transcript and counters all
 // stay), so it has to be reachable by touch and by keyboard, which a drag to a zone that only exists mid-drag
 // never was.
-const archivable = computed(() => canArchive(props.agent));
+/* ARCHIVING AND RENAMING ARE THIS BOX'S ALONE, so a card from another one offers neither.
+ *
+ * Both go through the fleet store, which IS the active daemon's roster: it holds no entry for that agent, so
+ * the optimistic write would take a card off a list it was never on and the request would name an id this
+ * daemon has never heard of. They are absent rather than disabled, and the crossing that reaches them is on
+ * the review page one press away (AgentDetail's "Open in <sandbox>").
+ *
+ * Land, discard and stop are not on this list, and that difference is the whole design: those are addressed by
+ * agent id and the daemon on the other end does the work, so they cross intact. */
+const localOnly = computed(() => props.agent.sandboxId === undefined);
+const archivable = computed(() => localOnly.value && canArchive(props.agent));
 /* THE EXIT FOR A CARD THAT IS NOT AN AGENT: a draft, a send the daemon refused, a turn it has not filed yet
  * (`unregistered`). Every other way off this board addresses an id through the daemon, which has never heard of
  * this one: archive, discard, land and every drop are therefore refused, and what that left behind was a card
@@ -186,8 +209,8 @@ const requestLand = async (): Promise<void> => {
     }
     requesting.value = true;
     try {
-        await requestLandAgent(props.agent.id);
-        await refreshAgents();
+        await requestLandAgent(props.agent.id, props.agent.sandboxId);
+        await (props.agent.sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
     } catch (caught) {
         agentsNotice.value = errorMessage(caught, `Couldn't send the land request.`);
     } finally {
@@ -411,6 +434,7 @@ const grab = (event: PointerEvent): void => {
                     }}</span>
                 </span>
                 <button
+                    v-if="localOnly"
                     type="button"
                     aria-label="Rename agent"
                     v-tooltip.top="'Rename'"
@@ -537,10 +561,26 @@ const grab = (event: PointerEvent): void => {
                  wins between two plain utilities is Tailwind's emit order, not the order they are written. A
                  variant (`group-hover:`) always sorts after its unvaried counterpart, so that pair is safe. -->
             <div
-                v-if="model !== undefined || agent.branch !== undefined || account !== undefined"
+                v-if="box !== undefined || model !== undefined || agent.branch !== undefined || account !== undefined"
                 class="min-w-0 items-center gap-2 text-2xs text-subtle"
-                :class="model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
+                :class="box !== undefined || model !== undefined || mobile ? 'flex' : 'hidden group-hover:flex'"
             >
+                <!-- WHICH SANDBOX THIS AGENT IS IN, and only ever when that is not the one the reader is in.
+                     It leads the line and it does NOT hide behind a hover, unlike the session name and the
+                     account beside it: those are facts you go looking for, and this one changes what every
+                     other number on the card is about. A board mixing four machines' work in one Attention lane
+                     is only readable if each card says whose work it is without being asked.
+                     The box's own logo when it has one, so the chip matches the rail's sandbox tile and the
+                     switcher row it came from, and the same monogram fallback when it does not. -->
+                <span
+                    v-if="box !== undefined"
+                    class="flex min-w-0 shrink-0 items-center gap-1 truncate rounded bg-overlay px-1 py-px text-muted"
+                    v-tooltip.top="`In ${box.name}, not in the sandbox you're in`"
+                >
+                    <img v-if="box.image !== undefined" :src="box.image" alt="" class="h-3 w-3 shrink-0 rounded-sm object-cover" />
+                    <Icon v-else name="server" class="shrink-0 text-2xs" />
+                    <span class="truncate">{{ box.name }}</span>
+                </span>
                 <span v-if="model !== undefined" class="truncate">{{ model }}</span>
                 <!-- WHERE IT IS RUNNING, said only when that is somewhere other than here (runners/). A fleet
                      spreads its own work across machines without anybody choosing per agent, so the card is

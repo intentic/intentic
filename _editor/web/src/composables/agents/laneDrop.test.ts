@@ -177,3 +177,61 @@ describe("dropActionFor", () => {
         expect(new Set(labels).size).toBe(labels.length);
     });
 });
+
+/* A CARD FROM ANOTHER SANDBOX. Three of the five actions are calls addressed by agent id and cross intact; the
+ * two that are not need something this browser holds for one daemon at a time, and the refusal has to SAY that
+ * rather than springing the card back with a sentence about the lane. */
+describe("a card whose agent is in another sandbox", () => {
+    const none = { plan: false, question: false, permission: false, service: false, capability: false, conflict: false };
+    const elsewhere = (over: Partial<FleetAgent>): FleetAgent => ({
+        id: `a1`,
+        status: `idle`,
+        provider: `claude`,
+        harness: `claude-code`,
+        branch: `agent/a1`,
+        updatedAt: 1,
+        attention: none,
+        open: false,
+        unread: false,
+        unsent: false,
+        sandboxId: `sbx-other`,
+        ...over,
+    });
+    const watch = { id: `watch-1`, note: `CI run 316`, intervalSeconds: 60, deadlineAt: 2 };
+
+    it("still stops its running turn: a cancel is addressed by id", () => {
+        expect(dropActionFor(elsewhere({ status: `running` }), `finished`)).toBe(`stop`);
+    });
+
+    it("still lands an errored turn's work into the workspace it belongs to", () => {
+        expect(dropActionFor(elsewhere({ status: `error` }), `finished`)).toBe(`land`);
+    });
+
+    it("still discards it: the worktree is the other daemon's to tear down", () => {
+        expect(dropActionFor(elsewhere({}), `discard`)).toBe(`discard`);
+    });
+
+    // Asking the agent to rebase SENDS A TURN, which needs the conversation the chat singleton holds for the
+    // active daemon alone. The same card in this box would resolve.
+    it("refuses to ask the agent to resolve, and says the sandbox is why", () => {
+        const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
+        expect(dropActionFor({ ...conflicted, sandboxId: undefined }, `finished`)).toBe(`resolve`);
+        expect(dropActionFor(conflicted, `finished`)).toBeUndefined();
+        expect(dropRejection(conflicted, `finished`)).toBe(`Asking the agent to resolve needs its own sandbox`);
+    });
+
+    // Ending a watch writes through the fleet store, which IS the active daemon's roster and has no entry for
+    // this agent: the optimistic write would take a card off a list it was never on.
+    it("refuses to end a watch, and says the sandbox is why", () => {
+        const watching = elsewhere({ status: `idle`, watches: [watch] });
+        expect(dropActionFor({ ...watching, sandboxId: undefined }, `finished`)).toBe(`unwatch`);
+        expect(dropActionFor(watching, `finished`)).toBeUndefined();
+        expect(dropRejection(watching, `finished`)).toBe(`Ending a watch needs the agent's own sandbox`);
+    });
+
+    // The box is only ever the reason when the drop would OTHERWISE have worked: a card with nothing to offer
+    // this gesture keeps the refusal that is actually true of it.
+    it("keeps the ordinary refusal when the box was never the obstacle", () => {
+        expect(dropRejection(elsewhere({ status: `idle` }), `active`)).toBe(`Send a message to start a turn`);
+    });
+});

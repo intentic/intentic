@@ -23,7 +23,7 @@ import DiffView from "./DiffView.vue";
  *             there is to say, so the bar says them and there is nothing underneath it.
  *   TEXT.     The ordinary case, both whole sides.
  */
-const { path, before, after, binary, partial, beforeRaw, afterRaw } = defineProps<{
+const { path, before, after, binary, partial, beforeRaw, afterRaw, at } = defineProps<{
     path: string;
     before?: string;
     after?: string;
@@ -33,6 +33,9 @@ const { path, before, after, binary, partial, beforeRaw, afterRaw } = defineProp
     // Where the two sides' BYTES live, for a diff the response could only flag as binary (daemon /diff/raw).
     beforeRaw?: string;
     afterRaw?: string;
+    // Which sandbox those two URLs are on, absent for the active one. Only the binary path uses it, since it is
+    // the only side of this pane that goes back to a daemon: the text sides arrived with the diff.
+    at?: string;
 }>();
 // The pane's own reading of what changed, code-only, for the toolbar above it. Forwarded from whichever viewer
 // is showing: a partial diff answers `undefined` there, because what it holds is an excerpt and counting it
@@ -76,7 +79,7 @@ const note = computed(() => {
 </script>
 
 <template>
-    <BinaryDiffView v-if="rendersAsBytes(path, binary)" :path="path" :before="beforeRaw" :after="afterRaw" />
+    <BinaryDiffView v-if="rendersAsBytes(path, binary)" :path="path" :before="beforeRaw" :after="afterRaw" :at="at" />
     <div v-else-if="partial !== undefined" class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5 text-2xs text-muted">
             <Icon :name="patched ? `compress` : `info-circle`" class="shrink-0 text-[0.7rem]" />

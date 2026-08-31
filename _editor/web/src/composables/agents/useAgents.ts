@@ -295,6 +295,18 @@ const markAllSeen = (): void => {
 // first turn registers the conversation.
 export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly status: AgentSummary["status"] | ClientAgentStatus;
+    /* WHICH SANDBOX THIS CARD'S AGENT LIVES IN, set only when that is NOT the one the app is pointed at.
+     *
+     * Absent is the ordinary case and the ordinary meaning: this store's own fleet, reachable through the
+     * active daemon, addressable by every action on the board. A card that carries an id came from another
+     * box's roster (composables/sandbox/fleetAcross) and is on screen because the reader asked for the
+     * All-sandboxes scope, so it wears that box's name and its actions are addressed by id instead.
+     *
+     * Optional rather than always-set, deliberately. Every existing reader of a FleetAgent is about the active
+     * sandbox and stays correct by ignoring this field, and a card with no id can be handed to the chat, the
+     * router and the mutation helpers exactly as before. `undefined` means "here", which is the only default
+     * that leaves the common path untouched. */
+    readonly sandboxId?: string;
     readonly open: boolean;
     readonly unread: boolean;
     /* The user has words in this chat that have not gone out (Conversation.unsent). A fact about an OPEN TAB in
@@ -620,9 +632,16 @@ export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "arc
  * distinguishes, it is the SAME order next frame. */
 const byId = (a: FleetAgent, b: FleetAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
+/* THE BOARD'S THREE LANES OUT OF A FLAT LIST, as a function of the list rather than of this store's own fleet.
+ *
+ * Taken out of the computed below so that the ALL-SANDBOXES board can put the same rule over a wider set: its
+ * cards are this sandbox's fleet plus the summaries read from every other box (composables/sandbox/fleetAcross),
+ * and the whole point of that board is that a card sorts by what it needs, never by which machine it is on. A
+ * second copy of these comparators over there would be a board whose columns order differently depending on
+ * which scope you were in, which is the one thing a scope control must not change. */
+export const laneGroups = (agents: readonly FleetAgent[]): Record<FleetLane, FleetAgent[]> => {
     const grouped: Record<FleetLane, FleetAgent[]> = { attention: [], active: [], finished: [] };
-    for (const agent of fleet.value) {
+    for (const agent of agents) {
         grouped[laneOf(agent)].push(agent);
     }
     // Fresh drafts lead the active lane (they're what the user just created). Below them, order by startedAt,
@@ -652,7 +671,9 @@ const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
             byId(a, b),
     );
     return grouped;
-});
+};
+
+const lanes = computed<Record<FleetLane, FleetAgent[]>>(() => laneGroups(fleet.value));
 
 /* Explicit registry pull, the reachable seam and pull-to-refresh use it; steady-state updates ride /events.
  *

@@ -1,5 +1,5 @@
 import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vue-query";
-import { computed, toValue } from "vue";
+import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { queryClient } from "../queryPersistence";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../perf";
@@ -10,7 +10,16 @@ import { trackPerf } from "../perf";
 
 const { reachable } = useSandbox();
 
-export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
+/* WHEN THE READ IS AIMED AT ANOTHER SANDBOX, the active daemon's reachability is not the question, and gating
+ * on it is actively wrong: the review of an agent in box B would refuse to load because box A's stream happened
+ * to be down, which is precisely the coupling the cross-sandbox surfaces exist to remove. There is no liveness
+ * probe for a box this browser is not pointed at (there is one stream and it belongs to the active sandbox), so
+ * such a read is simply issued: it answers, or it fails and the surface says which box did not answer.
+ *
+ * A ref rather than a boolean, because the aim can change under a mounted panel (the review's agent id and its
+ * box both come from the route).
+ */
+export function useSandboxQuery<T>(options: UseQueryOptions<T>, aimedAt?: MaybeRefOrGetter<string | undefined>) {
     const resolved = toValue(options);
     /* Every daemon-backed read is timed HERE rather than at each call site, so no query can be added without
      * one, the fan-out that makes the review panel expensive is invisible precisely when someone adds the
@@ -35,7 +44,11 @@ export function useSandboxQuery<T>(options: UseQueryOptions<T>) {
             // Reachability is an ADDITIONAL gate, not a replacement: a caller may have its own reason not to run
             // yet (an id it doesn't have, a subject that isn't in scope on this screen), and overwriting that with
             // `reachable` alone turned every such caller into a request for a resource it knew wasn't there.
-            enabled: computed(() => toValue(reachable) && (resolved.enabled === undefined || toValue(resolved.enabled) !== false)),
+            enabled: computed(
+                () =>
+                    (toValue(aimedAt) !== undefined || toValue(reachable)) &&
+                    (resolved.enabled === undefined || toValue(resolved.enabled) !== false),
+            ),
         },
         /* THE APP'S ONE CLIENT, HANDED OVER RATHER THAN INJECTED. Left to itself vue-query resolves it with
          * `inject()`, which needs Vue's injection context, and a daemon read is not always reached from a

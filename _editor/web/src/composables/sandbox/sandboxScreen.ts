@@ -36,6 +36,22 @@ const parseScreen = (raw: string): string | undefined => (raw.startsWith(`/`) ? 
 
 const { activeSandboxId } = useSandbox();
 
+/* AIM THE LANDING BEFORE THE SWITCH, for a crossing that is going somewhere specific.
+ *
+ * The rule above is that a switch lands on whatever that sandbox was last showing, which is right for every
+ * switch made from the switcher: you are going to that box, not to anything in particular in it. It is wrong
+ * for the one crossing that has a destination, "open this agent in the box it lives in", which the
+ * All-sandboxes board offers on a card whose agent it can read but not converse with. Left to the rule, that
+ * press would select the box and then land on whatever screen it was last left on, which is the detour the
+ * rule exists to prevent, arriving from the one direction where the caller knew the answer.
+ *
+ * Written as that sandbox's remembered screen rather than pushed after the switch, because the landing watch
+ * `replace`s at `flush: post` and would cancel a navigation started beside it. Recording it is the supported
+ * way to say where a switch ends up, and it is the same slot a visit would have written anyway. */
+export const landOnAfterSwitch = (sandboxId: string, path: string): void => {
+    writeWindowState(screenKey(sandboxId), path);
+};
+
 // Recorded on arrival, under whichever sandbox was active when the navigation landed, so the outgoing
 // sandbox's screen is already on file by the time a switch reads it back, and deep links and back/forward are
 // covered by the same one rule. A FAILED navigation is a screen nobody reached: recording it would land the

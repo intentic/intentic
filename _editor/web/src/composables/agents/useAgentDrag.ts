@@ -1,6 +1,8 @@
 import { computed, ref } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, stopAgent } from "./agentActions";
+import { refreshAcross } from "../sandbox/fleetAcross";
+import { otherFleet } from "./fleetScope";
 import { unregistered } from "./agentStatus";
 import { dropActionFor, type DropAction, type DropTarget, type PendingAction } from "./laneDrop";
 import { useAgents, type FleetAgent } from "./useAgents";
@@ -24,18 +26,33 @@ const DRAG_THRESHOLD_PX = 5;
 
 const { fleet, refresh, notice, stopWatching } = useAgents();
 
+/* WHICH CARD IS IN FLIGHT, as an id AND the box it is in.
+ *
+ * An id alone stopped being an identity the day the board could show two sandboxes at once: agent ids are
+ * minted per daemon, so a workspace cloned onto a second machine, or the same conversation resumed there, puts
+ * the same id on two cards. Resolving by id would then pick whichever half of the fleet was searched first,
+ * and a drop meant for the laptop's card would stop, land or discard the desk's. */
 const draggedId = ref<string | undefined>(undefined);
+const draggedBox = ref<string | undefined>(undefined);
 const dragging = ref(false);
 const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
 // The one action this board is running, and which card it is running against, the action and not just the id
 // because the card's own buttons report their progress in place (see PendingAction).
-const busy = ref<{ id: string; action: PendingAction } | undefined>(undefined);
+const busy = ref<{ id: string; at?: string; action: PendingAction } | undefined>(undefined);
 const ghostWidth = ref(0);
 
-// Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
-// retract its "Stop the turn" drop instead of letting the user cancel a turn that already finished.
-const dragged = computed<FleetAgent | undefined>(() => fleet.value.find((agent) => agent.id === draggedId.value));
+/* Resolved live against the roster rather than snapshotted at grab time: a turn that ends mid-drag must
+ * retract its "Stop the turn" drop instead of letting the user cancel a turn that already finished.
+ *
+ * Out of the roster the card CAME from, never out of whichever one answers to its id first: see draggedBox. A
+ * card from another sandbox that resolved to nothing here would have every drop on it silently refused with no
+ * reason to show, and one that resolved to a local namesake would be worse than that. */
+const dragged = computed<FleetAgent | undefined>(() =>
+    draggedBox.value === undefined
+        ? fleet.value.find((agent) => agent.id === draggedId.value)
+        : otherFleet.value.find((agent) => agent.id === draggedId.value && agent.sandboxId === draggedBox.value),
+);
 
 const action = computed<DropAction | undefined>(() =>
     dragged.value === undefined || over.value === undefined ? undefined : dropActionFor(dragged.value, over.value),
@@ -76,51 +93,71 @@ const cancel = (): void => {
     listeners?.abort();
     listeners = undefined;
     draggedId.value = undefined;
+    draggedBox.value = undefined;
     dragging.value = false;
     over.value = undefined;
 };
 
+// One runner for both spans, because a re-land IS a land in every way the board cares about, same busy flag,
+// same refusal notice, same refresh. What differs is the rung it measures from, and that is one argument rather
+// than a parallel path free to drift on the other three.
+const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
+    const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`, false, at);
+    await invalidateAgentAction(id, at);
+    if (!result.landed) {
+        // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves instead),
+        // either way a first refusal with a report to read, not the repeat of one the user has already seen. A
+        // re-land reaches it when the user's own tree has moved over the paths it is putting back, which is
+        // the same report and the same read.
+        notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
+    }
+};
+
+const runAction = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
+    if (chosen === `stop`) {
+        await stopAgent(id, at);
+        return;
+    }
+    if (chosen === `unwatch`) {
+        // The store's own optimistic write moves the card out of Active the moment this is pressed
+        // (useAgents.stopWatching), so the drop needs nothing here beyond the call: no report to read, and
+        // nothing that can half-succeed. Local by construction: the drop is refused for a card in another box
+        // (laneDrop's NEEDS_THIS_BOX), because this store is the active daemon's roster.
+        await stopWatching(id);
+        return;
+    }
+    if (chosen === `land` || chosen === `reland`) {
+        await runLand(id, chosen, at);
+        return;
+    }
+    if (chosen === `resolve`) {
+        // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card. Its own
+        // frames are the progress report, so a send that WENT says nothing here. One that didn't has to: the
+        // board is armed off `status: "conflict"` alone, so it cannot know until the report is read that this
+        // particular conflict is the user's own to clear (see askAgentToResolve).
+        const ask = await askAgentToResolve(id);
+        if (!ask.sent) {
+            notice.value = ask.why;
+        }
+        return;
+    }
+    await discardAgent(id, at);
+    await invalidateAgentAction(id, at);
+};
+
 // The card doesn't move lane here, the roster frame the action provokes does that. Until it arrives the card
 // shows as busy in place, so a slow daemon reads as "working", never as a card teleporting back.
-const perform = async (id: string, chosen: PendingAction): Promise<void> => {
-    busy.value = { id, action: chosen };
+const perform = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
+    busy.value = { id, at, action: chosen };
     notice.value = undefined;
     try {
-        if (chosen === `stop`) {
-            await stopAgent(id);
-        } else if (chosen === `unwatch`) {
-            // The store's own optimistic write moves the card out of Active the moment this is pressed
-            // (useAgents.stopWatching), so the drop needs nothing here beyond the call: no report to read, and
-            // nothing that can half-succeed.
-            await stopWatching(id);
-        } else if (chosen === `land` || chosen === `reland`) {
-            // One runner for both spans, because a re-land IS a land in every way the board cares about, same
-            // busy flag, same refusal notice, same refresh. What differs is the rung it measures from, and
-            // that is one argument rather than a parallel path free to drift on the other three.
-            const result = await landAgent(id, `check`, chosen === `reland` ? `cumulative` : `outstanding`);
-            await invalidateAgentAction(id);
-            if (!result.landed) {
-                // Reachable from an ERRORED card's drop or a READY card's button (a conflicted one resolves
-                // instead), either way a first refusal with a report to read, not the repeat of one the user
-                // has already seen. A re-land reaches it when the user's own tree has moved over the paths it
-                // is putting back, which is the same report and the same read.
-                notice.value = `Landing hit a conflict: open the agent to see what blocked it.`;
-            }
-        } else if (chosen === `resolve`) {
-            // The turn does the rest: it rebases, resolves, and the auto-land at completion moves the card.
-            // Its own frames are the progress report, so a send that WENT says nothing here. One that didn't
-            // has to: the board is armed off `status: "conflict"` alone, so it cannot know until the report is
-            // read that this particular conflict is the user's own to clear (see askAgentToResolve).
-            const ask = await askAgentToResolve(id);
-            if (!ask.sent) {
-                notice.value = ask.why;
-            }
-        } else {
-            await discardAgent(id);
-            await invalidateAgentAction(id);
-        }
-        // The action's own roster frame is already on its way; this just closes the gap on a quiet stream.
-        await refresh();
+        await runAction(id, chosen, at);
+        /* The action's own roster frame is already on its way; this just closes the gap on a quiet stream.
+         *
+         * Another box has no stream to close a gap on, so its re-read is the ONLY thing that moves the card:
+         * without it a landed card would sit in Attention until the poll's next tick, which is the one place a
+         * press on the wider board could read as a press that did nothing. */
+        await (at === undefined ? refresh() : Promise.resolve(refreshAcross()));
     } catch (caught) {
         notice.value = errorMessage(caught, `That didn't work.`);
     } finally {
@@ -169,18 +206,18 @@ const cancelResolve = (): void => {
  * with the action, under a tooltip that states the mechanics, IS the answer that dialog exists to collect,
  * the same reasoning the review panel's own button already rests on. Asking twice for the same intent teaches
  * people to click through dialogs. */
-const resolveNow = (id: string): Promise<void> => perform(id, `resolve`);
+const resolveNow = (id: string, at?: string): Promise<void> => perform(id, `resolve`, at);
 
 // The ready card's "Land now", the same runner for the same reasons resolveNow shares it (one busy flag, one
 // notice strip, one refresh). No dialog: landing is reversible in the git sense (the branch keeps everything)
 // and the button states its own mechanics, exactly like the review panel's copy of it.
-const landNow = (id: string): Promise<void> => perform(id, `land`);
+const landNow = (id: string, at?: string): Promise<void> => perform(id, `land`, at);
 
 // The way back for a card whose landed work was discarded from the workspace, the same runner again, one
 // argument apart (see perform). No dialog, for the reason the two above have none and one of their own: this
 // press UNDOES a destruction rather than causing one, and the only thing it can put in the tree is work the
 // user has already reviewed once.
-const relandNow = (id: string): Promise<void> => perform(id, `reland`);
+const relandNow = (id: string, at?: string): Promise<void> => perform(id, `reland`, at);
 
 /* THE WAY OFF A WATCH, from the card's own readout, and the fourth press to share `perform` for the reasons
  * the three above give: one busy flag, one notice strip, one refresh, and a refusal reported the same way
@@ -191,7 +228,7 @@ const relandNow = (id: string): Promise<void> => perform(id, `reland`);
  * only thing on it that could not be acted on. No dialog, and this is the clearest case on the board for
  * having none: the card names the condition it is ending, the wait is the only thing lost, and re-arming it is
  * a sentence to the agent. */
-const unwatchNow = (id: string): Promise<void> => perform(id, `unwatch`);
+const unwatchNow = (id: string, at?: string): Promise<void> => perform(id, `unwatch`, at);
 
 const onMove = (event: PointerEvent): void => {
     pointer.value = { x: event.clientX, y: event.clientY };
@@ -209,17 +246,19 @@ const onMove = (event: PointerEvent): void => {
 
 const onUp = (): void => {
     const id = draggedId.value;
+    const at = draggedBox.value;
     const chosen = action.value;
     cancel();
     if (id === undefined || chosen === undefined) {
         return;
     }
-    // The one drop that starts a turn stops for an answer first; the rest go straight through.
+    // The one drop that starts a turn stops for an answer first; the rest go straight through. `resolve` is
+    // refused outright for a card in another box (laneDrop), so the dialog only ever holds a local id.
     if (chosen === `resolve`) {
         pendingResolve.value = id;
         return;
     }
-    void perform(id, chosen);
+    void perform(id, chosen, at);
 };
 
 const onKey = (event: KeyboardEvent): void => {
@@ -249,6 +288,7 @@ const begin = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void 
     pointer.value = origin;
     ghostWidth.value = rect.width;
     draggedId.value = agent.id;
+    draggedBox.value = agent.sandboxId;
     dragging.value = false;
     notice.value = undefined;
     listeners = new AbortController();
@@ -264,6 +304,7 @@ export function useAgentDrag() {
         dragged,
         dragging,
         draggedId,
+        draggedBox,
         over,
         action,
         accepts,

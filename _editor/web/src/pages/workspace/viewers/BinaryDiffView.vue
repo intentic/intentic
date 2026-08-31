@@ -38,7 +38,10 @@ import { compareSides, type ImageSize, imageSize, type SidesComparison } from ".
  * Only images render inline. A font, an archive, a .wasm has no visual form to compare: for those the pane
  * states what it is and offers the bytes, which is the honest end of the road rather than a placeholder. */
 
-const { path, before, after } = defineProps<{ path: string; before?: string; after?: string }>();
+// `at` names the sandbox the bytes are on, absent for the active one. Set only by a review of an agent in
+// another box: the daemon route is the same, the address is not, and fetching a remote agent's screenshot from
+// the local daemon would either 404 or, worse, answer with a different file at the same path.
+const { path, before, after, at } = defineProps<{ path: string; before?: string; after?: string; at?: string }>();
 
 const { mobile } = useDevice();
 const { diffLayout } = useLayout();
@@ -95,7 +98,7 @@ watch(
             if (source === undefined) {
                 continue;
             }
-            void sandboxBlob(source).then(
+            void sandboxBlob(source, undefined, at).then(
                 (blob) => {
                     if (token !== seq) {
                         return;

@@ -48,9 +48,21 @@ const props = defineProps<{
     busy: boolean;
     // The user has already handed this conflict back to the agent (useAgentChanges.asked).
     asked: boolean;
+    /* THE AGENT IS IN ANOTHER SANDBOX, named. Two of the three rungs below stop being offerable when it is set,
+     * and for the two different reasons the whole cross-sandbox design turns on:
+     *
+     *   · "Have the agent resolve it" SENDS A TURN, which needs a conversation, which the chat singleton holds
+     *     for one daemon at a time.
+     *   · "Commit or stash yours" opens the Changes panel over THIS box's /work, and the uncommitted edits
+     *     blocking that land are in the other one.
+     *
+     * The merge rung stays, and that is not an oversight: it is a land, addressed by agent id, and it writes
+     * into the workspace the conflict is actually about. Both of the others collapse into the crossing, which
+     * is the honest single answer to "this needs you over there". */
+    box?: string;
 }>();
 
-const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: []; select: [Blocker] }>();
+const emit = defineEmits<{ resolve: []; merge: []; commit: []; stop: []; chat: []; cross: []; select: [Blocker] }>();
 
 const { mobile } = useDevice();
 
@@ -140,10 +152,33 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
         </div>
 
         <template v-else>
+            <!-- THE TWO RUNGS THAT NEED TO HAPPEN IN THE AGENT'S OWN BOX, as one press when it is not this one.
+                 Asking the agent needs its conversation and committing your own edits needs its workspace, and
+                 both are one switch away, so the report says so once instead of offering two buttons that would
+                 each address the wrong sandbox. -->
+            <div v-if="box !== undefined && (mine.length > 0 || theirs.length > 0)" :class="ROW">
+                <Button size="small" :class="INLINE" @click="emit('cross')">
+                    <Icon name="arrow-right" />Open in {{ box }}
+                </Button>
+                <!-- The trailing promise is gated on `mergeable`, and it has to be: a three-way apply goes
+                     through the index, so git refuses it outright while any path is held by uncommitted work,
+                     which is exactly the case that puts a `workspace` blocker in this report. Saying "landing
+                     with conflict markers still works from here" over a block that does not offer that row is
+                     the one sentence this design keeps catching elsewhere: a claim the surface cannot honour. -->
+                <span class="text-2xs text-subtle">
+                    <template v-if="mine.length > 0">Asking the agent to rebase needs its conversation</template
+                    ><template v-if="mine.length > 0 && theirs.length > 0">, and </template
+                    ><template v-if="theirs.length > 0"
+                        >the {{ theirs.length === 1 ? "file" : `${theirs.length} files` }} with your own edits
+                        {{ theirs.length === 1 ? "is" : "are" }} in that workspace</template
+                    >.<template v-if="mergeable"> Landing with conflict markers still works from here.</template>
+                </span>
+            </div>
+
             <!-- First, the one action that costs the user nothing: the agent redoing its own merge in its own
                  worktree. `mine` is empty only when every blocker is the user's own uncommitted work, which no
                  rebase can reach: then the primary slot belongs to them instead. -->
-            <div v-if="mine.length > 0" :class="ROW">
+            <div v-if="box === undefined && mine.length > 0" :class="ROW">
                 <Button
                     size="small"
                     :class="INLINE"
@@ -163,7 +198,7 @@ const ROW = `mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1`;
 
             <!-- The user's own half, which nothing else here can do for them. Primary when it is the ONLY
                  thing standing in the way, so the block always ends on somebody's next move. -->
-            <div v-if="theirs.length > 0" :class="ROW">
+            <div v-if="box === undefined && theirs.length > 0" :class="ROW">
                 <Button size="small" :severity="mine.length === 0 ? undefined : `secondary`" :class="INLINE" @click="emit('commit')">
                     <Icon name="file-edit" />Commit or stash yours
                 </Button>

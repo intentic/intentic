@@ -39,6 +39,7 @@ import type { OpenMode } from "./workspaceTabs";
 import { useChangeGrouping } from "../../composables/workspace/useChangeGrouping";
 import { useModules } from "../../composables/workspace/useModules";
 import ChangeRowName from "../../components/ChangeRowName.vue";
+import OtherSandboxChanges from "./OtherSandboxChanges.vue";
 import ModuleLabel from "../../components/ModuleLabel.vue";
 
 /* The Changes review: a mode of the workspace's ONE left sidebar (Workspace.vue owns the aside, the resize
@@ -1918,6 +1919,12 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </p>
                 </div>
             </div>
+
+            <!-- WHAT THE OTHER SANDBOXES ARE HOLDING, folded, at the foot of the list. Deliberately below every
+                 repo of THIS workspace and never mixed into them: the panel above is a review of files you can
+                 stage, and that one is a ledger of exposure you cannot, so running the two together would put
+                 rows that answer a click beside rows that cannot. See the component for the rest. -->
+            <OtherSandboxChanges />
         </div>
 
         <!-- The destructive confirm, in the same modal every other irreversible git action in this app uses.

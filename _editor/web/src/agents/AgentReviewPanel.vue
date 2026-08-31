@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { FileDiffResponse } from "@intentic-app/api-contract";
-import { ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
+import { Button, ChangeStatusMark, ui, explorerColorClass, iconForEntry, Notice, SegmentedControl, useDevice, useExplorerStyle } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../components/ReviewStat.vue";
 import { sumCounts, useCodeStats, type CodeCount } from "../composables/workspace/useCodeStats";
 import { stopAgent } from "../composables/agents/agentActions";
+import { boxNameOf, openInSandbox } from "../composables/agents/fleetScope";
 import { type Blocker, REASON_COPY } from "../composables/agents/conflictResolution";
 import {
     AGENT_FILE_DIFF_OPTIONS,
@@ -70,7 +71,7 @@ import { basename } from "@intentic/ui/path";
  * waits for any live turn, parked or not. The merge is a land: it only reads the agent's checkout, so it waits
  * only while the agent is actually writing (see agents.routes.ts landable). */
 
-const { agentId, changes } = defineProps<{
+const { agentId, at, changes } = defineProps<{
     agentId: string;
     // The review's state, created and owned by AgentDetail: see the note there. This panel reads it and fires
     // the conflict ladder's own actions through it; Land, archive, discard and hold fire from the page header.
@@ -79,6 +80,13 @@ const { agentId, changes } = defineProps<{
     streaming: boolean;
     // The narrow half: the agent is mid-write, so a land would catch it half-done. What the merge offer waits on.
     writing: boolean;
+    /* WHICH SANDBOX THIS AGENT'S WORKTREE IS ON, absent for the one the app is pointed at, which is every
+     * review but the cross-sandbox board's. It reaches the per-file diff read and the code-stat key below; the
+     * list, the conflict report and the mutations all come through `changes`, which the page already aimed.
+     *
+     * The panel is otherwise unchanged by it, and that is the point: a review is a review, the diff renders
+     * the same way, the keyboard pass works the same way, and what differs is one address. */
+    at?: string;
 }>();
 // "Watch it work": the conflict block's link to the turn it just started. On desktop the conversation is
 // already on screen in the docked chat, so this is a mobile affair: only there is the chat a mode this view
@@ -172,7 +180,17 @@ const filtered = computed<readonly AgentReviewFile[]>(() => {
  * The background reader has normally settled every row of this review before the page opens; a row that arrives
  * ahead of it says "counting" for a moment rather than showing a number that would then change. */
 const { countOf } = useCodeStats();
-const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path));
+const codeOf = (file: AgentReviewFile): CodeCount => countOf(agentStatKey(agentId, file.repo, file.change.path, at));
+
+// The box's name for the conflict report's crossing row, and the crossing itself. Read here rather than passed
+// down from the page: the panel already holds `at`, and a name threaded through two components is a name that
+// goes stale the day somebody renames a sandbox.
+const remoteName = computed(() => (at === undefined ? undefined : boxNameOf.value.get(at)));
+const cross = (): void => {
+    if (at !== undefined) {
+        openInSandbox(at, agentId);
+    }
+};
 
 /* What a heading says about the rows under it: at BOTH scopes, because both fold. A collapsed heading is the
  * only thing left of its rows, so it has to carry what the rows would have said: how big the change is, and
@@ -443,12 +461,15 @@ onBeforeUnmount(() => window.removeEventListener(`keydown`, onKey));
  * that refreshes the file list (invalidateAgentAction, after a land or discard) drops the per-file diffs with
  * it. That key is also what makes arrowing through the list safe: it outruns the network, and a key change
  * already means a slow early file can't land on top of the one now selected. */
-const { query: diffQuery, error: diffError } = useSandboxQuery({
-    queryKey: computed(() => agentFileDiffKey(agentId, selected.value?.repo ?? ``, selected.value?.change.path ?? ``)),
-    queryFn: () => readAgentFileDiff(agentId, selected.value!.repo, selected.value!.change.path),
-    enabled: computed(() => selected.value !== undefined),
-    ...AGENT_FILE_DIFF_OPTIONS,
-});
+const { query: diffQuery, error: diffError } = useSandboxQuery(
+    {
+        queryKey: computed(() => agentFileDiffKey(agentId, selected.value?.repo ?? ``, selected.value?.change.path ?? ``, at)),
+        queryFn: () => readAgentFileDiff(agentId, selected.value!.repo, selected.value!.change.path, at),
+        enabled: computed(() => selected.value !== undefined),
+        ...AGENT_FILE_DIFF_OPTIONS,
+    },
+    () => at,
+);
 const diff = computed(() => diffQuery.data.value);
 const diffLoading = diffQuery.isFetching;
 // Identity of what the viewer is showing. Monaco is uncontrolled (it owns its models), so a new file, or the
@@ -598,10 +619,12 @@ const endResize = (event: PointerEvent): void => {
             :writing="writing"
             :busy="changes.actionBusy.value"
             :asked="changes.asked.value"
+            :box="remoteName"
             @resolve="changes.askResolve()"
             @merge="changes.land('merge')"
             @commit="openChanges"
-            @stop="stopAgent(agentId)"
+            @stop="stopAgent(agentId, at)"
+            @cross="cross"
             @chat="emit('chat')"
             @select="jumpTo"
         />
@@ -609,10 +632,21 @@ const endResize = (event: PointerEvent): void => {
         <p v-if="changes.loading.value && changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">Loading the agent's diff…</p>
         <div v-else-if="changes.count.value === 0" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
             <Icon name="file-edit" class="text-2xl text-subtle" />
-            <p class="max-w-xs text-2xs text-muted">
+            <!-- "Ask it in the chat" is the right next step only where there IS a chat for this agent. On a
+                 review of one in another sandbox there is none on screen and there cannot be (its conversation
+                 lives on that daemon), so the sentence names the crossing instead of pointing at a panel that
+                 is showing a different conversation entirely. -->
+            <p v-if="remoteName !== undefined" class="max-w-xs text-2xs text-muted">
+                This agent hasn't changed any files. Its conversation is in {{ remoteName }}: open it there to ask for something, and whatever it
+                writes shows up here.
+            </p>
+            <p v-else class="max-w-xs text-2xs text-muted">
                 This agent hasn't changed any files. Ask it for something in the chat: its work shows up here, file by file, to review before it
                 lands.
             </p>
+            <Button v-if="remoteName !== undefined" size="small" severity="secondary" class="mt-1" @click="cross">
+                <Icon name="arrow-right" />Open in {{ remoteName }}
+            </Button>
         </div>
 
         <!-- List | diff. On a phone the two are the same real estate: the list IS the view until a file is
@@ -890,8 +924,12 @@ const endResize = (event: PointerEvent): void => {
                             <button type="button" :class="ICON_BUTTON" @click="move(1)" v-tooltip.bottom="'Next file (j)'" aria-label="Next file">
                                 <Icon name="chevron-down" class="text-2xs" />
                             </button>
+                            <!-- Absent for an agent in another sandbox: "the workspace editor" is THIS box's
+                                 /work, and a tab opened there would carry the other box's paths over a tree
+                                 that has never held them. The review itself is the whole surface in that case,
+                                 which is what the page's "Open in <sandbox>" is for. -->
                             <button
-                                v-if="!mobile"
+                                v-if="!mobile && at === undefined"
                                 type="button"
                                 :class="ICON_BUTTON"
                                 :disabled="diff === undefined"
@@ -922,6 +960,7 @@ const endResize = (event: PointerEvent): void => {
                             :partial="diff.partial"
                             :before-raw="rawSides.beforeRaw"
                             :after-raw="rawSides.afterRaw"
+                            :at="at"
                         />
                     </div>
                 </template>

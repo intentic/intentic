@@ -3,7 +3,7 @@ import { trackPerf } from "../perf";
 import { CHUNK_BYTES } from "../workspace/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
 import { useSandboxSession } from "./sandboxSession";
-import { currentSandboxTarget } from "./sandboxTarget";
+import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
 
 // Calls the ACTIVE sandbox's daemon DIRECTLY (browser → https://sandbox-<id>.<zone>, or its loopback shortcut
 // when the sandbox turns out to be on this machine, see useEndpoint), authenticated by a daemon-session
@@ -19,9 +19,8 @@ const { getSessionToken, rejectSessionToken } = useSandboxSession();
  * two together locate the cost: agree ⇒ the daemon; browser much larger ⇒ the tunnel, the token, or a queue in
  * here. `path` is stripped of its query so a hundred distinct file reads aggregate into one row.
  */
-export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
-    return trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
-        const target = currentSandboxTarget();
+const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit): Promise<Response> =>
+    trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
@@ -30,6 +29,20 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
          * last place the body is still the thing the caller passed rather than a stream. */
         return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, !uploadsBody(init?.body));
     });
+
+export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
+    return requestTo(currentSandboxTarget(), path, init);
+}
+
+/* The same call aimed at a NAMED sandbox rather than the active one. Everything below the address is
+ * unchanged: the same auth policy, the same bearer store (keyed by sandbox id already), the same perf row.
+ *
+ * Deliberately a separate entry point rather than an optional argument on `sandboxRequest`. Almost every call
+ * in this app is about the box the user is standing in, and that must stay the thing you get by default. A
+ * call that crosses to another sandbox is a decision, so it is spelled differently, which is also what makes
+ * the handful of them greppable. */
+export async function sandboxRequestAt(sandboxId: string, path: string, init?: RequestInit): Promise<Response> {
+    return requestTo(targetFor(sandboxId), path, init);
 }
 
 // A non-2xx daemon response, carrying the HTTP status so callers can branch on it (e.g. a 404 on a file read
@@ -84,11 +97,25 @@ export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<
     return (await response.json()) as T;
 }
 
-// Raw bytes for binary preview (images / PDF), where a utf8 decode would corrupt the file.
-export async function sandboxBlob(path: string, init?: RequestInit): Promise<Blob> {
-    const response = await sandboxRequest(path, init);
+// The same read aimed at a named sandbox (see sandboxRequestAt). The route-drift checks inside `sandboxError`
+// are the active daemon's fingerprint and so are skipped here: another box's build is not one this browser has
+// ever handshaked with, and claiming "your sandbox is out of date" from the wrong fingerprint is worse than
+// passing the daemon's own words through.
+export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: RequestInit): Promise<T> {
+    const response = await sandboxRequestAt(sandboxId, path, init);
     if (!response.ok) {
-        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
+        throw await sandboxError(response);
+    }
+    return (await response.json()) as T;
+}
+
+// Raw bytes for binary preview (images / PDF), where a utf8 decode would corrupt the file. `at` names the
+// sandbox when the bytes are not in the active one, which is what lets a review of an agent in another box
+// render its screenshots rather than fetching the active daemon's answer for a path it has never heard of.
+export async function sandboxBlob(path: string, init?: RequestInit, at?: string): Promise<Blob> {
+    const response = at === undefined ? await sandboxRequest(path, init) : await sandboxRequestAt(at, path, init);
+    if (!response.ok) {
+        throw await sandboxError(response, at === undefined ? { method: init?.method ?? `GET`, path } : undefined);
     }
     return response.blob();
 }

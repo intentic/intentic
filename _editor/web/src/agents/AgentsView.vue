@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
 import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
-import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, useDevice, useNarrow } from "@intentic/ui";
+import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -14,7 +14,9 @@ import { dropActionLabel, dropRejection, type PendingAction } from "../composabl
 import { useAgentDrag } from "../composables/agents/useAgentDrag";
 import { useAgentFilter } from "../composables/agents/useAgentFilter";
 import { type FleetLane, reviewAction, unregistered, watching } from "../composables/agents/agentStatus";
-import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, useAgents, windowFinished } from "../composables/agents/useAgents";
+import { agentSeed, canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, useAgents, windowFinished } from "../composables/agents/useAgents";
+import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../composables/agents/fleetScope";
+import { refreshAcross, subscribe as watchOtherBoxes } from "../composables/sandbox/fleetAcross";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../composables/agents/useWorkflowRuns";
 import { relativeTime } from "../composables/chat/catalog";
 import { chatRun, showingRunGraph } from "../composables/chat/chatRun";
@@ -139,10 +141,15 @@ const resolveTarget = computed(() => (pendingResolve.value === undefined ? undef
  * batches, which are addressed by id alone: an id in flight there is being filed AWAY unless it is already
  * archived, in which case the only thing anyone can be doing to it is putting it back. */
 const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
-    if (busy.value?.id === agent.id) {
+    /* MATCHED ON THE CARD, NOT ON THE ID. Agent ids are minted per daemon, so a workspace cloned onto a second
+     * machine puts the same id on two cards, and an id-only test would dim both of them while one is landing.
+     * `busy` carries the box the action was fired at (useAgentDrag) for exactly this. */
+    if (busy.value?.id === agent.id && busy.value.at === agent.sandboxId) {
         return busy.value.action;
     }
-    if (!busyIds.value.includes(agent.id)) {
+    // The filing pair is the ACTIVE box's alone (archive and restore go through the fleet store), so a card
+    // from anywhere else can never be in that set whatever its id says.
+    if (agent.sandboxId !== undefined || !busyIds.value.includes(agent.id)) {
         return undefined;
     }
     return agent.archivedAt !== undefined ? `restore` : `archive`;
@@ -215,17 +222,56 @@ const runsFor = (lane: FleetLane): WorkflowRun[] => {
  */
 const BOARD_LANES = [`attention`, `active`, `finished`] as const;
 const ledgerRunIds = computed(() => runIdsInLedger(workflowRuns.value));
+
+/* THE LANES, OVER WHATEVER THE SCOPE SAYS THEY ARE ABOUT. In the `box` scope this is exactly the fleet store's
+ * own three lanes; in `all` it is the same grouping (laneGroups, shared so the two scopes can never order a
+ * column differently) over this sandbox's fleet plus every other box's roster.
+ *
+ * SANDBOX IS NEVER A COLUMN AND NEVER A SORT KEY. A column per box would reproduce the exact problem the wider
+ * board exists to solve, since the reader would still be scanning by machine and an agent needing them in the
+ * fourth column is as easy to miss as it is behind a switch. The lanes sort by what an agent is waiting for and
+ * how long it has waited, and the box rides along as a chip on the card. */
+const scopedFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.value, ...otherFleet.value] : fleet.value));
+const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() => (readingAcross.value ? laneGroups(scopedFleet.value) : lanes.value));
+
 const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
     if (ledgerRunIds.value.size === 0) {
-        return lanes.value;
+        return scopedLanes.value;
     }
     const outside = (agent: FleetAgent): boolean => !insideRun(agent, ledgerRunIds.value);
     return {
-        attention: lanes.value.attention.filter(outside),
-        active: lanes.value.active.filter(outside),
-        finished: lanes.value.finished.filter(outside),
+        attention: scopedLanes.value.attention.filter(outside),
+        active: scopedLanes.value.active.filter(outside),
+        finished: scopedLanes.value.finished.filter(outside),
     };
 });
+
+/* THE STORE BEHIND THE WIDER BOARD RUNS EXACTLY WHILE THE BOARD IS ASKING FOR IT. Mounting is not enough and
+ * neither is the preference: a board in the `box` scope must cost nothing, and a board left in `all` on a
+ * route nobody is looking at must cost nothing either (fleetAcross also stands itself down for a hidden
+ * window). Flipping the control is what starts and stops it. */
+let releaseBoxes: (() => void) | undefined;
+watch(
+    readingAcross,
+    (across) => {
+        if (across) {
+            releaseBoxes ??= watchOtherBoxes();
+            return;
+        }
+        releaseBoxes?.();
+        releaseBoxes = undefined;
+    },
+    { immediate: true },
+);
+onUnmounted(() => {
+    releaseBoxes?.();
+    releaseBoxes = undefined;
+});
+
+const SCOPE_OPTIONS = [
+    { label: `This sandbox`, value: `box` as const },
+    { label: `All sandboxes`, value: `all` as const },
+];
 // The archive obeys the same rule, and needs to: a run's steps are filed away WITH it, so without this the
 // pile the archive shows would be one run row and the five conversations it already stands for.
 const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
@@ -797,6 +843,14 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
     if (consumeSuppressedOpen()) {
         return;
     }
+    /* A CLICK ON A CARD FROM ANOTHER BOX OPENS ITS REVIEW, because the thing a plain click normally does,
+     * point the docked chat at this conversation, is the one thing that cannot happen across sandboxes. Rather
+     * than a click that does nothing, the card's primary press becomes the thing it CAN do: show the work. The
+     * crossing that would let you talk to it is on that page, named. */
+    if (isRemote(agent)) {
+        reviewAgent(agent);
+        return;
+    }
     // The user is pointing the board somewhere themselves: whatever a deep link was highlighting is over.
     flashId.value = undefined;
     // This board made this selection, so it does not also scroll to it (see the selection watch).
@@ -820,8 +874,19 @@ const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
 // The deliberate view-change: focus the dock AND swap the surface to the agent's review detail. Fired by the
 // card's contextual affordance or its double-click accelerator (never a plain click); the card only offers it
 // for a registered agent, so there is always a detail to land on.
-const agentHref = (agent: FleetAgent): string => router.resolve(`/agents/${encodeURIComponent(agent.id)}`).href;
+const agentHref = (agent: FleetAgent): string =>
+    router.resolve(
+        isRemote(agent) ? { path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } } : `/agents/${encodeURIComponent(agent.id)}`,
+    ).href;
 const reviewAgent = (agent: FleetAgent): void => {
+    /* A card from another box opens its review WITHOUT opening a tab for it, and the omission is the point:
+     * `open()` files a conversation into the chat singleton, which is pointed at this daemon, so it would mint
+     * a tab for an agent this daemon has never heard of. The review page reads the `?sandbox=` it is handed and
+     * addresses every read and both mutations at that box instead. */
+    if (isRemote(agent)) {
+        void router.push({ path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } });
+        return;
+    }
     open(agent);
     void router.push(`/agents/${encodeURIComponent(agent.id)}`);
 };
@@ -865,6 +930,38 @@ const copySessionName = async (branch: string): Promise<void> => {
  * a draft has no review, so a separator written inline is a rule about rows that may not be rendered, and it
  * draws a line under the last item of a menu whose whole bottom group turned out to be empty. Grouping makes
  * the separator a property of the JOIN, which cannot dangle. */
+/* THE WAY OFF A WATCH, which this menu no longer has to be. It was the only one for a while, next to a drag
+ * onto Finished, and between them they made an arrangement the AGENT entered into on the user's behalf
+ * reachable exclusively through two gestures a user has to already know about. The card's own readout carries
+ * the press now, beside the fact it is about (AgentCard, the watch row).
+ *
+ * The row stays anyway, and not out of symmetry: it is the one place the action is spelled with its verb and
+ * its COUNT ("Stop watching (3)"), where the card has room for four characters beside a note it is already
+ * truncating. A user who opened this menu having decided something about a card reads what they are ending; a
+ * user who noticed the readout presses the readout. One row for however many are armed, because that is what
+ * the press means about a card, and the daemon disarms them together (agents.stopWatching). */
+const watchRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
+    const armed = agent.watches?.length ?? 0;
+    if (!watching(agent) || !here) {
+        return [];
+    }
+    return [{ label: armed === 1 ? `Stop watching` : `Stop watching (${armed})`, icon: `eye`, command: () => void stopWatching(agent.id) }];
+};
+
+// Filing a card away, bringing it back, or closing one that was never an agent. The first two are the ACTIVE
+// box's alone (both write through the fleet store); the third is about a tab in this browser, so it is offered
+// wherever an unregistered card can appear.
+const filingRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
+    const filing = !here
+        ? []
+        : agent.archivedAt !== undefined
+          ? [{ label: `Restore`, icon: `history`, command: () => restore([agent.id]) }]
+          : canArchive(agent)
+            ? [{ label: `Archive`, icon: `box`, command: () => archive([agent.id]) }]
+            : [];
+    return [...filing, ...(unregistered(agent.status) ? [{ label: `Close`, icon: `times`, command: () => closeAgent(agent) }] : [])];
+};
+
 const cardMenuItems = computed<MenuItem[]>(() => {
     const agent = menuAgent.value;
     if (agent === undefined) {
@@ -872,6 +969,12 @@ const cardMenuItems = computed<MenuItem[]>(() => {
     }
     const review = mobile.value ? undefined : reviewAction(agent);
     const branch = agent.branch;
+    /* WHAT THIS MENU CAN OFFER A CARD FROM ANOTHER SANDBOX. Opening it, reviewing it and copying its session
+     * name all work at a distance; ending a watch, archiving and restoring do not, because all three write
+     * through the fleet store, which is the ACTIVE daemon's roster and has no entry for that agent. The rows
+     * are dropped rather than shown disabled: a menu of greyed-out verbs teaches nothing, and the review page
+     * this menu's second row leads to carries the crossing that reaches them. */
+    const here = !isRemote(agent);
     const groups: MenuItem[][] = [
         [
             { label: `Open`, icon: `arrow-right`, command: () => focusAgent(agent) },
@@ -884,33 +987,22 @@ const cardMenuItems = computed<MenuItem[]>(() => {
         /* The whole reason this menu was built. It hands over the BRANCH, which is what the card prints: the
            other forms of the name are labelled and visible before the press, on the agent's own page. */
         branch === undefined ? [] : [{ label: `Copy session name`, icon: `code`, command: () => void copySessionName(branch) }],
-        /* THE WAY OFF A WATCH, which this menu no longer has to be. It was the only one for a while, next to a
-           drag onto Finished, and between them they made an arrangement the AGENT entered into on the user's
-           behalf reachable exclusively through two gestures a user has to already know about. The card's own
-           readout carries the press now, beside the fact it is about (AgentCard, the watch row).
-           The row stays anyway, and not out of symmetry: it is the one place the action is spelled with its
-           verb and its COUNT ("Stop watching (3)"), where the card has room for four characters beside a note
-           it is already truncating. A user who opened this menu having decided something about a card reads
-           what they are ending; a user who noticed the readout presses the readout. One row for however many
-           are armed, because that is what the press means about a card, and the daemon disarms them together
-           (agents.stopWatching). */
-        watching(agent)
-            ? [
+        /* THE CROSSING, for a card whose agent is in another box, and named after the box it goes to rather
+           than called "Switch". It is the one press on such a card that costs the whole shell (the chat, the
+           tree, every extension activation), so it says where it is taking you before you make it.
+           It is here as well as on the review page because this menu is where the board keeps the decisions
+           made ABOUT a card, and "go and work on this one" is the biggest of them. */
+        here || agent.sandboxId === undefined
+            ? []
+            : [
                   {
-                      label: (agent.watches?.length ?? 0) === 1 ? `Stop watching` : `Stop watching (${agent.watches?.length})`,
-                      icon: `eye`,
-                      command: () => void stopWatching(agent.id),
+                      label: `Open in ${boxNameOf.value.get(agent.sandboxId) ?? `its sandbox`}`,
+                      icon: `arrow-right`,
+                      command: () => openInSandbox(agent.sandboxId!, agent.id),
                   },
-              ]
-            : [],
-        [
-            ...(agent.archivedAt !== undefined
-                ? [{ label: `Restore`, icon: `history`, command: () => restore([agent.id]) }]
-                : canArchive(agent)
-                  ? [{ label: `Archive`, icon: `box`, command: () => archive([agent.id]) }]
-                  : []),
-            ...(unregistered(agent.status) ? [{ label: `Close`, icon: `times`, command: () => closeAgent(agent) }] : []),
-        ],
+              ],
+        watchRow(agent, here),
+        filingRow(agent, here),
     ];
     const items: MenuItem[] = [];
     for (const group of groups.filter((candidate) => candidate.length > 0)) {
@@ -1042,7 +1134,12 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              board lost it entirely. Below the same width at which the lanes stack, the field takes a row of its
              own and the flanks keep the first one to themselves. -->
         <div class="flex min-h-[2.25rem] flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
-            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2"></div>
+            <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
+                <!-- HOW MUCH OF THE ACCOUNT THIS BOARD IS ABOUT. Drawn only when there is more than one
+                     sandbox to be about (scopeOffered): a switch whose two settings produce the same screen is
+                     a control that teaches the reader nothing except to ignore controls. -->
+                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
+            </div>
             <SearchBar
                 ref="filterField"
                 v-model="query"
@@ -1078,6 +1175,26 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <span class="min-w-0 flex-1">{{ notice }}</span>
             <button type="button" aria-label="Dismiss" class="shrink-0 rounded p-0.5 hover:bg-overlay" @click="dismissNotice">
                 <Icon name="times" class="text-2xs" />
+            </button>
+        </p>
+        <!-- WHEN THE ANSWER IS PARTIAL, SAY SO. This is the only board in the app that can be three-fifths
+             right, and an empty Attention lane is a claim: made on the strength of two requests that never came
+             back, it is the worst thing this surface could assert. Named boxes rather than a count, because the
+             name is what tells the reader whether the missing one is the one they came for.
+             Not the danger strip above and not dismissible: nothing is broken and nothing is owed. It is a
+             condition, so it states itself for as long as it holds and stops the moment those boxes answer. -->
+        <p
+            v-if="partialAnswer !== undefined"
+            class="flex shrink-0 items-center gap-2 border-b border-line bg-warning/10 px-3 py-1 text-2xs text-warning"
+        >
+            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
+            <span class="min-w-0 flex-1">{{ partialAnswer }}</span>
+            <button
+                type="button"
+                class="shrink-0 rounded px-1.5 py-0.5 font-medium transition-colors hover:bg-overlay"
+                @click="refreshAcross()"
+            >
+                Try again
             </button>
         </p>
         <!-- What the counter's pulse cannot tell a screen reader. Covers every archive, quiet or not, so the
@@ -1312,10 +1429,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"
                             @review="reviewAgent(agent)"
-                            @resolve="resolveNow(agent.id)"
-                            @land="landNow(agent.id)"
-                            @reland="relandNow(agent.id)"
-                            @unwatch="unwatchNow(agent.id)"
+                            @resolve="resolveNow(agent.id, agent.sandboxId)"
+                            @land="landNow(agent.id, agent.sandboxId)"
+                            @reland="relandNow(agent.id, agent.sandboxId)"
+                            @unwatch="unwatchNow(agent.id, agent.sandboxId)"
                             @archive="archive([agent.id])"
                             @restore="restore([agent.id])"
                             @close="closeAgent(agent)"

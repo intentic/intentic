@@ -39,14 +39,23 @@ import { sandboxKey } from "./sandbox/activeSandbox";
  *
  * A sub-entry filed under a family, one file's diff under its change list, appends AFTER the family's key
  * (`[...GIT_CHANGES.of(), UNPERSISTED, …]`) rather than passing extra segments to `of`. That is what makes a
- * prefix match on `of()` reach it, which is how invalidating a list drops the per-item reads it introduced. */
+ * prefix match on `of()` reach it, which is how invalidating a list drops the per-item reads it introduced.
+ *
+ * `ofSandbox(id, ...variant)` is `of` aimed at a NAMED sandbox instead of the active one, what the surfaces
+ * that read across sandboxes register under (composables/sandbox/fleetAcross.ts and the ledger behind it).
+ * The id lands in the same last position `sandboxKey` appends it to, deliberately: `sandboxQueryPredicate`
+ * finds a sandbox's entries by reading `queryKey.at(-1)`, so a cross-sandbox entry is dropped by the same
+ * sweep as every other entry belonging to that box, and pointing the app AT that sandbox produces the
+ * identical key rather than a second copy of the same read. */
 export interface QueryFamily {
     readonly of: (...extra: readonly unknown[]) => unknown[];
+    readonly ofSandbox: (sandboxId: string, ...extra: readonly unknown[]) => unknown[];
     readonly every: readonly string[];
 }
 
 const family = (...path: readonly string[]): QueryFamily => ({
     of: (...extra) => sandboxKey(...path, ...extra),
+    ofSandbox: (sandboxId, ...extra) => [...path, ...extra, sandboxId],
     every: path,
 });
 
