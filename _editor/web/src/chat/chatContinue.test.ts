@@ -53,6 +53,10 @@ vi.mock(`../composables/agents/useWorkflowRuns`, async (importOriginal) => ({
 /* THE COMPOSER ONLY EXISTS WHEN THE SANDBOX DOES: unreachable, the whole footer yields to "Chat is available
  * once your sandbox is connected", and every assertion below would pass against a pane with no controls in it
  * at all. So this one is mocked ONLINE: the state the feature lives in. */
+const { sandboxReachable } = await vi.hoisted(async () => {
+    const { ref: vueRef } = await import(`vue`);
+    return { sandboxReachable: vueRef(true) };
+});
 vi.mock(`../composables/sandbox/useSandbox`, async (importOriginal) => {
     const { computed } = await import(`vue`);
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
@@ -65,7 +69,7 @@ vi.mock(`../composables/sandbox/useSandbox`, async (importOriginal) => {
             active: computed(() => sandboxes.value[0]),
             daemonUrl: computed(() => `http://localhost`),
             connection: ref({ phase: `online` }),
-            reachable: ref(true),
+            reachable: sandboxReachable,
             list: { isPending: ref(false) },
             refresh: () => {},
             select: () => {},
@@ -130,6 +134,7 @@ beforeEach(async () => {
     localStorage.clear();
     sessionStorage.clear();
     resetChat();
+    sandboxReachable.value = true;
     // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
@@ -352,4 +357,21 @@ it(`says nothing on a chat whose turn finished`, async () => {
 
     expect(continueButton()).toBeUndefined();
     expect(composerText()).not.toContain(`Enter to continue`);
+});
+
+it(`keeps the status row mounted while a busy sandbox temporarily holds Send`, async () => {
+    useChat().active.value.draft.value = `hello`;
+    await mountPanel();
+    const status = (): string => document.querySelector<HTMLAnchorElement>(`a[href="/sandbox/agent"]`)?.textContent ?? ``;
+    const send = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`)!;
+
+    expect(status()).toContain(`Ready · Manage`);
+    expect(send().disabled).toBe(false);
+
+    sandboxReachable.value = false;
+    await settle();
+
+    expect(status()).toContain(`Busy · Manage`);
+    expect(composerText()).toContain(`The sandbox is busy; Send returns when it responds.`);
+    expect(send().disabled).toBe(true);
 });

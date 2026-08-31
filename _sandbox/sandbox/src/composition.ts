@@ -697,7 +697,7 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         readonly copy: (fromAbs: string, toAbs: string) => Promise<void>;
     };
     readonly workspaceTree: (root: string) => Promise<WorkspaceTree>;
-    readonly workspaceChildren: (root: string, relPath: string) => Promise<WorkspaceChildren>;
+    readonly workspaceChildren: (root: string, relPath: string, options?: { depth?: number }) => Promise<WorkspaceChildren>;
     // Resident workspace search: one iq engine instance holding the index DB open with its sweep cached in
     // memory: /workspace/search runs in-process (no per-query CLI spawn), revalidation rides the workspace
     // watcher (main.ts) instead of the query path. The agent's Bash `iq` calls share the same on-disk index.

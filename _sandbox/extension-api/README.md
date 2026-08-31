@@ -131,6 +131,9 @@ and the poll is the timer it always was. Bursts coalesce, so a run writing a fil
 reconnect wakes it too, because a frame pushed while the stream was down is a frame nobody resends. Pick
 `everyMs` accordingly: minutes for a file-backed badge (it is covering a dropped event, not carrying the news),
 and the honest cadence of the source for anything behind somebody else's API, where nothing can push at all.
+All polls in a window share one background-read lane, so aligned extension clocks and reconnect wakes cannot
+turn into parallel request bursts. Repeated triggers coalesce while waiting; one that lands during the read gets
+one trailing pass, so serialization does not trade load for a missed update.
 
 What the tile SAYS stays yours: `badge()` is the judgement each surface exists to make, and no two of them
 agree about tone or wording.

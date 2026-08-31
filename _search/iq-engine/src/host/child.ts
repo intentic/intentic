@@ -108,7 +108,7 @@ process.on("message", (message: EngineRequest) => {
         return;
     }
     if (engine === undefined) {
-        if (message.type !== "dirty") {
+        if (message.type !== "dirty" && message.type !== "healthDirty") {
             emit({ type: "failed", id: message.id, ...describe(broken ?? new Error("iq engine child received a request before init")) });
         }
         return;
@@ -116,6 +116,10 @@ process.on("message", (message: EngineRequest) => {
     const live = engine;
     if (message.type === "dirty") {
         live.markDirty();
+        return;
+    }
+    if (message.type === "healthDirty") {
+        live.invalidateHealth();
         return;
     }
     if (message.type === "warm") {

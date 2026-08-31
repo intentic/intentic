@@ -64,8 +64,15 @@ export const createWorkspaceRoutes = (services: Services) => {
         // a place rather than a lookup: half of it silently coming from the other checkout is not a view of
         // anything. A file the walk therefore misses still opens, through `file` below.
         tree: i.tree.handler(async ({ input }) => services.workspaceTree(await workspaceRootFor(scope, input.agent))),
-        // Lazy-load the children of an ignored dir (node_modules, .git, …) the tree didn't descend into.
-        children: i.children.handler(async ({ input }) => services.workspaceChildren(await workspaceRootFor(scope, input.agent), input.path)),
+        // Lazy-load the children of an ignored dir (node_modules, .git, …) the tree didn't descend into, or
+        // serve one bounded subtree to a consumer that would otherwise fan a request out per directory.
+        children: i.children.handler(async ({ input }) =>
+            services.workspaceChildren(
+                await workspaceRootFor(scope, input.agent),
+                input.path,
+                input.depth === undefined ? undefined : { depth: input.depth },
+            ),
+        ),
         /* A window, not the file (see readWorkspaceFileWindow). The response carries the file's total size, so
          * the viewer decides how to render from the daemon's number rather than from a tree entry it may not
          * have, the gate can't be skipped by opening a file the tree never listed.

@@ -18,11 +18,13 @@ import UsageRing from "../components/UsageRing.vue";
  * arrives as words rather than being worked out again here; everything to the right is measured off this pane's
  * own conversation and the signed-in person's allowance. */
 
-const { block, hint } = defineProps<{
+const { block, hint, reachable } = defineProps<{
     /** Why Send will not go, if it won't: this owns the slot whenever there is one. */
     block?: string;
     /** What the composer would rather say when nothing is refusing. */
     hint: string;
+    /** The daemon stream is answering. False keeps this row mounted but names the temporary busy state. */
+    reachable: boolean;
 }>();
 
 const { contextUsage, provider, account } = usePaneView();
@@ -176,7 +178,8 @@ const creditChip = computed(() => {
             <!-- Every chip on this line names a page, so every one of them is a link: the address shows on
                  hover, and Ctrl/⌘-click opens it without taking the conversation off screen. -->
             <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-                <span class="inline-block h-1.5 w-1.5 rounded-full bg-success"></span> Ready · Manage
+                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="reachable ? `bg-success` : `bg-warning`"></span>
+                {{ reachable ? `Ready` : `Busy` }} · Manage
             </RouterLink>
         </div>
     </div>

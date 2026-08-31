@@ -37,7 +37,10 @@ arrives. The resolution both it and the map depend on now lives once, in
 because reversing them on demand costs a second pass over every edge.
 [engines/health.ts](src/engines/health.ts) is those two rankings as NUMBERS rather than rendered lines, for a
 host that plots them: the daemon serves it at `/workspace/health` and the browser draws one repo's
-codebase-health panel from it. One ranking, two presentations: the verbs keep printing text for the agent.
+codebase-health panel from it. The resident engine single-flights and caches the full ranking by scope and churn
+window, then slices it per caller; workspace indexing and git-ref moves invalidate it, so the minute chores probe
+does not replay the repository's full history when nothing changed. One ranking, two presentations: the verbs
+keep printing text for the agent.
 
 **Part of the iq dependency island.** The CLI (`@intentic/iq`) and the benchmark harness are its only
 *search-shaped* consumers; the daemon holds ONE long-lived engine: as a `createEngineClient` handle, see below

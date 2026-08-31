@@ -200,6 +200,9 @@ export const createEngineClient = (options: ResidentEngineOptions): EngineClient
         }),
         run: (request: QueryRequest, signal?: AbortSignal) => call((id) => ({ type: "run", id, request }), signal) as Promise<QueryOutcome>,
         health: (request: HealthRequest) => call((id) => ({ type: "health", id, request })) as Promise<CodebaseHealth>,
+        invalidateHealth: () => {
+            start()?.send({ type: "healthDirty" } satisfies EngineRequest, () => undefined);
+        },
         warm: () => call((id) => ({ type: "warm", id })) as Promise<IndexStatus>,
         // Fire-and-forget, exactly as in process: a change notification nobody waits on, and one that arrives
         // while the child is restarting is covered by the fresh child's own first pass.

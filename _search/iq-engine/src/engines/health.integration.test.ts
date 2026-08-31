@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { createResidentEngine, type ResidentEngine } from "../index.js";
+import { type CodebaseHealth, createResidentEngine, type ResidentEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 
 const exec = promisify(execFile);
@@ -96,4 +96,37 @@ test("totals count the whole scope while the lists stay capped", async () => {
     // Unscoped totals cover both repos and the loose files, so they exceed any single repo's.
     const alpha = await engine.health({ scope: { repo: "alpha" }, limit: 1 });
     expect(capped.totals.files).toBeGreaterThan(alpha.totals.files);
+});
+
+test("resident health single-flights one full ranking and ref invalidation refreshes it", async () => {
+    engine.invalidateHealth();
+    const tracePath = join(root, "git-health-trace.log");
+    const previousTrace = process.env["GIT_TRACE"];
+    process.env["GIT_TRACE"] = tracePath;
+    let short: CodebaseHealth;
+    let full: CodebaseHealth;
+    try {
+        [short, full] = await Promise.all([engine.health({ scope: { repo: "" }, limit: 0 }), engine.health({ scope: { repo: "" }, limit: 10 })]);
+    } finally {
+        if (previousTrace === undefined) {
+            delete process.env["GIT_TRACE"];
+        } else {
+            process.env["GIT_TRACE"] = previousTrace;
+        }
+    }
+
+    const tracedLogs = (await readFile(tracePath, "utf8")).split("\n").filter((line) => line.includes("git log --numstat"));
+    expect(tracedLogs).toHaveLength(1);
+    expect(short.hotspots).toHaveLength(0);
+    expect(full.hotspots.length).toBeGreaterThan(short.hotspots.length);
+
+    const before = full.hotspots.find((file) => file.path === "gate.ts")!.commits;
+    await writeFile(join(root, "gate.ts"), gate(6));
+    await commitRoot("widen the gate again", ["gate.ts"], 0);
+    // A commit moves refs without necessarily changing the indexed file set. Until that feed invalidates the
+    // history cache, the old complete ranking is deliberately reused.
+    expect((await engine.health({ scope: { repo: "" }, limit: 10 })).hotspots.find((file) => file.path === "gate.ts")?.commits).toBe(before);
+
+    engine.invalidateHealth();
+    expect((await engine.health({ scope: { repo: "" }, limit: 10 })).hotspots.find((file) => file.path === "gate.ts")?.commits).toBe(before + 1);
 });

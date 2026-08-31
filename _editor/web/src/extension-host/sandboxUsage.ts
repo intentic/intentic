@@ -34,23 +34,6 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 const matchedEntry = (permissions: readonly string[], method: string, path: string): string | undefined =>
     permissions.find((entry) => sandboxRouteAllowed([entry], method, path));
 
-const flushOne = async (id: string, batch: Map<string, number>): Promise<void> => {
-    const used = Object.fromEntries(batch);
-    try {
-        await sandboxJson(`/extensions/${encodeURIComponent(id)}/usage`, jsonBody(`POST`, { used }));
-    } catch {
-        /* Put it back. A daemon that was briefly unreachable must not cost the evidence, and the counts are
-         * bounded by the manifest's own list, so re-queuing cannot grow without limit however long it lasts.
-         * Swallowed rather than surfaced: this is bookkeeping behind someone else's feature, and an extension
-         * whose calls are working should not report an error because their tally did not. */
-        const again = pending.get(id) ?? new Map<string, number>();
-        for (const [entry, calls] of batch) {
-            again.set(entry, (again.get(entry) ?? 0) + calls);
-        }
-        pending.set(id, again);
-    }
-};
-
 export const flushSandboxUsage = async (): Promise<void> => {
     if (timer !== undefined) {
         clearTimeout(timer);
@@ -60,7 +43,27 @@ export const flushSandboxUsage = async (): Promise<void> => {
     // dropped by a clear that raced them.
     const batches = [...pending.entries()];
     pending.clear();
-    await Promise.all(batches.map(([id, batch]) => flushOne(id, batch)));
+    if (batches.length === 0) {
+        return;
+    }
+    try {
+        await sandboxJson(
+            `/extensions/usage`,
+            jsonBody(`POST`, { reports: Object.fromEntries(batches.map(([id, batch]) => [id, Object.fromEntries(batch)])) }),
+        );
+    } catch {
+        /* Put it back. A daemon that was briefly unreachable must not cost the evidence, and the counts are
+         * bounded by the manifests' own lists, so re-queuing cannot grow without limit however long it lasts.
+         * Swallowed rather than surfaced: this is bookkeeping behind someone else's feature, and extensions
+         * whose calls are working should not report an error because their tally did not. */
+        for (const [id, batch] of batches) {
+            const again = pending.get(id) ?? new Map<string, number>();
+            for (const [entry, calls] of batch) {
+                again.set(entry, (again.get(entry) ?? 0) + calls);
+            }
+            pending.set(id, again);
+        }
+    }
 };
 
 /* Record one permitted call. Called from the gate, so it is on the path of every api.sandbox call an extension

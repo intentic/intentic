@@ -28,6 +28,7 @@ export type EngineRequest =
     | { readonly type: "abort"; readonly id: number }
     | { readonly type: "health"; readonly id: number; readonly request: HealthRequest }
     | { readonly type: "warm"; readonly id: number }
+    | { readonly type: "healthDirty" }
     | { readonly type: "dirty" }
     | { readonly type: "close"; readonly id: number };
 

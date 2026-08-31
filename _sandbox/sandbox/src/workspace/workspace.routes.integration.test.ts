@@ -189,6 +189,23 @@ test("workspace.tree returns the full working tree from the walker", async () =>
     expect(await client.workspace.tree({})).toEqual(tree);
 });
 
+test("workspace.children forwards the bounded depth to the walker", async () => {
+    const calls: { root: string; path: string; depth: number | undefined }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                workspaceChildren: async (root, path, options) => {
+                    calls.push({ root, path, depth: options?.depth });
+                    return { entries: [], hidden: 0 };
+                },
+            }),
+        ),
+    );
+
+    await client.workspace.children({ path: "staged", depth: 5 });
+    expect(calls).toEqual([{ root: WORKSPACE_ROOT, path: "staged", depth: 5 }]);
+});
+
 test("workspace.file reads any contained file (former-secret paths included), answers absent, BAD_REQUESTs escape", async () => {
     const client = clientFor(
         createApp(

@@ -84,7 +84,7 @@ import { startReleaseNotesCheck } from "./platform/release-notes.js";
 import { startRuntimeHealth } from "./agent/adapter-health.js";
 import { startSidecarService } from "./derived/sidecar-service.js";
 import { startRepoWatch, subscribeRepoChanges } from "./workspace/repo-watch.js";
-import { startRefWatch } from "./git/ref-watch.js";
+import { startRefWatch, subscribeRefChanges } from "./git/ref-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "./workspace/workspace-watch.js";
 
 // The sandbox container's entrypoint. Config comes from env set at `docker run`, by connect.sh (your PC) or
@@ -1211,6 +1211,9 @@ const main = async (): Promise<void> => {
     // ANY workspace repo re-frames the surfaces built on the commit graph. Neither watcher above can carry it,
     // git dirs live off /work entirely (repo-git-dirs.ts) and the file watcher ignores .git besides.
     startRefWatch(services.workspace.root, subscribeRepoChanges, logger);
+    // Health rankings include committed churn. A ref can move without changing one workspace byte, so the
+    // workspace-index feed above cannot invalidate this cache; the ref feed does it without forcing a parse.
+    shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     // The agent plane converges on the same feed, in the one direction a conversation's FROZEN composition
     // cannot absorb by itself: a repo that has been deleted is taken out of every composition that still names
     // it, and its stranded checkouts are reclaimed (agents/vanished-repos.ts explains what leaving them costs).

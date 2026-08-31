@@ -195,17 +195,21 @@ export const walkWorkspaceTree = async (root: string, options?: { maxEntries?: n
 };
 
 // Lazy-load one directory's children, a dir the tree walk listed but didn't descend into (ignored, or beyond
-// the walk's entry budget). Child DIRS again carry no `children` (they lazy-load on their own expand). Ignore
+// the walk's entry budget). One level is the default; a caller may ask for a bounded-depth subtree, returned as
+// the same FLAT entry list, so it does not have to fan one browser request out per discovered directory. Ignore
 // state is rebuilt by descending from the root so a lazily-listed dir agrees with the eager walk: entries under
 // an ignored subtree stay ignored, entries under a normal one are graded by the real .gitignore layers.
-// Bounded by the same entry cap → `hidden`. Symlinks are listed as what they point at, dirs first. One level
-// only, so a cycle is bounded by the clicking rather than by a guard, the same thing that makes VSCode's
-// lazily-resolved explorer safe against one.
+// Bounded by the same total entry cap → `hidden`. Symlinks are listed as what they point at, dirs first, and the
+// eager walk's real-path ancestor guard prevents a recursive request from following a link cycle.
 //
 // `relPath` is contained twice: lexically (resolveWithin, a path climbing out of /work) and on disk
 // (realWithin, a path that gets out through a LINK), the second is what stops an expand on a link pointing
 // outside the workspace from listing what is behind it.
-export const listWorkspaceChildren = async (root: string, relPath: string, options?: { maxEntries?: number }): Promise<WorkspaceChildren> => {
+export const listWorkspaceChildren = async (
+    root: string,
+    relPath: string,
+    options?: { maxEntries?: number; depth?: number },
+): Promise<WorkspaceChildren> => {
     const base = resolve(root);
     const dir = resolveWithin(base, relPath);
     if (dir === undefined) {
@@ -221,46 +225,76 @@ export const listWorkspaceChildren = async (root: string, relPath: string, optio
     if (isLockedWorkspacePath(relPath)) {
         return { entries: [], hidden: 0 };
     }
-    const dirents = await readdir(dir, { withFileTypes: true }).catch(() => undefined);
-    if (dirents === undefined) {
-        return { entries: [], hidden: 0 };
-    }
-
     // Replay the ancestor chain: each descend() layers that directory's .gitignore, and an ancestor that is
     // itself ignored makes the whole branch ignored no matter what the local rules say.
-    let scope = createIgnoreScope();
+    let parentScope = createIgnoreScope();
     let branchIgnored = false;
     let walked = base;
     let rel = "";
     for (const segment of relPath.split("/").filter((part) => part !== "" && part !== ".")) {
-        scope = await scope.descend(walked, rel);
+        parentScope = await parentScope.descend(walked, rel);
         walked = join(walked, segment);
         rel = rel === "" ? segment : `${rel}/${segment}`;
-        branchIgnored = branchIgnored || scope.isIgnored(segment, rel, true);
+        branchIgnored = branchIgnored || parentScope.isIgnored(segment, rel, true);
     }
-    scope = await scope.descend(walked, rel);
 
-    const listable = await followEntries(dir, realDir, await realPathOf(base), dirents);
-    listable.sort(byKind);
+    type Job = {
+        readonly abs: string;
+        readonly real: string;
+        readonly rel: string;
+        readonly parentScope: IgnoreScope;
+        readonly branchIgnored: boolean;
+        readonly level: number;
+    };
 
+    const realRoot = await realPathOf(base);
+    const depth = options?.depth ?? 1;
+    let budget = options?.maxEntries ?? MAX_ENTRIES;
     const entries: WorkspaceTreeEntry[] = [];
-    for (const entry of listable.slice(0, options?.maxEntries ?? MAX_ENTRIES)) {
-        const { name, isDir } = entry;
-        const abs = join(dir, name);
-        const path = toRelPath(base, abs);
-        const ignored = branchIgnored || scope.isIgnored(name, path, isDir);
-        const link = entry.link === undefined ? {} : { link: entry.link };
-        if (isDir) {
-            entries.push({ name, path, type: "dir", ...(ignored ? { ignored: true } : {}), ...link });
-            continue;
+    let hidden = 0;
+    let level: Job[] = [{ abs: dir, real: realDir, rel: relPath, parentScope, branchIgnored, level: 1 }];
+
+    while (level.length > 0 && budget > 0) {
+        const next: Job[] = [];
+        for (const job of level) {
+            if (budget <= 0) {
+                break;
+            }
+            const scope = await job.parentScope.descend(job.abs, job.rel);
+            const dirents = await readdir(job.abs, { withFileTypes: true }).catch(() => undefined);
+            if (dirents === undefined) {
+                continue;
+            }
+            const listable = await followEntries(job.abs, job.real, realRoot, dirents);
+            listable.sort(byKind);
+            const included = listable.slice(0, budget);
+            hidden += listable.length - included.length;
+
+            for (const entry of included) {
+                budget--;
+                const abs = join(job.abs, entry.name);
+                const path = toRelPath(base, abs);
+                const ignored = job.branchIgnored || scope.isIgnored(entry.name, path, entry.isDir);
+                const link = entry.link === undefined ? {} : { link: entry.link };
+                if (!entry.isDir) {
+                    const stats = await stat(abs).catch(() => undefined);
+                    entries.push({
+                        name: entry.name,
+                        path,
+                        type: "file",
+                        ...(stats !== undefined ? { size: stats.size } : {}),
+                        ...(ignored ? { ignored: true } : {}),
+                        ...link,
+                    });
+                    continue;
+                }
+                entries.push({ name: entry.name, path, type: "dir", ...(ignored ? { ignored: true } : {}), ...link });
+                if (job.level < depth && !isLockedWorkspacePath(path) && descendable(entry, job.real)) {
+                    next.push({ abs, real: entry.real, rel: path, parentScope: scope, branchIgnored: ignored, level: job.level + 1 });
+                }
+            }
         }
-        let size: number | undefined;
-        try {
-            size = (await stat(abs)).size;
-        } catch {
-            size = undefined;
-        }
-        entries.push({ name, path, type: "file", ...(size !== undefined ? { size } : {}), ...(ignored ? { ignored: true } : {}), ...link });
+        level = next;
     }
-    return { entries, hidden: listable.length - entries.length };
+    return { entries, hidden };
 };

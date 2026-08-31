@@ -107,6 +107,9 @@ export interface ResidentEngine {
     // the same rankings `hotspots` and `map` render as text, for a host that plots them instead. Reads the same
     // resident sweep + index as run(), plus one `git log` per scoped repo.
     health(request: HealthRequest): Promise<CodebaseHealth>;
+    // A git ref moved without changing workspace bytes. Drops only the history-derived health cache; forcing a
+    // full index pass for a commit whose files are already indexed would do unrelated work to refresh one rank.
+    invalidateHealth(): void;
     // Filesystem changed, the worker picks it up; bursts coalesce into one extra pass.
     markDirty(): void;
     // Boot warmup: first index pass + the full embedding backlog. Queries may run concurrently throughout, and
@@ -309,6 +312,22 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
     // Last reading published by the worker's backlog slices; 0 until one lands, which is also the honest answer
     // on a host with no model.
     let embedBacklog = 0;
+    // Full rankings by scope + churn window. `limit` is deliberately not part of the key: a chores probe and a
+    // panel asking for different leaderboard lengths share the same git history walk, then slice independently.
+    // The Promise is the value so simultaneous callers single-flight too.
+    const healthCache = new Map<string, Promise<CodebaseHealth>>();
+    const healthKeyOf = (request: HealthRequest): string =>
+        JSON.stringify({
+            paths: request.scope.paths,
+            repo: request.scope.repo,
+            langs: request.scope.langs,
+            globs: request.scope.globs,
+            notGlobs: request.scope.notGlobs,
+            only: request.scope.only,
+            ignored: request.scope.ignored,
+            since: request.since,
+        });
+    const invalidateHealth = (): void => healthCache.clear();
 
     // The sweep publishes before revalidation finishes, so the first query waits only for the file walk, it
     // searches against whatever index exists (rg hits are always live) while the parse/chunk pass catches up.
@@ -359,6 +378,7 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
             generation = event.generation;
             appliedSeq = event.seq;
             revalidatedOnce = true;
+            invalidateHealth();
             return;
         }
         if (event.type === "embedding") {
@@ -422,9 +442,28 @@ export const createResidentEngine = (options: ResidentEngineOptions): ResidentEn
         },
         async health(request) {
             await firstSweep;
-            return codebaseHealth({ db, root: options.root, freshness: freshness() }, request, entries);
+            const key = healthKeyOf(request);
+            let pending = healthCache.get(key);
+            if (pending === undefined) {
+                pending = codebaseHealth({ db, root: options.root, freshness: freshness() }, { ...request, limit: Number.MAX_SAFE_INTEGER }, entries);
+                healthCache.set(key, pending);
+                void pending.catch(() => {
+                    if (healthCache.get(key) === pending) {
+                        healthCache.delete(key);
+                    }
+                });
+            }
+            const full = await pending;
+            return {
+                ...full,
+                hotspots: full.hotspots.slice(0, request.limit),
+                modules: full.modules.slice(0, request.limit),
+                freshness: freshness(),
+            };
         },
+        invalidateHealth,
         markDirty() {
+            invalidateHealth();
             dirtySeq += 1;
             // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads, not window: this postMessage takes no targetOrigin
             worker.postMessage({ type: "dirty", seq: dirtySeq } satisfies IndexWorkerRequest);

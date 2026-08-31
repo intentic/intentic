@@ -91,6 +91,69 @@ export interface SandboxPollOptions<T> {
  * is the entire point of not waiting for the interval. */
 const WAKE_MS = 400;
 
+/* ONE LANE FOR EVERY BACKGROUND READ IN THIS WINDOW.
+ *
+ * Extensions activate together, so their minute clocks also fire together. Letting each timer issue its own
+ * request turned one harmless cadence into a burst across the daemon: the widest poll could still be walking
+ * the workspace while CI, deployments and chores all started beside it. A reconnect was worse, because every
+ * file-backed poll was woken in the same frame.
+ *
+ * Per-poll coalescing matters as much as the global lane. A wake that lands while its read is QUEUED adds no
+ * information; a wake that lands while it is RUNNING may describe a change the in-flight read missed, so it
+ * earns exactly one trailing pass. Re-queueing that pass at the back keeps one noisy poll from starving the
+ * others. */
+interface ScheduledRead {
+    queued: boolean;
+    running: boolean;
+    trailing: boolean;
+    readonly read: () => Promise<void>;
+}
+
+const scheduledReads: ScheduledRead[] = [];
+let drainingReads = false;
+
+const drainScheduledReads = async (): Promise<void> => {
+    if (drainingReads) {
+        return;
+    }
+    drainingReads = true;
+    try {
+        for (;;) {
+            const scheduled = scheduledReads.shift();
+            if (scheduled === undefined) {
+                return;
+            }
+            scheduled.queued = false;
+            scheduled.running = true;
+            try {
+                await scheduled.read();
+            } finally {
+                scheduled.running = false;
+            }
+            if (scheduled.trailing) {
+                scheduled.trailing = false;
+                scheduled.queued = true;
+                scheduledReads.push(scheduled);
+            }
+        }
+    } finally {
+        drainingReads = false;
+    }
+};
+
+const scheduleRead = (scheduled: ScheduledRead): void => {
+    if (scheduled.running) {
+        scheduled.trailing = true;
+        return;
+    }
+    if (scheduled.queued) {
+        return;
+    }
+    scheduled.queued = true;
+    scheduledReads.push(scheduled);
+    void drainScheduledReads();
+};
+
 /* Re-read when the extension's own declared files are written.
  *
  * Contained in a try/catch because BOTH of its failure modes are ordinary rather than exceptional: `host()`
@@ -141,16 +204,17 @@ export const sandboxPoll = <T>(options: SandboxPollOptions<T>): SandboxPoll<T> =
             // same: leave the last value standing. "We could not ask" is not "there is nothing there".
         }
     };
+    const scheduled: ScheduledRead = { queued: false, running: false, trailing: false, read: once };
 
     return {
         state,
-        refresh: () => void once(),
+        refresh: () => scheduleRead(scheduled),
         start: () => {
             if (options.immediate !== false) {
-                void once();
+                scheduleRead(scheduled);
             }
-            const timer = setInterval(() => void once(), options.everyMs);
-            const wake = wakeOnFiles(options.host, () => void once());
+            const timer = setInterval(() => scheduleRead(scheduled), options.everyMs);
+            const wake = wakeOnFiles(options.host, () => scheduleRead(scheduled));
             return {
                 dispose: () => {
                     clearInterval(timer);

@@ -241,8 +241,8 @@ test("usage is counted per declared route, accumulates across reports, and rides
     // exercised" from "exercised and uses none of these": the difference between evidence and a guess.
     expect((await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage).toBeUndefined();
 
-    await client.extensions.recordUsage({ id, used: { [first]: 2 } });
-    await client.extensions.recordUsage({ id, used: { [first]: 3, [second]: 1 } });
+    await client.extensions.recordUsage({ reports: { [id]: { [first]: 2 } } });
+    await client.extensions.recordUsage({ reports: { [id]: { [first]: 3, [second]: 1 } } });
 
     const usage = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage;
     expect(usage?.[first]?.calls).toBe(5);
@@ -259,7 +259,7 @@ test("usage the manifest no longer declares is dropped, so a removed permission 
 
     // A browser still running a previous manifest reports a route this one never declared. Dropped rather than
     // refused: it is not an error the owner can act on, and recording it would credit reach nobody approved.
-    await client.extensions.recordUsage({ id, used: { [kept]: 1, "DELETE /everything": 9 } });
+    await client.extensions.recordUsage({ reports: { [id]: { [kept]: 1, "DELETE /everything": 9 } } });
 
     const usage = (await client.extensions.list()).extensions.find((extension) => extension.id === id)?.usage;
     expect(usage?.[kept]?.calls).toBe(1);

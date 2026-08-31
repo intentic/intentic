@@ -1833,7 +1833,12 @@ watch(
              of its own to keep it legible over a transcript sliding beneath it. Below the scroller it sits
              on the panel's own background, which is where a status bar belongs and where Claude's own
              "check important info" line sits. -->
-        <ChatPaneStatus v-if="reachable && connected" :block="refusal" :hint="composerHint" />
+        <ChatPaneStatus
+            v-if="connected"
+            :reachable
+            :block="reachable ? refusal : `The sandbox is busy; Send returns when it responds.`"
+            :hint="composerHint"
+        />
 
         <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them

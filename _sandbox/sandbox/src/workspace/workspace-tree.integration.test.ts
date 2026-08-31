@@ -140,6 +140,26 @@ test("listWorkspaceChildren counts what its own cap cut: the only listing that c
     expect(hidden).toBe(3);
 });
 
+test("listWorkspaceChildren returns a bounded subtree as one flat listing", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-children-depth-"));
+    await mkdir(join(root, "staged", "group", "package", "deeper"), { recursive: true });
+    await writeFile(join(root, "staged", "repo.json"), "{}");
+    await writeFile(join(root, "staged", "group", "package", "README.md"), "# Package");
+    await writeFile(join(root, "staged", "group", "package", "deeper", "hidden.md"), "too deep");
+
+    const { entries, hidden } = await listWorkspaceChildren(root, "staged", { depth: 3 });
+
+    expect(hidden).toBe(0);
+    expect(entries.map((entry) => entry.path)).toEqual([
+        "staged/group",
+        "staged/repo.json",
+        "staged/group/package",
+        "staged/group/package/deeper",
+        "staged/group/package/README.md",
+    ]);
+    expect(entries.every((entry) => entry.children === undefined)).toBe(true);
+});
+
 test("walkWorkspaceTree counts exactly how many of the ROOT's own entries the budget cut (the one unavoidable cut)", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-tree-cap-"));
     for (let i = 0; i < 5; i++) {

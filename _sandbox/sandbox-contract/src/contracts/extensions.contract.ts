@@ -12,7 +12,7 @@ import {
     ExtensionUpdatePolicyInputSchema,
     ExtensionUpdatePreviewSchema,
     ExtensionUpdatesCheckedSchema,
-    ExtensionUsageInputSchema,
+    ExtensionUsageBatchSchema,
     WorkspaceExtensionCreatedSchema,
     WorkspaceExtensionCreateSchema,
 } from "../schemas/extension-updates.js";
@@ -80,16 +80,17 @@ export const extensionsContract = {
         .output(OkSchema),
     // The host reporting which declared routes it just let through. Written by the browser because that is where
     // the permission gate runs (apiImpl.ts), the daemon sees an extension's traffic as ordinary authenticated
-    // requests and cannot tell which extension, or which declared entry, any of it belongs to.
+    // requests and cannot tell which extension, or which declared entry, any of it belongs to. Every extension's
+    // accumulated counts ride together so the bookkeeping is one request rather than a burst of them.
     recordUsage: oc
         .route({
             method: "POST",
-            path: "/extensions/{id}/usage",
-            summary: "Record what an extension just used",
+            path: "/extensions/usage",
+            summary: "Record what extensions just used",
             description:
-                "Written by the app rather than measured by the daemon, because the permission gate runs in the browser: from the sandbox's side an extension's traffic is indistinguishable from anyone else's. This is how the record of which powers an extension actually exercises gets kept.",
+                "One batch written by the app rather than measured by the daemon, because the permission gate runs in the browser: from the sandbox's side extension traffic is indistinguishable from anyone else's. This is how the record of which powers each extension actually exercises gets kept without one reporting request per extension.",
         })
-        .input(ExtensionUsageInputSchema)
+        .input(ExtensionUsageBatchSchema)
         .output(OkSchema),
     /* Whether this extension is fit for somebody else to run, the checks answerable from its files alone. Read
      * on demand rather than carried on the list: it reads the bundle off disk per extension, and it is looked at

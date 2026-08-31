@@ -210,17 +210,20 @@ export const createExtensionsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         recordUsage: i.recordUsage.handler(async ({ input }) => {
-            const extension = await find(input.id);
+            const installed = new Map((await installedExtensions(services)).map((extension) => [extension.id, extension]));
+            const at = new Date().toISOString();
             /* The manifest filters the batch, the same honesty rule settings follow. A report naming a route the
              * manifest does not declare is not an error anyone can act on, it means the manifest changed while a
-             * browser was still running the previous one, so it is dropped rather than refused, and the sweep in
-             * the store drops what that browser had already recorded. */
-            await recordExtensionUsage(
-                root,
-                extensionIdOf(extension.manifest),
-                extension.manifest.permissions?.sandbox ?? [],
-                input.used,
-                new Date().toISOString(),
+             * browser was still running the previous one, so it is dropped rather than refused, and the sweep
+             * in the store drops what that browser had already recorded. A removed extension is the same stale
+             * browser case and its report is ignored, otherwise the browser would retry it forever. */
+            await Promise.all(
+                Object.entries(input.reports).flatMap(([id, used]) => {
+                    const extension = installed.get(id);
+                    return extension === undefined
+                        ? []
+                        : [recordExtensionUsage(root, extensionIdOf(extension.manifest), extension.manifest.permissions?.sandbox ?? [], used, at)];
+                }),
             );
             return { ok: true } as const;
         }),

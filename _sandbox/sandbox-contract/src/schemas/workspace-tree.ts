@@ -101,16 +101,25 @@ export const WorkspaceTreeSchema = z.object({
     hidden: z.number().describe("How many entries at the top level were cut for size. Zero means the listing is complete."),
 });
 export type WorkspaceTree = z.infer<typeof WorkspaceTreeSchema>;
-// Lazy-load one directory's children, for a dir the tree walk listed but didn't descend into. Child dirs again
-// carry no `children`, so they lazy-load on their own expand. `hidden` = how many entries the cap cut (0 = all
-// listed).
+// Lazy-load one directory's children, for a dir the tree walk listed but didn't descend into. The ordinary
+// request is one level; a bounded `depth` lets a caller that genuinely needs a small subtree receive its
+// descendants in the same flat `entries` list instead of issuing one request per directory.
 export const WorkspaceChildrenQuerySchema = WorkspaceScopeSchema.extend({
     path: z.string().min(1).describe("The folder to open, as a workspace path."),
+    depth: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(5)
+        .optional()
+        .describe("How many levels to include. Omitted means direct children only; at most five levels can be read in one request."),
 });
 export const WorkspaceChildrenSchema = z.object({
     entries: z
         .array(WorkspaceTreeEntrySchema)
-        .describe("What is directly inside it. Folders in here carry no contents of their own, so they open the same way."),
+        .describe(
+            "What is inside it, as a flat list. With the default depth these are direct children; a deeper request also includes descendants, whose full paths say where they belong. Folders carry no nested contents of their own.",
+        ),
     hidden: z.number().describe("How many entries were cut for size. Zero means the listing is complete."),
 });
 export type WorkspaceChildren = z.infer<typeof WorkspaceChildrenSchema>;

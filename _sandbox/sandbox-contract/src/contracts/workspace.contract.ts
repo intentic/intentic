@@ -53,13 +53,14 @@ export const workspaceContract = {
         .output(WorkspaceTreeSchema),
     // Lazy-load one directory's children, the tree returns ignored dirs (node_modules, .git, …) without children,
     // and the client fetches them here on expand so a giant node_modules can't blow the tree walk's entry budget.
+    // Bounded depth is for consumers that need a small subtree as data rather than one explorer row at a time.
     children: oc
         .route({
             method: "GET",
             path: "/workspace/children",
-            summary: "One folder's contents",
+            summary: "A bounded folder listing",
             description:
-                "The entries directly inside a single folder. This is how you open a folder the full tree walk deliberately left closed, such as an installed-packages directory with a hundred thousand files in it.",
+                "The entries inside a folder as one flat list. Direct children are the default, which is how the explorer opens a folder the full tree walk left closed; callers that need a small subtree can ask for up to five levels without a request per directory.",
         })
         .input(WorkspaceChildrenQuerySchema)
         .output(WorkspaceChildrenSchema),

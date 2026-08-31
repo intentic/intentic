@@ -30,8 +30,26 @@ test(`counts against the declared entry, not the path that was called`, async ()
 
     expect(sandboxJson).toHaveBeenCalledTimes(1);
     const [path, init] = sandboxJson.mock.calls[0] as unknown as [string, { body: string }];
-    expect(path).toBe(`/extensions/repo-apps/usage`);
-    expect(JSON.parse(init.body)).toEqual({ used: { "POST /panels/*/start": 2, "GET /workspace/file": 1 } });
+    expect(path).toBe(`/extensions/usage`);
+    expect(JSON.parse(init.body)).toEqual({
+        reports: { "repo-apps": { "POST /panels/*/start": 2, "GET /workspace/file": 1 } },
+    });
+});
+
+test(`reports every extension in one request`, async () => {
+    recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/panels`);
+    recordSandboxCall(`deployments`, PERMISSIONS, `GET`, `/workspace/file?path=deployments.json`);
+
+    await flushSandboxUsage();
+
+    expect(sandboxJson).toHaveBeenCalledOnce();
+    const [, init] = sandboxJson.mock.calls[0] as unknown as [string, { body: string }];
+    expect(JSON.parse(init.body)).toEqual({
+        reports: {
+            "repo-apps": { "GET /panels": 1 },
+            deployments: { "GET /workspace/file": 1 },
+        },
+    });
 });
 
 test(`keeps the counts when the daemon is unreachable`, async () => {
@@ -47,7 +65,7 @@ test(`keeps the counts when the daemon is unreachable`, async () => {
     await flushSandboxUsage();
 
     const [, init] = sandboxJson.mock.calls[1] as unknown as [string, { body: string }];
-    expect(JSON.parse(init.body)).toEqual({ used: { "GET /panels": 2 } });
+    expect(JSON.parse(init.body)).toEqual({ reports: { "repo-apps": { "GET /panels": 2 } } });
 });
 
 test(`reports nothing at all when nothing was called`, async () => {

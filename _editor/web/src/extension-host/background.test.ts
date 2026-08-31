@@ -99,6 +99,97 @@ describe(`sandboxPoll`, () => {
         expect(read).not.toHaveBeenCalled();
     });
 
+    it(`runs independent polls through one global read lane`, async () => {
+        const { api } = fakeApi();
+        let active = 0;
+        let widest = 0;
+        let releaseFirst = (): void => {};
+        const first = sandboxPoll({
+            host: () => api,
+            everyMs: 60_000,
+            initial: () => ``,
+            read: async () => {
+                active++;
+                widest = Math.max(widest, active);
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve;
+                });
+                active--;
+                return `first`;
+            },
+        });
+        const secondRead = vi.fn(async () => {
+            active++;
+            widest = Math.max(widest, active);
+            active--;
+            return `second`;
+        });
+        const second = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read: secondRead });
+
+        first.refresh();
+        second.refresh();
+        await flush();
+
+        expect(secondRead).not.toHaveBeenCalled();
+        releaseFirst();
+        await flush();
+        expect(secondRead).toHaveBeenCalledTimes(1);
+        expect(widest).toBe(1);
+    });
+
+    it(`coalesces repeated triggers while a poll is waiting for the global lane`, async () => {
+        const { api } = fakeApi();
+        let releaseBlocker = (): void => {};
+        const blocker = sandboxPoll({
+            host: () => api,
+            everyMs: 60_000,
+            initial: () => ``,
+            read: async () => {
+                await new Promise<void>((resolve) => {
+                    releaseBlocker = resolve;
+                });
+                return `done`;
+            },
+        });
+        const read = vi.fn(async () => `answer`);
+        const waiting = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
+
+        blocker.refresh();
+        waiting.refresh();
+        waiting.refresh();
+        waiting.refresh();
+        await flush();
+        releaseBlocker();
+        await flush();
+
+        expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    it(`runs one trailing read when triggers land during an active read`, async () => {
+        const { api } = fakeApi();
+        let releaseFirst = (): void => {};
+        const read = vi.fn(async () => {
+            if (read.mock.calls.length === 1) {
+                await new Promise<void>((resolve) => {
+                    releaseFirst = resolve;
+                });
+            }
+            return `answer-${read.mock.calls.length}`;
+        });
+        const poll = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
+
+        poll.refresh();
+        await flush();
+        poll.refresh();
+        poll.refresh();
+        poll.refresh();
+        releaseFirst();
+        await flush();
+
+        expect(read).toHaveBeenCalledTimes(2);
+        expect(poll.state.value).toBe(`answer-2`);
+    });
+
     /* The rule that makes this safe to call from module scope: `host()` throws until activate() binds one, and
      * this runs detached on a timer, so a throw here is an unhandled rejection in the console of an app that is
      * otherwise fine. */

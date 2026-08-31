@@ -698,6 +698,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 modules: [],
                 freshness: { state: "fresh" as const },
             }),
+            invalidateHealth: () => {},
             markDirty: () => {},
             warm: async () => ({ files: 0, symbols: 0, chunks: 0, embedded: 0, generation: 0, freshness: { state: "fresh" as const, ageMs: 0 } }),
             close: async () => {},

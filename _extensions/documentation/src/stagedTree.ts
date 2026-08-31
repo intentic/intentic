@@ -11,43 +11,27 @@ import { README_TAIL, stagingDir } from "./paths.js";
  * advancing a run idempotent, it can run on every poll, in any browser, after any interruption, and start each
  * package's agent exactly once.
  *
- * It has to be a walk because the daemon lists one directory at a time (`GET /workspace/children`) and a document
- * set nests as deep as the package paths do. Bounded by MAX_LEVELS so a surprising tree cannot turn a render into
- * an unbounded request fan-out. */
+ * The daemon's bounded-depth children read returns this small subtree as one flat list. That matters here: the
+ * old browser-side walk issued one request per discovered directory, and a wide monorepo turned the minute
+ * presence poll into a synchronized request fan-out. */
 
 // `_editor/web` is two levels; a monorepo nesting packages three deep under a group directory is the realistic
 // worst case. Past that the set is not shaped like anything this extension writes.
-const MAX_LEVELS = 5;
+const MAX_DEPTH = 5;
 
 export const listStagedTails = async (api: IntenticApi, repo: string): Promise<readonly string[]> => {
     const root = stagingDir(repo);
-    const tails: string[] = [];
-    const children = async (path: string): Promise<readonly { name: string; type: string }[]> => {
-        try {
-            const body = await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(path)}`);
-            return WorkspaceChildrenSchema.parse(body).entries;
-        } catch {
-            // A directory that is not there is the ordinary answer for a repo with nothing staged.
-            return [];
-        }
-    };
-    const walk = async (path: string, tail: string, level: number): Promise<void> => {
-        const entries = await children(path);
-        const directories = entries.filter((entry) => entry.type === `dir`);
-        for (const entry of entries) {
-            if (entry.type === `file`) {
-                tails.push(tail === `` ? entry.name : `${tail}/${entry.name}`);
-            }
-        }
-        if (level >= MAX_LEVELS) {
-            return;
-        }
-        // Siblings in parallel: the levels are sequential (a child's path is not known until its parent is
-        // listed), but a level's directories are independent and a 50-package set is mostly one wide level.
-        await Promise.all(directories.map((entry) => walk(`${path}/${entry.name}`, tail === `` ? entry.name : `${tail}/${entry.name}`, level + 1)));
-    };
-    await walk(root, ``, 0);
-    return tails.toSorted();
+    try {
+        const body = await api.sandbox.json(`/workspace/children?path=${encodeURIComponent(root)}&depth=${MAX_DEPTH}`);
+        const prefix = `${root}/`;
+        return WorkspaceChildrenSchema.parse(body)
+            .entries.filter((entry) => entry.type === `file` && entry.path.startsWith(prefix))
+            .map((entry) => entry.path.slice(prefix.length))
+            .toSorted();
+    } catch {
+        // A directory that is not there is the ordinary answer for a repo with nothing staged.
+        return [];
+    }
 };
 
 // Which package dirs the staged set holds a page for, a `README.md` tail's directory part. The map's own tails

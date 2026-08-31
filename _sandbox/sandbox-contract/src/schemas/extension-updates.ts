@@ -299,13 +299,15 @@ export const WorkspaceExtensionCreatedSchema = z.object({
     id: z.string().describe("The id it was given."),
     dir: z.string().describe("Where its files are, so you can open them."),
 });
-/* A batch of calls the host observed against this extension's declared routes, entry → how many since the last
- * report. Counts rather than events, and declared entries rather than concrete paths, because the question the
- * ledger answers is "is this permission earned?": a finer record would be a log of what the owner was doing,
- * indexed by extension, which is not a thing this product should be accumulating to answer it. */
-export const ExtensionUsageInputSchema = z.object({
-    id: z.string().describe("Which extension."),
-    used: z.record(z.string(), z.number().int().positive()).describe("Which of its declared powers it exercised, and how many times."),
+/* Batches of calls the host observed against extensions' declared routes: extension id → declared entry → how
+ * many since the last report. Counts rather than events, and declared entries rather than concrete paths,
+ * because the question the ledger answers is "is this permission earned?": a finer record would be a log of
+ * what the owner was doing, indexed by extension, which is not a thing this product should be accumulating to
+ * answer it. Every extension rides one request so the bookkeeping cannot become its own request burst. */
+export const ExtensionUsageBatchSchema = z.object({
+    reports: z
+        .record(z.string(), z.record(z.string(), z.number().int().positive()))
+        .describe("Each extension that called something, and the counts against the declared powers it exercised."),
 });
 // One declared background process (contributes.processes), status/start/stop, addressed by the capability
 // entry id + the manifest's process name. Undeclared names are NOT_FOUND, the manifest-honesty rule again.
