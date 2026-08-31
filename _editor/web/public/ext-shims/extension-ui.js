@@ -90,5 +90,7 @@ export const useNarrow = m["useNarrow"];
 export const useNoteDraft = m["useNoteDraft"];
 export const useNow = m["useNow"];
 export const useRailMemory = m["useRailMemory"];
+export const useScrollReset = m["useScrollReset"];
+export const useStickyTop = m["useStickyTop"];
 export const useTheme = m["useTheme"];
 export const vAction = m["vAction"];

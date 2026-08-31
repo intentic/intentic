@@ -74,8 +74,15 @@ const candidatesIn = (files: readonly string[]): string[] => {
  * and an ordinary English word about how edges are drawn, and the one in this tree is PROSE: a sentence in
  * WorkflowNodeCard.vue explaining why a status stripe stops short of the card's corner. Naming both here says
  * "we looked", which is more honest than widening the promise to cover a class no markup contains, and than
- * editing the sentence, which would only leave the next person to write the word tripping the same wire. */
-const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`]);
+ * editing the sentence, which would only leave the next person to write the word tripping the same wire.
+ *
+ * `top-11` is the third of the same kind, and the sentence containing it is an argument AGAINST writing it:
+ * KnowledgeView explains that the offset its lower pinned things clear is measured and published as
+ * `--pinned-top` "rather than written down as a `top-11` that is correct at one width". Naming a class in prose
+ * is ordinary here — the comment two lines above the markup names `pb-3`, `-mb-3` and `gap-3` — and those pass
+ * only because they happen to be promised. Rewording this one would leave the argument weaker and the wire in
+ * the same place, and 11 is not a rung the pinned stack wants: it wants a measurement. */
+const NOT_CLASSES = new Set([`flex-shrink`, `antialiased`, `top-11`]);
 
 const classesOf = (css: string): Set<string> =>
     new Set([...css.matchAll(/\.(-?(?:[A-Za-z_]|\\.)(?:[\w-]|\\.)*)/gu)].map((match) => (match[1] ?? ``).replaceAll(/\\(.)/gu, `$1`)));

@@ -115,7 +115,12 @@
 @source inline("{static,fixed,absolute,relative,sticky}");
 @source inline("{inset,inset-x,inset-y,top,right,bottom,left,start,end}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,8,10,12,16,20,24,px,auto,full,1/2,1/3,2/3,1/4,3/4}");
 @source inline("-{inset,inset-x,inset-y,top,right,bottom,left}-{0.5,1,1.5,2,2.5,3,4,5,6,8,px,full,1/2}");
-@source inline("z-{0,1,10,20,30,40,50,auto}");
+/* Two ladders, not one scale. The TENS are overlays — a menu over a page, a dialog over that — and an extension
+ * rarely names one, because the kit's own overlay components own those rungs. The SINGLE DIGITS are the local
+ * order of pinned chrome within one surface, and an extension has to name them: <ScrollFrame sticky> pins its
+ * header at `z-2`, so a surface that pins a search bar ABOVE that frame needs the rung after it. Promised up to
+ * 3 because that is where this app's deepest pinned stack ends (bar → frame header → index column). */
+@source inline("z-{0,1,2,3,10,20,30,40,50,auto}");
 @source inline("{overflow,overflow-x,overflow-y}-{auto,hidden,clip,visible,scroll}");
 @source inline("overscroll-{auto,contain,none}");
 @source inline("{float-left,float-right,float-none,clear-left,clear-right,clear-both,clear-none,isolate,isolation-auto}");
