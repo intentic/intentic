@@ -539,9 +539,7 @@ const REFUSAL_CONDITION: Record<ProviderRefusal["kind"], string> = {
 };
 const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], string> = {
     limit: `has had room since`,
-    auth: `has authenticated fine since`,
-    // Only ever printed for a refusal the daemon settled by watching a turn run on this account (the store's
-    // own clear), nothing this side can observe answers one.
+    auth: `authenticated fine since`,
     entitlement: `has run a turn since`,
 };
 

@@ -79,13 +79,13 @@ const trialNotice = computed(() => {
         return undefined;
     }
     if (trialSpent.value) {
-        return `Free trial used up for today. Connect a Google account to keep going free: no subscription, no daily cap.`;
+        return `Free trial used up for today. Connect Google to keep going free.`;
     }
     if (trialStatus.value.health === `unavailable`) {
-        return `Free trial temporarily unavailable: failed messages aren't counted.`;
+        return `Free trial unavailable. Failed messages are not counted.`;
     }
     if (trialStatus.value.health === `degraded`) {
-        return `Free trial service is degraded: another upstream key may still answer, and failed messages aren't counted.`;
+        return `Free trial degraded. Failed messages are not counted.`;
     }
     const remaining = trialStatus.value.remaining;
     const left = `${remaining} free ${remaining === 1 ? `message` : `messages`} left today`;
@@ -95,7 +95,7 @@ const trialNotice = computed(() => {
      * that there is nothing true to say, and a placeholder would be a promise about a choice not yet made. */
     const served = trialStatus.value.servedModel;
     const answered = served === undefined ? `` : `Last answer: ${served}. `;
-    return `${answered}${left}: a step of an agent's turn spends one. ${TRIAL_NOTICE}`;
+    return `${answered}${left}. Each agent step costs one. ${TRIAL_NOTICE}`;
 });
 const retryTrial = async (): Promise<void> => {
     if (!reachable.value) {
@@ -124,7 +124,7 @@ const activeAccountReauth = computed(() => {
         class="flex items-center gap-2 rounded-xl border border-line bg-overlay/60 px-3 py-2 text-2xs text-muted"
     >
         <Icon name="box" class="shrink-0" />
-        <span class="min-w-0 flex-1">Archived: off the agents board. Sending a message puts it back.</span>
+        <span class="min-w-0 flex-1">Archived: off the board. Sending a message restores it.</span>
         <Button
             size="small"
             :text="true"

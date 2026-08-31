@@ -111,7 +111,7 @@ const assertHostedAllowance = async (context: OrpcContext, userId: string): Prom
     const used = await context.prisma.hostedMachine.count({ where: { sandbox: { ownerId: userId } } });
     if (used >= context.config.hosted.perUser) {
         throw new ORPCError(`BAD_REQUEST`, {
-            message: `you already have ${used === 1 ? `a sandbox we host` : `${used} sandboxes we host`}, remove one to have this sandbox hosted instead`,
+            message: `you already have ${used === 1 ? `a hosted sandbox` : `${used} hosted sandboxes`}; remove one first`,
         });
     }
     const budget = await hostedBudgetOf(context.prisma, context.config, userId);
@@ -261,7 +261,7 @@ export const sandboxRoutes = {
             } catch (error) {
                 context.logger.error({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed`);
                 throw new ORPCError(`BAD_GATEWAY`, {
-                    message: `couldn't take this sandbox's address down just now, try removing it again in a moment`,
+                    message: `couldn't release the address; try again shortly`,
                 });
             }
         }
@@ -332,7 +332,7 @@ export const sandboxRoutes = {
     cloudProvision: os.sandbox.cloudProvision.handler(async ({ context, input }) => {
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
         if (sandbox.setupCode === null || sandbox.setupCodeExpiresAt === null || sandbox.setupCodeExpiresAt < new Date()) {
-            throw new ORPCError(`BAD_REQUEST`, { message: `this sandbox has no live setup code, reopen its setup screen and retry` });
+            throw new ORPCError(`BAD_REQUEST`, { message: `no live setup code; reopen the setup screen and retry` });
         }
         const payload =
             typeof sandbox.setupPayload === `string`
@@ -340,7 +340,7 @@ export const sandboxRoutes = {
                 : {};
         if (payload[`SANDBOX_HOSTNAME`] === undefined) {
             throw new ORPCError(`BAD_REQUEST`, {
-                message: `the setup code targets your own Cloudflare, cloud machines need the intentic-provided tunnel`,
+                message: `setup targets your own Cloudflare; cloud machines need the provided tunnel`,
             });
         }
         const connectToken = decryptSecret(context.config, sandbox.token);
@@ -464,7 +464,7 @@ export const sandboxRoutes = {
         if (hosted !== null) {
             if (sandbox.lastSeenAt !== null) {
                 throw new ORPCError(`BAD_REQUEST`, {
-                    message: `this sandbox has already started, remove it from your account to destroy the machine we run for it`,
+                    message: `already started; remove it first to destroy the machine`,
                 });
             }
             try {
@@ -545,7 +545,7 @@ export const sandboxRoutes = {
         const budget = await hostedBudgetOf(context.prisma, context.config, sandbox.ownerId);
         if (budget.metered && budget.remainingMinutes === 0) {
             throw new ORPCError(`PAYMENT_REQUIRED`, {
-                message: `your ${budget.allowanceMinutes / 60} free hours are used up for this month, a membership lifts the limit, or run it on a machine of your own and it never applies`,
+            message: `your ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
             });
         }
         try {
@@ -595,7 +595,7 @@ export const sandboxRoutes = {
             // the hours, hence "this sandbox's" rather than "your". PAYMENT_REQUIRED so the editor can offer
             // the membership without string-matching a message.
             throw new ORPCError(`PAYMENT_REQUIRED`, {
-                message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up for this month, a membership lifts the limit, or run it on a machine of your own and it never applies`,
+                message: `this sandbox's ${budget.allowanceMinutes / 60} free hours are used up this month; upgrade or self-host`,
             });
         }
         try {

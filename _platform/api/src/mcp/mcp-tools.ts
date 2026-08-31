@@ -104,10 +104,10 @@ const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: s
     if (run.kind === `refused`) {
         const { json } = refusalResponse(run.refusal);
         const error = (json as { error?: { message?: string } | string }).error;
-        return say(typeof error === `string` ? error : (error?.message ?? `That run was refused, nothing was charged.`), true);
+        return say(typeof error === `string` ? error : (error?.message ?? `Run refused; nothing charged.`), true);
     }
     if (run.kind === `failed`) {
-        return say(`${run.service.name} did not answer: nothing was charged. Please try again shortly.`, true);
+        return say(`${run.service.name} did not answer; nothing charged. Try again shortly.`, true);
     }
     if (run.kind === `answered`) {
         // A provider's own 4xx: a complete answer, CHARGED, relayed verbatim, "your query was malformed" is
@@ -150,9 +150,9 @@ const executeRun = async (deps: ToolDeps, ownerId: string, slug: string, body: s
     // Always settled, even on a throw: not settling would leave a charge with no ledger entry.
     await run.settle(served);
     if (!served || result === undefined) {
-        return say(`${run.service.name} did not finish its answer: nothing was charged. Please try again shortly.`, true);
+        return say(`${run.service.name} did not finish; nothing charged. Try again shortly.`, true);
     }
-    return say(`${result}\n\n— charged ${run.credits} credits, ${run.remaining} left today.`);
+    return say(`${result}\n\nCharged ${run.credits} credits, ${run.remaining} left today.`);
 };
 
 export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId: string): void => {
@@ -163,24 +163,23 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
         {
             title: `List premium services`,
             description:
-                `What the intentic services catalog lists, what each run costs in membership credits, and how many are ` +
-                `left today. Free to call, spends nothing. Read this before services_run: the slug, the price and the ` +
-                `provider's own example request all come from here.`,
+                `What the services catalog lists, per-run cost in credits, and credits left today. ` +
+                `Free to call. Read this before services_run.`,
             inputSchema: {},
         },
         async () => {
             const catalog = await readServiceCatalog(prisma, config, ownerId, deps.now());
             if (catalog.services.length === 0) {
                 return say(
-                    `No premium services are listed on this platform yet. Carry on with your ordinary tools, and if a paid ` +
-                        `service plausibly could have answered, file one line with services_wanted so providers can see the demand.`,
+                    `No premium services listed. Use your ordinary tools; if a paid service would help, ` +
+                        `file one line with services_wanted.`,
                 );
             }
             const listings = catalog.services.map(renderListing).join(`\n\n`);
             const meter =
                 catalog.credits !== undefined
                     ? `${catalog.credits.remaining} of ${catalog.credits.allowance} credits left today (resets ${catalog.credits.resetsAt}).`
-                    : `Running any of these needs an intentic membership. Ask for one with services_run and it will offer the join page.`;
+                    : `Running any of these needs an intentic membership. Ask with services_run and it will offer the join page.`;
             return say(`${listings}\n\n${meter}`);
         },
     );
@@ -190,9 +189,8 @@ export const registerServiceTools = (server: McpServer, deps: ToolDeps, ownerId:
         {
             title: `Run a premium service`,
             description:
-                `Ask to run one metered service from the catalog. This does NOT spend on your say-so: the owner gets a link ` +
-                `to an approval page showing the price, what will be sent, and today's balance, and only their click there ` +
-                `releases the run. One approval covers exactly one run. A service that fails to answer is refunded.`,
+                `Run a metered service. The owner approves each run on a card showing price and balance. ` +
+                `Failed runs are refunded.`,
             inputSchema: {
                 slug: z.string().describe(`The service's slug, exactly as services_list gave it.`),
                 request: z.unknown().describe(`The provider's request body as JSON. Shape it after the example in services_list.`),

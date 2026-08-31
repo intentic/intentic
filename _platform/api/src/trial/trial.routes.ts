@@ -148,7 +148,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
                 {
                     error: {
                         type: `trial_exhausted`,
-                        message: `Free trial used up for today (${spend.allowance} messages). It resets at ${spend.resetsAt}. Connect a Google account in Sandbox ▸ Agent to keep going for free.`,
+                        message: `Free trial used up for today (${spend.allowance} messages). Resets at ${spend.resetsAt}. Connect Google to keep going free.`,
                     },
                     trial: { allowance: spend.allowance, remaining: 0, resetsAt: spend.resetsAt },
                 },
@@ -180,7 +180,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
                 `trial: no key answered on any model`,
             );
             return c.json(
-                { error: { type: `trial_unavailable`, message: `The free trial is unavailable right now. Please try again shortly.` } },
+                { error: { type: `trial_unavailable`, message: `Free trial unavailable. Try again shortly.` } },
                 502,
             );
         }

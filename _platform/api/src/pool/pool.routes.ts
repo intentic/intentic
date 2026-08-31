@@ -129,7 +129,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
                 {
                     error: {
                         type: `insufficient_credits`,
-                        message: `Supporting this extension costs ${amount} credits and ${spend.remaining} are left today. The allowance resets at ${spend.resetsAt}.`,
+                        message: `Costs ${amount} credits, ${spend.remaining} left. Resets at ${spend.resetsAt}.`,
                     },
                     credits: { allowance: spend.allowance, remaining: spend.remaining, resetsAt: spend.resetsAt },
                 },
@@ -246,7 +246,7 @@ export const poolHttpRoutes = ({ config, prisma, auth, gateway, fetchFn = fetch,
                 {
                     error: {
                         type: `service_unavailable`,
-                        message: `${run.service.name} did not answer, nothing was charged. Please try again shortly.`,
+                        message: `${run.service.name} did not answer; nothing charged. Try again shortly.`,
                     },
                 },
                 502,

@@ -694,7 +694,7 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
             kind: "error",
             code: "rate_limit",
             message:
-                "Claude usage limit reached: this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.",
+                "Claude usage limit reached. Send again once it resets.",
         },
         { kind: "done" },
     ]);
@@ -992,7 +992,7 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
             {
                 kind: "error",
                 code: "rate_limit",
-                message: expect.stringContaining("allowance is exhausted"),
+                message: expect.stringContaining("usage limit reached"),
                 resetsAt: Date.parse("2026-07-30T20:15:00.000Z") / 1000,
             },
             { kind: "done" },

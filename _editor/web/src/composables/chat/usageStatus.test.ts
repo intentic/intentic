@@ -546,7 +546,7 @@ describe(`plan-limit aggregates`, () => {
         );
 
         const answered = refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [reading({ measuredAt: 1_000 })], 300_000);
-        expect(answered?.line).toBe(`Refused its credential 5m ago, has authenticated fine since.`);
+        expect(answered?.line).toBe(`Refused its credential 5m ago, authenticated fine since.`);
         // Kept whole, either way: the sentence is what a hover is for once it stops being the headline.
         expect(answered?.detail).toBe(`token revoked`);
         expect(refusalNote({ at: 0, kind: `limit`, message }, [reading({ measuredAt: 1_000 })], 300_000)?.line).toBe(

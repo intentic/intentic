@@ -146,13 +146,13 @@ describe(`chipMessageNotice`, () => {
     });
 
     test(`says a sentence is never coming when none was written`, () => {
-        expect(chipMessageNotice(state)).toBe(`No message was written for Review panel · audit — name the commit yourself`);
+        expect(chipMessageNotice(state)).toBe(`No message written for Review panel · audit`);
     });
 
     // A draft that ENDED without writing is the same answer — the step list under the box carries the details.
     test(`a failed draft reads as the absence, not as a wait`, () => {
         expect(chipMessageNotice({ ...state, draft: { startedAt: 0, steps: [], outcome: `failed`, finishedAt: 9_000 } })).toBe(
-            `No message was written for Review panel · audit — name the commit yourself`,
+             `No message written for Review panel · audit`,
         );
     });
 
@@ -161,24 +161,24 @@ describe(`chipMessageNotice`, () => {
      * is what made a working feature read as a broken one. */
     test(`explains itself when the box is the user's, and says what to do about it`, () => {
         expect(chipMessageNotice({ ...state, message: `fix: cascading markers`, boxIsYours: true })).toBe(
-            `Keeping your message — clear the box to use Review panel · audit's`,
+            `Keeping your message. Clear the box to use Review panel · audit's.`,
         );
     });
 
     test(`says the same while that session's sentence is still being written`, () => {
         expect(chipMessageNotice({ ...state, draft: running(), boxIsYours: true })).toBe(
-            `Keeping your message — clear the box to use Review panel · audit's`,
+            `Keeping your message. Clear the box to use Review panel · audit's.`,
         );
     });
 
     // A box the user owns over a session nothing was written for: the absence is the more fundamental answer,
     // and offering to clear the box for a message that does not exist would be a lie.
     test(`falls back to the absence when neither the box nor the session has anything to file`, () => {
-        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(`No message was written for Review panel · audit — name the commit yourself`);
+        expect(chipMessageNotice({ ...state, boxIsYours: true })).toBe(`No message written for Review panel · audit`);
     });
 
     test(`the "you" row has no landed sentence by definition, and says so`, () => {
-        expect(chipMessageNotice({ ...state, label: `you`, yours: true })).toBe(`Your own changes — name this commit yourself`);
+        expect(chipMessageNotice({ ...state, label: `you`, yours: true })).toBe(`Your changes -- name this commit yourself`);
     });
 });
 
@@ -240,8 +240,8 @@ describe(`draftReport`, () => {
             NOW,
         );
         expect(rows.map((row) => row.title)).toEqual([
-            `Skipped gemini-3-flash — it refused a moment ago: usage limit reached`,
-            `claude-haiku-4-5-20251001 refused after 6s — Claude usage limit reached — the allowance is exhausted. Try again once it resets.`,
+            `Skipped gemini-3-flash, refused a moment ago: usage limit reached`,
+            `claude-haiku-4-5-20251001 refused after 6s: Claude usage limit reached — the allowance is exhausted. Try again once it resets.`,
         ]);
     });
 
@@ -298,8 +298,8 @@ describe(`draftReport`, () => {
             {
                 key: `failed`,
                 status: `failed`,
-                detail: `No message was written — No AI account is connected`,
-                title: `No message was written — No AI account is connected`,
+                detail: `No message written: No AI account is connected`,
+                title: `No message written: No AI account is connected`,
             },
         ]);
     });

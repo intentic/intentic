@@ -92,7 +92,7 @@ export const solveTurnstile = async (container: HTMLElement, siteKey: string): P
         turnstile.render(container, {
             sitekey: siteKey,
             callback: resolve,
-            "error-callback": () => reject(new Error("The bot check failed, reload the page and try again")),
+            "error-callback": () => reject(new Error("Bot check failed. Reload the page.")),
         });
     });
 };

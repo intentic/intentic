@@ -156,17 +156,17 @@ test("the ceiling has nothing to disclose; a floor names what it lacks", () => {
     expect(grok).toContain("no per-tool approvals");
     expect(grok).toContain("no mid-turn steering");
     expect(grok).toContain("no effort control");
-    expect(grok).toContain("worktree by working directory only");
+    expect(grok).toContain("worktree by cwd only");
 
     // ACP takes our http MCP tools when it advertises them, so its line is a narrowing rather than an absence:
     // and it publishes commands and terminals, which must NOT be listed as missing.
     const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native"));
-    expect(acp).toContain("MCP tools only: no plugins or browser");
+    expect(acp).toContain("MCP tools only, no plugins or browser");
     expect(acp).not.toContain("no slash commands");
     expect(acp).not.toContain("no terminal panel");
 
     const codex = limitationsOf(capabilitiesOf("codex", "native"));
-    expect(codex).toContain("browser tools only: no plugins or other MCP tools");
+    expect(codex).toContain("browser tools only, no other MCP");
     expect(codex).not.toContain("no MCP tools or plugins");
 });
 
@@ -211,24 +211,24 @@ test("the safety axes disclose the middle answer differently from the floor", ()
     expect(claude).not.toContain("stored secrets");
 
     // The middle: rules DO apply, to what the vendor raises. Never the floor's flat "aren't applied".
-    expect(codex).toContain("only to calls this agent asks about");
-    expect(codex).not.toContain("aren't applied");
+    expect(codex).toContain("only to calls this agent raises");
+    expect(codex).not.toContain("not applied");
 
     // The floor: no seam at all, said plainly.
-    expect(pi).toContain("your command rules aren't applied");
+    expect(pi).toContain("command rules not applied");
 
     /* The third answer, which exists because OpenCode's watchdog aborts a turn that pauses. Its sentence must
      * say the rules DO bite (unlike Pi's) and that a hold cannot ask (unlike Codex's). */
     const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
-    expect(grok).toContain("a rule set to hold refuses instead");
-    expect(grok).not.toContain("aren't applied");
-    expect(grok).not.toContain("only to calls this agent asks about");
+    expect(grok).toContain("command rules can refuse but not hold");
+    expect(grok).not.toContain("not applied");
+    expect(grok).not.toContain("only to calls this agent raises");
     // Gemini rides the same loop, so it must read the same way.
     expect(limitationsOf(capabilitiesOf("gemini", "native")).join(" ")).toBe(grok);
 
     // Masking is binary and structural, so every non-Claude runtime says the same thing.
     for (const provider of ["codex", "grok", "gemini", "pi", "some-installed-agent"] as const) {
-        expect(limitationsOf(capabilitiesOf(provider, "native")).join(" ")).toContain("stored secrets reach the model unmasked");
+        expect(limitationsOf(capabilitiesOf(provider, "native")).join(" ")).toContain("secrets reach the model unmasked");
     }
 });
 
@@ -239,9 +239,9 @@ test("the instruction axis discloses its two weaker answers, differently", () =>
     const grok = limitationsOf(capabilitiesOf("grok", "native")).join(" ");
     const acp = limitationsOf(capabilitiesOf("some-installed-agent", "native")).join(" ");
 
-    expect(grok).toContain("added to theirs");
-    expect(grok).not.toContain("isn't applied");
-    expect(acp).toContain("isn't applied");
+    expect(grok).toContain("appended, not replaced");
+    expect(grok).not.toContain("not applied");
+    expect(acp).toContain("not applied");
     // Codex on its own runtime replaces, like the Claude Code loop, so it has nothing to disclose here.
     expect(limitationsOf(capabilitiesOf("codex", "native")).join(" ")).not.toContain("system prompt");
 });

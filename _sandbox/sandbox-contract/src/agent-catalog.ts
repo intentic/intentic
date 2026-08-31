@@ -140,7 +140,7 @@ export const TRIAL_MODEL_ID = "auto";
 // What the picker calls it, and the sentence the surfaces put underneath. One wording, so the composer's notice
 // and the picker's row cannot end up describing different bargains.
 export const TRIAL_LABEL = "Free trial";
-export const TRIAL_NOTICE = "Trial messages pass through intentic's servers. Connect an account to chat directly.";
+export const TRIAL_NOTICE = "Trial messages pass through intentic. Connect an account to chat directly.";
 
 export const ENDPOINT_PROVIDER_PREFIX = "endpoint/";
 export const endpointProvider = (id: string): AgentProvider => `${ENDPOINT_PROVIDER_PREFIX}${id}`;
@@ -679,35 +679,26 @@ export const limitationsOf = (capabilities: AgentCapabilities): string[] => [
     ...(capabilities.mcp === "none"
         ? ["no MCP tools or plugins"]
         : capabilities.mcp === "http"
-          ? ["MCP tools only: no plugins or browser"]
+          ? ["MCP tools only, no plugins or browser"]
           : capabilities.mcp === "browser"
-            ? ["browser tools only: no plugins or other MCP tools"]
+            ? ["browser tools only, no other MCP"]
             : capabilities.mcp === "tools"
-              ? ["no plugins: every other tool reaches it"]
+              ? ["no plugins"]
               : []),
-    ...(capabilities.execution.includes("js") ? [] : ["no code runs, its shell is the one way to execute"]),
+    ...(capabilities.execution.includes("js") ? [] : ["no code runs, shell only"]),
     ...(capabilities.effort ? [] : ["no effort control"]),
     ...(capabilities.commands ? [] : ["no slash commands"]),
     ...(capabilities.terminals ? [] : ["no terminal panel"]),
-    ...(capabilities.isolation === "namespace" ? [] : ["worktree by working directory only"]),
-    ...(capabilities.recovery ? [] : ["no auto-resume after an outage"]),
-    /* The two weaker answers on the instruction axis, and only those: "replace" is the ceiling this list
-     * measures against, so it has nothing to disclose. Both phrasings name the OWNER'S prompt rather than the
-     * mechanism, because that is the thing they wrote and the thing that will or will not be in force. */
-    ...(capabilities.instructions === "append" ? ["your system prompt is added to theirs, not replacing it"] : []),
-    ...(capabilities.instructions === "none" ? ["your system prompt isn't applied"] : []),
-    /* THE TWO SAFETY AXES, phrased as what the OWNER loses rather than as which seam is missing, because both
-     * describe something they configured on a settings page and would otherwise assume was in force everywhere.
-     *
-     * "hooks" and "masked" are the ceiling and disclose nothing. The "approval" middle answer discloses the one
-     * thing that genuinely differs from a hook: the vendor picks which calls it asks about, so a rule can only
-     * reach what it chose to raise. */
-    ...(capabilities.rulebook === "approval" ? ["your command rules apply only to calls this agent asks about"] : []),
+    ...(capabilities.isolation === "namespace" ? [] : ["worktree by cwd only"]),
+    ...(capabilities.recovery ? [] : ["no auto-resume after outage"]),
+    ...(capabilities.instructions === "append" ? ["system prompt appended, not replaced"] : []),
+    ...(capabilities.instructions === "none" ? ["system prompt not applied"] : []),
+    ...(capabilities.rulebook === "approval" ? ["command rules apply only to calls this agent raises"] : []),
     ...(capabilities.rulebook === "refuse-only"
-        ? ["your command rules can stop a command here but not pause to ask: a rule set to hold refuses instead"]
+        ? ["command rules can refuse but not hold"]
         : []),
-    ...(capabilities.rulebook === "none" ? ["your command rules aren't applied"] : []),
-    ...(capabilities.secrets === "none" ? ["stored secrets reach the model unmasked, and `{{secret:name}}` isn't substituted"] : []),
+    ...(capabilities.rulebook === "none" ? ["command rules not applied"] : []),
+    ...(capabilities.secrets === "none" ? ["secrets reach the model unmasked"] : []),
 ];
 
 // Claude's compile-time model floor, shared by the daemon's catalog (claude-models.ts, its last rung, reached

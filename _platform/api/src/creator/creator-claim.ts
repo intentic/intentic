@@ -68,7 +68,7 @@ export const isDomainPublisher = (publisher: string): boolean => publisher.inclu
  * every card shows. */
 export const domainClaimProblem = (domain: string): string | undefined => {
     if (isIP(domain) !== 0) {
-        return `A publisher domain must be a name, not an IP address.`;
+        return `A publisher domain must be a name, not an IP.`;
     }
     if (RESERVED_WORDS.some((word) => domain.includes(word))) {
         return `A publisher domain may not contain ${RESERVED_WORDS.join(`, `)}: those words are reserved for the platform's own listings.`;
@@ -243,7 +243,7 @@ export const checkClaim = async (
 export const claimFailureReason = (publisher: string, report: ClaimReport): string => {
     const { attempts } = report;
     if (attempts.length === 0) {
-        return `The registry lists no GitHub-backed extension under ${publisher}, so there is nothing to prove ownership against yet.`;
+        return `No GitHub-backed extension under ${publisher} in the registry.`;
     }
     const mismatched = attempts.filter((attempt) => attempt.outcome === `mismatched`).map((attempt) => attempt.repo);
     if (mismatched.length > 0) {
@@ -254,7 +254,7 @@ export const claimFailureReason = (publisher: string, report: ClaimReport): stri
     }
     const unreadable = attempts.filter((attempt) => attempt.outcome === `unreadable`).map((attempt) => attempt.repo);
     if (unreadable.length === attempts.length) {
-        return `None of ${attempts.map((attempt) => attempt.repo).join(`, `)} could be read just now. That is GitHub, not you: try again in a moment.`;
+        return `None of ${attempts.map((attempt) => attempt.repo).join(`, `)} could be read. Try again in a moment.`;
     }
     const read = attempts.length - unreadable.length;
     const looked =
@@ -304,13 +304,13 @@ export const domainClaimFailureReason = (domain: string, report: ClaimReport): s
     const at = `https://${domain}/${DOMAIN_CLAIM_PATH}`;
     const outcome = report.attempts[0]?.outcome;
     if (outcome === `mismatched`) {
-        return `${at} serves a token, but not the line minted for your account. Replace its contents with the line shown here and try again.`;
+        return `${at} serves a token, but not this account's. Replace with the line shown here.`;
     }
     if (outcome === `absent`) {
-        return `${at} answered nothing readable yet. Serve the line shown here as plain text at exactly that path, over https, and try again.`;
+        return `${at} returned nothing readable. Serve the line shown here as plain text at that path over https.`;
     }
     return (
-        `${at} could not be read just now: the domain must resolve publicly and answer over https. ` +
-        `If the DNS record or the route is new, give it a moment and try again.`
+        `${at} could not be read. The domain must resolve publicly over https. ` +
+        `If the DNS record is new, wait a moment and retry.`
     );
 };

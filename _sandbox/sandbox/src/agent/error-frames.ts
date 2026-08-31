@@ -10,13 +10,13 @@ type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 export const trialUnavailableFrame = (): ErrorEvent => ({
     kind: "error",
     code: "trial-unavailable",
-    message: "Free trial temporarily unavailable, failed messages aren't counted. Retry shortly or connect Google in Sandbox ▸ Agent.",
+    message: "Free trial unavailable. Failed messages are not counted. Retry or connect Google.",
 });
 
 const trialExhaustedFrame = (message?: string): ErrorEvent => ({
     kind: "error",
     code: "trial-exhausted",
-    message: message ?? "Free trial used up for today. Connect Google in Sandbox ▸ Agent to keep going for free.",
+    message: message ?? "Free trial used up for today. Connect Google to keep going free.",
 });
 
 export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_limit" ? trialExhaustedFrame() : trialUnavailableFrame());
@@ -73,25 +73,21 @@ const proxyCooldownReset = (explained: string, now: number = Date.now()): number
  * turns a wrong promise into a useful one: if it keeps happening, the request is being refused, not the quota. */
 const limitSentence = (vendor: string, limit: TurnLimit | undefined): string => {
     if (limit === undefined) {
-        return `${vendor} usage limit reached: this account's allowance is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+        return `${vendor} usage limit reached. Send again once it resets.`;
     }
     const allowance = limit.pool === undefined ? `allowance` : `${limit.pool} allowance`;
     if (limit.withHeadroom > 0) {
         const total = limit.withHeadroom + limit.spent;
         return (
-            `${vendor} refused this turn, but ${limit.withHeadroom} of ${total} connected accounts still ` +
-            `${limit.withHeadroom === 1 ? `has` : `have`} headroom${limit.pool === undefined ? `` : ` for ${limit.pool}`}, so this is ` +
-            `not a spent allowance and no reset will fix it. Send again; if it keeps refusing, the request is ` +
-            `being turned away rather than the quota, and another model or harness will get through.`
+            `${vendor} refused, but ${limit.withHeadroom}/${total} accounts have headroom` +
+            `${limit.pool === undefined ? `` : ` for ${limit.pool}`}. Send again or try another model.`
         );
     }
-    // Nothing measured either way: the pool was never polled, or the provider has renamed the bucket it is
-    // reported under. Say a limit was hit and claim nothing about a fleet we cannot see.
     if (limit.spent === 0) {
-        return `${vendor} usage limit reached: the ${allowance} is exhausted, not a provider outage. Send again once it resets to carry on from here.`;
+        return `${vendor} usage limit reached: ${allowance} exhausted. Send again once it resets.`;
     }
-    const accounts = limit.spent === 1 ? `the connected account` : `all ${limit.spent} connected accounts`;
-    return `${vendor} usage limit reached: the ${allowance} is spent on ${accounts}, not a provider outage. Send again once it resets to carry on from here.`;
+    const accounts = limit.spent === 1 ? `the connected account` : `all ${limit.spent} accounts`;
+    return `${vendor} usage limit reached: ${allowance} spent on ${accounts}. Send again once it resets.`;
 };
 
 // One frame for both ways a spent subscription allowance reaches us: an assistant refusal after the harness
@@ -123,9 +119,8 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
     kind: "error",
     code: "provider-outage",
     message:
-        `The provider refused ${attempts} requests in a row${status === undefined ? `` : ` (HTTP ${status})`}, so this turn stopped ` +
-        `waiting on it. Whatever it had already done is kept, and sending again picks it up. If every send fails the same way, ` +
-        `the endpoint is turning the request away rather than having a bad minute: check the model and endpoint on its card.`,
+        `Provider refused ${attempts} requests${status === undefined ? `` : ` (HTTP ${status})`}. ` +
+        `Work so far is kept; send again to resume. If it keeps failing, check the model and endpoint.`,
 });
 
 /* A PARAMETER THE TURN NEVER ASKED FOR, refused as if it had (failure-sentences.ts holds the evidence and the
@@ -137,9 +132,7 @@ export const retryStormFrame = (attempts: number, status: number | undefined): E
 export const unsentParameterFrame = (explained: string): ErrorEvent => ({
     kind: "error",
     code: "provider-outage",
-    message:
-        `${explained} Nothing this sandbox sends carries that parameter, so it was added above us: there is no request of yours to fix, ` +
-        `and the same send usually goes through moments later. Whatever the turn had already done is kept.`,
+    message: `${explained} This parameter was not sent by intentic. Usually clears on retry; work so far is kept.`,
 });
 
 /* WHICH CONDITION an API failure actually is, the frame the client branches on.
@@ -171,7 +164,7 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
         return {
             kind: "error",
             code: "trial-model-unavailable",
-            message: `This model couldn't run through the free trial. ${explained} Choose another model or connect Google in Sandbox ▸ Agent. The failed message wasn't counted.`,
+            message: `This model could not run through the free trial. ${explained} Choose another model or connect Google.`,
         };
     }
     // rate_limit is the subscription usage cap, not a workspace fault, tag it so the UI can render it as a

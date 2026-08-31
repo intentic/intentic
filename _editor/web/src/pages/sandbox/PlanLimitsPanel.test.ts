@@ -185,7 +185,7 @@ it(`reads a healed refusal as history: a footnote about the account, not an alar
     const el = mount([claudeAccount({}), claudeAccount({ id: `acc-2`, label: `second@example.com` })]);
 
     const refusal = [...el.querySelectorAll(`p`)].find((line) => /Refused its credential/.test(line.textContent ?? ``));
-    expect(refusal?.textContent?.trim()).toBe(`Refused its credential 3h ago, has authenticated fine since.`);
+    expect(refusal?.textContent?.trim()).toBe(`Refused its credential 3h ago, authenticated fine since.`);
     // Quiet, not shouted: the warning tone is reserved for a refusal that still describes the situation.
     expect(refusal?.className).toContain(`text-subtle`);
     expect(refusal?.className).not.toContain(`text-warning`);

@@ -354,4 +354,4 @@ const escapeHtml = (value: string): string =>
     value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 const escapeAttribute = escapeHtml;
 
-const messageOf = (error: unknown): string => (error instanceof Error ? error.message : "Something went wrong, please try again.");
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : "Something went wrong. Try again.");

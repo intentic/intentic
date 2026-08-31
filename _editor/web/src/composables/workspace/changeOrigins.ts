@@ -204,12 +204,12 @@ const stepRow = (step: LandedMessageStep, index: number, now: number): DraftRepo
               ? `wrote the message`
               : step.reason === undefined
                 ? step.status === `skipped`
-                    ? `skipped — refused a moment ago`
+                    ? `skipped, refused a moment ago`
                     : `refused`
                 : headline(step.reason);
     // The tooltip says the whole thing the row abbreviates, the full model id, the verb spelled out, and the
     // vendor's own sentence to its last word.
-    const said = step.reason === undefined ? `` : ` — ${step.reason}`;
+    const said = step.reason === undefined ? `` : `: ${step.reason}`;
     const title =
         step.status === `asking`
             ? `Asking ${step.model}…${elapsed === undefined ? `` : ` ${elapsed}`}`
@@ -217,7 +217,7 @@ const stepRow = (step: LandedMessageStep, index: number, now: number): DraftRepo
               ? `${step.model} wrote the message${elapsed === undefined ? `` : ` in ${elapsed}`}`
               : step.status === `refused`
                 ? `${step.model} refused${elapsed === undefined ? `` : ` after ${elapsed}`}${said}`
-                : `Skipped ${step.model} — it refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
+                : `Skipped ${step.model}, refused a moment ago${step.reason === undefined ? `` : `: ${step.reason}`}`;
     return {
         key: `${index}-${step.model}`,
         status: step.status,
@@ -242,7 +242,7 @@ export const draftReport = (draft: LandedMessageDraft | undefined, now: number):
     }
     const rows = draft.steps.map((step, index) => stepRow(step, index, now));
     if (draft.outcome === `failed` && draft.reason !== undefined && !draft.steps.some((step) => step.reason === draft.reason)) {
-        const closing = `No message was written — ${draft.reason}`;
+        const closing = `No message written: ${draft.reason}`;
         return [...rows, { key: `failed`, status: `failed`, detail: closing, title: closing }];
     }
     return rows;
@@ -283,13 +283,13 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
         return undefined;
     }
     if (state.yours) {
-        return `Your own changes — name this commit yourself`;
+        return `Your changes -- name this commit yourself`;
     }
     const running = draftRunning(state.draft);
     // Said whether the sentence exists yet or is still being written: either way this box is not taking it, and
     // the same clearing lets the one that arrives land.
     if (state.boxIsYours && (state.message !== undefined || running)) {
-        return `Keeping your message — clear the box to use ${state.label}'s`;
+        return `Keeping your message. Clear the box to use ${state.label}'s.`;
     }
     /* The wait, and ONLY the wait. This used to append the walk's newest step ("- Asking claude-haiku-4-5-…
      * 2s"), which put the very same words in two places a centimetre apart: here, and as the last row of the
@@ -302,5 +302,5 @@ export const chipMessageNotice = (state: ChipMessageState): string | undefined =
     // Nothing was written and nothing is coming: the draft failed (its report below says exactly how), no
     // quick model answered, or the work landed before anything was writing these. The honest answer is that
     // there is nothing to file, and the same words the receipt used when the draft ended empty.
-    return state.message === undefined ? `No message was written for ${state.label} — name the commit yourself` : undefined;
+    return state.message === undefined ? `No message written for ${state.label}` : undefined;
 };
