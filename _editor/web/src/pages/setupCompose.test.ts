@@ -25,9 +25,20 @@ test("the compose file mirrors connect.sh: slugged names, origin alias, .env gua
     const yaml = composeFile(base);
     // Same names as connect.sh derives, so cleanup.sh + coexistence checks + workspace data stay compatible.
     expect(yaml).toContain(`container_name: intentic-sandbox-sandbox-0f00ba4dd12b`);
-    // No tunnel container: the sandbox's own agent enables against the platform's hub from inside.
+    // No tunnel container: the sandbox's own daemon dials the ingress edge from inside.
     expect(yaml).not.toContain(`intentic-sandbox-tunnel`);
-    expect(yaml).toContain(`ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}`);
+    /* THE REACHABILITY PAIR, spelled as ingress-contract.ts pins it, because the entrypoint and the daemon read
+     * exactly these names and a compose file that hands down a name nobody reads starts a sandbox that is
+     * simply unreachable. The grant is guarded (`:?`) and the URL defaults (`:-`): a box with no proof of
+     * identity can serve nothing, while one with no edge address falls to the daemon's own default. */
+    expect(yaml).toContain(`INGRESS_URL: \${INGRESS_URL:-}`);
+    expect(yaml).toContain(`SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`);
+    // The hub-era vocabulary is gone rather than accepted alongside: reachability is a signature the edge
+    // verifies, not an account on a hub, so a lingering ZROK_* line would name a provisioning step that no
+    // longer exists and quietly shadow the workspace .env.
+    for (const retired of [`ZROK_TOKEN`, `ZROK_API`, `ZROK_NAMESPACE`]) {
+        expect(yaml, `${retired} belongs to the retired hub lane`).not.toContain(retired);
+    }
     expect(yaml).toContain(`name: intentic-workspace-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`name: intentic-history-sandbox-0f00ba4dd12b`);
     expect(yaml).toContain(`name: intentic-docker-sandbox-0f00ba4dd12b`);

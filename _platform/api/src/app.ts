@@ -9,7 +9,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { type Auth, createAuth } from "./auth.js";
 import { localHostname } from "@intentic/sandbox-contract";
 import { CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
-import { sandboxHostname } from "./sandbox/zrok-provision.js";
+import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import type { Config } from "./config.js";
 import { buildOrpcContext, type OrpcContext } from "./context.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -54,31 +54,26 @@ const hostOf = (url: string): string | undefined => {
  * be trading up for. A platform-side compromise is the same story with no token needed at all, which is what
  * makes the "the platform holds nothing it could replay" claim (sandbox auth.ts) worth defending here.
  *
- * The address is not information the daemon actually contributes. On the intentic path we provisioned the
- * tunnel and stored its hostname; on the own-Cloudflare path the user picked the zone and subdomain at setup
- * and we stored those too. Both are known before the daemon ever boots, so an announce that disagrees is
- * either a misconfiguration or an attack, and neither deserves to be written.
+ * The address is not information the daemon actually contributes. A sandbox this platform made reachable
+ * answers at `sandbox-<id>.<zone>`, a pure digest of its own connect token, known before the daemon ever
+ * boots — so an announce that disagrees is either a misconfiguration or an attack, and neither deserves to be
+ * written.
  *
- * The remaining case is a sandbox with neither record, an `attach`-only row, or one predating the stored
- * hostname. There it pins on first announce and holds: still not a free-form field, just one whose value is
- * learned instead of derived. */
+ * The remaining case is a sandbox this platform never handed a grant to: an `attach`-only row, where the owner
+ * runs the box behind a domain of their own and asserted the address themselves. There it pins on first
+ * announce and holds: still not a free-form field, just one whose value is learned instead of derived.
+ *
+ * DID WE HAND THIS ROW A GRANT is asked of the row's own records rather than of a column, because there is no
+ * column any more: reachability is a signature, not state (sandbox/reachability.ts). The two lanes that hand
+ * one down are the two that leave a record — the setup mint stores its claim payload, and a hosted provision
+ * creates the machine row — which is exactly the set the column this replaced used to mark. */
 const expectedDaemonHost = (
     config: Config,
-    sandbox: { token: string; zrokToken: string | null; setupPayload: unknown; daemonUrl: string | null },
+    sandbox: { token: string; setupPayload: unknown; daemonUrl: string | null; hosted?: { id: string } | null },
 ): string | undefined => {
-    // A sandbox we made reachable answers at the address DERIVED from its connect token, known before the
-    // daemon ever boots, which is what makes a disagreeing announce a misconfiguration or an attack.
-    if (sandbox.zrokToken !== null) {
-        return sandboxHostname(config.zrok.zone, decryptSecret(config, sandbox.token));
-    }
-    // A row whose payload is absent or not the string shape simply contributes no expectation, an
-    // attach-only sandbox lives at an address its owner asserted, and pins on first announce below.
-    const stored =
-        typeof sandbox.setupPayload === `string` ? (JSON.parse(decryptSecret(config, sandbox.setupPayload)) as Record<string, string>) : {};
-    const zone = stored[`ZONE`];
-    const subdomain = stored[`SUBDOMAIN`];
-    if (zone !== undefined && zone !== `` && subdomain !== undefined && subdomain !== ``) {
-        return `${subdomain}.${zone}`;
+    const handedAGrant = sandbox.setupPayload !== null || (sandbox.hosted ?? null) !== null;
+    if (handedAGrant && ingressEnabled(config)) {
+        return sandboxHostname(config.ingress.zone, decryptSecret(config, sandbox.token));
     }
     return sandbox.daemonUrl === null ? undefined : hostOf(sandbox.daemonUrl);
 };
@@ -94,11 +89,11 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
 // The platform is the sandbox REGISTRY: each daemon announces its own URL + liveness here (outbound-only,
 // authenticated by its connect token), and the browser reads the registry, then talks to the daemon DIRECTLY
 // over its tunnel for everything else. No relay, no platform→sandbox calls, a breach still can't reach into
-// any sandbox. The public (sessionless) routes are /setup/claim (the connect script redeems its setup code)
-// and the connect-token-authenticated daemon relays /sandbox/announce (phone-home), /sandbox/host-tunnel and
-// /sandbox/preview-route (minted on intentic's own Cloudflare). sandbox.zones is the one route handed an infra secret (the
-// Cloudflare token), and only transiently, it lists zones for the picker and drops the token, never
-// persisting or logging it.
+// any sandbox. The public (sessionless) routes are /setup/claim (the connect script redeems its setup code) and
+// /api/reachability/<id> (the edge asks whether a registering tunnel's sandbox still exists), plus the
+// connect-token-authenticated daemon relays /sandbox/announce (phone-home), /sandbox/boot-report and
+// /sandbox/local-dns. sandbox.zones is the one route handed an infra secret (the Cloudflare token), and only
+// transiently, it lists zones for the picker and drops the token, never persisting or logging it.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger): { app: Hono<AppEnv>; auth: Auth } => {
     const auth = createAuth(config, prisma);
 
@@ -196,8 +191,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (sandboxId !== undefined) {
             lines.push(`LOCAL_PORT=${localDaemonPort(sandboxId)}`);
         }
-        // The reachability grant itself (ZROK_TOKEN/ZROK_API/ZROK_NAMESPACE/SANDBOX_HOSTNAME) rides in the
-        // stored payload below, minted when the code was, so the box can enable and share the moment it boots.
+        // The reachability grant itself (SANDBOX_GRANT/INGRESS_URL/SANDBOX_HOSTNAME) rides in the stored
+        // payload below, signed when the code was, so the box can dial the edge the moment it boots.
         // Single-use desktop-sync pairing token, minted per claim (the sandbox isn't running yet to mint its own).
         // The daemon arms it at boot; the connect script only runs the sync agent when SYNC_DIR was passed on the
         // command (the user's opt-in), so returning it unconditionally is harmless when sync is off.
@@ -258,7 +253,12 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
         if (typeof daemonUrl !== `string` || !isHttpsUrl(daemonUrl)) {
             return c.text(`error: daemonUrl must be an https URL`, 400);
         }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) } });
+        // `hosted` rides along because it is half of "did we hand this row a grant" (expectedDaemonHost): a
+        // hosted machine's address is ours by construction, and its row is the only record saying so.
+        const sandbox = await prisma.sandbox.findUnique({
+            where: { tokenDigest: sha256Hex(token) },
+            include: { hosted: { select: { id: true } } },
+        });
         if (!sandbox) {
             return c.text(`error: unknown sandbox`, 404);
         }
@@ -324,10 +324,40 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
     });
 
     /* The two Cloudflare relays that used to live here (POST /sandbox/host-tunnel, POST /sandbox/preview-route)
-     * are gone with the tunnels they minted. Under the self-hosted hub a sandbox's names live under ONE
-     * wildcard the frontend routes by name, and the daemon attaches its own (panels, forwarded ports, the
-     * public outbox) with the zrok account token it already holds, so the platform is no longer on the path
-     * for naming at all, which is one fewer thing a compromised platform could do to a sandbox. */
+     * are gone with the tunnels they minted. A sandbox's names all live under ONE wildcard the edge routes by
+     * name, and the leftmost label carries the sandbox's own id, so every name a box serves (panels, forwarded
+     * ports, the public outbox) is one it can prove it owns with the grant it already holds. The platform is
+     * not on the naming path at all, which is one fewer thing a compromised platform could do to a sandbox. */
+
+    /* IS THIS SANDBOX STILL A SANDBOX? The ingress asks on every tunnel registration, and the answer is the
+     * whole of revocation under this fabric: a grant carries no expiry (it lives in a container's env for the
+     * container's life), so "this box may no longer be reached" has to be a question somebody can ask, and the
+     * only party that knows is the registry. 200 the row exists, 404 it does not — and a 404 is what makes
+     * deleting a sandbox the act that takes its address away (sandbox/reachability.ts).
+     *
+     * UNAUTHENTICATED, on purpose. What it discloses is whether a 12-hex id names a live sandbox, and that id
+     * is the leading label of every URL its owner has ever shared: existence is not a secret, and the address
+     * itself already answers this question to anyone who loads it. Guessing one is guessing 48 bits, and a
+     * guess that lands still learns nothing but "yes". Signing this would mean giving the edge a credential to
+     * hold for a fact the edge could read off DNS.
+     *
+     * Resolved by exact match on the stored `tunnelId` — the row's own copy of the derivation, written at
+     * creation (sandbox.routes create). The id is the first 12 hex of `tokenDigest`, so this LOOKS like a
+     * prefix query on a column that already exists, and that is exactly what it must not be: Postgres cannot
+     * use a default-collation btree index for `LIKE 'prefix%'`, so the honest reading of the same fact costs a
+     * sequential scan of every sandbox on the platform, on the path a fleet-wide restart hits at once. The
+     * column is also `@unique`, which is not decoration: two rows sharing a 12-hex id would fight over every
+     * hostname either one serves, and the constraint is where that becomes impossible rather than unlikely. */
+    app.get(`/api/reachability/:sandboxId`, async (c) => {
+        const sandboxId = c.req.param(`sandboxId`);
+        // Shape-checked before the query: the id is a fixed alphabet and length, so anything else is not a
+        // sandbox that could exist and is answered without asking the database.
+        if (!/^[0-9a-f]{12}$/.test(sandboxId)) {
+            return c.json({ error: `not a sandbox id` }, 404);
+        }
+        const sandbox = await prisma.sandbox.findUnique({ where: { tunnelId: sandboxId }, select: { id: true } });
+        return sandbox === null ? c.json({ error: `unknown sandbox` }, 404) : c.json({ ok: true });
+    });
 
     /* The LOOPBACK CERTIFICATE's DNS relay, kept through the tunnel migration because it is not a tunnel: a
      * sandbox on the same machine as the browser is reached at 127.0.0.1, and that address still needs a real

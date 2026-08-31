@@ -59,11 +59,14 @@ volume self-initializes and an image bump self-migrates: no manual db step.
   their env vars are set. Google + the tunnel + the secrets are the only hard requirements. The same handover
   happens when `WEB_ORIGIN` is a localhost address: a link only this machine can open is never mailed, because
   the recipient would get an invitation whose button lands on their own empty localhost.
-- **Reaching sandboxes** needs `ZROK_ADMIN_TOKEN` (+ `ZROK_API_ENDPOINT`, `ZROK_ZONE`): the self-hosted hub in
-  [`_tools/selfhost/zrok`](../zrok). The platform mints one account per sandbox on it; each box enables with its
-  own and answers under `sandbox-<id>.<zone>`. Without the token, setup can only attach a sandbox the user
-  already publishes under their own domain.
-- **Hosted sandboxes** (`HOSTED_FLY_API_TOKEN` + `HOSTED_FLY_ORG`, on top of the hub above) make
+- **Reaching sandboxes** needs `INGRESS_SIGNING_KEY` (+ `INGRESS_URL`, `INGRESS_ZONE`): the edge every sandbox
+  dials, [`@intentic/ingress`](../../../_platform/ingress), which is deployed on its own (Fly machines behind
+  one wildcard certificate for `*.<zone>`) rather than being a service in this compose file. This stack's whole
+  part in it is a signature: it mints each sandbox a grant naming that sandbox's id, the box dials the ingress
+  with it, and from then on answers under `sandbox-<id>.<zone>`. Nothing here calls the ingress and no state is
+  shared with it, so the two can be deployed and restarted independently. Without a signing key, setup can only
+  attach a sandbox the user already publishes under their own domain.
+- **Hosted sandboxes** (`HOSTED_FLY_API_TOKEN` + `HOSTED_FLY_ORG`, on top of the reachability above) make
   signing in the whole setup: this deployment creates each new user's machine on its own Fly account and can
   wake, stop and destroy it. That is a deliberate hole in the boundary the rest of this platform keeps: read
   the hosted paragraph in [ARCHITECTURE.md](../../../ARCHITECTURE.md) before switching it on, and remember the
@@ -77,11 +80,12 @@ volume self-initializes and an image bump self-migrates: no manual db step.
   reaper + sandbox-pool top-up take a Postgres advisory lock so replicas don't duplicate the work.
 - **No host ports are published**: everything is reached over the tunnel. Add a `ports:` mapping to `api`/`web`
   only for local debugging.
-- **Reachability grants are revoked at removal, not swept.** The hub answers no "list accounts" call, so there
-  is no nightly reconcile that could find a forgotten grant: removing a sandbox revokes its address FIRST and
-  fails the removal if the hub is unreachable, which keeps the row (the only record of the grant) instead of
-  stranding a live address. The one self-healing case is a mint whose write never landed: the next mint drops
-  the stale account and takes a fresh one.
+- **There is nothing to reconcile about reachability.** A grant is a signature over a sandbox id, not a row on
+  some hub, so it cannot leak or be forgotten — and it is only worth anything while the sandbox exists: the
+  ingress asks this deployment on every tunnel register (`GET /api/reachability/<id>`), so deleting the sandbox
+  IS the revocation, and it takes effect the next time that box reconnects. That check deliberately fails
+  **open** when this platform does not answer: sandboxes stay reachable while the platform is down, for the
+  same reason the platform is off the hot path everywhere else.
 - **The daily sweep is now just the zone's residue.** One wildcard record serves every sandbox, so the zone no
   longer fills up; what is left to clear are the loopback (`local-*`) records of same-machine sandboxes.
   Deletes are final; run a new deployment's first sweep with `INTENTIC_CLOUDFLARE_REAP_DRY_RUN=true` and read

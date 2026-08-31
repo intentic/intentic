@@ -27,7 +27,7 @@ const config: Config = configSchema.parse({
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
     intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: `true` },
-    zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+    ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
     trial: { keys: ``, baseUrl: `https://upstream.test/v1beta/openai`, models: ``, dailyMessages: 2 },
     wallet: { custodyUrl: `https://custody.test`, custodyKey: `ck_test` },
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },

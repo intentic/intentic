@@ -3,7 +3,7 @@ import { CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./clo
 
 /* The two things this platform still asks Cloudflare for: the user's own zone list, and the DNS behind the
  * loopback certificate. Tunnel provisioning, teardown, ingress and the tunnel reaper had suites here and are
- * gone with the machinery, the fabric is the zrok hub. */
+ * gone with the machinery, the fabric is the platform's own edge. */
 
 // Canned Cloudflare success envelope.
 const ok = (result: unknown, resultInfo?: { total_pages: number }) =>
@@ -100,7 +100,7 @@ describe(`reapOrphanDnsRecords`, () => {
             onError: () => {},
         });
         /* THE ASSERTION THIS FILE EXISTS FOR, and it is about `r-tunnel-a`: a live sandbox's tunnel CNAME.
-         * Deleting those was an outage. The reasoning that licensed it was "the fabric moved to the zrok hub,
+         * Deleting those was an outage. The reasoning that licensed it was "the fabric moved off Cloudflare,
          * so nothing mints these any more" — true of new sandboxes, silent about the ones created before it,
          * which are reachable through exactly these records and nothing else. A dozen each (daemon, ssh, the
          * port-slot pool), so the sweep took whole sandboxes off the internet and left their owners on a
@@ -146,7 +146,7 @@ describe(`reapOrphanDnsRecords`, () => {
 
     it(`asks Cloudflare for nothing but DNS: the sweep must survive a DNS-only token`, async () => {
         /* It used to list the account's tunnels first, to tell a dangling CNAME from a live one. That call
-         * needs the Cloudflare Tunnel scope, which this token lost when the fabric moved to the zrok hub, so
+         * needs the Cloudflare Tunnel scope, which this token lost when the fabric moved off Cloudflare, so
          * the listing threw and took the whole sweep with it, every day, silently. Nothing was collected, the
          * zone reached its record quota, and the loopback certificate that quota pays for stopped being
          * issuable, which is how a permission on an API token ended up freezing workspaces. */

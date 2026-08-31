@@ -44,7 +44,7 @@ const configWith = (overrides?: Record<string, unknown>): Config =>
             maxRefundRate: 0.2,
         },
         hosted: { monthlyHours: 40, poolSize: 2, image: `ghcr.io/intentic/sandbox:stable`, flyApiToken: ``, flyOrg: `` },
-        zrok: { adminToken: ``, apiEndpoint: `` },
+        ingress: { url: ``, signingKey: ``, zone: `sbx.test` },
         trial: { keys: `k1`, dailyMessages: 12 },
         wallet: { custodyUrl: ``, custodyKey: `` },
         apns: { keyP8: `` },
@@ -236,7 +236,7 @@ describe(`adminAttention`, () => {
                           setupCodeClaimedAt: new Date(`2026-08-25T08:00:00Z`),
                           setupReport: {
                               stage: `creating-tunnel`,
-                              failed: [{ check: `tunnel`, problem: `zrok enable refused`, remedy: `` }],
+                              failed: [{ check: `tunnel`, problem: `the ingress refused the grant`, remedy: `` }],
                               at: `x`,
                           },
                           owner: { email: `alice@example.com` },
@@ -262,7 +262,7 @@ describe(`adminAttention`, () => {
         expect(stuck).toMatchObject({
             severity: `danger`,
             title: `Setup stuck for alice@example.com (“dev box”)`,
-            detail: `tunnel: zrok enable refused`,
+            detail: `tunnel: the ingress refused the grant`,
             email: `alice@example.com`,
             sandboxId: `sb1`,
         });
@@ -896,7 +896,7 @@ describe(`admin actions`, () => {
         expect((await stopHostedMachine({} as PrismaClient, configWith(), `sb1`)).ok).toBe(false);
         const hostedOn = configWith({
             hosted: { monthlyHours: 40, poolSize: 2, image: `x`, flyApiToken: `t`, flyOrg: `o` },
-            zrok: { adminToken: `z`, apiEndpoint: `https://hub` },
+            ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         });
         const prisma = { hostedMachine: { findUnique: async () => null } } as unknown as PrismaClient;
         const result = await stopHostedMachine(prisma, hostedOn, `sb1`);
@@ -904,10 +904,10 @@ describe(`admin actions`, () => {
         expect(result.message).toContain(`sb1`);
     });
 
-    it(`erasure deletes the user row and reports the address it erased (zrok off, no hosted: nothing external)`, async () => {
+    it(`erasure deletes the user row and reports the address it erased (no hosted: nothing external)`, async () => {
         let deleted: Record<string, unknown> | undefined;
         const prisma = {
-            sandbox: { findMany: async () => [{ id: `sb1`, token: `enc`, zrokToken: null, hosted: null }] },
+            sandbox: { findMany: async () => [{ id: `sb1`, hosted: null }] },
             user: {
                 delete: async (args: Record<string, unknown>) => {
                     deleted = args;

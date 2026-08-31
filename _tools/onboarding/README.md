@@ -4,8 +4,8 @@ The onboarding tier: one journey through the product's front door, run once per 
 
 ## Responsibilities
 
-- Stand up the whole platform from the branch's own code: postgres, the api, the SPA, and stand-ins for the
-  two outside services onboarding cannot do without.
+- Stand up the whole platform from the branch's own code: postgres, the api, the SPA, and a stand-in for the
+  one outside service onboarding cannot do without.
 - Walk the install path a user walks (the wizard, the bytes it renders, the container that comes up) and
   assert the platform sees the sandbox connected and the browser can talk to it.
 - Give every path the same seeded account and the same assertions, so a regression in signing in or in
@@ -25,10 +25,9 @@ one never does: through provisioning, into a real daemon the wizard's own instru
             { "id": "api", "label": "Platform api", "note": "branch image", "accent": "3" },
             { "id": "pg", "label": "Postgres", "accent": "neutral" },
             { "id": "up", "label": "fake-upstream", "note": "stand-in model", "accent": "5" },
-            { "id": "zr", "label": "fake-zrok", "note": "stand-in hub", "accent": "5" },
             { "id": "box", "label": "Sandbox", "note": "compose / cli / cloud / desktop", "accent": "2" }],
   "edges": [{ "from": "browser", "to": "web" }, { "from": "browser", "to": "api" }, { "from": "browser", "to": "box" },
-            { "from": "api", "to": "pg" }, { "from": "api", "to": "up" }, { "from": "api", "to": "zr" },
+            { "from": "api", "to": "pg" }, { "from": "api", "to": "up" },
             { "from": "box", "to": "api" }] }
 ```
 
@@ -64,6 +63,13 @@ Most of these were discovered by watching this tier fail in ways that named some
   permits plain-http calls to `127.0.0.1` alone, so an api on any other host is refused by the document before
   the request leaves the page: which surfaces as "Intentic isn't reachable", a screen that blames the network.
   [src/certs.ts](src/certs.ts) and [src/docker.ts](src/docker.ts) carry the full accounts.
+- **Reachability is a signature, so there is no hub to stand up.** The platform mints a sandbox's reachability
+  grant by signing it and calls nothing, so this world hands the api a throwaway Ed25519 key and that alone is
+  what makes the wizard willing to mint a setup code: with no key at all, the provisioning routes 404 and setup
+  offers only the attach lane, which is a legitimate mode but not one a journey through the install paths can
+  walk. The ingress that grant names does not exist (an unroutable `.test` address) and nothing here needs it —
+  the box is reached over loopback, and its tunnel dial retries in the background as it would against an edge
+  that is down.
 - **The api and the SPA share a host, a scheme and a certificate.** They are separate origins that must stay
   same-site, or the browser drops the session cookie on every call and a signed-in journey looks exactly like
   a broken login. Same-site comparison includes the scheme, so the two move together or not at all.

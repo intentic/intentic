@@ -21,7 +21,7 @@ flowchart TB
     subgraph cloud["Intentic Platform — identity + sandbox-URL store"]
         web["Web UI · Vue (SPA)"]
         api["API · Hono / oRPC"]
-        db[("Postgres<br/>account + connection token<br/>+ sandbox URL + tunnel pool")]
+        db[("Postgres<br/>account + connection token<br/>+ sandbox URL")]
         web --> api --> db
     end
 
@@ -69,12 +69,29 @@ flowchart TB
   absence leaves a working sandbox: is probed on the host first and dropped rather than failing the launch; its
   engine settings (registry mirror, address pool) are a different family again, living in `daemon.json` and
   costing a dockerd restart instead of a rebuild. The HOST's Docker socket is
-  never mounted, so the agent's containers can only live inside the sandbox's own engine; its tunnel agent runs
-  as a supervised process inside the box, not a sidecar). Runs the coding agents (Claude via the agent
+  never mounted, so the agent's containers can only live inside the sandbox's own engine; the tunnel that makes
+  it reachable is a connection the daemon itself dials, not a sidecar). Runs the coding agents (Claude via the agent
   SDK, Codex app-server, Grok, Kimi Code, Gemini: spawned per turn, not resident) and the `intentic` CLI over the three repos
   (`intent` = `deploy.config.ts`, the IaC; `desired-state` = resolved artifact + status; `app` =
-  the application code), and exposes its daemon over the platform's **self-hosted tunnel hub** (zrok v2, `_tools/selfhost/zrok`): the box runs the `zrok2` agent outbound, enabling with the account token the platform minted for it and serving its daemon and previews as public shares under ONE wildcard hostname. The platform can create and revoke that grant but never impersonate it (the overlay identity is born inside the box) and traffic stays end-to-end encrypted past the hub. Cloudflare is DNS only now, and every record it still holds is a wildcard or a transient: the hub's wildcard, the hub's certificate challenge, `*.local.<zone>` for the loopback shortcut, and one ACME TXT per loopback certificate being issued. Nothing per-sandbox is left, which is the point — the loopback name was the last thing minting a record each, and enough of them filled the zone's quota and stopped issuance for everyone. SSH keys,
-  Cloudflare and agent tokens ride straight into it and never reach the platform.
+  the application code), and exposes its daemon through the platform's own edge, **`@intentic/ingress`**
+  ([_platform/ingress](_platform/ingress)): the box dials ONE outbound WebSocket to it, presenting a
+  platform-signed Ed25519 **reachability grant** that says which sandbox it is, and from then on serves its
+  daemon and previews under that sandbox's hostnames. Nothing else is provisioned, because every public name a
+  sandbox answers to already ends in its own 12-hex id: the ingress decides who may serve a request by parsing
+  the `Host` header, so there are no accounts, no name claims and no namespace to reconcile
+  ([ingress-contract.ts](_sandbox/sandbox-contract/src/ingress-contract.ts) is what the three parties agree
+  on). A reconnecting box DISPLACES its own previous tunnel, which is why recreating a container heals itself
+  instead of fighting over names its dead predecessor still held. The platform can mint and revoke that
+  reachability — revoking is deleting the sandbox row — but cannot impersonate the daemon's own auth: the
+  credential that binds an owner is born inside the box. TLS terminates at the edge, under ONE wildcard
+  certificate for `*.sbx.intentic.dev`, so the ingress handles plaintext requests: it is a trusted hop, and
+  what makes that acceptable is that the daemon verifies every credential it accepts inside the box instead of
+  trusting a header. Cloudflare is DNS only now, and every record it still holds is a wildcard or a transient:
+  the wildcard aimed at the ingress's anycast addresses, `*.local.<zone>` for the loopback shortcut, and one
+  ACME TXT per loopback certificate being issued. Nothing per-sandbox is left, which is the point — the
+  loopback name was the last thing minting a record each, and enough of them filled the zone's quota and
+  stopped issuance for everyone. SSH keys, Cloudflare and agent tokens ride straight into it and never reach
+  the platform.
 - **Trust root = browser Google Sign-In**: the browser proves its identity to the daemon with a
   Google ID token, verified against Google's JWKS, and the daemon binds its owner **on first use**:
   the first authenticated request must carry the `x-intentic-connect` connect token (and, when setup
@@ -88,7 +105,7 @@ flowchart TB
   collaborators are granted via `/work/.intentic/identity/members.json`, and owner/membership are re-checked
   per request, so revoking a member kills their live sessions too. The platform never holds or forges
   either credential, so a platform breach can read the stored URL but **cannot drive any sandbox**:
-  the hub's blast radius is bounded to identity + the sandbox URL.
+  a breach's blast radius is bounded to identity + the sandbox URL.
 
   **The HOSTED lane is the stated exception to that boundary.** A user who chooses "we run it for you"
   (or lands on it as the zero-command first run) gets a sandbox whose machine the platform creates on
@@ -119,7 +136,7 @@ sequenceDiagram
     Note over U,S: hosted lane: P creates the machine itself (no command) — the daemon's announce takes it from here
     P-->>U: curl one-liner + connection token
     U->>P: store derived sandbox URL (setup.bind: sandbox-<hash(token)>.<zone>)
-    U->>S: curl … | sh   (docker run sandbox — it dials the tunnel hub itself)
+    U->>S: curl … | sh   (docker run sandbox — it dials the ingress itself)
     U->>S: probe /health directly until reachable (no platform involved)
     U->>S: drive directly — chat · Provision (Google ID token)
     S->>I: intentic deploy apply (SSH · Docker · Cloudflare)
@@ -289,32 +306,43 @@ than a second implementation to keep in step. Nor is the setup wizard's **cloud 
 the *user's own* Hetzner/DigitalOcean/Oracle account for someone (a phone, usually) with no computer to
 paste into): the VM's cloud-init user-data is that same one-liner run headlessly, claiming the same setup
 code ([\_platform/api/src/sandbox/cloud/](_platform/api/src/sandbox/cloud/); the provider credential is
-request-scoped, the platform keeps no way back into the machine). Either way the
-tunnel is named `sandbox-<id>` where `<id> = sha256(connectToken).slice(0, 12)`
-([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)), and it is provisioned one of two ways:
+request-scoped, the platform keeps no way back into the machine). Every lane then reaches the box the same
+way, and there is only one way: the daemon dials ONE outbound WebSocket to the ingress and presents the
+platform-signed grant naming `<id> = sha256(connectToken).slice(0, 12)`
+([tunnel-ids.ts](_sandbox/sandbox-contract/src/tunnel-ids.ts)); the edge reads the `Host` header of each
+request and sends it down that sandbox's tunnel.
 
-- **Own Cloudflare**: `connect.sh` runs `intentic tunnel sandbox` against the *user's* zone:
-  `sandbox-<id>.<zone>` for the daemon, `ssh-<id>.<zone>` for desktop sync, plus the `*.<zone>`
-  wildcard for panel previews. The user's Cloudflare account absorbs all of it.
-- **Intentic-provided**: for users with no Cloudflare, the platform provisions the tunnel on
-  intentic's own account under a shared zone (`sandbox-<id>.intentic.dev`) and hands the sandbox only
-  the narrow per-tunnel connector token. A shared zone can't give each user a wildcard, so the daemon
-  asks the platform to mint preview routes (`preview-<panel>` / `port-<slot>` labels, batched per call):
-  panel labels lazily as repos appear, and the whole fixed port-slot pool (`PORT_SLOTS`) eagerly: slot
-  routes are created at tunnel provisioning and re-ensured by the boot sweep, so a port forward never
-  waits on fresh DNS, and churning dev-server ports cost at most the pool's size in routes per sandbox, ever.
+Publishing anything is therefore free of provisioning, because every name a sandbox serves already carries its
+id: `sandbox-<id>` for the daemon, `preview-<panel>-<id>` for a panel, `port-<slot>-<id>` for a forwarded port,
+`public-<slot>-<id>` for the outbox ([hostnames.ts](_sandbox/sandbox-contract/src/hostnames.ts)). A new panel or
+a dev server on a fresh port is reachable the moment it exists: no record to mint, no name to claim, no pool to
+keep warm, nothing to reap when it goes. Desktop sync rides the same surface rather than a name of its own,
+Mutagen's SSH tunnelled over the daemon's HTTPS (`/system/sync/ssh`), and when the agent and the sandbox are on
+one machine it resolves to the loopback address first and never crosses the edge at all
+([daemon-base.ts](_computers/machine/src/sync/daemon-base.ts)).
 
-On a server the workspace is just another service on that host's shared tunnel, exposing only the
-preview wildcard (the daemon stays host-internal: the server workspace is preview-only; `connect.sh`
-is the browser-direct path). The infrastructure it *provisions*, either way, builds Cloudflare tunnels
-on its target hosts (see below): which is how the system fans out to "workers on many machines."
+Two lanes stay off the shared edge entirely. **A sandbox published under its owner's own domain** is reached
+through whatever that owner already runs; the platform stores its URL and nothing else, which is the whole of
+the attach lane. And **on a server** the workspace is just another service on that host's shared tunnel,
+exposing only the preview wildcard (the daemon stays host-internal: the server workspace is preview-only;
+`connect.sh` is the browser-direct path). The infrastructure a sandbox *provisions*, meanwhile, builds
+Cloudflare tunnels on its target hosts (see below): which is how the system fans out to "workers on many
+machines."
 
-### Cloudflare is the reachability fabric (required)
+### Cloudflare: DNS for the sandbox, required for everything it deploys
 
-Cloudflare is not a user-facing convenience: it is the system's **reachability fabric**, and it is
-**required**. The operator never needs to open `git.<zone>` / `deploy.<zone>`; the **browser reads the
-control plane through the sandbox daemon directly** (over the sandbox's tunnel). How each piece is reached
-is asymmetric:
+Two different jobs wear the same vendor's name, and keeping them apart is the point of this section.
+
+**Reaching a sandbox no longer involves Cloudflare at all** beyond the DNS it answers with. The zone holds one
+wildcard record aimed at the ingress, one `*.local.<zone>` record answering `127.0.0.1` for the loopback
+shortcut, and a transient TXT per loopback certificate being issued over DNS-01
+([cloudflare.ts](_platform/api/src/sandbox/cloudflare.ts)). No tunnel is created per sandbox, no record is
+minted per name, and the platform is off the naming path completely.
+
+**For the infrastructure a sandbox provisions, Cloudflare carries the traffic and is required.** Every app,
+service and workspace the engine deploys is exposed through a Cloudflare tunnel on its host, and nothing else
+is offered. The operator never needs to open `git.<zone>` / `deploy.<zone>`; the **browser reads the control
+plane through the sandbox daemon directly**. How each piece is reached is asymmetric:
 
 | Reached over | Who / what |
 | --- | --- |
@@ -335,11 +363,13 @@ Why a tunnel, rather than "just use SSH and make Cloudflare optional":
 
 This is enforced in code, not just convention: the SDK types require `expose: Cloudflare`, and both
 `resolveNeeds` ([needs.ts](_deploy/need-resolver/src/needs.ts)) and `emit`
-([emit.ts](_deploy/state-resolver/src/emit/emit.ts)) throw when it is missing: there is no alternative ingress.
+([emit.ts](_deploy/state-resolver/src/emit/emit.ts)) throw when it is missing: there is no second way to expose
+a deployment.
 The Cloudflare API token is supplied at **connect** time (it rides `connect.sh` into the sandbox) and consumed
-at **provision** time by `intentic deploy apply`. It never reaches the platform except for one request-scoped call at
-setup: the platform lists the token's zones so the user can pick which one the sandbox tunnel uses (the browser
-can't call Cloudflare directly), then drops the token: never persisted, never logged.
+at **provision** time by `intentic deploy apply`. It never reaches the platform except for one request-scoped
+call: the platform lists the token's zones so the user can pick which one their DEPLOYMENTS live under, because
+the browser can't call Cloudflare directly, then drops the token: never persisted, never logged. That call has
+nothing to do with reaching the sandbox any more, which is the ingress's job and needs no token from anyone.
 
 > The sections from here through **Packages** document the **bundled deployment engine**: a standalone
 > infra tool that ships in this monorepo and is one of the many tools an agent can run. It is **not part of
@@ -1002,16 +1032,22 @@ Who pays for scale is a design decision, not an accident:
   its URL on boot (not a heartbeat: platform traffic is proportional to boot events, not sandbox
   count × a tick); the SPA is static files. Steady-state platform traffic per active user is roughly
   a `sandbox.list` every 30 s of navigation plus a plan check. The API is stateless with DB-backed
-  sessions, so it scales horizontally; background jobs (retention sweep, tunnel pool top-up) take a
-  Postgres advisory lock so replicas don't duplicate the work.
-- **The one ceiling intentic owns is the tunnel hub** every sandbox is reached through
-  (`_tools/selfhost/zrok`): a machine intentic runs, so the limit is its bandwidth and its Ziti router's
-  concurrent connections, not a vendor's quota. A sandbox costs ONE account and its share names: no DNS
-  record each, because one wildcard record and one wildcard certificate serve every hostname. (That
-  replaced a shared Cloudflare account where each sandbox held ~10 records against a per-zone cap, and a
-  full zone answered every new setup with error 81045.) The hub is horizontal by construction: more
-  frontends behind the same wildcard: and the daily sweep revokes accounts whose sandbox is gone, so
-  nothing accumulates. Users who publish their own sandbox under their own domain don't touch it at all.
+  sessions, so it scales horizontally; background jobs (retention sweep, the zone's DNS sweep, hosted-pool
+  top-up) take a Postgres advisory lock so replicas don't duplicate the work.
+- **The one ceiling intentic owns is the edge** every sandbox is reached through: `@intentic/ingress`
+  ([_platform/ingress](_platform/ingress)), N stateless machines on Fly behind anycast addresses. Intentic
+  operates no host in that path any more, so the limit is no longer one home server's uplink and its overlay
+  router's connection table. It is metered vendor bandwidth (~$0.02/GB out of North America and Europe) that
+  grows by adding machines, which makes the scaling question a bill and a region's capacity rather than a
+  saturated link nobody else can relieve. And a sandbox's registration is a live connection rather than a row,
+  so tunnels re-establish themselves against whichever machine answers next.
+  A sandbox still costs ZERO DNS records: one wildcard record and one wildcard
+  certificate (issued and renewed over DNS-01, $1/mo) serve every hostname. That is what replaced a shared
+  Cloudflare account where each sandbox held ~10 records against a per-zone cap, and a full zone answered
+  every new setup with error 81045. Nothing accumulates to sweep, either: reachability is a signature the
+  platform mints, so there is no account anywhere to reconcile on a nightly pass. Two things keep bytes off
+  the meter — a sandbox on the same machine as its desktop agent syncs over loopback instead of through the
+  edge, and users who publish their own sandbox under their own domain don't touch it at all.
 - **Postgres stays small.** Workspace state (chat history, files, inventory, secrets) lives in the
   sandbox, never the platform: per-user platform data is a handful of rows. Hot-path columns are
   indexed and the connection pool is bounded per replica (`DATABASE_POOL_MAX`), so replicas × pool

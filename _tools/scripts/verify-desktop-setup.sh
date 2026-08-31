@@ -16,15 +16,15 @@
 # point: verify-desktop-bundle.sh proves the bundled bytes match the source, and this proves those same bundled
 # bytes bring a sandbox up. Reading the source tree here would test a file no user ever runs.
 #
-# HERMETIC — no tunnel hub, no Google, no platform. connect.sh documents a direct-token path (CONNECT_TOKEN +
-# ZROK_TOKEN + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: `/setup/claim`
-# only mints a reachability grant when the platform has a zrok hub configured, so a code-claiming run cannot
-# be secret-free. The grant here is a dummy pointed at an unroutable hub, so the in-box zrok agent fails to
-# enable and retries harmlessly in the background — the entrypoint does not gate the daemon on it, and the
-# daemon is reached on the container's own published port.
+# HERMETIC — no edge, no Google, no platform. connect.sh documents a direct-token path (CONNECT_TOKEN +
+# SANDBOX_GRANT + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: `/setup/claim`
+# only mints a reachability grant when the platform holds a signing key, so a code-claiming run cannot be
+# secret-free. The grant here is a dummy naming an unroutable ingress, so the daemon's tunnel dial fails and
+# retries harmlessly in the background — the entrypoint does not gate the daemon on it, and the daemon is
+# reached on the container's own published port.
 #
 # What this therefore does NOT cover: the setup-code claim round trip against a real platform. That needs a
-# real hub grant and belongs with the other gated nightly suites, which self-skip without their secrets.
+# real signed grant and belongs with the other gated nightly suites, which self-skip without their secrets.
 set -euo pipefail
 . "$(dirname "$0")/repo-root.sh"
 . "$(dirname "$0")/desktop-artifacts.sh"
@@ -128,8 +128,8 @@ echo "==> running the shipped connect.sh (image: $SANDBOX_IMAGE)"
 # quietly reaching production.
 if in_host env \
     CONNECT_TOKEN="$CONNECT_TOKEN" \
-    ZROK_TOKEN="dummy-zrok-token" \
-    ZROK_API="https://zrok.e2e.test" \
+    SANDBOX_GRANT="dummy-reachability-grant" \
+    INGRESS_URL="https://ingress.e2e.test" \
     SANDBOX_HOSTNAME="$HOSTNAME_UNDER_TEST" \
     SANDBOX_IMAGE="$SANDBOX_IMAGE" \
     PLATFORM_URL="https://platform.e2e.test" \

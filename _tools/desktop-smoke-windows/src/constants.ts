@@ -42,7 +42,7 @@ export const PLATFORM_URL_UNREACHABLE = `https://platform.e2e.test`;
 
 /** The direct-token path's stand-in credentials, see `connect.sh`'s own documentation of the codeless flow. */
 export const CONNECT_TOKEN = `windows-setup-smoke-token`;
-export const ZROK_TOKEN = `dummy-zrok-token`;
-/* The hub the in-box agent would enable against, on the same unroutable TLD: the dummy grant cannot work, and
- * pointing it at nothing keeps a failed enable from reaching the real hub. */
-export const ZROK_API = `https://zrok.e2e.test`;
+export const SANDBOX_GRANT = `dummy-reachability-grant`;
+/* The edge the daemon would dial its tunnel to, on the same unroutable TLD: the dummy grant carries no valid
+ * signature anyway, and naming an address that resolves nowhere keeps a failed dial off the real ingress. */
+export const INGRESS_URL = `https://ingress.e2e.test`;

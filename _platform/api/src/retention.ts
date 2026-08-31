@@ -103,8 +103,11 @@ export const startRetention = (prisma: PrismaClient, config: Config, logger: Log
          * destructive default off on a laptop. */
         const deleting = reap && !reapDryRun;
         try {
-            const rows = await prisma.sandbox.findMany({ select: { tokenDigest: true } });
-            const liveSandboxIds = new Set(rows.map((row) => row.tokenDigest.slice(0, 12)));
+            // The row's own 12-hex id, read rather than re-sliced off `tokenDigest`: the column exists so the
+            // derivation lives in exactly one place (sandboxIdFromToken, at creation), and a sweep that decides
+            // what to DELETE is the last place that should be re-deriving it from a digest by hand.
+            const rows = await prisma.sandbox.findMany({ select: { tunnelId: true } });
+            const liveSandboxIds = new Set(rows.map((row) => row.tunnelId));
             const records = await reapOrphanDnsRecords({
                 apiToken,
                 zone,

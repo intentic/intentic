@@ -9,8 +9,9 @@
   Windows prerequisite tree is far too large to live in a shell script, and putting it in ic is what lets the
   terminal, the desktop app and the browser setup page all report the same diagnosis.
 
-  The setup code carries the sandbox's reachability grant on intentic's own tunnel hub; the sandbox enables
-  with it from inside. CF_TOKEN is only for SELF_HOST, which publishes THIS PC's SSH for the deploy engine.
+  The setup code carries the sandbox's reachability grant (a platform-signed token naming the sandbox's id);
+  the daemon dials intentic's ingress edge with it from inside, outbound-only, so nothing here opens a port.
+  CF_TOKEN is only for SELF_HOST, which publishes THIS PC's SSH for the deploy engine.
 
 .EXAMPLE
   $env:SETUP_CODE='<code>'; irm https://intentic.dev/connect.ps1 | iex

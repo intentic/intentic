@@ -3,11 +3,10 @@ import type { PrismaClient } from "@intentic-app/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { decryptSecret, encryptSecret } from "../../crypto.js";
+import { encryptSecret } from "../../crypto.js";
+import { ensureReachability } from "../reachability.js";
 import { JOB_HOSTED_CANARY, runExclusive } from "../../jobs-lock.js";
 import { linkEmail, sendMail } from "../../mail.js";
-import { ensureZrokAccount } from "../zrok-provision.js";
-import { deleteSandboxAccount } from "../zrok.js";
 import { destroyHosted, hostedEnabled, provisionHosted } from "./hosted.js";
 
 /* DOES SIGNING UP STILL GET YOU A WORKING MACHINE? Asked by doing it, on a timer, rather than by waiting for
@@ -63,18 +62,12 @@ const ensureCanaryUser = async (prisma: PrismaClient, email: string): Promise<st
     return created.id;
 };
 
-/* Everything this run made, taken back down in the order the delete route uses: the hub grant first (zrok has
- * no way to list accounts, so a grant whose row is gone can never be found again), then the row, then the
- * machine. Best-effort throughout: a teardown that throws would strand the machine it was cleaning up. */
+/* Everything this run made, taken back down in the order the delete route uses: the row, then the machine.
+ * Releasing reachability is not a step any more — deleting the row IS the revocation (reachability.ts), so the
+ * canary cannot leak a grant even if it dies here. Best-effort throughout: a teardown that throws would strand
+ * the machine it was cleaning up. */
 const teardown = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<void> => {
-    const sandbox = await prisma.sandbox.findUnique({ where: { id: sandboxId } }).catch(() => null);
     const hosted = await prisma.hostedMachine.findUnique({ where: { sandboxId } }).catch(() => null);
-    if (sandbox?.zrokToken != null) {
-        const tunnelId = sandboxIdFromToken(decryptSecret(config, sandbox.token)) ?? sandboxId;
-        await deleteSandboxAccount(config.zrok, tunnelId).catch((error: unknown) =>
-            logger.warn({ err: error, sandboxId }, `hosted canary: releasing the tunnel grant failed`),
-        );
-    }
     await prisma.sandbox.delete({ where: { id: sandboxId } }).catch((error: unknown) =>
         logger.warn({ err: error, sandboxId }, `hosted canary: deleting the canary sandbox failed`),
     );
@@ -129,11 +122,17 @@ export const runHostedCanary = async (
     await collectPreviousRuns(prisma, config, logger, ownerId);
     const token = randomBytes(16).toString(`base64url`);
     const sandbox = await prisma.sandbox.create({
-        data: { name: canarySandboxName, ownerId, token: encryptSecret(config, token), tokenDigest: sha256Hex(token) },
+        data: {
+            name: canarySandboxName,
+            ownerId,
+            token: encryptSecret(config, token),
+            tokenDigest: sha256Hex(token),
+            tunnelId: sandboxIdFromToken(token) ?? ``,
+        },
     });
     const startedAt = Date.now();
     try {
-        const grant = await ensureZrokAccount(prisma, config, sandbox);
+        const grant = ensureReachability(config, sandbox);
         const { appName } = await provisionHosted(prisma, config, logger, {
             sandboxId: sandbox.id,
             connectToken: token,

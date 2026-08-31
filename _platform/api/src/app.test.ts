@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
+import { testIngressConfig } from "./testing.js";
 import type { Logger } from "pino";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
 
@@ -15,7 +16,7 @@ const config = configSchema.parse({
     google: { clientId: ``, clientSecret: `` },
     email: { apiKey: ``, from: `` },
     intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: `true` },
-    zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+    ingress: testIngressConfig,
     api: { url: `http://localhost:6480`, port: 6480, host: `127.0.0.1`, httpsKey: ``, httpsCert: `` },
     log: { level: `silent`, pretty: `false` },
 });
@@ -33,20 +34,20 @@ const claim = (prisma: PrismaClient) =>
 
 const parse = (text: string): Record<string, string> =>
     Object.fromEntries(text.split(`\n`).map((line) => [line.slice(0, line.indexOf(`=`)), line.slice(line.indexOf(`=`) + 1)]));
-// The deterministic hostname the mint stored for connect token `tok` (same digest provisionSandboxTunnel derives).
-const HOSTNAME = `sandbox-${createHash(`sha256`).update(`tok`).digest(`hex`).slice(0, 12)}.intentic.dev`;
+// The sandbox's 12-hex id and public hostname for connect token `tok`, derived here rather than transcribed:
+// every party shares this digest (sandboxIdFromToken), and the point of the fabric swap is that it did not move.
+const TUNNEL_ID = createHash(`sha256`).update(`tok`).digest(`hex`).slice(0, 12);
+const HOSTNAME = `sandbox-${TUNNEL_ID}.sbx.test`;
 
-// A minted setup code: the reachability grant was bought at mint (sandbox.setupCode) and stored IN the
+// A minted setup code: the reachability grant was signed at mint (sandbox.setupCode) and stored IN the
 // payload, so the claim is a pure read: it hands the box the whole grant and calls no provider at all.
 const intenticRow = () => ({
     id: `s1`,
     token: `tok`,
     setupCodeExpiresAt: new Date(Date.now() + 60_000),
-    zrokToken: `enc-account-token`,
     setupPayload: JSON.stringify({
-        ZROK_TOKEN: `acct-token`,
-        ZROK_API: `https://zrok2.sbx.test`,
-        ZROK_NAMESPACE: `ns-1`,
+        SANDBOX_GRANT: `ig1.stored-grant`,
+        INGRESS_URL: `https://ingress.sbx.test`,
         SANDBOX_HOSTNAME: HOSTNAME,
         OWNER_EMAIL: `owner@example.com`,
     }),
@@ -69,8 +70,8 @@ describe(`POST /setup/claim`, () => {
         const values = parse(await res.text());
 
         expect(values[`CONNECT_TOKEN`]).toBe(`tok`);
-        expect(values[`ZROK_TOKEN`]).toBe(`acct-token`);
-        expect(values[`ZROK_NAMESPACE`]).toBe(`ns-1`);
+        expect(values[`SANDBOX_GRANT`]).toBe(`ig1.stored-grant`);
+        expect(values[`INGRESS_URL`]).toBe(`https://ingress.sbx.test`);
         expect(values[`SANDBOX_HOSTNAME`]).toBe(HOSTNAME);
         expect(values[`SYNC_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
         expect(values[`HOST_PAIR_TOKEN`]).toMatch(/^[\w-]{20,}$/);
@@ -155,12 +156,16 @@ const announce = (prisma: PrismaClient, token: string | undefined, daemonUrl: un
 describe(`POST /sandbox/announce`, () => {
     it(`stamps daemonUrl + lastSeenAt on the row matched by the token's digest`, async () => {
         const update = vi.fn().mockResolvedValue({});
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, zrokToken: null, setupPayload: null, daemonUrl: null });
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
         const prisma = fakePrisma({ sandbox: { findUnique, update } });
 
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
-        expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
+        // `hosted` rides along because it is half of "did this platform hand this row a grant".
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
+            include: { hosted: { select: { id: true } } },
+        });
         expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
             // The refusal record is cleared on the way through: it exists to describe a LIVE disagreement, and
@@ -187,8 +192,9 @@ describe(`POST /sandbox/announce`, () => {
      * is one we already know, from whichever half of setup established it. */
     it(`refuses a daemonUrl that isn't the address derived from the sandbox's own token`, async () => {
         const update = vi.fn().mockResolvedValue({});
-        // A provisioned row: its grant exists, so its address is a pure derivation, known before boot.
-        const row = { id: `s1`, token: `tok`, zrokToken: `enc-acct`, setupPayload: null, daemonUrl: null };
+        /* A row this platform handed a grant to: the setup mint stored its claim payload, which is the record
+         * that says so now that no column does. Its address is therefore a pure derivation, known before boot. */
+        const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
         const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
@@ -198,12 +204,47 @@ describe(`POST /sandbox/announce`, () => {
          * is what made a mis-addressed sandbox look exactly like one that never started. */
         expect(update).toHaveBeenCalledExactlyOnceWith({
             where: { id: `s1` },
-            data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME.replace(`.intentic.dev`, `.sbx.test`) } },
+            data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME } },
         });
 
-        // The address the platform would derive for this token, under the fabric's own zone.
-        const derived = `https://${HOSTNAME.replace(`.intentic.dev`, `.sbx.test`)}`;
-        expect((await announce(prisma, `tok`, derived)).status).toBe(200);
+        // The address the platform would derive for this token, under the ingress's own zone.
+        expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
+    });
+
+    /* THE HOSTED LANE IS THE OTHER HALF of that record, and it has no setup payload: the platform composed its
+     * machine env directly. Its machine row is what says "this address is ours", and dropping it from the
+     * check would leave the one lane where the platform controls the whole box as the one lane whose announce
+     * was free-form. */
+    it(`derives the address for a hosted sandbox too, off its machine row`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const row = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: { id: `h1` } };
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+
+        expect((await announce(prisma, `tok`, `https://evil.example`)).status).toBe(409);
+        expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
+    });
+
+    /* AND WITH THE FABRIC OFF there is nothing to derive from: a self-hosted platform that signs no grants
+     * cannot know where anybody's sandbox lives, so a row it never provisioned pins on first announce as
+     * always. Asserted here because the ingress switch, not the row, is what turns the derivation on. */
+    it(`derives nothing on a platform with no reachability fabric`, async () => {
+        const update = vi.fn().mockResolvedValue({});
+        const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
+        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), update } });
+        const fabricless = configSchema.parse({
+            database: { url: `postgres://x` },
+            betterAuth: { secret: `s` },
+            secrets: { key: `` },
+            webOrigin: `https://app.test`,
+            ingress: { ...testIngressConfig, signingKey: `` },
+            log: { level: `silent`, pretty: `false` },
+        });
+        const res = await createApp(fabricless, prisma, logger).app.request(`/sandbox/announce`, {
+            method: `POST`,
+            headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+            body: JSON.stringify({ daemonUrl: `https://self-hosted.example` }),
+        });
+        expect(res.status).toBe(200);
     });
 
     /* A row with neither record (attached by hand, or created before the hostname was stored) has nothing to
@@ -211,7 +252,7 @@ describe(`POST /sandbox/announce`, () => {
      * never free-form for longer than one write. */
     it(`pins on first announce when nothing on the row predicts the address`, async () => {
         const update = vi.fn().mockResolvedValue({});
-        const bare = { id: `s1`, token: `tok`, zrokToken: null, setupPayload: null, daemonUrl: null };
+        const bare = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null };
         const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(bare), update } });
         expect((await announce(prisma, `tok`, `https://self-hosted.example`)).status).toBe(200);
 
@@ -305,5 +346,53 @@ describe(`POST /api/auth/one-tap/callback`, () => {
         // refusal itself is Google's verifier talking, and its exact status is that library's business.
         expect(response.status).not.toBe(404);
         expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+});
+
+/* THE EDGE'S ONE QUESTION BACK, and the whole of revocation under this fabric. A grant carries no expiry — it
+ * lives in a container's env for the container's life — so "this sandbox may no longer be reached" has to be
+ * something the edge can ASK, and the registry is the only party that knows. 200/404, nothing else, and the
+ * 404 is what makes deleting a sandbox the act that takes its address away. */
+describe(`GET /api/reachability/:sandboxId`, () => {
+    const ask = (prisma: PrismaClient, sandboxId: string) => createApp(config, prisma, logger).app.request(`/api/reachability/${sandboxId}`);
+    const id = `abcdef012345`;
+
+    it(`200s a sandbox that exists, resolved by its indexed tunnel id`, async () => {
+        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const res = await ask(fakePrisma({ sandbox: { findUnique } }), id);
+
+        expect(res.status).toBe(200);
+        /* The LOOKUP is the assertion, not just the status. The id is the leading twelve hex of `tokenDigest`,
+         * so the tempting version of this route is a prefix match on a column that already exists — and that
+         * cannot use the index under a default collation, making a fleet-wide restart a sequential scan per
+         * box. An equality on `tunnelId` is the point of the column. */
+        expect(findUnique).toHaveBeenCalledWith({ where: { tunnelId: id }, select: { id: true } });
+    });
+
+    // Revocation: the row is gone, so the edge refuses the tunnel. Nothing else had to happen for that.
+    it(`404s a sandbox that does not exist`, async () => {
+        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } }), id);
+        expect(res.status).toBe(404);
+    });
+
+    // A shape that is not an id cannot name a sandbox, so it is refused without asking the database — this
+    // door is unauthenticated, and the cheapest thing it can do with garbage is not touch Postgres.
+    it(`404s anything that isn't a 12-hex id, without querying`, async () => {
+        const findUnique = vi.fn();
+        const prisma = fakePrisma({ sandbox: { findUnique } });
+        for (const bad of [`nope`, `ABCDEF012345`, `abcdef01234`, `abcdef0123456`, `../../etc/passwd`]) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one cheap request per shape; sequential reads clearer
+            expect((await ask(prisma, bad)).status, bad).toBe(404);
+        }
+        expect(findUnique).not.toHaveBeenCalled();
+    });
+
+    /* UNAUTHENTICATED ON PURPOSE, so this pins that it answers with no credential at all: what it discloses is
+     * whether a 12-hex id names a live sandbox, and that id is the leading label of every URL its owner has
+     * ever shared. Signing it would mean handing the edge a credential for a fact DNS already answers. */
+    it(`answers with no credential presented`, async () => {
+        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }) } }), id);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ ok: true });
     });
 });

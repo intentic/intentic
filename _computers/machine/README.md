@@ -30,6 +30,13 @@ The **sync half** (`src/sync/`, the machine side of desktop sync):
   a one-way backup of the sandbox's own state.
 - Serve the SSH transport itself on loopback (the sandbox's sshd reached over its HTTPS surface), mirror every
   workspace port onto this machine's localhost, and bridge git so commits appear in local clones.
+- **Dial a sandbox that runs on this very machine directly** ([src/sync/daemon-base.ts](src/sync/daemon-base.ts)):
+  the container publishes its daemon on `127.0.0.1:<port derived from the sandbox id>`, so the transport, the
+  ports poll and the machine report use that instead of sending a multi-gigabyte Mutagen sync out to the
+  reachability edge and back to the same laptop. A candidate is adopted only if the daemon's unauthenticated
+  `/health` answers with the id we expected — a port is not a sandbox, and the sync token is what would be
+  presented to whoever holds it. The sandbox's public URL stays the floor under every pairing, and a pairing
+  sitting on it is re-probed each minute, so a container started after the watcher gets promoted with no restart.
 - Own the **port-mirroring switch** (`sync mirror off|on`, optionally `--sandbox <id>`): mirroring is the one
   thing here that writes to *this* computer's localhost, so the flag lives on this side, survives a restart, and
   is read every tick. File sync, the state backup and the git bridge are untouched by it — the point is to stop

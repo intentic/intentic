@@ -16,7 +16,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         api: { url: `https://api.test` },
         admin: { emails: `` },
         email: { apiKey: ``, from: `` },
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, adminToken: `hub-admin` },
+        ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,

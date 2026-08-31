@@ -1,13 +1,9 @@
 import type { AdminActionResult } from "@intentic-app/api-contract";
-import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic-app/prisma";
 import type { Config } from "../config.js";
-import { decryptSecret } from "../crypto.js";
 import { stopMachine } from "../sandbox/hosted/fly.js";
 import { destroyHosted, hostedEnabled } from "../sandbox/hosted/hosted.js";
-import { deleteSandboxAccount } from "../sandbox/zrok.js";
-import { zrokEnabled } from "../sandbox/zrok-provision.js";
 
 /* THE ADMIN MUTATIONS — the only writes on the admin surface, behind three gates the ROUTES enforce
  * (requireAdmin, the ADMIN_MUTATIONS switch, the typed confirmation); what lives here is the action itself,
@@ -63,24 +59,15 @@ export const stopHostedMachine = async (prisma: PrismaClient, config: Config, sa
 };
 
 /* GDPR erasure from the operator's side (Art. 17 requests that arrive by email rather than through
- * Settings). The same teardown per sandbox as the owner's own delete — reachability grant off the hub,
- * hosted machine destroyed — then the user row goes and the cascade takes everything else. Teardown
- * failures downgrade to the reaper's problem exactly as they do in the owner flow: an app with no row is
- * what the daily hosted reap destroys. */
+ * Settings). The same teardown per sandbox as the owner's own delete — the rows go, which is itself what
+ * revokes their reachability (reachability.ts: the ingress refuses a tunnel whose sandbox is not here), and
+ * the hosted machines are destroyed after. Teardown failures downgrade to the reaper's problem exactly as they
+ * do in the owner flow: an app with no row is what the daily hosted reap destroys. */
 export const deleteUserAccount = async (prisma: PrismaClient, config: Config, logger: Logger, userId: string): Promise<AdminActionResult> => {
     const sandboxes = await prisma.sandbox.findMany({
         where: { ownerId: userId },
-        select: { id: true, token: true, zrokToken: true, hosted: { select: { appName: true } } },
+        select: { id: true, hosted: { select: { appName: true } } },
     });
-    for (const sandbox of sandboxes) {
-        if (sandbox.zrokToken !== null && zrokEnabled(config)) {
-            try {
-                await deleteSandboxAccount(config.zrok, sandboxIdFromToken(decryptSecret(config, sandbox.token)) ?? sandbox.id);
-            } catch (error) {
-                logger.error({ err: error, sandboxId: sandbox.id }, `admin delete: zrok teardown failed, grant orphaned`);
-            }
-        }
-    }
     const user = await prisma.user.delete({ where: { id: userId }, select: { email: true } });
     for (const sandbox of sandboxes) {
         if (sandbox.hosted !== null) {

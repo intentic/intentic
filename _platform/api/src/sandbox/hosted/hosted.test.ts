@@ -5,7 +5,8 @@ import type { OrpcContext } from "../../context.js";
 import type { Config } from "../../config.js";
 import { sandboxRoutes } from "../sandbox.routes.js";
 import { HostedAlreadyProvisioned, hostedEnabled, hostedInstanceId, provisionHosted, reapHostedOrphans, wakeHosted } from "./hosted.js";
-import { forgetNamespace } from "../zrok-provision.js";
+import { ensureReachability } from "../reachability.js";
+import { testIngressConfig } from "../../testing.js";
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 
@@ -17,7 +18,7 @@ const config = (over?: Record<string, unknown>): Config =>
         api: { url: `https://api.test` },
         secrets: { key: `` },
         intenticCloudflare: { apiToken: `cf`, zone: `sbx.test`, reapDryRun: true },
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+        ingress: { ...testIngressConfig },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,
@@ -91,14 +92,13 @@ const flyMachine = (over: { platform?: string; ageMinutes?: number } = {}) => ({
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    forgetNamespace();
 });
 
 describe(`hostedEnabled`, () => {
-    it(`needs BOTH the Fly credential and the tunnel fabric: machines without reachability boot to nothing`, () => {
+    it(`needs BOTH the Fly credential and the reachability fabric: machines without it boot to nothing`, () => {
         expect(hostedEnabled(config())).toBe(true);
         expect(hostedEnabled(config({ hosted: { ...config().hosted, flyApiToken: `` } }))).toBe(false);
-        expect(hostedEnabled(config({ zrok: { ...config().zrok, adminToken: `` } }))).toBe(false);
+        expect(hostedEnabled(config({ ingress: { ...testIngressConfig, signingKey: `` } }))).toBe(false);
     });
 });
 
@@ -146,7 +146,9 @@ describe(`provisionHosted`, () => {
     const args = {
         sandboxId: `s1`,
         connectToken: `t0k3n`,
-        grant: { accountToken: `acct-1`, namespaceToken: `ns-1`, hostname: `sandbox-abc.sbx.test`, apiEndpoint: `https://zrok2.sbx.test` },
+        // The reachability the route signs and hands down. Produced by the real thing rather than transcribed,
+        // so the env assertions below pin the HANDDOWN and not a shape somebody typed twice.
+        grant: ensureReachability(config(), { id: `s1`, token: `t0k3n` }),
         ownerEmail: `owner@example.com`,
         // The route decides this from the caller's country (region.test.ts covers the pick itself).
         region: `iad`,
@@ -170,10 +172,10 @@ describe(`provisionHosted`, () => {
         // machines from those of anything else sharing the Fly org and credential (fly.ts, hosted.ts).
         expect(machine.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(machine.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
-        expect(machine.config.env[`ZROK_TOKEN`]).toBe(`acct-1`);
-        expect(machine.config.env[`ZROK_NAMESPACE`]).toBe(`ns-1`);
-        expect(machine.config.env[`ZROK_API`]).toBe(`https://zrok2.sbx.test`);
-        expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
+        // The pair the daemon reads to open its outbound tunnel, in the contract's own vocabulary.
+        expect(machine.config.env[`SANDBOX_GRANT`]).toBe(args.grant.grant);
+        expect(machine.config.env[`INGRESS_URL`]).toBe(`https://ingress.sbx.test`);
+        expect(machine.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${args.grant.hostname}`);
         expect(machine.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
         expect(machine.config.env[`IDLE_STOP_MINUTES`]).toBe(`20`);
         expect(machine.config.env[`SANDBOX_VM`]).toBe(`1`);
@@ -236,7 +238,7 @@ describe(`provisionHosted`, () => {
         expect(update.config.metadata).toEqual({ intentic_role: `sandbox`, intentic_sandbox: `s1`, intentic_platform: INSTANCE });
         expect(update.config.env[`CONNECT_TOKEN`]).toBe(`t0k3n`);
         expect(update.config.env[`OWNER_EMAIL`]).toBe(`owner@example.com`);
-        expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://sandbox-abc.sbx.test`);
+        expect(update.config.env[`SANDBOX_PUBLIC_URL`]).toBe(`https://${args.grant.hostname}`);
         expect(update.config.init).toBeUndefined();
         expect(update.config.mounts).toEqual([{ volume: `vol_7`, path: `/data` }]);
         // The branding call IS the launch. Holding it back (skip_launch) and starting afterwards raced Fly's
@@ -646,9 +648,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         image: null,
         ownerId: `u1`,
         token: `tok`,
-        tunnelToken: `tt`,
-        tunnelHostname: `sandbox-a.sbx.test`,
-        zrokToken: `acct-1`,
+        tunnelId: `abcdef012345`,
         daemonUrl: null,
         lastSeenAt: null,
         setupCodeClaimedAt: null,

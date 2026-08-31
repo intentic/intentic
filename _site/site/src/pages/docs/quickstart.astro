@@ -5,7 +5,7 @@ import DocsLayout from "../../components/DocsLayout.astro";
 
 /* THE FOUR INSTALL PATHS, ONE PAGE.
  *
- * Every path is the same three objects (a sandbox container, a tunnel connector, three named volumes) and
+ * Every path is the same objects (a sandbox container that dials its own tunnel, three named volumes) and
  * the same short-lived setup code; they differ only in who types the docker commands: an app, a script,
  * compose, or you. Readers arrive already knowing which of those they trust, so the page's job is to let
  * them find their own section fast and leave with something that runs, not to argue for one path.
@@ -62,9 +62,8 @@ const composeFile = `services:
             SANDBOX_PUBLIC_URL: https://<SLUG>.intentic.dev
             PLATFORM_URL: https://api.intentic.dev
             GOOGLE_CLIENT_ID: <shown filled in on the setup page>
-            ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}
-            ZROK_API: \${ZROK_API:-}
-            ZROK_NAMESPACE: \${ZROK_NAMESPACE:-}
+            INGRESS_URL: \${INGRESS_URL:-}
+            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}
 networks:
     intentic:
         name: intentic-workspace-<SLUG>
@@ -80,8 +79,8 @@ const runInline = `IMAGE=ghcr.io/intentic/sandbox:stable
 SLUG='<SLUG>'              # the first label of your sandbox hostname
 SETUP_CODE='<SETUP_CODE>'  # the short-lived code the setup screen shows
 
-# 1 · Redeem the setup code. You get KEY=value lines: CONNECT_TOKEN, ZROK_TOKEN,
-#     ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL, LOCAL_PORT.
+# 1 · Redeem the setup code. You get KEY=value lines: CONNECT_TOKEN, SANDBOX_GRANT,
+#     INGRESS_URL, SANDBOX_HOSTNAME, OWNER_EMAIL, LOCAL_PORT.
 #     Every other path does exactly this.
 curl -fsS https://api.intentic.dev/setup/claim -d code=$SETUP_CODE > sandbox.env
 
@@ -105,7 +104,7 @@ echo "$RUN"
 eval "$RUN"
 
 # That is all of it. The sandbox connects itself outward on boot. There is no
-# second container: the tunnel agent runs inside the image.`;
+# second container: the daemon dials the tunnel itself.`;
 ---
 
 <DocsLayout
@@ -241,7 +240,7 @@ eval "$RUN"
     <DocsCodeBlock code={connectAdvanced} lang="bash" title="Variations" />
     <p>
         For a scripted install with no setup code at all, pass the values directly instead:{" "}
-        <code>CONNECT_TOKEN=… ZROK_TOKEN=… ./connect.sh</code>.
+        <code>CONNECT_TOKEN=… SANDBOX_GRANT=… ./connect.sh</code>.
     </p>
 
     <h3 id="docker-compose">Install with Docker Compose</h3>
@@ -254,7 +253,8 @@ eval "$RUN"
     <DocsCodeBlock code={composeBootstrap} lang="bash" title="Bootstrap" />
     <p>
         The first command redeems your setup code into the <code>.env</code> that Compose interpolates
-        (<code>CONNECT_TOKEN</code>, the <code>ZROK_*</code> reachability grant, <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After
+        (<code>CONNECT_TOKEN</code>, the <code>SANDBOX_GRANT</code> that makes the box reachable, <code>INGRESS_URL</code>,{" "}
+        <code>LOCAL_PORT</code>, <code>OWNER_EMAIL</code>). After
         that the sandbox is yours to manage with <code>docker compose up -d</code>, <code>down</code>, and <code>logs</code>. Your workspace
         lives in the named volumes, so <code>down</code> then <code>up</code> keeps it.
     </p>

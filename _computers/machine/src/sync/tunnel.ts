@@ -1,5 +1,6 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import type { Log } from "@intentic/local-agent";
+import type { DialedPairing } from "./daemon-base.js";
 
 /* THE TRANSPORT, THIS SIDE, a loopback port on this machine that IS the sandbox's sshd.
  *
@@ -9,6 +10,12 @@ import type { Log } from "@intentic/local-agent";
  * (sandbox: platform/sync-ssh.ts) and this listener is the other end of that pipe:
  *
  *   ssh ─→ 127.0.0.1:<port> [here] ─wss→ <sandbox>/system/sync/ssh ─→ 127.0.0.1:22 [in the sandbox]
+ *
+ * WHERE that middle arrow points is resolved per pairing rather than fixed (daemon-base.ts): the sandbox's
+ * public address, or — when its daemon is proved to be listening on this machine's loopback — the shortcut
+ * straight to the container. It matters most HERE of the three places this agent dials, because this is the
+ * stream Mutagen pushes a whole workspace through: a multi-gigabyte first sync between a laptop and a sandbox
+ * ON that laptop used to cross the public internet twice to travel no distance at all.
  *
  * One socket per SSH connection, opened on demand and closed with it, no session, no reconnect logic, nothing
  * to keep in step. Mutagen already treats a dropped transport as a reconnect and retries forever, so the
@@ -36,8 +43,14 @@ export const syncSshPort = (sandboxId: string): number => {
     return SSH_PORT_BASE + (Number.parseInt(hex, 16) % SSH_PORT_SPAN);
 };
 
-// The socket URL for a paired sandbox: its own public URL, ws-scheme, at the daemon's transport route.
-export const sshSocketUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "").replace(/^http/, "ws")}/system/sync/ssh`;
+/* The socket URL for a paired sandbox: the base it was resolved to, ws-scheme, at the daemon's transport route.
+ *
+ * The scheme flip is a prefix swap rather than a pair of cases, and it has to cover BOTH now that the base can
+ * be a loopback address: `https://…` → `wss://…` (the public URL) and `http://…` → `ws://…` (the shortcut,
+ * which is plain because a same-machine hop has nothing to protect it from and the daemon's loopback listener
+ * serves HTTP/1.1 there). Replacing the leading `http` with `ws` does both, since the `s` it leaves behind is
+ * exactly the one that has to survive. */
+export const sshSocketUrl = (base: string): string => `${base.replace(/\/$/, "").replace(/^http/, "ws")}/system/sync/ssh`;
 
 /* Backpressure, laptop side. A sync push fills this direction, and a WebSocket send never blocks, it buffers,
  * so without this a big upload grows the send buffer until the process dies. Past HIGH the TCP socket is paused
@@ -72,20 +85,23 @@ const frameOf = (chunk: Buffer): Uint8Array<ArrayBuffer> => {
 
 export interface TunnelTarget {
     readonly sandboxId: string;
-    readonly sandboxUrl: string;
+    // Where this pairing's daemon is dialled THIS PASS (daemon-base.ts), not necessarily its public address.
+    readonly base: string;
     readonly syncToken: string;
 }
 
 /* Which pairings get a transport: the ones holding a sync token, which is the credential the socket presents.
  * A pairing without one cannot open the stream, so binding a port for it would produce a listener that accepts
  * ssh and then fails every connection, a worse answer than no listener, which at least fails at connect with
- * the port in the message. */
-export const tunnelTargets = (
-    pairings: readonly { readonly sandboxId: string; readonly sandboxUrl: string; readonly syncToken?: string }[],
-): readonly TunnelTarget[] =>
-    pairings
-        .filter((pairing): pairing is TunnelTarget => pairing.syncToken !== undefined)
-        .map(({ sandboxId, sandboxUrl, syncToken }) => ({ sandboxId, sandboxUrl, syncToken }));
+ * the port in the message.
+ *
+ * Takes pairings with their base already resolved, because resolution is one pass-wide step shared with the
+ * ports poll and the report (mirror.ts) — a transport that resolved its own would probe the same daemon a
+ * third time and could disagree with the two of them about where the sandbox is. */
+export const tunnelTargets = (dialed: readonly DialedPairing[]): readonly TunnelTarget[] =>
+    dialed.flatMap(({ pairing, base }) =>
+        pairing.syncToken === undefined ? [] : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
+    );
 
 // Bridge ONE accepted TCP connection to one WebSocket. Exported for the test that drives it against a real
 // socket server without binding a listener.
@@ -94,7 +110,7 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
      * in logs, and this token is what a machine's whole enrollment rests on. The cast is because the second
      * argument is typed as WebSocket subprotocols by the DOM lib; both runtimes this agent runs on (Node's
      * undici and Bun) accept an options object with headers there, which is checked by the tests. */
-    const ws = new WebSocket(sshSocketUrl(target.sandboxUrl), { headers: { "x-intentic-sync": target.syncToken } } as never);
+    const ws = new WebSocket(sshSocketUrl(target.base), { headers: { "x-intentic-sync": target.syncToken } } as never);
     ws.binaryType = "arraybuffer";
     // ssh sends its version banner immediately, before the socket is open, so bytes that arrive early are held
     // rather than dropped. Cleared on open; the socket stays paused until then so the queue is bounded by one
@@ -219,34 +235,53 @@ export const startSshTunnel = async (target: TunnelTarget, log: Log): Promise<((
  * Reconciled rather than started once, for the reason the watcher re-reads state at all: a `setup` in another
  * terminal adds a pairing and an `uninstall` removes one, and neither should need this process restarted. */
 export const createTunnelPool = (log: Log) => {
-    const running = new Map<string, () => Promise<void>>();
+    // The base each live listener was bound FOR, beside its stop: a listener is a closure over the address it
+    // dials, so the pool cannot tell whether one is still current without remembering what it was told.
+    const running = new Map<string, { readonly base: string; readonly stop: () => Promise<void> }>();
     return {
         reconcile: async (targets: readonly TunnelTarget[]): Promise<void> => {
             const wanted = new Set(targets.map((target) => target.sandboxId));
-            for (const [sandboxId, stop] of running) {
+            for (const [sandboxId, held] of running) {
                 if (!wanted.has(sandboxId)) {
                     running.delete(sandboxId);
                     // oxlint-disable-next-line eslint/no-await-in-loop -- one listener at a time; the set is tiny and ordering keeps the log readable
-                    await stop();
+                    await held.stop();
                     log(`  sync transport for ${sandboxId} stopped: it is no longer paired`);
                 }
             }
             for (const target of targets) {
-                if (running.has(target.sandboxId)) {
+                const held = running.get(target.sandboxId);
+                if (held?.base === target.base) {
                     continue;
+                }
+                /* A BASE THAT MOVED IS A REBIND, and without this the resolution would be decided once and then
+                 * ignored for the life of the login: bridgeConnection captures the target, so every later
+                 * connection on a listener bound before the promotion would still dial the old address.
+                 *
+                 * The restart drops whatever ssh connections that listener is carrying, which is the right
+                 * trade in both directions this fires: a promotion moves the stream off the edge and onto
+                 * loopback, and a demotion means the loopback daemon is GONE, so those connections are already
+                 * dead. Mutagen treats a dropped transport as a reconnect and redials within seconds (the whole
+                 * premise of this file), so the cost is one reconnect, and the cache upstream is what stops a
+                 * flapping probe from spending one per tick. */
+                if (held !== undefined) {
+                    running.delete(target.sandboxId);
+                    // oxlint-disable-next-line eslint/no-await-in-loop -- the old listener must release the port before the new one binds it
+                    await held.stop();
+                    log(`  sync transport for ${target.sandboxId} moving to ${target.base}`);
                 }
                 // oxlint-disable-next-line eslint/no-await-in-loop -- ditto: a bind per pairing, serialized on purpose
                 const stop = await startSshTunnel(target, log);
                 if (stop !== undefined) {
-                    running.set(target.sandboxId, stop);
+                    running.set(target.sandboxId, { base: target.base, stop });
                     log(`  sync transport for ${target.sandboxId} listening on 127.0.0.1:${syncSshPort(target.sandboxId)}`);
                 }
             }
         },
         stopAll: async (): Promise<void> => {
-            const stops = [...running.values()];
+            const held = [...running.values()];
             running.clear();
-            await Promise.all(stops.map(async (stop) => await stop()));
+            await Promise.all(held.map(async ({ stop }) => await stop()));
         },
     };
 };

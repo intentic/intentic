@@ -670,7 +670,7 @@ export const SandboxSummarySchema = z.object({
      * Server-computed, and it has to be, because it is the one address in the product that lives in a
      * DIFFERENT zone from the sandbox itself. The browser used to derive it from `daemonUrl` — right only
      * while a sandbox's public zone and the platform's DNS zone were the same one, which stopped being true
-     * the moment reachability moved to the zrok hub: the sandbox answers under `sbx.<zone>` while the wildcard
+     * the moment reachability moved to the platform's own edge: the sandbox answers under `sbx.<zone>` while the wildcard
      * and the ACME challenge are written under `<zone>`. The two names never met, so the browser probed an
      * address nothing was certified for, failed, and quietly settled for the plain-http loopback — HTTP/1.1,
      * six connections per origin, which is the transport the whole stream budget exists to survive.
@@ -772,8 +772,8 @@ export type CfZones = z.infer<typeof CfZonesSchema>;
 
 /* The setup code: ONE short-lived value the copy-paste install command carries instead of raw tokens (nothing
  * secret lands in shell history or the process list). The connect script redeems it at POST /setup/claim (a
- * public non-oRPC route, the script has no session) for CONNECT_TOKEN plus the sandbox's reachability grant
- * on the self-hosted zrok hub: {ZROK_TOKEN, ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
+ * public non-oRPC route, the script has no session) for CONNECT_TOKEN plus the sandbox's reachability grant on
+ * the platform's own edge: {SANDBOX_GRANT, INGRESS_URL, SANDBOX_HOSTNAME, OWNER_EMAIL}.
  *
  * There is no target to choose any more. Under the platform's own tunnel fabric every sandbox's address is
  * DERIVED from its connect token (`sandbox-<id>.<zone>`), the bring-your-own-Cloudflare lane it used to

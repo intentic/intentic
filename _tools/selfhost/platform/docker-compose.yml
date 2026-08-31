@@ -66,7 +66,7 @@ services:
             # The admin surface's writes (suspend/retry/stop/erase). Leave off until the panel is a pinned
             # install — see the platform-admin extension's README.
             ADMIN_MUTATIONS: ${ADMIN_MUTATIONS:-false}
-            # Cloudflare is DNS-ONLY now (the tunnel fabric is the zrok hub above): the loopback-certificate
+            # Cloudflare is DNS-ONLY now (the reachability fabric is the ingress below): the loopback-certificate
             # records for same-machine sandboxes, and the sweep that clears their residue.
             INTENTIC_CLOUDFLARE_API_TOKEN: ${INTENTIC_CLOUDFLARE_API_TOKEN:-}
             INTENTIC_CLOUDFLARE_ZONE: ${INTENTIC_CLOUDFLARE_ZONE:-intentic.dev}
@@ -81,15 +81,19 @@ services:
             # Hosted sandboxes: the platform creates each new user's machine on its OWN Fly account, so signing
             # in IS the setup — and it keeps the way back in (wake/stop/destroy). Blank (the default) → the lane
             # is off and every user sets up their own machine as before. The token must be ORG-scoped
-            # (`fly tokens create org`), and the Cloudflare pair above must be set too: a hosted machine is
-            # reachable only over a platform-provisioned tunnel. A daily reconcile destroys any app under the
+            # (`fly tokens create org`), and the ingress pair below must be set too: a hosted machine is
+            # reachable only through the grant this platform signs. A daily reconcile destroys any app under the
             # prefix whose sandbox is gone — keep the prefix unique to this deployment.
-            # The self-hosted tunnel hub every sandbox is reached through (_tools/selfhost/zrok). Without
-            # ZROK_ADMIN_TOKEN nothing can be provisioned reachability and setup offers only the attach lane.
-            ZROK_API_ENDPOINT: ${ZROK_API_ENDPOINT:-https://zrok2.sbx.intentic.dev}
-            ZROK_AGENT_ENDPOINT: ${ZROK_AGENT_ENDPOINT:-}
-            ZROK_ADMIN_TOKEN: ${ZROK_ADMIN_TOKEN:-}
-            ZROK_ZONE: ${ZROK_ZONE:-sbx.intentic.dev}
+            # The edge every sandbox is reached through (@intentic/ingress). Sandboxes dial INGRESS_URL
+            # outbound and authenticate with a grant this platform SIGNS, so there is no fabric credential
+            # here — just the private half of an Ed25519 pair whose public half rides the ingress's own env
+            # (`openssl genpkey -algorithm ed25519`, PKCS8 PEM, newlines and all). Without
+            # INGRESS_SIGNING_KEY nothing can be made reachable and setup offers only the attach lane.
+            # INGRESS_ZONE is the wildcard zone sandbox hostnames are labels under; INGRESS_URL should be a
+            # label under that same zone, so it costs no extra DNS and rides the same wildcard certificate.
+            INGRESS_ZONE: ${INGRESS_ZONE:-sbx.intentic.dev}
+            INGRESS_URL: ${INGRESS_URL:-https://ingress.sbx.intentic.dev}
+            INGRESS_SIGNING_KEY: ${INGRESS_SIGNING_KEY:-}
             HOSTED_FLY_API_TOKEN: ${HOSTED_FLY_API_TOKEN:-}
             HOSTED_FLY_ORG: ${HOSTED_FLY_ORG:-}
             HOSTED_REGION: ${HOSTED_REGION:-iad}

@@ -237,6 +237,16 @@ model Sandbox {
     // sha256(token) hex — the deterministic lookup key for the daemon's announce (token itself is encrypted
     // with a random IV, so its ciphertext can't be queried by value).
     tokenDigest        String          @unique
+    /* The sandbox's 12-hex id: the first twelve hex of `tokenDigest`, written at creation from the one
+     * derivation every party shares (sandboxIdFromToken, tunnel-ids). The leftmost label of every public name
+     * this sandbox will ever serve is built from it, so it is not reachability STATE — there is none, a grant
+     * is a signature over this value — it is the id as a KEY.
+     *
+     * Stored rather than sliced off `tokenDigest` on read because two callers need to look a sandbox UP by it
+     * and neither can afford a prefix scan: the ingress on every tunnel registration (GET
+     * /api/reachability/<id>) and the daily DNS sweep. Unique, and load-bearing: two rows sharing this id
+     * would serve each other's hostnames. */
+    tunnelId           String          @unique
     // The sandbox's public URL (https://sandbox-<id>.<zone>), reported by the DAEMON on every announce.
     // Null until the daemon first phones home.
     daemonUrl          String?
@@ -271,13 +281,10 @@ model Sandbox {
     // refusal, cleared by an accepted announce, so a value here is always a live disagreement. Was a log line
     // only, which is what made a mis-addressed sandbox look identical to one that never started.
     announceRefusal    Json?
-    // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): {ZROK_TOKEN,
-    // ZROK_API, ZROK_NAMESPACE, SANDBOX_HOSTNAME, OWNER_EMAIL}.
+    // The KEY=value map /setup/claim returns alongside CONNECT_TOKEN (= token above): {SANDBOX_GRANT,
+    // INGRESS_URL, SANDBOX_HOSTNAME, OWNER_EMAIL}. Its presence is also the row's record that this platform
+    // handed the sandbox a reachability grant, which is what the announce check reads (api app.ts).
     setupPayload       Json?
-    // The sandbox's zrok ACCOUNT token (encrypted) — its whole reachability grant on the self-hosted hub,
-    // minted once (sandbox/zrok.ts) and reused across mints; the hostname needs no column because it stays a
-    // stable digest of `token` (tunnel-ids). Null until the first setup mint (or hosted provision) buys it.
-    zrokToken          String?
     // Where the cloud lane created this sandbox's machine (SandboxCloudSchema + the provider's server id) —
     // null for every other creation path. Display metadata only, never a credential: the provider token was
     // request-scoped, so the platform keeps no way back into the machine. Plaintext on purpose — nothing here
@@ -295,8 +302,8 @@ model Sandbox {
     @@map("sandbox")
 }
 
-// The pre-provisioned pool (ReservedSandbox) died with the Cloudflare tunnels it existed to amortize: a zrok
-// account mint is one fast call, so sandbox.create provisions inline and nothing is reserved ahead of demand.
+// The pre-provisioned pool (ReservedSandbox) died with the Cloudflare tunnels it existed to amortize:
+// reachability is now a signature computed in-process, so sandbox.create needs nothing reserved ahead of demand.
 // The HOSTED lane grew a pool of its own (HostedPoolMachine below) for the cost a mint never had: pulling the
 // sandbox image onto a Fly host is the minutes-long part of a first boot, and it can be paid before anyone asks.
 

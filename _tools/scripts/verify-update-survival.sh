@@ -22,7 +22,7 @@
 #        → ic fails, AND the original sandbox is back up healthy with its sentinels — the parked-container
 #          restore, which is the "never worse off" half of the promise
 #
-# Hermetic like its sibling: direct-token connect, no tunnel hub, no platform. connect.sh is read from the
+# Hermetic like its sibling: direct-token connect, no edge, no platform. connect.sh is read from the
 # site tree rather than an installer — verify-desktop-setup.sh owns "the shipped bytes work"; this tier owns
 # "the update engine keeps its promises", and building a .deb to test the update engine would couple the two
 # for nothing. ic is built from this checkout via IC_BIN, the shim's own override.
@@ -80,8 +80,8 @@ docker cp "$ROOT/_site/site/public/scripts/connect.sh" "$HOST_CONTAINER:/root/co
 echo "==> connecting a sandbox on $START_IMAGE"
 in_host env \
     CONNECT_TOKEN="update-drill-token" \
-    ZROK_TOKEN="dummy-zrok-token" \
-    ZROK_API="https://zrok.e2e.test" \
+    SANDBOX_GRANT="dummy-reachability-grant" \
+    INGRESS_URL="https://ingress.e2e.test" \
     SANDBOX_HOSTNAME="$HOSTNAME_UNDER_TEST" \
     SANDBOX_IMAGE="$START_IMAGE" \
     PLATFORM_URL="https://platform.e2e.test" \

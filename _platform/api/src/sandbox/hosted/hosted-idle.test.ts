@@ -11,7 +11,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         // Unconfigured mail logs the link instead of sending, so these tests exercise the real send path's
         // ordering without a network stub standing in for Resend.
         email: { apiKey: ``, from: `` },
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, adminToken: `hub-admin` },
+        ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: { flyApiToken: `fly`, flyOrg: `intentic`, appPrefix: `intentic-sbx`, idleDays: 21, idleWarnDays: 14, ...over },
         pool: { compEmails: `` },
     }) as unknown as Config;

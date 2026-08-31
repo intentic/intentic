@@ -70,15 +70,15 @@ export const configSchema = z.object({
             from: z.string().default(``), // EMAIL_FROM
         })
         .prefault({}),
-    /* Intentic-OWNED Cloudflare token + zone. DNS ONLY since the tunnel fabric moved in-house (zrok above).
-     * What is left of it: the loopback certificate's `*.local.<zone>` wildcard and the per-order ACME
+    /* Intentic-OWNED Cloudflare token + zone. DNS ONLY since the tunnel fabric moved in-house (`ingress`
+     * below). What is left of it: the loopback certificate's `*.local.<zone>` wildcard and the per-order ACME
      * challenge beside it (the daemon relays for both, having no token for this zone), plus the daily sweep
      * that clears the residue of everything this platform used to mint here.
      *
      * "Nothing against the per-zone quota" is now true and was not before: a sandbox used to leave a
-     * `local-<id>` A record behind forever, that was the last per-sandbox record anywhere in this zone after
-     * the zrok move, and enough of them filled the zone and stopped issuance for everyone. DNS-ONLY is also
-     * literal, the sweep may not call anything but /dns_records, or a narrowed token kills it.
+     * `local-<id>` A record behind forever, that was the last per-sandbox record anywhere in this zone once
+     * reachability stopped costing DNS, and enough of them filled the zone and stopped issuance for everyone.
+     * DNS-ONLY is also literal, the sweep may not call anything but /dns_records, or a narrowed token kills it.
      *
      * Unset ⇒ the loopback-certificate path is simply off. */
     intenticCloudflare: z
@@ -99,24 +99,31 @@ export const configSchema = z.object({
             reapDryRun: z.stringbool().default(false),
         })
         .prefault({}),
-    /* THE TUNNEL FABRIC, the self-hosted zrok hub every sandbox reaches its owner through (sandbox/zrok.ts;
-     * the `zrok` Komodo stack runs it). The platform holds the hub's ADMIN token and mints one account per
-     * sandbox; the box's own `zrok2 enable` births the identity, so this credential creates and revokes
-     * reachability but can never impersonate a sandbox. Replaces the Cloudflare tunnel machinery outright,
-     * intenticCloudflare below is DNS-only residue now (loopback-cert records). `adminToken` is the switch:
-     * empty (the default for a platform that has not stood the hub up) leaves every provisioning route 404
-     * and the wizard offering only the attach lane. */
-    zrok: z
+    /* THE REACHABILITY FABRIC: the platform's OWN edge (`@intentic/ingress`), which sandboxes dial with one
+     * outbound tunnel and authenticate with a grant this key signs (sandbox/reachability.ts). It replaced a
+     * self-hosted tunnel hub, and what went with the hub is the interesting part — there is no admin
+     * credential here, because there is no fabric to administer: the platform does not create, name, or
+     * revoke anything upstream, it signs a claim about a sandbox's identity and the edge verifies it offline.
+     * Revocation is deleting the sandbox row, which the ingress reads back over /api/reachability/<id>.
+     *
+     * intenticCloudflare above is unrelated and stays: DNS only, for the loopback certificate's records.
+     *
+     * `signingKey` (with `url`) is the switch: empty — the default for a developer and for a self-hoster who
+     * runs no ingress — leaves every provisioning route 404 and the wizard offering only the attach lane. */
+    ingress: z
         .object({
-            // The controller API as the PLATFORM reaches it (LAN address is fine). ZROK_API_ENDPOINT.
-            apiEndpoint: z.url().default(`https://zrok2.sbx.intentic.dev`),
-            // The same controller as SANDBOXES reach it, differs from the above when the platform sits on
-            // the hub's LAN but the boxes come in from outside. Empty ⇒ same as apiEndpoint. ZROK_AGENT_ENDPOINT.
-            agentEndpoint: z.string().default(``),
-            // The hub's admin token (ZROK2_ADMIN_TOKEN of the zrok stack). ZROK_ADMIN_TOKEN.
-            adminToken: z.string().default(``).meta({ secret: true }),
-            // The DNS zone the wildcard record serves, the suffix of every sandbox hostname. ZROK_ZONE.
+            /* The wildcard DNS zone every sandbox hostname is a label under. The names themselves did not
+             * change with the fabric, only what answers behind them. INGRESS_ZONE. */
             zone: z.string().default(`sbx.intentic.dev`),
+            /* The public base the BOXES dial to open their tunnel. Deliberately a label under the same
+             * wildcard (`https://ingress.<zone>`), so it costs no DNS record and is covered by the same
+             * wildcard certificate the edge already terminates. One address, not the hub era's
+             * platform-view/agent-view pair: the edge is public by construction. INGRESS_URL. */
+            url: z.url().default(`https://ingress.sbx.intentic.dev`),
+            /* The platform's Ed25519 PRIVATE key (PKCS8 PEM), the whole of what minting reachability needs.
+             * The ingress holds only the matching public key, so a compromised edge can verify grants and
+             * never mint one. INGRESS_SIGNING_KEY. */
+            signingKey: z.string().default(``).meta({ secret: true }),
         })
         .prefault({}),
     /* THE HOSTED LANE, intentic's OWN Fly.io credential, the THIRD documented exception to the secret-free
@@ -456,7 +463,7 @@ export const CONFIG_SECRETS = [
     `google.clientSecret`,
     `email.apiKey`,
     `intenticCloudflare.apiToken`,
-    `zrok.adminToken`,
+    `ingress.signingKey`,
     `hosted.flyApiToken`,
     `trial.keys`,
     `apns.keyP8`,

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@intentic-app/prisma";
 import type { Config } from "../../config.js";
 import { runHostedCanary } from "./hosted-canary.js";
-import { forgetNamespace } from "../zrok-provision.js";
+import { testIngressConfig } from "../../testing.js";
 
 /* WHAT THE CANARY IS FOR, in one sentence: the health sweep can see a machine go missing, and cannot see a
  * lane that is intact but no longer works. Production sat for days with six sandboxes provisioned and not one
@@ -20,7 +20,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
         email: { apiKey: ``, from: `` },
         google: { clientId: `gcid` },
         secrets: { key: `` },
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+        ingress: { ...testIngressConfig },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,
@@ -42,7 +42,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
 // The canary's own sandbox row, and the announce it is waiting for: `lastSeenAt` is written by the daemon
 // checking in, so a fixture that sets it IS a machine that came up.
 const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) => {
-    const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, zrokToken: null, ownerId: `canary-user` };
+    const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, tunnelId: `abcdef012345`, ownerId: `canary-user` };
     return {
         user: { findUnique: vi.fn().mockResolvedValue({ id: `canary-user` }), create: vi.fn().mockResolvedValue({ id: `canary-user` }) },
         sandbox: {
@@ -93,7 +93,6 @@ const stubProviders = (over: { machine?: () => Response } = {}) => {
 
 afterEach(() => {
     vi.unstubAllGlobals();
-    forgetNamespace();
 });
 
 describe(`the provisioning canary`, () => {

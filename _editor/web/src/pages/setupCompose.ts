@@ -1,9 +1,9 @@
 /* The docker-compose variant of the setup one-liner: instead of `curl … | sh` (connect.sh) imperatively
  * starting containers, the user adds two services to their own compose file and a one-time bootstrap creates
  * the `.env` beside it. The claim endpoint already answers KEY=value lines, exactly compose's .env format,
- * so the intentic-provided path needs no script at all: claim → .env, `docker compose up -d`. The
- * own-Cloudflare path additionally mints the sandbox tunnel with the bundled CLI (the same `tunnel sandbox`
- * call connect.sh makes), appending the reachability grant (ZROK_*) + SANDBOX_HOSTNAME to the .env.
+ * so the path needs no script at all: claim → .env, `docker compose up -d`. Nothing mints a tunnel on the way
+ * in any more — the claim's own KEY=value lines carry the reachability pair (INGRESS_URL + SANDBOX_GRANT) and
+ * SANDBOX_HOSTNAME, and the daemon dials the edge itself once the container is up.
  *
  * Everything here mirrors connect.sh's `docker run`, image, env set, volumes, network alias, dns, logging,
  * and uses the SAME container/volume/network names (intentic-*-<slug>), so cleanup.sh, the coexistence check,
@@ -123,12 +123,23 @@ export const composeFile = (args: ComposeArgs): string => {
         // defaults to, but a self-hosted or localhost-dev SPA is a browser the daemon has never heard of, and
         // without this line every call it makes is blocked before the bearer is ever looked at.
         ...(args.webOrigin === PLATFORM_WEB_ORIGIN ? [] : [`            WEB_ORIGIN: ${args.webOrigin}`]),
-        // The sandbox's reachability grant on the platform's own hub, the .env bootstrap (the claim) carries
-        // all three, and the container's entrypoint enables + shares with them. There is no tunnel SERVICE any
-        // more: the agent runs inside the sandbox, which is why this file is one container shorter than it was.
-        `            ZROK_TOKEN: \${ZROK_TOKEN:?run the .env bootstrap first}`,
-        `            ZROK_API: \${ZROK_API:-}`,
-        `            ZROK_NAMESPACE: \${ZROK_NAMESPACE:-}`,
+        /* HOW THIS SANDBOX IS REACHED: the platform's own ingress edge, named by INGRESS_URL, dialled with the
+         * signed grant that says which sandbox the bearer is. The claim writes both into the .env and the
+         * daemon opens one outbound WebSocket with them; the canonical spelling of the pair is
+         * @intentic/sandbox-contract's ingress-contract.ts (ENV_INGRESS_URL / ENV_SANDBOX_GRANT), which every
+         * lane — this file, the connect one-liner, the hosted machine env — has to agree with, because the
+         * entrypoint and the daemon read exactly these names.
+         *
+         * The grant is required and the URL is not: a sandbox with no grant cannot prove who it is and would
+         * serve nothing, so it fails here with the fix named, while a missing URL falls to the daemon's own
+         * default for the edge. That is the same split the zrok-era pair had (token required, API optional),
+         * and it replaces it outright — reachability is no longer an account and a claimed name on a hub, it is
+         * a signature the edge verifies offline, so there is nothing per-sandbox left to provision or reap.
+         *
+         * There is still no tunnel SERVICE: the client is the daemon itself, which is why this file is one
+         * container shorter than it was. */
+        `            INGRESS_URL: \${INGRESS_URL:-}`,
+        `            SANDBOX_GRANT: \${SANDBOX_GRANT:?run the .env bootstrap first}`,
         ...(dev ? [`            AGENT_AUTH_DIR: /agent-auth`] : []),
         `networks:`,
         `    intentic:`,

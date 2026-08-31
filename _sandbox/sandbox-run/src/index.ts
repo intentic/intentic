@@ -267,11 +267,13 @@ export const REPLAY_ENV = [
     "WEB_ORIGIN",
     "SANDBOX_PUBLIC_URL",
     "PLATFORM_URL",
-    // The sandbox's reachability grant on the self-hosted hub, replayed like every other identity value, so
-    // a recreated container re-enables as the SAME zrok environment and re-attaches the same public names.
-    "ZROK_TOKEN",
-    "ZROK_API",
-    "ZROK_NAMESPACE",
+    /* The sandbox's reachability: the signed grant it presents when it dials the edge, and the edge it dials
+     * (ingress-contract's ENV_SANDBOX_GRANT / ENV_INGRESS_URL). Replayed like every other identity value, so a
+     * recreated container comes back up on the SAME public names — and here that is a property of the fabric
+     * rather than a thing to arrange: the grant names the sandbox's own id, a second tunnel for an id displaces
+     * the first, so the new container is simply the live one. The dead predecessor holds nothing to reclaim. */
+    "SANDBOX_GRANT",
+    "INGRESS_URL",
     "CLOUDFLARE_API_TOKEN",
     "HOST_SSH_KEY",
     "SELF_HOST_USER",

@@ -27,7 +27,7 @@ const configSchema = z.object({
     // writes the {kind:"start"} marker before each run, then tails it (the apply job's durable file at
     // /intentic/apply/events; a per-run file for the check flow's resolve/plan).
     intenticEventsFile: z.string().default(""),
-    // sandbox-tunnel reads these straight from the env connect.{sh,ps1} sets; the demo reads the token too.
+    // host-ssh-tunnel reads these straight from the env connect.{sh,ps1} sets; the demo reads the token too.
     cloudflareApiToken: z.string().default(""),
     connectToken: z.string().default(""),
     zone: z.string().default(""),

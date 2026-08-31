@@ -34,8 +34,8 @@ import { kickHostedPool } from "./hosted/hosted-pool.js";
 import { hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
-import { ensureZrokAccount, zrokEnabled } from "./zrok-provision.js";
-import { deleteSandboxAccount } from "./zrok.js";
+import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
+import { ensureReachability, ingressEnabled } from "./reachability.js";
 
 const os = implement(apiContract).$context<OrpcContext>();
 
@@ -48,15 +48,15 @@ const SETUP_CODE_TTL_MS = 30 * 60 * 1000;
 // the wait renders as the plain spinner it has always had.
 const MACHINE_STATES = HostedStatusSchema.shape.machine.options;
 
-// The hub's zone when the tunnel fabric is configured, else undefined, the zone alone defaults even when
+// The ingress's wildcard zone when the fabric is configured, else undefined, the zone alone defaults even when
 // the fabric is off, so it must not flag sandboxes on its own.
-const intenticZoneOf = (context: OrpcContext): string | undefined => (zrokEnabled(context.config) ? context.config.zrok.zone : undefined);
+const intenticZoneOf = (context: OrpcContext): string | undefined => (ingressEnabled(context.config) ? context.config.ingress.zone : undefined);
 
 /* The loopback listener's certified name, from the zone that actually holds its DNS.
  *
  * Deliberately NOT `intenticZoneOf` above: that one answers "where is this sandbox REACHABLE", which is the
- * tunnel hub's zone, and the loopback certificate lives in intentic's own DNS zone instead. They were the same
- * zone until reachability moved to the hub, and every derivation that assumed so broke silently when it did.
+ * ingress's wildcard zone, and the loopback certificate lives in intentic's own DNS zone instead. They were the
+ * same zone until reachability moved off Cloudflare, and every derivation that assumed so broke silently then.
  * Two questions, two zones, and this is the one the wildcard and the ACME challenge are written under
  * (cloudflare.ts ensureLocalDnsRecord).
  *
@@ -219,14 +219,26 @@ export const sandboxRoutes = {
             ],
         };
     }),
-    // Mint a new sandbox for the caller. Unlimited, own as many as you like. Nothing is provisioned here:
-    // a zrok account is one fast call the first setup mint (or hosted provision) makes, which is why the
-    // pre-provisioned pool the Cloudflare tunnels needed died with them.
+    /* Mint a new sandbox for the caller. Unlimited, own as many as you like. Nothing is provisioned anywhere:
+     * reachability is a signature the first setup mint (or hosted provision) computes in-process, which is why
+     * the pre-provisioned pool the Cloudflare tunnels needed died with them and never came back.
+     *
+     * `tunnelId` is written HERE and never again: it is the 12-hex id every hostname this sandbox will ever
+     * serve is built from, and the row's copy of a derivation the connect token already fixes
+     * (sandboxIdFromToken). Stored rather than re-derived because two readers need it as a KEY — the ingress's
+     * registration check (GET /api/reachability/<id>) and the DNS sweep — and neither can decrypt a token or
+     * scan a table for a digest prefix. */
     create: os.sandbox.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const token = randomBytes(16).toString(`base64url`);
         const sandbox = await context.prisma.sandbox.create({
-            data: { name: input.name, ownerId: user.id, token: encryptSecret(context.config, token), tokenDigest: sha256Hex(token) },
+            data: {
+                name: input.name,
+                ownerId: user.id,
+                token: encryptSecret(context.config, token),
+                tokenDigest: sha256Hex(token),
+                tunnelId: sandboxIdFromToken(token) ?? ``,
+            },
             include: { hosted: true },
         });
         return toSummary(sandbox, `owner`, context);
@@ -243,28 +255,24 @@ export const sandboxRoutes = {
         });
         return toSummary(sandbox, `owner`, context);
     }),
-    // Remove an owned sandbox (cascades its member grants), its hosted machine, and its reachability grant on
-    // the hub, the platform destroys everything it provisioned. The grant is revoked FIRST and the machine is
-    // destroyed after the row, and the asymmetry is the hubs' own doing: Fly apps can be listed by prefix, so
-    // a machine the teardown missed is found and destroyed tomorrow, while zrok v2 has no way to list accounts
-    // at all, a grant whose row is gone could never be found again. So the removal fails on a hub hiccup and
-    // the user retries, rather than stranding an address nobody can revoke. The daemon keeps running on its
-    // host until cleanup.sh tears it down there.
+    /* Remove an owned sandbox (cascades its member grants) and its hosted machine.
+     *
+     * DELETING THE ROW IS THE REVOCATION, which is why there is no teardown call before it any more. Under the
+     * old tunnel hub, reachability was an account the platform had created upstream, so that account had to go
+     * FIRST and the whole removal failed on a hub hiccup — the hub could not be asked what it held, so a grant
+     * whose row was already gone could never be found again. The ingress inverts that: a grant is a signature
+     * over this sandbox's id and nothing upstream holds a record of it, so the edge asks US on every tunnel
+     * registration (GET /api/reachability/<id>) and a row that is not here answers 404 and refuses the tunnel.
+     * One statement, nothing to strand, and nothing to reconcile tomorrow.
+     *
+     * The machine is still destroyed AFTER the row, for the reason it always was: the row is what the browser
+     * reads, so a slow provider must not keep a just-removed sandbox on screen, and an app with no row is
+     * exactly what the hosted reaper collects. The daemon keeps running on its host until cleanup.sh tears it
+     * down there. */
     delete: os.sandbox.delete.handler(async ({ context, input }) => {
-        const sandbox = await requireOwnedSandbox(context, input.sandboxId);
+        await requireOwnedSandbox(context, input.sandboxId);
         // Read the hosted record BEFORE the row goes, the cascade takes it, and its appName is the teardown.
         const hosted = await context.prisma.hostedMachine.findUnique({ where: { sandboxId: input.sandboxId } });
-        if (sandbox.zrokToken !== null && zrokEnabled(context.config)) {
-            const sandboxId = sandboxIdFromToken(decryptSecret(context.config, sandbox.token)) ?? sandbox.id;
-            try {
-                await deleteSandboxAccount(context.config.zrok, sandboxId);
-            } catch (error) {
-                context.logger.error({ err: error, sandboxId: input.sandboxId }, `zrok account teardown failed`);
-                throw new ORPCError(`BAD_GATEWAY`, {
-                    message: `couldn't release the address; try again shortly`,
-                });
-            }
-        }
         await context.prisma.sandbox.delete({ where: { id: input.sandboxId } });
         // A hosted sandbox's machine dies with it, best-effort AFTER the row: the row is what the browser
         // reads, so a slow provider would otherwise keep a just-removed sandbox on screen, and a failed
@@ -418,17 +426,13 @@ export const sandboxRoutes = {
             return toSummary(already, `owner`, context);
         }
         await assertHostedAllowance(context, user.id);
-        if (!zrokEnabled(context.config)) {
-            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no tunnel fabric configured` });
+        if (!ingressEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
         }
-        let grant;
-        try {
-            // The machine's env must carry the sandbox's reachability grant, so it is minted (or reused)
-            // before the machine exists, the same ordering the tunnel had, one call instead of a dozen.
-            grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
-        } catch (error) {
-            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
-        }
+        // The machine's env must carry the sandbox's grant, so it is minted before the machine exists — the
+        // same ordering the tunnel had, except that this is now a signature rather than a provider round trip,
+        // so it cannot fail in a way the reader could act on and needs no gateway-error wrapper of its own.
+        const grant = ensureReachability(context.config, sandbox);
         try {
             await provisionHosted(context.prisma, context.config, context.logger, {
                 sandboxId: sandbox.id,
@@ -549,7 +553,7 @@ export const sandboxRoutes = {
             });
         }
         try {
-            const grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
+            const grant = ensureReachability(context.config, sandbox);
             const args = {
                 sandboxId: sandbox.id,
                 connectToken: decryptSecret(context.config, sandbox.token),
@@ -614,31 +618,25 @@ export const sandboxRoutes = {
      * configuration rather than anything about the caller. */
     addressOffer: os.sandbox.addressOffer.handler(({ context }) => {
         requireUser(context);
-        return { enabled: zrokEnabled(context.config) };
+        return { enabled: ingressEnabled(context.config) };
     }),
     /* Mint the short-lived setup code the install one-liner carries instead of raw tokens. One lane now: the
-     * sandbox's reachability grant on the self-hosted hub is minted (or reused) here and stashed in the
-     * payload, so the pasted command carries a code and nothing else, the address it will answer on is a
-     * derivation of the connect token, known before anything runs. Re-claimable until expiry so a failed run
-     * stays re-runnable; re-minting overwrites the previous code but never the grant. */
+     * sandbox's reachability grant is signed here and stashed in the payload, so the pasted command carries a
+     * code and nothing else, and the address it will answer on is a derivation of the connect token, known
+     * before anything runs. Re-claimable until expiry so a failed run stays re-runnable; re-minting overwrites
+     * the previous code and re-signs the grant, which is the same claim either way (there is no identity to
+     * lose by minting a second one — see reachability.ts). */
     setupCode: os.sandbox.setupCode.handler(async ({ context, input }) => {
         const user = requireUser(context);
         const sandbox = await requireOwnedSandbox(context, input.sandboxId);
-        if (!zrokEnabled(context.config)) {
-            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no tunnel fabric configured` });
+        if (!ingressEnabled(context.config)) {
+            throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });
         }
-        let grant;
-        try {
-            grant = await ensureZrokAccount(context.prisma, context.config, sandbox);
-        } catch (error) {
-            // Surface WHY, a raw throw serializes as a bare "Internal server error" in the wizard.
-            throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `provisioning reachability failed` });
-        }
+        const grant = ensureReachability(context.config, sandbox);
         const hostname = grant.hostname;
         const payload: Record<string, string> = {
-            ZROK_TOKEN: grant.accountToken,
-            ZROK_API: grant.apiEndpoint,
-            ZROK_NAMESPACE: grant.namespaceToken,
+            [ENV_SANDBOX_GRANT]: grant.grant,
+            [ENV_INGRESS_URL]: grant.ingressUrl,
             SANDBOX_HOSTNAME: hostname,
         };
         // Seed the creator's account email so the daemon binds ONLY this Google identity as owner (TOFU by

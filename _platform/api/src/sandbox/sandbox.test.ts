@@ -1,8 +1,10 @@
 import { sandboxSubdomain } from "@intentic/sandbox-contract";
+import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { call, ORPCError } from "@orpc/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrpcContext } from "../context.js";
+import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
@@ -15,7 +17,7 @@ const sandboxRow = {
     daemonUrl: null,
     lastSeenAt: null,
     setupCodeClaimedAt: null,
-    zrokToken: null,
+    tunnelId: sandboxIdFromToken(`tok`)!,
 };
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
@@ -27,7 +29,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         config: {
             webOrigin: `https://app.test`,
             intenticCloudflare: { apiToken: ``, zone: ``, reapDryRun: true },
-            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+            ingress: { ...testIngressConfig },
             secrets: { key: `` },
             email: { apiKey: ``, from: `` },
         },
@@ -179,43 +181,39 @@ describe(`sandbox routes`, () => {
         );
     });
 
-    /* THE MINT, on the self-hosted fabric: one account per sandbox, cached on the row, and a payload carrying
-     * exactly what the box needs to enable and share. The owner email is lowercased into it for the reason it
-     * always was: the daemon binds that one Google identity as owner. */
-    it(`setupCode mints the reachability grant, caches it, and hands the box its whole payload`, async () => {
+    /* THE MINT: a signature and a payload carrying exactly what the box needs to dial the edge. Nothing is
+     * cached, which is the change — the hub era wrote an account token to the row here, and the assertion
+     * that used to guard that column is now the one below saying the ROUTE calls no provider at all. The owner
+     * email is lowercased into the payload for the reason it always was: the daemon binds that one Google
+     * identity as owner. */
+    it(`setupCode signs the reachability grant into the payload, with no provider call`, async () => {
         const update = vi.fn().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
         const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null };
-        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
-            if (String(url).endsWith(`/namespaces`)) {
-                return Promise.resolve(new Response(JSON.stringify([{ namespaceToken: `ns-1`, name: `public` }])));
-            }
-            if ((init?.method ?? `GET`) === `POST` && String(url).endsWith(`/account`)) {
-                return Promise.resolve(new Response(JSON.stringify({ accountToken: `acct-9` }), { status: 201 }));
-            }
-            throw new Error(`unexpected fetch: ${String(url)}`);
+        // Provisioning reachability is local arithmetic now: a fetch from this route is the regression.
+        vi.stubGlobal(`fetch`, () => {
+            throw new Error(`the mint must call no provider — a grant is signed in-process`);
         });
 
         const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma, user: mixedCase }) });
 
         // The address is derived from the connect token, so it is knowable before anything runs.
         expect(minted.hostname).toBe(`${sandboxSubdomain(sandboxIdFromToken(`tok`)!)}.sbx.test`);
-        // The account token is cached on the row: a second mint reuses it rather than growing a second grant.
-        const cached = update.mock.calls.find((entry) => (entry[0] as { data: Record<string, unknown> }).data[`zrokToken`] !== undefined);
-        // The write happened AND it carried a token. `find` returning something only says a call matched the
-        // predicate; naming the shape is what would catch a token written as null or as an empty string.
-        expect(cached?.[0]).toMatchObject({ data: { zrokToken: expect.any(String) } });
         const stored = JSON.parse((update.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload) as Record<string, string>;
-        expect(stored[`ZROK_TOKEN`]).toBe(`acct-9`);
-        expect(stored[`ZROK_NAMESPACE`]).toBe(`ns-1`);
-        expect(stored[`ZROK_API`]).toBe(`https://zrok2.sbx.test`);
+        // The grant is the credential, so it is asserted the way the ingress will read it: verified against the
+        // public key, naming THIS sandbox. A `expect.any(String)` here would pass for the empty payload too.
+        expect(verifyReachabilityGrant(INGRESS_TEST_PUBLIC_KEY, stored[`SANDBOX_GRANT`]!)?.sandboxId).toBe(sandboxIdFromToken(`tok`));
+        expect(stored[`INGRESS_URL`]).toBe(`https://ingress.sbx.test`);
+        expect(stored[`SANDBOX_HOSTNAME`]).toBe(minted.hostname);
         expect(stored[`OWNER_EMAIL`]).toBe(`owner@example.com`);
+        // Nothing about reachability is written to the row: the payload IS the whole handdown.
+        expect(Object.keys((update.mock.calls.at(-1)![0] as { data: Record<string, unknown> }).data)).not.toContain(`tunnelId`);
     });
 
-    it(`setupCode 404s when this platform has no tunnel fabric configured`, async () => {
+    it(`setupCode 404s when this platform has no reachability fabric configured`, async () => {
         const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
         const noFabric = context({ prisma });
-        (noFabric.config as { zrok: { adminToken: string } }).zrok.adminToken = ``;
+        (noFabric.config as { ingress: { signingKey: string } }).ingress.signingKey = ``;
         await expectOrpcCode(call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: noFabric }), `NOT_FOUND`);
     });
 
@@ -227,44 +225,26 @@ describe(`sandbox routes`, () => {
         expect(await call(sandboxRoutes.addressOffer, {}, { context: context({ prisma }) })).toEqual({ enabled: true });
 
         const noFabric = context({ prisma });
-        (noFabric.config as { zrok: { adminToken: string } }).zrok.adminToken = ``;
+        (noFabric.config as { ingress: { signingKey: string } }).ingress.signingKey = ``;
         expect(await call(sandboxRoutes.addressOffer, {}, { context: noFabric })).toEqual({ enabled: false });
     });
 
-    // The teardown a delete owes the hub: the account goes, taking every environment, share and name with it.
-    it(`delete revokes the sandbox's reachability grant before dropping the row`, async () => {
-        const order: string[] = [];
-        const deleteRow = vi.fn().mockImplementation(() => {
-            order.push(`row`);
-            return Promise.resolve({});
-        });
-        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
-            order.push(`hub`);
-            expect(init?.method ?? `GET`).toBe(`DELETE`);
-            expect(String(url)).toContain(`/account`);
-            return Promise.resolve(new Response(``, { status: 200 }));
+    /* DELETING THE ROW IS THE REVOCATION, and this is the test that used to assert the opposite. Under the hub
+     * a delete had to call upstream FIRST and the whole removal failed on a hub hiccup, because a grant whose
+     * row was gone could never be found again. Now the edge asks US on every tunnel registration, so the row's
+     * absence is the refusal: there is no call to make, and a removal cannot be blocked by anything but the
+     * database. The `fetch` stub is the assertion — a provider call on this path is the regression. */
+    it(`delete drops the row and calls nothing: the row's absence IS the revocation`, async () => {
+        const deleteRow = vi.fn().mockResolvedValue({});
+        vi.stubGlobal(`fetch`, () => {
+            throw new Error(`delete must call no provider — revocation is the row going away`);
         });
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, zrokToken: `enc-acct` }), delete: deleteRow },
+            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: deleteRow },
             hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) });
-        // Hub first: the hub cannot be asked what it holds (v2 lists no accounts), so a grant whose row is
-        // already gone could never be found again.
-        expect(order).toEqual([`hub`, `row`]);
-    });
-
-    // …and a hub that refuses keeps the row: the user retries a removal rather than losing the only record of
-    // an address that is still live.
-    it(`delete fails, leaving the row, when the hub cannot revoke`, async () => {
-        const deleteRow = vi.fn();
-        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(`down`, { status: 503 })));
-        const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, zrokToken: `enc-acct` }), delete: deleteRow },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
-        });
-        await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `BAD_GATEWAY`);
-        expect(deleteRow).not.toHaveBeenCalled();
+        expect(deleteRow).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` } });
     });
 
     it(`creates a second sandbox for an owner who already has one: there is no cap`, async () => {
@@ -272,6 +252,21 @@ describe(`sandbox routes`, () => {
         const prisma = fakePrisma({ sandbox: { create } });
         const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma }) });
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
+    });
+
+    /* THE 12-HEX ID IS WRITTEN AT CREATION, because it is the key two readers that cannot derive it look a
+     * sandbox up by: the ingress on tunnel registration (GET /api/reachability/<id>) and the DNS sweep. Pinned
+     * against the shared derivation rather than a transcribed digest, so a change to either side fails here. */
+    it(`create stores the sandbox's derived tunnel id alongside the token's digest`, async () => {
+        const create = vi.fn().mockResolvedValue(sandboxRow);
+        const prisma = fakePrisma({ sandbox: { create } });
+        await call(sandboxRoutes.create, { name: `first` }, { context: context({ prisma }) });
+
+        const { data } = create.mock.calls[0]![0] as { data: { token: string; tokenDigest: string; tunnelId: string } };
+        // secrets.key is empty, so the stored token passes through as the plaintext connect token.
+        expect(data.tunnelId).toBe(sandboxIdFromToken(data.token));
+        // And it really is the digest's leading label, which is what makes every hostname derivable from it.
+        expect(data.tokenDigest.startsWith(data.tunnelId)).toBe(true);
     });
 
     it(`flags providedTunnel only for a daemonUrl under the fabric's own zone`, async () => {
@@ -282,7 +277,7 @@ describe(`sandbox routes`, () => {
         ];
         const config = {
             intenticCloudflare: { apiToken: `cf-api`, zone: `intentic.dev`, reapDryRun: true },
-            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+            ingress: { ...testIngressConfig },
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prisma = fakePrisma({
@@ -293,10 +288,10 @@ describe(`sandbox routes`, () => {
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
         expect(sandboxes.map((sandbox) => sandbox.providedTunnel)).toEqual([true, false, false]);
 
-        // The zone alone defaults even when the fabric is off (no admin token): it must not flag on its own.
+        // The zone alone defaults even when the fabric is off (no signing key): it must not flag on its own.
         const tokenless = {
             intenticCloudflare: { apiToken: ``, zone: `intentic.dev`, reapDryRun: true },
-            zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: ``, zone: `sbx.test` },
+            ingress: { ...testIngressConfig, signingKey: `` },
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prismaAgain = fakePrisma({

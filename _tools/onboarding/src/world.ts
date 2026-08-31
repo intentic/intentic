@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { mintCertificate } from "./certs.js";
@@ -47,12 +47,22 @@ const DB = { user: `app`, password: `app`, name: `app` } as const;
  * list is empty and the journey's last step has nothing to send to.
  */
 const TRIAL_KEY = `onboarding-trial-key`;
-/* The hub's admin token is ALSO the switch that decides whether this platform mints addresses at all: without
- * it every setup code is refused and no installer path reaches its second step. `.test` is an RFC 2606
- * reserved TLD, resolvable by nobody, so a run that accidentally reaches for a real address fails loudly
- * instead of leaking traffic. */
-const ZROK_ADMIN_TOKEN = `onboarding-zrok-admin`;
+/* THE REACHABILITY SWITCH, and the reason this world has one fewer container than it used to.
+ *
+ * The platform mints a sandbox's reachability by SIGNING a grant with this key — no call to anything — so the
+ * whole of what a world needs to hand out working setup codes is a key, and there is no service left to stand
+ * in for. (A platform with no key is the other legitimate mode: every provisioning route 404s and setup offers
+ * only the attach lane. It is simply not a mode a journey through the install paths can walk.) Minted per run
+ * and thrown away with it, so nothing here is a credential.
+ *
+ * The ingress it names is on `.test`, an RFC 2606 reserved TLD resolvable by nobody: the box's tunnel dial
+ * therefore fails and retries in the background exactly as it would against an ingress that is down, which is
+ * harmless twice over — the entrypoint does not gate the daemon on the tunnel, and the journey reaches the box
+ * over loopback anyway (the app's own preference for a sandbox on this machine).
+ */
+const INGRESS_SIGNING_KEY = generateKeyPairSync(`ed25519`).privateKey.export({ type: `pkcs8`, format: `pem` }).toString();
 export const SANDBOX_ZONE = `sbx.onboarding.test`;
+const INGRESS_URL = `https://ingress.${SANDBOX_ZONE}`;
 export const TRIAL_MODEL = `fake-flash-latest`;
 // What the journey asserts it read on screen. Distinctive enough that no UI copy could be mistaken for it.
 export const TRIAL_REPLY = `The onboarding journey reached the model.`;
@@ -111,12 +121,11 @@ export const startWorld = async (): Promise<World> => {
     const names = {
         postgres: `intentic-onboarding-postgres-${run}`,
         upstream: `intentic-onboarding-upstream-${run}`,
-        zrok: `intentic-onboarding-zrok-${run}`,
         api: `intentic-onboarding-api-${run}`,
         web: `intentic-onboarding-web-${run}`,
         webtls: `intentic-onboarding-webtls-${run}`,
     };
-    const [dbPort, upstreamPort, zrokPort, apiPort, webPort] = await Promise.all([freePort(), freePort(), freePort(), freePort(), freePort()]);
+    const [dbPort, upstreamPort, apiPort, webPort] = await Promise.all([freePort(), freePort(), freePort(), freePort()]);
 
     const started: string[] = [];
     const stop = async (): Promise<void> => {
@@ -164,18 +173,6 @@ export const startWorld = async (): Promise<World> => {
         started.push(names.upstream);
         await waitForHttp(`${plainUrlFor(upstreamPort)}/health`, `the stand-in model`, 60_000, names.upstream);
 
-        await startContainer({
-            name: names.zrok,
-            image: IMAGES.zrok,
-            network: networkName,
-            ip: IPS.zrok,
-            alias: `zrok`,
-            env: { FAKE_ZROK_ADMIN_TOKEN: ZROK_ADMIN_TOKEN },
-            ports: { 8098: zrokPort },
-        });
-        started.push(names.zrok);
-        await waitForHttp(`${plainUrlFor(zrokPort)}/health`, `the stand-in tunnel hub`, 60_000, names.zrok);
-
         // At least 32 characters, because Better Auth warns below that and a warning in this log is noise
         // between whoever is reading it and the failure they came for.
         const betterAuthSecret = `onboarding-journey-secret-0123456789abcdef`;
@@ -196,14 +193,11 @@ export const startWorld = async (): Promise<World> => {
                 TRIAL_KEYS: TRIAL_KEY,
                 TRIAL_BASE_URL: `http://upstream:8099/v1beta/openai`,
                 TRIAL_MODELS: TRIAL_MODEL,
-                /* The tunnel fabric, which is what lets the wizard mint a setup code at all. The platform
-                 * reaches the hub over the run's own network; the SANDBOX is on a network of its own (the
-                 * compose file makes it) and reaches the same hub through the docker host, which is the same
-                 * split the two endpoints exist for on a real deployment. */
-                ZROK_ADMIN_TOKEN,
-                ZROK_API_ENDPOINT: `http://zrok:8098`,
-                ZROK_AGENT_ENDPOINT: `http://host.docker.internal:${zrokPort}`,
-                ZROK_ZONE: SANDBOX_ZONE,
+                // Reachability, which is what lets the wizard mint a setup code at all. A key and two strings:
+                // the platform signs, the box carries the grant, nothing on this network is called.
+                INGRESS_SIGNING_KEY,
+                INGRESS_URL,
+                INGRESS_ZONE: SANDBOX_ZONE,
                 // SECRETS_KEY stays unset so a sandbox's connect token is stored in plain text, the seed and
                 // the provisioners read it back, exactly as the browser tier's stack does.
                 LOG_PRETTY: `false`,

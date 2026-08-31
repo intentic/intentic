@@ -42,7 +42,6 @@ export const IPS = {
     upstream: `10.89.0.11`,
     api: `10.89.0.12`,
     web: `10.89.0.13`,
-    zrok: `10.89.0.14`,
     webtls: `10.89.0.15`,
 } as const;
 

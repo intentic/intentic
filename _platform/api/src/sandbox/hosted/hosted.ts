@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@intentic-app/prisma";
+import { ENV_INGRESS_URL, ENV_SANDBOX_GRANT } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
+import { ingressEnabled, type Reachability } from "../reachability.js";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
@@ -24,16 +26,17 @@ import {
  * one app per sandbox; the app name is derived from the sandbox's 12-hex tunnel id, so the Fly console, the
  * sandbox-<id> hostname the user sees, and the reaper's prefix match all tell the same story.
  *
- * Reachability stays Cloudflare end to end: the machine env carries the tunnel's connector token and the
- * daemon's announce is the only "it's up" signal, the platform never probes or dials a machine, it only
- * flips power. That is the hosted trust trade in one line: power and existence are the platform's, the
- * command path stays browser → daemon. */
+ * Reachability is the machine's own business: the env carries its signed grant and the address it dials, the
+ * daemon opens the tunnel outbound, and the daemon's announce is the only "it's up" signal — the platform
+ * never probes or dials a machine, it only flips power. That is the hosted trust trade in one line: power and
+ * existence are the platform's, the command path stays browser → daemon. A hosted machine needs no Fly
+ * services or IPs for any of it, because nothing ever connects TO it. */
 
-// The lane needs BOTH its own switch and the tunnel fabric: a hosted machine is reachable only through the
-// grant the platform mints on the hub, so Fly credentials without a configured hub would build machines that
-// boot to nothing.
+// The lane needs BOTH its own switch and a reachability fabric: a hosted machine is reachable only through the
+// grant the platform signs, so Fly credentials without a configured ingress would build machines that boot to
+// nothing.
 export const hostedEnabled = (config: Config): boolean =>
-    config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && config.zrok.adminToken !== `` && config.zrok.apiEndpoint !== ``;
+    config.hosted.flyApiToken !== `` && config.hosted.flyOrg !== `` && ingressEnabled(config);
 
 /* WHICH PLATFORM THIS IS, as the twelve hex characters every machine it creates carries in its Fly metadata
  * (fly.ts), and the thing the orphan sweep checks before it destroys anything.
@@ -102,9 +105,9 @@ export interface HostedProvisionArgs {
     readonly sandboxId: string;
     // Decrypted by the route (the row stores them encrypted), this module never touches crypto.
     readonly connectToken: string;
-    // The sandbox's reachability grant on the self-hosted hub (zrok-provision.ts): the account token the box
-    // enables with, the namespace its names live under, its derived address, and the hub as the box dials it.
-    readonly grant: { accountToken: string; namespaceToken: string; hostname: string; apiEndpoint: string };
+    // The sandbox's reachability, signed by the route (reachability.ts): the grant the box presents when it
+    // dials, its derived address, and the ingress it dials.
+    readonly grant: Reachability;
     readonly ownerEmail: string;
     // Decided by the route from the caller's country (region.ts), because only the request knows it, a
     // European user's machine and volume are both created here, which is what makes the residency promise
@@ -137,9 +140,10 @@ const hostedMachineConfig = (config: Config, args: HostedProvisionArgs, machineN
             [`WEB_ORIGIN`, config.webOrigin],
             [`SANDBOX_PUBLIC_URL`, `https://${args.grant.hostname}`],
             [`PLATFORM_URL`, config.api.url],
-            [`ZROK_TOKEN`, args.grant.accountToken],
-            [`ZROK_API`, args.grant.apiEndpoint],
-            [`ZROK_NAMESPACE`, args.grant.namespaceToken],
+            // The reachability pair, spelled from the contract every other lane spells it from (the connect
+            // one-liner's claim payload, the compose file): the daemon reads exactly these two names.
+            [ENV_SANDBOX_GRANT, args.grant.grant],
+            [ENV_INGRESS_URL, args.grant.ingressUrl],
             [`IDLE_STOP_MINUTES`, String(config.hosted.idleStopMinutes)],
         ],
     }),

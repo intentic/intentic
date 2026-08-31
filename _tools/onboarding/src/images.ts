@@ -26,7 +26,6 @@ export const IMAGES = {
     api: `intentic-onboarding-api:local`,
     web: `intentic-onboarding-web:local`,
     upstream: `intentic-onboarding-upstream:local`,
-    zrok: `intentic-onboarding-zrok:local`,
 } as const;
 
 const exec = async (command: string, args: string[], cwd: string, what: string): Promise<void> => {
@@ -40,7 +39,7 @@ const exec = async (command: string, args: string[], cwd: string, what: string):
     }
 };
 
-/* Build the three images the shared world runs.
+/* Build the images the shared world runs.
  *
  * `ONBOARDING_SKIP_IMAGE_BUILD=1` reuses whatever is already tagged. That is for iterating on a spec against a
  * world that has not changed; it is deliberately an opt-in, because a tier that skipped the build by default
@@ -51,14 +50,13 @@ export const buildImages = async (): Promise<void> => {
         return;
     }
 
-    // No dependencies, no build step, each stand-in is the stock node base with two files copied in.
+    // No dependencies, no build step: the stand-in is the stock node base with two files copied in.
     await exec(
         `docker`,
         [`build`, `--provenance=false`, `-t`, IMAGES.upstream, `.`],
         join(root, `_tools/fake-upstream`),
         `building the stand-in model`,
     );
-    await exec(`docker`, [`build`, `--provenance=false`, `-t`, IMAGES.zrok, `.`], join(root, `_tools/fake-zrok`), `building the stand-in tunnel hub`);
 
     // The workspace deps both apps COPY in. `docker:release` declares this as its `dependsOn`; running it
     // explicitly is what lets the two builds below be pure COPYs of a tree that already exists.

@@ -15,7 +15,7 @@ const config = (over?: Partial<Config[`hosted`]>): Config =>
         webOrigin: `https://app.test`,
         google: { clientId: `gcid` },
         api: { url: `https://api.test` },
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, agentEndpoint: ``, adminToken: `hub-admin`, zone: `sbx.test` },
+        ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: {
             flyApiToken: `fly`,
             flyOrg: `intentic`,

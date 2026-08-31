@@ -10,13 +10,13 @@ import { z } from "zod";
  *   • The DNS behind the LOOPBACK CERTIFICATE, against intentic's own token: one wildcard record for the whole
  *     zone, and one transient ACME challenge per order.
  *
- * The tunnel fabric is the zrok hub (sandbox/zrok.ts). Provisioning, teardown, ingress, per-route CNAMEs, the
- * connector token and the tunnel reaper all lived here and are gone: nothing creates a Cloudflare tunnel here
- * any more.
+ * The tunnel fabric is the platform's own edge (sandbox/reachability.ts). Provisioning, teardown, ingress,
+ * per-route CNAMEs, the connector token and the tunnel reaper all lived here and are gone: nothing creates a
+ * Cloudflare tunnel here any more.
  *
- * WHICH IS NOT THE SAME AS NOTHING NEEDING ONE. Sandboxes created before that migration are still reachable
- * only through the records it left: `sandbox-<id>` and its siblings, a dozen per sandbox, pointing at a
- * cfargotunnel target. They have no zrok identity to fall back on. So the sweep below treats those records as
+ * WHICH IS NOT THE SAME AS NOTHING NEEDING ONE. Sandboxes created before the tunnel migration are still
+ * reachable only through the records it left: `sandbox-<id>` and its siblings, a dozen per sandbox, pointing at
+ * a cfargotunnel target. They have no outbound tunnel to fall back on. So the sweep below treats those as
  * a live sandbox's property, not as residue, and the difference between the two questions — "does anything
  * still CREATE this?" and "does anything still DEPEND on it?" — is the difference between a tidy zone and
  * sandboxes with no public address.
@@ -123,11 +123,11 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
         if (codes.includes(81045)) {
             /* WHAT NOT TO SAY HERE, learned expensively. This used to name `sandbox-*`/`ssh-*` as "the usual
              * culprit" and invite the operator to delete them in the dashboard. Those are the records a
-             * pre-zrok sandbox is REACHABLE through — a dozen per sandbox, daemon, ssh and the port-slot pool
+             * pre-migration sandbox is REACHABLE through — a dozen per sandbox, daemon, ssh and the port-slot pool
              * — so the advice took working sandboxes off the internet. A quota message may say what is safe to
              * remove or it may say nothing; it may not guess. */
             throw new CloudflareApiError(
-                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the zrok migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
+                `the Cloudflare zone is out of DNS records (Cloudflare's per-zone quota), so no sandbox in it can be issued a loopback certificate. The daily sweep reclaims what is genuinely unused (the records of sandboxes that no longer exist, and the per-sandbox local-* records one wildcard replaced) and logs what it found; deletions need INTENTIC_CLOUDFLARE_REAP=true on the deployment that owns this zone. Do not clear sandbox-*/ssh-*/port-slot records by hand: a sandbox created before the tunnel migration is reachable through exactly those. Raising the zone's plan limit is the other way out.`,
                 codes,
             );
         }
@@ -144,7 +144,7 @@ const cfCall = async <T>(token: string, path: string, resultSchema: z.ZodType<T>
  * zone NOTHING permanent, and no sandbox has to be told about a record before its name works.
  *
  * That is a correction, not a tidy-up. Each sandbox used to get its own `local-<id>` A record, and after the
- * tunnels moved to the zrok hub those were the last per-sandbox records left in this zone. They accumulated
+ * tunnels moved off Cloudflare those were the last per-sandbox records left in this zone. They accumulated
  * until it hit the per-record quota (81045), and a full zone cannot take the ACME challenge either, so
  * issuance stopped for everyone: the certified shortcut resolved nowhere, every browser fell back to the plain
  * http loopback, and that transport is HTTP/1.1 with six connections per origin. Sandboxes froze, and the zone
@@ -242,7 +242,7 @@ const resolveZone = async (apiToken: string, zone: string): Promise<{ zoneId: st
  * Three shapes, all of them residue by construction rather than by inspection:
  *
  *   • tunnel CNAMEs, the sandbox-, ssh-, port-slot, preview and public records pointing at
- *     `<tunnelId>.cfargotunnel.com`. The fabric moved to the zrok hub and nothing has minted one since, so
+ *     `<tunnelId>.cfargotunnel.com`. The fabric moved off Cloudflare and nothing has minted one since, so
  *     every one of them is left over from before that migration;
  *   • per-sandbox loopback A records in either spelling, `<id>.local.<zone>` and the older `local-<id>.<zone>`.
  *     One wildcard now answers for all of them, so not one is needed, and no tunnel teardown ever cleaned one;
@@ -273,7 +273,7 @@ const recordSandboxId = (record: z.infer<typeof zoneRecordSchema>): string | und
  * sandbox is reachable under, and the sweep runs unattended every day.
  *
  * A CNAME onto a Cloudflare tunnel, whose SANDBOX no longer exists. The liveness check is the whole rule and
- * removing it was an outage: the reasoning was that the fabric had moved to the zrok hub so nothing mints
+ * removing it was an outage: the reasoning was that the fabric had moved off Cloudflare so nothing mints
  * these any more, which is true of new sandboxes and says nothing about old ones. Every sandbox created before
  * that migration is still reachable through exactly these records — a dozen of them each, the daemon, ssh, and
  * the port-slot pool — and deleting them took working sandboxes off the internet, leaving their owners on the

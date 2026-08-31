@@ -69,7 +69,7 @@ export const isFlyGone = (error: unknown): boolean => error instanceof FlyError 
 const errorSchema = z.object({ error: z.string() });
 
 /* HOW LONG THE PLATFORM WILL WAIT FOR FLY TO SAY ANYTHING, the same 30s the other two providers get
- * (zrok.ts, cloudflare.ts). Node's fetch has no default deadline, and this client had none, so a connection
+ * (reachability.ts, cloudflare.ts). Node's fetch has no default deadline, and this client had none, so a connection
  * Fly never closed held its caller forever: a browser's `wake` or `hostedStatus` that could not time out, and
  * — the expensive one — the daily retention sweep, which runs every hosted reconcile in sequence WHILE HOLDING
  * the jobs advisory lock, so one hung read stopped the reaper, the hour meter and the idle collector for every

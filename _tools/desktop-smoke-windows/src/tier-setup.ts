@@ -19,12 +19,12 @@
  * Windows PowerShell 5.1, not pwsh 7: that is what the app runs and what the site's one-liner lands in, and the
  * two differ in exactly the places these scripts live.
  *
- * HERMETIC, no tunnel hub, no Google, no platform. `connect.ps1` documents a direct-token path (CONNECT_TOKEN
- * + ZROK_TOKEN + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: the platform
- * only mints a reachability grant when it has a zrok hub configured, so a code-claiming run cannot be
- * secret-free. The grant here is a dummy pointed at an unroutable hub, so the in-box agent fails to enable and
- * retries harmlessly; the entrypoint does not gate the daemon on it, and the daemon is reached on the
- * container's own port.
+ * HERMETIC, no edge, no Google, no platform. `connect.ps1` documents a direct-token path (CONNECT_TOKEN +
+ * SANDBOX_GRANT + SANDBOX_HOSTNAME instead of a setup code), which is what makes that possible: the platform
+ * only mints a reachability grant when it holds a signing key, so a code-claiming run cannot be secret-free.
+ * The grant here is a dummy naming an unroutable ingress, so the daemon's tunnel dial fails and retries
+ * harmlessly; the entrypoint does not gate the daemon on it, and the daemon is reached on the container's own
+ * port.
  *
  * What this therefore does NOT cover: the setup-code claim round trip against a real platform. That needs a
  * real hub grant and belongs with the other gated nightly suites, which self-skip without their secrets.
@@ -32,7 +32,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CONNECT_TOKEN, PLATFORM_URL_UNREACHABLE, PRODUCT_NAME, SANDBOX_HOSTNAME, ZROK_API, ZROK_TOKEN } from "./constants.js";
+import { CONNECT_TOKEN, INGRESS_URL, PLATFORM_URL_UNREACHABLE, PRODUCT_NAME, SANDBOX_GRANT, SANDBOX_HOSTNAME } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { sandboxContainerName } from "./parse.js";
 import { dockerContainerOs, dockerInspectRunning, dockerLogs, dockerReachable, findInstalledApp, sandboxHealth } from "./probe.js";
@@ -153,8 +153,8 @@ export const runSetupTier = async (harness: Harness, options: SetupTierOptions):
     harness.section(`the shipped connect.ps1 (image: ${options.sandboxImage})`);
     const env: Record<string, string> = {
         CONNECT_TOKEN,
-        ZROK_TOKEN,
-        ZROK_API,
+        SANDBOX_GRANT,
+        INGRESS_URL,
         SANDBOX_HOSTNAME,
         SANDBOX_IMAGE: options.sandboxImage,
         // Pointed at the unroutable reserved TLD precisely because nothing on this path should call it, a claim

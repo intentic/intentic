@@ -32,6 +32,7 @@
         "@intentic/desktop": "workspace:*",
         "@intentic/local-agent": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
+        "@intentic/sandbox-run": "workspace:*",
         "@orpc/server": "catalog:",
         "@stricli/core": "catalog:",
         "tslib": "catalog:",

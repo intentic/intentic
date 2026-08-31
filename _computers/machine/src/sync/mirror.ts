@@ -14,6 +14,7 @@ import {
     type SkippedPort,
     updateState,
 } from "./config.js";
+import { createDaemonBases, dialedPairings, type DialedPairing } from "./daemon-base.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import {
     ensureMutagen,
@@ -94,8 +95,13 @@ export class SyncAuthError extends Error {}
 // what the reconcile drives from. Authenticated by the enrollment-minted sync token, which the daemon scopes
 // to exactly this read. System ports (the sandbox's own machinery) are filtered out and never mirrored, and so
 // are non-forwardable binds (a loopback alias Mutagen would dial at 127.0.0.1 and never reach).
-export const fetchWorkspacePorts = async (sandboxUrl: string, syncToken: string): Promise<PortSummary[]> => {
-    const response = await fetch(`${sandboxUrl.replace(/\/$/, "")}/ports`, {
+//
+// `base` is where this pairing's daemon was resolved to this pass (daemon-base.ts), which for a sandbox running
+// on this machine is its loopback address rather than its public one. This poll is also what NOTICES a resolved
+// loopback base going away: it runs every tick, so a container that stopped costs one failed tick before the
+// next resolution demotes the pairing back to its public URL.
+export const fetchWorkspacePorts = async (base: string, syncToken: string): Promise<PortSummary[]> => {
+    const response = await fetch(`${base.replace(/\/$/, "")}/ports`, {
         headers: { "x-intentic-sync": syncToken },
         signal: AbortSignal.timeout(PORTS_TIMEOUT_MS),
     });
@@ -283,6 +289,7 @@ const savePorts = async (sandboxId: string, mirroredPorts: readonly MirroredPort
 const servePairing = async (
     mutagen: string,
     pairing: Pairing,
+    base: string,
     claimedBy: ReadonlyMap<number, string>,
     log: Log,
 ): Promise<readonly MirroredPort[]> => {
@@ -292,7 +299,7 @@ const servePairing = async (
      * on it, platform/sync.ts) and the only thing that ever notices a revoked enrollment. A machine that stopped
      * polling would go quiet on the Desktop sync card and keep a dead pairing forever. What the switch changes is
      * what is DONE with the answer. */
-    const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(pairing.sandboxUrl, pairing.syncToken);
+    const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(base, pairing.syncToken);
     if (pairing.mirrorOff === true) {
         /* Torn down ONCE, on the first pass after the switch was thrown: `sync mirror off` tears down for itself,
          * so the ordinary path finds nothing left and this costs a length check. Said in the words of the switch
@@ -326,16 +333,16 @@ const servePairing = async (
  * old enough not to have the route, must cost nothing, so failures are logged and dropped, and a definitive
  * "no such route" retires reporting for that pairing rather than knocking on the same door every 15 seconds for
  * the life of the login session. */
-const postReports = async (pairings: readonly Pairing[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
-    const reportable = pairings.filter((pairing) => pairing.syncToken !== undefined && !unsupported.has(pairing.sandboxId));
+const postReports = async (dialed: readonly DialedPairing[], mutagen: string, unsupported: Set<string>, log: Log): Promise<void> => {
+    const reportable = dialed.filter(({ pairing }) => pairing.syncToken !== undefined && !unsupported.has(pairing.sandboxId));
     if (reportable.length === 0) {
         return;
     }
     const report = await machineReport(mutagen);
-    for (const pairing of reportable) {
+    for (const { pairing, base } of reportable) {
         try {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time, like every other pass in this loop
-            const response = await fetch(`${pairing.sandboxUrl.replace(/\/$/, "")}/system/sync/report`, {
+            const response = await fetch(`${base.replace(/\/$/, "")}/system/sync/report`, {
                 method: "POST",
                 headers: { "content-type": "application/json", "x-intentic-sync": pairing.syncToken ?? "" },
                 body: JSON.stringify(scopedReport(report, pairing.sandboxId)),
@@ -496,7 +503,11 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
      * list, so a machine that is already correct pays one file comparison. */
     await guard(log, "refreshing the ssh configuration", async () => await writeManagedSshConfig(pairingSshConfig(initial.pairings)));
     const tunnels = createTunnelPool(log);
-    await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(initial.pairings)));
+    /* WHERE EACH PAIRING'S DAEMON IS DIALLED, held for this watcher's lifetime (daemon-base.ts owns the policy).
+     * The verdict is per sandbox and cached, so asking on every tick costs a map lookup and only a pairing whose
+     * answer could have changed pays for a probe. */
+    const bases = createDaemonBases(log);
+    await guard(log, "opening the sync transports", async () => await tunnels.reconcile(tunnelTargets(await dialedPairings(initial.pairings, bases))));
     // The watcher runs at every login, which makes it the one place an upgraded agent reliably reaches the file
     // syncs it INHERITED. Mutagen bakes a session's ignores at creation, so an install that swapped the binary
     // without re-pairing would otherwise keep syncing on whatever rules were current the day it first paired.
@@ -549,10 +560,16 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
             log("no sandboxes are paired any more: sync stopping. Re-enable from a sandbox's Desktop sync card.");
             return;
         }
+        /* WHERE THIS PASS DIALS EACH PAIRING, decided once, up front, and shared by all three things that
+         * dial it: the transport below, the ports poll, and the report at the bottom. Re-asked every tick so a
+         * container started after this watcher gets promoted onto loopback without a restart, and so one that
+         * went away is demoted instead of failing the pairing — but asked through the cache, so the tick pays
+         * for a probe only when the answer could have moved, never per tick. */
+        const dialed = await dialedPairings(state.pairings, bases);
         // Before the port reconcile, because that reconcile and the git bridge under it both ride this
         // transport: a pairing added since the last tick needs its listener up before anything asks it to
-        // carry an ssh connection.
-        await guard(log, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(state.pairings)));
+        // carry an ssh connection. A pairing whose base moved since the last tick is rebound here too.
+        await guard(log, "reconciling the sync transports", async () => await tunnels.reconcile(tunnelTargets(dialed)));
         // A sandbox whose file sync could not be created, asleep, mid-rebuild, a transport still coming up,
         // gets another go now that its transport has just been reconciled above. Nothing to do in the common
         // case: the set is empty and this costs a subtraction.
@@ -572,11 +589,11 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         }
         // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted.
         const claimedBy = new Map<number, string>();
-        for (const pairing of state.pairings) {
+        for (const { pairing, base } of dialed) {
             let pausedThisPass = false;
             try {
                 // oxlint-disable-next-line eslint/no-await-in-loop -- one sandbox at a time keeps the log readable and the tunnels unhammered
-                const mirrored = await servePairing(mutagen, pairing, claimedBy, log);
+                const mirrored = await servePairing(mutagen, pairing, base, claimedBy, log);
                 rejectedPolls.delete(pairing.sandboxId);
                 unreachablePolls.delete(pairing.sandboxId);
                 if (resumeAutoPausedSync(mutagen, pairing)) {
@@ -589,6 +606,13 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
                     claimedBy.set(port.port, pairing.sandboxId);
                 }
             } catch (error) {
+                /* THE BASE THIS PASS USED JUST LET US DOWN, which is the one report daemon-base.ts cannot make
+                 * for itself: it resolves an address, and only the caller finds out whether the address kept
+                 * working. It matters for a LOOPBACK base and nothing else — a container that stopped, or was
+                 * recreated onto a different port, would otherwise keep this pairing pointed at a dead port for
+                 * the life of the login. Saying so here drops that verdict, and the next tick's resolution
+                 * falls back to the public URL instead of the pairing simply failing. */
+                bases.failed(pairing.sandboxId);
                 // oxlint-disable-next-line eslint/no-await-in-loop -- one pairing's failure is absorbed before the next is served
                 const outcome = await absorbPairingFailure(error, mutagen, pairing, tracking, log);
                 if (outcome.drop) {
@@ -625,7 +649,7 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
         // and the report is built by re-reading that state, so reporting last is what makes it report NOW
         // rather than the previous pass.
         if (tick % REPORT_EVERY_TICKS === 0) {
-            await guard(log, "posting this machine's reports", async () => await postReports(state.pairings, mutagen, reportUnsupported, log));
+            await guard(log, "posting this machine's reports", async () => await postReports(dialed, mutagen, reportUnsupported, log));
         }
         /* HERE, at the bottom of the pass, and INSIDE the branch that did the work: the stamp's whole meaning
          * is that everything above it ran. A tick skipped because the state would not parse leaves the stamp

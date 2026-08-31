@@ -6,10 +6,10 @@ import { createHash } from "node:crypto";
 export const sha256Hex = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 // The sandbox's stable 12-hex id, digested from the connect token. Used by:
-//   • the CLI's sandbox-tunnel bootstrap (sandbox-tunnel.ts) to name the tunnel + DNS
-//   • the preview hostname builder beside it (hostnames.ts)
-//   • the sandbox daemon's sync SSH hostname derivation (sync.ts)
-// All three MUST agree on the digest, so it lives in the contract they share.
+//   • the hostname builders beside it (hostnames.ts) — every public name embeds this id
+//   • the platform's reachability grant mint and tunnelId lookup (reachability.ts, ingress-contract.ts)
+//   • the desktop agent's loopback-port derivation for the direct-dial shortcut (daemon-base.ts)
+// All of them MUST agree on the digest, so it lives in the contract they share.
 export const sandboxIdFromToken = (connectToken: string): string | undefined =>
     connectToken === "" ? undefined : sha256Hex(connectToken).slice(0, 12);
 

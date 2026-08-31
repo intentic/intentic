@@ -10,7 +10,7 @@ import { hostedFleet, renderHostedFleet, type HostedFleetRole } from "./hosted-f
 
 const config = (): Config =>
     ({
-        zrok: { apiEndpoint: `https://zrok2.sbx.test`, adminToken: `hub-admin` },
+        ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
         hosted: { flyApiToken: `fly`, flyOrg: `intentic`, appPrefix: `intentic-sbx` },
     }) as unknown as Config;
 

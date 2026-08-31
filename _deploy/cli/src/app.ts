@@ -16,7 +16,6 @@ import { resolveCommand } from "./resolve/resolve.command.js";
 import { restore } from "./restore/restore.command.js";
 import { hostProbesCli } from "./sandbox-run/host-probes.command.js";
 import { sandboxRunCommandCli } from "./sandbox-run/sandbox-run.command.js";
-import { sandboxTunnel } from "./sandbox-tunnel/sandbox-tunnel.command.js";
 import { secretsCommand } from "./secrets/secrets.command.js";
 
 // User-facing errors should read as a one-line message, not a JS stack trace, the CLI is driven by end users
@@ -34,18 +33,19 @@ const formatException = (exc: unknown): string => {
     return message;
 };
 
-// The bin is a toolbox, not one tool: three command groups, each its own facet. `tunnel` is core sandbox
-// plumbing (used by connect.sh to mint the sandbox's own Cloudflare tunnels); `deploy` is the bundled
+// The bin is a toolbox, not one tool: three command groups, each its own facet. `tunnel` mints the Cloudflare
+// tunnel that lets a sandbox deploy to a machine nothing can dial (connect.sh enrols one with `tunnel host`);
+// reaching the SANDBOX itself takes no command at all any more, its daemon dials the ingress from inside.
+// `deploy` is the bundled
 // deployment engine (one of many tools an agent can run, not part of the product); `scaffold` seeds app repos.
 // Leaf command files keep their own names for run-log/events output (e.g. `apply` still emits command:"apply"),
 // so grouping the routes is invisible to the daemon's apply-events tail. Each command lives in its own
 // src/<command>/<command>.command.ts.
 const tunnel = buildRouteMap({
     routes: {
-        sandbox: sandboxTunnel,
         host: hostSshTunnel,
     },
-    docs: { brief: "Sandbox reachability, mint the sandbox's own Cloudflare tunnels (used by connect.sh)" },
+    docs: { brief: "Deploy-target reachability, mint a host's own Cloudflare SSH tunnel (used by connect.sh)" },
 });
 
 const deploy = buildRouteMap({
