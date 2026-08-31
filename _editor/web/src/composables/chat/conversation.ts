@@ -164,8 +164,8 @@ export class Conversation {
      * A standing instruction rather than a per-stop choice, which is why it lives on the conversation and is
      * persisted with the tab: the whole point is the stops that happen while nobody is watching. It arms nothing
      * on its own, only a turn that ends `resumable` schedules anything, so a chat whose turns finish normally
-     * never sees it act, and a failure that names something to fix (a spent allowance, a dead credential) is not
-     * one of those endings by construction.
+     * never sees it act. A failure that names something to repair (a dead credential) is not one of those endings
+     * by construction; a spent allowance is, because it clears on its own and its retry policy lives below.
      *
      * autoContinue.ts holds the schedule and the argument for it; `autoContinueAt` is the instant the pending
      * one fires, which is what the composer's strip counts down to (and what makes the wait visible instead of
@@ -1356,7 +1356,19 @@ export class Conversation {
      * opposite of what they asked for, and `interrupted` is what tells the two endings apart. */
     private scheduleAutoContinue(ranForMs: number): void {
         const pickUp = this.pickUp.value;
-        if (!this.autoContinue.value || pickUp === undefined || this.interrupted) {
+        if (!this.autoContinue.value || this.interrupted) {
+            return;
+        }
+        /* A long turn normally proves the continuation bought something, even if it stopped again afterwards,
+         * and starts the short ladder over. A LIMIT NEVER PROVES THAT BY DURATION. Providers and harnesses may
+         * spend minutes retrying a closed allowance before reporting the same refusal; amber-forge's turns did,
+         * which reset this counter to five seconds forever without producing a word. Keep its rung until a turn
+         * ends as something other than a limit. This also resets after a successful long turn (`pickUp` absent),
+         * so a later unrelated stop does not inherit yesterday's backoff. */
+        if (ranForMs >= AUTO_CONTINUE_PROGRESS_MS && pickUp?.reason !== `limit`) {
+            this.autoContinueTries = 0;
+        }
+        if (pickUp === undefined) {
             return;
         }
         /* SOMETHING ELSE IS ALREADY BRINGING THIS TURN BACK (an outage the daemon's breaker holds), so the
@@ -1366,16 +1378,14 @@ export class Conversation {
         if (pickUp.automatic !== undefined) {
             return;
         }
-        if (ranForMs >= AUTO_CONTINUE_PROGRESS_MS) {
-            this.autoContinueTries = 0;
-        }
         this.armAutoContinue();
     }
 
-    // Put the next continuation on the clock at whatever rung of the ladder this chat has reached, or, past the
-    // end of it, stand down and say why.
+    // Put the next continuation on the clock at whatever rung of the ladder this chat has reached. Ordinary
+    // stops have three rungs and then stand down; limits repeat their one-day ceiling until the allowance opens.
     private armAutoContinue(): void {
-        const delay = autoContinueDelay(this.autoContinueTries);
+        const blocker = this.pickUp.value?.reason === `limit` ? `limit` : `transient`;
+        const delay = autoContinueDelay(this.autoContinueTries, blocker);
         if (delay === undefined) {
             // The ladder is spent: three turns in a row went nowhere, so something is wrong that continuing does
             // not fix. Stand down and SAY so, an automation that quietly stopped would leave the user waiting on
@@ -1389,11 +1399,9 @@ export class Conversation {
         }
         this.autoContinueTries += 1;
         /* THE LADDER SETS A FLOOR, NOT THE WAIT. A pick-up that names an instant before which nothing gets
-         * through (a spent allowance, hours out) makes every rung of the ladder a guaranteed failure: three
-         * five-second retries against a quota that resets on Tuesday, and then the automation gives up and the
-         * user comes back to a chat that stopped trying long before it could have worked. So the wait is
-         * whichever is longer, and an armed chat sleeps through the reset and picks the work up on the far side
-         * of it, which is the entire promise this switch makes. */
+         * through (a spent allowance, hours out) makes every earlier rung a guaranteed failure. So the wait is
+         * whichever is longer: an armed chat sleeps through a known reset and picks the work up on the far side;
+         * only a provider that names no instant walks the interval ladder above. */
         const readyAt = this.pickUp.value?.readyAt;
         const wait = Math.max(delay, readyAt === undefined ? 0 : readyAt - Date.now());
         this.autoContinueAt.value = Date.now() + wait;

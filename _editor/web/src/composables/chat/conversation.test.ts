@@ -1874,10 +1874,9 @@ describe(`Conversation`, () => {
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
     });
 
-    /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where the ladder alone gets
-     * it wrong: three retries five, fifteen and forty-five seconds into a quota that reopens in an hour spends
-     * the whole automation on guaranteed failures and then gives up, hours before the work could have resumed.
-     * So the named instant is a floor under the wait, and an armed chat sleeps through the reset. */
+    /* THE STANDING PRESS MEETS THE ONE ENDING THAT KNOWS WHEN IT WILL WORK, which is where an interval ladder
+     * alone gets it wrong: every rung before a quota reopens is a guaranteed failure, whatever its length. So the
+     * named instant is a floor under the wait, and an armed chat sleeps through the reset. */
     it(`waits for the reset before continuing itself through a spent allowance`, async () => {
         vi.useFakeTimers();
         try {
@@ -1903,10 +1902,54 @@ describe(`Conversation`, () => {
         }
     });
 
-    /* THE AUTOMATION MAKES THE SAME PRESS, which matters more here than at the button: unattended, this fires
-     * three times against one stopped turn, and three appended "Continue"s IS the pile. An automation that
-     * re-runs instead costs three refused requests and leaves the transcript exactly as it found it. */
-    it(`re-runs the held turn when it continues itself, rather than appending three nudges`, async () => {
+    /* A PROVIDER THAT CANNOT SAY WHEN ITS WINDOW REOPENS, the failure amber-forge exposed. Its harness spent
+     * more than thirty seconds internally retrying every refused request, so wall time reset the old ladder to
+     * five seconds after every turn. No model output was produced, but the chat treated waiting as progress and
+     * continued hot forever. A limit keeps its rung regardless of duration, grows through minutes and hours,
+     * and retains the standing instruction at a one-day ceiling instead of either hammering or silently giving
+     * up before a weekly allowance can reopen. */
+    it(`backs an unknown usage reset off from seconds to a daily probe even when every refusal is slow`, async () => {
+        vi.useFakeTimers();
+        try {
+            const conversation = new Conversation(`c1`);
+            conversation.setAutoContinue(true);
+            const refused = { kind: `error`, code: `rate_limit`, message: `Provider usage limit reached.` } as const;
+            sandboxRequestMock.mockImplementation(
+                sseResponse([refused, { kind: `done` }], {
+                    // Slow refusal, not progress: this is the seam the old duration-only heuristic got wrong.
+                    head: () => ({ startedAt: Date.now() - 60_000 }),
+                }),
+            );
+
+            const waits: number[] = [];
+            for (let attempt = 0; attempt < 10; attempt += 1) {
+                await conversation.send(attempt === 0 ? `ship the parser` : CONTINUATIONS.plain, settings);
+                waits.push(conversation.autoContinueAt.value! - Date.now());
+            }
+
+            expect(waits).toEqual([
+                5_000,
+                15_000,
+                45_000,
+                5 * 60_000,
+                30 * 60_000,
+                2 * 60 * 60_000,
+                6 * 60 * 60_000,
+                12 * 60 * 60_000,
+                24 * 60 * 60_000,
+                24 * 60 * 60_000,
+            ]);
+            expect(conversation.autoContinue.value).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    /* THE AUTOMATION MAKES THE SAME PRESS, which matters more here than at the button: unattended, the short
+     * rungs fire three times against one stopped turn, and three appended "Continue"s IS the pile. An automation
+     * that re-runs instead costs refused requests without changing the transcript, then moves onto its minute
+     * and hour rungs. */
+    it(`re-runs the held turn when it continues itself, then moves beyond the short retry rungs`, async () => {
         vi.useFakeTimers();
         try {
             const conversation = new Conversation(`c1`);
@@ -1920,13 +1963,14 @@ describe(`Conversation`, () => {
                     head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
                 }),
             );
-            // The whole ladder, spent: 5s, 15s, 45s, then it gives up and says so.
+            // The short end of the ladder: 5s, 15s, 45s, then the next retry is five minutes away.
             await vi.advanceTimersByTimeAsync(70_000);
 
             expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/resume`)).toHaveLength(3);
             expect(turnBodies()).toHaveLength(1);
             expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-            expect(conversation.autoContinue.value).toBe(false);
+            expect(conversation.autoContinue.value).toBe(true);
+            expect(conversation.autoContinueAt.value! - Date.now()).toBe(295_000);
         } finally {
             vi.useRealTimers();
         }
