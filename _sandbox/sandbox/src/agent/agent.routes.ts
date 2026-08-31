@@ -38,6 +38,7 @@ import { adapterFor } from "./adapter-registry.js";
 import { composeWirePrompt } from "./turn-preamble.js";
 import { rewindConversation } from "./rewind.js";
 import { commandsOf } from "./agent-commands.js";
+import { limitReopensAt } from "./limit-reset.js";
 import { createFrameLedger } from "./agent-verification.js";
 import { createViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork } from "./verify-nudge.js";

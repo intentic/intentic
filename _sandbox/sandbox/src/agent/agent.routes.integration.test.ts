@@ -10,7 +10,7 @@ import { createApp } from "../app.js";
 
 import type { RestoredMessage } from "@intentic/sandbox-contract";
 import type { AgentWorktrees } from "../agents/worktrees.js";
-import { clientFor, collect, errorCode, runAgentTurn, services } from "../route-testing.js";
+import { clientFor, codexConnectedProxy, collect, errorCode, runAgentTurn, services, withTranslator } from "../route-testing.js";
 import { createRequest } from "./agent-requests.js";
 
 /* The agent routes, driven over the daemon's HTTP surface exactly as the browser drives them.
@@ -165,7 +165,7 @@ test("a spent allowance on a native runtime carries the reset the translator alr
     const events = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-limit", agent: "codex" });
 
     expect(events).toContainEqual(
-        expect.objectContaining({ kind: "error", code: "rate_limit", message: "429 You've hit your usage limit.", held: { ran: false }, resetsAt }),
+        expect.objectContaining({ kind: "error", code: "rate_limit", message: "429 You've hit your usage limit.", held: { ran: false }, resetsAt: reopensAt }),
     );
 });
 

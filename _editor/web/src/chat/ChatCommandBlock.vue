@@ -86,7 +86,12 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
             <!-- The copy always carries the FULL text, never the clamped rendering: someone copying a command
                  off this card is taking it somewhere to run or to read, and half of one is worse than none. -->
-            <CopyButton :text="program.text" label="Copy" class="absolute top-1.5 right-1.5 bg-canvas" />
+            <!-- Positioned by a box of its own: the button's root wears `relative` for its press spinner, and
+                 an `absolute` handed to it from here is settled by Tailwind's utility order rather than by
+                 this call site. -->
+            <div class="absolute top-1.5 right-1.5">
+                <CopyButton :text="program.text" label="Copy" class="bg-canvas" />
+            </div>
             <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering fault. -->
             <div
                 v-if="clamped"

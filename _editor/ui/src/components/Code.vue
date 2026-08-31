@@ -119,7 +119,14 @@ watch(
                 <!-- `bg-canvas` rather than a transparent chip: it sits over the code's own surface, and the
                      block's right padding (code.css, keyed off ui-code-copyable) keeps text from running
                      under it, but a wrapped line's descender still passes behind the border without it. -->
-                <CopyButton v-if="copyable" :text="code" label="Copy" class="absolute top-1.5 right-1.5 bg-canvas" @copied="emit(`copied`)" />
+                <!-- The WRAPPER carries the position, not the button. Button's root always wears `relative`
+                     (it is the positioning context its press spinner hangs in), and a caller's `absolute`
+                     lands in the same class attribute — where Tailwind's own utility order decides the
+                     winner, not the call site. That is how this chip once fell out of its corner and back
+                     into the flow, under the block. A box of its own cannot lose that argument. -->
+                <div v-if="copyable" class="absolute top-1.5 right-1.5">
+                    <CopyButton :text="code" label="Copy" class="bg-canvas" @copied="emit(`copied`)" />
+                </div>
                 <!-- The fade is what says "there is more": a hard cut mid-command reads as a rendering bug. -->
                 <div
                     v-if="clamped && overflowing"
