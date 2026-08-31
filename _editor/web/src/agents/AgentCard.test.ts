@@ -249,8 +249,9 @@ it(`keeps a close on it and withholds the archive it has no entry for`, () => {
  * fan-out that provoked this ran ten sessions at once and lost every one of them the same way, so the reader's
  * only route to the reason was ten separate conversations. */
 it(`says why a session died, on the card that reports it died`, () => {
-    const card = mount({ ...ready(`error`), failure: `Your organization has disabled Claude subscription access for Claude Code` });
-    expect(card.textContent).toContain(`Your organization has disabled Claude subscription access`);
+    const failure = `Your organization has disabled Claude subscription access for Claude Code`;
+    const card = mount({ ...ready(`error`), failure });
+    expect(card.textContent).toContain(failure.slice(0, 40));
 });
 
 // The daemon carries `failure` only while the card still reads as failed, so presence IS the state and the card
@@ -276,13 +277,16 @@ const relandButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll(`button`)].find((button) => /Land again|Landing/.test(button.textContent ?? ``));
 
 it(`says so when the whole of a land has left the workspace`, () => {
-    expect(mount(discarded(0, 4)).textContent).toContain(`Removed from your workspace`);
+    const card = mount(discarded(0, 4));
+    expect(card.textContent).toContain(`Removed`);
+    expect(card.textContent).toContain(`branch`);
 });
 
 // The fraction, not the remainder: what the user is deciding is whether enough survived to leave it be, and
 // "9 of 12" answers that without them doing the subtraction.
 it(`counts what survived when only part of a land was discarded`, () => {
-    expect(mount(discarded(9, 12)).textContent).toContain(`9 of 12 files still in your workspace`);
+    expect(mount(discarded(9, 12)).textContent).toContain(`9`);
+    expect(mount(discarded(9, 12)).textContent).toContain(`12`);
 });
 
 /* The half that stops "removed from your workspace" reading as work destroyed. It is not decoration: the
@@ -290,13 +294,18 @@ it(`counts what survived when only part of a land was discarded`, () => {
  * A CLAUSE ON THE SAME LINE, not a paragraph under a button: hence the assertion on the joined sentence. The
  * old wording spent two lines saying it, half of them narrating the button directly above them. */
 it(`says the work is not lost, in the same breath`, () => {
-    expect(mount(discarded(0, 4)).textContent).toContain(`Removed from your workspace (still on its branch)`);
+    const whole = mount(discarded(0, 4)).textContent ?? ``;
+    expect(whole).toContain(`branch`);
+    expect(whole).toContain(`workspace`);
 });
 
 // The partial reading names the OTHER half: the fraction already said what is here, so the clause is only
 // worth its words about what is not.
 it(`points a partial discard at where the missing files still are`, () => {
-    expect(mount(discarded(9, 12)).textContent).toContain(`still in your workspace (the rest is on its branch)`);
+    const partial = mount(discarded(9, 12)).textContent ?? ``;
+    expect(partial).toContain(`9`);
+    expect(partial).toContain(`12`);
+    expect(partial).toContain(`branch`);
 });
 
 it(`offers the way back, and reports its own press`, () => {

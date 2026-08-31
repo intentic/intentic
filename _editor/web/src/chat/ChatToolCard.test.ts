@@ -54,12 +54,13 @@ afterEach(() => {
 describe(`ChatToolCard`, () => {
     it(`nests a sub-agent's child calls and thinking under the delegation card (renders itself recursively)`, () => {
         // A running Agent card starts expanded (live output is the point), so its nested transcript is visible.
+        const thinking = `weighing the options`;
         const element = mount({
             id: `a1`,
             name: `Agent`,
             category: `other`,
             status: `in_progress`,
-            thinking: `weighing the options`,
+            thinking,
             children: [
                 { id: `b1`, name: `Bash`, category: `execute`, status: `completed`, target: `ls -la`, content: [{ type: `text`, text: `file.txt` }] },
             ],
@@ -71,7 +72,7 @@ describe(`ChatToolCard`, () => {
         expect(nested?.textContent).toContain(`Bash`);
         expect(nested?.textContent).toContain(`ls -la`);
         // The sub-agent's thinking rides on the card, not the parent turn.
-        expect(element.textContent).toContain(`weighing the options`);
+        expect(element.textContent).toContain(thinking);
     });
 
     it(`shows no nested transcript for an ordinary tool call`, () => {

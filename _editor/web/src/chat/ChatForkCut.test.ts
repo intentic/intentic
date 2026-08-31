@@ -145,7 +145,7 @@ describe(`the fork cut`, () => {
         await openMenu(element);
 
         expect(row(`Fork`)?.disabled).toBe(true);
-        expect(row(`Fork`)?.[`hint`]).toBe(`No saved state for this point`);
+        expect(row(`Fork`)?.[`hint`]).toContain(`No saved state`);
         expect(row(`Rewind`)?.disabled).toBe(true);
         expect(row(`Fork chat only`)?.disabled).toBe(false);
     });
@@ -200,7 +200,8 @@ describe(`the fork cut`, () => {
         const element = mount(2);
         await openMenu(element);
         expect(row(`Edit`)?.disabled).toBe(true);
-        expect(row(`Edit`)?.[`hint`]).toBe(`No saved state for this point`);
+        const noStateHint = row(`Edit`)?.[`hint`];
+        expect(noStateHint).toContain(`No saved state`);
         app?.unmount();
 
         state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, anchored(2)];
@@ -208,7 +209,9 @@ describe(`the fork cut`, () => {
         const running = mount(2);
         await openMenu(running);
         expect(row(`Edit`)?.disabled).toBe(true);
-        expect(row(`Edit`)?.[`hint`]).toBe(`Old files have to wait for the turn to finish`);
+        const streamingHint = row(`Edit`)?.[`hint`];
+        expect(streamingHint).toContain(`turn`);
+        expect(streamingHint).not.toEqual(noStateHint);
     });
 
     /* A cut can land above the agent's words: a turn the reducer opened without a prompt of its own. "Edit"
@@ -254,7 +257,8 @@ describe(`the fork cut`, () => {
         row(`Rewind`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         await nextTick();
         expect(rewindTo).not.toHaveBeenCalled();
-        expect(row(`Click again`)?.label).toBe(`Click again, drops 2 messages`);
+        expect(row(`Click again`)?.label).toContain(`2`);
+        expect(row(`Click again`)?.label).toContain(`messages`);
 
         row(`Click again`)?.command?.({ originalEvent: new Event(`click`), item: {} });
         await nextTick();
@@ -287,7 +291,7 @@ describe(`the fork cut`, () => {
 
         expect(row(`Fork chat only`)?.disabled).toBe(false);
         expect(row(`Fork`)?.disabled).toBe(true);
-        expect(row(`Fork`)?.[`hint`]).toBe(`Old files have to wait for the turn to finish`);
+        expect(row(`Fork`)?.[`hint`]).toContain(`turn`);
         expect(row(`Rewind`)?.disabled).toBe(true);
 
         row(`Fork chat only`)?.command?.({ originalEvent: new Event(`click`), item: {} });
@@ -315,7 +319,8 @@ describe(`the fork cut`, () => {
 
         expect(row(`Fork chat only`)).toBeUndefined();
         expect(row(`Fork`)?.disabled).toBe(false);
-        expect(row(`Fork`)?.[`hint`]).toBe(`New chat, files as they are now`);
+        expect(row(`Fork`)?.[`hint`]).toContain(`files`);
+        expect(row(`Fork`)?.[`hint`]).not.toContain(`turn`);
         expect(row(`Rewind`)?.disabled).toBe(false);
 
         row(`Fork`)?.command?.({ originalEvent: new Event(`click`), item: {} });

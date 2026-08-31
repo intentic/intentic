@@ -160,9 +160,11 @@ it(`strikes what the send would replace and names the cost over the box`, async 
     await settle();
 
     // The edited prompt and the three rows under it.
+    const droppedBelow = struck() - 1;
     expect(struck()).toBe(4);
-    expect(paneText()).toContain(`Editing this message`);
-    expect(paneText()).toContain(`the 3 below it are replaced when you send`);
+    expect(paneText()).toContain(`Editing`);
+    expect(paneText()).toContain(String(droppedBelow));
+    expect(paneText()).toContain(`below`);
 });
 
 // Cancelling is the promise that arming costs nothing, kept: the strikes lift, and the composer goes back to

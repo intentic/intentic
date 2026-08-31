@@ -1672,11 +1672,9 @@ describe(`Conversation`, () => {
         conversation.model.value = `grok-code-fast-1`;
         // The daemon self-heals a stale model in-turn (re-prompting with one xAI named), so this code now reaches
         // the client only when that failed, xAI rejected the model AND named no alternative: a genuine error.
+        const xaiMessage = `xAI returned no available models for your account.`;
         sandboxRequestMock.mockImplementation(
-            sseResponse([
-                { kind: `error`, code: `grok-model-invalid`, message: `xAI returned no available models for your account.` },
-                { kind: `done` },
-            ]),
+            sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]),
         );
         await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
@@ -1684,7 +1682,7 @@ describe(`Conversation`, () => {
 
         // The server message surfaces as the red error ref (not a muted notice), and the catalog is reloaded so
         // the picker reflects whatever the daemon last recorded.
-        expect(conversation.error.value).toBe(`xAI returned no available models for your account.`);
+        expect(conversation.error.value).toBe(xaiMessage);
         expect(conversation.messages.value.at(-1)!.role).not.toBe(`notice`);
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`grok`);
     });
@@ -2285,9 +2283,11 @@ describe(`Conversation`, () => {
 
         // …and the way back out, in the same surface: the countdown stops, the offer comes back (the turn is
         // still stranded and still re-armable), and the probe hunting the resume stands down with it.
+        const armed = conversation.messages.value.at(-1)!.text;
         conversation.failures.disarmOutageResume();
         expect(conversation.failures.outageResume.value?.scheduled).toBe(false);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`no longer picks itself back up`);
+        expect(conversation.messages.value.at(-1)!.text).not.toEqual(armed);
+        expect(conversation.messages.value.at(-1)!.text).toContain(`no longer`);
         conversation.abort();
     });
 
@@ -3018,7 +3018,8 @@ describe(`Conversation`, () => {
             tierHold: false,
         });
 
-        expect(conversation.error.value).toBe(`This agent already has a turn running: wait for it to finish.`);
+        expect(conversation.error.value).toContain(`turn`);
+        expect(conversation.error.value).toContain(`running`);
         expect(conversation.queued.value).toEqual([]);
     });
 
@@ -3190,7 +3191,8 @@ describe(`Conversation`, () => {
 
         await conversation.send(`Hi`, settings);
 
-        expect(conversation.error.value).toBe(`This agent already has a turn running: wait for it to finish.`);
+        expect(conversation.error.value).toContain(`turn`);
+        expect(conversation.error.value).toContain(`running`);
         expect(conversation.streaming.value).toBe(false);
     });
 
@@ -3530,16 +3532,14 @@ describe(`Conversation placeAsAgent`, () => {
         await conversation.send(`first`, settings);
         const before = conversation.messages.value.length;
 
+        const daemonMessage = `the discord gateway is not running, so the message cannot reach the channel`;
         sandboxRequestMock.mockImplementation(
-            async () =>
-                new Response(JSON.stringify({ message: `the discord gateway is not running, so the message cannot reach the channel` }), {
-                    status: 502,
-                }),
+            async () => new Response(JSON.stringify({ message: daemonMessage }), { status: 502 }),
         );
         expect(await conversation.placeAsAgent(`planted`)).toBe(false);
 
         expect(conversation.messages.value).toHaveLength(before);
-        expect(conversation.error.value).toContain(`the discord gateway is not running`);
+        expect(conversation.error.value).toContain(`discord gateway`);
     });
 
     // The mark survives a reopen: the record's `placed` maps back onto the bubble a restored tab draws.

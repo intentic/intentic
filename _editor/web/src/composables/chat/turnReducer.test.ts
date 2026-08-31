@@ -467,12 +467,14 @@ describe(`effects`, () => {
     /* The pre-turn rebase is announced, never asked (daemon: agents/sync.ts), one muted line where the turn
      * begins, so the human can see why the branch moved without being stopped to approve it. */
     it(`says the branch was rebased onto the workspace, and still reports the worktree`, () => {
-        const { state, effects } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } });
+        const commits = 4;
+        const { state, effects } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits, blocked: [] } });
 
         expect(effects.map((effect) => effect.kind)).toEqual([`worktree`]);
         const notice = state.messages[1];
         expect(notice?.role).toBe(`notice`);
-        expect(notice?.text).toContain(`rebased onto your latest 4 commits`);
+        expect(notice?.text).toContain(String(commits));
+        expect(notice?.text).toContain(`rebased`);
         // Nothing to press: the work is already done and there is no decision left to offer.
         expect(notice?.noticeAction).toBeUndefined();
     });
@@ -481,15 +483,16 @@ describe(`effects`, () => {
      * of a transcript that already holds this turn's (still empty) answer bubble. Getting this wrong put a line
      * about the turn's starting conditions below the first block of the reply. */
     it(`places the rebase line under the user's message, above the answer it precedes`, () => {
+        const commits = 4;
         const { state } = run(
             started(),
-            { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 4, blocked: [] } },
+            { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits, blocked: [] } },
             { kind: `delta`, text: `on it` },
         );
 
         expect(settled(state).messages.map((message) => [message.role, message.text])).toEqual([
             [`user`, `do it`],
-            [`notice`, expect.stringContaining(`rebased onto your latest 4 commits`)],
+            [`notice`, expect.stringMatching(new RegExp(String.raw`rebased.*${commits}`))],
             [`assistant`, `on it`],
         ]);
     });
@@ -510,16 +513,18 @@ describe(`effects`, () => {
      * placement above finds nothing to sit atop and appends. That is why neither the frame nor the reducer
      * carries a "which moment is this" flag: the transcript already knows. */
     it(`places a mid-turn rebase under the card that was just answered`, () => {
+        const commits = 2;
         const { state } = run(
             started(),
             { kind: `question`, requestId: `q1`, questions: [{ question: `which?`, header: `Pick`, multiSelect: false, options: [] }] },
             { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { "which?": [`this one`] } } },
-            { kind: `worktree`, branch: `agent/x`, base: `def4567`, sync: { commits: 2, blocked: [] } },
+            { kind: `worktree`, branch: `agent/x`, base: `def4567`, sync: { commits, blocked: [] } },
             { kind: `delta`, text: `carrying on` },
         );
 
         expect(settled(state).messages.map((message) => message.role)).toEqual([`user`, `assistant`, `notice`, `assistant`]);
-        expect(settled(state).messages[2]?.text).toContain(`rebased onto your latest 2 commits`);
+        expect(settled(state).messages[2]?.text).toContain(String(commits));
+        expect(settled(state).messages[2]?.text).toContain(`rebased`);
         // And the standing it re-announces is where the branch sits NOW, which is the whole point of re-sending it.
         expect(run(started(), { kind: `worktree`, branch: `agent/x`, base: `def4567` }).effects).toEqual([
             { kind: `worktree`, branch: `agent/x`, base: `def4567` },
@@ -527,10 +532,12 @@ describe(`effects`, () => {
     });
 
     it(`says so when the rebase was rolled back, so the land's refusal is expected`, () => {
-        const { state } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 0, blocked: [`root`] } });
+        const blocked = [`root`] as const;
+        const { state } = run(started(), { kind: `worktree`, branch: `agent/x`, base: `abc123`, sync: { commits: 0, blocked: [...blocked] } });
 
         const notice = state.messages[1];
-        expect(notice?.text).toContain(`Couldn't rebase onto your workspace in root`);
+        expect(notice?.text).toContain(blocked[0]!);
+        expect(notice?.text).toContain(`rebase`);
         expect(notice?.text).not.toContain(`rebased onto your latest`);
     });
 

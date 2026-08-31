@@ -299,9 +299,10 @@ describe(`native account connection`, () => {
 
     it(`starts Cursor on its dedicated login route and preserves the daemon's failure`, async () => {
         const chat = useChat();
+        const daemonMessage = `The Cursor SDK download failed: npm registry unavailable.`;
         chat.setManagedProvider(`cursor`);
         sandboxRequestMock.mockResolvedValue(
-            new Response(JSON.stringify({ message: `The Cursor SDK download failed: npm registry unavailable.` }), {
+            new Response(JSON.stringify({ message: daemonMessage }), {
                 status: 412,
                 headers: { "content-type": `application/json` },
             }),
@@ -310,7 +311,7 @@ describe(`native account connection`, () => {
         await chat.startConnect();
 
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/cursor/login/start`, { method: `POST` });
-        expect(chat.error.value).toBe(`The Cursor SDK download failed: npm registry unavailable.`);
+        expect(chat.error.value).toBe(daemonMessage);
         expect(chat.accountBusy.value).toBeUndefined();
     });
 });

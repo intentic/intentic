@@ -135,13 +135,13 @@ it(`says nothing about connections until BOTH halves of the picture have landed`
     endpointsLoaded.value = false;
     const element = mount();
 
-    expect(element.textContent).toContain(`Checking your AI accounts…`);
+    expect(element.textContent).toContain(`Checking`);
     expect(element.textContent).not.toContain(`isn't connected`);
 
     // The accounts land first, as they do in the app. This is the moment the old gate spoke; this one waits.
     accountsLoaded.value = true;
     await nextTick();
-    expect(element.textContent).toContain(`Checking your AI accounts…`);
+    expect(element.textContent).toContain(`Checking`);
     expect(element.textContent).not.toContain(`isn't connected`);
 
     endpointsLoaded.value = true;

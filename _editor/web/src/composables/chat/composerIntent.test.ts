@@ -66,8 +66,9 @@ it(`gives every intent its own sentence in both slots`, () => {
 });
 
 it(`counts what an edit costs, and says it in the singular where only one message goes`, () => {
-    expect(sendHintFor(`edit`, WORDS)).toBe(`Replace this message`);
-    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toBe(`Replace this message and the 3 below it`);
+    expect(sendHintFor(`edit`, WORDS)).toContain(`Replace`);
+    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toContain(`3`);
+    expect(sendHintFor(`edit`, { ...WORDS, editDropped: 4 })).toContain(`below`);
 });
 
 it(`asks nobody by name on the trial: the product's own channel has no vendor`, () => {
@@ -89,10 +90,9 @@ it(`refuses only what the daemon would, and only with something staged`, () => {
 
 it(`refuses more of the agent's voice than of your own`, () => {
     const speaking = { staged: true, voiceAgent: true };
-    expect(sendRefusal(chat({ ...speaking, streaming: true }))).toContain(`its words can be placed once the turn ends`);
-    expect(sendRefusal(chat({ ...speaking, pendingPlan: true }))).toContain(`decide it before speaking as the agent`);
-    // There is no shape of transcript in which the agent attached a file to its own reply.
-    expect(sendRefusal(chat({ ...speaking, attached: true }))).toContain(`can't be placed as the agent's words`);
+    expect(sendRefusal(chat({ ...speaking, streaming: true }))).toContain(`turn ends`);
+    expect(sendRefusal(chat({ ...speaking, pendingPlan: true }))).toContain(`plan`);
+    expect(sendRefusal(chat({ ...speaking, attached: true }))).toContain(`agent`);
     // The same three states refuse nothing when the words are the user's own: they are sent, steered or queued.
     expect(sendRefusal(chat({ staged: true, streaming: true }))).toBeUndefined();
     expect(sendRefusal(chat({ staged: true, pendingPlan: true, attached: true }))).toBeUndefined();

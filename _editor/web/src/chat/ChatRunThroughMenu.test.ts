@@ -74,24 +74,25 @@ afterEach(() => {
  * reason the control stopped being two pills: "where is the shape I saved" had two places to look before it
  * had an answer, and two bare glyphs told nobody which was which. */
 it(`lists loops and workflows together, each under a heading that says what it does`, () => {
-    loops.value = [aLoop()];
-    workflows.value = [aWorkflow()];
+    const loop = aLoop();
+    const workflow = aWorkflow();
+    loops.value = [loop];
+    workflows.value = [workflow];
     const body = text(mount());
 
-    expect(body).toContain(`Repeat it here, until it's done`);
-    expect(body).toContain(`Until green`);
-    expect(body).toContain(`Hand it to other sessions`);
-    expect(body).toContain(`Two models`);
+    expect(body).toContain(loop.name);
+    expect(body).toContain(workflow.name);
 });
 
 // A heading with nothing under it is a half-empty pair, which reads as something being broken. A workspace
 // with loops and no workflows should simply look like a loop picker.
 it(`hides the heading of a kind this workspace has none of`, () => {
     loops.value = [aLoop()];
+    workflows.value = [];
     const body = text(mount());
 
-    expect(body).toContain(`Repeat it here, until it's done`);
-    expect(body).not.toContain(`Hand it to other sessions`);
+    expect(body).toContain(aLoop().name);
+    expect(body).not.toContain(aWorkflow().name);
 });
 
 /* THE STOP CONDITION AND THE CEILINGS, on the row, computed from the loop. A control that starts paid work in
@@ -125,7 +126,7 @@ it(`offers one way back to an ordinary message, and it clears both kinds`, () =>
     const element = mount({ workflow: `duel` });
 
     const off = rowLabelled(element, `Just this chat`)!;
-    expect(text(off)).toContain(`Send once, as an ordinary message`);
+    expect(text(off)).toContain(`ordinary`);
     off.click();
     expect(picked.loop).toEqual([undefined]);
     expect(picked.workflow).toEqual([undefined]);

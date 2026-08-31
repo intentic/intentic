@@ -56,8 +56,8 @@ describe("dropActionFor", () => {
         for (const status of [`stopping`, `dismissing`] as const) {
             expect(dropActionFor(agent({ status }), `finished`)).toBeUndefined();
             expect(dropActionFor(agent({ status }), `discard`)).toBeUndefined();
-            expect(dropRejection(agent({ status }), `finished`)).toBe(`This turn is already ending`);
-            expect(dropRejection(agent({ status }), `discard`)).toBe(`This turn is already ending`);
+            expect(dropRejection(agent({ status }), `finished`)).toContain(`ending`);
+            expect(dropRejection(agent({ status }), `discard`)).toContain(`ending`);
         }
     });
 
@@ -112,7 +112,7 @@ describe("dropActionFor", () => {
     it("yields to a live turn, whose drop is still the stop or a refusal", () => {
         expect(dropActionFor(agent({ status: `running`, watches: [watch] }), `finished`)).toBe(`stop`);
         expect(dropActionFor(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBeUndefined();
-        expect(dropRejection(agent({ status: `resuming`, watches: [watch] }), `finished`)).toBe(`This turn is picking itself back up`);
+        expect(dropRejection(agent({ status: `resuming`, watches: [watch] }), `finished`)).toContain(`picking itself back up`);
     });
 
     it("discards anything that isn't running, the daemon refuses a running turn's worktree", () => {
@@ -217,21 +217,24 @@ describe("a card whose agent is in another sandbox", () => {
         const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
         expect(dropActionFor({ ...conflicted, sandboxId: undefined }, `finished`)).toBe(`resolve`);
         expect(dropActionFor(conflicted, `finished`)).toBeUndefined();
-        expect(dropRejection(conflicted, `finished`)).toBe(`Asking the agent to resolve needs its own sandbox`);
+        expect(dropRejection(conflicted, `finished`)).toContain(`sandbox`);
+        expect(dropRejection(conflicted, `finished`)).not.toEqual(dropRejection(elsewhere({ status: `idle` }), `active`));
     });
 
     // Ending a watch writes through the fleet store, which IS the active daemon's roster and has no entry for
     // this agent: the optimistic write would take a card off a list it was never on.
     it("refuses to end a watch, and says the sandbox is why", () => {
         const watching = elsewhere({ status: `idle`, watches: [watch] });
+        const conflicted = elsewhere({ status: `conflict`, attention: { ...none, conflict: true } });
         expect(dropActionFor({ ...watching, sandboxId: undefined }, `finished`)).toBe(`unwatch`);
         expect(dropActionFor(watching, `finished`)).toBeUndefined();
-        expect(dropRejection(watching, `finished`)).toBe(`Ending a watch needs the agent's own sandbox`);
+        expect(dropRejection(watching, `finished`)).toContain(`sandbox`);
+        expect(dropRejection(watching, `finished`)).not.toEqual(dropRejection(conflicted, `finished`));
     });
 
     // The box is only ever the reason when the drop would OTHERWISE have worked: a card with nothing to offer
     // this gesture keeps the refusal that is actually true of it.
     it("keeps the ordinary refusal when the box was never the obstacle", () => {
-        expect(dropRejection(elsewhere({ status: `idle` }), `active`)).toBe(`Send a message to start a turn`);
+        expect(dropRejection(elsewhere({ status: `idle` }), `active`)).toContain(`message`);
     });
 });

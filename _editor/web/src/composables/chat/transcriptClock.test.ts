@@ -74,9 +74,10 @@ it(`a re-run's head reuses the prompt's own bubble; an answered park's head land
     const rerun = withoutResumeNote(withResumeNote(`ship the parser`, RESUME_NOTES.restart));
     expect(clock.reuseUserBubble(rerun, false)).toBe(asked);
 
-    const answered = withoutResumeNote(withResumeNote(`The user approved the plan: proceed with it.`, RESUME_NOTES.answered));
+    const answerText = `The user approved the plan: proceed with it.`;
+    const answered = withoutResumeNote(withResumeNote(answerText, RESUME_NOTES.answered));
     // The strip leaves exactly the answer: no machine preamble in a user bubble either way.
-    expect(answered).toBe(`The user approved the plan: proceed with it.`);
+    expect(answered).toBe(answerText);
     expect(clock.reuseUserBubble(answered, false)).toBeUndefined();
 });
 

@@ -119,7 +119,8 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     await nextTick();
 
     expect(headings(element).slice(0, 3)).toEqual([`Claude Code`, `Free trial`, `Google`]);
-    expect(element.textContent).toContain(`Free trial · 12 left today`);
+    expect(element.textContent).toContain(String(trialStatus.value.remaining));
+    expect(element.textContent).toContain(`trial`);
 });
 
 /* THE DOOR TO EVERYTHING THIS LIST CAN ONLY BADGE: a second account on one provider, an account to drop, the

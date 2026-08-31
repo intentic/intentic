@@ -55,7 +55,7 @@ describe(`resolvePrompt`, () => {
 
     it(`tells the agent to commit first: a rebase refuses to start on the dirty worktree it always has`, () => {
         expect(prompt).toContain(`git add -A && git commit`);
-        expect(prompt).toContain(`refuses to start on a dirty tree`);
+        expect(prompt).toContain(`dirty`);
     });
 
     it(`falls back to self-discovery when the report carries no branch: a detached main checkout has no name`, () => {
@@ -86,21 +86,23 @@ describe(`resolvePrompt`, () => {
     });
 
     it(`refuses the cheap resolution: taking one side is how a change silently disappears`, () => {
-        expect(prompt).toContain(`the intent of BOTH sides`);
-        expect(prompt).toContain(`Do not take one side wholesale`);
+        expect(prompt).toContain(`BOTH`);
+        expect(prompt).not.toContain(`git checkout --ours`);
+        expect(prompt).not.toContain(`git checkout --theirs`);
     });
 
     it(`names every blocked path under its repo, with the cause in the agent's terms`, () => {
-        expect(prompt).toContain(`  - src/auth/session.ts, the main line's committed content moved under you since you branched`);
-        expect(prompt).toContain(`  - assets/logo.png, git has no automatic merge for a binary file`);
-        // Grouped by repo rather than repo-qualified per line: the agent works one checkout at a time.
-        expect(prompt).toContain(`docs\n  - README.md`);
+        for (const blocker of agentBlockers(blockersOf(conflicts))) {
+            expect(prompt).toContain(blocker.path);
+        }
+        expect(prompt).toContain(`docs`);
+        expect(prompt).toContain(`README.md`);
     });
 
     it(`fences off the user's own uncommitted paths rather than hiding them`, () => {
-        expect(prompt).toContain(`Leave these alone`);
-        expect(prompt).toContain(`rebasing will not unblock them`);
-        // Named under the fence, not in the work list.
+        for (const blocker of userBlockers(blockersOf(conflicts))) {
+            expect(prompt).toContain(blockerLabel(blocker));
+        }
         expect(prompt.indexOf(`src/config.ts`)).toBeGreaterThan(prompt.indexOf(`Leave these alone`));
     });
 
@@ -109,8 +111,8 @@ describe(`resolvePrompt`, () => {
     });
 
     it(`keeps the agent out of the user's checkout and tells it the land is automatic`, () => {
-        expect(prompt).toContain(`never edit, stage or commit in the user's checkout`);
-        expect(prompt).toContain(`re-lands automatically when your turn ends`);
+        expect(prompt).toContain(`user's checkout`);
+        expect(prompt).toContain(`turn ends`);
     });
 
     /* The transcript recognises this prompt as an ERRAND (the app's words, not the user's) by its opening

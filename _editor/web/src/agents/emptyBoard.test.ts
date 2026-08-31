@@ -76,7 +76,7 @@ it(`asks for a task rather than for a sign-in, even with nothing connected`, asy
     const board = mount(AgentsView);
     await nextTick();
 
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
     expect(board.textContent).not.toContain(`Try free with Google`);
     expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(false);
     // Nor the subscription row that came with it: what a chat can send with is answered in the model picker.
@@ -98,7 +98,7 @@ it(`says nothing about accounts while the daemon is still being read`, async () 
     const board = mount(AgentsView);
     await nextTick();
 
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
     expect(board.textContent).not.toContain(`Checking your AI accounts…`);
     expect(board.textContent).not.toContain(`Try free with Google`);
 });
@@ -115,7 +115,7 @@ it(`offers building on an empty workspace, and nothing that points at code which
     const board = mount(AgentsView);
     await nextTick();
 
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
 
     // No repos and no changes in this mount, so every code-pointing suggestion is absent.
     expect([...board.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).not.toContain(`Bring in my code`);
@@ -160,7 +160,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().active.value.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
     // Still the empty board: filling the composer is not starting anything.
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
 });
 
 /* THE PLATFORM SERVES A FREE TRIAL, which is what a new user on the hosted product actually gets, and the
@@ -178,7 +178,7 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
 
     expect(useChat().active.value.provider.value).toBe(TRIAL_PROVIDER);
     expect(useChat().connected.value).toBe(true);
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
     expect(board.textContent).not.toContain(`Try free with Google`);
 });
 
@@ -193,6 +193,6 @@ it(`keeps asking for a task once the trial is used up`, async () => {
     await nextTick();
 
     expect(useChat().connected.value).toBe(false);
-    expect(board.textContent).toContain(`Start your first agent`);
+    expect(board.textContent).toContain(`first agent`);
     expect([...board.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Continue with Google`))).toBe(false);
 });

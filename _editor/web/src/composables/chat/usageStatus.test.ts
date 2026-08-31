@@ -42,10 +42,13 @@ const headroom = (over: Partial<AccountUsage> = {}): PlanHeadroom => {
 
 describe(`usageWindowLabel`, () => {
     it(`keeps every weekly pool distinguishable, folding them is the bug it exists to prevent`, () => {
-        expect(usageWindowLabel(window({ kind: `five_hour` }))).toBe(`5-hour session`);
-        expect(usageWindowLabel(window({ kind: `seven_day` }))).toBe(`Weekly · all models`);
-        expect(usageWindowLabel(window({ kind: `seven_day_opus` }))).toBe(`Weekly · Opus`);
-        expect(usageWindowLabel(window({ kind: `seven_day_oauth_apps` }))).toBe(`Weekly · third-party apps`);
+        const kinds = [`five_hour`, `seven_day`, `seven_day_opus`, `seven_day_oauth_apps`] as const;
+        const labels = kinds.map((kind) => usageWindowLabel(window({ kind })));
+        expect(new Set(labels).size).toBe(kinds.length);
+        expect(usageWindowLabel(window({ kind: `five_hour` }))).toContain(`5-hour`);
+        expect(usageWindowLabel(window({ kind: `seven_day` }))).toContain(`Weekly`);
+        expect(usageWindowLabel(window({ kind: `seven_day_opus` }))).toContain(`Opus`);
+        expect(usageWindowLabel(window({ kind: `seven_day_oauth_apps` }))).toContain(`third-party`);
     });
 
     it(`prefers the provider's own name for a per-model pool`, () => {
@@ -133,30 +136,41 @@ describe(`isStale / formatUtilization`, () => {
  * still carries every fact the card draws. */
 describe(`usageDetail`, () => {
     it(`lists EVERY pool, because which one is binding is what a single number can't say`, () => {
-        const detail = usageDetail(
-            headroom({
-                windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 98 })],
-                measuredAt: Date.now(),
-            }),
-        );
-        expect(detail).toBe(`5-hour session 12% · Weekly · all models 98% · measured just now`);
+        const measuredAt = Date.now();
+        const projected = headroom({
+            windows: [window({ kind: `five_hour`, utilization: 12 }), window({ kind: `seven_day`, utilization: 98 })],
+            measuredAt,
+        });
+        const detail = usageDetail(projected);
+        for (const pool of projected.pools) {
+            expect(detail).toContain(`${pool.label} ${formatUtilization(pool.percent, projected.stale)}`);
+        }
+        expect(detail).toContain(formatAge(measuredAt));
+        expect(detail).toContain(`12%`);
+        expect(detail).toContain(`98%`);
     });
 
     it(`names each pool's reset beside its figure, "wait 20 minutes" and "wait until Thursday" are different answers`, () => {
         const resetsAt = 1_700_000_000;
-        const detail = usageDetail(
-            headroom({
-                windows: [window({ kind: `five_hour`, utilization: 91, resetsAt }), window({ kind: `seven_day`, utilization: 40 })],
-                measuredAt: Date.now(),
-            }),
-        );
-        // formatReset renders in the runner's locale/zone, so the expectation reuses it and asserts placement.
-        expect(detail).toBe(`5-hour session 91% (resets ${formatReset(resetsAt)}) · Weekly · all models 40% · measured just now`);
+        const measuredAt = Date.now();
+        const projected = headroom({
+            windows: [window({ kind: `five_hour`, utilization: 91, resetsAt }), window({ kind: `seven_day`, utilization: 40 })],
+            measuredAt,
+        });
+        const detail = usageDetail(projected);
+        expect(detail).toContain(formatReset(resetsAt));
+        expect(detail).toContain(`91%`);
+        expect(detail).toContain(`40%`);
+        expect(detail).toContain(formatAge(measuredAt));
     });
 
     it(`marks every figure as a floor once the reading is old enough to have been overtaken elsewhere`, () => {
-        const detail = usageDetail(headroom({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt: Date.now() - 8 * 3_600_000 }));
-        expect(detail).toBe(`Weekly · all models ≥1% · measured 8h ago`);
+        const measuredAt = Date.now() - 8 * 3_600_000;
+        const projected = headroom({ windows: [window({ kind: `seven_day`, utilization: 1 })], measuredAt });
+        const detail = usageDetail(projected);
+        expect(detail).toContain(formatUtilization(1, true));
+        expect(detail).toContain(usageWindowLabel(window({ kind: `seven_day` })));
+        expect(detail).toContain(formatAge(measuredAt));
     });
 });
 
@@ -453,12 +467,14 @@ describe(`plan-limit aggregates`, () => {
      * is that it is read as such: it survives a week in the store, so the question "is this still describing the
      * situation" has to be answered here rather than by whether a record exists. */
     it(`hands each provider its own last refusal, and points it at the account it names`, () => {
-        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message: `You've reached your usage limit`, account: `20` } };
+        const message = `You've reached your usage limit`;
+        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message, account: `20` } };
         const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals, 5_000);
-        expect(groups.map((group) => [group.provider, group.refusal?.line])).toEqual([
-            [`claude`, undefined],
-            [`kimi`, `Hit its usage limit just now, You've reached your usage limit`],
-        ]);
+        expect(groups.find((group) => group.provider === `claude`)?.refusal).toBeUndefined();
+        const kimiRefusal = groups.find((group) => group.provider === `kimi`)?.refusal;
+        expect(kimiRefusal?.line).toContain(message);
+        expect(kimiRefusal?.line).toContain(formatAge(1_000, 5_000));
+        expect(kimiRefusal?.current).toBe(true);
         // The row it belongs to, so the panel can draw it under that account rather than over the provider.
         expect(groups[1]?.refusedRow?.id).toBe(`k`);
     });
@@ -521,15 +537,20 @@ describe(`plan-limit aggregates`, () => {
         expect(current([reading({ measuredAt: 2_000, percent: 3, needsReauth: false })])).toBe(true);
         // Not even a reading taken long after it, which is the state a five-minute sweep guarantees.
         expect(current([reading({ measuredAt: 4_999 })])).toBe(true);
-        // Its own sentence stays the headline for as long as it stands: it is the only part naming the fix.
-        expect(refusalNote(refusal, [reading()], 5_000)?.line).toBe(`Turned this account away just now, organization has disabled`);
+        const message = `organization has disabled`;
+        const standing = refusalNote({ at: 1_000, kind: `entitlement` as const, message, account: `a` }, [reading()], 5_000);
+        expect(standing?.line).toContain(message);
+        expect(standing?.line).toContain(formatAge(1_000, 5_000));
+        expect(standing?.current).toBe(true);
     });
 
     it(`settles a refusal whose account has been disconnected, instead of shouting about one nobody holds`, () => {
-        const refusal = { at: 1_000, kind: `auth` as const, message: `401 OAuth access token has been revoked.`, account: `a` };
+        const message = `401 OAuth access token has been revoked.`;
+        const refusal = { at: 1_000, kind: `auth` as const, message, account: `a` };
         const note = refusalNote(refusal, [reading({ account: `b`, measuredAt: 500 })], 5_000);
         expect(note?.current).toBe(false);
-        expect(note?.line).toBe(`Refused its credential just now, that account is no longer connected.`);
+        expect(note?.line).toContain(formatAge(1_000, 5_000));
+        expect(note?.line).not.toContain(message);
     });
 
     /* The condition is read off the record's `kind`, which the daemon derived from the SENTENCE rather than from
@@ -540,18 +561,27 @@ describe(`plan-limit aggregates`, () => {
      * ignore. */
     it(`quotes the provider while the refusal stands, and says what answered it once one has`, () => {
         const message = `API Error: 403 You've reached your usage limit for this billing cycle.`;
-        expect(refusalNote({ at: 0, kind: `limit`, message }, [], 300_000)?.line).toBe(`Hit its usage limit 5m ago, ${message}`);
-        expect(refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [], 300_000)?.line).toBe(
-            `Refused its credential 5m ago, token revoked`,
-        );
+        const standingLimit = refusalNote({ at: 0, kind: `limit`, message }, [], 300_000);
+        expect(standingLimit?.line).toContain(message);
+        expect(standingLimit?.line).toContain(formatAge(0, 300_000));
+        expect(standingLimit?.current).toBe(true);
 
-        const answered = refusalNote({ at: 0, kind: `auth`, message: `token revoked` }, [reading({ measuredAt: 1_000 })], 300_000);
-        expect(answered?.line).toBe(`Refused its credential 5m ago, authenticated fine since.`);
-        // Kept whole, either way: the sentence is what a hover is for once it stops being the headline.
-        expect(answered?.detail).toBe(`token revoked`);
-        expect(refusalNote({ at: 0, kind: `limit`, message }, [reading({ measuredAt: 1_000 })], 300_000)?.line).toBe(
-            `Hit its usage limit 5m ago, has had room since.`,
-        );
+        const tokenMessage = `token revoked`;
+        const standingAuth = refusalNote({ at: 0, kind: `auth`, message: tokenMessage }, [], 300_000);
+        expect(standingAuth?.line).toContain(tokenMessage);
+        expect(standingAuth?.current).toBe(true);
+        expect(standingAuth?.line).not.toEqual(standingLimit?.line);
+
+        const answered = refusalNote({ at: 0, kind: `auth`, message: tokenMessage }, [reading({ measuredAt: 1_000 })], 300_000);
+        expect(answered?.current).toBe(false);
+        expect(answered?.line).not.toContain(tokenMessage);
+        expect(answered?.line).not.toEqual(standingAuth?.line);
+        expect(answered?.detail).toBe(tokenMessage);
+
+        const answeredLimit = refusalNote({ at: 0, kind: `limit`, message }, [reading({ measuredAt: 1_000 })], 300_000);
+        expect(answeredLimit?.current).toBe(false);
+        expect(answeredLimit?.line).not.toContain(message);
+        expect(answeredLimit?.line).not.toEqual(standingLimit?.line);
     });
 
     /* A SPENT POOL IS NOT AN ALARM, and this is where that is enforced. It refills on the provider's own

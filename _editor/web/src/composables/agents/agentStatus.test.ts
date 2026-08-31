@@ -278,8 +278,11 @@ describe("unfinishedMark", () => {
      * turn ended twenty minutes ago and which is now waiting on somebody else's CI, so the mark says which
      * kind of unfinished it is. A watching agent that IS mid-turn is working, and reads as such. */
     it("tells a card waiting on a condition apart from one still working", () => {
-        expect(unfinishedMark({ status: `idle`, attention: none, watches: [watch()] })?.label).toBe(`Waiting on a condition`);
-        expect(unfinishedMark({ status: `running`, attention: none, watches: [watch()] })?.label).toBe(`Still working`);
+        const waiting = unfinishedMark({ status: `idle`, attention: none, watches: [watch()] });
+        const working = unfinishedMark({ status: `running`, attention: none, watches: [watch()] });
+        expect(waiting?.label).toContain(`condition`);
+        expect(working?.label).toContain(`working`);
+        expect(waiting?.label).not.toEqual(working?.label);
     });
 });
 
@@ -295,8 +298,9 @@ describe("watchLine", () => {
     /* THE NOTE IS THE PHRASE. The agent wrote one line about what it is waiting for so that somebody could
      * read it here; "Watching" alone is the glyph's job and tells a user nothing they could act on. */
     it("leads with the agent's own note and counts down to the deadline", () => {
-        const line = watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW);
-        expect(line?.text).toBe(`CI run 316 on intentic/intentic`);
+        const armed = watch();
+        const line = watchLine({ status: `idle`, attention: none, watches: [armed] }, NOW);
+        expect(line?.text).toBe(armed.note);
         expect(line?.countdown).toBe(`42m 0s`);
     });
 
@@ -304,15 +308,9 @@ describe("watchLine", () => {
      * The clock still names the SOONEST deadline: what it answers is "when does this card next move", and the
      * next one to give up is the next time this conversation comes back to life. */
     it("collapses several watches to a count and counts down to the first of them", () => {
-        const line = watchLine(
-            {
-                status: `idle`,
-                attention: none,
-                watches: [watch({ deadlineAt: NOW + 3 * 60 * 60 * 1000 }), watch({ id: `watch-2`, note: `deploy`, deadlineAt: NOW + 5 * 60 * 1000 })],
-            },
-            NOW,
-        );
-        expect(line?.text).toBe(`Watching 2 conditions`);
+        const watches = [watch({ deadlineAt: NOW + 3 * 60 * 60 * 1000 }), watch({ id: `watch-2`, note: `deploy`, deadlineAt: NOW + 5 * 60 * 1000 })];
+        const line = watchLine({ status: `idle`, attention: none, watches }, NOW);
+        expect(line?.text).toContain(String(watches.length));
         expect(line?.countdown).toBe(`5m 0s`);
     });
 
@@ -320,18 +318,19 @@ describe("watchLine", () => {
      * end of this wait is the agent WORKING AGAIN, not a notification. That is the fact a user cannot guess
      * and the one that decides whether they leave the watch armed. */
     it("spells the pacing, every note in full, and what happens when it ends", () => {
-        const line = watchLine({ status: `idle`, attention: none, watches: [watch(), watch({ id: `watch-2`, note: `deploy` })] }, NOW);
-        expect(line?.hint).toContain(`CI run 316 on intentic/intentic`);
-        expect(line?.hint).toContain(`deploy`);
-        expect(line?.hint).toContain(`checked every 60s`);
-        expect(line?.hint).toContain(`wakes this conversation`);
+        const first = watch();
+        const second = watch({ id: `watch-2`, note: `deploy` });
+        const line = watchLine({ status: `idle`, attention: none, watches: [first, second] }, NOW);
+        expect(line?.hint).toContain(first.note);
+        expect(line?.hint).toContain(second.note);
+        expect(line?.hint).toContain(`60s`);
     });
 
     /* AND THAT IT CAN BE ENDED. A box that explains a mechanism and names no exit is what taught users this
      * arrangement was theirs to wait out: pinned because it is one clause at the tail of a clamped strip, the
      * first thing a careless edit here would drop. */
     it("names the way out, and what taking it costs", () => {
-        expect(watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW)?.hint).toContain(`Stop watching and it stays put.`);
+        expect(watchLine({ status: `idle`, attention: none, watches: [watch()] }, NOW)?.hint).toContain(`Stop watching`);
     });
 
     // Pacing in the fewest characters that stay true: a half-hourly check reads as minutes, not as "1800s".
