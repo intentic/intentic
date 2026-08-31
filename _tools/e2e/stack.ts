@@ -98,6 +98,11 @@ export const seed = async (): Promise<{ sessionToken: string; sandboxToken: stri
                 ownerId: SEED.userId,
                 token: sandboxToken,
                 tokenDigest: createHash(`sha256`).update(sandboxToken).digest(`hex`),
+                // The same 12-hex id the API derives on create (sandboxIdFromToken, sandbox.routes.ts): it is
+                // `@unique` and every public hostname embeds it, so a seeded row without one is a sandbox no
+                // URL can name. Spelled out rather than imported because e2e does not depend on
+                // sandbox-contract, and one `.slice(12)` is a cheaper thing to keep in step than a dependency.
+                tunnelId: createHash(`sha256`).update(sandboxToken).digest(`hex`).slice(0, 12),
                 daemonUrl: DAEMON_URL,
                 lastSeenAt: new Date(),
             },

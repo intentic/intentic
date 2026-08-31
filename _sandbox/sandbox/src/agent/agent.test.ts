@@ -542,7 +542,7 @@ test("ExitPlanMode uses the adjacent prose as its plan because the current SDK c
 });
 
 test("ExitPlanMode refuses to raise an empty approval card", async () => {
-    let result: PermissionResult | undefined;
+    let result: PermissionResult | null | undefined;
     const frames = await collect(
         { ...request, permissionMode: "plan" },
         async function* (args) {

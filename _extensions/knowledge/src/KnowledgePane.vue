@@ -7,7 +7,6 @@ import {
     InfoTable,
     Markdown,
     NoteEditor,
-    SegmentedControl,
     StatusBadge,
     type StatusVariant,
     useNoteDraft,
@@ -25,10 +24,21 @@ import { useNote, useNoteMutations } from "./useKnowledge";
  * rather than any other: the three views, the head's facts, and the connections.
  *
  * THREE VIEWS OF THE SAME THING, because a knowledge note genuinely has three: the prose you read, the map of
- * what it connects to, and the file underneath. They are one control rather than three panels stacked down the
+ * what it connects to, and the file underneath. They are one switch rather than three panels stacked down the
  * pane: this lives in a hub section, which is a band rather than a page, and a map worth reading needs most of
  * that band's height. Reading is the default; the other two are one click and they remember nothing, so nobody
  * lands somewhere they did not choose.
+ *
+ * THE SWITCH IS TWO WAYS OUT OF THE NOTE, NOT A THREE-WAY PICKER, which is the shape the workspace's markdown
+ * viewer already settled on and the shape that fits on the header's row. A <SegmentedControl> spelling all
+ * three is ~140px wide and could not share a line with the note's name and the Copy/Edit/Delete cluster, so it
+ * had a row of its own under the header: ~34px of every screenful, permanently, for a control that is pressed
+ * once a session. As two glyph toggles it is ~62px and rides beside the others.
+ *
+ * Reading is not one of the three buttons because reading is not a destination: it is where the note IS, and
+ * both toggles return to it, which is why each one turns into an eye while it is the view on screen. Losing
+ * the words costs discoverability, and that is bought back the way the viewer buys it, with a tooltip and an
+ * accessible name that say what the press will DO rather than what the button is called.
  *
  * ── THE CONNECTIONS SIT WHERE THE QUESTION THEY ANSWER IS ASKED ───────────────────────────────────────────
  *
@@ -156,23 +166,33 @@ const onProseClick = (event: MouseEvent): void => {
             </template>
         </template>
 
-        <!-- WHICH VIEW rides a row of its own rather than the header's, and that is width, not taste: a
-                 header's title, badges and actions share ONE shrinking row, and this control is ~140px of it:
-                 beside three icon buttons in a pane this narrow, the note's own NAME truncated to a single
-                 letter. It also belongs here on the merits: the switch is about the body underneath it, not
-                 about the note the header names. -->
-        <template #strips>
-            <div class="flex items-center gap-2 border-b border-line-subtle px-4 py-1.5">
-                <SegmentedControl
-                    v-model="view"
-                    size="xs"
-                    :options="[
-                        { label: `Read`, value: `read` },
-                        { label: `Map`, value: `map`, title: `What this note connects to, a step or two out` },
-                        { label: `Source`, value: `source`, title: `The raw markdown, header included` },
-                    ]"
-                />
-            </div>
+        <!-- WHICH VIEW, on the header's own row and to the left of Copy/Edit/Delete: the caller's controls go
+                 first because they are about the note, where that cluster is about the FILE. Both are one press
+                 away from reading and neither remembers anything, so there is no state here to get lost in.
+                 <NoteEditor> drops this whole slot while a draft is open, which is right: an editor is already
+                 the source, so a button offering to show it would do nothing, and one offering the map would
+                 throw the draft off screen. -->
+        <template #actions>
+            <button
+                type="button"
+                :class="ui.iconButton(`h-7 w-7`)"
+                :aria-pressed="view === `map`"
+                :aria-label="view === `map` ? `Back to the note` : `Show what this note connects to`"
+                v-tooltip.top="view === `map` ? `Back to the note` : `Map: what this note connects to`"
+                @click="view = view === `map` ? `read` : `map`"
+            >
+                <Icon :name="view === `map` ? `eye` : `sitemap`" />
+            </button>
+            <button
+                type="button"
+                :class="ui.iconButton(`h-7 w-7`)"
+                :aria-pressed="view === `source`"
+                :aria-label="view === `source` ? `Back to the note` : `Show the raw markdown`"
+                v-tooltip.top="view === `source` ? `Back to the note` : `Source: the raw markdown, header included`"
+                @click="view = view === `source` ? `read` : `source`"
+            >
+                <Icon :name="view === `source` ? `eye` : `code`" />
+            </button>
         </template>
 
         <template #confirm> Delete "{{ note?.summary.title }}"? Anything that links to it becomes a link to a note nobody has written. </template>
