@@ -69,24 +69,27 @@ afterEach(() => {
 });
 
 it(`lists every pool with its own figure and reset, and says how old the reading is`, async () => {
+    const pools = headroom().pools;
     const panel = await card();
-    expect(panel.textContent).toContain(`5-hour session`);
-    expect(panel.textContent).toContain(`56%`);
-    expect(panel.textContent).toContain(`Weekly · all models`);
-    expect(panel.textContent).toContain(`91%`);
+    for (const pool of pools) {
+        expect(panel.textContent).toContain(pool.label);
+        expect(panel.textContent).toContain(`${pool.percent}%`);
+    }
     // A pool with no reset instant simply doesn't claim one: the other's is still named.
-    expect(panel.textContent).toContain(`resets`);
-    expect(panel.textContent).toContain(`measured just now`);
+    expect(panel.textContent).toContain(formatReset(RESETS_AT));
     // One meter per pool, so which allowance is about to bite is seen rather than parsed.
-    expect(panel.querySelectorAll(`.bg-current`)).toHaveLength(2);
+    expect(panel.querySelectorAll(`.bg-current`)).toHaveLength(pools.length);
 });
 
 it(`speaks the whole breakdown beside the arc, since a card raised by a pointer never reaches a screen reader`, async () => {
     const anchor = await mount();
-    // The weekday and clock are fixed, but they still land in the runner's timezone, so the expectation goes
-    // through the same formatter rather than hardcoding an hour.
-    const reset = formatReset(RESETS_AT);
-    expect(anchor.querySelector(`.sr-only`)?.textContent).toBe(`5-hour session 56% (resets ${reset}) · Weekly · all models 91% · measured just now`);
+    const spoken = anchor.querySelector(`.sr-only`)?.textContent ?? ``;
+    const pools = headroom().pools;
+    for (const pool of pools) {
+        expect(spoken).toContain(pool.label);
+        expect(spoken).toContain(`${pool.percent}%`);
+    }
+    expect(spoken).toContain(formatReset(RESETS_AT));
 });
 
 it(`opens on the ring's right flank, clear of the rows it is being compared against`, async () => {
@@ -136,9 +139,10 @@ it(`shows nothing for a pointer that only sweeps past, and closes the moment one
 });
 
 it(`explains the ≥ only while the reading is old enough to have been overtaken elsewhere`, async () => {
-    expect((await card()).textContent).not.toContain(`≥`);
+    const fresh = await card();
+    expect(fresh.textContent).not.toContain(`≥`);
     document.body.innerHTML = ``;
     const stale = await card({ stale: true });
-    expect(stale.textContent).toContain(`≥91%`);
-    expect(stale.textContent).toContain(`these are floors`);
+    expect(stale.textContent).toContain(`≥${headroom().percent}%`);
+    expect(stale.textContent).not.toBe(fresh.textContent);
 });

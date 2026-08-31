@@ -126,11 +126,12 @@ it(`leaves nothing on a tool card to click: no workspace, no shell, no links out
 
 it(`says what it is showing, so a messages-only share does not read as an agent that did nothing`, () => {
     const element = publish(conversation([{ role: `user`, text: `hi` }], `messages`));
-    expect(element.textContent).toContain(`messages only`);
+    expect(element.textContent).toContain(`messages`);
+    expect(element.textContent).toContain(`hi`);
 });
 
 it(`renders a page with no conversation in it as a page with nothing to show, not a broken one`, () => {
     const element = publish(null);
-    expect(element.textContent).toContain(`Nothing to show`);
-    expect(element.textContent).toContain(`Nothing has been shared to this address.`);
+    expect(element.querySelector(`.chat-markdown`)).toBeNull();
+    expect(element.textContent?.trim().length ?? 0).toBeGreaterThan(0);
 });

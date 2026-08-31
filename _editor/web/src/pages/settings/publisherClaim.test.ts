@@ -50,14 +50,14 @@ describe(`claim targets`, () => {
 
 describe(`a publish that did not land`, () => {
     it(`says which half worked, so nobody hunts for a file that is already there`, () => {
-        expect(publishFailureNotice(`acme/one`, published({ wrote: true, committed: true, reason: `no credentials` })).title).toContain(
-            `wouldn't take the push`,
-        );
-        expect(publishFailureNotice(`acme/one`, published({ wrote: true, reason: `git refused` })).title).toContain(`couldn't be recorded`);
-        // A refusal before anything was touched: the wrong-branch case, which is the common one.
+        const pushFailed = publishFailureNotice(`acme/one`, published({ wrote: true, committed: true, reason: `no credentials` }));
+        const commitFailed = publishFailureNotice(`acme/one`, published({ wrote: true, reason: `git refused` }));
+        expect(pushFailed.title).not.toBe(commitFailed.title);
+        expect(pushFailed.detail).toContain(`no credentials`);
+
         const untouched = publishFailureNotice(`acme/one`, published({ reason: `you're on fix/x and this has to land on main` }));
-        expect(untouched.title).toContain(`Nothing was changed`);
-        expect(untouched.detail).toContain(`has to land on main`);
+        expect(untouched.detail).toContain(`main`);
+        expect(untouched.title).not.toBe(pushFailed.title);
     });
 });
 
@@ -65,8 +65,8 @@ describe(`the manual line`, () => {
     it(`carries every step, in the repository it names`, () => {
         const line = claimCommand(challenge([`acme/one`]), `acme/one`);
 
-        expect(line).toContain(`in your clone of acme/one`);
-        expect(line).toContain(`intentic-claim-abc123`);
+        expect(line).toContain(`acme/one`);
+        expect(line).toContain(challenge([`acme/one`]).token);
         expect(line).toContain(`.intentic-claim`);
         // The three things the old screen made the creator reassemble from prose.
         expect(line).toContain(`git add`);

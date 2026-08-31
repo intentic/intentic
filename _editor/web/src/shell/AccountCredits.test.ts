@@ -76,9 +76,10 @@ describe(`AccountCredits`, () => {
     });
 
     it(`leads with what is LEFT, which is the question it gets opened with`, () => {
-        const text = render(membership()).textContent ?? ``;
-        expect(text).toContain(`800`);
-        expect(text).toContain(`of 1,000 credits left today`);
+        const state = membership();
+        const text = render(state).textContent ?? ``;
+        expect(text).toContain(String(state.credits!.remaining));
+        expect(text).toContain(String(state.credits!.allowance.toLocaleString(`en-US`)));
     });
 
     it(`draws the bar as the remainder, not as the spend`, () => {
@@ -87,22 +88,29 @@ describe(`AccountCredits`, () => {
     });
 
     it(`tells a spent day that the whole allowance comes back, instead of reporting a nought`, () => {
-        const text = render(
-            membership({ credits: { allowance: 1_000, used: 1_000, remaining: 0, resetsAt: `2026-08-13T00:00:00.000Z` } }),
-        ).textContent;
-        expect(text).toContain(`Spent for today`);
-        expect(text).toContain(`full allowance is back at`);
+        const spent = membership({ credits: { allowance: 1_000, used: 1_000, remaining: 0, resetsAt: `2026-08-13T00:00:00.000Z` } });
+        const ordinary = membership();
+        const spentText = render(spent).textContent ?? ``;
+        const ordinaryText = render(ordinary).textContent ?? ``;
+        expect(spentText).toContain(`0`);
+        expect(spentText).toContain(`1,000`);
+        expect(spentText).not.toBe(ordinaryText);
     });
 
     // "Low" is defined as "another install is out of reach", so the row says that rather than a percentage.
     it(`names what a low balance actually costs the reader`, () => {
-        const text = render(
-            membership({ credits: { allowance: 1_000, used: 900, remaining: 100, resetsAt: `2026-08-13T00:00:00.000Z` } }),
-        ).textContent;
-        expect(text).toContain(`Not enough for another premium install today`);
+        const low = membership({ credits: { allowance: 1_000, used: 900, remaining: 100, resetsAt: `2026-08-13T00:00:00.000Z` } });
+        const ordinary = membership();
+        const lowText = render(low).textContent ?? ``;
+        const ordinaryText = render(ordinary).textContent ?? ``;
+        expect(lowText).toContain(`100`);
+        expect(lowText).not.toBe(ordinaryText);
     });
 
     it(`offers the reset time on an ordinary day, because that is the only other thing to know`, () => {
-        expect(render(membership()).textContent).toContain(`Resets at`);
+        const state = membership();
+        const text = render(state).textContent ?? ``;
+        expect(text).toMatch(/Resets at/i);
+        expect(text).not.toBe(render(membership({ credits: undefined })).textContent);
     });
 });

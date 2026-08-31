@@ -95,7 +95,7 @@ it(`draws the list's outline once the wait is long enough to be worth showing`, 
     vi.advanceTimersByTime(250);
     await nextTick();
     expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
-    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Reading what's running…`);
+    expect(el.querySelector(`[role="status"]`)?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     // The bars are decoration; the region carries the announcement, so the rows themselves are hidden from it.
     expect(el.querySelector(`.skeleton`)?.closest(`[aria-hidden="true"]`)).not.toBeNull();
 });

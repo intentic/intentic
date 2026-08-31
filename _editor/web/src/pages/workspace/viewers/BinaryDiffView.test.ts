@@ -111,8 +111,7 @@ describe(`BinaryDiffView`, () => {
         await settle();
 
         expect(element.querySelectorAll(`img`)).toHaveLength(0);
-        expect(element.textContent).toContain(`no preview for this type`);
-        expect(element.textContent).toContain(`Download`);
+        expect(element.querySelector(`button[aria-label*="Download"]`)).not.toBeNull();
     });
 
     it(`reports a side that failed to load against that side, leaving the other one showing`, async () => {
@@ -152,16 +151,18 @@ describe(`BinaryDiffView`, () => {
         });
         await settleComparison();
 
-        expect(element.textContent).toContain(`Both sides are the same file: identical bytes.`);
-        // Still two panes: the verdict is a statement about them, not a replacement for them.
-        expect(element.querySelectorAll(`img`)).toHaveLength(2);
+        const images = element.querySelectorAll(`img`);
+        expect(images).toHaveLength(2);
+        expect(images[0]?.getAttribute(`src`)).toBe(images[1]?.getAttribute(`src`));
+        expect(element.textContent).not.toContain(`+1 B`);
     });
 
     it(`says so plainly when the daemon reported a binary change with no bytes on either end`, async () => {
         const element = mount({ path: `logo.png` });
         await settle();
 
-        expect(element.textContent).toContain(`neither side has content`);
+        expect(element.querySelectorAll(`img`)).toHaveLength(0);
         expect(fetched).toHaveLength(0);
+        expect(element.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     });
 });

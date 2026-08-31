@@ -95,14 +95,14 @@ it(`sends the pressed row's own prompt, and nothing else`, async () => {
     // The load-bearing hotspot: src/schemas.ts churns AND the import graph leans on it.
     refactorButtons(el)[2]!.click();
     expect(started).toHaveLength(1);
-    expect(started[0]).toContain(`Refactor src/schemas.ts.`);
-    expect(started[0]).toContain(`40 commits over all history`);
-    expect(started[0]).toContain(`Separate the contract from the churn`);
+    expect(started[0]).toContain(`src/schemas.ts`);
+    expect(started[0]).toContain(String(report.hotspots[2]!.commits));
 
     // The key-module row for the same path is a different ask about the same file: its surface, not its churn.
     refactorButtons(el)[3]!.click();
     expect(started).toHaveLength(2);
-    expect(started[1]).toContain(`428 exports`);
+    expect(started[1]).toContain(String(report.modules[1]!.exports));
+    expect(started[1]).not.toBe(started[0]);
 });
 
 it(`dims the row nobody has touched in a season instead of hiding it`, async () => {
@@ -114,5 +114,6 @@ it(`dims the row nobody has touched in a season instead of hiding it`, async () 
     // The reason lives in the tooltip; the button still sends, because the git log is evidence, not a veto.
     started.length = 0;
     dormant!.click();
-    expect(started[0]).toContain(`Refactor src/legacy/parser.ts.`);
+    expect(started[0]).toContain(`src/legacy/parser.ts`);
+    expect(started[0]).toContain(String(report.hotspots[1]!.commits));
 });

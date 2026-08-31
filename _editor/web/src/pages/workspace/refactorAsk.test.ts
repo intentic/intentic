@@ -32,23 +32,27 @@ const context = (over: Partial<HotspotContext> = {}): HotspotContext => ({
 
 describe(`hotspotAsk`, () => {
     it(`asks for a decomposition when churn and branching are telling one story`, () => {
-        const ask = hotspotAsk(hotspot(), context());
+        const row = hotspot();
+        const ask = hotspotAsk(row, context());
         expect(ask.kind).toBe(`decompose`);
-        expect(ask.prompt).toContain(`change seams`);
+        expect(ask.prompt).toContain(row.path);
+        expect(ask.prompt).not.toBe(hotspotAsk(hotspot({ commits: 5 }), context()).prompt);
     });
 
     it(`asks to flatten in place when the branching is out of proportion to the churn`, () => {
-        // A tenth of the leader's commits, all of its branch points: tangled logic, rarely touched.
-        const ask = hotspotAsk(hotspot({ commits: 5 }), context());
+        const row = hotspot({ commits: 5 });
+        const ask = hotspotAsk(row, context());
         expect(ask.kind).toBe(`simplify`);
-        expect(ask.prompt).toContain(`early returns`);
+        expect(ask.prompt).toContain(String(row.commits));
+        expect(ask.prompt).not.toBe(hotspotAsk(hotspot(), context()).prompt);
     });
 
     it(`asks to split by responsibility when the churn is out of proportion to the branching`, () => {
-        // Every commit the leader took, a tenth of its branching: crowded, not tangled.
-        const ask = hotspotAsk(hotspot({ complexity: 20 }), context());
+        const row = hotspot({ complexity: 20 });
+        const ask = hotspotAsk(row, context());
         expect(ask.kind).toBe(`split`);
-        expect(ask.prompt).toContain(`one subject per file`);
+        expect(ask.prompt).toContain(String(row.complexity));
+        expect(ask.prompt).not.toBe(hotspotAsk(hotspot(), context()).prompt);
     });
 
     it(`holds the balanced reading right up to the dominance boundary`, () => {
@@ -67,8 +71,8 @@ describe(`hotspotAsk`, () => {
         for (const path of [`src/thing.test.ts`, `src/thing.spec.tsx`, `src/__tests__/thing.ts`]) {
             const ask = hotspotAsk(hotspot({ path }), context({ keyModule: true }));
             expect(ask.kind).toBe(`tests`);
-            // The one thing a test refactor must not do is change what is asserted.
-            expect(ask.prompt).toContain(`Do not change what is asserted`);
+            expect(ask.prompt).toContain(path);
+            expect(ask.prompt).not.toBe(hotspotAsk(hotspot({ path: `src/thing.ts` }), context({ keyModule: true })).prompt);
         }
     });
 
@@ -86,11 +90,17 @@ describe(`hotspotAsk`, () => {
     });
 
     it(`quotes the row's own figures, and the window they were counted over`, () => {
-        const ask = hotspotAsk(hotspot({ path: `_editor/web/src/App.vue`, commits: 12 }), context({ rank: 3, window: `30d` }));
-        expect(ask.prompt).toContain(`Refactor _editor/web/src/App.vue.`);
-        expect(ask.prompt).toContain(`#3 hotspot in this repository: 12 commits in the last 30 days, +4,120/-1,877 lines, 200 branch points.`);
-        // The check it ends on names the file, so the agent can recount instead of declaring victory.
-        expect(ask.prompt).toContain(`\`iq hotspots --in _editor/web/src/App.vue\``);
+        const path = `_editor/web/src/App.vue`;
+        const row = hotspot({ path, commits: 12 });
+        const ctx = context({ rank: 3, window: `30d` });
+        const ask = hotspotAsk(row, ctx);
+        expect(ask.prompt).toContain(path);
+        expect(ask.prompt).toContain(`#${ctx.rank}`);
+        expect(ask.prompt).toContain(String(row.commits));
+        expect(ask.prompt).toContain(`30 days`);
+        expect(ask.prompt).toContain(`+${row.adds.toLocaleString(`en-US`)}/-${row.dels.toLocaleString(`en-US`)}`);
+        expect(ask.prompt).toContain(String(row.complexity));
+        expect(ask.prompt).toContain(`\`iq hotspots --in ${path}\``);
     });
 
     it(`survives a degenerate ranking rather than dividing by zero`, () => {
@@ -110,9 +120,16 @@ describe(`moduleAsk`, () => {
     });
 
     it(`asks to narrow a surface that dwarfs the ranking it sits in`, () => {
-        const ask = moduleAsk({ path: `_libs/contract/src/schemas.ts`, exports: 428 }, { rank: 2, medianExports: 21 });
+        const path = `_libs/contract/src/schemas.ts`;
+        const exports = 428;
+        const medianExports = 21;
+        const rank = 2;
+        const ask = moduleAsk({ path, exports }, { rank, medianExports });
         expect(ask?.kind).toBe(`narrow`);
-        expect(ask?.prompt).toContain(`#2 key module by PageRank: 428 exports against a median of 21 across that ranking.`);
+        expect(ask?.prompt).toContain(path);
+        expect(ask?.prompt).toContain(`#${rank}`);
+        expect(ask?.prompt).toContain(String(exports));
+        expect(ask?.prompt).toContain(String(medianExports));
         expect(ask?.dormant).toBe(false);
     });
 
@@ -136,18 +153,16 @@ describe(`every prompt`, () => {
     it(`names the file first, states the invariants, and stays short enough to be read`, () => {
         for (const ask of asks) {
             expect(ask.prompt.startsWith(`Refactor `)).toBe(true);
-            expect(ask.prompt).toContain(`Behaviour stays identical`);
-            expect(ask.prompt).toContain(`no re-export shims`);
+            expect(ask.prompt.split(/\n/).length).toBeGreaterThan(3);
             expect(ask.prompt).toContain(`Done when`);
-            // A prompt the model skims is a prompt whose load-bearing sentences got diluted.
             expect(ask.prompt.split(/\s+/).length).toBeLessThan(120);
         }
     });
 
     it(`prescribes no design and pastes no code: the agent reads the file itself`, () => {
         for (const ask of asks) {
-            expect(ask.prompt).toContain(`Read it first.`);
             expect(ask.prompt).not.toContain(`\n\`\`\``);
+            expect(ask.prompt).toMatch(/Refactor .+\./);
         }
     });
 

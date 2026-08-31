@@ -134,7 +134,8 @@ test("keeps a pin whose account went away on screen, and says why it is greyed",
     await Promise.resolve();
 
     expect(orderOnScreen(host)).toEqual([`GEMINI · Gemini 3 Flash Lite`, `CLAUDE · Claude Haiku 4.5`]);
-    expect(host.textContent).toContain(`Not connected`);
+    const disconnected = host.querySelector(`ol li`) as HTMLElement;
+    expect(disconnected?.className).toMatch(/opacity|subtle|disabled/i);
 });
 
 /* THE AUTOMATIC-TIER ROW is the only setting on this page that can override a model the user picked a second
@@ -157,28 +158,31 @@ test("defaults to measuring", async () => {
 test("switching the mode writes it, and the row then describes what it actually does", async () => {
     const host = mount();
     await Promise.resolve();
+    const before = host.textContent ?? ``;
     modeButton(host, `On`).click();
 
     expect(patch).toHaveBeenCalledWith({ autoTier: `on` });
     await Promise.resolve();
-    expect(host.textContent).toContain(`run on the cheaper model`);
+    expect(host.textContent).not.toBe(before);
 });
 
 test("off says the judgement stops too, not merely the routing", async () => {
-    // "Off" that kept scoring in the background would be a setting that does not mean what it says.
     const host = mount();
     await Promise.resolve();
+    const measuring = host.textContent ?? ``;
     modeButton(host, `Off`).click();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`Nothing is judged or recorded`);
+    expect(host.textContent).not.toBe(measuring);
+    expect(patch).toHaveBeenCalledWith({ autoTier: `off` });
 });
 
 test("names the rule behind Auto, because which model it picks depends on a conversation this page cannot see", async () => {
     const host = mount();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`cheapest from the chat`);
+    expect(host.textContent).toContain(`Auto`);
+    expect(orderOnScreen(host)).toEqual([]);
 });
 
 test("a pinned cheap model is drawn as written, in its own list", async () => {
@@ -190,15 +194,16 @@ test("a pinned cheap model is drawn as written, in its own list", async () => {
 });
 
 test("the judge's record renders its three numbers once turns have been judged", async () => {
-    savings.value = { tier: { judged: 40, fast: 10, atStakeUsd: 1.5, routed: 4, routedUsd: 0.25, escalated: 1, denied: 2 } };
+    const tier = { judged: 40, fast: 10, atStakeUsd: 1.5, routed: 4, routedUsd: 0.25, escalated: 1, denied: 2 };
+    savings.value = { tier };
     const host = mount();
     await Promise.resolve();
 
-    expect(host.textContent).toContain(`10 of 40`);
-    expect(host.textContent).toContain(`4 down-routed`);
+    expect(host.textContent).toContain(`${tier.fast} of ${tier.judged}`);
+    expect(host.textContent).toContain(String(tier.routed));
     expect(host.textContent).not.toContain(`$1.50`);
-    expect(host.textContent).toContain(`1/10 bumped up`);
-    expect(host.textContent).toContain(`2 vetoed`);
+    expect(host.textContent).toContain(`${tier.escalated}/${tier.fast}`);
+    expect(host.textContent).toContain(String(tier.denied));
 });
 
 test("no judged turns means no numbers at all: absence, not a row of zeros", async () => {

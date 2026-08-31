@@ -37,26 +37,37 @@ const render = (status: CapabilitySummary[`status`], state: ConnectionState = ST
 };
 
 it("sets the pairing code out where it can be read and copied, with the phone's own steps under it", () => {
+    const detail = `Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.`;
     const html = render({
         state: `pending`,
-        detail: `Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.`,
+        detail,
         code: `ABCDEFGH`,
     });
     expect(html).toContain(`ABCDEFGH`);
-    expect(html).toContain(`Link with phone number instead`);
+    expect(html).toContain(detail);
     // The wide tracking IS the feature: it is what makes a run of eight characters transcribable by hand, so
     // it is asserted rather than left to a class list nobody would notice going quiet.
     expect(html).toContain(`tracking-[0.3em]`);
 });
 
 it("says what it is waiting for before any code exists: the seconds that used to read as connected", () => {
-    const html = render({ state: `pending`, detail: `waiting for WhatsApp to issue a pairing code…` });
-    expect(html).toContain(`waiting for WhatsApp to issue a pairing code`);
+    const waiting = `waiting for WhatsApp to issue a pairing code…`;
+    const withCode = render({
+        state: `pending`,
+        detail: `Type this code on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead.`,
+        code: `ABCDEFGH`,
+    });
+    const html = render({ state: `pending`, detail: waiting });
+    expect(html).toContain(waiting);
+    expect(html).not.toContain(`ABCDEFGH`);
+    expect(html).not.toBe(withCode);
 });
 
 it("carries WhatsApp's own refusal rather than a green badge", () => {
-    const html = render({ state: `pending`, detail: `WhatsApp refused that number: Not a WhatsApp account` });
-    expect(html).toContain(`Not a WhatsApp account`);
+    const refusal = `WhatsApp refused that number: Not a WhatsApp account`;
+    const html = render({ state: `pending`, detail: refusal });
+    expect(html).toContain(refusal);
+    expect(html).not.toContain(`tracking-[0.3em]`);
 });
 
 it("a connected row keeps its one line: nothing outstanding, nothing to show", () => {

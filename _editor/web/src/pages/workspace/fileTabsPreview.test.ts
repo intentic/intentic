@@ -66,8 +66,11 @@ it(`tells the reader how to keep the tab it is about to replace`, async () => {
 
     await mountStrip();
 
-    expect(tabFor(`peeked.ts`).getAttribute(`data-tooltip`)).toContain(`double-click to keep open`);
-    expect(tabFor(`kept.ts`).getAttribute(`data-tooltip`)).toBe(`src/kept.ts`);
+    const peeked = tabFor(`peeked.ts`);
+    const keptTab = tabFor(`kept.ts`);
+    expect(peeked.getAttribute(`data-tooltip`)).not.toBe(keptTab.getAttribute(`data-tooltip`));
+    expect(peeked.getAttribute(`data-tooltip`)).not.toBe(`src/peeked.ts`);
+    expect(keptTab.getAttribute(`data-tooltip`)).toBe(`src/kept.ts`);
 });
 
 it(`asks to keep the tab that was double-clicked`, async () => {

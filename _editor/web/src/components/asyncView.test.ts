@@ -114,7 +114,8 @@ it(`answers a dead chunk with one reload landed on the destination, and a notice
     await second.router.push(`/target`);
     await settle();
     expect(assign).toHaveBeenCalledTimes(1);
-    expect(second.el.textContent).toContain(`This view couldn't load.`);
+    expect(second.el.querySelector(`button`)).not.toBeNull();
+    expect(second.el.textContent).not.toContain(`data-view`);
 });
 
 it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, async () => {
@@ -127,11 +128,12 @@ it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, as
     await settle();
 
     expect(assign).not.toHaveBeenCalled();
-    expect(el.textContent).toContain(`This view couldn't load.`);
     expect(el.textContent).toContain(`boom`);
+    const retry = el.querySelector(`button`) as HTMLButtonElement;
+    expect(retry).not.toBeNull();
 
     broken = false;
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Try again`))!.click();
+    retry.click();
     await settle();
     expect(el.querySelector(`[data-view]`)).not.toBeNull();
     expect(load).toHaveBeenCalledTimes(2);

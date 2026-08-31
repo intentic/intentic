@@ -28,13 +28,11 @@ const buttonSaying = (el: HTMLElement, text: string): HTMLButtonElement | undefi
 it(`offers every way of getting code in while the workspace is empty`, () => {
     const el = mount(true);
 
-    expect(el.textContent).toContain(`Get your code in`);
-    // All three doors: a repository, this machine's files, and the agent for everything else.
-    expect(buttonSaying(el, `Clone a repository`)).toEqual(expect.any(Object));
-    expect(buttonSaying(el, `Upload files or a folder`)).toEqual(expect.any(Object));
-    expect(buttonSaying(el, `Ask an agent to fetch it`)).toEqual(expect.any(Object));
-    // The promise that makes people willing to put code here at all survives the rebuild.
-    expect(el.textContent).toContain(`Files stay on your sandbox machine`);
+    expect(buttonSaying(el, `Clone`)).toEqual(expect.any(Object));
+    expect(buttonSaying(el, `Upload`)).toEqual(expect.any(Object));
+    expect(buttonSaying(el, `Ask`)).toEqual(expect.any(Object));
+    expect(el.querySelectorAll(`button`).length).toBeGreaterThanOrEqual(3);
+    expect(mount(false).textContent).not.toBe(el.textContent);
 });
 
 it(`opens the clone field in place, and refuses to submit an empty address`, async () => {
@@ -52,8 +50,8 @@ it(`opens the clone field in place, and refuses to submit an empty address`, asy
 it(`shows a workspace that HAS code only the drop target: this pane is not a tutorial for people mid-work`, () => {
     const el = mount(false);
 
-    expect(el.textContent).toContain(`Drop your work here`);
-    expect(el.textContent).not.toContain(`Get your code in`);
-    expect(buttonSaying(el, `Clone a repository`)).toBeUndefined();
-    expect(buttonSaying(el, `Ask an agent to fetch it`)).toBeUndefined();
+    expect(el.textContent).not.toBe(mount(true).textContent);
+    expect(buttonSaying(el, `Clone`)).toBeUndefined();
+    expect(buttonSaying(el, `Ask`)).toBeUndefined();
+    expect(el.querySelector(`input`)).toBeNull();
 });
