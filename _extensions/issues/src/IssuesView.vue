@@ -99,7 +99,10 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
 </script>
 
 <template>
-    <SplitView title="Issues" description="Bugs your own users hit, grouped so one crash is one row however many people it reached.">
+    <!-- `scroll="page"`: a feed, so the page scrolls it. There is no rail on this screen at all, which makes the
+         clamp even harder to defend — it was a scrollbar inside a card inside a page, in aid of keeping an index
+         on screen that does not exist here. -->
+    <SplitView title="Issues" scroll="page" description="Bugs your own users hit, grouped so one crash is one row however many people it reached.">
         <!-- Above the split rather than inside it: a failure to read the inbox is not about any one row. -->
         <template #strips>
             <NoticeStack :of="[actionError, listNotice]" />
@@ -112,7 +115,9 @@ const openRun = (conversationId: string): void => host().chat.openSession(conver
         </template>
 
         <template #detail>
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+            <!-- No `pr-1` either: that gutter existed to keep the rows' trailing controls off this pane's own
+                 scrollbar thumb, and the pane no longer has one. -->
+            <div class="flex flex-col gap-4">
                 <template v-if="outline">
                     <RowGroup role="status" aria-busy="true">
                         <template #label><span class="skeleton block h-2.5 w-24" aria-hidden="true" /></template>

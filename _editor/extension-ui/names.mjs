@@ -91,6 +91,8 @@ export const extensionUiNames = [
     "useNoteDraft",
     "useNow",
     "useRailMemory",
+    "useScrollReset",
+    "useStickyTop",
     "useTheme",
     "vAction",
 ];

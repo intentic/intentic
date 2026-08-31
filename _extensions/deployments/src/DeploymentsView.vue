@@ -256,136 +256,140 @@ const setLink = async (repo: string, stack: string): Promise<void> => {
 </script>
 
 <template>
-    <div class="scrollbar-thin h-full min-h-0 overflow-auto">
-        <Page width="wide">
-            <PageHeader title="Deployments" description="Container health, incidents and one-click redeploys across your Komodo.">
-                <template #actions>
-                    <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
-                </template>
-            </PageHeader>
+    <!-- No scroller of its own: the shell's router-view wrapper is the scroll container, and a second one nested
+         inside it is a scrollbar inside a page that also has one. It bought nothing here (there is no header this
+         was holding still, and no index it was keeping beside a body) and cost the two things a private scroller
+         always costs: `scroll-margin` and `:target` stop working, because a fragment link resolves against the
+         page and the content is in a different scrollport, and the reader's place is lost on every remount.
+         AcceptanceView and AutomationsView are the same shape and were already written this way. -->
+    <Page width="wide">
+        <PageHeader title="Deployments" description="Container health, incidents and one-click redeploys across your Komodo.">
+            <template #actions>
+                <PageAction v-if="stacksUrl !== undefined" icon="box" label="Open Komodo stacks" :href="stacksUrl" />
+            </template>
+        </PageHeader>
 
-            <!-- A poll that failed while a board is already on screen. Kept at the top and kept SMALL: the rows
+        <!-- A poll that failed while a board is already on screen. Kept at the top and kept SMALL: the rows
                  below are the last good answer and still worth reading, so this says the board has stopped
                  refreshing rather than replacing it. -->
-            <Notice v-if="error && board !== undefined" :of="noticeOf(error)" class="mb-4" />
+        <Notice v-if="error && board !== undefined" :of="noticeOf(error)" class="mb-4" />
 
-            <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
+        <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                  fetch. Show the board's shape rather than a line of text that everything then jumps under. -->
-            <DeploymentsSkeleton v-if="isPending" />
+        <DeploymentsSkeleton v-if="isPending" />
 
-            <!-- The daemon call itself failed (an old daemon with no /komodo routes, a dropped connection).
+        <!-- The daemon call itself failed (an old daemon with no /komodo routes, a dropped connection).
                  It gets its own branch because the alternative is what actually shipped: `board` undefined fell
                  through to the board below, whose zero resources rendered "Komodo has no stacks or deployments
                  yet": a confident wrong answer about the one thing the reader came to check. -->
-            <!-- Title, cause and the one thing to do about it: the three parts <Notice> is shaped around, so
+        <!-- Title, cause and the one thing to do about it: the three parts <Notice> is shaped around, so
                  they arrive in the app's own order and wording rather than this view's. -->
-            <Notice
-                v-else-if="board === undefined"
-                :of="{
-                    tone: `danger`,
-                    title: `Couldn't load this Komodo connection`,
-                    detail: error ?? `The sandbox did not answer.`,
-                    action: { label: `Try again`, run: () => void refetch() },
-                }"
-            />
+        <Notice
+            v-else-if="board === undefined"
+            :of="{
+                tone: `danger`,
+                title: `Couldn't load this Komodo connection`,
+                detail: error ?? `The sandbox did not answer.`,
+                action: { label: `Try again`, run: () => void refetch() },
+            }"
+        />
 
-            <!-- The single most important thing this view can say, and it can only say it by rendering.
+        <!-- The single most important thing this view can say, and it can only say it by rendering.
                  Deliberately a WARNING and not an error: not being able to see production is not the same as
                  production being broken, and drawing it red would cry wolf on every network blip. -->
-            <Notice
-                v-else-if="!board.reachable"
-                class="px-4 py-3"
-                :of="{
-                    tone: `warning`,
-                    title: `Can't reach Komodo at ${board.komodoUrl}`,
-                    detail: `Nothing below is current, this is not a report that your deployments are down, only that we couldn't ask.`,
-                }"
-            >
-                <div v-if="board.unreachableReason" class="mt-2 font-mono text-2xs">{{ board.unreachableReason }}</div>
-                <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
-            </Notice>
+        <Notice
+            v-else-if="!board.reachable"
+            class="px-4 py-3"
+            :of="{
+                tone: `warning`,
+                title: `Can't reach Komodo at ${board.komodoUrl}`,
+                detail: `Nothing below is current, this is not a report that your deployments are down, only that we couldn't ask.`,
+            }"
+        >
+            <div v-if="board.unreachableReason" class="mt-2 font-mono text-2xs">{{ board.unreachableReason }}</div>
+            <Button class="mt-3" label="Try again" size="small" severity="secondary" @click="refetch()" />
+        </Notice>
 
-            <template v-else>
-                <!-- ---- 1. Needs you ----
+        <template v-else>
+            <!-- ---- 1. Needs you ----
                      Only when something is open. This is the reason the rail badged, and it carries the
                      buttons rather than making the operator find the row. The one boxed panel on the page:
                      everything else lives on a hairline, so the frame here means "this is the alarm". -->
-                <div v-if="worst" class="mb-6 rounded-lg border px-4 py-3" :class="INCIDENT_TONE[worst].panel">
-                    <div class="flex items-center gap-2">
-                        <Icon name="exclamation-circle" class="text-sm" :class="INCIDENT_TONE[worst].text" />
-                        <span class="text-sm font-semibold text-content">Needs you</span>
-                    </div>
-                    <div class="mt-2 flex flex-col gap-2">
-                        <IncidentRow
-                            v-for="incident in open"
-                            :key="incident.alert.id"
-                            :incident="incident"
-                            :resource="resourceFor(incident.alert.resource)"
-                            :failure="failures.get(incident.alert.id)"
-                            @fix="(resource, pick) => askAgent(resource, incident.alert.id, pick)"
-                        />
-                    </div>
+            <div v-if="worst" class="mb-6 rounded-lg border px-4 py-3" :class="INCIDENT_TONE[worst].panel">
+                <div class="flex items-center gap-2">
+                    <Icon name="exclamation-circle" class="text-sm" :class="INCIDENT_TONE[worst].text" />
+                    <span class="text-sm font-semibold text-content">Needs you</span>
+                </div>
+                <div class="mt-2 flex flex-col gap-2">
+                    <IncidentRow
+                        v-for="incident in open"
+                        :key="incident.alert.id"
+                        :incident="incident"
+                        :resource="resourceFor(incident.alert.resource)"
+                        :failure="failures.get(incident.alert.id)"
+                        @fix="(resource, pick) => askAgent(resource, incident.alert.id, pick)"
+                    />
+                </div>
+            </div>
+
+            <!-- ---- 2. Is anything wrong right now ---- -->
+            <StatusTally v-if="resources.length > 0" :items="counts" class="mb-5" />
+
+            <div class="flex flex-col gap-6">
+                <div v-if="emptyReason" :class="ui.emptyState(`text-left`)">
+                    <div class="font-medium text-content">{{ emptyReason.title }}</div>
+                    <div class="mt-1">{{ emptyReason.detail }}</div>
                 </div>
 
-                <!-- ---- 2. Is anything wrong right now ---- -->
-                <StatusTally v-if="resources.length > 0" :items="counts" class="mb-5" />
+                <!-- ---- 3. Grouped by host ---- -->
+                <template v-else>
+                    <RowGroup v-for="group in carrying" :key="group.label" :label="group.label">
+                        <template #info>
+                            <ServerMeta v-if="group.server" :server="group.server" />
+                        </template>
 
-                <div class="flex flex-col gap-6">
-                    <div v-if="emptyReason" :class="ui.emptyState(`text-left`)">
-                        <div class="font-medium text-content">{{ emptyReason.title }}</div>
-                        <div class="mt-1">{{ emptyReason.detail }}</div>
-                    </div>
+                        <ResourceRow
+                            v-for="resource in group.resources"
+                            :key="resource.id"
+                            :resource="resource"
+                            :busy="busyId === resource.id"
+                            :logs="logsFor.get(resource.id)"
+                            :logs-pending="logsPendingId === resource.id"
+                            :error="failures.get(resource.id)"
+                            @act="runAction"
+                            @logs="loadLogs"
+                            @fix="(resource, pick) => askAgent(resource, resource.id, pick)"
+                        />
+                    </RowGroup>
 
-                    <!-- ---- 3. Grouped by host ---- -->
-                    <template v-else>
-                        <RowGroup v-for="group in carrying" :key="group.label" :label="group.label">
-                            <template #info>
-                                <ServerMeta v-if="group.server" :server="group.server" />
-                            </template>
-
-                            <ResourceRow
-                                v-for="resource in group.resources"
-                                :key="resource.id"
-                                :resource="resource"
-                                :busy="busyId === resource.id"
-                                :logs="logsFor.get(resource.id)"
-                                :logs-pending="logsPendingId === resource.id"
-                                :error="failures.get(resource.id)"
-                                @act="runAction"
-                                @logs="loadLogs"
-                                @fix="(resource, pick) => askAgent(resource, resource.id, pick)"
-                            />
-                        </RowGroup>
-
-                        <!-- Hosts with nothing on them: one list, one surface, still carrying the state and
+                    <!-- Hosts with nothing on them: one list, one surface, still carrying the state and
                              the gauges that make an empty box worth knowing about. -->
-                        <RowGroup v-if="idle.length > 0" label="Other hosts" caption="Connected to this Komodo with nothing deployed on them.">
-                            <div v-for="server in idle" :key="server.id" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
-                                <span class="text-sm font-medium text-content">{{ server.name }}</span>
-                                <ServerMeta :server="server" class="ml-auto" />
-                            </div>
-                        </RowGroup>
-                    </template>
+                    <RowGroup v-if="idle.length > 0" label="Other hosts" caption="Connected to this Komodo with nothing deployed on them.">
+                        <div v-for="server in idle" :key="server.id" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
+                            <span class="text-sm font-medium text-content">{{ server.name }}</span>
+                            <ServerMeta :server="server" class="ml-auto" />
+                        </div>
+                    </RowGroup>
+                </template>
 
-                    <!-- ---- 4. Your repos ----
+                <!-- ---- 4. Your repos ----
                          SETUP rather than operations, so it sits under the board an operator opened this view
                          for. It still leads on a first connection, because that is exactly when the board
                          above it is one short empty-state paragraph, and it renders whether or not Komodo
                          returned resources, since a workspace with a compose file and nothing linked yet is
                          the state where this section matters most. -->
-                    <RowGroup v-if="repos.length > 0" label="Your repos" caption="Which Komodo stack each repo in this workspace deploys to.">
-                        <RepoLinkRow
-                            v-for="repoLink in repos"
-                            :key="repoLink.repo"
-                            :link="repoLink"
-                            :stacks="stackNames"
-                            :busy="linking === repoLink.repo"
-                            :error="failures.get(repoLink.repo)"
-                            @link="setLink"
-                        />
-                    </RowGroup>
-                </div>
-            </template>
-        </Page>
-    </div>
+                <RowGroup v-if="repos.length > 0" label="Your repos" caption="Which Komodo stack each repo in this workspace deploys to.">
+                    <RepoLinkRow
+                        v-for="repoLink in repos"
+                        :key="repoLink.repo"
+                        :link="repoLink"
+                        :stacks="stackNames"
+                        :busy="linking === repoLink.repo"
+                        :error="failures.get(repoLink.repo)"
+                        @link="setLink"
+                    />
+                </RowGroup>
+            </div>
+        </template>
+    </Page>
 </template>

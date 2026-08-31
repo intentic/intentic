@@ -3,7 +3,16 @@
 
      The reading experience is the point, so the layout gives the page the room and keeps the machinery: runs,
      staleness counts, publishing: to a strip and a sidebar. Everything shown here is a file that exists; there is
-     no documentation service and no server-side state to be out of step with. -->
+     no documentation service and no server-side state to be out of step with.
+
+     THE PAGE SCROLLS THE DOCUMENT, and this is the one screen in the set where `panes` had a real argument: a
+     long document beside a 54-entry contents list is the shape that contract was written for. It loses anyway,
+     for the reason every docs site on the web is built the other way round — including this project's own
+     marketing docs (_site/site DocsLayout.astro: `sticky top-20` sidebar, page-scrolled article). A document read
+     through a pane-shaped window is a document whose length is capped by the chrome above it, and the chrome
+     here is a page title, a run strip and a frame header. What `panes` was protecting is the contents list, and
+     `sticky` protects it better: it stays put AND keeps its own scroller AND keeps its own place, which is all
+     three of the things the clamp was buying, without spending the document's height on them. -->
 <script setup lang="ts">
 import {
     type AgentRunChoice,
@@ -185,6 +194,8 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
 <template>
     <SplitView
         title="Documentation"
+        scroll="page"
+        :scroll-key="`${repo}/${page ?? ``}`"
         :description="`Plain-language orientation for ${label}, written by agents and reviewed by you.`"
         mobile="swap"
         :detail-open="page !== undefined"
@@ -262,11 +273,14 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
             </button>
 
             <DocSkeleton v-if="isLoading && outline" />
-            <div v-else-if="isLoading" class="min-h-0 flex-1" />
+            <!-- A held space while the wait is too short to draw an outline for. `min-h-figure` rather than
+                 `flex-1`: there is no clamped parent to take a share of any more, so `flex-1` resolved to zero
+                 and the page collapsed to its header for the length of every fetch. -->
+            <div v-else-if="isLoading" class="min-h-figure" />
 
             <!-- The empty state is an invitation, not an error: a repo with no documents is the ordinary starting
                  point and this view is where the first set gets made. -->
-            <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined" class="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+            <div v-else-if="set?.repoDoc === undefined && set?.prose === undefined">
                 <div :class="ui.emptyState()">
                     <p class="text-sm">{{ label }} has no documentation yet.</p>
                     <p class="mt-1 text-xs text-muted">
@@ -280,13 +294,16 @@ const agentLink = (id: string) => appLink(api.href(`/agents/${id}`), () => api.n
             <!-- A FRAMED BODY, because this screen is an index and a body: the contents list beside it is chrome
                  and never boxes itself, so the document is what has to say "this is the thing you are reading".
                  The frame belongs to the SURFACE and is written here rather than inside <DocPage>: the same page
-                 in a Workspace tab is the tab's whole content and wants no box at all. The Panel owns the scroll
-                 area, independent of the contents menu's own.
+                 in a Workspace tab is the tab's whole content and wants no box at all.
 
-                 KEYED BY PAGE, so each document mounts fresh. A reused instance keeps the last page's scroll
-                 position and you arrive halfway down a page you have never seen. Remounting also gives every
-                 figure a clean fit-on-init, which is what a new document wants. -->
-            <ScrollFrame v-else :key="page ?? `overview`" grow>
+                 IT NO LONGER OWNS A SCROLL AREA (`:scroll="false"`, and no `grow`, which would resolve to zero
+                 here anyway): the page is the scrollport, so the frame is as tall as the document and draws its
+                 edges around the whole of it rather than around a window onto it.
+
+                 STILL KEYED BY PAGE, and now for one reason rather than two. The scroll position is the split's
+                 business (`scroll-key` above) and no longer needs a remount to reset; what the remount is still
+                 for is the figures, which fit themselves to their container on init and want a clean one. -->
+            <ScrollFrame v-else :key="page ?? `overview`" :scroll="false">
                 <DocPage
                     v-if="page === undefined"
                     class="px-6 py-5"

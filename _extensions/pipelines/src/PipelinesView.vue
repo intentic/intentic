@@ -215,8 +215,14 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
 </script>
 
 <template>
+    <!-- `scroll="page"`: the body here is a REPORT, not a document. `panes` earns its keep when a long document
+         sits beside a long index and losing your place in either costs you something; this index is a handful of
+         repositories, and the body is a summary bar over a list of runs that is read top-down once. Clamped, it
+         put a scrollbar inside a card inside a page, and the page's own scrollport had nothing to take. -->
     <SplitView
         title="Pipelines"
+        scroll="page"
+        :scroll-key="scopeRepo"
         :description="scope === undefined ? `CI runs on your workspace repos' GitHub and GitLab remotes.` : `CI runs on ${scope.repo.project}.`"
     >
         <template #actions>
@@ -244,7 +250,9 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined): Promi
         </template>
 
         <template #detail>
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <!-- No scroller and no `min-h-0 flex-1`: those are what a pane that must shrink inside a clamp asks
+                 for, and nothing clamps this now. The column is as tall as the runs in it. -->
+            <div class="flex flex-col">
                 <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                      fetch. Show the board's shape rather than a bare page that is indistinguishable from "you have
                      no repos connected". -->

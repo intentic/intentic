@@ -43,16 +43,53 @@
      tail). It clips with `overflow-clip` rather than `overflow-hidden`, and the difference is load-bearing:
      `hidden` makes this box a scroll container, so a `sticky` day header inside it resolves against a box that
      never scrolls and never sticks to anything. `clip` clips the corners just the same without becoming one,
-     which leaves the page as the scrollport the header sticks to. -->
+     which leaves the page as the scrollport the header sticks to.
+
+     `sticky` IS WHAT A PAGE-SCROLLED DOCUMENT NEEDS BACK. A bounded frame gets a header that stays put for
+     free: the box does not move, so neither does its head. Hand the scroll to the page and that is gone, and
+     what leaves with it is not decoration, it is the document's NAME and the controls that act on it: on a note
+     five screens long, Save was five screens up. So the header can pin itself to the scrollport instead.
+
+     IT PINS ONE ROW, NOT THE WHOLE HEAD, and that is measured rather than tasteful. This header carries a title
+     row, a description, a #meta fact line and an action cluster, and in a pane too narrow for `@xl` the cluster
+     drops to a row of its own: 133px, plus a #strips control row, is 175px of a 900px viewport held forever, so
+     19% of every screenful of the document is chrome. The facts (a path, a size, an edited-at, the aliases) are
+     read ONCE, at the top, and they are the part that scrolls away; what pins is the name, the badges and the
+     actions. `sticky` therefore also means "this header condenses", and #meta and #description ride along under
+     it only until the reader has left the top of the document.
+
+     Only with `scroll: false`: a frame that owns its scroller has a header that already stays put, and pinning
+     it inside a box that never moves buys a stacking context and nothing else.
+
+     WHERE IT PINS TO IS `--pinned-top`, A NUMBER THIS COMPONENT DOES NOT KNOW. A frame is rarely the first thing
+     pinned on its surface: the knowledge section pins a search bar above it, a docs page pins nothing. So the
+     offset is read from a custom property the SURFACE sets, defaulting to zero, rather than passed as a prop
+     nobody can compute from in here. A property and not a prop because the same number has three consumers on
+     one surface (this header, the sticky index column beside it, and the `scroll-margin-top` that keeps a row
+     revealed by the keyboard out from under both), and threading one measurement through three components as
+     three props is how they drift apart. See useStickyTop for the measuring end. -->
 <script setup lang="ts">
-const { grow = false, scroll = true } = defineProps<{
+import { computed } from "vue";
+
+const {
+    grow = false,
+    scroll = true,
+    sticky = false,
+} = defineProps<{
     title?: string;
     description?: string;
     /** Fill the remaining space of a flex parent, rather than being sized by content. */
     grow?: boolean;
     /** Set false for a body that manages its own scrolling (an editor, an auto-scrolling log tail). */
     scroll?: boolean;
+    /** Pin the header (and #strips) to the page scrollport, condensed to its title row. `scroll: false` only. */
+    sticky?: boolean;
 }>();
+
+/* Ignored unless the page owns the scroll, so a caller cannot ask for a pin that has nothing to pin against.
+ * `bg-card` is the frame's own surface repeated on the header: a stuck header scrolls prose under itself and
+ * needs to be opaque, and inheriting the section's background is not the same thing as painting it. */
+const pinned = computed(() => sticky && !scroll);
 </script>
 
 <template>
@@ -63,27 +100,49 @@ const { grow = false, scroll = true } = defineProps<{
         class="@container flex min-h-0 flex-col rounded-lg border border-line-subtle bg-card"
         :class="[grow ? `flex-1` : ``, scroll ? `overflow-hidden` : `overflow-clip`]"
     >
-        <header
-            v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"
-            class="flex shrink-0 flex-col gap-2 border-b border-line-subtle px-4 py-2.5 @xl:flex-row @xl:items-start @xl:justify-between @xl:gap-3"
-        >
-            <div class="min-w-0">
-                <div class="flex min-w-0 items-center gap-2">
-                    <slot name="lead" />
-                    <h2 v-if="title !== undefined || $slots[`title`]" class="min-w-0 truncate text-sm font-medium text-content">
-                        <slot name="title">{{ title }}</slot>
-                    </h2>
-                    <slot name="badges" />
+        <!-- THE HEAD AND THE STRIPS PIN AS ONE BLOCK when pinned, rather than as two stacked `sticky` elements
+             at hand-computed offsets. The header's height is not a constant here (a title wraps, an action
+             cluster drops to its own row below `@xl`), so any `top-<n>` on the strips is a number that is wrong
+             at some width, and wrong here means a delete confirmation hidden behind the bar that asked it. -->
+        <div :class="pinned ? `sticky top-(--pinned-top) z-2 shrink-0 bg-card` : `contents`">
+            <header
+                v-if="title !== undefined || $slots[`title`] || $slots[`actions`] || $slots[`lead`]"
+                class="flex shrink-0 flex-col gap-2 border-b border-line-subtle px-4 py-2.5 @xl:flex-row @xl:items-start @xl:justify-between @xl:gap-3"
+            >
+                <div class="min-w-0">
+                    <div class="flex min-w-0 items-center gap-2">
+                        <slot name="lead" />
+                        <h2 v-if="title !== undefined || $slots[`title`]" class="min-w-0 truncate text-sm font-medium text-content">
+                            <slot name="title">{{ title }}</slot>
+                        </h2>
+                        <slot name="badges" />
+                    </div>
+                    <!-- Pinned, these two are NOT in the bar: see the note above. They fall through to the top of
+                         the document instead, which is where they are read. -->
+                    <template v-if="!pinned">
+                        <p v-if="description !== undefined || $slots[`description`]" class="mt-1 text-xs text-muted">
+                            <slot name="description">{{ description }}</slot>
+                        </p>
+                        <p v-if="$slots[`meta`]" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle"><slot name="meta" /></p>
+                    </template>
                 </div>
-                <p v-if="description !== undefined || $slots[`description`]" class="mt-1 text-xs text-muted">
-                    <slot name="description">{{ description }}</slot>
-                </p>
-                <p v-if="$slots[`meta`]" class="mt-1 flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle"><slot name="meta" /></p>
-            </div>
-            <div v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-1.5"><slot name="actions" /></div>
-        </header>
+                <div v-if="$slots[`actions`]" class="flex shrink-0 items-center gap-1.5"><slot name="actions" /></div>
+            </header>
 
-        <div v-if="$slots[`strips`]" class="shrink-0"><slot name="strips" /></div>
+            <div v-if="$slots[`strips`]" class="shrink-0"><slot name="strips" /></div>
+        </div>
+
+        <!-- The facts the pinned bar handed back, at the head of the document rather than in the chrome. -->
+        <div
+            v-if="pinned && (description !== undefined || $slots[`description`] || $slots[`meta`])"
+            class="flex shrink-0 flex-col gap-1 border-b border-line-subtle px-4 py-2.5"
+        >
+            <p v-if="description !== undefined || $slots[`description`]" class="text-xs text-muted">
+                <slot name="description">{{ description }}</slot>
+            </p>
+            <p v-if="$slots[`meta`]" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle"><slot name="meta" /></p>
+        </div>
+
         <div v-if="scroll" class="scrollbar-thin min-h-0 flex-1 overflow-auto"><slot /></div>
         <slot v-else />
     </section>

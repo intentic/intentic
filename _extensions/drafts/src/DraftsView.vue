@@ -370,8 +370,14 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 </script>
 
 <template>
+    <!-- `scroll="page"`: a QUEUE is a feed, and the rail narrows it rather than selecting a document out of it,
+         which is the `page` case exactly. A draft post is a tall row (a brand mark, a body that folds at 20rem,
+         a schedule and four controls), so a clamped pane showed two of them and hid the rest behind a scrollbar
+         inside a card inside a page. -->
     <SplitView
         title="Drafts"
+        scroll="page"
+        :scroll-key="railScope"
         :description="
             activeScope.key === ``
                 ? `Posts your agent prepared for you to approve.`
@@ -397,7 +403,8 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
         </template>
 
         <template #detail>
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+            <!-- `pr-1` went with the scrollbar it was keeping the row controls clear of. -->
+            <div class="flex flex-col">
                 <!-- Nothing proposed, nothing sent, nothing broken. The rail hides its tile in this state, so the
                      page is only reached deliberately, and it owes an explanation of what would ever put
                      something here. -->

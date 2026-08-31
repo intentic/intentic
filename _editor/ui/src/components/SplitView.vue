@@ -41,12 +41,14 @@ import { computed, ref } from "vue";
 import Page from "./Page.vue";
 import PageHeader from "./PageHeader.vue";
 import { useNarrow } from "../composables/useNarrow.js";
+import { useScrollReset } from "../composables/useScrollReset.js";
 import { provideCompact } from "./splitView.js";
 
 const {
     mobile: mobileMode = `collapse`,
     detailOpen = false,
     scroll = `panes`,
+    scrollKey = undefined,
 } = defineProps<{
     title: string;
     description?: string;
@@ -61,6 +63,13 @@ const {
      *    section): clamping it would put a scrollbar inside a card inside a page, and the rail still has to stay
      *    reachable, which is what sticky buys. */
     scroll?: `panes` | `page`;
+    /* WHAT THE SCROLL POSITION IS ABOUT, for `page` mode. A clamped pane got this for free: it was its own
+     * scroller, keyed by whatever it showed, so a new subject arrived at the top. The page's scrollport belongs
+     * to the shell and outlives every selection, so without this, picking the next package page four screens
+     * down lands you four screens into it — or, when the new one is shorter, at its footer, which reads as an
+     * empty document. Pass whatever the body is OF: a document path, a repo scope. Ignored in `panes` mode,
+     * where the panes' own keys still do the job. */
+    scrollKey?: unknown;
 }>();
 
 /* ONE WIDTH, not a scale. It was three named tiers, which was already better than the four ad-hoc numbers it
@@ -91,6 +100,11 @@ const FOLD_AT_REM = 44;
 const row = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(row, FOLD_AT_REM);
 
+/* Back to the top when the body changes subject, and only where the page owns the scroll: in `panes` mode this
+ * element is not inside the shell's scrollport in any way that matters, and each pane resets itself. The same
+ * composable a hub SECTION calls directly (KnowledgeView), rather than a second answer to one rule. */
+useScrollReset(row, () => (scroll === `page` ? scrollKey : undefined));
+
 /* Three arrangements, and only three:
  *  · unfolded       : rail beside detail, rail at its named width.
  *  · folded collapse: rail ABOVE detail and full width, both on screen. A rail that narrows a feed has to stay
@@ -111,8 +125,15 @@ const railClass = computed(() => {
     if (!railAside.value) {
         return `shrink-0`;
     }
-    // Sticky only in `page` mode: it is what keeps the index reachable once the body has scrolled past a screen.
-    return scroll === `page` ? `sticky top-0 shrink-0 self-start ${RAIL}` : `shrink-0 ${RAIL}`;
+    /* Sticky only in `page` mode: it is what keeps the index reachable once the body has scrolled past a screen.
+     *
+     * `max-h-dvh` IS THE OTHER HALF OF `self-start`, and it was missing. `self-start` sizes the column by its
+     * content, which is what lets it stop stretching to the body's height — and also what lets it grow PAST the
+     * viewport: <NavRail>'s inner scroller is `min-h-0 flex-1`, so with nothing bounding the column there is no
+     * height for it to be a share of, the scroller never engages, and the rows past the fold are unreachable
+     * because the column is pinned and cannot scroll off. Invisible on a hub (fourteen sections fit), and the
+     * documentation contents list is fifty-four. `dvh` for the phone reason every other ceiling here uses it. */
+    return scroll === `page` ? `sticky top-0 max-h-dvh shrink-0 self-start ${RAIL}` : `shrink-0 ${RAIL}`;
 });
 </script>
 

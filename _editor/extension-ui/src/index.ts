@@ -239,6 +239,14 @@ export {
      * tile again, because a tile opens a view at its bare address. Solving that per extension would be three
      * copies of one rule about what a link means versus what a memory is allowed to guess. */
     useRailMemory,
+    /* The other half of `scroll="page"`. A view whose rail SELECTS something (a note, a package page) hands the
+     * page scrollport a position that stops meaning anything the moment the selection moves, and every such
+     * view would otherwise re-derive the same answer: find the shell's scroller, put it back at the top. */
+    useScrollReset,
+    /* And what the next pinned thing under it has to clear, since a page-scrolling view that pins a filter bar
+     * over its content is the shape three of these sections now are. */
+    type StickyTop,
+    useStickyTop,
     useTheme,
 } from "@intentic/ui";
 // Also reachable as `@intentic/extension-ui/format`, see the note there for why an extension's pure logic

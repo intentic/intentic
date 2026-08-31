@@ -15,7 +15,16 @@
      answer, and it is in place rather than in a <ConfirmDialog> because the sentence names the note you are
      looking at. `verb` is the whole of what differs between callers, and it spells the button, the tooltip and
      the accessible name from one word: "Delete" for a knowledge note, whose neighbours are left linking to
-     something nobody has written, and whatever the removal actually means to the next pane that reuses it. -->
+     something nobody has written, and whatever the removal actually means to the next pane that reuses it.
+
+     `paged` IS WHICH SURFACE THE NOTE IS ON, and it is a real fork rather than a preference — the same fork
+     <ScrollFrame> draws, forwarded, because a note is exactly the kind of thing that reads badly through a
+     window. Bounded (`paged` off), the frame owns a scroller and the note reads through whatever is left of it
+     after the header: measured on the knowledge section, 473px of a 648px pane, so a note of any length arrived
+     as a 20-line slot with an invisible scrollbar, inside a page that had nothing to scroll. Paged, the page
+     owns it: the note is as long as it is, the header pins itself instead of merely staying put, and the
+     Cancel/Save pair pins with it, which is the part that stops being a nicety once a draft is five screens
+     long. Nothing else moves, and #strips keeps its contract either way. -->
 <script setup lang="ts">
 import Button from "./Button.vue";
 import { ui } from "../lib/ui.js";
@@ -25,7 +34,7 @@ import Icon from "./Icon.vue";
 import ScrollFrame from "./ScrollFrame.vue";
 import StatusBadge from "./StatusBadge.vue";
 
-const { verb = `Delete` } = defineProps<{
+const { verb = `Delete`, paged = false } = defineProps<{
     /** The note's name, in the frame's header. */
     title: string;
     /** The file as it stands on disk: what Copy copies, whatever is on screen. */
@@ -43,6 +52,8 @@ const { verb = `Delete` } = defineProps<{
     /** What deleting this kind of note is CALLED. Spells the tooltip, the accessible name and the confirm
      *  button ("Forget", "Forget it", "Forget this note"). */
     verb?: string;
+    /** The PAGE owns the scroll: the note runs its full length and the header pins itself. See the note above. */
+    paged?: boolean;
 }>();
 
 const emit = defineEmits<{ edit: []; cancel: []; save: []; remove: [] }>();
@@ -54,7 +65,9 @@ const confirming = defineModel<boolean>(`confirming`, { default: false });
 </script>
 
 <template>
-    <ScrollFrame grow :title="title">
+    <!-- `grow` is for the bounded case only: `flex-1` in an auto-height parent resolves to nothing, and asking
+         for it there is how a paged frame ends up collapsed instead of merely un-grown. -->
+    <ScrollFrame :grow="!paged" :scroll="!paged" :sticky="paged" :title="title">
         <template v-if="$slots[`lead`]" #lead><slot name="lead" /></template>
 
         <!-- "Unsaved" is this component's, not the caller's: it is a fact about the draft it is holding, and a

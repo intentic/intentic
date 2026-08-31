@@ -12,6 +12,8 @@ import {
     type PickerOptions,
     useKeyedDraft,
     useNarrow,
+    useScrollReset,
+    useStickyTop,
 } from "@intentic/extension-ui";
 import { computed, ref, watch } from "vue";
 import { filterOptions, type Filters, useNoteMutations, useOverview, useSearch } from "./useKnowledge";
@@ -31,6 +33,32 @@ import KnowledgePane from "./KnowledgePane.vue";
  * a narrow column beside the note rather than a second rail in front of it, and in a narrow body it folds above
  * the note instead of hiding it.
  *
+ * ── THE PAGE SCROLLS, NOT THE PANES ───────────────────────────────────────────────────────────────────────
+ *
+ * This section used to clamp itself to 72dvh and let each pane scroll inside its own frame. That is the `panes`
+ * contract, and the hub this lives in is `page` (HubLayout): the section was running the other screen's layout
+ * inside it, which is the same fault ActivityView records having had. Measured at 1440x900 with a chat panel
+ * open — where this is actually read — the note's frame spent 175px of its 648px on chrome and left a 473px
+ * reading window, about twenty lines, with a scrollbar invisible until the pointer was already inside it; the
+ * page's own scrollport, meanwhile, had nothing to scroll at all. Four scroll-capable surfaces stacked in one
+ * band, so a wheel did a different thing in each horizontal strip of it.
+ *
+ * The clamp was there to keep the way OUT of a long note on screen, and it bought that by making the note
+ * unreadable. Three things buy it properly, and all three are `sticky` against the page:
+ *
+ *  1. THE SEARCH BAR, because search is the navigation here (see above) — losing it is worse on this section
+ *     than on any other, and it is the one piece of chrome that is about the whole knowledge base rather than
+ *     about the note.
+ *  2. THE INDEX COLUMN, which keeps a scroller of its own and should: an index is chrome, bounded by the
+ *     viewport, and its place is worth keeping independently of the note's. Same treatment the hub's own rail
+ *     gets one column to the left.
+ *  3. THE NOTE'S IDENTITY BAR — its name, kind and actions (NoteEditor `paged`), which is what a reader needs
+ *     in order to still know what they are reading five screens down, and what an editor needs in order to
+ *     Save without going back up.
+ *
+ * Everything else scrolls: the notices, the note's own facts, and the connections, which moved INTO the note
+ * for exactly this reason (see KnowledgePane).
+ *
  * WHAT IS UNFINISHED ABOUT THE KNOWLEDGE BASE gets a strip, and only when there IS something: links pointing at notes
  * nobody wrote, kinds the vocabulary has not adopted, notes that fell out of the graph. A permanent panel
  * reading "0 problems" would spend the same space to say nothing, and would train the reader to stop looking at
@@ -41,6 +69,15 @@ import KnowledgePane from "./KnowledgePane.vue";
  * nothing the window can predict. Below ~36rem a 16rem index beside a note leaves neither readable. */
 const body = ref<HTMLElement | undefined>(undefined);
 const stacked = useNarrow(body, 36);
+
+/* WHERE THE SECOND PINNED THING STARTS. The search bar pins at the top of the section and everything else that
+ * pins has to clear it: the index column's `top` and its own ceiling, and the note frame's identity bar. That
+ * height is not a constant — the bar carries a field, two pickers, a count and a hint, and it wraps — so it is
+ * measured and published as `--pinned-top` for all three to read, rather than written down as a `top-11` that
+ * is correct at one width. */
+const chrome = ref<HTMLElement | undefined>(undefined);
+const pinned = useStickyTop(chrome);
+
 const { overview, error: overviewError } = useOverview();
 
 const q = ref(``);
@@ -63,6 +100,12 @@ const tagChoice = computed<string>({ get: () => tag.value ?? ``, set: (value) =>
 
 const selected = ref<string>();
 const { draft } = useKeyedDraft(selected);
+
+/* BACK TO THE TOP OF THE NOTE WHEN THE NOTE CHANGES. The bounded pane got this for free: `:key="selected"`
+ * remounted the frame and its scroller came back at zero. The page's scrollport outlives every selection, so
+ * without this, arrowing down the index four screens into a long note lands you four screens into the next one
+ * — and if the next one is shorter, at its footer, which reads as an empty note. */
+useScrollReset(body, () => selected.value);
 
 // Open on the first answer, so the section is never a list with an empty half beside it, and follow the list
 // when what is selected drops out of it, which is what happens as somebody types.
@@ -168,70 +211,78 @@ const startKnowledge = async (): Promise<void> => {
 </script>
 
 <template>
-    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both. -->
-    <div ref="body" class="flex min-h-0 flex-col gap-3">
+    <!-- A HUB SECTION BODY, no page header and no frame of its own: the hub draws both. No `min-h-0` any more:
+         that is a flex child asking to be allowed to SHRINK, which is what a clamped pane needs and the opposite
+         of what this wants now — the section is as tall as the note in it, and the hub page scrolls it. -->
+    <div ref="body" class="flex flex-col gap-3" :style="pinned.style.value">
         <Notice v-if="error" :of="noticeOf(error)" />
 
-        <!-- The section's one row of chrome, and it is the app's <FilterBar>: free text on the left taking the
+        <!-- PINNED, because search is the navigation here and this is the section's only route to another note
+             once the note in hand is longer than a screen. `pb-3 -mb-3` is how it paints the gutter it would
+             otherwise let prose show through: the padding is inside the sticky box (so it is painted) and the
+             negative margin gives the 12px back to the parent's `gap-3`, leaving the spacing exactly as it was.
+
+             The section's one row of chrome, and it is the app's <FilterBar>: free text on the left taking the
              row's slack, the controls that narrow the same list in their own matched track, and what does not
              narrow anything sitting chromeless beside them. The field spanning the row is the point: the bar
              then shares its left and right edges with the two panes under it, instead of huddling in a corner
              above them. The pickers are `ghost` because the track is already the box. -->
-        <FilterBar
-            v-model="q"
-            placeholder="Search the knowledge base…"
-            aria-label="Search the knowledge base"
-            clearable
-            :count="hits.length"
-            :busy="isFetching && !isLoading"
-            @keydown.down.prevent="step(1)"
-            @keydown.up.prevent="step(-1)"
-        >
-            <template v-if="options.types.length > 0 || options.tags.length > 0" #controls>
-                <Picker
-                    v-if="options.types.length > 0"
-                    v-model="typeChoice"
-                    variant="ghost"
-                    :options="pickerOptions(options.types, `Any kind`)"
-                    class="max-w-32"
-                    aria-label="Kind"
-                    header="Kind"
-                />
-                <Picker
-                    v-if="options.tags.length > 0"
-                    v-model="tagChoice"
-                    variant="ghost"
-                    :options="pickerOptions(options.tags, `Any tag`)"
-                    class="max-w-32"
-                    aria-label="Tag"
-                    header="Tag"
-                />
-            </template>
-            <template #actions>
-                <span v-if="overview" class="text-2xs text-subtle">
-                    {{ overview.noteCount }} {{ overview.noteCount === 1 ? `note` : `notes` }} · {{ overview.linkCount }}
-                    {{ overview.linkCount === 1 ? `link` : `links` }} · {{ overview.types.length }}
-                    {{ overview.types.length === 1 ? `kind` : `kinds` }}
-                </span>
-                <InfoHint label="Knowledge">
-                    <span class="block text-sm font-medium text-content">The knowledge base</span>
-                    <span class="mt-1 block text-xs text-muted">
-                        A folder of markdown notes: <b>{{ overview?.folder ?? `knowledge/` }}</b> in your workspace, where each note is a
-                        <i>thing</i>
-                        (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before
-                        answering questions about your world and writes to it when it learns something durable; you read, correct and delete here.
-                        Open it in Obsidian or put it under git: it is only ever markdown.
+        <div ref="chrome" class="sticky top-0 z-3 -mb-3 bg-canvas pb-3">
+            <FilterBar
+                v-model="q"
+                placeholder="Search the knowledge base…"
+                aria-label="Search the knowledge base"
+                clearable
+                :count="hits.length"
+                :busy="isFetching && !isLoading"
+                @keydown.down.prevent="step(1)"
+                @keydown.up.prevent="step(-1)"
+            >
+                <template v-if="options.types.length > 0 || options.tags.length > 0" #controls>
+                    <Picker
+                        v-if="options.types.length > 0"
+                        v-model="typeChoice"
+                        variant="ghost"
+                        :options="pickerOptions(options.types, `Any kind`)"
+                        class="max-w-32"
+                        aria-label="Kind"
+                        header="Kind"
+                    />
+                    <Picker
+                        v-if="options.tags.length > 0"
+                        v-model="tagChoice"
+                        variant="ghost"
+                        :options="pickerOptions(options.tags, `Any tag`)"
+                        class="max-w-32"
+                        aria-label="Tag"
+                        header="Tag"
+                    />
+                </template>
+                <template #actions>
+                    <span v-if="overview" class="text-2xs text-subtle">
+                        {{ overview.noteCount }} {{ overview.noteCount === 1 ? `note` : `notes` }} · {{ overview.linkCount }}
+                        {{ overview.linkCount === 1 ? `link` : `links` }} · {{ overview.types.length }}
+                        {{ overview.types.length === 1 ? `kind` : `kinds` }}
                     </span>
-                </InfoHint>
-            </template>
-        </FilterBar>
+                    <InfoHint label="Knowledge">
+                        <span class="block text-sm font-medium text-content">The knowledge base</span>
+                        <span class="mt-1 block text-xs text-muted">
+                            A folder of markdown notes: <b>{{ overview?.folder ?? `knowledge/` }}</b> in your workspace, where each note is a
+                            <i>thing</i>
+                            (a person, a project, a decision, a word) and each link is a connection between two of them. The agent reads it before
+                            answering questions about your world and writes to it when it learns something durable; you read, correct and delete here.
+                            Open it in Obsidian or put it under git: it is only ever markdown.
+                        </span>
+                    </InfoHint>
+                </template>
+            </FilterBar>
+        </div>
 
+        <!-- Not pinned: both are facts about the whole knowledge base, read once. Pinning them would spend
+             another ~56px of every screenful on a sentence nobody re-reads. -->
         <Notice v-if="linkedNotice" :of="linkedNotice" />
         <Notice v-if="health" :of="health" />
 
-        <!-- Bounded, so the two panes scroll inside their own frames and the chrome above stays put. Unbounded,
-             the hub page would scroll them together and reaching the end of a long note would take the way to
-             the next one off screen with it. -->
         <div v-if="overview?.noteCount === 0 && !filtered" :class="ui.emptyState(`flex flex-col items-center gap-2 px-6 py-12 text-sm`)">
             <Icon name="sitemap" class="text-base text-subtle" />
             <p class="text-content">Nothing here yet.</p>
@@ -252,7 +303,10 @@ const startKnowledge = async (): Promise<void> => {
             <p v-if="seed.error.value" class="text-xs text-danger">{{ seed.error.value.message }}</p>
         </div>
 
-        <div v-else class="flex max-h-panel-lg min-h-0 gap-4" :class="stacked ? `flex-col` : undefined">
+        <!-- UNCLAMPED, so the note is as long as the note is and the hub page scrolls it (see the header note).
+             `items-start` while the index is beside the note: it is what lets a sticky column stop stretching to
+             the note's height, and in the folded column it would shrink both to their content width. -->
+        <div v-else class="flex gap-4" :class="stacked ? `flex-col` : `items-start`">
             <!-- In a narrow body the index folds above the note instead of beside it: a 14rem column next to a
                  note leaves neither of them readable, and hiding the note behind a list would put two clicks
                  between the reader and the thing they came for.
@@ -267,14 +321,26 @@ const startKnowledge = async (): Promise<void> => {
                  1440px window — 16rem of index left the note 360px to render prose in, and the index was
                  spending a quarter of its own width on a date. The rows now carry a name instead of a pill and
                  a timestamp (NoteIndex), so 14rem shows MORE of every title than 16rem did, and the note gets
-                 the difference. -->
-            <div class="flex min-w-0 shrink-0 flex-col" :class="stacked ? `max-h-56` : `max-h-full w-56`">
+                 the difference.
+
+                 STICKY, AND THE ONE SCROLLER LEFT IN THE SECTION THAT EARNS ITS KEEP. An index is chrome pointing at something, and it wants
+                 three things a page-scrolled column cannot have: to be reachable from anywhere in the note, to be bounded by the viewport rather
+                 than by the note's length, and to keep its own place while the note keeps a different one. `--pinned-top` is the search bar above
+                 it: `top` clears it and the ceiling subtracts it, from the same measurement, so the two can never disagree about how much room
+                 there is. Stacked, none of that applies: the index is a short band above the note, `max-h-56` already bounds it, and pinning it
+                 would hold a quarter of a phone's viewport for a list you scrolled past on purpose. -->
+            <div
+                class="flex min-w-0 shrink-0 flex-col"
+                :class="stacked ? `max-h-56` : `sticky top-(--pinned-top) max-h-[calc(100dvh-var(--pinned-top))] w-56`"
+            >
                 <NoteIndex :hits="hits" :selected="selected" :filtered="filtered" :is-loading="isLoading" @pick="open" />
             </div>
 
+            <!-- No `:key` any more. It was there to give each note a fresh scroller; the note has no scroller of
+                 its own now, and the page's is reset deliberately instead (useScrollReset above), which is the
+                 same effect without throwing away the pane — and without throwing away an open draft with it. -->
             <KnowledgePane
                 v-if="selected"
-                :key="selected"
                 v-model:draft="draft"
                 :path="selected"
                 class="min-w-0 flex-1"
@@ -285,7 +351,9 @@ const startKnowledge = async (): Promise<void> => {
 
             <!-- The same dashed placeholder the empty state above uses, from the same helper: it was spelled
                  out by hand here, two elements away from the call that produces it. -->
-            <section v-else :class="ui.emptyState(`flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
+            <!-- No `min-h-0`: nothing clamps this row now, so there is no height for a child to be told it may
+                 shrink below. Its own padding is what gives it a size. -->
+            <section v-else :class="ui.emptyState(`flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10`)">
                 <Icon name="sitemap" class="text-base text-subtle" />
                 <p class="text-sm text-muted">Pick a note to read it.</p>
                 <p class="max-w-xs text-xs text-subtle">Follow its links to move through your knowledge the way the agent does.</p>

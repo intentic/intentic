@@ -263,8 +263,13 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
 </script>
 
 <template>
+    <!-- `scroll="page"`: this body is a REPORT read top-down, which is the `page` case. It was clamped and given
+         a scroller of its own, so a workspace with a full book of chores was read through a window with the page
+         around it holding still and nothing to scroll. -->
     <SplitView
         title="Maintenance"
+        scroll="page"
+        :scroll-key="`${repo ?? ``}/${filter}`"
         :description="`What ${repo === undefined ? `this workspace` : repoLabel(repo)} is owed, what measured it, and what has already been done about it.`"
     >
         <template #actions>
@@ -312,7 +317,8 @@ const onStart = (verdict: ChoreVerdict, pick: AgentRunChoice | undefined): void 
         </template>
 
         <template #detail>
-            <div class="scrollbar-thin flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto">
+            <!-- The gap stays, the scroller and the shrink-to-fit do not: see the note on the split above. -->
+            <div class="flex flex-col gap-6">
                 <!-- Nothing has come back yet: including the window where the sandbox handshake still gates the
                      fetch. Show the book's shape rather than a sentence, so the page that arrives is the page you
                      were already looking at. -->

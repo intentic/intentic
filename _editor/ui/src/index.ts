@@ -110,7 +110,15 @@ export {
 // The verb row on one sandbox's line, which buttons exist, their order, their words, and which one is red.
 // Here because the desktop manager and the web Computers tab render the same row and had drifted apart.
 export { default as SandboxVerbs } from "./components/SandboxVerbs.vue";
-export { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type SandboxVerb, sandboxVerbPrompt, type SandboxVerbPrompt, VERB_LABEL } from "./components/sandboxVerbs.js";
+export {
+    DESTRUCTIVE_VERB,
+    menuVerbs,
+    primaryVerb,
+    type SandboxVerb,
+    sandboxVerbPrompt,
+    type SandboxVerbPrompt,
+    VERB_LABEL,
+} from "./components/sandboxVerbs.js";
 export { default as Markdown } from "./components/Markdown.vue";
 export { default as MarkdownFigure } from "./components/MarkdownFigure.vue";
 // A mermaid diagram, drawn from the fence body by mermaid itself and dressed in the app's tokens. Exported
@@ -263,6 +271,12 @@ export { type Device, useDevice } from "./composables/useDevice.js";
  * chat panel is never as wide as the screen. */
 export { useNarrow } from "./composables/useNarrow.js";
 export { useListNavigation } from "./composables/useListNavigation.js";
+/* The scroll position belongs to the reader, but only for as long as it is ABOUT something. On a page-scrolling
+ * surface, changing what a view is showing leaves the old document's offset pointing into the new one. */
+export { useScrollReset } from "./composables/useScrollReset.js";
+/* The other half of a pinned stack: what the SECOND sticky thing has to clear. Measured rather than written
+ * down, because the height of a bar carrying a field and two pickers is a fact about its width. */
+export { type StickyTop, useStickyTop } from "./composables/useStickyTop.js";
 /* The other half of a narrowing rail: where the reader left it. Four surfaces grew one of these menus and all
  * four forgot the pick the moment you clicked away, because the choice lives in the URL and the rail tile opens
  * a view at its bare address. Shipped as one composable rather than solved four times, for the same reason

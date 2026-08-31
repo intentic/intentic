@@ -92,6 +92,12 @@
        becomes a letterbox on a tall monitor. Hence the clamp rather than a plain `dvh`. */
     --height-figure: min(26rem, 50dvh);
 
+    /* HOW MUCH PINNED CHROME SITS ABOVE A STICKY THING, on a page-scrolling surface. Zero here so every consumer
+       resolves on a surface that pins nothing; a surface that pins a bar over its content MEASURES it and
+       overrides this locally (see useStickyTop), because a filter bar's height is a fact about the width it was
+       given, not a constant anybody can write down. */
+    --pinned-top: 0px;
+
     /* THE FACTS GRID — a column of labels sized to their own content beside a column of values that takes the
        rest. Every `<dl>` of label→value in the app is this shape, and it had been spelled `grid-cols-[auto_1fr]`
        and `grid-cols-[max-content_1fr]` — two spellings of one layout, neither of which can be promised to an
