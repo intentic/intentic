@@ -1033,29 +1033,51 @@
             0 2px 6px -2px rgba(0, 0, 0, 0.6);
     }
 
-    /* ── AND WHEN IT CANNOT BE PRESSED IT IS A BLANK SUNK INTO THE WALL ──────────────────────────────────
-     * A disabled button here loses its lift, its contact shadow and its edge, and sits flush in the surface
-     * with the shadow turned INWARD; the face goes flat (no tooth, no pitting) and the label loses its lit lip,
-     * because an incision is something somebody cut and this plate was never finished.
+    /* ── AND WHEN IT CANNOT BE PRESSED IT IS AN UNCARVED BLANK ───────────────────────────────────────────
+     * This skin already says what a button is made of, in four layers, and each layer means something:
      *
-     * IT WENT ROUND TWICE, AND BOTH FAULTS ARE WORTH KEEPING WRITTEN DOWN. First it was #38342e — the WALL's
-     * own value — against a live plaque of pale limestone, so the one control on a form that a person is
-     * waiting to be able to press was a dark rectangle where a pale object had been, and read as GONE rather
-     * than as unavailable. The fix for that was to keep each tier's own material and take 28% of its light off:
-     * stone stayed stone, bronze stayed bronze. That was worse. A pale plate is this skin's single loudest
-     * "press me" signal — nothing else on the window is pale — so a slightly dimmer pale plate is a button that
-     * looks pressable and is not, which is the more expensive of the two mistakes.
+     *     the TOOTH is the material   — the stone's own grain, on every plate in the skin
+     *     the MOTTLE is the vein      — slow variation across a face, because rock is not one colour
+     *     the PITS + their LIT LIPS   — the marks a chisel leaves: this face has been DRESSED
+     *     the incision (text-shadow)  — the label, cut in, lit from above
      *
-     * SO THE MATERIAL IS THE THING THAT GOES. There is one disabled surface for every filled tier, and it is
-     * not a plaque at all: a recess, cut to three quarters of the neutral plate's light (#2c2824 against the
-     * live secondary's ~#332f2a) and still clearly above the card it sits on, with no rim and no face. Losing
-     * the RIM is what makes it unmistakable — every live tier in this skin draws a hairline, so a filled box
-     * without one is a shape nothing live can wear. That was the other half of the report: that a disabled
-     * control was hard to tell from a quiet one, which it was, because the two differed only by a few per cent
-     * of fill and a few per cent of edge.
+     * A disabled control is therefore not a colour problem, it is a stage-of-work problem. It is a panel of the
+     * same rock, set in the wall, that nobody has dressed and nobody has inscribed: it keeps the grain and the
+     * vein, and it has no pitting, no lit lips and no incision. That reads as unavailable the way a blank
+     * pediment does — not because it is greyer, but because the work has not been done to it.
      *
-     * The ink is #948b7c, 4.35:1 on that ground against the live neutral label's 10.5:1 — under half the
-     * contrast, which is the signal, and still a word rather than a smudge.
+     * IT WENT ROUND THREE TIMES, AND EVERY FAULT IS WORTH KEEPING WRITTEN DOWN.
+     *
+     *   1. It was #38342e, the WALL's own value, against a live plaque of pale limestone — so the one control on
+     *      a form that somebody was waiting to be able to press was a dark rectangle where a pale object had
+     *      been, and read as GONE rather than as unavailable.
+     *   2. The fix for that kept each tier's own material and took 28% of its light off: stone stayed stone,
+     *      bronze stayed bronze. Worse. A pale plate is this skin's single loudest "press me" signal — nothing
+     *      else on the window is pale — so a slightly dimmer pale plate is a button that LOOKS pressable and is
+     *      not, which is the more expensive of the two mistakes.
+     *   3. So the material went, and with it went too much: `background-image: none` left the one surface in the
+     *      whole skin with no grain at all, and `inset 0 1px 2px rgba(0,0,0,0.5)` put a half-black smear across
+     *      its top edge. A smooth rectangle with a hard black line on it is not stone in any light; it is the
+     *      1998 pressed-input emboss this file already talks itself out of, thirty rules up, for the plaque.
+     *      Reported, correctly, as ugly and as not belonging to the skin.
+     *
+     * SO THE RELIEF IS A SINGLE WARM HAIRLINE, and warm is the load-bearing word. Black on a warm ash ground
+     * does not read as shade, it reads as a hard line drawn ON the stone. The shade is mixed from the wall's own
+     * darkness at a quarter alpha and given no blur, which is what a shallow set actually looks like: one line
+     * of the top edge fallen out of the light, and a whisper on the lower lip where it comes back. Two pixels of
+     * relief in total, and no drop at all, because the panel is IN the wall.
+     *
+     * AND ITS EDGE IS A SEAM, NOT A RIM, which is the correction to "a disabled control has no edge". That was
+     * the right idea stated one notch too bluntly: with no edge at all the blank had nothing to end against, and
+     * on canvas — a shade darker than the card — it stopped being a panel and became a stain on the wall. What
+     * every LIVE tier here draws is a rim that CATCHES LIGHT: cream, gold, red, amber, green, each its own tone
+     * at some alpha, an edge proud of the surface. The blank's edge is the opposite thing — the shadow in the
+     * gap around a panel that has been set INTO the surface — so it still wears a shape nothing live can wear,
+     * and it is an object again. The flat scheme has no material and no gap, so there it stays a plain absence
+     * of rim; a skin answering this question in its own substance is what a skin is for.
+     *
+     * The ink is #968c7d — flat, no lit lip, 4.4:1 on the blank against the live neutral label's 10.5:1. Under
+     * half the contrast, which is the signal, and still a word rather than a smudge.
      *
      * IT RESTATES THE PLATE, AND THAT IS A SPECIFICITY FACT RATHER THAN A DUPLICATION. The app's own disabled
      * rule (primeng.css) paints from these same three variables at one class plus `:disabled`, and this skin's
@@ -1063,17 +1085,23 @@
      * outright. Measured, not assumed: the success plaque stayed weathered-green while disabled, which is a
      * button that cannot be pressed and does not say so. */
     [data-skin="sanctum"] .p-button:where(:not(.p-button-text, .p-button-link)):disabled:not(.p-button-loading) {
-        --ui-button-off-fill: #2c2824;
-        --ui-button-off-line: transparent;
-        --ui-button-off-content: #948b7c;
+        --ui-button-off-fill: #2e2a25;
+        --ui-button-off-line: rgba(18, 13, 9, 0.6);
+        --ui-button-off-content: #968c7d;
         background-color: var(--ui-button-off-fill);
-        background-image: none;
+        /* Vein over grain, and nothing above them. The pit layers and their lit lips are the dressing, and a
+           blank has not been dressed; stating the three list properties keeps this face independent of the
+           five-layer plaque rule it overrides, rather than inheriting a position list built for other stones. */
+        background-image: var(--sanctum-mottle), var(--sanctum-tooth);
+        background-position: 0 0;
+        background-size: auto;
+        background-repeat: repeat;
         border-color: var(--ui-button-off-line);
         color: var(--ui-button-off-content);
         text-shadow: none;
         box-shadow:
-            inset 0 1px 2px rgba(0, 0, 0, 0.5),
-            inset 0 -1px 0 rgba(255, 250, 238, 0.05);
+            inset 0 1px 0 rgba(24, 18, 12, 0.28),
+            inset 0 -1px 0 rgba(255, 250, 238, 0.045);
     }
 
     /* The quiet tiers have no plate to sink; the app's base rule already keeps them transparent, so this is the

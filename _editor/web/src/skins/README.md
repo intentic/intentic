@@ -36,7 +36,7 @@ Sanctum read the rule as "no background-image on a plate" for one cut, and shipp
 in which every surface anyone actually looked at was a flat rectangle. The plates carry a tooth now, measured at
 under a hundredth of a contrast ratio point.
 
-Sanctum has paid for that rule and sixteen others, and the notes are kept at the top of the file:
+Sanctum has paid for that rule and seventeen others, and the notes are kept at the top of the file:
 
 - **A skin that says `.p-button` has said it about the tiers that are meant to have no chrome.** Both skins
   wrote their plate — a border colour, a bevel, a drop shadow, a wash, a hover glow — against every `.p-button`
@@ -44,15 +44,27 @@ Sanctum has paid for that rule and sixteen others, and the notes are kept at the
   out as outlined boxes. It reached the whole of `<SandboxVerbs>`, which is the Start/Stop/… cluster on every
   machine row. Reported as the app having border weights nobody had chosen. Both skins exclude the borderless
   variants now, spelled with `:where()` so the exclusion costs no specificity.
-- **A disabled control is told apart by what it LACKS, not by how dark it is.** This one went round twice.
-  Sanctum first painted a disabled committing button at the *wall's own value*, against a live plaque of pale
-  limestone, so the one action on a form read as gone rather than as unavailable. The obvious correction — keep
-  each tier's material and take 28% of its light off — was worse: a pale plate is this skin's single loudest
-  "press me" signal, so a slightly dimmer pale plate is a button that looks pressable and is not. What settled
-  it was dropping the material entirely and dropping the RIM: one recess, cut under the neutral plate, with no
-  edge. Every live tier here draws a hairline, so a filled box without one is a shape nothing live can wear.
-  It is driven by re-pointing the app's `--ui-button-off-*` variables rather than by a block per tier, which is
-  what had let four hand-mixed tones drift to 3.0–3.3:1 under a comment claiming 4.5.
+- **A disabled control is a STAGE OF WORK, not a colour.** This one went round three times and every round is
+  in the file. First it was painted at the *wall's own value*, against a live plaque of pale limestone, so the
+  one action on a form read as gone rather than as unavailable. The obvious correction — keep each tier's
+  material and take 28% of its light off — was worse: a pale plate is this skin's single loudest "press me"
+  signal, so a slightly dimmer pale plate is a button that looks pressable and is not. The third round dropped
+  the material *and* the relief, and overshot: `background-image: none` left the one surface in the skin with
+  no grain at all, and a half-black inset smear across its top edge — reported as ugly, and as not belonging
+  here, which it was: that is the 1990s pressed-input emboss this file talks itself out of for the plaque.
+
+  What settled it was reading the skin's own layers as a sentence. **The tooth is the material, the mottle is
+  the vein, the pits and their lit lips are the DRESSING, and the incision is the label.** So a disabled
+  control is a panel of the same rock, set in the wall, that nobody has dressed and nobody has inscribed: it
+  keeps the grain and the vein, and it has no pitting, no lit lips and no incision. It reads as unavailable
+  the way a blank pediment does — not because it is greyer, but because the work has not been done to it.
+- **An edge that catches light and an edge that is a shadow are different objects.** Every live tier here draws
+  a rim in its own tone — cream, gold, red, amber, green — an edge proud of the surface. Saying a disabled
+  control therefore has *no* edge was one notch too blunt: with none at all the blank had nothing to end
+  against, and on canvas it stopped being a panel and became a stain on the wall. Its edge is a **seam**: the
+  shadow in the gap around something set INTO the surface. Still a shape nothing live can wear, and an object
+  again. The whole thing is driven by re-pointing the app's `--ui-button-off-*` variables rather than by a
+  block per tier, which is what had let four hand-mixed tones drift to 3.0–3.3:1 under a comment claiming 4.5.
 - **One percentage across four tones is four different weights.** `secondary`, `danger`, `warn` and `success`
   shared a border formula at 30% of the tier's tone — but `secondary`'s tone is `--color-content`, the lightest
   colour in the palette, so the quietest tier was drawing the brightest edge on the screen. Reported as the

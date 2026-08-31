@@ -93,21 +93,31 @@ version of anything: it was a dark rectangle where a pale object had been. That 
 **Now.** One contract, three variables (`--ui-button-off-*` in `tokens.css`), which the skins re-point rather
 than re-implement:
 
-- A disabled button is a **flat plate with no rim**, and the rim is the part that does the work. Every live
-  tier here draws a 1px hairline; the two that do not (`text`, `link`) have no fill either. So a filled box
-  with no edge is a shape nothing live can wear. The border is still declared, at `transparent`, so the box
-  does not change size when it goes off.
+- A disabled button **has no lit edge**, and that is the part doing the work. Every live tier draws a 1px
+  hairline in its own tone; the two that do not (`text`, `link`) have no fill either. So a filled box with no
+  edge that catches light is a shape nothing live can wear. The border is still declared — `transparent` in
+  the flat scheme, a shadow seam under Sanctum — so the box never changes size when it goes off.
 - Its fill sits **under** the quietest live tier (4% against `secondary`'s 8%) and the label drops to
   `subtle`. One neutral ground for every tier — a disabled `danger` must not still be red.
-- Under Sanctum it is a recess at three quarters of the neutral plate's light (`#2c2824`), ink `#948b7c` at
-  4.35:1 against the live neutral label's 10.5:1.
+- Under Sanctum it is an **uncarved blank**, and that phrasing is the design rather than a metaphor. The skin
+  builds a button from four layers, each meaning something: the *tooth* is the material, the *mottle* is the
+  vein, the *pits and their lit lips* are the dressing a chisel leaves, and the *incision* is the label. A
+  disabled control is a panel of the same rock, set in the wall, that nobody has dressed and nobody has
+  inscribed — grain and vein, no pitting, no lit lips, no incision. It reads as unavailable the way a blank
+  pediment does: not because it is greyer, but because the work has not been done to it. Ink `#968c7d`, 4.4:1
+  against the live neutral label's 10.5:1.
+- Its edge is a **seam**, not a rim: the shadow in the gap around something set *into* a surface. Every live
+  tier draws an edge that catches light; this one draws the absence of light around it. In the flat scheme,
+  which has no material and no gap, that same rule is expressed as no edge at all.
 
-  ⚑ This took two passes, and both failures are worth recording. The first kept each tier's own material and
-  took 28% of its light off — stone stayed stone, bronze stayed bronze. That was *worse*: a pale plate is
-  Sanctum's single loudest "press me" signal, so a slightly dimmer pale plate is a button that looks
-  pressable and is not. The second fault was in the flat scheme and in Sanctum both: a disabled plate whose
-  fill and rim were each a few per cent under `secondary`'s **is** `secondary`, which is why it was hard to
-  tell a disabled control from a quiet one.
+  ⚑ This took three passes and each failure is recorded in `skins/README.md`. (1) The wall's own value, so the
+  button read as *gone*. (2) Each tier's own material at 28% less light — worse, because a pale plate is
+  Sanctum's loudest "press me" signal and a slightly dimmer one is a button that looks pressable and isn't.
+  (3) Material *and* relief both dropped, which overshot: `background-image: none` left the one surface in the
+  skin with no grain, and a half-black inset smear across its top edge — the 1990s pressed-input emboss the
+  file explicitly talks itself out of thirty rules earlier, for the plaque. Separately, in both schemes, a
+  disabled plate whose fill and rim were each a few per cent under `secondary`'s simply **is** `secondary`,
+  which is why it was hard to tell a disabled control from a quiet one.
 - The borderless tiers keep having no chrome. A control that *gains* an edge by becoming unavailable is
   answering the wrong question.
 - ⚑ **`loading` is excluded.** PrimeVue reports a Button as disabled while it is loading (`disabled || loading`),
