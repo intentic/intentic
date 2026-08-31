@@ -25,6 +25,7 @@ import { startAnchor, type TurnPlacement } from "../agents/isolation.js";
 import { holdAccount } from "../claude/claude-credentials.js";
 import { isIsolated } from "../agents/agents-store.js";
 import { anchorWorktree, forkWorktreeBase } from "./anchor-worktree.js";
+import { anchorSteeredMessage } from "./steer-anchors.js";
 import { landAgent } from "../agents/land.js";
 import { describeLandingInBackground } from "../agents/landed-subject.js";
 import { landingPaths } from "../agents/landing-paths.js";
@@ -160,6 +161,40 @@ const settleLandBooks = async (services: Services, conversationId: string): Prom
     }
 };
 
+/* THIS TURN'S BEFORE-STATE, in the currency an isolated conversation has: its own branch. Pinned, filed under
+ * the message, and SAID OUT LOUD, which is the part that has to happen in one place for the two isolated arms
+ * (local worktree, runner mirror) to behave the same.
+ *
+ * Both halves matter and they reach different readers. The record is what a tab coming back tomorrow reads,
+ * through the anchor stamp on a restored transcript (sessions/agent-transcript.ts). The FRAME is what the tab
+ * watching this turn reads: the client hangs "go back to before this message" on it, so without it an isolated
+ * conversation offered the pencil, the rewind and the files-as-they-were fork on every turn it had reloaded and
+ * on none it had just watched — the affordance appearing at random rather than by any rule.
+ *
+ * `worktree:index` is not a second naming of anything: it is exactly the id agent-transcript.ts synthesises for
+ * this anchor, so the live frame and the reopened tab put the same string on the same message. The client never
+ * opens it — it reads it as "there is a state here" and hands the index back — which is why a placement's
+ * commits need no wire representation of their own, and why a client cannot address a commit the daemon did not
+ * choose.
+ *
+ * Best-effort throughout: a repo that will not commit costs its own anchor (anchorWorktree), and nothing here
+ * costs the turn. Nothing pinned ⇒ nothing claimed, no frame. */
+async function* anchorIsolatedTurn(
+    services: Pick<Services, "agentWorktrees" | "logger" | "turnAnchors">,
+    conversationId: string,
+    repos: readonly { readonly repo: string; readonly base: string }[],
+    turn: SnapshotTurn,
+): AsyncGenerator<AgentEvent> {
+    const anchored = await anchorWorktree(services, conversationId, repos);
+    if (anchored.length === 0) {
+        return;
+    }
+    await services.turnAnchors
+        .record(turn.conversationId, turn.index, { kind: "worktree", repos: anchored })
+        .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
+    yield { kind: "checkpoint", id: `worktree:${turn.index}`, index: turn.index };
+}
+
 // The fleet-registry lifecycle around every conversation turn. `conversationId` is the boundary: workspace and
 // isolated conversations both acquire the mutex, publish every frame and finish in a finally. `isolated` only
 // chooses the placement-specific worktree/land flow inside that shared lifecycle.
@@ -261,9 +296,18 @@ async function* runConversationTurn(
     const turn: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
     /* THE REMOTE ARM (runners/runner-dispatch.ts). The parent's stations only: the worktree here is a MIRROR
      * — ensured so diff, standing and land read the conversation exactly as a local isolated one, never
-     * synced or anchored here, because the rebase and the anchor run on the runner, whose CPU the placement
-     * bought. The finally settles the books in `measure` (the same pass an ended local turn takes), which is
-     * what turns the pushed branch into the card's diffstat and its "Ready to land" standing. */
+     * REBASED here, because that runs on the runner, whose CPU the placement bought. The finally settles the
+     * books in `measure` (the same pass an ended local turn takes), which is what turns the pushed branch into
+     * the card's diffstat and its "Ready to land" standing.
+     *
+     * ANCHORED here though, and that one is not the runner's to keep. The runner records anchors in its own
+     * store; `/agent/rewind` reads THIS daemon's, so a conversation placed on a runner had every way back to
+     * every one of its messages silently withdrawn — no pencil, no rewind, no fork on the old files — for no
+     * reason a user could see, since nothing else about a remote card reads differently from a local one.
+     *
+     * The mirror is the right thing to anchor, not a stand-in for the runner's checkout: the turn opens with a
+     * sync PULL, the runner bringing its copy up to this branch, so the mirror at this moment IS the state the
+     * turn starts from, and a rewind that resets the mirror is picked up by the next turn's pull. */
     if (runnerId !== undefined) {
         let remoteFailed = false;
         try {
@@ -274,6 +318,7 @@ async function* runConversationTurn(
             }
             const root = worktree.repos.find((repo) => repo.repo === "root") ?? worktree.repos[0];
             yield { kind: "worktree", branch: worktree.branch, base: (root?.base ?? "").slice(0, 7), remote: runnerId };
+            yield* anchorIsolatedTurn(services, conversationId, worktree.repos, turn);
             for await (const event of dispatchRemoteTurn(services, { ...input, conversationId }, runnerId, worktree, signal)) {
                 services.agents.observe(conversationId, event);
                 if (event.kind === "error") {
@@ -469,14 +514,10 @@ async function* runConversationTurn(
          * This is what makes an agent's own history reachable at all. Until it existed, an isolated
          * conversation had no per-message state anywhere: rewind had nothing to offer, and a fork could only
          * start from wherever the checkout happened to have got to by the time somebody asked, which is not
-         * the point the user pointed at. Best-effort: a repo that will not commit costs its own anchor, never
-         * the turn. */
-        const anchored = await anchorWorktree(services, conversationId, worktree.repos);
-        if (anchored.length > 0) {
-            await services.turnAnchors
-                .record(turn.conversationId, turn.index, { kind: "worktree", repos: anchored })
-                .catch((error: unknown) => services.logger.warn({ err: error }, "anchors: recording the turn's commits failed"));
-        }
+         * the point the user pointed at. Pinned, filed and ANNOUNCED by anchorIsolatedTurn, which the runner
+         * arm above shares: the two isolated placements have to offer the same ways back, or which turns wear a
+         * pencil comes down to where the work happened to run. */
+        yield* anchorIsolatedTurn(services, conversationId, worktree.repos, turn);
         /* The rebase the harness takes back whenever a card settles (agent.ts). It answers with the frame the
          * transcript needs, and with undefined on the ordinary answer, where the branch was already on today's
          * main line and there is nothing to report. The MODEL is told nothing either way, see turn-preamble.ts
@@ -1842,6 +1883,13 @@ export const createAgentRoutes = (services: Services) => {
                 sentAt: Date.now(),
                 ...((input.attachments ?? []).length > 0 ? { attachments: [...(input.attachments ?? [])] } : {}),
             });
+            /* AND ITS PLACE IN THE QUEUE OF WAYS BACK, taken in the same synchronous breath as the frame so the
+             * Nth box belongs to the Nth steered row however the captures below interleave (see
+             * agent/steer-anchors.ts). The state itself is pinned after: mid-answer is the only moment it
+             * exists, and its INDEX is not known until the turn settles and the fold says how many rows it
+             * wrote first. Awaited so the poster's 200 means the bookmark is really there, and never fatal:
+             * this message has already been accepted by the turn. */
+            await anchorSteeredMessage(services, input.conversationId);
             // A steered message is something the user SAID, so the fleet filter has to find it. Recorded here
             // rather than left to the transcript because the prompt index reads a session's file once and holds
             // it (transcript-search.ts), a mid-turn message that only ever landed in the file would be invisible to

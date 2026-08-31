@@ -347,6 +347,46 @@ test("a dismissed question settles the turn's books on the branch, and lands not
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", diff: { files: 1, insertions: 1, deletions: 0 } });
 });
 
+/* AN ISOLATED TURN SAYS WHERE ITS MESSAGE CAN BE PUT BACK TO, out loud, in the stream.
+ *
+ * It always RECORDED that (agent/turn-anchors.ts) and never announced it, and the two reach different readers.
+ * The record is what a tab coming back tomorrow reads, through the stamp on a restored transcript. The FRAME is
+ * what the tab watching this turn reads: the client hangs the pencil, the rewind and the files-as-they-were fork
+ * on it. So an agent chat offered all three on every turn it had RELOADED and on none of the turns it had just
+ * watched — which from the chat's side is the affordance appearing at random, since nothing distinguishes those
+ * turns from each other.
+ *
+ * The id is the one sessions/agent-transcript.ts synthesises for the same anchor, so the live tab and the
+ * reopened one put the same string on the same message. It needs a REAL checkout to have anything to pin, which
+ * is why this sits with the turn-end suite rather than beside the cheaper route tests. */
+test("an isolated turn announces the state its message can be rewound to, and files it under that message", async () => {
+    const { worktrees } = await realCheckout("conv-anchor");
+    const filed: { index: number; kind: string }[] = [];
+    const client = clientFor(
+        createApp(
+            services({
+                agentWorktrees: worktrees,
+                turnAnchors: {
+                    record: async (_id: string, index: number, anchor: { kind: string }) => void filed.push({ index, kind: anchor.kind }),
+                    of: async () => undefined,
+                    all: async () => new Map(),
+                    truncate: async () => {},
+                },
+                async *agent() {
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    const events = await runAgentTurn(client, { prompt: "start it", conversationId: "conv-anchor", isolated: true });
+
+    // The first turn of the conversation, so the message it answers is row 0 of the record.
+    expect(events.find((event) => event.kind === "checkpoint")).toEqual({ kind: "checkpoint", id: "worktree:0", index: 0 });
+    // And the frame is not a claim on its own: the state behind it is filed under the same message.
+    expect(filed).toEqual([{ index: 0, kind: "worktree" }]);
+});
+
 /* A MID-TURN MESSAGE IS PART OF THE RUN, not a note the sending window keeps to itself.
  *
  * The steer used to reach the model and nothing else: the frame log never heard of it, so the settled record was

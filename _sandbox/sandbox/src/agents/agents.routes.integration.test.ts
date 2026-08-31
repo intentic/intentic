@@ -235,7 +235,12 @@ test("agents.search matches titles and later lines, across the archive", async (
             { role: "assistant", text: "landAgent lives in laneDrop.ts" },
         ],
     });
-    expect(scopedTo).toEqual(["/work"]);
+    /* WHICH DIR, not how many reads. The fake derives `count` from `read` on purpose (route-testing), so the
+     * number of store reads tracks the daemon's own bookkeeping — a turn reads its start index, and a settled one
+     * reads it again to place any message steered into it (sessions/turn-transcript.ts). What must never drift is
+     * the SCOPE: every one of them is the workspace root, because an isolated turn's namespace makes its worktree
+     * /work and a read aimed at the worktree path finds nothing. */
+    expect([...new Set(scopedTo)]).toEqual(["/work"]);
     // An id the registry has never heard of is a 404 ON THE WIRE, not merely a rejected call: the browser reads
     // that exact status as "this conversation has no entry any more" and stops a tab claiming a fleet card
     // nothing on the board can render (see useChat's replayStoredSession). Anything else: a 500, an

@@ -21,7 +21,7 @@ import {
 import type { Conversation } from "../composables/chat/conversation";
 import { modelLabelFor, providerDisplayLabel } from "../composables/chat/providerCatalog";
 import { pickUpReady } from "../composables/chat/pickUp";
-import { type ChatMessage, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
+import { type ChatMessage, cutsAboveOf, dayMarksOf, forkCutsOf, turnsOf } from "../composables/chat/transcript";
 import { withShortcut } from "../composables/commands/useCommands";
 import { navigateInApp } from "../composables/mainWindow";
 import { invalidateAgentTranscript } from "../composables/chat/agentTranscript";
@@ -314,6 +314,15 @@ const dayMarks = computed(() => dayMarksOf(turns.value));
  * a findIndex per section would be quadratic in the transcript on every frame: the cost this file's v-memo
  * note is about, arriving by a different road. */
 const forkCuts = computed(() => forkCutsOf(turns.value));
+
+/* AND THE BOUNDARIES THAT INDEX DOES NOT COVER, keyed by the message each sits above (cutsAboveOf): the
+ * messages a turn folded, and the conversation's first. One mark per turn is one boundary per turn, and a turn
+ * holding a "keep going" or an errand holds more than one place a reader can want to go back to.
+ *
+ * Built here beside `forkCuts` and for the same reason: the flat position of a message is exactly what the
+ * grouped render throws away, and asking per row would be a findIndex per row on every paint of a streaming
+ * answer. */
+const cutsAbove = computed(() => cutsAboveOf(turns.value));
 
 /* WHAT AN EDIT IN PROGRESS WOULD THROW AWAY: the id of every row from the edited message down, so the
  * transcript can draw them as already gone while they are still entirely there.
@@ -1168,7 +1177,13 @@ watch(
             :class="{ 'chat-realize': realizing }"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
-                <div class="chat-turns flex flex-1 flex-col pt-4">
+                <!-- The top inset is one target's worth of air rather than the half of one it was, because the
+                     first message now carries a mark in the gap ABOVE it (cutsAboveOf) and that gap is the only
+                     one in the transcript with nothing else in it: everywhere else a mark hangs over the answer
+                     it follows, in the gutter, where overlapping costs nothing. Here it would hang over the
+                     scroller's own edge and be clipped at the top of the column. Spent at the oldest end of a
+                     conversation, which is the one place in this panel where air is free. -->
+                <div class="chat-turns flex flex-1 flex-col pt-8">
                     <!-- Where a forked chat says so: above the turns it inherited, which without it read as
                          this conversation's own beginning. -->
                     <ChatForkLine />
@@ -1208,15 +1223,39 @@ watch(
                                      row that has just been struck (or unstruck by a cancel) renders
                                      differently, and a memo that did not list it would leave the transcript
                                      showing the previous edit's casualties. -->
-                                <ChatMessageView
+                                <!-- A `display: contents` wrapper, which is doing two jobs at once and neither is
+                                     layout: its children ARE the section's flex items, spaced on the same gap,
+                                     exactly as they were when the row was the loop's element.
+                                     It exists because a row can now be preceded by a mark (cutsAbove) and
+                                     because `v-memo` must sit on the same element as its `v-for` — that is the
+                                     only arrangement Vue gives a per-iteration cache slot, and a memo on a child
+                                     of the loop would share ONE slot across every row in the transcript.
+                                     `cutAbove` joins the memo key like every other input: it moves whenever a row
+                                     is added or dropped above this one, and a memo that did not list it would
+                                     leave a mark pointing at the boundary it used to sit on. -->
+                                <div
                                     v-for="message in turn.messages"
                                     :key="message.id"
-                                    v-memo="[message, isStreaming(message), turn.folded, doomed.has(message.id)]"
-                                    :message="message"
-                                    :streaming="isStreaming(message)"
-                                    :folded="message.id === turn.id ? turn.folded : undefined"
-                                    :doomed="doomed.has(message.id)"
-                                />
+                                    v-memo="[message, isStreaming(message), turn.folded, doomed.has(message.id), cutsAbove.get(message.id)]"
+                                    class="contents"
+                                >
+                                    <!-- THE WAY BACK TO JUST ABOVE THIS MESSAGE, for the boundaries one mark per
+                                         turn cannot reach: a message the turn folded, and the chat's first (see
+                                         cutsAboveOf). BETWEEN the rows rather than inside one, which is not a
+                                         stylistic choice: `.chat-message` carries `content-visibility: auto`, and
+                                         that paint-contains the row, so a mark hanging above its top edge is
+                                         clipped out of existence — invisible AND unclickable. `.chat-prompt`
+                                         happens to opt back out with `content-visibility: visible`, so drawn from
+                                         inside the row it worked on opening prompts and silently vanished on
+                                         every folded one, which is the worst of both. -->
+                                    <ChatForkCut v-if="cutsAbove.get(message.id) !== undefined" :cut="cutsAbove.get(message.id)!" />
+                                    <ChatMessageView
+                                        :message="message"
+                                        :streaming="isStreaming(message)"
+                                        :folded="message.id === turn.id ? turn.folded : undefined"
+                                        :doomed="doomed.has(message.id)"
+                                    />
+                                </div>
                                 <!-- THE FORK POINT of this turn, in the column's MARGIN at the end of the answer:
                                      everything down to here is what a fork keeps, and everything after it is
                                      what it leaves behind. Last in the section so it stands level with the close

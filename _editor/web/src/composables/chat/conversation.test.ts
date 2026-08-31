@@ -6,7 +6,17 @@ import { Conversation } from "./conversation";
 import { providerAccounts } from "./providerAccounts";
 import { turnDefaults } from "./turnDefaults";
 import { resolvePrompt } from "../agents/conflictResolution";
-import { type ChatMessage, CONTINUATIONS, continuationFor, dayMarksOf, foldsIntoTurn, forkCutsOf, isAcknowledgment, turnsOf } from "./transcript";
+import {
+    type ChatMessage,
+    CONTINUATIONS,
+    continuationFor,
+    cutsAboveOf,
+    dayMarksOf,
+    foldsIntoTurn,
+    forkCutsOf,
+    isAcknowledgment,
+    turnsOf,
+} from "./transcript";
 import { usageStatusByAccount } from "./usageStatus";
 
 // `sandboxError` stands in for the real one minus that module's app-wide singletons (the endpoint, session and
@@ -452,6 +462,37 @@ describe(`Conversation`, () => {
         // Every turn has one, the first included: a fork below the opening answer keeps that whole exchange.
         expect(forkCutsOf(turnsOf(messages.slice(0, 2)))).toEqual(new Map([[1, 2]]));
         expect(forkCutsOf([])).toEqual(new Map());
+    });
+
+    /* AND THE BOUNDARIES ONE-MARK-PER-TURN CANNOT REACH (cutsAboveOf). A turn is not one message: the ones it
+     * FOLDED sit inside it, so the mark at its close is a different line — it keeps everything the fold went on
+     * to produce, which is exactly what someone going back to their "keep going" means to drop. And the very
+     * first message has nothing above it at all, so the turn that set the conversation's whole direction was
+     * the one turn nobody could go back to.
+     *
+     * Openers past the first are deliberately absent: their boundary IS the previous turn's close, and two
+     * marks on one line would be two controls doing one thing. */
+    it(`cutsAboveOf covers the folded messages and the first, and nothing that already has a mark`, () => {
+        const messages: ChatMessage[] = [
+            { id: 1, role: `user`, text: `hi` },
+            { id: 2, role: `assistant`, text: `hello` },
+            { id: 3, role: `user`, text: `continue` },
+            { id: 4, role: `assistant`, text: `sure` },
+            { id: 5, role: `user`, text: `now do the other thing` },
+            { id: 6, role: `assistant`, text: `done` },
+        ];
+        expect([...cutsAboveOf(turnsOf(messages))]).toEqual([
+            // The first message: everything above it is nothing, which is still a place to go back to.
+            [1, 0],
+            // The bare "continue", folded into turn 1 and two rows deep in it.
+            [3, 2],
+        ]);
+        // Message 5 opens turn 2, so its boundary is turn 1's close mark (forkCutsOf) and it gets none here.
+        expect(cutsAboveOf(turnsOf(messages)).has(5)).toBe(false);
+        // A transcript that opens on the agent's words (a restored history, a provider notice) has no first
+        // prompt to mark, and an assistant row is not a point anyone goes back TO.
+        expect(cutsAboveOf(turnsOf(messages.slice(1)))).toEqual(new Map([[3, 1]]));
+        expect(cutsAboveOf([])).toEqual(new Map());
     });
 
     /* THE TRANSCRIPT'S DATE (dayMarksOf): a day named once, above the first turn sent on it. It is what the

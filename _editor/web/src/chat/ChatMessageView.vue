@@ -846,6 +846,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         class="chat-message chat-stack flex flex-col"
         :class="{
             'chat-prompt': message.role === 'user' && !defers,
+            // The rows that host the pencil, which is the same set `items-end` names below: the user speaking,
+            // in a bubble. It hangs in the gutter, OUTSIDE this row's box, and .chat-message paint-contains the
+            // row — see .chat-gutter-host in chat.css for what that did to it.
+            'chat-gutter-host': message.role === 'user' && errand === undefined,
             'items-end': message.role === 'user' && errand === undefined,
             'chat-prompt-open': expanded,
             'chat-prompt-pinned': pinned,

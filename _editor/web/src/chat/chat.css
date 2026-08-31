@@ -32,6 +32,22 @@
 .chat-realize .chat-message {
     content-visibility: visible;
 }
+/* A ROW THAT HOSTS A CONTROL IN THE GUTTER CANNOT BE PAINT-CONTAINED, and this is the rule that says so once
+   instead of each control discovering it.
+   `content-visibility: auto` above brings paint containment with it, which CLIPS the row to its own box. The
+   gutter is deliberately outside that box (the pencil hangs off the prompt's right edge at `left-full`,
+   --chat-gutter wide), so a control there is not cropped, it is painted out of existence: invisible, and
+   `elementFromPoint` cannot find it either, so it is unclickable in the bargain.
+   It went unnoticed because `.chat-prompt` opts out for a reason of its own (a sticky row may not be skipped),
+   and `.chat-prompt` is on every user message EXCEPT the ones a turn folded. So the same pencil, on the same
+   kind of message, worked on an opening prompt and silently vanished on a "keep going" — which read as the edit
+   affordance being arbitrary rather than as one CSS rule reaching one set of rows and not the other.
+   Keyed on hosting a control rather than on being a prompt, so the next thing put in that lane is covered by
+   the fact that it is there, and the perf mechanism still covers everything else: the agent's rows, tool cards
+   and errands are the bulk of a long transcript and none of them reach into the gutter. */
+.chat-gutter-host {
+    content-visibility: visible;
+}
 /* The prompt stays on screen for as long as its answer does: it pins to the top of the transcript while the
    turn scrolls beneath it, and the next turn's prompt pushes it out. Claude Code's transcript, and for the same
    reason — a long turn otherwise buries the question it is answering, and re-finding it means scrolling away

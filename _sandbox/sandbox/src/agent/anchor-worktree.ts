@@ -54,7 +54,11 @@ export const forkWorktreeBase = async (
 export const anchorWorktree = async (
     services: AnchorDeps,
     conversationId: string,
-    repos: readonly { repo: string; base: string }[],
+    repos: readonly { readonly repo: string; readonly base: string }[],
+    // What `git log` on the branch calls the commit this writes, when there was something to keep. A turn's own
+    // anchor is the turn boundary; a message steered INTO a running turn is a different moment and has to read
+    // as one, or the log says a turn began four times in the middle of one answer.
+    title = "Agent: before this turn",
     git: GitRunner = defaultGit,
 ): Promise<RepoBase[]> => {
     const anchored: RepoBase[] = [];
@@ -67,9 +71,9 @@ export const anchorWorktree = async (
              * so the decision about what actually goes in stays with commitWorktreeRemainder and its index. */
             const { stdout } = await git(dir, ["status", "--porcelain", "-z"]);
             if (stdout !== "") {
-                // Titled as the turn boundary it is, so a reader of `git log` on the branch can see where each
-                // turn began rather than a run of identically-named commits.
-                await commitWorktreeRemainder(repo, dir, `Agent: before this turn`, git);
+                // Titled as the boundary it is, so a reader of `git log` on the branch can see where each turn
+                // began rather than a run of identically-named commits.
+                await commitWorktreeRemainder(repo, dir, title, git);
             }
             const base = await headSha(dir, git);
             if (base !== undefined) {

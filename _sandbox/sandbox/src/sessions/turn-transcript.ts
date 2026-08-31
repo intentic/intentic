@@ -9,6 +9,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
+import { takeSteerAnchors } from "../agent/steer-anchors.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -326,19 +327,99 @@ export const handoffHistory = async (
  * the restart recovery path keep an interrupted journal entry until this write really landed; ordinary settled
  * turns use the awaited call only as an ordering boundary. */
 export const recordTurnTranscript = async (
-    services: Pick<Services, "transcripts" | "workspace" | "logger">,
+    services: Pick<Services, "transcripts" | "turnAnchors" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     events: readonly AgentEvent[],
     // When the turn started, for the user row's stamp, every caller runs a turn and therefore knows it.
     sentAt: number,
 ): Promise<boolean> => {
+    const agent = transcriptAgentOf(turn);
+    /* Read BEFORE the append, which is what makes it this turn's start index: the same number turnStartIndex
+     * takes at the top of the turn, in the same window (the record is open, this turn's rows are not in it yet).
+     * Taken here rather than passed down from there because only this side knows how many rows the fold actually
+     * wrote, and the two have to be added together to place a message steered into the turn.
+     *
+     * And OUTSIDE the guard below, which is the point: this is bookkeeping for a bookmark, and the write it sits
+     * beside is the conversation itself. Inside, a store that cannot answer this — a count that fails, a caller
+     * whose record does not implement one — took the turn's whole transcript down with it. */
+    const base = await recordedCount(services, agent);
     try {
-        await services.transcripts.append(transcriptAgentOf(turn), restoredTurn(turn, events, services.workspace.root, sentAt));
+        const rows = restoredTurn(turn, events, services.workspace.root, sentAt);
+        await services.transcripts.append(agent, rows);
+        await recordSteerAnchors(services, turn.conversationId, rows, events, base);
         return true;
     } catch (error) {
         services.logger.warn({ err: error, conversationId: turn.conversationId }, "transcript append failed");
         return false;
     }
+};
+
+/* HOW MANY ROWS THIS CONVERSATION'S RECORD ALREADY HOLDS, or nothing, said in a way that cannot fail upward.
+ *
+ * try/catch rather than a rejection handler, because the two failures are shaped differently and only one of
+ * them is a rejected promise: a store missing this member at all throws where it is CALLED, which no `.catch`
+ * on the result can see. Undefined is a complete answer — the caller then files no bookmark for this turn's
+ * steers, rather than filing one at a position it guessed. */
+const recordedCount = async (services: Pick<Services, "transcripts">, agent: TranscriptAgent): Promise<number | undefined> => {
+    try {
+        return await services.transcripts.count(agent);
+    } catch {
+        return undefined;
+    }
+};
+
+/* WHICH ROWS OF A SETTLED TURN ARE MESSAGES THE USER STEERED INTO IT, by position.
+ *
+ * The fold writes a user row in exactly two circumstances (restoredTurn, above): the turn's own opening prompt,
+ * at most one and always first, and one per `steer` frame, in the order the turn took them. So the user rows
+ * are the opener followed by the steers, and the only question is whether the opener is among them — a turn
+ * whose prompt was empty, or one whose prompt was replaced by a re-run notice, writes no opening user row at
+ * all, and then the very first user row is already a steered one.
+ *
+ * Answered by COUNTING rather than by re-deriving that condition: the steer frames say how many steered rows
+ * there must be, so the last N user rows are them, whichever way the opener went. Two facts that must agree
+ * become one fact that cannot disagree, which matters more here than usual — a position off by one files a
+ * message's state under its neighbour, and a rewind then restores a point the reader never saw. */
+export const steerRowsOf = (rows: readonly RestoredMessage[], events: readonly AgentEvent[]): number[] => {
+    const steers = events.filter((event) => event.kind === "steer").length;
+    const userRows = rows.flatMap((row, index) => (row.role === "user" ? [index] : []));
+    return steers === 0 ? [] : userRows.slice(-steers);
+};
+
+/* FILE THE STATES PINNED MID-TURN UNDER THE ROWS THEY TURNED OUT TO BE (agent/steer-anchors.ts).
+ *
+ * This is the second half of a steer's bookmark, and the half that could only ever happen here: the state was
+ * captured when the message arrived, because that is the only moment it exists, and its index is knowable only
+ * now, because until the fold ran nobody knew how many rows the turn wrote before it.
+ *
+ * The queue drains whatever happens, including when this cannot use it — a turn whose count could not be read,
+ * a record that took fewer rows than the queue holds — because a box left behind would be picked up by the NEXT
+ * turn and filed under one of ITS rows, which is the mis-indexing this whole path is careful about.
+ *
+ * Never throws: a bookmark is a side-channel of a turn that has already finished. */
+const recordSteerAnchors = async (
+    services: Pick<Services, "turnAnchors" | "logger">,
+    conversationId: string,
+    rows: readonly RestoredMessage[],
+    events: readonly AgentEvent[],
+    base: number | undefined,
+): Promise<void> => {
+    const anchors = takeSteerAnchors(conversationId);
+    const positions = steerRowsOf(rows, events);
+    if (base === undefined) {
+        return;
+    }
+    await Promise.all(
+        positions.map(async (position, at) => {
+            const anchor = anchors[at];
+            if (anchor === undefined) {
+                return;
+            }
+            await services.turnAnchors
+                .record(conversationId, base + position, anchor)
+                .catch((error: unknown) => services.logger.warn({ err: error, conversationId }, "anchors: filing a steered message failed"));
+        }),
+    );
 };
 
 // The line a turn the daemon died under leaves under whatever it managed to write: what stopped it, and the one

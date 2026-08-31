@@ -580,6 +580,39 @@ export const forkCutsOf = (turns: readonly ChatTurn[]): Map<number, number> => {
     return cuts;
 };
 
+/* THE BOUNDARIES THE MARKS ABOVE DO NOT REACH, keyed by the message each one sits on top of (ChatMessageView).
+ *
+ * One mark per turn is one boundary per turn, and a turn is not one message. Two kinds of user message end up
+ * with no way back to them at all, and both are ordinary rather than exotic:
+ *
+ *   · A message the turn FOLDED (foldsIntoTurn): a bare "keep going", an errand the app sent on the user's
+ *     behalf, a message steered into a running turn. It sits INSIDE a turn, so the mark at that turn's close is
+ *     a different line entirely — it keeps everything the fold went on to produce, which is precisely what
+ *     someone going back to their "keep going" wants to drop.
+ *   · The FIRST message in the conversation. Every other opening prompt has the previous turn's close-mark
+ *     above it; the first has nothing above it, so the one turn nobody could ever go back to was the one that
+ *     set the whole conversation's direction.
+ *
+ * Openers past the first are deliberately absent: their boundary IS the previous turn's close, and a second
+ * mark on the same line would be two controls doing one thing three pixels apart.
+ *
+ * The value is the message's index in the flat list, which is what a cut means everywhere else: the count of
+ * bubbles kept above the line. Keyed by message id rather than by position because it is read by a component
+ * that knows its message and not where it stands, exactly like `doomed` in ChatPane. */
+export const cutsAboveOf = (turns: readonly ChatTurn[]): Map<number, number> => {
+    const cuts = new Map<number, number>();
+    let index = 0;
+    for (const turn of turns) {
+        for (const message of turn.messages) {
+            if (message.role === `user` && (index === 0 || message !== turn.messages[0])) {
+                cuts.set(message.id, index);
+            }
+            index += 1;
+        }
+    }
+    return cuts;
+};
+
 /* WHICH DAY A TURN WAS SENT ON, for the turns where that day is not the one already on screen, keyed by turn
  * id, absent for every other turn. The transcript draws one marker row per entry (ChatPane), and that row is
  * the chat's date: it is what lets each prompt's own hover stamp shrink to the clock alone.

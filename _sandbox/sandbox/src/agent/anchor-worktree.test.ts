@@ -7,6 +7,9 @@ const REPOS = [
     { repo: "root", base: "old-root" },
     { repo: "intent", base: "old-intent" },
 ];
+// What the commit is titled where there was something to keep. Only ever read by a human on `git log`, so the
+// tests below pass one and assert nothing about it: what they are about is which repos got pinned to what.
+const TITLE = "Agent: before this turn";
 
 const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: vi.fn() } } as unknown as AnchorDeps;
 
@@ -38,7 +41,7 @@ const gitFake = (options: { dirty?: readonly string[]; broken?: readonly string[
 test("a clean checkout is pinned without committing anything", async () => {
     const { git, calls } = gitFake();
 
-    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, git);
+    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git);
 
     expect(anchored).toEqual([
         { repo: "root", base: "head-root" },
@@ -53,7 +56,7 @@ test("a clean checkout is pinned without committing anything", async () => {
 test("a checkout holding work commits it before pinning, so the anchor includes it", async () => {
     const { git, calls } = gitFake({ dirty: ["root"] });
 
-    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, git);
+    const anchored = await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git);
 
     expect(calls).toContain("add:root");
     expect(anchored).toContainEqual({ repo: "root", base: "new-root" });
@@ -66,7 +69,7 @@ test("a checkout holding work commits it before pinning, so the anchor includes 
 test("a repo that refuses drops out of the anchor without taking the others with it", async () => {
     const { git } = gitFake({ broken: ["root"] });
 
-    expect(await anchorWorktree(services, CONVERSATION, REPOS, git)).toEqual([{ repo: "intent", base: "head-intent" }]);
+    expect(await anchorWorktree(services, CONVERSATION, REPOS, TITLE, git)).toEqual([{ repo: "intent", base: "head-intent" }]);
 });
 
 const anchors = (anchor: TurnAnchor | undefined) => ({ of: async () => anchor });

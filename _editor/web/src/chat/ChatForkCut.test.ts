@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "../composables/chat/transcript";
+import { ERRANDS } from "../composables/chat/errands";
 
 /* THE CUT'S MENU IS THE WHOLE FEATURE: three outcomes that differ in what happens to the conversation and to
  * the files, and the user picks between them by reading three rows. So what is asserted here is the menu: which
@@ -239,6 +240,54 @@ describe(`the fork cut`, () => {
         const other = mount(0);
         await openMenu(other);
         expect(row(`Edit`)).toEqual(expect.any(Object));
+    });
+
+    /* AN ERRAND is a prompt the APP composed and sent on the user's behalf, so "ask it differently" would mean
+     * rewriting our own paragraph — the same reason the pencil skips one (ChatMessageView). The boundary above
+     * it is still a boundary though, and that is why these are separate rows: a cut nobody can edit at is not a
+     * cut nobody can go back to. */
+    it(`offers no edit above an errand, and still offers every way back to it`, async () => {
+        const errand: ChatMessage = {
+            id: 2,
+            role: `user`,
+            rewindIndex: 2,
+            text: `${ERRANDS.landConflict.opening}\n\nroot: two files`,
+        };
+        state.messages = [anchored(0), { id: 1, role: `assistant`, text: `answer` }, errand, { id: 3, role: `assistant`, text: `fixed` }];
+        const element = mount(2);
+        await openMenu(element);
+
+        expect(row(`Edit`)).toBeUndefined();
+        expect(row(`Fork`)?.disabled).toBe(false);
+        expect(row(`Rewind`)?.disabled).toBe(false);
+    });
+
+    /* THE HEAD OF THE CONVERSATION, the mark on its first message. Both halves of that boundary mean something
+     * — put the files back to before any of this, or start a chat of its own on them — but the chat-only fork
+     * there keeps no turns and no old files, which is the New Chat button with extra steps. */
+    it(`drops the chat-only fork at the head, where it would keep nothing`, async () => {
+        const element = mount(0);
+        await openMenu(element);
+
+        expect(row(`Fork chat only`)).toBeUndefined();
+        expect(row(`Fork`)?.disabled).toBe(false);
+        expect(row(`Edit`)?.disabled).toBe(false);
+        // Going back to the head is "start this over": every message drops and the files come with them.
+        expect(row(`Rewind`)?.disabled).toBe(false);
+        row(`Fork`)?.command?.({ originalEvent: new Event(`click`), item: {} });
+        expect(forkAt).toHaveBeenCalledWith(0, `then`);
+    });
+
+    // On the shared workspace the only fork there IS is the chat-only one, so the head has no fork to offer at
+    // all rather than one that would do nothing.
+    it(`offers no fork at the head of a chat working in the shared workspace`, async () => {
+        state.isolated = false;
+        const element = mount(0);
+        await openMenu(element);
+
+        expect(row(`Fork`)).toBeUndefined();
+        expect(row(`Edit`)?.disabled).toBe(false);
+        expect(row(`Rewind`)?.disabled).toBe(false);
     });
 
     // Anywhere else that row would be a second name for the cut the mark already is.

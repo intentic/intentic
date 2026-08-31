@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
 import { describe, expect, it } from "vitest";
 import { withRuntimeHistory } from "../agent/runtime-history.js";
-import { restoredTurn, subagentTurn } from "./turn-transcript.js";
+import { restoredTurn, steerRowsOf, subagentTurn } from "./turn-transcript.js";
 
 // When the turn started: what its user row is stamped with (RestoredMessage.sentAt).
 const SENT_AT = 1_767_225_600_000;
@@ -136,6 +136,37 @@ describe("restoredTurn", () => {
             },
             { role: "assistant", text: "will do" },
         ]);
+    });
+
+    /* WHICH ROWS THOSE STEERS TURNED OUT TO BE, by position, which is the half of a steered message's bookmark
+     * that cannot be known until here (agent/steer-anchors.ts): the state was pinned when the message arrived,
+     * and its index only exists once the fold has decided how many rows the turn wrote before it.
+     *
+     * Asserted hard because an answer off by one files one message's state under its neighbour's index, and a
+     * rewind then restores a point the reader never saw — the one failure on this path that loses work rather
+     * than declining to act. The count comes from the FRAMES and the rows are taken from the end, so the answer
+     * does not depend on whether the turn managed to write an opening row at all. */
+    it("names the rows a turn's steers landed on, from the end, whatever the opener did", () => {
+        const events: AgentEvent[] = [
+            { kind: "delta", text: "on it" },
+            { kind: "steer", text: "and the tests", sentAt: SENT_AT + 1000 },
+            { kind: "delta", text: "will do" },
+            { kind: "steer", text: "and the docs", sentAt: SENT_AT + 2000 },
+        ];
+        const rows = restoredTurn({ prompt: "ship it" }, events, "/work", SENT_AT);
+        // prompt, "on it", steer, "will do", steer.
+        expect(rows.map((row) => row.role)).toEqual(["user", "assistant", "user", "assistant", "user"]);
+        expect(steerRowsOf(rows, events)).toEqual([2, 4]);
+
+        /* A TURN THAT WROTE NO OPENING ROW: an empty prompt writes none (there is nothing to draw), so the very
+         * first user row in the fold is already a steered one. Counting down from the top would call it the
+         * prompt and hand both steers the wrong index; counting up from the end cannot. */
+        const headless = restoredTurn({ prompt: "" }, events, "/work", SENT_AT);
+        expect(headless.map((row) => row.role)).toEqual(["assistant", "user", "assistant", "user"]);
+        expect(steerRowsOf(headless, events)).toEqual([1, 3]);
+
+        // A turn nobody steered has no rows to name, and asks for no boxes either.
+        expect(steerRowsOf(rows, [{ kind: "delta", text: "on it" }])).toEqual([]);
     });
 
     // A text_end on a bubble holding only cards is not a boundary: retiring there would split a card away from

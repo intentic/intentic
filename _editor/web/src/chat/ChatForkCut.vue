@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { invalidateWorkspace } from "../composables/workspace/useHistory";
 import { openAgentConversation, useChat, usePaneView } from "../composables/chat/useChat";
 import { useAgents } from "../composables/agents/useAgents";
+import { errandOf } from "../composables/chat/errands";
 
 /* THE CUT: one gesture for every way of going back to a point in a conversation.
  *
@@ -62,7 +63,8 @@ import { useAgents } from "../composables/agents/useAgents";
 const props = defineProps<{
     /* THE LINE ITSELF: the count of bubbles above it, which is also the index of the first bubble below it.
        Every turn hands its own (forkCutsOf), so the number arrives already meaning "everything down to the end
-       of this answer". */
+       of this answer". A message the turn folded, and the first message in the chat, hand their own instead
+       (cutsAboveOf), which is the same number meaning "everything above this message". */
     cut: number;
 }>();
 
@@ -164,6 +166,12 @@ const rewind = async (): Promise<void> => {
 
 const dropped = computed(() => Math.max(0, messages.value.length - props.cut));
 
+/* NOTHING ABOVE THE LINE either, the mark on the conversation's FIRST message. The boundary is real and both
+ * halves of it mean something — put the files back to before any of this and drop the lot, or start a chat of
+ * its own on those files — but a fork that keeps no turns and no old files is the New Chat button with extra
+ * steps, so that one row stands down rather than being offered as a third way to do nothing. */
+const head = computed(() => props.cut === 0);
+
 /* Every row states what becomes of the FILES, because that is the half of this decision that used to be
  * silent, and the half that made the old pair of controls impossible to tell apart. A row refused because a
  * turn is in flight says THAT instead, so a disabled row is never a dead end without a reason. */
@@ -183,25 +191,34 @@ const forkRows = computed<MenuItem[]>(() =>
                   disabled: !anchored.value || filesBusy.value,
                   command: () => forkAt(props.cut, `then`),
               },
-              {
-                  label: `Fork chat only`,
-                  icon: `comment`,
-                  hint: `New chat, files as they are now`,
-                  disabled: chatBusy.value,
-                  command: () => forkAt(props.cut, `now`),
-              },
+              // At the head of the conversation this one keeps no turns and no old files, which is New Chat
+              // (see `head`), so it stands down there rather than reading as a third option.
+              ...(head.value
+                  ? []
+                  : [
+                        {
+                            label: `Fork chat only`,
+                            icon: `comment`,
+                            hint: `New chat, files as they are now`,
+                            disabled: chatBusy.value,
+                            command: () => forkAt(props.cut, `now`),
+                        },
+                    ]),
           ]
-        : [
-              // The shared workspace has one fork to give, so it wears the plain name, and still says which
-              // files it lands on, so the sentence a user reads is the same sentence either way.
-              {
-                  label: `Fork`,
-                  icon: `fork`,
-                  hint: `New chat, files as they are now`,
-                  disabled: chatBusy.value,
-                  command: () => forkAt(props.cut, `now`),
-              },
-          ],
+        : // The shared workspace has one fork to give, so it wears the plain name, and still says which files
+          // it lands on, so the sentence a user reads is the same sentence either way. At the head there is
+          // nothing for it to carry, and no other fork to offer instead, so the group is empty.
+          head.value
+          ? []
+          : [
+                {
+                    label: `Fork`,
+                    icon: `fork`,
+                    hint: `New chat, files as they are now`,
+                    disabled: chatBusy.value,
+                    command: () => forkAt(props.cut, `now`),
+                },
+            ],
 );
 
 /* ASK THIS PROMPT AGAIN: the row for the message the cut sits above, offered only where that message IS one
@@ -209,13 +226,18 @@ const forkRows = computed<MenuItem[]>(() =>
  * own), and "edit" over the agent's words means something else entirely: that is what the agent's VOICE is
  * for, down on the composer.
  *
+ * An ERRAND is out for the same reason the pencil skips it (ChatMessageView): the words under it are OUR prose
+ * sent on the user's behalf, so "ask it differently" would mean rewriting a paragraph nobody wrote. The
+ * boundary above one is still a boundary — the fork and the rewind rows below stand — which is the whole point
+ * of the rows being separate: a cut nobody can EDIT at is not a cut nobody can go back to.
+ *
  * The refusals are the same two the file rows carry, said in the same words, because they are the same
  * refusals: no checkpoint means the files cannot come back, and a running turn means the daemon will not let
  * anything move them. The difference is only WHEN they bite: the fork rows are refusing a press, this one is
  * refusing to arm a mode that would then be unable to send. */
 const editRow = computed<MenuItem[]>(() => {
     const target = below.value;
-    if (target?.role !== `user` || editing.value?.id === target.id) {
+    if (target?.role !== `user` || editing.value?.id === target.id || errandOf(target) !== undefined) {
         return [];
     }
     return [
