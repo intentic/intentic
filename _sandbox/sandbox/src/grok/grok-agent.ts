@@ -172,7 +172,13 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
         }
         let sessionId = turn.sessionId;
         if (sessionId === undefined) {
-            const created = await c.session.create({ query: { directory: turn.cwd } });
+            /* NAMED ON CREATION, and for once the string itself does not matter: what matters is that OpenCode
+             * does not auto-title it. An unnamed session gets one extra model call on the turn's own provider
+             * ("You are a title generator…", carrying the user's prompt as material) whose answer is written to a
+             * field nothing here reads, because intentic names its own conversations (agent/title-namer.ts).
+             * Measured on a recording upstream: two requests for the first message of an unnamed session, one for
+             * a named one. Same reason the Gemini helper does it (agent/one-shot-gemini.ts). */
+            const created = await c.session.create({ query: { directory: turn.cwd }, body: { title: `intentic conversation` } });
             sessionId = created.data?.id;
             if (sessionId === undefined) {
                 throw new Error("OpenCode did not return a session id");

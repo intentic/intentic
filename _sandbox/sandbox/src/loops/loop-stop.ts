@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { fieldsValidator, type Loop, type LoopCheck, type LoopDocument, LoopDocumentSchema } from "@intentic/sandbox-contract";
+import type { QuickAnswer } from "../agent/quick-answer.js";
 import { askQuickModel } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
 import { verdictPathIn } from "./loop-brief.js";
@@ -47,6 +48,25 @@ export interface StopVerdict {
     // step hands to the step after it.
     readonly document?: LoopDocument;
 }
+
+/* THE JUDGE'S REPLY, AS A VERDICT, and the shape demand is the same one the prompt makes: one word, DONE or
+ * CONTINUE, then a sentence.
+ *
+ * The shape used to be checked HERE and only softly: anything that did not open with "done" fell through to
+ * not-done, which is the safe direction but also a silent one. A rung that answered off-shape (a tool-call
+ * stand-in from a Gemini rung, a paragraph of reasoning, its own provider's refusal as prose) counted as a
+ * ruling the judge never made, and the loop paid a full iteration on it. Stated as the ask's contract instead
+ * (quick-answer.ts), the same reply is a rung that did not answer, so the next model in the chain rules and the
+ * loop only ever acts on a verdict some model actually gave. Nothing rules ⇒ the catch below says so. */
+const JUDGE_ANSWER = {
+    what: `a DONE or CONTINUE verdict`,
+    read: (reply: string): StopVerdict => {
+        const trimmed = reply.trim();
+        return { done: /^done\b/iu.test(trimmed), detail: trimmed.slice(0, DETAIL_TAIL) };
+    },
+    unusable: ({ detail }: StopVerdict): string | undefined =>
+        /^(?:done|continue)\b/iu.test(detail ?? ``) ? undefined : `did not open with DONE or CONTINUE`,
+} satisfies QuickAnswer<StopVerdict>;
 
 /* Read and validate the iteration's document. Absent, unparseable, schema-violating and field-violating all
  * read the same way, not done, and each says so in its own words, because "the model never wrote the file"
@@ -117,9 +137,8 @@ const askJudge = async (services: Services, loop: Loop, rubric: string, report: 
             `whose verification is not described are all CONTINUE. If the report is too vague to tell, that is CONTINUE.`,
     ].join(`\n`);
     try {
-        const { text } = await askQuickModel(services, prompt, signal);
-        const trimmed = text.trim();
-        return { done: /^done\b/i.test(trimmed), detail: trimmed.slice(0, DETAIL_TAIL) };
+        const { value } = await askQuickModel(services, { prompt, answer: JUDGE_ANSWER }, signal);
+        return value;
     } catch (error) {
         // A judge that cannot run is not a verdict. Reported as the detail so the row says why the loop is
         // still going, rather than leaving a silent "not done" that looks like the judge ruled.

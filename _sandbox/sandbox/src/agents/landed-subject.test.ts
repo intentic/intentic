@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { describeLanding } from "./landed-subject.js";
 
-const ask = vi.fn<() => Promise<{ text: string }>>();
+const ask = vi.fn<() => Promise<{ value: { subject: string; note: string; breaking: string } }>>();
 vi.mock("../agent/quick-model.js", () => ({ askQuickModel: () => ask() }));
 vi.mock("../git/contract-shrink.js", () => ({ claimedContractShrink: async () => [] }));
 
@@ -58,22 +58,24 @@ beforeEach(() => {
 });
 
 test("opens the report at the land, writes the sentence, and only then says the draft ended", async () => {
-    ask.mockResolvedValue({ text: "fix: cascading markers" });
+    ask.mockResolvedValue({ value: { subject: "fix: cascading markers", note: "", breaking: "" } });
     await describeLanding(servicesWith(), "c1");
     expect(steps).toEqual([`opened`, `wrote fix: cascading markers`, `ended written`]);
 });
 
-// Every other road out of the model call ends the report too, or a chip keeps saying "writing…" about a call
-// that ended minutes ago, and it ends `failed` with nothing written, which is the honest answer.
-test("a refusal ends the report as failed, with nothing written", async () => {
-    ask.mockResolvedValue({ text: "I can't help with that." });
-    await describeLanding(servicesWith(), "c1");
-    expect(steps).toEqual([`opened`, `ended failed`]);
-});
-
-test("a model call that throws ends the report as failed too", async () => {
-    ask.mockRejectedValue(new Error("no quick model connected"));
-    await expect(describeLanding(servicesWith(), "c1")).rejects.toThrow();
+/* EVERY OTHER ROAD OUT OF THE MODEL CALL ENDS THE REPORT TOO, or a chip keeps saying "writing…" about a call that
+ * ended minutes ago, and it ends `failed` with nothing written, which is the honest answer.
+ *
+ * All of them arrive as a throw now: nothing connected, a chain spent to the bottom, and a chain that answered
+ * but never with a subject (a tool-call stand-in, a question back, its provider's own refusal as prose). That
+ * last one used to be checked here, after the walk was over, which meant one misbehaving rung ended the landing
+ * while working accounts below it went unasked. The ask decides it now (quick-answer.ts). */
+test.each([
+    ["nothing connected", "no quick model connected"],
+    ["a rung that wrote a tool call", "gemini-3.5-flash: wrote a tool call instead of a commit subject"],
+])("%s ends the report as failed, with nothing written", async (_case, message) => {
+    ask.mockRejectedValue(new Error(message));
+    await expect(describeLanding(servicesWith(), "c1")).rejects.toThrow(message);
     expect(steps).toEqual([`opened`, `ended failed`]);
 });
 

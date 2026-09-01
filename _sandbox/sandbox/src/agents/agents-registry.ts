@@ -7,7 +7,7 @@ import {
     type LandedMessageDraft,
     planParts,
 } from "@intentic/sandbox-contract";
-import { isFailureSentence } from "../agent/failure-sentences.js";
+import { isFailureSentence, isToolCallStandIn } from "../agent/failure-sentences.js";
 import { subagentCountsOf } from "../agent/subagents.js";
 import { MAX_NOTE_LENGTH } from "../git/commit-message.js";
 import { watchProjection } from "../agent/watch-state.js";
@@ -53,6 +53,18 @@ const sanitizeLine = (text: string, limit: number): string | undefined => {
 };
 
 const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
+
+/* A STRING THAT CANNOT BE A NAME, HOWEVER IT GOT HERE: a provider's failure sentence ("You've hit your session
+ * limit · resets …", "Failed to authenticate. API Error: 401 …"), or a tool-call stand-in written by a rung whose
+ * runtime taught it to type its tool calls out (`[tool_call: glob for pattern '**']`, see failure-sentences.ts).
+ *
+ * Read twice below, and that pairing is the whole mechanism: such a title may never be WRITTEN by anything but a
+ * rename (a rename is the user's to waste), and a stored one FORFEITS its source's rank, so the next honest
+ * promotion replaces it instead of bouncing off the sideways-move rule. The naming pass tests the same family for
+ * the same reason (title-namer's `poisoned`), which is what heals the four fleet cards that were named this way
+ * before the ask-side guard existed. The family, never a member of it: guarding one member is what cost four
+ * other cards their names, twice. */
+const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title);
 
 /* The `Release-Note:` / `Breaking-Note:` sentences, on their own limit. Same one-line scrub, these are read as
  * one line in a changelog entry and in the update card, and emphatically NOT the title's ceiling: a title is
@@ -662,16 +674,13 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         if (entry === undefined || clean === undefined) {
             return false;
         }
-        // A provider failure sentence ("You've hit your session limit · resets …", "Failed to authenticate.
-        // API Error: 401 …") is never a NAME, however it got here, a naming pass whose own model call hit
-        // the condition, a plan heading quoting the failure. Only a rename may say it, because a rename is the
-        // user's to waste. And a STORED title that is one was stolen exactly that way: it forfeits its
-        // source's rank, so the next honest promotion replaces it instead of bouncing off the sideways-move
-        // rule below. The family, never a member of it, see failure-sentences.ts on what guarding one cost.
-        if (source !== "user" && isFailureSentence(clean)) {
+        // Neither a provider's failure sentence nor a tool-call stand-in is ever a NAME, however it got here: a
+        // naming pass whose own model call hit the condition, a plan heading quoting the failure. See
+        // cannotBeAName above for why the write is refused and the stored one loses its rank.
+        if (source !== "user" && cannotBeAName(clean)) {
             return false;
         }
-        const currentRank = entry.title !== undefined && isFailureSentence(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
+        const currentRank = entry.title !== undefined && cannotBeAName(entry.title) ? -1 : TITLE_RANK[entry.titleSource ?? "derived"];
         if (source !== "user" && TITLE_RANK[source] <= currentRank) {
             return false;
         }

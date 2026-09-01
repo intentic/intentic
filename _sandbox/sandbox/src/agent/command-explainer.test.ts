@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import type { Services } from "../composition.js";
 import { cleanExplanation, explainCommand } from "./command-explainer.js";
 
-const ask = vi.fn<() => Promise<{ text: string }>>();
+const ask = vi.fn<() => Promise<{ value: string }>>();
 vi.mock("./quick-model.js", () => ({ askQuickModel: () => ask() }));
 
 const services = {} as Services;
@@ -34,25 +34,21 @@ test("an empty reply is nothing rather than an empty sentence", () => {
     expect(cleanExplanation("\n\n  \n")).toBe("");
 });
 
-/* THE THREE REPLIES THAT ARE NOT DESCRIPTIONS, each of which would otherwise be printed on a safety card in
- * the exact spot the reader was told to look for what they are approving.
+/* THE REPLIES THAT ARE NOT DESCRIPTIONS, each of which would otherwise be printed on a safety card in the exact
+ * spot the reader was told to look for what they are approving: a provider's own failure arriving as prose, a
+ * healthy model that would not do the job, a rung writing out the tool call it would have made.
  *
- * The first two are the quick model's own failures arriving as PROSE rather than as a thrown error, which is
- * how a provider whose allowance is spent or whose credential is dead answers. The third is a healthy model
- * that would not do the job and said so; that one is nobody's fault and still not an explanation. */
-test("a failure sentence or a question back is not an explanation", async () => {
-    for (const text of [
-        "Failed to authenticate. API Error: 401 {\"type\":\"error\"}",
-        "I need more context to describe this. What is the workspace?",
-        "   ",
-    ]) {
-        ask.mockResolvedValueOnce({ text });
-        expect(await explainCommand(services, "git push --force", "bash", signal)).toBeUndefined();
-    }
+ * WHICH IS NO LONGER THIS FILE'S JUDGMENT. The ask carries it (quick-answer.ts, and its suite pins each of those
+ * replies), so a chain that produced none of them produces a value, and a chain that produced only them throws.
+ * What this pins is the half that matters at this call site: the throw is not swallowed here, because the gate
+ * races the call and swallows every failure itself (command-gate.ts), leaving the card exactly as it was. */
+test("a chain that wrote no usable sentence leaves the card to the gate", async () => {
+    ask.mockRejectedValue(new Error("gpt-5.6: answered the asker instead of writing a one-sentence explanation"));
+    await expect(explainCommand(services, "git push --force", "bash", signal)).rejects.toThrow(/answered the asker/);
 });
 
 test("an ordinary sentence comes back as the card's line", async () => {
-    ask.mockResolvedValueOnce({ text: "Force-pushes the branch to origin, discarding whatever commits it has." });
+    ask.mockResolvedValueOnce({ value: "Force-pushes the branch to origin, discarding whatever commits it has." });
     expect(await explainCommand(services, "git push --force origin main", "bash", signal)).toBe(
         "Force-pushes the branch to origin, discarding whatever commits it has.",
     );

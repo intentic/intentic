@@ -1,6 +1,7 @@
 import type { Services } from "../composition.js";
+import { isFailureSentence, isToolCallStandIn } from "./failure-sentences.js";
+import { sentenceAnswer } from "./quick-answer.js";
 import { askQuickModel } from "./quick-model.js";
-import { isDeclinedAnswer, isFailureSentence } from "./failure-sentences.js";
 
 /* THE NAME THE QUICK MODEL WRITES FOR A CONVERSATION, one second into its first turn, the second half of the
  * naming rule that starts in the contract's title.ts.
@@ -103,36 +104,39 @@ export const cleanSessionTitle = (reply: string): string => {
     return (unquoted?.[2] ?? bare).trim().replace(TAIL_SEPARATOR, ` · $1`);
 };
 
+/* HOW LONG A NAME CAN BE BEFORE IT IS PLAINLY NOT ONE. The shape above asks for five words; this is the ceiling
+ * past which the reply is a model that ignored the task rather than one that overran it, which is a different
+ * failure and the one worth refusing. Twelve is hermes-agent's number for the same guard, and its reasoning is
+ * the part worth keeping: cutting an answer-shaped reply down to size stores a fragment of an answer, which is
+ * still not a name. A rung that does this gets stepped over and the next one asked (quick-answer.ts). */
+const TITLE_MAX_WORDS = 12;
+
+// What this pass asks the quick model for: a name, unwrapped from whatever the model wrapped it in, and judged
+// by the contract every helper here answers to. Built once, at module scope, because it holds no state.
+const titleAnswer = sentenceAnswer(`a session title`, cleanSessionTitle, TITLE_MAX_WORDS);
+
 /* Name a conversation from the prompt that just opened its turn, replacing the derivation's cut sentence.
- * Resolves without effect whenever there is nothing to do; throws only what askQuickModel throws (nothing
- * connected, a credential that fails resolution), the call site treats that as a log line, not a failure. */
+ * Resolves without effect whenever there is nothing to do.
+ *
+ * Throws only what askQuickModel throws: nothing connected, a credential that fails resolution, or a chain that
+ * was asked to the bottom without one rung writing a usable name (the reply guards this pass used to make itself
+ * now live at that seam, where a bad reply costs one rung instead of the whole pass). The call site treats every
+ * one of those as a log line, not a failure: nothing is written, the derived title stands, and the next turn,
+ * which has more to go on, tries again. */
 export const nameAgentTitle = async (services: Services, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
     if (entry === undefined) {
         return;
     }
-    // A stored title that is itself a provider failure sentence was stolen by an earlier pass whose quick-model
-    // call hit the condition, it counts as no name at all, so this pass runs again over it (the registry's
-    // ranking forfeits its rank the same way; see promoteTitle) and the entry heals on its next turn.
-    const poisoned = entry.title !== undefined && isFailureSentence(entry.title);
+    /* A STORED TITLE THAT IS ITSELF ONE OF THE REPLIES THIS PASS NOW REFUSES was stolen by an earlier pass that
+     * had no such guard: a provider failure sentence, or a tool-call stand-in from a Gemini rung. Either counts
+     * as no name at all, so this pass runs again over it (the registry's ranking forfeits its rank the same way;
+     * see promoteTitle) and the entry heals on its next turn rather than wearing `[tool_call: glob for pattern
+     * '**']` for the rest of its life. */
+    const poisoned = entry.title !== undefined && (isFailureSentence(entry.title) || isToolCallStandIn(entry.title));
     if ((entry.titleSource ?? "derived") !== "derived" && !poisoned) {
         return;
     }
-    const { text } = await askQuickModel(services, namePrompt(prompt), new AbortController().signal);
-    const title = cleanSessionTitle(text);
-    /* Two ways this reply can fail to be a name, and only the first is anybody's fault.
-     *
-     * The refusal check repeats here because the quick model may run on a DIFFERENT provider than the turn it is
-     * naming, its own limit hit or refused credential arrives as this reply's text, not as a thrown error, on
-     * providers whose failures stream as prose rather than reaching one-shot's flag.
-     *
-     * The decline check is for a healthy model that simply would not do it: an opening prompt too thin to name
-     * ("continue", a pasted stack trace, a bare slash command) gets answered with a question back, and writing
-     * that down would name the conversation after the model's confusion, permanently, since a model title
-     * outranks every later automatic source. Skipping leaves the derived title standing and lets the next turn,
-     * which has more to go on, try again. */
-    if (title === `` || isFailureSentence(title) || isDeclinedAnswer(title)) {
-        return;
-    }
+    const { value: title } = await askQuickModel(services, { prompt: namePrompt(prompt), answer: titleAnswer }, new AbortController().signal);
     await services.agents.setTitle(conversationId, title, "model");
 };

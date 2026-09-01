@@ -13,6 +13,7 @@ import { endpointConfigOf } from "../endpoints/local-model.js";
 import { harnessReadyProviders, resolveHarnessCredentials } from "./harness-credentials.js";
 import { runOneShot } from "./one-shot.js";
 import { runGeminiOneShot } from "./one-shot-gemini.js";
+import { type QuickAsk, readQuickAnswer, UnusableAnswerError } from "./quick-answer.js";
 import { spentRung } from "./quick-model-quota.js";
 
 /* THE SANDBOX'S QUICK MODEL, resolved against what it actually has connected, the daemon half of the rule in
@@ -80,8 +81,11 @@ export interface QuickModelRefusal {
     readonly reason: string;
 }
 
-export interface QuickModelAnswer {
-    readonly text: string;
+export interface QuickModelAnswer<T> {
+    /* THE VALUE THE CALLER ASKED FOR, never the raw reply, and that is the seam's whole promise: what comes back
+     * here has already been unwrapped and judged usable by the ask's own contract (quick-answer.ts). A caller
+     * that receives one of these has nothing left to check. */
+    readonly value: T;
     readonly choice: QuickModelChoice;
     // Everything ahead of `choice` in the chain that refused, in the order it was tried. Empty on the ordinary
     // path, which is what lets a surface stay silent unless something actually happened.
@@ -184,6 +188,12 @@ const askRung = async (services: Services, choice: QuickModelChoice, prompt: str
  * while the next account down could have answered in two seconds. Classifying would only add ways to
  * get the answer wrong, and the cost of over-stepping is one extra one-shot on a cheap rung.
  *
+ * A REPLY OF THE WRONG SHAPE IS ONE OF THEM, and that is why the ask carries its own answer contract
+ * (quick-answer.ts) rather than the caller checking afterwards. A rung that writes a tool call where a name was
+ * asked for, answers the asker instead of the ask, or spends fifty words on a five-word job has not answered:
+ * this walk treats that exactly as it treats a refusal, hands the question to the next model down, and gives the
+ * caller a VALUE it does not have to inspect. What it does not do is remember it, see the catch below.
+ *
  * THE USER'S OWN CANCEL IS NOT A REFUSAL. A caller whose signal aborts (a loop the user stopped) is done, and
  * continuing down the chain after it would spend three more calls nobody is waiting for.
  *
@@ -192,12 +202,12 @@ const askRung = async (services: Services, choice: QuickModelChoice, prompt: str
  * caller already has one place to record a failure. Nothing connected is a message about the sandbox; a chain
  * that is spent to the bottom names every model it asked and what each one said, because "couldn't draft a
  * message" without that is indistinguishable from a helper that is simply broken. */
-export const askQuickModel = async (
+export const askQuickModel = async <T>(
     services: Services,
-    prompt: string,
+    ask: QuickAsk<T>,
     signal: AbortSignal,
     onProgress?: QuickModelProgress,
-): Promise<QuickModelAnswer> => {
+): Promise<QuickModelAnswer<T>> => {
     const chain = resolveQuickModels(await quickModelSources(services), (await services.sandboxSettings.get()).quickModel);
     if (chain.length === 0) {
         throw new Error(`No AI account is connected to this sandbox: connect one in Sandbox ▸ Agent first.`);
@@ -231,7 +241,7 @@ export const askQuickModel = async (
      * `asked` is the fact the caller needs and the answer cannot carry: a walk that skipped every rung and a
      * walk that asked every rung and was refused by all of them both end with no text, and they call for
      * opposite things next. */
-    const walk = async (honourSkips: boolean): Promise<{ answer?: QuickModelAnswer; asked: boolean }> => {
+    const walk = async (honourSkips: boolean): Promise<{ answer?: QuickModelAnswer<T>; asked: boolean }> => {
         // The timeline is rebuilt, not appended to: a second pass is a RETRACTION of the first's skips, and
         // showing both would report every rung twice, once stepped over, once asked, for one walk.
         attempts.length = 0;
@@ -270,13 +280,18 @@ export const askQuickModel = async (
                 // Inside the try with the call itself: a credential that fails on the way in (a token that no
                 // longer refreshes passes the cheap readiness check but fails resolution) is the same kind of
                 // dead end as one that fails on the way out, and the next model in the chain answers both.
-                const text = await askRung(services, choice, prompt, signal);
+                const text = await askRung(services, choice, ask.prompt, signal);
+                /* AND THE REPLY IS READ HERE, not by the caller, which is what makes a rung that answers with
+                 * something unusable a rung the walk steps over (quick-answer.ts says why that belongs inside
+                 * the loop rather than after it). Inside the try for the same reason the call above is: the two
+                 * ways a rung can fail to produce an answer lead to the same place. */
+                const value = readQuickAnswer(ask.answer, text);
                 // It answered, so whatever it last refused for is over, a memo outliving the condition it
                 // describes would keep steering work off an account that is plainly working again.
                 refusals.delete(key);
                 services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model });
                 settle({ choice, status: `answered`, at: from, ms: spent() });
-                return { answer: { text, choice, skipped }, asked };
+                return { answer: { value, choice, skipped }, asked };
             } catch (error) {
                 if (signal.aborted) {
                     // The user's own cancel is not the model's failure, so it earns no memo: the next call must
@@ -284,7 +299,14 @@ export const askQuickModel = async (
                     throw error;
                 }
                 services.perf.record("quick.model", spent(), { provider: choice.provider, model: choice.model }, true);
-                refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
+                /* A REPLY OF THE WRONG SHAPE EARNS NO MEMO, and it is the one refusal here that doesn't. The memo
+                 * exists for conditions that outlive the call (a spent allowance, a revoked token, an outage), and
+                 * this rung has just demonstrated the opposite: it is reachable, credentialed and fast. Writing it
+                 * down would sideline the sandbox's best model for hours over one unlucky sample, and cost every
+                 * helper in between the rung it should have run on. */
+                if (!(error instanceof UnusableAnswerError)) {
+                    refusals.set(key, { until: Date.now() + REFUSED_FOR_MS, reason: refusalText(error) });
+                }
                 services.logger.debug({ err: error, model: choice.model }, "quick model: refused, trying the next in the chain");
                 skipped.push({ choice, reason: refusalText(error) });
                 settle({ choice, status: `refused`, at: from, ms: spent(), reason: refusalText(error) });

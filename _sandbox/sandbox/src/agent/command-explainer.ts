@@ -1,5 +1,5 @@
 import type { Services } from "../composition.js";
-import { isDeclinedAnswer, isFailureSentence } from "./failure-sentences.js";
+import { sentenceAnswer } from "./quick-answer.js";
 import { askQuickModel } from "./quick-model.js";
 
 /* WHAT A HELD COMMAND ACTUALLY DOES, IN ONE SENTENCE, for the permission card that is asking a person to
@@ -92,19 +92,23 @@ export const cleanExplanation = (reply: string): string => {
     return (unquoted?.[2] ?? bare).trim();
 };
 
-/* The sentence for one held program, or undefined when there is not one worth showing. Never throws: every way
- * this can fail is a card that stays as it already was.
- *
- * The two reply guards are title-namer's, for the same two reasons. A provider whose limit or dead credential
- * arrives as PROSE rather than as a thrown error would otherwise have its own failure message printed on a
- * safety card as if it were a description of the command. And a model that answers the asker instead of the
- * ask ("I need more context to…") is describing its own confusion, which on this card would sit exactly where
- * the reader expects to find out what they are approving. */
-export const explainCommand = async (services: Services, program: string, language: string, signal: AbortSignal): Promise<string | undefined> => {
-    const { text } = await askQuickModel(services, explainPrompt(program, language), signal);
-    const sentence = cleanExplanation(text);
-    if (sentence === `` || isFailureSentence(sentence) || isDeclinedAnswer(sentence)) {
-        return undefined;
-    }
-    return sentence;
+/* HOW LONG THE SENTENCE MAY BE BEFORE IT IS NOT ONE. The rules above ask for about 25 words; this is the ceiling
+ * past which the reply is the stage-by-stage walkthrough they forbid, or a model answering something else
+ * entirely. Refusing it costs one rung and the next model down writes the card's line (quick-answer.ts). */
+const EXPLANATION_MAX_WORDS = 50;
+
+/* WHAT THIS CARD ASKS FOR, and why the contract matters more here than anywhere else this seam is used: the
+ * sentence lands on a SAFETY card, in the exact spot a person looks to find out what they are approving. A
+ * provider's own limit sentence printed there reads as a description of the command; a model's "I need more
+ * context to…" reads as one too; a tool-call stand-in reads as one too. None of them may reach it, and none of
+ * them is this file's problem any more, they are the seam's. */
+const explainAnswer = sentenceAnswer(`a one-sentence explanation`, cleanExplanation, EXPLANATION_MAX_WORDS);
+
+/* The sentence for one held program. Nobody waits for it and nothing on the card depends on it: the gate races
+ * this against its own deadline and swallows every failure (command-gate.ts), so a chain that is spent, a
+ * sandbox with no account connected and a chain that answered nothing usable all leave the card exactly as it
+ * already was. */
+export const explainCommand = async (services: Services, program: string, language: string, signal: AbortSignal): Promise<string> => {
+    const { value } = await askQuickModel(services, { prompt: explainPrompt(program, language), answer: explainAnswer }, signal);
+    return value;
 };

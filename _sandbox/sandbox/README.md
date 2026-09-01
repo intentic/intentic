@@ -466,6 +466,19 @@ reports the profile.
   pattern put it. The asymmetry is the design — a wrong "yes" costs one card, a wrong "no" un-gates a real
   credential read — and the reason it is worth having at all is that a card raised over an empty file is not a
   near miss but noise, and noise is what teaches an owner to answer cards without reading them.
+- [src/agent/quick-answer.ts](src/agent/quick-answer.ts): what a one-shot reply has to BE before a helper may
+  use it, and the reason every quick-model caller now asks for a value instead of text. A session title, a
+  commit subject, the sentence on a permission card and a loop's verdict all get written into a durable field,
+  so each of them used to own the same guards separately — and the family kept growing on one caller at a time:
+  a spent allowance arriving as prose, then an auth failure (four fleet cards renamed), then a model answering
+  the asker instead of the ask, then a rung TYPING OUT the tool call it would have made
+  ([src/agent/failure-sentences.ts](src/agent/failure-sentences.ts), `isToolCallStandIn`: four more cards and
+  three commits named `[tool_call: glob for pattern '**']`, because OpenCode prepends its own 27k-character
+  coding-agent prompt, whose worked examples demonstrate exactly that, to every Gemini rung). The ask carries
+  the contract now, and [src/agent/quick-model.ts](src/agent/quick-model.ts) reads the reply INSIDE the walk, so
+  a rung that answers unusably is a rung that refused and the next model down gets asked — where the old
+  post-hoc checks ran after the chain was finished and left the helper with nothing however many working
+  accounts sat below. It is the one refusal that earns no memo: wrong shape is a sample, not a condition.
 - [src/agent/command-explainer.ts](src/agent/command-explainer.ts): one plain sentence about a held command,
   for the card a person is about to answer. Off unless the owner asks for it (`settings.explainCommands`), and
   wired as a callback the gate is handed rather than as anything guard/ knows about, so the account chain stays

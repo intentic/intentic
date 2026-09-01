@@ -48,6 +48,20 @@ const textOf = (parts: readonly { readonly type: string; readonly text?: string 
         .join(``)
         .trim();
 
+/* THE SESSION IS NAMED ON CREATION, AND THAT IS NOT COSMETIC: it is what stops OpenCode spending a SECOND model
+ * call on this one-liner.
+ *
+ * An unnamed session gets auto-titled. OpenCode fires its own "You are a title generator…" prompt at the same
+ * provider as soon as the first message lands, carrying our whole prompt as the material to name, and then
+ * writes the answer over a session we delete moments later. Measured against a recording upstream: two requests
+ * per helper call unnamed, one when the session is created with a title. Every landing, every session title,
+ * every held command paid double on the Gemini road.
+ *
+ * A title given here is a title OpenCode does not need to invent, so the pass simply never runs. Same trick
+ * t3code uses on this API for the same reason (`title: "T3 Code ${operation}"`), and the string is never seen by
+ * anybody: nothing reads this session, and the `finally` below deletes it. */
+const HELPER_SESSION_TITLE = `intentic helper (one-shot)`;
+
 export const runGeminiOneShot = async (params: {
     readonly services: Services;
     readonly prompt: string;
@@ -58,7 +72,7 @@ export const runGeminiOneShot = async (params: {
     readonly signal: AbortSignal;
 }): Promise<string> => {
     const client = await params.services.openCode.client();
-    const created = await client.session.create({ query: { directory: params.cwd } });
+    const created = await client.session.create({ query: { directory: params.cwd }, body: { title: HELPER_SESSION_TITLE } });
     const id = created.data?.id;
     if (id === undefined) {
         throw new Error(`the model did not answer (Gemini's runtime opened no session)`);

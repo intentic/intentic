@@ -92,6 +92,66 @@ export const isDeclinedAnswer = (text: string): boolean => {
     return clean.includes("?") || DECLINE_OPENERS.test(clean) || DECLINE_PHRASES.some((phrase) => clean.toLowerCase().includes(phrase));
 };
 
+/* A MODEL THAT REACHED FOR A TOOL IT DOES NOT HAVE and wrote the reach down as prose: the fourth kind of reply
+ * that is not data, and the only one that arrives looking like an answer rather than like a failure.
+ *
+ * Every helper here runs with tools switched off (one-shot.ts, one-shot-gemini.ts), because a one-liner is a
+ * rewrite of material already in the prompt and a tool call is a model wandering off. The runtime that carries a
+ * Gemini rung does not honour that as an instruction, though: OpenCode PREPENDS its own coding-agent prompt to
+ * whatever system text it is handed (measured on the wire: 27,445 characters of it, with our own one-liner
+ * appended at the end), and that prompt teaches the model to write tool calls as TEXT. Its worked examples read
+ * `model: [tool_call: glob for pattern '**\/app.config']`. Handed a naming prompt and no tools, the cheap rung
+ * does the thing its instructions demonstrate: it writes the stand-in, and the stand-in is the whole reply.
+ *
+ * Which passed every guard above (it is not a limit, not a credential, nobody is being addressed) and was
+ * written down as four sessions' names and three commit subjects: `Agent: [tool_call: glob for pattern '**']`.
+ *
+ * MATCHED AT THE START OF A LINE, AND THE LINE GOES WHOLE. The idiom occupies its own line in every runtime that
+ * produces one, and what follows a stand-in is the model continuing its imagined transcript (`[tool_call: grep
+ * for pattern '…'] Bluntly search th…`, one of the four), not an answer that happens to trail it. Anchoring on
+ * the line start is also what lets a real answer TALK about one: a commit subject reading `fix(quick-model):
+ * refuse a [tool_call: …] reply` opens with its own type, keeps its line, and lands. */
+const TOOL_NAMES = "tool_call|tool_calls|tool_code|tool_use|function_call|invoke";
+
+// One line that IS a stand-in: the bracketed idiom every Gemini-family prompt demonstrates, or a tag carrying its
+// whole payload on one line.
+const STAND_IN_LINE = new RegExp(String.raw`^\s*(?:\[{1,2}\s*(?:${TOOL_NAMES})\b|<\/?(?:${TOOL_NAMES})\b)`, "iu");
+
+/* THE BLOCK FORMS, which need the lines UNDER them dropped too, and that is the whole reason this is a loop and
+ * not a filter. A fenced ```tool_code block and a `<tool_call>` tag with its arguments on the lines below both
+ * open a payload: dropping the opener alone leaves `glob('**')` standing, and a caller handed that writes it into
+ * a session title as if the model had answered. */
+const CODE_FENCE = "```";
+const BLOCK_OPEN = new RegExp(String.raw`^\s*(?:${CODE_FENCE}(?:tool_code|tool_call|tool_use)\b|<(?:${TOOL_NAMES})\b[^>]*>\s*$)`, "iu");
+const BLOCK_CLOSE = new RegExp(String.raw`^\s*(?:${CODE_FENCE}|</(?:${TOOL_NAMES})>)\s*$`, "iu");
+
+// The reply with every stand-in taken out: what remains is what the model wrote for the caller, if anything.
+export const withoutToolCallStandIns = (text: string): string => {
+    const kept: string[] = [];
+    let inBlock = false;
+    for (const line of text.split("\n")) {
+        if (inBlock) {
+            // The terminator goes with the block it closes; an unterminated one swallows the rest, which is the
+            // safe direction: a payload with no end is not an answer either.
+            inBlock = !BLOCK_CLOSE.test(line);
+            continue;
+        }
+        if (BLOCK_OPEN.test(line)) {
+            inBlock = true;
+            continue;
+        }
+        if (!STAND_IN_LINE.test(line)) {
+            kept.push(line);
+        }
+    }
+    return kept.join("\n").trim();
+};
+
+// Whether a reply is nothing BUT stand-ins, which is the shape a helper has to refuse. Also what lets a title
+// already stolen by one forfeit its rank (agents-registry promoteTitle) and be re-asked on the conversation's
+// next turn (title-namer), the same self-heal a stored failure sentence gets.
+export const isToolCallStandIn = (text: string): boolean => text.trim() !== "" && withoutToolCallStandIns(text) === "";
+
 /* A SPENT ALLOWANCE IN SOMEBODY ELSE'S WORDS, the same condition as isUsageLimitText, for the providers whose
  * wording the Claude Code SDK has no prefix list for.
  *

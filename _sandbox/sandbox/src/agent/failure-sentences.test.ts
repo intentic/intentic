@@ -4,9 +4,11 @@ import {
     isDeclinedAnswer,
     isEntitlementRefusalText,
     isFailureSentence,
+    isToolCallStandIn,
     isUnsentParameterRefusalText,
     isUsageLimitText,
     mentionsSpentAllowance,
+    withoutToolCallStandIns,
 } from "./failure-sentences.js";
 
 /* The two conditions the CLI reports as prose, and the third reading of them that the routed providers forced.
@@ -135,4 +137,37 @@ test("passes the names and subjects these seams actually exist to collect", () =
     // Empty is nothing, not a decline: every caller already treats it as nothing.
     expect(isDeclinedAnswer("")).toBe(false);
     expect(isDeclinedAnswer("   ")).toBe(false);
+});
+
+/* THE SIXTH READING, AND THE ONE THAT ARRIVED LOOKING LIKE AN ANSWER: a model writing out the tool call it would
+ * have made, because the runtime carrying it (OpenCode, on every Gemini rung) prepends a coding-agent prompt
+ * whose worked examples demonstrate exactly that. Four fleet cards and three commits in this repo's own history
+ * are named `[tool_call: glob for pattern '**']` and its siblings. */
+
+test("reads a written-out tool call as the non-answer it is", () => {
+    expect(isToolCallStandIn("[tool_call: glob for pattern '**']")).toBe(true);
+    expect(isToolCallStandIn("[tool_call: ls for path '/work']\n[tool_call: read for absolute_path '/work/a.ts']")).toBe(true);
+    expect(isToolCallStandIn('<tool_call>{"name":"Glob"}</tool_call>')).toBe(true);
+    expect(isToolCallStandIn("[TOOL_CALLS] search(query='titles')")).toBe(true);
+    // The tail of a stand-in line is the model continuing its imagined transcript, so the line goes whole: this
+    // one is a title this fleet actually wore.
+    expect(isToolCallStandIn("[tool_call: grep for pattern 'gone quiet|offline'] Bluntly search th")).toBe(true);
+});
+
+/* Anchored at the start of a line, which is where every runtime that writes these puts them, and that anchor is
+ * what keeps the family from swallowing an answer ABOUT one: the commit subject for the change that added this
+ * predicate has to be writable. Empty is nothing, not a stand-in, same rule as a decline. */
+test("leaves an answer that merely talks about a tool call alone", () => {
+    expect(isToolCallStandIn("fix(quick-model): refuse a [tool_call: …] reply as an answer")).toBe(false);
+    expect(isToolCallStandIn("Tool-call stand-ins · refuse")).toBe(false);
+    expect(isToolCallStandIn("")).toBe(false);
+    expect(isToolCallStandIn("   ")).toBe(false);
+});
+
+// A model that narrated its tool call and THEN did the job has still done the job: the stand-in lines come off
+// and what is left is the reply. Refusing that would spend a rung on the model's phrasing.
+test("strips the stand-in lines and keeps whatever the model actually wrote", () => {
+    expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']\nSandbox freezes · fix")).toBe("Sandbox freezes · fix");
+    expect(withoutToolCallStandIns("Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
+    expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']")).toBe("");
 });

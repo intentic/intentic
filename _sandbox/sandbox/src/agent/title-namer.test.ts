@@ -3,7 +3,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { cleanSessionTitle, nameAgentTitle } from "./title-namer.js";
 
-const ask = vi.fn<() => Promise<{ text: string }>>();
+const ask = vi.fn<() => Promise<{ value: string }>>();
 vi.mock("./quick-model.js", () => ({ askQuickModel: () => ask() }));
 
 /* The quick model's name for a session, unwrapped from the packaging models reach for even when told not to.
@@ -55,11 +55,15 @@ test("returns empty for a reply with nothing in it", () => {
 /* The pass itself, over a fake registry: only the entry read and the title write matter to these rules, and
  * the quick model is the mock above: what it answers (or that it was never asked) IS each test's subject. */
 
-// The conditions the CLI reports as prose (failure-sentences.ts). Every rule below is asserted over BOTH,
-// because this pass guarded the first alone and the second walked in and took four sessions' names.
-const FAILURE_SENTENCES = [
+/* THE STRINGS THAT ARE NOT NAMES, EVERY ONE THAT HAS ACTUALLY TAKEN A SESSION'S NAME IN THIS FLEET, and the list
+ * is the point: the pass guarded the session-limit sentence alone, the auth sentence walked in and took four
+ * cards, both were guarded, and a Gemini rung's tool-call stand-in walked in and took four more. Whether a REPLY
+ * may become a name is settled at the ask now (quick-answer.ts); what stays this pass's business is whether a
+ * STORED one counts as a name at all, which is what lets the cards already wearing these heal. */
+const STOLEN_TITLES = [
     "You've hit your session limit · resets 11:50pm (UTC)",
     "Failed to authenticate. API Error: 401 OAuth access token has been revoked",
+    "[tool_call: glob for pattern '**']",
 ];
 
 const servicesWith = (
@@ -76,7 +80,7 @@ beforeEach(() => {
 
 test("names a still-derived conversation from the prompt that just opened its turn", async () => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
-    ask.mockResolvedValue({ text: "Fleet board broadcast · wire" });
+    ask.mockResolvedValue({ value: "Fleet board broadcast · wire" });
     await nameAgentTitle(
         servicesWith({ title: "We should look at the fleet board and figure out why it…", titleSource: "derived" }, setTitle),
         "c1",
@@ -94,16 +98,23 @@ test("leaves a conversation that already answers to a better name alone", async 
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-test.each(FAILURE_SENTENCES)("a quick-model reply reading %s never becomes the name", async (failure) => {
+// A chain asked to the bottom without one rung writing a usable name writes NOTHING: the derived title stands
+// and the next turn, which has more to go on, asks again. The reply guards that used to live here are the ask's
+// now, so what reaches this pass is either a name or a throw.
+test("a chain that never wrote a usable name leaves the derived title standing", async () => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
-    ask.mockResolvedValue({ text: failure });
-    await nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests");
+    ask.mockRejectedValue(new Error("gemini-3.5-flash: wrote a tool call instead of a session title"));
+
+    await expect(
+        nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests"),
+    ).rejects.toThrow(/tool call/);
+
     expect(setTitle).not.toHaveBeenCalled();
 });
 
-test.each(FAILURE_SENTENCES)("a stored title stolen by %s counts as no name: the pass runs again and heals it", async (failure) => {
+test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass runs again and heals it", async (stolen) => {
     const setTitle = vi.fn<Services["agents"]["setTitle"]>();
-    ask.mockResolvedValue({ text: "Auth test flakiness · fix" });
-    await nameAgentTitle(servicesWith({ title: failure, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
+    ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
+    await nameAgentTitle(servicesWith({ title: stolen, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness · fix", "model");
 });

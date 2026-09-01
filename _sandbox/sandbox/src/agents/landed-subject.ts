@@ -1,5 +1,5 @@
 import type { LandedMessageDraft, LandedMessageStep } from "@intentic/sandbox-contract";
-import { isDeclinedAnswer, isFailureSentence } from "../agent/failure-sentences.js";
+import { type QuickAnswer, sentenceReason } from "../agent/quick-answer.js";
 import { askQuickModel, type QuickModelAttempt } from "../agent/quick-model.js";
 import type { Services } from "../composition.js";
 import {
@@ -65,6 +65,37 @@ const claimedDiff = async (services: Services, id: string, repo: string): Promis
     // agents', and the user's own edits besides.
     return { diff: await services.git.collectRepoDiff(repo, dir, { paths }), removed: await claimedContractShrink(dir, paths) };
 };
+
+/* HOW LONG A SUBJECT MAY BE BEFORE IT IS EVIDENTLY NOT ONE. The prompt asks for one imperative line under 72
+ * characters; this is the ceiling past which the reply is a model that answered something else at length rather
+ * than one that overran. Refusing it hands the diff to the next model in the chain (quick-answer.ts) instead of
+ * ending the landing with nothing, which is what the old post-hoc check did. */
+const SUBJECT_MAX_WORDS = 20;
+
+// Everything one reply carries, read out of it in one place: the subject, and the two trailers that ride beside
+// it when they were asked for. One value rather than three reads of the same text, because the ask hands the
+// caller a value and keeps the raw reply to itself.
+interface DraftedMessage {
+    readonly subject: string;
+    readonly note: string;
+    readonly breaking: string;
+}
+
+/* WHAT A LANDING ASKS THE QUICK MODEL FOR. The SUBJECT is what decides whether the reply was worth anything:
+ * the two trailers are optional by design (most commits earn no release note, nearly none break anything), so a
+ * reply without them is an ordinary answer, while a reply without a subject is no answer at all.
+ *
+ * The note is read only when one was asked for, exactly as before: a model that volunteers a trailer on a repo
+ * that keeps no changelog has answered a question nobody put to it. */
+const messageAnswer = (wantsNote: boolean): QuickAnswer<DraftedMessage> => ({
+    what: `a commit subject`,
+    read: (reply) => ({
+        subject: cleanCommitSubject(reply),
+        note: wantsNote ? cleanReleaseNote(reply) : ``,
+        breaking: cleanBreakingNote(reply),
+    }),
+    unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, SUBJECT_MAX_WORDS),
+});
 
 // One rung of the walk, restated as the report's own step, the same fact, in the contract's shape.
 const step = (attempt: QuickModelAttempt): LandedMessageStep => ({
@@ -135,43 +166,33 @@ export const describeLanding = async (services: Services, id: string): Promise<v
      * Every road out ends the report, an answer, a reply that was itself a refusal, the chain running dry, a
      * throw, or a chip keeps saying "writing…" about a call that ended minutes ago. */
     try {
-        const { text } = await services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
-            askQuickModel(services, commitMessagePrompt(diffs, wantsNote, removed), new AbortController().signal, (attempts) =>
-                publish({ ...draft, steps: attempts.map(step) }),
+        const { value } = await services.perf.track("landing.subject", { agent: id, repos: diffs.length }, () =>
+            askQuickModel(
+                services,
+                { prompt: commitMessagePrompt(diffs, wantsNote, removed), answer: messageAnswer(wantsNote) },
+                new AbortController().signal,
+                (attempts) => publish({ ...draft, steps: attempts.map(step) }),
             ),
         );
         // The `!` is enforced rather than trusted whenever the detector saw a shrink: the marker is what the
         // release tooling majors on, and a model that dropped it would ship the removal as a minor bump.
-        const drafted = cleanCommitSubject(text);
-        const subject = removed.length > 0 ? markSubjectBreaking(drafted) : drafted;
-        // A provider's refusal arrives as this reply's TEXT on the providers whose failures stream as prose, so
-        // it is checked here rather than left to the throw above, and a model that asked a question back
-        // instead of describing the diff has not written a subject either. The same pair of guards, for the
-        // same reasons, as the naming pass makes over its own reply (agent/title-namer.ts).
-        if (subject === `` || isFailureSentence(subject) || isDeclinedAnswer(subject)) {
-            // The model produced words, just not a usable subject, say that, or the report reads "answered"
-            // over a box that never fills.
-            ended(`failed`, `The model's reply wasn't a usable commit subject.`);
-            return;
-        }
-        /* The note is read from the same reply, and only kept when one was asked for: a model that volunteers a
-         * trailer on a repo that keeps no changelog has answered a question nobody put to it. The breaking
-         * sentence rides the same gate ONLY while nothing was detected, a detected shrink keeps its sentence
-         * on every repo, changelog or not, because the declaration is what the push gate reads from the range
-         * (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none.
+        const subject = removed.length > 0 ? markSubjectBreaking(value.subject) : value.subject;
+        /* WHETHER THE REPLY WAS A SUBJECT AT ALL IS NO LONGER ASKED HERE. It used to be, and being asked after
+         * the walk was over is what made it expensive: a rung whose reply was its provider's own refusal in
+         * prose, or a question back, or a tool-call stand-in, ended the landing with an empty box while three
+         * working accounts sat below it unasked. The ask carries that judgment now (see messageAnswer), so
+         * reaching this line means some model wrote a usable subject, and a chain where none did arrives at the
+         * catch below with each model's own words in the reason.
          *
-         * These two and the subject are the WHOLE of a drafted message. The body that used to sit between them
-         * is gone (git/commit-message.ts says why it is not read back): a subject naming what changed, and,
-         * for a repo that publishes one, a sentence for the people who will read the release, is everything
-         * the box needs to be filled with. */
-        const note = wantsNote ? cleanReleaseNote(text) : ``;
-        const written = cleanBreakingNote(text);
-        const breaking = removed.length > 0 ? (written === `` ? fallbackBreakingNote(removed) : written) : wantsNote ? written : ``;
+         * The breaking sentence rides the note's gate ONLY while nothing was detected: a detected shrink keeps
+         * its sentence on every repo, changelog or not, because the declaration is what the push gate reads from
+         * the range (COMPATIBILITY.md), and it falls back to the truthful floor when the model wrote none. */
+        const breaking = removed.length > 0 ? (value.breaking === `` ? fallbackBreakingNote(removed) : value.breaking) : wantsNote ? value.breaking : ``;
         // Broadcasts as it writes, which is what puts the sentence in the commit box of a panel that is already
         // open with this agent's chip lit, no request, no rescan, no second thing that has to go right.
         await services.agents.setLandedSubject(id, {
             subject,
-            ...(note === `` ? {} : { note }),
+            ...(value.note === `` ? {} : { note: value.note }),
             ...(breaking === `` ? {} : { breaking }),
         });
         // The sentence is on the card; now the report may say so, see the ordering note above.
