@@ -84,14 +84,22 @@ const details = computed<string[][]>(() => [
         <!-- What it is for, and the terminal it lives in when there is one. The terminal is a link because
              reaching it is the point: a port you can see and not reach is a port you can only wonder about.
              The sentence WRAPS instead of truncating: this pane is regularly dragged to half a window, and half
-             an explanation is the failure the whole row exists to fix. -->
+             an explanation is the failure the whole row exists to fix.
+
+             THE TERMINAL LINK DOES NOT SET THE ROW'S HEIGHT. It used to be `ui.linkButton`, whose geometry is
+             `min-h-9 -my-1.5` — 24px of net box hung on a 14px line of `text-2xs`, so every row in "Your
+             services" (the group whose ports have a session; internals mostly do not) stood ~10px taller than
+             the same compact row everywhere else in /sandbox. The thumb target comes from `touch-target`
+             instead, which grows the HIT AREA on a coarse pointer and leaves the drawn box alone — the same
+             trick `ui.iconButton` bakes in. `textAction` rather than `linkButton` for the second reason the
+             call site was already fighting with `hover:no-underline`: this opens a pane, it does not navigate. -->
         <template #description>
             <span class="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span>{{ entry.purpose }}</span>
                 <button
                     v-if="entry.session"
                     type="button"
-                    :class="ui.linkButton(`shrink-0 gap-1 text-2xs text-muted hover:text-content hover:no-underline`)"
+                    :class="ui.textAction(`touch-target my-0 min-h-0 shrink-0 gap-1 text-2xs`)"
                     v-tooltip.bottom="`Open ${entry.session}: the terminal this is running in`"
                     @click="openTerminal"
                 >
