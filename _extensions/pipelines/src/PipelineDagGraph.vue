@@ -26,10 +26,10 @@ import { formatDuration, STATUS_TONE, type StatusTone } from "./statusVisual";
  * it. And `magnify` is off, because the same fit blew a four-job run up to 2× and drew four billboards.
  *
  * HOVER TRACES THE RUN THROUGH ONE JOB: its card's line lights and takes the ring, the cards that merely ran
- * beside it fade but stay readable, and the caption names the job in words. That is the gesture the git log's
- * branch highlight teaches, and it answers the question a fan-out actually provokes: of these five test legs,
- * which one am I looking at, and what did it hold up? A click pins it, so the trace survives the pointer leaving
- * the canvas and exists at all on a touch screen. */
+ * beside it fade but stay readable. That is the gesture the git log's branch highlight teaches, and it answers
+ * the question a fan-out actually provokes: of these five test legs, which one am I looking at, and what did it
+ * hold up? A click pins it, so the trace survives the pointer leaving the canvas and exists at all on a touch
+ * screen. */
 
 const {
     stages,
@@ -119,34 +119,8 @@ const pinnedCard = computed<string | undefined>({
  * the pointer, on the reasoning that a card holds several jobs and the reader should see which one they are on.
  * That was the wrong end of the argument: cluster members share every edge, so the trace lights the whole card
  * whatever row you enter it by, and a ring around one line of a lit box reads as a glitch rather than as an
- * answer. The caption already names the exact job, in words, which is where that precision belongs. */
+ * answer. The job name on the row is where that precision belongs. */
 const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs.some((member) => member.id === focus.value))?.id);
-
-/* WHAT THE TRACE SAYS IN WORDS, and the reason the cards carry no tooltip. The counts are the sentence someone
- * hovering a failed job came for: "nine jobs waited on this one", and they are the part of the highlight that
- * still works in a screenshot, or for a reader who cannot pick the fading out. They count JOBS and not cards,
- * which is the one thing grouping must not be allowed to quietly change. Being a fixed corner rather than a
- * popup, it can also afford the job's untruncated name and its stage. */
-const caption = computed(() => {
-    const id = focus.value;
-    const trace = dag.value.trace;
-    if (id === undefined || trace === undefined) {
-        return undefined;
-    }
-    const job = dag.value.nodes.flatMap((node) => node.data.jobs).find((member) => member.id === id)?.job;
-    if (job === undefined) {
-        return undefined;
-    }
-    const line = [trace.before > 0 ? `${trace.before} ran before` : undefined, trace.after > 0 ? `${trace.after} waited on it` : undefined]
-        .filter(Boolean)
-        .join(` · `);
-    return {
-        name: job.name,
-        // Only when the vendor named it: a derived GitHub wave has no name a reader would recognise.
-        stage: stages[stageOfNode(id)]?.name,
-        line: line === `` ? `the whole run, start to finish` : line,
-    };
-});
 </script>
 
 <template>
@@ -194,8 +168,8 @@ const caption = computed(() => {
                             :class="toneOf(member.job).text"
                         />
                         <!-- One line, name first: the stage only ever repeated the column the card is standing
-                             in, and the duration: the thing being compared across a fan-out: was buried in the
-                             same grey subtitle. Both facts are in the caption instead. -->
+                             in, and the duration — the thing being compared across a fan-out — was buried in the
+                             same grey subtitle. -->
                         <!-- The graph sizes (tokens.css: below 2xs) rather than body text. A job name is read in
                              a card 184px wide with a duration beside it, so at 12px two thirds of this run's
                              names were ellipsis: `verify-core / …`, `release / sand…`. One step down fits them,
@@ -220,12 +194,6 @@ const caption = computed(() => {
             </template>
 
             <template #overlay="{ fitAll }">
-                <div v-if="caption" class="pointer-events-none absolute left-3 top-2.5 max-w-3/4 truncate text-2xs">
-                    <span class="font-medium text-content">{{ caption.name }}</span>
-                    <span v-if="caption.stage" class="text-subtle"> · {{ caption.stage }}</span>
-                    <span class="text-subtle">: {{ caption.line }}</span>
-                </div>
-
                 <!-- Two controls of one shape. A word beside a bare glyph gave the corner a wide button and a
                      small square one, which reads as two unrelated things rather than as a pair. -->
                 <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1">
