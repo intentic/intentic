@@ -220,14 +220,10 @@ const caption = computed(() => {
             </template>
 
             <template #overlay="{ fitAll }">
-                <!-- Teaches the gesture while nothing is traced, then gets out of the way and reports it. -->
-                <div class="pointer-events-none absolute left-3 top-2.5 max-w-3/4 truncate text-2xs">
-                    <template v-if="caption">
-                        <span class="font-medium text-content">{{ caption.name }}</span>
-                        <span v-if="caption.stage" class="text-subtle"> · {{ caption.stage }}</span>
-                        <span class="text-subtle">: {{ caption.line }}</span>
-                    </template>
-                    <span v-else class="text-subtle">Hover a job to trace its flow · click to pin it</span>
+                <div v-if="caption" class="pointer-events-none absolute left-3 top-2.5 max-w-3/4 truncate text-2xs">
+                    <span class="font-medium text-content">{{ caption.name }}</span>
+                    <span v-if="caption.stage" class="text-subtle"> · {{ caption.stage }}</span>
+                    <span class="text-subtle">: {{ caption.line }}</span>
                 </div>
 
                 <!-- Two controls of one shape. A word beside a bare glyph gave the corner a wide button and a
