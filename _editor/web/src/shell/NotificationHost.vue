@@ -91,7 +91,7 @@ const TINT: Record<NotificationTone, string> = {
  * Below `sm` they all span the lane instead, because a 22rem card on a 390px phone leaves 12px of margin on one
  * side and 26px on the other, which reads as a misalignment rather than as a width. */
 const widthOf = (entry: Notification): string =>
-    entry.kind === `receipt` ? `w-auto max-w-full` : entry.wide ? `w-full sm:w-[32rem]` : `w-full sm:w-[22rem]`;
+    entry.kind === `receipt` ? `w-full sm:w-auto sm:max-w-[22rem]` : entry.wide ? `w-full sm:w-[32rem]` : `w-full sm:w-[22rem]`;
 
 /* ONE LINE OR TWO ROWS, decided by whether the card has anything to say under its sentence. "3 files deleted"
  * with its Undo banished to a row of its own is a two-line card carrying three words, which is the shape that
@@ -151,7 +151,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                 <div class="flex min-w-0 items-center gap-2">
                     <!-- A completion is three words and wrapping it never bites; a problem or a condition
                          has to say what and why, so it wraps rather than ending in an ellipsis mid-reason. -->
-                    <p class="min-w-0 flex-1 text-xs font-medium text-content">{{ entry.title }}</p>
+                    <p class="min-w-0 flex-1 break-words text-xs font-medium text-content">{{ entry.title }}</p>
                     <!-- The one-line card keeps its press on the sentence's own row. -->
                     <Button
                         v-for="action in compact(entry) ? (entry.actions ?? []) : []"
