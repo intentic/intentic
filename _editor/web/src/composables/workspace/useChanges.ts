@@ -387,32 +387,33 @@ const afterPull = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
 };
 
-// Remote sync, per repo. Each reports a GitActionResult rather than throwing, so "won't fast-forward" or a
-// credential failure surfaces as git's own reason on the action line instead of a generic request error.
-//
-// INCOMING ONLY. Pushing is not offered here even though the route would serve it: every push in the panel has
-// to go through the pre-push check first (ReviewPanel's askSync), and a second door into the same verb is a
-// door around it. A one-repo push is `syncAll` with one target, the same request, the same failure line, so
-// nothing is lost.
-const syncRepo = (repo: string, action: "fetch" | "pull", label: string): Promise<void> =>
+/* What MAKES ahead/behind trustworthy, over every repo the caller names, in one busy span. Each reports a
+ * GitActionResult rather than throwing, so a credential failure surfaces as git's own reason filed against the
+ * repo that raised it instead of a generic request error.
+ *
+ * IT TAKES A LIST because that is the scope the panel now asks in. Fetch used to hang off an individual repo
+ * row, back when the Changes list carried a sync dashboard on every row; that interleaved a repo surface with a
+ * file review, so the sync state moved up into the one block that owns "what is leaving this machine" and the
+ * fetch went with it. There is one fetch control and its scope is every repo with a remote, which is also the
+ * honest scope: the zero on a repo you did not fetch is exactly the stale claim this verb exists to refresh.
+ *
+ * NEITHER PULL NOR PUSH IS HERE. Both go through the panel's single sync door (usePushFlow's askSync, then
+ * `syncAll` below), because a second way to reach a verb is a way around the pre-push check. A pull-only sync
+ * passes that check straight through, so routing it there costs nothing. */
+const fetchRepos = (repos: readonly string[]): Promise<void> =>
     runBatch(
-        [
-            {
-                scope: repo,
-                action: `${label} failed`,
-                run: async (): Promise<void> => {
-                    const result = await post<GitActionResult>(repo, action, {});
-                    if (!result.ok) {
-                        // git's own reason, which the daemon already condensed to its verdict line. Empty falls
-                        // through to runBatch's fallback rather than being papered over with the verb again.
-                        throw new Error(result.reason);
-                    }
-                    if (action === `pull`) {
-                        await afterPull();
-                    }
-                },
+        repos.map((repo) => ({
+            scope: repo,
+            action: `Fetch failed`,
+            run: async (): Promise<void> => {
+                const result = await post<GitActionResult>(repo, `fetch`, {});
+                if (!result.ok) {
+                    // git's own reason, which the daemon already condensed to its verdict line. Empty falls
+                    // through to runBatch's fallback rather than being papered over with the verb again.
+                    throw new Error(result.reason);
+                }
             },
-        ],
+        })),
         () => Promise.all([invalidateChanges(), queryClient.invalidateQueries({ queryKey: GIT_LOG.every })]),
     );
 
@@ -521,8 +522,7 @@ export function useChanges() {
         discardGroups,
         abortOperation,
         stageGroups,
-        fetchRepo: (repo: string) => syncRepo(repo, `fetch`, `Fetch`),
-        pullRepo: (repo: string) => syncRepo(repo, `pull`, `Pull`),
+        fetchRepos,
         syncAll,
         actionBusy,
         // Keyed by repo id (the per-repo verbs) or COMMIT_SCOPE, the panel renders each one where it happened.

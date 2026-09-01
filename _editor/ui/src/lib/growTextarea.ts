@@ -19,6 +19,15 @@
  * scrollbar on a single-line message. The commit box carried that as a hand-written constant; here it is read
  * off the element, so a box that grows a border does not need to be told again.
  *
+ * AN EMPTY BOX IS AS TALL AS ITS PLACEHOLDER, because a placeholder does not count towards `scrollHeight`: the
+ * browser reports one line for an empty field however many lines it is drawing in it. Every box here wears a
+ * placeholder that says something (the commit box states why a lit chip filed no message, the composer explains
+ * the mode it is in), and the ones that wrap were being sliced through the middle — line one, then a sliver of
+ * line two, with no way for the reader to get at the rest, since a placeholder cannot be scrolled or selected.
+ * So the placeholder is measured as if it were the content: assigned, read, put back, all inside one call, with
+ * no paint and no `input` event in between. An empty box therefore opens at the size of the sentence it is
+ * showing and collapses to one row the moment the first character is typed over it.
+ *
  * NOT ProseField, which sizes itself with a CSS grid replica and no JavaScript, and is the technique any NEW
  * box should use: it measures nothing, so it cannot mis-measure the fallback font before the webfont swaps.
  * These four are borderful, capped, keyboard-driven boxes that it is not a drop-in for. */
@@ -29,10 +38,18 @@ export const growTextarea = (element: HTMLTextAreaElement | null | undefined, ma
     element.style.height = `auto`;
     const style = getComputedStyle(element);
     const oneLine = Number.parseFloat(style.lineHeight) + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    if (element.scrollHeight <= 0 || element.scrollHeight < oneLine) {
+    const throughPlaceholder = element.value === `` && element.placeholder !== ``;
+    if (throughPlaceholder) {
+        element.value = element.placeholder;
+    }
+    const measured = element.scrollHeight;
+    if (throughPlaceholder) {
+        element.value = ``;
+    }
+    if (measured <= 0 || measured < oneLine) {
         return;
     }
     const border = style.boxSizing === `border-box` ? Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.borderBottomWidth) : 0;
-    const height = element.scrollHeight + border;
+    const height = measured + border;
     element.style.height = `${maxHeight === undefined ? height : Math.min(height, maxHeight)}px`;
 };

@@ -419,6 +419,46 @@ const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
     return originFilter.value === YOURS ? ids.length === 0 : ids.includes(originFilter.value);
 };
 
+/* WHAT A ROW STILL HAS TO SAY ABOUT ITS ORIGIN ONCE A CHIP IS LIT: usually nothing.
+ *
+ * A lit chip means every row on screen is that session's, so the name and the logo on each of them are the
+ * filter's own answer, restated per row. On the state this was written from the same agent was identified three
+ * times on one screenful: once in the legend, once per file row. In a 270px column that identity is being paid
+ * for in filename width, which is the one thing the list is actually read for.
+ *
+ * Narrowly, though: only a row whose SOLE origin is the lit chip goes quiet. A file two agents landed still
+ * shows both, because there the row genuinely knows something the filter does not, and that is the case the
+ * origins list is plural for. */
+const showRowOrigins = (repo: RepoChanges, path: string): boolean => {
+    const ids = originsOf(repo, path);
+    if (ids.length === 0) {
+        return false;
+    }
+    return !(ids.length === 1 && ids[0] === originFilter.value);
+};
+
+/* THE INDENT GUIDE AND THE ATTRIBUTION RAIL ARE ONE COLUMN, which is what pays for the guide.
+ *
+ * The rail was already here: 2px of the landing agent's hue at the head of every file row, transparent for a
+ * file nobody landed. It was drawn `h-4` inside a taller row, so a run of six files from one agent rendered as
+ * six separate ticks with gaps between them, and the "an agent's batch reads as a colour block" this was for
+ * never actually happened. Stretched to the row, the same pixels do it.
+ *
+ * And the un-attributed case stops being invisible. This panel draws no horizontal rules on purpose (see the
+ * note further down), which left nested rows with no containment at all once the indents had collapsed into
+ * each other. A vertical guide is not a divider: it is the structure the rules were being asked for, in a
+ * column the list was already spending. Faint when nobody landed the file, the agent's hue when somebody did.
+ *
+ * `bg-content/15` rather than `border-line`'s colour, which is what this first shipped as and what measuring it
+ * corrected: the hairline token is a warm gold at 14% alpha, and 2px of it over this panel's near-black reads at
+ * a 1.2:1 contrast ratio — a guide that is present in the DOM and absent on the screen, which is the worst of
+ * both (it costs the width and delivers no structure). A neutral 15% of the content colour lands near 1.6:1 in
+ * both schemes: still the quietest mark in the list, and actually a line. */
+const railClass = (repo: RepoChanges, path: string): string => {
+    const first = originsOf(repo, path)[0];
+    return first === undefined ? `bg-content/15` : originHue(first).rail;
+};
+
 // The lists a repo group renders. Conflicts first because they BLOCK everything below them: git will not
 // commit while one exists: then staged, then unstaged (VSCode's order, staged being what a bare commit takes).
 // An empty section renders nothing at all rather than an empty header. "Unstaged", not VSCode's bare "Changes":
@@ -427,19 +467,62 @@ const matchesFilter = (repo: RepoChanges, change: GitChange): boolean => {
 // The origin filter applies HERE, so everything downstream inherits it from one place: the rows, the range
 // selection, the section verbs and the repo's Discard all. A "Stage all" under an active filter stages that
 // agent's files and only those, which is the action the filter existed to make possible.
-const sidesOf = (repo: RepoChanges): readonly { side: GitDiffSide; label: string; changes: readonly GitChange[] }[] =>
-    [
-        { side: `conflicted` as const, label: `Conflicts`, changes: repo.conflicted },
-        { side: `staged` as const, label: `Staged`, changes: repo.staged },
-        { side: `unstaged` as const, label: `Unstaged`, changes: repo.unstaged },
-    ].flatMap((section) => {
-        const shown = section.changes.filter((change) => matchesFilter(repo, change));
-        return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
-    });
+//
+// BUILT ONCE PER REVIEW, not once per call. This is the panel's single most-asked question: the repo heading
+// reads it for its sole side, its count, its verb and its discard scope; the body walks it; the row indent, the
+// range selection and every commit shape are derived from it. Recomputing the filter pass on each of those, over
+// a list the daemon ships up to 500 rows of per repo, is work paid for on every hover tint.
+interface SideView {
+    readonly side: GitDiffSide;
+    readonly label: string;
+    readonly changes: readonly GitChange[];
+}
+const sidesByRepo = computed<ReadonlyMap<string, readonly SideView[]>>(
+    () =>
+        new Map(
+            scannable.value.map((repo) => [
+                repo.repo,
+                [
+                    { side: `conflicted` as const, label: `Conflicts`, changes: repo.conflicted },
+                    { side: `staged` as const, label: `Staged`, changes: repo.staged },
+                    { side: `unstaged` as const, label: `Unstaged`, changes: repo.unstaged },
+                ].flatMap((section) => {
+                    const shown = section.changes.filter((change) => matchesFilter(repo, change));
+                    return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
+                }),
+            ]),
+        ),
+);
+const sidesOf = (repo: RepoChanges): readonly SideView[] => sidesByRepo.value.get(repo.repo) ?? [];
 
-// A section's own count only earns its pixels when there is more than one section to tell apart. Alone it is
-// the repo row's badge repeated verbatim one line below it: the same number twice, one line apart.
+/* --- WHEN A SIDE EARNS A ROW OF ITS OWN ----------------------------------------------------------------------
+ * A section's own count only earns its pixels when there is more than one section to tell apart. Alone it is
+ * the repo row's badge repeated verbatim one line below it: the same number twice, one line apart.
+ *
+ * The same rule now governs the ROW, not just the count, which is the generalisation that was missing. A repo
+ * whose work is entirely staged was drawn as a repo row, and then a STAGED row under it, and then (grouped) a
+ * module row under that: three headings over two files, at three indents that were not three indents, since the
+ * side and the module resolved to the same left edge. Two of those three rows carried no information the row
+ * above did not already imply.
+ *
+ * So a repo with ONE side says it on the repo row ("intentic … STAGED 2 ↺") and the body starts at the files.
+ * A repo with two or three sides keeps the repo row and nests its sides under it, which is the case the split
+ * exists for: staged-vs-unstaged is genuinely two lists of the same paths with different content. */
 const sidesSplit = (repo: RepoChanges): boolean => sidesOf(repo).length > 1;
+const soleSide = (repo: RepoChanges): SideView | undefined => {
+    const sides = sidesOf(repo);
+    return sides.length === 1 ? sides[0] : undefined;
+};
+
+/* THE LIST HOLDS REPOS WITH CHANGES IN THEM, and nothing else. A clean repo used to take a full row here,
+ * carrying a branch it shares with the window title and an ↑N pill that has now moved to the outgoing block:
+ * a row in a panel called Changes whose entire content was about something other than changes. With the pills
+ * gone it has nothing left to say, and "no uncommitted changes" is said once, by the empty state, rather than
+ * once per repo by a row that looks like a list item you could open.
+ *
+ * Read through `sidesOf`, so the origin filter narrows this too: filtering to an agent drops the repos that
+ * agent never touched instead of leaving them as empty headings over nothing. */
+const dirty = computed(() => scannable.value.filter((repo) => sidesOf(repo).length > 0));
 
 /* --- reading the list by module ------------------------------------------------------------------------------
  * The one preference this panel takes about how it READS (useChangeGrouping, flipped from the mode-switch row
@@ -585,7 +668,7 @@ const rowsOn = (repo: string, side: GitDiffSide): readonly Row[] =>
 // between two of a package's) and a range that measured against the other order would select rows the user
 // never dragged over.
 const visibleRows = computed<readonly Row[]>(() =>
-    scannable.value.flatMap((repo) => (collapsed.value.has(repo.repo) ? [] : sidesOf(repo).flatMap((section) => rowsOn(repo.repo, section.side)))),
+    dirty.value.flatMap((repo) => (collapsed.value.has(repo.repo) ? [] : sidesOf(repo).flatMap((section) => rowsOn(repo.repo, section.side)))),
 );
 
 const selected = ref<ReadonlySet<string>>(new Set());
@@ -856,8 +939,12 @@ const growCommitBox = (): void => {
  * files a whole message, a commit clears it, switching sandboxes swaps it for that tree's own. `post` runs it
  * after the DOM has the new text: measuring before that measures the previous message. The sidebar's width is
  * in the list for the same reason as the text: dragging it narrower re-wraps the lines, and the height that
- * fitted at 400px hides a line at 270px. */
-watch([commitBox, commitMessage, layout.sidebarWidth], growCommitBox, { flush: `post` });
+ * fitted at 400px hides a line at 270px.
+ *
+ * `chipNotice` is in the list because the box is sized through its PLACEHOLDER while it is empty
+ * (`growTextarea`), and lighting a chip is what replaces a five-word prompt with a sentence naming a session:
+ * without it the notice arrives in a box still measured for the prompt it replaced. */
+watch([commitBox, commitMessage, chipNotice, layout.sidebarWidth], growCommitBox, { flush: `post` });
 
 // --- stage / unstage ---------------------------------------------------------------------------------------
 // `staged` is the one side that moves BACK out of the index; the other two move in. For a conflict that inward
@@ -967,16 +1054,11 @@ const confirmDiscard = async (): Promise<void> => {
 
 // --- remote sync ------------------------------------------------------------------------------------------
 // Sync affordances show only for a repo that actually has a remote; a purely local repo gets no dead controls.
-// Each verb then earns its place from state: pull when behind, push when ahead, Publish when the branch has no
-// upstream at all. Fetch is the exception: it is what MAKES ahead/behind trustworthy, so it is always offered.
 // `syncable`/`ahead`/`behind`/`unpublished` come from useChanges: the rail tile and the sidebar's Changes tab
 // read the same repo the same way, and a second local definition here is how those three drift apart.
-
-// The pills carry only a direction and a number, so the tooltip is where the whole sentence goes: including
-// WHICH ref is involved, which the folded row no longer spends a line printing.
-const pullHint = (repo: RepoChanges): string =>
-    `Pull ${plural(behind(repo), `commit`)} from ${repo.remote?.upstream}: fast-forward only; a diverged history is reported, never auto-merged`;
-const pushHint = (repo: RepoChanges): string => `Push ${plural(ahead(repo), `commit`)} to ${repo.remote?.upstream}`;
+//
+// NONE OF IT REACHES A ROW ANY MORE. Every verb (pull, push, publish, fetch) is said once, in the outgoing block
+// above the list; see `outgoing` for why the rows gave it up.
 
 // --- the primary sync action --------------------------------------------------------------------------------
 // VSCode's post-commit move: the same prominent slot the user just used to Commit becomes the sync the repos now
@@ -1101,26 +1183,39 @@ const stageHint = computed<string | undefined>(() => {
 /* --- ONE BLOCK FOR WHAT IS LEAVING THIS MACHINE ---------------------------------------------------------------
  * The offer and the run are ONE control in two states, not two rows. They used to be two, stacked, each with a
  * full-width border of its own: "↑15 · Push" above "Checking · 2s · Stop", which is a single intent ("send these
- * commits") drawn as two unrelated strips, the top one greyed out because the bottom one was busy. Three
- * dividers and two rows to say one thing, and the count said twice over: the bar's ↑15 and the repo row's own
- * ↑15 pill, forty pixels apart.
+ * commits") drawn as two unrelated strips, the top one greyed out because the bottom one was busy.
  *
  * So the flow TAKES THE BUTTON'S PLACE: the control that was clicked is the control that reports, which is also
  * what retires the disabled-button state entirely, there is no dead Push sitting beside its own progress.
  *
- * The COMMIT BOX still outranks the offer, for the reason it always did: a tree with work to record has a more
- * urgent primary action than a push, and the offer is VSCode's post-commit button, which only exists once there
- * is nothing left to commit. But the flow outranks both, because it is the only thing here that is HAPPENING
- * rather than being offered, and it is what the user is waiting on. */
+ * AND IT IS NOW THE ONLY PLACE SYNC IS SAID. This block used to appear only on a clean tree, on the grounds that
+ * the commit box outranks it; while there was work to record, ahead/behind lived on the repo rows as pills that
+ * WERE pull and push. Pills-on-rows was the right call while the rows were the only place to hang them, and it
+ * stopped being right the moment you notice the rows are the problem: a repo row carrying a branch, an ↑N, a
+ * fetch and a publish is a REPO DASHBOARD, and it was interleaved, at the same width and the same row rhythm,
+ * with the FILE REVIEW the panel is named after. Two jobs in one column, and a repo with nothing uncommitted
+ * still took a row in a list of uncommitted changes purely to carry its pill.
+ *
+ * So the sync state comes up here, where it is one line and one verb for the whole workspace, and the list below
+ * goes back to being only files. The commit box still outranks it, but now by SEVERITY rather than by absence:
+ * with work to record, Commit is the success button and this one steps down to secondary. */
 const outgoing = computed<"flow" | "offer" | undefined>(() =>
-    stageLine.value !== undefined ? `flow` : changes.count.value === 0 && syncMeta.value !== undefined ? `offer` : undefined,
+    stageLine.value !== undefined ? `flow` : syncMeta.value !== undefined ? `offer` : undefined,
 );
-// Whether that block is already this repo's own push control. One syncable repo means the block's verb IS the
-// row's pill: same commits, same action, one line apart, and the row would be spending its width restating a
-// number the block states in words. With several repos in play the block is an aggregate and each row keeps its
-// own pill, which is the case the pills exist for.
-const barCovers = (repo: RepoChanges): boolean =>
-    outgoing.value !== undefined && changes.count.value === 0 && syncRepos.value.length === 1 && syncRepos.value[0]!.repo === repo.repo;
+// The commit box keeps the primary slot while there is anything to record: two full-weight buttons stacked
+// forty pixels apart is exactly the "which one am I meant to press" this panel spent its redesign removing.
+const syncSeverity = computed<"secondary" | undefined>(() => (changes.count.value > 0 ? `secondary` : undefined));
+// WHICH REPOS, AND WHAT A PULL PROMISES. Named, because the rows that used to name them are gone: the summary
+// beside the button counts commits and repos, and a count cannot say which. The fast-forward caveat rides here
+// too, for the same reason: it used to live on the per-row pull pill, and it is the one thing about this verb a
+// user can be surprised by. A hover rather than a line, because the block is one line by construction.
+const syncHint = computed(() => {
+    const named = `${syncMeta.value?.label ?? `Sync`} ${syncRepos.value.map((repo) => repo.repo).join(`, `)}`;
+    return behindTotal.value > 0 ? `${named}. Pulls fast-forward only: a diverged history is reported, never auto-merged` : named;
+});
+// Every repo with a remote, which is the honest scope for the one verb that makes ahead/behind trustworthy: the
+// zero on a repo you did not fetch is precisely the claim most likely to be stale.
+const fetchable = computed(() => scannable.value.filter((repo) => syncable(repo)).map((repo) => repo.repo));
 
 /* THIS PANEL DRAWS NO HORIZONTAL RULES AT ALL, and that is the whole of the rule budget it gets.
  *
@@ -1143,17 +1238,6 @@ const doSync = (): void =>
         syncRepos.value.map((repo) => ({ repo: repo.repo, pull: behind(repo) > 0, push: ahead(repo) > 0 || unpublished(repo) })),
     );
 
-// A row's own pill: this repo, outgoing only. Publish and ↑N differ in wording, not in what they send.
-const askPushRepo = (repo: RepoChanges): void =>
-    pushFlow.askSync(
-        unpublished(repo) ? `Publish` : `Push`,
-        unpublished(repo) ? `${repo.repo}'s branch` : `${plural(ahead(repo), `commit`)} in ${repo.repo}`,
-        [{ repo: repo.repo, pull: false, push: true }],
-    );
-
-// Ahead/behind are only ever as fresh as the last fetch, which is why fetch is offered even when both read
-// zero: the zero itself is the claim most likely to be stale.
-const SYNC_PILL = `flex h-5 shrink-0 items-center gap-0.5 rounded px-1 text-2xs text-muted transition-colors hover:bg-overlay hover:text-content disabled:opacity-40`;
 // Hover-revealed, but always laid out: revealing on hover must not move anything, or the button slides out
 // from under the cursor that summoned it. Touch has no hover, so mobile keeps them visible.
 const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group-hover/repo:opacity-100 max-md:opacity-100`;
@@ -1163,8 +1247,82 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
 // counts too: a repo with 30k deletions must read as 30k, not as the 500 rows that fit the payload.
 const repoCount = (repo: RepoChanges): number => sidesOf(repo).reduce((total, section) => total + section.changes.length, repo.truncated ?? 0);
 
+/* --- A COUNT APPEARS ONCE PER RANK, AND ONLY WHERE IT IS NOT ALREADY ON SCREEN --------------------------------
+ * The state this rule was written from printed the same figure five times in a hundred pixels: the mode
+ * switch's "Changes 2", the From chip's 2, the repo row's 2, the module heading's 2, and "2 staged" over the
+ * Commit button. Four of the five were about the same two rows, which were themselves visible directly beneath.
+ * A number nobody can act on, restated, is the texture that makes a dense panel read as noisy.
+ *
+ * The rule that survives: a count earns its pixels when the rows it counts are NOT all on screen. So the repo
+ * badge shows while the group is folded (it is the only thing saying what is under there), while the repo has
+ * more than one side (it is a total no single section states), and while the daemon truncated the list (the
+ * rows genuinely are not all here). Expanded, single-sided and complete, it is deleted: the files are right
+ * there to be counted, and the side label beside them already says what they are.
+ *
+ * The module heading's count is gone outright, at every width. A module bucket has no fold of its own, so its
+ * rows are on screen whenever the heading is. */
+const showRepoCount = (repo: RepoChanges): boolean =>
+    repoCount(repo) > 0 && (collapsed.value.has(repo.repo) || sidesSplit(repo) || (repo.truncated ?? 0) > 0);
+
+/* --- ONE GUTTER, ONE STEP PER RANK ---------------------------------------------------------------------------
+ * The list is up to four ranks deep (repo → side → module → file) and it used to draw them at three left edges,
+ * two of which collided: the side header and the module header both resolved to 12px, and with grouping off the
+ * file rows landed on that same 12px too. Four ranks, one indent, which is why the structure had to be inferred
+ * from type case and colour rather than seen.
+ *
+ * Now every rank that is DRAWN gets one 8px step, and a rank that is not drawn costs nothing. That is the part
+ * a fixed ladder gets wrong in a 270px column: indenting files past an absent side header and an absent module
+ * header spends 16px of a filename's width on hierarchy that is not on the screen. So the depth is counted, not
+ * assumed, and the common case (one repo, one side, no grouping) is two ranks and a very shallow list.
+ *
+ * The module rank is read off the SECTION'S OWN VIEW rather than off the grouping toggle, because the two are
+ * not the same question: grouping on over a repo of loose files resolves to one unnamed bucket and draws no
+ * heading at all (changeModules' `named`), and indenting rows under a heading that is not there is the exact
+ * waste this counts to avoid. */
+const ROW_INDENT: readonly string[] = [`pl-2`, `pl-4`, `pl-6`];
+const rowIndent = (repo: RepoChanges, side: GitDiffSide): string =>
+    ROW_INDENT[(sidesSplit(repo) ? 1 : 0) + (moduleRow(repo, side) ? 1 : 0)] ?? `pl-6`;
+// The module heading sits one step above its rows, on whichever step the side header left free.
+const moduleIndent = (repo: RepoChanges): string => (sidesSplit(repo) ? `pl-4` : `pl-2`);
+
+/* --- A RANK WITH ONE CHILD DOESN'T GET A ROW, one level further down ------------------------------------------
+ * The rule that deleted the lone side's header (soleSide) applies verbatim to the lone MODULE, and not applying
+ * it there was visible the moment a conflicted repo was drawn: conflicts, staged and unstaged, one file each,
+ * and `@intentic-app/web` printed three times — one heading per section, each over a single row, all naming the
+ * same package. Three files, six rows.
+ *
+ * So a section whose rows are all in one module says it on the section's own row ("STAGED 1 · @intentic-app/web
+ * ↺") and its body starts at the files. Two or more modules and the headings come back, because then they are
+ * telling the rows apart, which is the job they exist for.
+ *
+ * ONLY WHERE THERE IS A SECTION ROW TO FOLD INTO. With one side the label already rode up to the repo row, and
+ * a repo row carrying repo, branch, side, count and two buttons has no width left to name a package in a 270px
+ * column: the module keeps its own row there. The fold follows the row that can afford it rather than being
+ * uniform, which is the same trade the ladder makes (rowIndent) — a rank costs a step only where it is drawn. */
+const soleBucket = (repo: string, side: GitDiffSide): ModuleGroup<GitChange> | undefined => {
+    const view = viewOf(repo, side);
+    return view.named && view.buckets.length === 1 ? view.buckets[0] : undefined;
+};
+const moduleRow = (repo: RepoChanges, side: GitDiffSide): boolean =>
+    viewOf(repo.repo, side).named && !(sidesSplit(repo) && soleBucket(repo.repo, side) !== undefined);
+
 // Where a failed action gets drawn: the repo's own row, or the commit box for a commit that spans repos.
 const failureIn = (scope: string) => changes.failures.value.get(scope);
+
+/* THE FAILURES WITH NO ROW TO LAND ON. Errors here are keyed by repo and drawn against the row that caused
+ * them, which worked while every repo had a row. It no longer does: the list holds repos with changes in it,
+ * and the verbs that can fail in a CLEAN repo are exactly the ones that just moved up to the outgoing block, a
+ * fetch that could not reach the remote, a push that was rejected. Filed against `root`, with no `root` row in
+ * the list, git's reason had nowhere to be drawn and the click reported nothing at all.
+ *
+ * So they surface under the block that fired them, still naming their repo, because that is the fact the row
+ * used to supply by position. Independent of whether the block itself is showing: a failed fetch can leave a
+ * repo with nothing outgoing, which is the state that would otherwise swallow its own error message. */
+const strayFailures = computed<readonly { repo: string; action: string; detail: string }[]>(() =>
+    [...changes.failures.value]
+        .filter(([scope]) => scope !== COMMIT_SCOPE && !dirty.value.some((repo) => repo.repo === scope))
+        .map(([repo, failure]) => ({ repo, ...failure })),
+);
 
 // Shared shells for the two things this panel says when something is wrong. A notice is a contained block with
 // a border, not loose coloured text: the old bare red sentence at the top of the panel was indistinguishable
@@ -1388,17 +1546,25 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
         </div>
 
         <!-- WHAT IS LEAVING THIS MACHINE: one block, two states, and never both at once.
-             AT REST it is the sync the repos need, in the slot the commit box hands back once there is nothing
-             left to record (VSCode's post-commit button): same place, same weight, so the commits you just made
-             are one labelled click from their remote instead of a muted pill on a repo row nobody reads as a
-             button. IN FLIGHT the run takes that button's place, because the control that was clicked is the
-             control that should report: it says the stage, the clock and the scale, and offers the only two
-             things worth offering mid-run (stop the suite, go and watch it).
+             AT REST it is the sync every repo needs, said once for the workspace: the counts, the verb, the
+             repos it will touch (on hover) and the fetch that makes the counts worth reading. IN FLIGHT the run
+             takes that button's place, because the control that was clicked is the control that should report:
+             it says the stage, the clock and the scale, and offers the only two things worth offering mid-run
+             (stop the suite, go and watch it).
+             IT IS THE ONLY PLACE THE REMOTE IS MENTIONED. This block used to appear only on a clean tree and the
+             repo rows carried ahead/behind as pills the rest of the time; that put a remote dashboard in the
+             middle of a file list, one row per repo, whether or not the repo had a single uncommitted change.
+             The rows gave it up, this block took it, and the commit box keeps the primary slot by severity
+             rather than by absence: with work to record, Commit is the success button and this steps down.
+             The one thing lost with the pills is per-repo scoping, and it is smaller than it looks: `doSync`
+             already resolves each repo on its own (pull only what is behind, push only what is ahead), so the
+             aggregate is per-repo-correct, it just cannot be aimed at one repo and not its neighbour.
              No verdict here, because a verdict that needs answering is raised above the router where the user
              can actually be found (shell/NotificationHost.vue, held by composables/notificationSources.ts), and
-             no output, because the output is the terminal's (composables/terminal/useTerminalPanel.ts). Every
-             sync failure renders on its own repo row below, each filed per repo, so this block carries no
-             errors either.
+             no output, because the output is the terminal's (composables/terminal/useTerminalPanel.ts). A sync
+             failure is filed per repo and renders on that repo's row below; the ones whose repo has no row (a
+             fetch that failed in a clean repo) land in the strip directly under this block, which is as close
+             to the button that fired them as they can get.
              THE HINT IS A LINE ON A PHONE AND A HOVER ON A DESKTOP, the same decision the two form factors have
              room for: a hover paragraph never reaches a touch device (tooltip.ts, rule 7), and on a phone this
              panel IS the screen, so the width objection that put the command in a tooltip does not apply. -->
@@ -1450,10 +1616,25 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 </Button>
             </template>
             <template v-else>
-                <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted">{{ syncSummary }}</span>
+                <span class="min-w-0 flex-1 truncate whitespace-nowrap text-2xs text-muted" v-tooltip.right="syncHint">{{ syncSummary }}</span>
+                <!-- FETCH LIVES WITH THE NUMBER IT REFRESHES, and there is one of it. It used to be an icon on
+                     every repo row, which is how a review of uncommitted files came to carry a per-repo remote
+                     dashboard; up here its scope is every repo with a remote, which is also the only scope at
+                     which the answer is worth trusting: the ↑0 on a repo you did not fetch is the stale claim,
+                     and fetching one repo at a time left the rest of the summary just as old as before. -->
+                <button
+                    type="button"
+                    :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
+                    :disabled="changes.actionBusy.value"
+                    @click="changes.fetchRepos(fetchable)"
+                    v-tooltip.top="'Fetch: refresh what every repo knows about its remote'"
+                    aria-label="Fetch every repo"
+                >
+                    <Icon name="sync" class="text-2xs" />
+                </button>
                 <!-- No `running` in the disabled test any more: the flow takes this whole block over while it
                      runs, so there is no longer a dead Push standing next to its own progress. -->
-                <Button size="small" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value" @click="doSync">
+                <Button size="small" :severity="syncSeverity" class="shrink-0 whitespace-nowrap" :disabled="changes.actionBusy.value" @click="doSync">
                     <Icon :name="syncMeta!.icon" />{{ syncMeta!.label }}
                 </Button>
             </template>
@@ -1471,6 +1652,26 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 ></div>
                 <div v-else class="h-full w-full animate-pulse bg-link/40"></div>
             </div>
+        </div>
+
+        <!-- A fetch or a push that failed in a repo the list is not showing. Every other failure in this panel
+             is drawn against the row that caused it; these have no row, so they name their repo instead and sit
+             under the block whose button fired them. See strayFailures. -->
+        <div v-for="failure in strayFailures" :key="failure.repo" :class="[NOTICE, 'mx-2 mt-1 shrink-0']">
+            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs text-danger" />
+            <div class="min-w-0 flex-1">
+                <p class="text-2xs font-medium text-danger">{{ failure.action }} in {{ failure.repo }}</p>
+                <p class="line-clamp-4 break-words text-2xs text-muted" v-tooltip.top.overflow="failure.detail">{{ failure.detail }}</p>
+            </div>
+            <button
+                type="button"
+                class="shrink-0 rounded p-0.5 text-muted transition-colors hover:text-content"
+                @click="changes.dismissFailure(failure.repo)"
+                v-tooltip.right="'Dismiss'"
+                :aria-label="`Dismiss error for ${failure.repo}`"
+            >
+                <Icon name="times" class="text-2xs" />
+            </button>
         </div>
 
         <!-- WHOSE WORK IS IN MY TREE: one line, only when an agent actually landed something. Each entry is a
@@ -1525,6 +1726,14 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
                 <span class="shrink-0 opacity-70">{{ entry.files }}</span>
+                <!-- THE WAY OUT, on the chip that is hiding rows. Dimming the others is a good signal that a
+                     filter is ON and no signal at all about how to end it: the gesture is a second click on the
+                     lit chip, which is a thing you either already know or discover by accident, and the cost of
+                     not knowing is a list that appears to have lost files. A cross is the one mark that means
+                     "clear this" without a word, and it costs 10px on exactly one chip. It is inside the same
+                     button rather than beside it, because the press it advertises is the press the whole chip
+                     already takes. -->
+                <Icon v-if="originFilter === entry.id" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
             <button
                 v-if="legend.yours > 0"
@@ -1535,6 +1744,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                 v-tooltip.right="'Your own edits, the terminal, a main-tree chat'"
             >
                 you <span class="opacity-70">{{ legend.yours }}</span>
+                <Icon v-if="originFilter === YOURS" name="times" class="shrink-0 text-[0.6rem] opacity-70" />
             </button>
         </div>
 
@@ -1547,19 +1757,25 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  list still loading. The rows below are about the REPOS (their branch, their sync state); this
                  is about the TREE, which is what the panel is named after and what the reader came to check. -->
             <p v-else-if="changes.count.value === 0" class="px-3 py-2 text-2xs text-subtle">No uncommitted changes.</p>
+            <!-- A LIT CHIP OVER AN EMPTY LIST SAYS SO. The list holds repos with changes in them, and under a
+                 filter that is repos with changes FROM THAT SESSION, so a chip whose work has just been
+                 committed (or which never had any in this tree) empties the column. The chip's own retirement
+                 watcher clears it a beat later; this is the beat, and without a sentence in it the panel reads
+                 as having lost the files rather than as having filtered them all out. -->
+            <p v-else-if="dirty.length === 0 && filterLabel" class="px-3 py-2 text-2xs text-subtle">
+                Nothing from {{ filterLabel }} is left in the tree.
+            </p>
 
             <!-- Repos git refused to scan. Same row rhythm as a real group: the repo still gets its name on a
                  row, because dropping it from the list is the silent disappearance this reports instead: with
                  git's reason in the same notice every other failure here uses. There is nothing to stage,
                  commit or discard, so the row carries no actions at all. -->
             <div v-for="group in unscannable" :key="group.repo" class="mt-1 px-1 first:mt-0">
-                <!-- The triangle takes the repo mark's slot, and the empty chevron slot before it is held, so a
-                     repo git could not read lines up with the ones it could. -->
+                <!-- The triangle takes the CHEVRON'S slot, which is now the whole of a repo row's lead, so a
+                     repo git could not read lines up exactly with the ones it could, and the glyph in the
+                     position that means "open this" says instead why this one will not open. -->
                 <div class="flex min-w-0 items-center gap-1.5 rounded-md py-1.5 pl-1 pr-1">
-                    <span class="flex shrink-0 items-center gap-0.5">
-                        <span class="w-2.5 shrink-0"></span>
-                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
-                    </span>
+                    <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-danger" />
                     <span class="min-w-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
                 </div>
                 <div :class="[NOTICE, 'mb-1.5']">
@@ -1576,15 +1792,23 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                  the request behind it anyway. Dimming the whole group says that in one gesture, and it is the
                  only thing on screen that tells a reloaded tab WHICH rows the running commit is about to take. -->
             <div
-                v-for="group in scannable"
+                v-for="group in dirty"
                 :key="group.repo"
                 class="group/repo mt-1 px-1 transition-opacity first:mt-0"
                 :class="changes.committing.value.includes(group.repo) && `pointer-events-none opacity-50`"
             >
-                <!-- One row per repo, carrying everything about it: identity on the left, then sync state, the
-                     change count, and the two actions that don't depend on state. The pills ARE the verbs:
-                     clicking "↓2" pulls those two commits, so a repo that is in sync costs exactly this row
-                     and no more, where it used to cost this row plus a full-width bar mostly reading zero.
+                <!-- ONE ROW PER REPO, AND IT IS ABOUT THE FILES UNDER IT. Identity on the left, then the rank
+                     the rows below belong to and the verb that moves them across the index, then discard.
+                     Nothing about the remote: a branch's ahead/behind, its publish state and its fetch all moved
+                     up to the outgoing block, because a repo dashboard interleaved row-for-row with a file
+                     review is two surfaces wearing one costume, and it was the reason a repo with nothing
+                     uncommitted still took a row in a panel called Changes.
+
+                     THE SIDE RIDES THIS ROW when the repo has only one, which is the ordinary case. It used to
+                     get a heading of its own directly underneath, at an indent that was also the module
+                     heading's indent, so a repo with two staged files spent three rows and three collisions
+                     saying what one row says here. Split across two sides, the sections come back as their own
+                     rows (below) and this one keeps the total, because then it is a figure no section states.
 
                      AN INSET, ROUNDED, TINTED ROW, and no rule under it. What separated one repo from the next
                      used to be a full-width hairline at half the strength of every other line in the panel,
@@ -1595,111 +1819,68 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      at all. Rounded and held off the panel edge so the lit row reads as one object: the band it
                      used to paint ran under the scrollbar and stopped dead against both walls. -->
                 <div class="ui-row-select flex items-center gap-1 rounded-md pr-1">
-                    <!-- NO CHEVRON ON A REPO WITH NOTHING IN IT. A disclosure triangle is a promise that
-                         something is under there, and on a clean repo it was a promise the row could not keep:
-                         the screenshot this redesign started from is a chevron over an empty column, which
-                         reads as a list still loading rather than as an answer. The slot is HELD at the same
-                         width, so a clean repo's name still lines up with a dirty one's. -->
                     <button
                         type="button"
                         class="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-1 text-left max-md:min-h-11"
-                        :disabled="repoCount(group) === 0"
                         @click="toggleGroup(group.repo)"
                     >
-                        <!-- THE MARK THE LIST WAS MISSING. A repo row was a bare word in a column: nothing to
-                             scan down, and "web main" read as one two-word name rather than as a repository and
-                             the branch it is on. Two glyphs fix both halves. `code` is what this app already
-                             draws for a repository nobody has a brand mark for (pages/sandbox/workspaceRepo.ts),
-                             and the branch takes git's own branch glyph, which is the same pairing the sandbox's
-                             workspace card uses. Both sit a step under the name in colour: they are what the row
-                             IS, not what it says.
-                             The chevron rides WITH the mark in a tight pair rather than at the row's own
-                             spacing, so the lead reads as one lead: two identical-weight glyphs six pixels
-                             apart read as two facts, and only one of them is one. -->
-                        <span class="flex shrink-0 items-center gap-0.5">
-                            <Icon
-                                v-if="repoCount(group) > 0"
-                                class="shrink-0 text-2xs text-subtle"
-                                :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'"
-                            />
-                            <span v-else class="w-2.5 shrink-0"></span>
-                            <Icon name="code" class="shrink-0 text-2xs text-subtle" />
-                        </span>
-                        <span class="shrink-0 truncate text-xs font-medium text-content">{{ group.repo }}</span>
-                        <span v-if="group.branch !== undefined" class="flex min-w-0 items-center gap-0.5 text-2xs text-subtle">
+                        <!-- THE CHEVRON IS THE WHOLE LEAD NOW. It used to be paired with a `code` glyph, on the
+                             argument that a bare word in a column has nothing to scan down; what actually
+                             happened is that every row in a list OF repositories carried a mark saying
+                             "repository", which is the one fact the reader had already been told by the panel
+                             they opened. The branch keeps its glyph, because that one distinguishes rather than
+                             classifies: `main` next to a name reads as a second word of the name without it. -->
+                        <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.repo) ? 'chevron-right' : 'chevron-down'" />
+                        <!-- BOTH NAMES GIVE WAY, which is the correction to a row where only one of them did.
+                             The repo name held its full width (`shrink-0`) and the branch absorbed every pixel
+                             the row was short, so `refs/agent-notes` on a long branch drew the fork glyph with
+                             NOTHING after it — a mark whose whole job is to introduce a name, introducing the
+                             uppercase side label two gaps away. Now the pair shrinks together — the branch three
+                             times as fast (`shrink-3`, capped at `max-w-24`), because it is the annotation and
+                             the repo is the heading: a squeezed row reads `refs/agent-… ⑂ feat/v…`, which is two
+                             truncated facts in the right order instead of one fact and one naked glyph. -->
+                        <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{
+                            group.repo
+                        }}</span>
+                        <span v-if="group.branch !== undefined" class="flex min-w-0 max-w-24 shrink-3 items-center gap-0.5 text-2xs text-subtle">
                             <Icon name="fork" class="shrink-0 text-[0.6rem]" />
-                            <span class="min-w-0 truncate">{{ group.branch }}</span>
+                            <!-- Both names now truncate, so both say the rest on hover: a 27px branch reads
+                                 `feat…`, which is enough to know it is not `main` and not enough to know what it
+                                 is. `.overflow` means the tooltip exists only while it is actually cut. -->
+                            <span class="min-w-0 truncate" v-tooltip.top.overflow="group.branch">{{ group.branch }}</span>
                         </span>
                     </button>
 
-                    <!-- THE SYNC PILLS, UNLESS THE BLOCK ABOVE IS ALREADY THIS REPO'S PUSH BUTTON. With one
-                         syncable repo the two are the same commits and the same verb one line apart, which is
-                         how the panel came to print "↑15" twice in ninety pixels. The block wins that tie: it
-                         says the count AND the word, it is where the run reports, and it is in the primary
-                         slot. With several repos the block is an aggregate and every row keeps its own pill,
-                         which is the case the pills were built for. -->
-                    <template v-if="!barCovers(group)">
-                        <button
-                            v-if="behind(group) > 0"
-                            type="button"
-                            :class="SYNC_PILL"
-                            :disabled="changes.actionBusy.value"
-                            @click="changes.pullRepo(group.repo)"
-                            v-tooltip.top="pullHint(group)"
-                            :aria-label="`Pull ${group.repo}`"
-                        >
-                            <Icon name="arrow-down-left" class="text-[0.6rem]" />{{ behind(group) }}
-                        </button>
-                        <!-- Publish keeps its word where the pills stay numeric: a branch with no upstream is a
-                             one-off state most people meet rarely, and "↑3" would not tell them the push also
-                             has to CREATE the branch on the remote. -->
-                        <Button
-                            v-if="unpublished(group)"
-                            size="small"
-                            severity="secondary"
-                            class="shrink-0 whitespace-nowrap"
-                            :disabled="changes.actionBusy.value || pushFlow.running.value"
-                            @click="askPushRepo(group)"
-                            v-tooltip.top="'Push and start tracking this branch on the remote'"
-                        >
-                            <Icon name="cloud-upload" class="mr-1 text-[0.6rem]" />Publish
-                        </Button>
-                        <button
-                            v-else-if="ahead(group) > 0"
-                            type="button"
-                            :class="SYNC_PILL"
-                            :disabled="changes.actionBusy.value || pushFlow.running.value"
-                            @click="askPushRepo(group)"
-                            v-tooltip.top="pushHint(group)"
-                            :aria-label="`Push ${group.repo}`"
-                        >
-                            <Icon name="arrow-up-right" class="text-[0.6rem]" />{{ ahead(group) }}
-                        </button>
-                    </template>
-
-                    <!-- A NUMBER, NOT A PILL. It used to be a filled chip in `bg-overlay`, which is the colour
-                         the row itself turns under the pointer: the one moment you are certainly looking at a
-                         repo was the one moment its count disappeared into the row. Nothing else on this row is
-                         a filled shape either, so the count now reads as the figure it is, in the column the
-                         sync pills already line up in. -->
-                    <span v-if="repoCount(group) > 0" class="shrink-0 px-0.5 text-2xs tabular-nums text-muted">{{ repoCount(group) }}</span>
-
-                    <button
-                        v-if="syncable(group)"
-                        type="button"
-                        :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
-                        :disabled="changes.actionBusy.value"
-                        @click="changes.fetchRepo(group.repo)"
-                        v-tooltip.top="'Fetch: refresh what this repo knows about its remote'"
-                        :aria-label="`Fetch ${group.repo}`"
+                    <!-- The sole side's name, in the cluster with the count it counts and the verb that moves
+                         it: `STAGED 2 ↺` is one statement, and putting the three together is also what tells
+                         this ↺ from the hundred identical ones down the right edge of the rows below. Never
+                         truncated, and never drawn at all once the repo has two sides to tell apart. -->
+                    <span
+                        v-if="soleSide(group)"
+                        class="shrink-0 text-2xs font-medium uppercase tracking-wide"
+                        :class="soleSide(group)!.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
+                        >{{ soleSide(group)!.label }}</span
                     >
-                        <Icon name="sync" class="text-2xs" />
-                    </button>
-                    <!-- Not drawn at all on a clean repo, where it used to sit dimmed. On a narrow viewport the
-                         row actions have no hover to hide behind (ROW_ACTION keeps them visible under `md`), so
-                         a permanently dead bin was on screen for every repo with nothing to discard. -->
+
+                    <!-- A NUMBER, NOT A PILL, and only where the rows it counts are not already on screen: see
+                         showRepoCount. Nothing else on this row is a filled shape either, so the count reads as
+                         the figure it is rather than as a badge. -->
+                    <span v-if="showRepoCount(group)" class="shrink-0 px-0.5 text-2xs tabular-nums text-muted">{{ repoCount(group) }}</span>
+
+                    <!-- The sole side's index verb, hoisted onto this row with its label. With two sides it
+                         goes back to the section headers, where each side has its own. -->
                     <button
-                        v-if="repoCount(group) > 0"
+                        v-if="soleSide(group)"
+                        type="button"
+                        :class="[ICON_BUTTON, 'text-muted max-md:h-8 max-md:w-8']"
+                        :disabled="changes.actionBusy.value"
+                        v-action="() => stageSide(group, soleSide(group)!.side)"
+                        v-tooltip.right="sideVerbHint(group, soleSide(group)!.side)"
+                        :aria-label="`${sideVerbHint(group, soleSide(group)!.side)} in ${group.repo}`"
+                    >
+                        <Icon :name="INDEX_VERB[soleSide(group)!.side].icon" class="text-2xs" />
+                    </button>
+                    <button
                         type="button"
                         :class="[ICON_BUTTON, ROW_ACTION, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"
@@ -1758,23 +1939,34 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </Button>
                 </div>
 
-                <!-- NOTHING UNDER A REPO WITH NOTHING IN IT. This block used to render on every expanded repo,
-                     empty or not, and its bottom padding was 4px of dead column INSIDE the group: on a clean
-                     repo the hover tint stopped short of the group's own edge, which is exactly the unlit strip
-                     under a lit row that reads as a rendering fault. A repo with no rows has no body. -->
-                <div v-if="!collapsed.has(group.repo) && repoCount(group) > 0" class="pb-1 pl-1">
+                <!-- Nothing needs guarding against an empty repo here any more: `dirty` is the list, and a repo
+                     with no rows is not in it. -->
+                <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-1">
                     <!-- One block per git side: conflicts (blocking), then staged (what a bare commit records),
                          then unstaged. The header's action is whole-side and ignores the row selection, which is
-                         VSCode's "Stage All Changes" / "Unstage All". -->
+                         VSCode's "Stage All Changes" / "Unstage All".
+
+                         DRAWN ONLY WHEN THERE IS A SPLIT TO DRAW. A repo with one side says so on its own row
+                         (the label, the count and this very button, in one cluster), so rendering the header
+                         here as well would be that row restated one line below it at a deeper indent, which is
+                         precisely the rank collision this list was losing its structure to. -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
-                        <div class="flex items-center gap-1 pl-2 pt-1">
+                        <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-2 pt-1">
                             <span
-                                class="truncate text-2xs font-medium uppercase tracking-wide"
+                                class="shrink-0 text-2xs font-medium uppercase tracking-wide"
                                 :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
                                 >{{ section.label }}</span
                             >
-                            <!-- Only when there is more than one section to tell apart; alone it repeats the repo badge. -->
-                            <span v-if="sidesSplit(group)" class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
+                            <span class="shrink-0 text-2xs text-subtle">{{ section.changes.length }}</span>
+                            <!-- THE SECTION'S ONLY MODULE, said here instead of on a row of its own directly
+                                 below: see soleBucket. It is the label, not a control, and it takes the
+                                 truncation this row needs (the side's word is nine characters at most and never
+                                 gives way, since it is what the ↺ beside it is a verb FOR). -->
+                            <ModuleLabel
+                                v-if="soleBucket(group.repo, section.side)"
+                                :name="soleBucket(group.repo, section.side)!.name"
+                                :packaged="soleBucket(group.repo, section.side)!.packaged"
+                            />
                             <span class="flex-1"></span>
                             <!-- ALWAYS DRAWN, the one rule this panel's action buttons follow: what moves a row
                                  ACROSS THE INDEX is on screen, what destroys work waits for a hover. Staging is
@@ -1807,10 +1999,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
 
                                  Separated by AIR rather than by brightness: this heading is the third rank in
                                  the list: under the repo, under the side, and everything about how quiet it
-                                 is lives in the component. -->
-                            <div v-if="viewOf(group.repo, section.side).named" class="flex items-center gap-1.5 pl-2 pt-2">
+                                 is lives in the component.
+
+                                 ITS COUNT IS GONE. A module bucket has no fold of its own, so its rows are on
+                                 screen for as long as the heading is, and the figure was the same two rows
+                                 counted a second time directly above themselves. It also sat at the same left
+                                 edge as the side header above it, which is what made two ranks read as one:
+                                 the indent is a step of its own now (moduleIndent).
+
+                                 AND IT IS NOT DRAWN AT ALL when it is the section's only module and the section
+                                 has a row to say so on: see soleBucket. -->
+                            <div v-if="moduleRow(group, section.side)" class="flex items-center pt-2" :class="moduleIndent(group)">
                                 <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
-                                <span class="shrink-0 text-2xs text-subtle">{{ bucket.rows.length }}</span>
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
                                 <!-- Selection is the primary tint every selectable list in the app uses
@@ -1823,26 +2023,24 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                  The unselected state IS the shared recipe (`ui-row-select`), which is what the
                                  repo rows above answer the pointer with too. -->
                                 <div
-                                    class="group/file flex items-center gap-1 rounded transition-colors"
+                                    class="group/file flex items-stretch gap-1 rounded transition-colors"
                                     :class="[
                                         isSelected({ repo: group.repo, side: section.side, path: change.path })
                                             ? 'bg-primary-500/15 hover:bg-primary-500/25'
                                             : 'ui-row-select',
-                                        // Under a header the rows step in, so the module reads as holding them
-                                        // rather than sitting beside them.
-                                        viewOf(group.repo, section.side).named ? 'pl-2' : '',
+                                        // One 8px step per rank that is actually drawn above this row, so a
+                                        // filename never pays indent for a heading that isn't there.
+                                        rowIndent(group, section.side),
                                     ]"
                                 >
-                                    <!-- The origin rail: 2px of the landing agent's hue, always laid out (transparent
-                                     for a file nobody landed) so no row shifts when one appears. This is the part
-                                     that works at a glance: an agent's batch reads as a colour block long before
-                                     any of the names below are legible. -->
-                                    <span
-                                        class="h-4 w-0.5 shrink-0 rounded-full"
-                                        :class="
-                                            originsOf(group, change.path)[0] ? originHue(originsOf(group, change.path)[0]!).rail : 'bg-transparent'
-                                        "
-                                    ></span>
+                                    <!-- THE INDENT GUIDE AND THE ORIGIN RAIL, one 2px column (railClass). It
+                                     stretches the row rather than standing 16px tall in the middle of it, which
+                                     is what turns a run of one agent's files into the single colour block this
+                                     was always described as and never was: six files used to draw six ticks
+                                     with gaps between them. Always present, faint where nobody landed the file,
+                                     so the nesting has an edge to be read against in a panel that draws no
+                                     rules; and nothing shifts when an agent's hue arrives. -->
+                                    <span class="w-0.5 shrink-0 self-stretch rounded-full" :class="railClass(group, change.path)"></span>
                                     <button
                                         type="button"
                                         class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 pl-0.5 text-left max-md:min-h-11"
@@ -1861,9 +2059,11 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         />
                                         <!-- Who landed it: a provider chip per agent (two, then a count), and the name
                                          itself only once the panel is wide enough to hold it AND the file has a
-                                         single owner: the path keeps first claim on the width. -->
+                                         single owner: the path keeps first claim on the width.
+                                         Silent under a filter that already names this row's only origin: see
+                                         showRowOrigins for why the multi-origin row still speaks up. -->
                                         <span
-                                            v-if="originsOf(group, change.path).length > 0"
+                                            v-if="showRowOrigins(group, change.path)"
                                             class="flex shrink-0 items-center gap-0.5"
                                             @mouseenter="showOrigins($event, originsOf(group, change.path))"
                                             @mouseleave="hoverCard?.hide()"
@@ -1915,7 +2115,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                          informative; the row's own colours are the data. -->
                                     <button
                                         type="button"
-                                        :class="ui.iconButton(`h-5 w-5 rounded text-subtle group-hover/file:text-muted max-md:h-8 max-md:w-8`)"
+                                        :class="
+                                            ui.iconButton(`h-5 w-5 self-center rounded text-subtle group-hover/file:text-muted max-md:h-8 max-md:w-8`)
+                                        "
                                         :disabled="changes.actionBusy.value"
                                         v-action="() => stageRow({ repo: group.repo, side: section.side, path: change.path })"
                                         v-tooltip.top="INDEX_VERB[section.side].one"
@@ -1938,7 +2140,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                         type="button"
                                         :class="
                                             ui.iconButton(
-                                                `h-5 w-5 rounded opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100`,
+                                                `h-5 w-5 self-center rounded opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:ml-2 max-md:h-8 max-md:w-8 max-md:opacity-100`,
                                             )
                                         "
                                         :disabled="changes.actionBusy.value"
