@@ -8,6 +8,9 @@ import { effectiveAccount } from "../composables/chat/providerAccounts";
 import { formatReset, formatUtilization, planHeadroom, SPENT_PERCENT, usageStatusFor } from "../composables/chat/usageStatus";
 import { usePaneView } from "../composables/chat/useChat";
 import { useToolCalls } from "../composables/chat/useToolCalls";
+import { sandboxAvailabilityVisual } from "../composables/sandbox/availability";
+import { useSandboxAvailability } from "../composables/sandbox/useSandboxAvailability";
+import { useWorkspaceTree } from "../composables/workspace/useWorkspaceTree";
 import UsageRing from "../components/UsageRing.vue";
 
 /* THE PANE'S STATUS BAR: the readouts under the composer, and the one part of the footer that stays OUT of the
@@ -18,19 +21,33 @@ import UsageRing from "../components/UsageRing.vue";
  * arrives as words rather than being worked out again here; everything to the right is measured off this pane's
  * own conversation and the signed-in person's allowance. */
 
-const { block, hint, reachable } = defineProps<{
+const { block, hint } = defineProps<{
     /** Why Send will not go, if it won't: this owns the slot whenever there is one. */
     block?: string;
     /** What the composer would rather say when nothing is refusing. */
     hint: string;
-    /** The daemon stream is answering. False keeps this row mounted but names the temporary busy state. */
-    reachable: boolean;
 }>();
 
 const { contextUsage, provider, account } = usePaneView();
 const { showToolCalls } = useToolCalls();
 const { meter: creditMeter } = useMembership();
 const { mobile, keyboardInset } = useDevice();
+
+/* THE SANDBOX'S STATE AS A READER SHOULD HAVE IT, which is NOT `reachable`.
+ *
+ * `reachable` is transport truth: may a daemon call be made THIS INSTANT. The liveness stream is always on and
+ * reconnects for ordinary reasons (a frame missed, a proxy hop dropped, a retarget onto the loopback shortcut),
+ * and the reconnect ladder's first rung is one second, so `reachable` goes false for a second or two on an
+ * otherwise idle workspace, over and over. Rendered raw, that painted "The sandbox is busy" under the composer
+ * every minute or two of a perfectly healthy session, which is the flicker `availability.ts` was written to
+ * prevent and which every other surface in the app already avoids by reading this projection instead: a retry
+ * shorter than SANDBOX_BUSY_AFTER_MS is `stale`, and `stale` deliberately looks live.
+ *
+ * The row still goes inert with the transport (Send is disabled off `reachable`, where instant truth is exactly
+ * what is wanted), it just stops ANNOUNCING a stall the app is healing on its own. */
+const { hasSnapshot } = useWorkspaceTree();
+const availability = useSandboxAvailability(hasSnapshot);
+const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 
 // Per-conversation context-window fill: a ring that warns as the chat approaches auto-compaction.
 const contextRing = computed(() => {
@@ -178,8 +195,11 @@ const creditChip = computed(() => {
             <!-- Every chip on this line names a page, so every one of them is a link: the address shows on
                  hover, and Ctrl/⌘-click opens it without taking the conversation off screen. -->
             <RouterLink to="/sandbox/agent" class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content">
-                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="reachable ? `bg-success` : `bg-warning`"></span>
-                {{ reachable ? `Ready` : `Busy` }} · Manage
+                <!-- One spelling and one colour for the sandbox's state, the same pair the rail chip and the
+                     switcher draw (availability.ts). A short retry keeps the healthy dot and the healthy word:
+                     changing either is itself the alarm, and there is nothing here for the reader to do. -->
+                <span class="inline-block h-1.5 w-1.5 rounded-full" :class="availabilityVisual.dotClass"></span>
+                {{ availabilityVisual.label }} · Manage
             </RouterLink>
         </div>
     </div>

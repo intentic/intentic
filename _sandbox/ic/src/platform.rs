@@ -14,9 +14,6 @@ pub struct Claim {
     /// The sandbox's reachability grant on the self-hosted tunnel hub: the account token the in-box agent
     /// enables with, the hub as this machine reaches it, and the namespace its public names live under.
     /// Replaces the Cloudflare connector token this flow used to carry.
-    pub zrok_token: Option<String>,
-    pub zrok_api: Option<String>,
-    pub zrok_namespace: Option<String>,
     pub sandbox_hostname: Option<String>,
     pub sync_pair_token: Option<String>,
     /// The one-shot pairing the CONNECTED-COMPUTER agent redeems, so this machine's sandboxes can be managed
@@ -87,9 +84,6 @@ pub fn claim(platform_url: &str, code: &str) -> Result<Claim> {
     let lookup = kv_lines(&body);
     Ok(Claim {
         connect_token: lookup("CONNECT_TOKEN"),
-        zrok_token: lookup("ZROK_TOKEN"),
-        zrok_api: lookup("ZROK_API"),
-        zrok_namespace: lookup("ZROK_NAMESPACE"),
         sandbox_hostname: lookup("SANDBOX_HOSTNAME"),
         sync_pair_token: lookup("SYNC_PAIR_TOKEN"),
         host_pair_token: lookup("HOST_PAIR_TOKEN"),

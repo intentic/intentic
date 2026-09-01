@@ -10,7 +10,6 @@ import {
     type DefinitionItem,
     type DefinitionPlan,
     type DefinitionReport,
-    previewLabel,
     type SandboxDefinition,
     SandboxSettingsSchema,
 } from "@intentic/sandbox-contract";
@@ -194,11 +193,6 @@ export const applyDefinitionItems = async (
                     ...(repo.ref === undefined ? {} : { branch: repo.ref }),
                     separateGitDir: repoGitDir(services.config.historyRoot, repo.id),
                 });
-                if (!repo.id.includes("/")) {
-                    // Mint the preview route at clone time, the addRepo route's own rule: hostnames must
-                    // predate the first browser lookup or an early NXDOMAIN gets negative-cached.
-                    void services.ensurePreviewRoutes([previewLabel(repo.id)]);
-                }
             } else if (item.kind === "environment") {
                 // The draft path, not the approved custom section: composeEnvironment folds drafts into the
                 // proposal the owner reviews, which is the approval gate this surface promises.

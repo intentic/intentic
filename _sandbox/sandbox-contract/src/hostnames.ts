@@ -70,12 +70,12 @@ export const CATCH_ALL = { service: "http_status:404" } as const;
 // for as long as the file does.
 //
 // A *label* is the first-DNS-label prefix before `-<sandboxId>` (`preview-<panel>` / `port-<slot>` /
-// `public-<slot>`), the unit the platform's /sandbox/preview-route mints, so one endpoint serves all three.
+// `public-<slot>`), the unit reachability is expressed in, so one rule covers all three.
 export const previewLabel = (panel: string): string => `preview-${panel}`;
 export const portLabel = (slot: string): string => `port-${slot}`;
 export const publicLabel = (slot: string): string => `public-${slot}`;
 
-// The hostname a label resolves to, what the platform's /sandbox/preview-route mints from the label alone.
+// The hostname a label resolves to. Nothing mints it: the edge parses the sandbox id back out of the name.
 export const labelHostname = (label: string, id: string, zone: string): string => `${label}-${id}.${zone}`;
 export const previewHostname = (panel: string, id: string, zone: string): string => labelHostname(previewLabel(panel), id, zone);
 export const portHostname = (slot: string, id: string, zone: string): string => labelHostname(portLabel(slot), id, zone);

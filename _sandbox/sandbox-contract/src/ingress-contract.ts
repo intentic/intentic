@@ -113,8 +113,10 @@ export const INGRESS_TUNNEL_PATH = "/tunnel/v1";
 export const INGRESS_GRANT_HEADER = "x-intentic-grant";
 
 /* The env vocabulary, every lane (connect one-liner, compose file, hosted machine env) hands the same pair
- * down and the entrypoint/daemon read exactly these names. SANDBOX_PUBLIC_URL is unchanged from the zrok era
- * and stays beside them. */
+ * down and the DAEMON reads exactly these names — the entrypoint reads neither, and that is the shape of the
+ * change: reachability stopped being something a shell script arranges before the daemon starts and became
+ * one outbound dial the daemon makes for itself. SANDBOX_PUBLIC_URL is unchanged from the fabric before this
+ * one and stays beside them. */
 export const ENV_INGRESS_URL = "INGRESS_URL";
 export const ENV_SANDBOX_GRANT = "SANDBOX_GRANT";
 

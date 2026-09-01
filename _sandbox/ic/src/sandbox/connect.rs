@@ -71,14 +71,9 @@ fn connect(
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
-    // The sandbox's reachability grant on the self-hosted hub — minted by the platform with the setup code
-    // and redeemed at the claim below. The in-box agent enables with it; nothing here dials a tunnel.
-    let mut zrok_token = env("ZROK_TOKEN").unwrap_or_default();
-    let mut zrok_api = env("ZROK_API").unwrap_or_default();
-    let mut zrok_namespace = env("ZROK_NAMESPACE").unwrap_or_default();
     let mut sandbox_hostname = env("SANDBOX_HOSTNAME").unwrap_or_default();
     // Only SELF_HOST needs a zone now: it publishes THIS machine's sshd for the deploy engine, on the user's
-    // own Cloudflare. The sandbox's own address comes from the platform's hub.
+    // own Cloudflare. The sandbox's own address comes from the platform's edge.
     let mut zone = env("ZONE").unwrap_or_default();
     let mut sync_pair_token = env("SYNC_PAIR_TOKEN").unwrap_or_default();
     let mut host_pair_token = env("HOST_PAIR_TOKEN").unwrap_or_default();
@@ -194,15 +189,16 @@ fn connect(
         let claim = platform::claim(platform_url, code)?;
         connect_token = claim.connect_token.unwrap_or(connect_token);
         sandbox_hostname = claim.sandbox_hostname.unwrap_or(sandbox_hostname);
-        zrok_token = claim.zrok_token.unwrap_or(zrok_token);
-        zrok_api = claim.zrok_api.unwrap_or(zrok_api);
-        zrok_namespace = claim.zrok_namespace.unwrap_or(zrok_namespace);
         sync_pair_token = claim.sync_pair_token.unwrap_or(sync_pair_token);
         host_pair_token = claim.host_pair_token.unwrap_or(host_pair_token);
         owner_email = claim.owner_email.unwrap_or(owner_email);
     }
-    // Reachability comes from the platform's own hub now: the grant plus the address it will answer at.
-    let provided_tunnel = !zrok_token.is_empty() && !sandbox_hostname.is_empty();
+    /* Reachability is the platform's own edge now, and provisioning it is a pure function there: the daemon
+     * dials out presenting a signed grant naming this sandbox's id, and the edge routes by parsing that id
+     * back out of the hostname. So there is nothing for this CLI to arrange, and the one thing worth knowing
+     * here is whether the platform named a public address at all — a sandbox claimed without one is a
+     * loopback-only box, which is a legitimate way to run and the warning below says so. */
+    let provided_tunnel = !sandbox_hostname.is_empty();
 
     // Per-sandbox identity, so several sandboxes coexist: the slug is the same key the public hostname uses.
     let slug = if provided_tunnel {
@@ -409,9 +405,6 @@ fn connect(
         ("HOST_PAIR_TOKEN", &host_pair_token),
         ("HOST_PLATFORM", host_platform()),
         ("HOST_LABEL", &machine_label()),
-        ("ZROK_TOKEN", &zrok_token),
-        ("ZROK_API", &zrok_api),
-        ("ZROK_NAMESPACE", &zrok_namespace),
         ("CLOUDFLARE_API_TOKEN", &cf_token),
         ("HOST_SSH_KEY", &host_ssh_key),
         ("SELF_HOST_USER", &self_host_user),

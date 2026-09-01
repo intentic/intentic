@@ -43,155 +43,20 @@ fi
 
 # ── HOW THIS SANDBOX IS REACHED ──────────────────────────────────────────────────────────────────────────
 #
-# One in-box agent, every flavor: `zrok2` enables against the self-hosted hub with the account token the
-# platform minted for THIS sandbox (ZROK_TOKEN, born as a grant the platform can revoke but never
-# impersonate — the Ziti identity below is created here and never leaves), then serves the daemon publicly at
-# the `sandbox-<id>` name the browser already knows. That replaces the cloudflared sidecar container and its
-# per-sandbox DNS records outright.
+# NOT FROM HERE, any more. ~150 lines used to sit at this spot enabling a zrok environment, claiming the
+# `sandbox-<id>` name, binding a share to it, and reclaiming whatever the previous container had left holding
+# that name — because on the hub, reachability was STATE: an account per sandbox, a name, a share, and a
+# terminator that a `docker rm -f` killed without telling anyone, so a recreated box came up 502 on its own
+# address and fought its dead predecessor for the name.
 #
-# The hub keeps NAMES and SHARES apart: a name is a hostname claimed in the namespace, a share is what answers
-# on it. So each is claimed first (`create name`, 409 when it is already ours) and bound second (`share
-# public -n <namespace>:<name>`). The long-lived process is the AGENT, not the share: `zrok2 agent start`
-# holds every share this box publishes, which is why the daemon can add preview names later
-# (panels/preview-route.ts) with two calls that return immediately instead of resident processes of its own.
+# The edge the platform runs now answers the question that state existed for — "which sandbox may serve this
+# hostname?" — by PARSING it: every public name ends in the sandbox's own 12-hex id (sandbox-contract's
+# hostnames.ts), so ownership is arithmetic and the only thing to provision is a signed grant naming that id.
+# Nothing to enable, claim, bind or reclaim, and a second tunnel for an id simply displaces the first.
 #
-# Enabling is idempotent-by-marker: the environment's identity lives on /history (the volume that outlives
-# every recreate), so a restarted or rebuilt container re-attaches the SAME names rather than minting a
-# second environment. The agent runs in a restart loop for the reason the sidecar had `--restart
-# unless-stopped`: the overlay drops connections and must simply come back.
-if [ -n "${ZROK_TOKEN:-}" ]; then
-    export HOME="${HOME:-/root}"
-    # Set here as well as below: the agent's state must land on the volume, and this block runs first.
-    HISTORY_ROOT="${HISTORY_ROOT:-/history}"
-    ZROK_STATE="$HISTORY_ROOT/zrok"
-    mkdir -p "$ZROK_STATE" "$HISTORY_ROOT/logs"
-    # The agent keeps its environment (its Ziti identity, its share registry) in $HOME/.zrok2 with no way to
-    # point it elsewhere — so that path becomes a link onto the volume, which is what survives a recreate. Any
-    # process that later runs `zrok2` (the daemon attaching preview names) inherits the same HOME and lands on
-    # the same environment, which is the point.
-    [ -e "$HOME/.zrok2" ] || ln -s "$ZROK_STATE" "$HOME/.zrok2"
-    # The v2 binary reads ZROK2_*; the platform hands the grant down under ZROK_* (its own vocabulary, shared
-    # with the run contract and the compose file). Without this the CLI silently talks to api-v2.zrok.io.
-    [ -n "${ZROK_API:-}" ] && export ZROK2_API_ENDPOINT="$ZROK_API"
-    export ZROK2_HEADLESS=true
-    if [ ! -f "$ZROK_STATE/environment.json" ]; then
-        # --headless or the TUI opens /dev/tty, which a container does not have: enable then fails AFTER
-        # creating the environment, which reads as a failure that isn't one.
-        zrok2 enable "$ZROK_TOKEN" --headless --description "${SANDBOX_NAME:-intentic-sandbox}" \
-            >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || echo "zrok enable failed — see $HISTORY_ROOT/logs/zrok.log" >&2
-    fi
-    # EVERY SHARE THIS ENVIRONMENT OWNS IS STALE THE MOMENT THIS SCRIPT RUNS, so they are all released before
-    # the agent comes up. This is the one place that can be systematic about it, and it has to be done here
-    # rather than at each bind site, because there are three of them (the daemon's own name below, plus preview
-    # and port names minted later by panels/preview-route.ts) and they all fail the same way.
-    #
-    # WHY THEY ARE STALE: a share lives on the hub, but the thing that SERVES it is a terminator — an open
-    # connection from this box into the overlay. A container recreate (`docker rm -f` + `docker run`, which is
-    # what every rebuild, update and provider change does) kills that connection without telling the hub, so
-    # the share survives, still holding its hostname, pointing at an egress that no longer exists. The hub then
-    # refuses to let the new agent bind the same name (409 shareConflict) while continuing to answer requests
-    # for it with a dial that can never succeed.
-    #
-    # The old behaviour treated that 409 as "already bound, nothing to do", which is why a rebuilt sandbox came
-    # up with NO share of its own and 502'd on every request — and since the sync transport rides that same
-    # address (platform/sync-ssh.ts), desktop sync died with it while the workspace still looked healthy over
-    # the loopback shortcut. Reclaiming one name at a time cannot fix that: the previews and ports hit it too.
-    #
-    # Deleting is safe precisely BECAUSE it is scoped to this environment: `zrok2 overview` lists only the
-    # account this box was enabled with, the agent recreates every share from its own registry moments later,
-    # and the names are deterministic, so what comes back is what was there. Failure is non-fatal — a hub that
-    # cannot be reached here leaves the binds below to retry, which is where they already were.
-    zrok_stale_tokens() {
-        # The overview is a box-drawn table: turn the rules into a plain delimiter, drop the padding, then take
-        # the share-token column of the Names rows. Those rows are `|<url>|<namespace>|<token>|<reserved>|...`,
-        # so the filter is: a URL with a dot in it, a namespace that is actually present, and a 12-character
-        # token. The namespace check is what keeps the Namespaces table above it out — its rows leave that
-        # column empty and would otherwise offer up the literal name "public" as a share to delete.
-        #
-        # `length()` rather than a `{12}` interval on purpose: the image's awk is busybox, whose default regex
-        # engine does not do interval expressions, and it fails by matching NOTHING rather than by erroring.
-        zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
-            | awk -F'|' '$2 ~ /\./ && $3 != "" && length($4) == 12 && $4 ~ /^[a-z0-9]+$/ { print $4 }'
-    }
-    for stale in $(zrok_stale_tokens); do
-        echo "releasing stale share $stale from a previous container" >> "$HISTORY_ROOT/logs/zrok.log"
-        zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
-    done
-    # THE AGENT'S CONTROL SOCKET IS THE SAME KIND OF CORPSE, and it kills the agent outright rather than
-    # degrading it. $HOME/.zrok2 is a symlink onto the /history volume (above), which is exactly what makes the
-    # environment survive a recreate — and it makes `agent.socket` survive too. A unix socket whose owner is
-    # gone still occupies its path, so `zrok2 agent start` dies on `bind: address already in use`, the restart
-    # loop below spins on it every 2s forever, and the sandbox has no agent: no previews, no port shares, and
-    # `zrok2 agent status` answers "connection refused" while the log fills with `started` / `aborted` pairs.
-    #
-    # Safe to remove unconditionally because of WHERE this runs: the entrypoint is the container's first
-    # process, so there is no agent of ours alive to own it. Anything at this path is by definition left over
-    # from a container that no longer exists.
-    rm -f "$HOME/.zrok2/agent.socket"
-    (
-        while :; do
-            zrok2 agent start >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
-            sleep 2
-        done
-    ) &
-    # The daemon's own name is the address the browser already knows: sandbox-<id>, derived from the connect
-    # token by the platform and handed down as SANDBOX_PUBLIC_URL, so its leftmost label is the share name.
-    if [ -n "${SANDBOX_PUBLIC_URL:-}" ]; then
-        daemon_name="$(printf '%s' "$SANDBOX_PUBLIC_URL" | sed -e 's#^https\?://##' -e 's#/.*##' -e 's#\..*##')"
-        zrok_namespace="${ZROK_NAMESPACE:-public}"
-        (
-            # Until the share is bound. The agent needs a moment to come up, so the loop is expected to fail a
-            # few times first; what it must NOT do is give up when the name is taken.
-            #
-            # The sweep above should have made a 409 here impossible, so reaching this branch means the sweep
-            # could not run — the hub was unreachable at boot, or a share was minted between the two. It is the
-            # same reclaim, narrowed to the one name that matters most (this is the address the browser, the
-            # platform's reachability probe and desktop sync all use), and it exists so that a sweep which
-            # failed costs a slow start rather than a sandbox that is 502 until someone notices.
-            #
-            # Bounded at three: past that the loop stops deleting and just keeps retrying the bind, so a hub
-            # that is merely slow is waited out rather than fought, and a delete/create fight cannot run away.
-            #
-            # THE VERDICT COMES FROM THE ATTEMPT, NEVER FROM THE LOG. zrok.log is one append-only file that the
-            # agent's own restart loop writes to every two seconds, so reading a window of it to learn what THIS
-            # bind just did is a race with two ways to lose: a chatty agent pushes the 409 out of the window and
-            # the name is never reclaimed (exactly the 502 this reclaim exists to prevent), while a 409 left by
-            # the PREVIOUS attempt still sitting inside it deletes the share the agent has meanwhile restored
-            # from its own registry — taking the address off the internet by our own hand. Capturing the
-            # command's own stderr is exact and immune to interleaving; the log still gets every line, staying
-            # the record rather than becoming the control flow.
-            reclaims=0
-            while :; do
-                zrok2 create name "$daemon_name" --namespace-token "$zrok_namespace" \
-                    >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
-                bind_status=0
-                bind_out="$(zrok2 share public "http://127.0.0.1:${SANDBOX_PORT:-8787}" --backend-mode proxy \
-                    --name-selection "$zrok_namespace:$daemon_name" 2>&1)" || bind_status=$?
-                printf '%s\n' "$bind_out" >> "$HISTORY_ROOT/logs/zrok.log"
-                if [ "$bind_status" -eq 0 ]; then
-                    break
-                fi
-                case "$bind_out" in
-                *"already in use"*)
-                    if [ "$reclaims" -lt 3 ]; then
-                        reclaims=$((reclaims + 1))
-                        # The table is box-drawn: turn the rules into a plain delimiter, drop the padding, then
-                        # the row whose URL starts with our name yields the token of the share sitting on it.
-                        stale="$(zrok2 overview 2>/dev/null | sed 's/│/|/g; s/ //g' \
-                            | awk -F'|' -v n="$daemon_name" '$2 ~ ("^" n "\\.") { print $4; exit }')"
-                        if [ -n "$stale" ]; then
-                            echo "reclaiming '$daemon_name' from stale share $stale (attempt $reclaims)" \
-                                >> "$HISTORY_ROOT/logs/zrok.log"
-                            zrok2 delete share "$stale" >> "$HISTORY_ROOT/logs/zrok.log" 2>&1 || true
-                        fi
-                    fi
-                    ;;
-                esac
-                sleep 2
-            done
-        ) &
-    fi
-fi
+# What remains is one outbound dial, and it belongs to the DAEMON rather than to this script — it reads the
+# grant and the edge out of its own environment (ingress-contract.ts's ENV_SANDBOX_GRANT / ENV_INGRESS_URL),
+# which is why the entrypoint no longer has a reachability step at all.
 
 # sshd backs the local-sync path: the laptop's Mutagen connects over SSH and auto-injects its agent, which
 # reads/writes /work. It is reached on 127.0.0.1 here — the daemon carries the stream in from its own HTTPS

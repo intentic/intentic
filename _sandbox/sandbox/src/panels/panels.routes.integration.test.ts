@@ -24,7 +24,6 @@ const panelsClient = (workspace: WorkspacePaths, overrides: Partial<PanelsRoutes
             config: testConfig,
             panelToken: "panel-secret",
             processes: fakeProcesses(),
-            ensurePreviewRoutes: async () => {},
             // Nothing listening unless a test says otherwise: the scan is a seam here rather than the real
             // machine's sockets, which used to make "no servers" depend on what happened to be up.
             scanPorts: async () => [],
@@ -200,18 +199,10 @@ test("panels.list gives the panel's own terminal to the assigned port the scan c
 test("panels.start runs the repo's operator dir, rejects unknown repos + repos with no panel; stop is idempotent", async () => {
     const workspace = tempWorkspace([{ name: "app", panel: true }, { name: "desired-state" }]);
     const processes = fakeProcesses();
-    const ensured: string[] = [];
-    const client = panelsClient(workspace, {
-        processes,
-        ensurePreviewRoutes: async (labels) => {
-            ensured.push(...labels);
-        },
-    });
+    const client = panelsClient(workspace, { processes });
 
     expect(await client.start({ repo: "app" })).toEqual({ ok: true });
     expect(processes.started).toEqual([{ repo: "app", cwd: join(workspace.root, "app", "operator") }]);
-    // The preview route is minted (as its label) before the panel is observable as running.
-    expect(ensured).toEqual(["preview-app"]);
     // A repo with no operator/ can't start; an unknown repo is NOT_FOUND.
     expect(await errorCode(client.start({ repo: "desired-state" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.start({ repo: "ghost" }))).toBe("NOT_FOUND");

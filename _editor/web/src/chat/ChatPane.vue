@@ -1832,13 +1832,16 @@ watch(
              daemon is up), not about the message being written, and unlike the composer it has no surface
              of its own to keep it legible over a transcript sliding beneath it. Below the scroller it sits
              on the panel's own background, which is where a status bar belongs and where Claude's own
-             "check important info" line sits. -->
-        <ChatPaneStatus
-            v-if="connected"
-            :reachable
-            :block="reachable ? refusal : `The sandbox is busy; Send returns when it responds.`"
-            :hint="composerHint"
-        />
+             "check important info" line sits.
+
+             The block slot carries the REFUSAL and nothing else. It used to be overridden with "The sandbox is
+             busy" whenever `reachable` went false, which is a transport fact and a bad thing to render: the
+             liveness stream reconnects for ordinary reasons every minute or two, the first retry is one second
+             long, and the line therefore blinked on and off under the composer of a workspace nothing was wrong
+             with. That sentence has one home, the notification lane (notificationSources.ts), which raises it
+             only once the wait has lasted long enough to be worth a reader's attention; what the composer owes
+             its reader is why SEND is dark, and that is on the button (sendHint). -->
+        <ChatPaneStatus v-if="connected" :block="refusal" :hint="composerHint" />
 
         <!-- The four composer menus, each in the app's standard touch swap (ResponsiveOverlay): an anchored
              panel on desktop, a bottom sheet on a phone, one open flag either way. No height cap on any of them

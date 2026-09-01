@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { previewLabel, STARTER_APP, STARTER_REPO, zoneFromUrl } from "@intentic/sandbox-contract";
+import { STARTER_APP, STARTER_REPO, zoneFromUrl } from "@intentic/sandbox-contract";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { AGENT_GIT_AUTHOR } from "../git/git.js";
@@ -133,10 +133,6 @@ export const seedStarterSite = async (services: Services, bakedDir: string = STA
     if (pkg === undefined) {
         return { repo: STARTER_REPO };
     }
-    // The preview hostname before the dev server, and unawaited: a hostname must predate the first browser
-    // lookup (an early NXDOMAIN is negative-cached for the zone's SOA TTL), and the platform round-trip that
-    // mints it is not something a boot waits on.
-    void services.ensurePreviewRoutes([previewLabel(appPanelKey(STARTER_REPO, STARTER_APP))]);
     await services.processes.start(
         appPanelKey(STARTER_REPO, STARTER_APP),
         buildAppSpec({

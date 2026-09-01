@@ -713,7 +713,6 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             search: async () => [],
             exists: async () => true,
         },
-        ensurePreviewRoutes: async () => {},
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         /* Loopback mode unless a test asks for the exposed daemon, `auth: undefined` is the mode, so it is the
          * ABSENCE of the key that means loopback, not an override that happens to be undefined. (CORS is not

@@ -35,7 +35,7 @@ export interface ProfileTraits {
      * local daemon is not an image; its host application owns its update story. */
     readonly containerUpdates: boolean;
     /* Container capabilities converged at boot: dockerd, auto-connect VPN tunnels, the environment overlay
-     * recompose, preview-route minting. All act on container furniture that does not exist locally. */
+     * recompose. All act on container furniture that does not exist locally. */
     readonly containerCapabilities: boolean;
     /* Does the daemon own the workspace's agent-facing config, converging it at boot, the baked-tool skill
      * files and the drafts skill? In the container yes: the folder exists for the daemon and arrives empty.

@@ -55,7 +55,6 @@ import { INFRA_APPLY_KEY } from "./intentic/infra-apply.js";
 import { killStaleManagedSessions, panelSession } from "./processes/managed-processes.js";
 import { killOrphanServiceProcesses } from "./processes/service-processes.js";
 import { createPreviewProxy } from "./panels/preview-proxy.js";
-import { ensureAllPreviewRoutes } from "./panels/preview-route.js";
 import { publicRoot } from "./public/public-files.js";
 import { createPublicHandler } from "./public/public-serve.js";
 import { linkClaudeState } from "./sessions/session-store.js";
@@ -192,7 +191,7 @@ const main = async (): Promise<void> => {
     process.env["INTENTIC_TERMINAL_LOGS_DIR"] ??= terminalLogsDir(config.historyRoot);
     const logger = createLogger(config);
     // ponytail: log-and-continue, don't exit. The daemon's whole job is to stay up for /agent + /events; a
-    // rejected best-effort boot job (the void reconnectVpns/composeEnvironment/ensureAllPreviewRoutes/… below)
+    // rejected best-effort boot job (the void reconnectVpns/composeEnvironment/… below)
     // must not take the origin down. A genuinely fatal state is rare, and --restart unless-stopped still
     // catches a hard crash. The pre-logger config-load throw stays unguarded, a bad config should crash loudly.
     process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled rejection"));
@@ -940,12 +939,6 @@ const main = async (): Promise<void> => {
     // Writes only under .intentic/ (in ROOT_EXCLUDES), so it never affects the baseline above.
     if (role.container) {
         void composeEnvironment(services);
-    }
-
-    // Preview routes for every existing repo (best-effort; the ensurer never throws), self-heals any repo
-    // whose creation-time mint was missed, so hostnames exist well before a browser ever resolves them.
-    if (role.container) {
-        void ensureAllPreviewRoutes(services);
     }
 
     // Auto-connect VPN tunnels die with the container while the manifest survives on /work, dial them again

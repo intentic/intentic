@@ -126,7 +126,6 @@ const servicesFor = (dirs: { work: string; history: string }, overrides: Record<
         capabilities: memoryCapabilitiesStore(),
         vaultManifestSecrets: async () => [],
         vaultExtensionSettingSecrets: async () => [],
-        ensurePreviewRoutes: async () => {},
         ...overrides,
     } as Parameters<typeof services>[0]);
 

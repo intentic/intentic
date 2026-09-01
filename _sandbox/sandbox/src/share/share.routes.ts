@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { publicLabel, publicUrl, type SharedConversation, shareContract, type ShareDetail, zoneFromUrl } from "@intentic/sandbox-contract";
+import { publicUrl, type SharedConversation, shareContract, type ShareDetail, zoneFromUrl } from "@intentic/sandbox-contract";
 import { SHARE_DIR, SHARE_ID, shareId } from "@intentic/sandbox-contract/share-paths";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
@@ -21,7 +21,7 @@ import type { StoredShare } from "./share-store.js";
  * feature safe to use on a conversation you intend to keep working in: the next turn is private until you say
  * otherwise. */
 
-export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "ensurePreviewRoutes" | "shares" | "transcripts" | "workspace">;
+export type ShareRoutesDeps = Pick<Services, "agents" | "config" | "shares" | "transcripts" | "workspace">;
 
 // 64 bits of the address, and the only thing between a stranger and the conversation, see share-paths.ts.
 const RANDOM_BYTES = 8;
@@ -64,10 +64,6 @@ export const createShareRoutes = (services: ShareRoutesDeps) => {
             throw new ORPCError("INTERNAL_SERVER_ERROR", { message: "this sandbox image is missing the shared-conversation page" });
         }
         await publishShare(services.workspace.root, viewer, id, { title, sharedAt, detail, messages }, pictures);
-        // Almost always a memoized no-op, the boot sweep pre-mints the outbox label. It pays a platform call
-        // only when boot ran with the platform unreachable, which is exactly when the first share would
-        // otherwise hand out a hostname that does not resolve. Same reasoning as the publish route's.
-        await services.ensurePreviewRoutes([publicLabel(slot)]);
         const stored: StoredShare = { id, conversationId, title, detail, sharedAt, messages: messages.length };
         await services.shares.put(stored);
         return withUrl(stored);

@@ -617,7 +617,6 @@ test("workspace.mkdir/delete/move/copy resolve within /work and reject escapes",
 
 test("workspace.addRepo clones a repo with a protected git dir, rejects reserved names + a bad body", async () => {
     const clones: { parentDir: string; name: string; cloneUrl: string; separateGitDir?: string }[] = [];
-    const ensured: string[] = [];
     const client = clientFor(
         createApp(
             services({
@@ -634,9 +633,6 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
                         });
                     },
                 },
-                ensurePreviewRoutes: async (labels) => {
-                    ensured.push(...labels);
-                },
             }),
         ),
     );
@@ -649,19 +645,16 @@ test("workspace.addRepo clones a repo with a protected git dir, rejects reserved
             separateGitDir: join(testConfig.historyRoot, "gits", "extra"),
         },
     ]);
-    // The preview route is minted at clone time, not first panel start (DNS negative-caching).
-    expect(ensured).toEqual(["preview-extra"]);
     // A reserved role (one of the three fixed repos) cannot be clobbered, and a path-escape name is rejected.
     expect(await errorCode(client.workspace.addRepo({ name: "intent", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.workspace.addRepo({ name: "../evil", cloneUrl: "https://example.com/x.git" }))).toBe("BAD_REQUEST");
     expect(clones).toHaveLength(1);
 });
 
-test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux job and mints each app's preview route up front", async () => {
+test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux job", async () => {
     const workspace = tempWorkspace([{ name: "shop" }]);
     const repoDir = join(workspace.root, "shop");
     const jobs: { key: string; spec: ProcessSpec }[] = [];
-    const ensured: string[] = [];
     const processes = unstubbed<ManagedProcesses>("processes", {
         start: async (key, spec) => {
             jobs.push({ key, spec });
@@ -676,9 +669,6 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
             services({
                 workspace,
                 processes,
-                ensurePreviewRoutes: async (labels) => {
-                    ensured.push(...labels);
-                },
             }),
         ),
     );
@@ -705,8 +695,6 @@ test("workspace.addApps launches `intentic scaffold add-app` as a one-shot tmux 
             },
         },
     ]);
-    // Preview routes are minted before the job runs (hostnames must predate the first browser lookup).
-    expect(ensured).toEqual(["preview-shop--api", "preview-shop--shop-web"]);
     // An unknown monorepo is NOT_FOUND (before any job is launched).
     expect(await errorCode(client.workspace.addApps({ repo: "ghost", apps: [{ template: "api", name: "api" }] }))).toBe("NOT_FOUND");
     expect(jobs).toHaveLength(1);

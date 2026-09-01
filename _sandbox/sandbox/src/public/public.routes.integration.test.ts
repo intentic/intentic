@@ -26,7 +26,6 @@ const outboxWorkspace = async (): Promise<ReturnType<typeof workspacePaths>> => 
 const publicDeps = (workspace: ReturnType<typeof workspacePaths>, overrides: Partial<PublicRoutesDeps> = {}): PublicRoutesDeps => ({
     config: { ...testConfig, zone: "example.com", connectToken: "tok" },
     workspace,
-    ensurePreviewRoutes: async () => {},
     ...overrides,
 });
 

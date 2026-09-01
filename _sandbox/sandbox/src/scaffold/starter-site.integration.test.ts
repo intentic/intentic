@@ -21,7 +21,6 @@ let root: string;
 let baked: string;
 let history: string;
 let started: { key: string; spec: { command: string; cwd: string } }[];
-let routes: string[][];
 
 // The baked tree, as the image leaves it: a monorepo shell with one app under `_apps/`, node_modules already
 // installed (a marker file stands in for 300 MB of it), and NO .git — the daemon inits the repo itself.
@@ -46,7 +45,6 @@ const services = (arrivedEmpty = true): Services =>
         workspaceArrivedEmpty: arrivedEmpty,
         config: { historyRoot: history, zone: "sbx.test", connectToken: "", sandbox: { publicUrl: "" } },
         processes: { start: vi.fn((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
-        ensurePreviewRoutes: vi.fn((labels: readonly string[]) => Promise.resolve(void routes.push([...labels]))),
     }) as unknown as Services;
 
 beforeEach(async () => {
@@ -55,7 +53,6 @@ beforeEach(async () => {
     history = join(base, "history");
     baked = join(base, "baked");
     started = [];
-    routes = [];
     await mkdir(root, { recursive: true });
     // The workspace as the boot chain leaves it one step earlier: root is already a repo, with its git dir on
     // /history, and its excludes were derived before any of this existed.
@@ -91,8 +88,6 @@ describe("seedStarterSite", () => {
         expect(started[0]?.key).toBe("site--landing");
         expect(started[0]?.spec.cwd).toBe(repo);
         expect(started[0]?.spec.command).toContain("pnpm --filter @app_/landing dev");
-        // And the preview hostname is minted, which has to happen before any browser resolves it.
-        expect(routes).toEqual([["preview-site--landing"]]);
     });
 
     it("does nothing on a workspace that already has one: a boot must never re-seed over the user's work", async () => {

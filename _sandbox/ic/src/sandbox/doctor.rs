@@ -7,7 +7,7 @@ use crate::health;
 use crate::sandbox::CONTAINER_PREFIX;
 use crate::util::{bail, kv_lines, Result};
 
-/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and hub → in-box agent → browser.
+/* THE REACHABILITY CHAIN — machine → container → daemon → platform, and edge → browser.
  *
  * connect used to stop at "the daemon answers /health inside the container", which proves the first half of
  * the chain and none of the second: a grant the hub refuses, a name still propagating, or a daemon that
@@ -15,11 +15,11 @@ use crate::util::{bail, kv_lines, Result};
  * workspace in the browser, with nothing anywhere naming the broken link. This module probes every link and
  * names the one that is broken, with its fix.
  *
- * THE SECOND HALF MOVED INSIDE THE SANDBOX. Reachability used to be a cloudflared sidecar container beside
- * the sandbox, so its link was probed by inspecting that container; the tunnel fabric is the platform's own
- * hub now, and what holds the share is the `zrok2` agent the entrypoint starts INSIDE the sandbox. The
- * sidecar is not merely a different name for the same thing — nothing creates one any more, so a probe that
- * looked for it reported every healthy sandbox as broken.
+ * THERE IS NO LOCAL HALF OF REACHABILITY LEFT TO PROBE. It used to be a cloudflared sidecar container beside
+ * the sandbox, then an in-box tunnel agent holding named shares, and each move stranded a probe that went on
+ * reporting every healthy sandbox as broken. The fabric is the platform's own edge now, dialled outbound by
+ * the daemon itself, so a daemon that is up either reached it or did not — which the two public links below
+ * already answer, from outside, where the answer actually matters.
  *
  * Two callers, one chain. connect runs it as a postflight WITH PATIENCE: a just-claimed name and an agent
  * still coming up are ordinary states of a fresh setup, so inconclusive links are re-probed until the
@@ -30,12 +30,6 @@ use crate::util::{bail, kv_lines, Result};
  * order — a daemon that is down makes "registered with the platform?" unknowable, and the report says
  * exactly that instead of piling three consequences onto one cause. */
 
-/// The environment `zrok2 enable` writes and the log every zrok call appends to, both on /history — the
-/// volume that outlives a recreate, so a rebuilt sandbox re-attaches the same names. docker-entrypoint.sh
-/// owns these paths; change one, change both.
-const ZROK_ENVIRONMENT: &str = "/history/zrok/environment.json";
-const ZROK_LOG: &str = "/history/logs/zrok.log";
-
 /// A link's verdict this round: settled, or worth re-probing while patience remains — carrying the outcome
 /// to report if it runs out.
 enum Verdict {
@@ -43,31 +37,25 @@ enum Verdict {
     Pending(Outcome),
 }
 
-const LINKS: [&str; 6] = [
+const LINKS: [&str; 5] = [
     "Sandbox container",
     "Daemon health",
     "Platform registration",
-    "Tunnel agent",
     "Public DNS",
     "Public URL",
 ];
 const CONTAINER: usize = 0;
 const DAEMON: usize = 1;
 const ANNOUNCE: usize = 2;
-const AGENT: usize = 3;
-const DNS: usize = 4;
-const URL: usize = 5;
+const DNS: usize = 3;
+const URL: usize = 4;
 
 /// Probe every link until each settles or patience runs out, printing verdicts as they land. The public URL
 /// is None when the container does not carry one — the reachability links then say so rather than guess.
 pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) -> Vec<Finding> {
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    // Whether this sandbox is on the hub at all: an attached one (its owner's own domain in front of it)
-    // carries no grant, and the agent link says so instead of failing a sandbox that was never meant to
-    // enable. Read once — a container's env is fixed for its life.
-    let has_grant = container_env(&container, "ZROK_TOKEN").is_some();
     let deadline = Instant::now() + patience;
-    let mut settled: [Option<Outcome>; 6] = [const { None }; 6];
+    let mut settled: [Option<Outcome>; 5] = [const { None }; 5];
 
     loop {
         let last_round = Instant::now() >= deadline;
@@ -112,17 +100,6 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
                     }
                 }
             }
-        }
-        // The agent lives INSIDE the sandbox, so a container that is down makes its state unknowable for the
-        // same reason the daemon's is — one cause, one verdict.
-        if settled[AGENT].is_none() {
-            let verdict = match &settled[CONTAINER] {
-                Some(Outcome::Fail { .. }) => Verdict::Settled(Outcome::Skip {
-                    why: "unknowable while the container is down".to_string(),
-                }),
-                _ => probe_agent(&container, has_grant),
-            };
-            settle(&mut settled, AGENT, verdict, last_round);
         }
         match public_url.and_then(host_of) {
             None => {
@@ -174,10 +151,10 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
             // Anything still unsettled had its Pending outcome forced by settle(); one more pass writes them.
             continue;
         }
-        /* WHAT IT IS STILL WAITING FOR. A new name propagating and an in-box agent still coming up are
+        /* WHAT IT IS STILL WAITING FOR. A new name propagating and a daemon still dialling the edge are
          * ordinary states of a fresh setup, so this loop is patient by design — but two minutes of a step
          * that says only "verifying" is indistinguishable from a hang, and the user has no way to learn
-         * that the four settled links already passed. Naming the outstanding ones costs nothing. */
+         * that the settled links already passed. Naming the outstanding ones costs nothing. */
         let waiting: Vec<&str> = LINKS
             .iter()
             .zip(settled.iter())
@@ -200,7 +177,7 @@ pub fn verify_chain(slug: &str, public_url: Option<&str>, patience: Duration) ->
 
 /// Record a verdict: settled outcomes latch immediately, pending ones only once patience is spent. Prints
 /// the row the moment it latches, so a patient postflight narrates instead of freezing.
-fn settle(settled: &mut [Option<Outcome>; 6], link: usize, verdict: Verdict, last_round: bool) {
+fn settle(settled: &mut [Option<Outcome>; 5], link: usize, verdict: Verdict, last_round: bool) {
     let outcome = match verdict {
         Verdict::Settled(outcome) => outcome,
         Verdict::Pending(outcome) if last_round => outcome,
@@ -214,7 +191,7 @@ fn settle(settled: &mut [Option<Outcome>; 6], link: usize, verdict: Verdict, las
     settled[link] = Some(finding.outcome);
 }
 
-fn skip_both(settled: &mut [Option<Outcome>; 6], why: &str) {
+fn skip_both(settled: &mut [Option<Outcome>; 5], why: &str) {
     for link in [DAEMON, ANNOUNCE] {
         if settled[link].is_none() {
             settle(
@@ -339,45 +316,6 @@ fn classify_announce(health: Option<&serde_json::Value>, container: &str) -> Ver
     }
 }
 
-/// The in-box agent, asked the two questions that have different answers: did this sandbox ENABLE against
-/// the hub (its environment, written once by the entrypoint onto the volume that outlives a recreate), and
-/// is the agent that holds its shares RUNNING now.
-fn probe_agent(container: &str, has_grant: bool) -> Verdict {
-    let enabled = docker::exec_ok(container, &["test", "-f", ZROK_ENVIRONMENT]);
-    let running = docker::exec_ok(container, &["zrok2", "agent", "status"]);
-    classify_agent(has_grant, enabled, running, container)
-}
-
-/// The two failures are different problems with different fixes, and the environment file tells them apart:
-/// a grant the hub refused never wrote one (no amount of waiting fixes that — the platform mints a new one
-/// with a new setup code), while an environment without a live agent is a process that has not come up yet,
-/// which patience often settles on a fresh setup.
-fn classify_agent(has_grant: bool, enabled: bool, running: bool, container: &str) -> Verdict {
-    if !has_grant {
-        return Verdict::Settled(Outcome::Skip {
-            why: "this sandbox carries no hub grant — it is reached however its own domain is"
-                .to_string(),
-        });
-    }
-    if running {
-        return Verdict::Settled(Outcome::Pass);
-    }
-    if !enabled {
-        return Verdict::Pending(Outcome::Fail {
-            problem: "the sandbox never enabled against the tunnel hub — its grant was refused.".to_string(),
-            remedy: format!(
-                "re-open the sandbox's setup screen for a fresh command; the refusal is in its log: docker exec {container} tail -40 {ZROK_LOG}"
-            ),
-        });
-    }
-    Verdict::Pending(Outcome::Fail {
-        problem: "the sandbox enabled against the hub, but its tunnel agent is not running.".to_string(),
-        remedy: format!(
-            "read its log: docker exec {container} tail -40 {ZROK_LOG} (the agent is restarted with the container: docker restart {container})"
-        ),
-    })
-}
-
 /// The URL's hostname, without pulling a URL crate: scheme stripped, then everything before the first
 /// path/port separator. Enough for the two shapes connect ever writes (https://host and https://host/).
 fn host_of(url: &str) -> Option<String> {
@@ -421,11 +359,12 @@ fn probe_public(url: &str, host: &str) -> Verdict {
 fn classify_public(result: &std::result::Result<u16, String>, host: &str) -> Verdict {
     match result {
         Ok(200) => Verdict::Settled(Outcome::Pass),
-        // The hub's own "edge is up, nothing serves this name" answers — the agent link is the cause, this
-        // is its symptom from outside.
+        /* The edge's own "I am up, nothing is registered for this name" answers. The cause is upstream of
+         * anything visible from here: no tunnel is registered under this sandbox's id, which means the daemon
+         * has not dialled the edge (yet, or at all). The daemon link above says whether it is even running. */
         Ok(status @ (502 | 503 | 530)) => Verdict::Pending(Outcome::Fail {
-            problem: format!("the hub answers HTTP {status} for {host} — its edge is up but no share serves this name."),
-            remedy: "usually the sandbox's tunnel agent — see that check's verdict.".to_string(),
+            problem: format!("the edge answers HTTP {status} for {host} — it is up, but no tunnel is registered for this sandbox."),
+            remedy: "if the daemon check passed, give it a moment to dial the edge; if this persists, re-run the connect one-liner.".to_string(),
         }),
         Ok(status) => Verdict::Pending(Outcome::Fail {
             problem: format!("https://{host} answered HTTP {status} instead of the daemon's health."),
@@ -562,45 +501,12 @@ mod tests {
     }
 
     #[test]
-    fn the_agent_link_tells_a_refused_grant_from_an_agent_still_coming_up() {
-        assert!(matches!(
-            classify_agent(true, true, true, "c"),
-            Verdict::Settled(Outcome::Pass)
-        ));
-
-        // Enabled once, no agent answering now: a process to bring back, not a grant to re-mint.
-        match classify_agent(true, true, false, "c") {
-            Verdict::Pending(Outcome::Fail { problem, remedy }) => {
-                assert!(problem.contains("not running"));
-                assert!(remedy.contains("docker restart c"));
-            }
-            _ => panic!("an agent that is down is pending — patience may settle it"),
-        }
-
-        // Never enabled: the hub refused the grant, and only a fresh one from the setup screen fixes it.
-        match classify_agent(true, false, false, "c") {
-            Verdict::Pending(Outcome::Fail { remedy, .. }) => {
-                assert!(remedy.contains("setup screen"))
-            }
-            _ => panic!("a refused grant must name the setup screen"),
-        }
-    }
-
-    #[test]
-    fn a_sandbox_without_a_grant_skips_the_agent_link_rather_than_failing_it() {
-        assert!(matches!(
-            classify_agent(false, false, false, "c"),
-            Verdict::Settled(Outcome::Skip { .. })
-        ));
-    }
-
-    #[test]
     fn public_probe_separates_edge_up_from_edge_unreachable() {
         match classify_public(&Ok(530), "sandbox-x.example.com") {
-            Verdict::Pending(Outcome::Fail { remedy, .. }) => {
-                assert!(remedy.contains("tunnel agent"))
+            Verdict::Pending(Outcome::Fail { problem, .. }) => {
+                assert!(problem.contains("no tunnel is registered"))
             }
-            _ => panic!("530 is the no-share symptom"),
+            _ => panic!("530 is the no-tunnel symptom"),
         }
         assert!(matches!(
             classify_public(&Ok(200), "h"),

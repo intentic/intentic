@@ -16,6 +16,7 @@ import { providerAccounts } from "../composables/chat/providerAccounts";
 import { CONTINUATIONS } from "../composables/chat/transcript";
 import { resetChat, useChat } from "../composables/chat/useChat";
 import { queryClient } from "../composables/queryPersistence";
+import { SANDBOX_BUSY_AFTER_MS } from "../composables/sandbox/availability";
 import { useLayout } from "../composables/useLayout";
 import { router } from "../router";
 import ChatPanel from "./ChatPanel.vue";
@@ -53,9 +54,12 @@ vi.mock(`../composables/agents/useWorkflowRuns`, async (importOriginal) => ({
 /* THE COMPOSER ONLY EXISTS WHEN THE SANDBOX DOES: unreachable, the whole footer yields to "Chat is available
  * once your sandbox is connected", and every assertion below would pass against a pane with no controls in it
  * at all. So this one is mocked ONLINE: the state the feature lives in. */
-const { sandboxReachable } = await vi.hoisted(async () => {
+const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await vi.hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
-    return { sandboxReachable: vueRef(true) };
+    // The steady state this file runs in, and the shape the status row reads: `reachable` alone cannot express
+    // "briefly retrying" versus "down for a while", which is exactly the distinction that row now draws.
+    const online = { phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0, everOnline: true, unavailableSince: undefined, generation: 0 };
+    return { sandboxReachable: vueRef(true), sandboxConnection: vueRef({ ...online }), ONLINE_CONNECTION: online };
 });
 vi.mock(`../composables/sandbox/useSandbox`, async (importOriginal) => {
     const { computed } = await import(`vue`);
@@ -68,7 +72,7 @@ vi.mock(`../composables/sandbox/useSandbox`, async (importOriginal) => {
             activeSandboxId,
             active: computed(() => sandboxes.value[0]),
             daemonUrl: computed(() => `http://localhost`),
-            connection: ref({ phase: `online` }),
+            connection: sandboxConnection,
             reachable: sandboxReachable,
             list: { isPending: ref(false) },
             refresh: () => {},
@@ -135,6 +139,7 @@ beforeEach(async () => {
     sessionStorage.clear();
     resetChat();
     sandboxReachable.value = true;
+    sandboxConnection.value = { ...ONLINE_CONNECTION };
     // `connected` is the composer's own gate: with no account on the provider the box is inert and says so.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
@@ -359,19 +364,52 @@ it(`says nothing on a chat whose turn finished`, async () => {
     expect(composerText()).not.toContain(`Enter to continue`);
 });
 
-it(`keeps the status row mounted while a busy sandbox temporarily holds Send`, async () => {
+const statusRow = (): string => document.querySelector<HTMLAnchorElement>(`a[href="/sandbox/agent"]`)?.textContent ?? ``;
+const sendButton = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`)!;
+// A stream that just broke and is about to be retried: the reconnect ladder's first rung is one second, so this
+// is the state a healthy workspace passes through several times an hour.
+const retrying = (sinceMsAgo: number): void => {
+    sandboxReachable.value = false;
+    sandboxConnection.value = {
+        ...ONLINE_CONNECTION,
+        phase: `retrying`,
+        failure: { kind: `timeout`, message: `The sandbox stopped responding.` },
+        attempt: 1,
+        retryDelayMs: 1000,
+        unavailableSince: Date.now() - sinceMsAgo,
+    } as never;
+};
+
+/* A ONE-SECOND RECONNECT IS NOT AN OUTAGE, and the composer must not say it is.
+ *
+ * The liveness stream is always on and reopens for ordinary reasons; rendered off `reachable`, this row blinked
+ * "The sandbox is busy" under the composer every minute or two of a session with nothing wrong with it. Send
+ * still goes inert — that IS instant transport truth, and a press has nowhere to go — but the words stay put
+ * until the wait has lasted long enough to mean something (availability.ts's SANDBOX_BUSY_AFTER_MS). */
+it(`says nothing about a reconnect short enough to heal itself`, async () => {
     useChat().active.value.draft.value = `hello`;
     await mountPanel();
-    const status = (): string => document.querySelector<HTMLAnchorElement>(`a[href="/sandbox/agent"]`)?.textContent ?? ``;
-    const send = (): HTMLButtonElement => document.querySelector<HTMLButtonElement>(`button[aria-label="Send"]`)!;
 
-    expect(status()).toContain(`Ready · Manage`);
-    expect(send().disabled).toBe(false);
+    expect(statusRow()).toContain(`online · Manage`);
+    expect(sendButton().disabled).toBe(false);
 
-    sandboxReachable.value = false;
+    retrying(1_000);
     await settle();
 
-    expect(status()).toContain(`Busy · Manage`);
-    expect(composerText()).toContain(`The sandbox is busy; Send returns when it responds.`);
-    expect(send().disabled).toBe(true);
+    expect(statusRow()).toContain(`online · Manage`);
+    expect(composerText()).not.toContain(`The sandbox is busy`);
+    expect(sendButton().disabled).toBe(true);
+});
+
+// And the other half of the same rule: a wait that has become real is named, in the vocabulary every other
+// sandbox readout in the app uses.
+it(`names a wait that has outlasted the busy threshold`, async () => {
+    useChat().active.value.draft.value = `hello`;
+    await mountPanel();
+
+    retrying(SANDBOX_BUSY_AFTER_MS + 1_000);
+    await settle();
+
+    expect(statusRow()).toContain(`busy, catching up · Manage`);
+    expect(sendButton().disabled).toBe(true);
 });

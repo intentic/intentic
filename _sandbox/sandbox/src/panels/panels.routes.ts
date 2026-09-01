@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { ARTIFACT_FILE, CONFIG_FILE, REPO_ROLES, type RepoRole } from "@intentic/scaffold";
-import { panelsContract, previewLabel, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { panelsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
@@ -30,7 +30,7 @@ const USER_STORIES_DIR = join("docs", "user-stories");
 // code). Its sibling above, and the same shape of evidence: the documents ARE the fact.
 const ARCHITECTURE_DIR = join("docs", "architecture");
 
-export type PanelsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "panelToken" | "processes" | "scanPorts" | "workspace">;
+export type PanelsRoutesDeps = Pick<Services, "config" | "panelToken" | "processes" | "scanPorts" | "workspace">;
 
 /* The repo's answering dev servers, each probed for the scheme it speaks, named by the package that bound it,
  * and carrying the terminal it is running in.
@@ -178,10 +178,6 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
             if (runDir === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.repo} has no runnable panel, add an operator/ dev server or a dev script` });
             }
-            // Kick off the preview-route mint fire-and-forget (never rejects; see preview-route.ts), the tmux
-            // session the browser attaches to must not wait on a platform round-trip. The route resolves long
-            // before the dev server (behind a possibly minutes-long install) is healthy enough to preview.
-            void services.ensurePreviewRoutes([previewLabel(key)]);
             await services.processes.start(key, {
                 // Install deps on first start (async, the terminal + "starting" badge cover it), then run the dev
                 // server; skipped once installed. No --ignore-workspace: an app repo IS its own pnpm monorepo (its

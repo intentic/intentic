@@ -61,7 +61,6 @@ export const testConfig: Config = {
     logLevel: "silent",
     logPretty: false,
     idleStopMinutes: 0,
-    zrok: { token: "", api: "", namespace: "" },
     zone: "",
     connectToken: "",
     owner: { email: "" },

@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-manifest";
-import { previewLabel } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
 import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
@@ -16,11 +15,6 @@ export const extensionProcessKey = (id: string, name: string): string => `${EXTE
 
 export const startExtensionProcess = async (services: Services, extension: InstalledExtension, process: ProcessContribution): Promise<void> => {
     const key = extensionProcessKey(extension.id, process.name);
-    if (process.preview === true) {
-        // Mint the tunneled preview hostname fire-and-forget (the panels-start pattern); never rejects, and the
-        // process bind doesn't need the route, only a later browser load does.
-        void services.ensurePreviewRoutes([previewLabel(key)]);
-    }
     await services.serviceProcesses.start(key, {
         command: process.command,
         cwd: process.cwd === undefined ? extension.dir : join(extension.dir, process.cwd),

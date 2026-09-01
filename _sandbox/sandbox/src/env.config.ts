@@ -79,18 +79,6 @@ const configSchema = z.object({
      * 0 (the default) disables: every non-hosted flavor runs always-on, exactly as before. Set by the hosted
      * provisioner from the platform's config, never by connect flows. */
     idleStopMinutes: z.coerce.number().int().nonnegative().default(0),
-    /* THE SANDBOX'S REACHABILITY GRANT on the platform's self-hosted tunnel hub, set by every creation flow
-     * from the setup claim (ZROK_TOKEN / ZROK_API / ZROK_NAMESPACE). The entrypoint enables the agent and
-     * shares the daemon with it; the daemon uses `namespace` to attach its own preview/port/outbox names
-     * (panels/preview-route.ts), which is naming the platform used to do on Cloudflare's behalf. Empty ⇒ this
-     * sandbox is reached some other way (an attached domain, or loopback in dev) and nothing is shared. */
-    zrok: z
-        .object({
-            token: z.string().default("").meta({ secret: true }),
-            api: z.string().default(""),
-            namespace: z.string().default(""),
-        })
-        .prefault({}),
     // Where the platform lives, for the daemon's announce (URL + liveness phone-home). Set by connect.{sh,ps1};
     // a localhost dev platform arrives as host.docker.internal. Empty ⇒ announcing disabled (tests, loopback).
     platform: z

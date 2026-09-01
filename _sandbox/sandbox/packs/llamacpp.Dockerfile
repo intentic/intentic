@@ -63,7 +63,7 @@
 # needs none of that, and still installs to the same two paths: the CUDA pack deletes that symlink before
 # installing its own binary there (see there for why it must), and one layout means one thing to delete.
 #
-# The sha256 is pinned, which the image's other pinned downloads (cloudflared, yq, zrok) do not do. A prebuilt
+# The sha256 is pinned, which the image's other pinned downloads (cloudflared, yq) do not do. A prebuilt
 # BINARY is a different trust proposition from source this image compiles itself: a moved release asset would
 # otherwise be executed unnoticed. ponytail: bump the two pins together, the digest belongs to the version.
 #

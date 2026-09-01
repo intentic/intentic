@@ -7,14 +7,14 @@ const failed = (at: number): ConnectionSignal => ({ kind: "failed", failure: cla
 
 describe(`sandboxAvailability`, () => {
     it(`keeps an established workspace quietly stale through transient retries`, () => {
-        const state = drive({ kind: "frame" }, failed(1_000), { kind: "connect" }, { kind: "opened" }, failed(2_000));
+        const state = drive({ kind: "frame", at: 0 }, failed(1_000), { kind: "connect" }, { kind: "opened" }, failed(2_000));
         expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS - 1)).toBe("stale");
         // Retry velocity does not move the presentation clock: the first observed failure owns it.
         expect(state.unavailableSince).toBe(1_000);
     });
 
     it(`names a wait only after elapsed unavailability crosses the busy threshold`, () => {
-        const state = drive({ kind: "frame" }, failed(1_000));
+        const state = drive({ kind: "frame", at: 0 }, failed(1_000));
         expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("busy");
     });
 
@@ -32,11 +32,11 @@ describe(`sandboxAvailability`, () => {
             at: 1_000,
         });
         expect(sandboxAvailability(blocked, true, true, 1_000)).toBe("blocked");
-        expect(sandboxAvailability(drive({ kind: "frame" }), false, true, 1_000)).toBe("warming");
+        expect(sandboxAvailability(drive({ kind: "frame", at: 0 }), false, true, 1_000)).toBe("warming");
     });
 
     it(`returns live and clears the outage clock on the first recovered frame`, () => {
-        const state = drive({ kind: "frame" }, failed(1_000), { kind: "frame" });
+        const state = drive({ kind: "frame", at: 0 }, failed(1_000), { kind: "frame", at: 0 });
         expect(state.unavailableSince).toBeUndefined();
         expect(sandboxAvailability(state, true, true, 1_000 + SANDBOX_BUSY_AFTER_MS)).toBe("live");
     });

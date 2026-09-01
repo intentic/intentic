@@ -1,4 +1,4 @@
-import { portLabel, portsContract, portUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { portsContract, portUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { identifyPort } from "./port-identity.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
 import type { ExtensionHost } from "../extensions/installed-extensions.js";
@@ -16,7 +16,7 @@ import type { OrpcContext } from "../context.js";
 // service on port 40085 into "the discord extension's gateway" instead of leaving the row to describe
 // somebody's background service as `node dist/gateway.js`. Taken as the narrow host interface rather than as
 // more of `Services`, so this file's blast radius stays what the type says it is.
-export type PortsRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
+export type PortsRoutesDeps = Pick<Services, "config" | "portForwards" | "scanPorts" | "serviceProcesses" | "workspace"> &
     ExtensionHost;
 
 export const createPortsRoutes = (services: PortsRoutesDeps) => {
@@ -64,9 +64,6 @@ export const createPortsRoutes = (services: PortsRoutesDeps) => {
             }
             // The listener's dial host rides into the forward: a `localhost` bind can be ::1-only (Vite).
             const slot = await services.portForwards.forward(input.port, listener.host);
-            // Almost always a memoized no-op: the boot sweep pre-mints every slot label (and own-Cloudflare
-            // rides its wildcard), so this only pays a platform call if boot ran with the platform unreachable.
-            await services.ensurePreviewRoutes([portLabel(slot)]);
             const url = portUrl(slot, zone, sandboxId);
             return url === undefined ? {} : { previewUrl: url };
         }),

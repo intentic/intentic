@@ -274,15 +274,6 @@ export const REPLAY_ENV = [
      * the first, so the new container is simply the live one. The dead predecessor holds nothing to reclaim. */
     "SANDBOX_GRANT",
     "INGRESS_URL",
-    /* The same reachability, on the platform's self-hosted tunnel hub instead of the edge above: the setup
-     * claim every creation flow hands the container (env.config's zrok trio), which the entrypoint enables the
-     * agent with and the daemon then attaches its preview, port and outbox names to. Replayed for the reason
-     * the grant is, and the cost of not replaying them is the quiet one this list exists to prevent: empty
-     * reads as "this sandbox is reached some other way", so a recreate that drops them returns a container
-     * that boots, serves, logs nothing, and is on no public name at all. */
-    "ZROK_TOKEN",
-    "ZROK_API",
-    "ZROK_NAMESPACE",
     "CLOUDFLARE_API_TOKEN",
     "HOST_SSH_KEY",
     "SELF_HOST_USER",

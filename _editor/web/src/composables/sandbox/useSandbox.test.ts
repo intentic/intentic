@@ -118,7 +118,7 @@ describe(`reachable`, () => {
 
     it(`goes true on a live stream to a daemon that reports nothing about its boot`, () => {
         // The pre-boot-frame daemon, and the steady state of every current one: silence means ready.
-        signalConnection({ kind: `frame` });
+        signalConnection({ kind: `frame`, at: 0 });
         expect(useSandbox().reachable.value).toBe(true);
     });
 
@@ -126,13 +126,13 @@ describe(`reachable`, () => {
         /* The whole point of the second condition. The daemon brings its listeners up before its boot chain
          * finishes, so this exact state (stream open, every data route parked on the readiness gate) used to
          * read as "go" and fire a workspace's worth of queries into it at once. */
-        signalConnection({ kind: `frame` });
+        signalConnection({ kind: `frame`, at: 0 });
         setDaemonBoot({ ready: false, startedAt: 1_000, steps: [{ key: `registry`, label: `Loading conversations`, state: `running` }] });
         expect(useSandbox().reachable.value).toBe(false);
     });
 
     it(`goes true the moment the daemon's gate opens, with no reconnect`, () => {
-        signalConnection({ kind: `frame` });
+        signalConnection({ kind: `frame`, at: 0 });
         setDaemonBoot({ ready: false, startedAt: 1_000, steps: [] });
         setDaemonBoot({ ready: true, startedAt: 1_000, steps: [] });
         expect(useSandbox().reachable.value).toBe(true);
@@ -140,7 +140,7 @@ describe(`reachable`, () => {
 
     it(`stays false for a ready daemon we have lost the stream to`, () => {
         // Readiness is the daemon's fact, liveness is ours: a ready daemon behind a dead tunnel is not reachable.
-        signalConnection({ kind: `frame` });
+        signalConnection({ kind: `frame`, at: 0 });
         setDaemonBoot({ ready: true, startedAt: 1_000, steps: [] });
         signalConnection({ kind: `failed`, failure: { kind: `network`, message: `gone` }, at: Date.now() });
         expect(useSandbox().reachable.value).toBe(false);

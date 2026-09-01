@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { previewLabel } from "@intentic/sandbox-contract";
 import { gitCommitAll, gitInit, INTENT_GITIGNORE, scaffoldDeployConfig, TARGET_GITIGNORE } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR, terminalGit } from "../git/git.js";
@@ -22,10 +21,6 @@ export const scaffoldAppMonorepo = async (services: Services, name: string, sess
         `intentic scaffold monorepo --dir ${shellQuote(services.workspace.root)} --name ${shellQuote(name)} --source ${shellQuote(source)} --ref ${shellQuote(ref)}`,
         { cwd: services.workspace.root, window: "scaffold" },
     );
-    // Mint the preview route NOW, not at first start, the hostname must exist long before a browser resolves
-    // it, or the early NXDOMAIN gets negative-cached for the zone's SOA TTL. (Covers a root dev script; the
-    // per-app routes mint at addApps.)
-    void services.ensurePreviewRoutes([previewLabel(name)]);
 };
 
 // Scaffold of a NEUTRAL ledger: the intent + desired-state git repos with an empty deploy.config.ts (only the
@@ -47,6 +42,4 @@ export const scaffoldNeutralLedger = async (services: Services, session: string)
     await services.files.write(join(desiredState, ".gitignore"), TARGET_GITIGNORE);
     await gitCommitAll(desiredState, "chore(intentic): scaffold desired-state", AGENT_GIT_AUTHOR, git);
 
-    // Mint both preview routes at scaffold time (see scaffoldAppMonorepo's note on DNS negative caching).
-    void services.ensurePreviewRoutes([previewLabel("intent"), previewLabel("desired-state")]);
 };

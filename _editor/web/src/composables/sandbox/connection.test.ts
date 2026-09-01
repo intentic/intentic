@@ -17,6 +17,9 @@ const network = (message = `tunnel down`) => classifyFailure({ message });
 const watchdog = () => classifyFailure({ watchdog: true, message: `The sandbox stopped responding.` });
 const forbidden = () => classifyFailure({ status: 403, message: `not a member` });
 const failed = (failure = network(), at = 1_000): ConnectionSignal => ({ kind: `failed`, failure, at });
+// Frames carry a clock now, because how long a stream WORKED is what a later failure is judged against. The
+// default sits at 0 so the ordinary tests below describe a stream that broke almost as soon as it opened.
+const frame = (at = 0): ConnectionSignal => ({ kind: `frame`, at });
 
 describe(`classifyFailure`, () => {
     it(`tells our own watchdog apart from a network failure`, () => {
@@ -62,7 +65,7 @@ describe(`watchdogRecoveryDelay`, () => {
 
 describe(`applyConnectionSignal`, () => {
     it(`comes online on the first frame and forgets the previous cause`, () => {
-        const state = drive({ kind: `connect` }, failed(), { kind: `connect` }, { kind: `opened` }, { kind: `frame` });
+        const state = drive({ kind: `connect` }, failed(), { kind: `connect` }, { kind: `opened` }, frame());
         expect(state.phase).toBe(`online`);
         expect(state.failure).toBeUndefined();
         expect(state.attempt).toBe(0);
@@ -71,7 +74,7 @@ describe(`applyConnectionSignal`, () => {
     });
 
     it(`does not call response headers a recovery before a frame arrives`, () => {
-        const state = drive({ kind: `frame` }, failed(network(), 2_000), { kind: `connect` }, { kind: `opened` });
+        const state = drive(frame(), failed(network(), 2_000), { kind: `connect` }, { kind: `opened` });
         expect(state.phase).toBe(`connecting`);
         expect(state.failure?.kind).toBe(`network`);
         expect(state.unavailableSince).toBe(2_000);
@@ -88,8 +91,8 @@ describe(`applyConnectionSignal`, () => {
     it(`returns the identical object for a heartbeat on an already-online connection`, () => {
         // ~1 frame every 2s for the life of the session: minting a new state each time would wake every
         // watcher of the connection for no change.
-        const online = drive({ kind: `connect` }, { kind: `opened` }, { kind: `frame` });
-        expect(applyConnectionSignal(online, { kind: `frame` })).toBe(online);
+        const online = drive({ kind: `connect` }, { kind: `opened` }, frame());
+        expect(applyConnectionSignal(online, frame())).toBe(online);
     });
 
     it(`walks the backoff up over consecutive failures and caps it`, () => {
@@ -100,7 +103,9 @@ describe(`applyConnectionSignal`, () => {
         expect(drive({ kind: `connect` }, fail, fail, fail, fail, fail, fail).retryDelayMs).toBe(5000);
     });
 
-    it(`earns back the fast first retry after a healthy stream`, () => {
+    it(`sends a stream that barely lived back to the top of the ladder, not past it`, () => {
+        // A run of failures, then a stream that opened and died almost at once. The climb is reset — this
+        // daemon did answer — but a second of life is not proof of anything, so it pays the first rung.
         const fail = failed();
         const state = drive(
             { kind: `connect` },
@@ -109,12 +114,60 @@ describe(`applyConnectionSignal`, () => {
             fail,
             { kind: `connect` },
             { kind: `opened` },
-            { kind: `frame` },
+            frame(),
             { kind: `connect` },
             fail,
         );
         expect(state.retryDelayMs).toBe(1000);
         expect(state.attempt).toBe(1);
+    });
+
+    /* THE ONE-SECOND OUTAGE THAT WAS NOBODY'S FAULT. A liveness stream is open for the life of a tab and ends
+     * for reasons that say nothing about reachability; on a loopback shortcut re-opening it costs tens of
+     * milliseconds, so a mandatory 1s floor WAS the outage, and it is what the workspace kept rendering. A
+     * stream that carried frames long enough to have proved itself is reconnected at once instead. */
+    it(`reconnects a stream that had been working at once, and charges it no rung`, () => {
+        const state = drive({ kind: `connect` }, { kind: `opened` }, frame(0), failed(network(), 60_000));
+        expect(state.phase).toBe(`retrying`);
+        expect(state.retryDelayMs).toBe(0);
+        expect(state.attempt).toBe(0);
+    });
+
+    it(`walks the ladder from its top rung when the free reconnect fails too`, () => {
+        // Nothing is proved twice: the repair spent no rung, so the failure after it is the ladder's first.
+        const state = drive({ kind: `connect` }, { kind: `opened` }, frame(0), failed(network(), 60_000), { kind: `connect` }, failed(network(), 61_000));
+        expect(state.retryDelayMs).toBe(1000);
+        expect(state.attempt).toBe(1);
+        // And the clock a person is shown still runs from the FIRST failure, not from the retry.
+        expect(state.unavailableSince).toBe(60_000);
+    });
+
+    it(`never lets a daemon that cannot hold a stream up hot-loop`, () => {
+        /* 200-then-close, over and over. Its hello frame resets the ladder every cycle, which is deliberate and
+         * unchanged — a daemon that answers IS answering — so this loop is bounded by the floor rather than by
+         * the climb, at one attempt per second forever. The thing that must never happen here is a delay of
+         * ZERO, and no stream that dies in 50ms can ever earn one. */
+        const flap = (at: number): readonly ConnectionSignal[] => [{ kind: `connect` }, { kind: `opened` }, frame(at), failed(network(), at + 50)];
+        for (const state of [drive(...flap(0)), drive(...flap(0), ...flap(1_000)), drive(...flap(0), ...flap(1_000), ...flap(2_000))]) {
+            expect(state.retryDelayMs).toBe(1000);
+            expect(state.attempt).toBe(1);
+        }
+    });
+
+    it(`refuses the free reconnect to an optimistic paint, which no daemon has confirmed`, () => {
+        // A switch paints `online` from this browser's memory of the sandbox. That is a guess, not a frame, so
+        // a failure against it is an ordinary first failure however long the paint has been up.
+        const state = drive({ kind: `switched`, lastKnownOnline: true }, { kind: `connect` }, failed(network(), 60_000));
+        expect(state.retryDelayMs).toBe(1000);
+        expect(state.attempt).toBe(1);
+    });
+
+    it(`does not hand a repair to a blocked cause`, () => {
+        // A long-healthy stream whose daemon then answers 403 is not a connection to be repaired: retrying at
+        // once would hammer a daemon working exactly as configured.
+        const state = drive({ kind: `connect` }, { kind: `opened` }, frame(0), failed(forbidden(), 60_000));
+        expect(state.phase).toBe(`blocked`);
+        expect(state.retryDelayMs).toBe(5000);
     });
 
     it(`pins a blocked cause at the ceiling instead of hammering`, () => {
@@ -160,7 +213,7 @@ describe(`applyConnectionSignal`, () => {
         // Promotion: the loopback shortcut qualified mid-stream, so the driver aborts to reconnect onto it.
         // That abort is deliberate; recording it as a failure would put a "reconnecting" gate over a workspace
         // that is about to get FASTER, and would make the first attempt on the new address wait out a backoff.
-        const promoted = drive({ kind: `connect` }, { kind: `opened` }, { kind: `frame` }, { kind: `retargeted` });
+        const promoted = drive({ kind: `connect` }, { kind: `opened` }, frame(), { kind: `retargeted` });
         expect(promoted.phase).toBe(`connecting`);
         expect(promoted.failure).toBeUndefined();
         expect(promoted.retryDelayMs).toBe(0);

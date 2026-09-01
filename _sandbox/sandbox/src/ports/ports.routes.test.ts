@@ -28,7 +28,6 @@ const portsDeps = (overrides: Partial<PortsRoutesDeps> = {}): PortsRoutesDeps =>
     workspace: workspacePaths(WORKSPACE_ROOT),
     portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
     scanPorts: async () => [],
-    ensurePreviewRoutes: async () => {},
     // The extension-process index behind each row's name: nothing installed here, so every listener is named
     // from its own command and session (port-identity.ts owns that reasoning and is tested beside it).
     files: { read: async () => undefined },
@@ -79,22 +78,18 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
     });
 });
 
-test("ports.forward maps a listener onto a slot, mints its route label, and refuses reserved/dead ports", async () => {
-    const ensured: string[] = [];
+test("ports.forward maps a listener onto a slot and refuses reserved/dead ports", async () => {
     const client = routesClient(
         portsContract,
         createPortsRoutes(
             portsDeps({
                 scanPorts: async () => [{ port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite" }],
-                ensurePreviewRoutes: async (labels) => {
-                    ensured.push(...labels);
-                },
             }),
         ),
     );
 
+    // The slot's hostname needs no arranging: the edge routes it by parsing the id out of the name.
     expect(await client.forward({ port: 3000 })).toEqual({ previewUrl: portUrl(SLOT, "example.com", sandboxIdFromToken("tok")) });
-    expect(ensured).toEqual([`port-${SLOT}`]);
     // The daemon's own surfaces are never forwardable; a port nothing listens on is NOT_FOUND.
     expect(await errorCode(client.forward({ port: 8787 }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.forward({ port: 4000 }))).toBe("NOT_FOUND");

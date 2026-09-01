@@ -1,6 +1,6 @@
 import { cp, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { basename, join, sep } from "node:path";
-import { publicContract, publicLabel, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
+import { publicContract, publicUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { SHARE_DIR } from "@intentic/sandbox-contract/share-paths";
 import { publicSlotFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { isPublicPath, toRelPath } from "@intentic/workspace-ignore";
@@ -20,7 +20,7 @@ import { BLOCK_REASON, blockByName, listPublicFiles, publicRoot } from "./public
  * and the one gesture users repeat most is republishing the same path after a rebuild, which overwrites, by
  * design, so a link that was handed out keeps pointing at the current version. */
 
-export type PublicRoutesDeps = Pick<Services, "config" | "ensurePreviewRoutes" | "workspace">;
+export type PublicRoutesDeps = Pick<Services, "config" | "workspace">;
 
 // Percent-encode per segment, so a published "Q3 report.pdf" yields a URL that survives being pasted anywhere.
 const fileUrl = (base: string | undefined, path: string): string | undefined =>
@@ -89,10 +89,6 @@ export const createPublicRoutes = (services: PublicRoutesDeps) => {
             }
             await mkdir(root, { recursive: true });
             await cp(source, join(root, name), { recursive: true, force: true });
-            // Almost always a memoized no-op, the boot sweep pre-mints the outbox label. It pays a platform
-            // call only when boot ran with the platform unreachable, which is exactly when the first publish
-            // would otherwise hand out a hostname that does not resolve.
-            await services.ensurePreviewRoutes([publicLabel(slot)]);
             return { path: name, ...(fileUrl(base, name) === undefined ? {} : { url: fileUrl(base, name)! }) };
         }),
 

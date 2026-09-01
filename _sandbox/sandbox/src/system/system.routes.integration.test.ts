@@ -319,13 +319,12 @@ test("POST /system/authorized-key authorizes via the pairing token alone (no bea
  * path the setup wizard offers. The transport is the daemon's own HTTPS surface now, so this sandbox enrolls
  * like any other and the card reads `available`. */
 test("a sandbox on intentic's own fabric enrolls for sync like every other one", async () => {
-    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-zrok-home-"));
+    process.env["HOME"] = mkdtempSync(join(tmpdir(), "sync-home-"));
     const svc = services({
         config: {
             ...testConfig,
             connectToken: "token",
-            historyRoot: mkdtempSync(join(tmpdir(), "sync-zrok-history-")),
-            zrok: { token: "acct", api: "https://zrok2.example.com", namespace: "ns" },
+            historyRoot: mkdtempSync(join(tmpdir(), "sync-history-")),
             sandbox: { ...testConfig.sandbox, publicUrl: "https://sandbox-abc.example.com" },
         },
     });

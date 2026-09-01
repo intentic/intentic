@@ -134,7 +134,10 @@ const stream = async (sandboxId: string): Promise<void> => {
         // missed).
         markWorkspaceChanged([]);
         for await (const frame of frames) {
-            signalConnection({ kind: `frame` });
+            // Stamped, not just counted: the machine dates the run of frames so a later break can be told from
+            // a daemon that cannot hold a stream up at all (connection.ts's SETTLED_STREAM_MS). Only the first
+            // frame of a run is read, the rest short-circuit.
+            signalConnection({ kind: `frame`, at: Date.now() });
             armWatchdog();
             /* Re-ask where this sandbox is best reached, which is nearly always a comparison and a return
              * (useEndpoint decides when an answer is stale, and only ONE of the three ever is). It is here, on

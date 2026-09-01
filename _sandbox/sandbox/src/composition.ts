@@ -159,7 +159,6 @@ import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
 import { createServiceProcesses, type ServiceProcesses } from "./processes/service-processes.js";
 import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panels/panel-upstream.js";
-import { createPreviewRouteEnsurer } from "./panels/preview-route.js";
 import { discoverRepos } from "./workspace/repo-discovery.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
@@ -762,9 +761,6 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // queue and the first-use model download that make it stateful (see speech/transcribe.ts).
     readonly speech: Speech;
     readonly purgeConversationState: NonNullable<AgentArchiveDeps["purgeConversationState"]>;
-    // Attaches a batch of share names (`preview-<panel>` / `port-<slot>` labels) to this box's own account on
-    // the tunnel fabric before the hostnames reach a browser; never rejects (see panels/preview-route.ts).
-    readonly ensurePreviewRoutes: (labels: readonly string[]) => Promise<void>;
     // What a panel's preview hostname actually serves right now, listening sockets over assignments (see
     // panels/panel-upstream.ts). The preview proxy routes on it, and the panels list advertises a preview URL
     // only where it answers, so no surface can offer an address that resolves to a dead port.
@@ -1494,7 +1490,6 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 saidIndex.forget(entry.id);
             }
         },
-        ensurePreviewRoutes: createPreviewRouteEnsurer(config, logger),
         // Reads the live sockets (through the shared scan, cached for a beat inside the resolver) rather than
         // the port the panel manager handed out: a repo whose `dev` pins its own ports is the ordinary
         // monorepo, and the assignment is fiction there.
