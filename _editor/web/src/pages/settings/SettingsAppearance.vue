@@ -89,7 +89,6 @@ type ThemeChoice = "light" | "dark" | Skin;
 const themeOptions = [
     { label: `Light`, value: `light` as const },
     { label: `Dark`, value: `dark` as const },
-    { label: `HUD`, value: `hud` as const, title: `A heads-up display: glass panels, lit edges and a survey grid, in the colour you picked below.` },
     {
         label: `Sanctum`,
         value: `sanctum` as const,
@@ -97,10 +96,10 @@ const themeOptions = [
     },
 ];
 // The row's lead glyph names the look rather than the light level, which is what the row now chooses.
-const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, hud: `wave-pulse`, sanctum: `star-fill`, none: `moon` };
+const THEME_ICON: Record<ThemeChoice, IconName> = { light: `sun`, dark: `moon`, sanctum: `star-fill`, none: `moon` };
 const themeChoice = computed<ThemeChoice>(() => (skin.value === `none` ? scheme.value : skin.value));
 const setThemeChoice = (value: ThemeChoice): void => {
-    // Both skins are built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
+    // The skin is built for a near-black canvas and PrimeVue keys its own dark components off the scheme, so
     // useSkin flips it, so nothing to do here beyond naming the skin.
     if (value !== `light` && value !== `dark`) {
         setSkin(value);

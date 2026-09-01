@@ -30,7 +30,6 @@
  * is selected in Appearance. Late on purpose: a skin restates the design system's own tokens (the surface ramp,
  * the role tokens, the radius scale) at equal specificity, so source order is what lets it win. Everything about
  * the feature, including how to remove it, is in ./skins/README.md. */
-@import "./skins/hud.css";
 @import "./skins/sanctum.css";
 
 /* THE ENTRY SCREENS' OWN MATERIAL — the site's metals, ground, frame kit and two button plaques, scoped to
@@ -42,7 +41,7 @@
  * — so whichever sheet is read second wins the tie. These two screens are the ONE place a selected skin must
  * not reach: they are dressed as the marketing site the visitor just came from, not as the workspace they have
  * not seen yet, and a reader arriving on them has picked no skin anyway. (Specificity cannot settle the skins'
- * route-element backdrop, which is written with an id; both skins exclude `.entry` from it by name instead.) */
+ * route-element backdrop, which is written with an id; the skin excludes `.entry` from it by name instead.) */
 @import "./styles/entry.css";
 
 /* Scan the @intentic/ui library's source for class names (it lives outside this app's tree,
@@ -292,8 +291,8 @@
  * not styling a component, it is overruling the component's own background for as long as the view is somewhere
  * it does not normally go.
  *
- * `background-color` rather than the shorthand, so it composes with the skins, which paint these same bars with
- * `background-image` (see hud.css) instead of one of the two silently winning. */
+ * `background-color` rather than the shorthand, so it composes with the skin, which paints these same bars with
+ * `background-image` (see sanctum.css) instead of one of the two silently winning. */
 .ws-scoped {
     box-shadow: inset 0 2px 0 var(--color-primary-500);
 }

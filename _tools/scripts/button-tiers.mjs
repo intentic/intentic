@@ -12,7 +12,7 @@
  * times in four files in two
  * recipes; "Abort" twice; the pair "Done: hand back" / "Can't help now" was duplicated verbatim between
  * Browsers.vue and TerminalPanel.vue in a hardcoded `bg-primary-600 text-white` that ignores the palette,
- * light mode and both skins. None of that was anybody being careless. It is what happens when the cheapest
+ * light mode and the skin. None of that was anybody being careless. It is what happens when the cheapest
  * way to get a button is to type one.
  *
  * AND THE COST IS NOT MERELY UNTIDY, WHICH IS THE PART WORTH UNDERSTANDING. A skin (skins/README.md) restyles
@@ -280,12 +280,12 @@ for (const path of tracked) {
             });
         }
 
-        // ── 3 · a colour the accent picker and both skins cannot reach
+        // ── 3 · a colour the accent picker and the skin cannot reach
         const literal = classes.match(/(?:^|\s)!?(?:[\w@-]+:)*(?:bg-primary-\d{2,3}(?![\w/])|text-white\b)/u);
         if (pressable && literal !== null && !waived(path, literal[0].trim())) {
             findings.push({
                 at: where,
-                why: `\`${literal[0].trim()}\` pins a control to one step of the palette, so the accent picker and both skins cannot repaint it: use the tier (\`<Button>\` / \`class="ui-button-loud"\`) or the fill tokens (\`--color-primary-fill\` / \`--color-fill-content\`)`,
+                why: `\`${literal[0].trim()}\` pins a control to one step of the palette, so the accent picker and the skin cannot repaint it: use the tier (\`<Button>\` / \`class="ui-button-loud"\`) or the fill tokens (\`--color-primary-fill\` / \`--color-fill-content\`)`,
             });
         }
 

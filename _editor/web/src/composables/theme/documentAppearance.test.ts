@@ -29,12 +29,12 @@ beforeEach(() => {
 
 describe(`installDocumentAppearance`, () => {
     it(`applies a stored skin, and the face that skin asks for`, async () => {
-        localStorage.setItem(`ui-skin`, `hud`);
+        localStorage.setItem(`ui-skin`, `sanctum`);
         const { installDocumentAppearance } = await boot();
 
         installDocumentAppearance();
 
-        expect(root().getAttribute(`data-skin`)).toBe(`hud`);
+        expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
         // The webfont is part of the look and only `useSkin` fetches it, so a window that never loaded it drew
         // the skin in the app's own stack. This is the half the anti-flash script cannot do.
         expect(document.getElementById(`ui-skin-font`)).not.toBeNull();
@@ -64,7 +64,7 @@ describe(`installDocumentAppearance`, () => {
     });
 
     it(`drops a skin back to none when light or dark is chosen`, async () => {
-        localStorage.setItem(`ui-skin`, `hud`);
+        localStorage.setItem(`ui-skin`, `sanctum`);
         const { installDocumentAppearance } = await boot();
         const { receivePreferenceChange } = await seam();
 
@@ -76,7 +76,7 @@ describe(`installDocumentAppearance`, () => {
     });
 
     it(`falls back to the default skin when storage is cleared`, async () => {
-        localStorage.setItem(`ui-skin`, `hud`);
+        localStorage.setItem(`ui-skin`, `sanctum`);
         const { installDocumentAppearance } = await boot();
         const { receivePreferenceChange } = await seam();
 

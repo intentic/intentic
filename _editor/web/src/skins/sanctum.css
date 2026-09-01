@@ -55,7 +55,7 @@
  *     rectangle.
  *
  * ── EVERYTHING ELSE ───────────────────────────────────────────────────────────────────────────────────────
- * As in the HUD: the surface ramp, the role tokens and the radius scale are restated, which repaints Tailwind's
+ * The surface ramp, the role tokens and the radius scale are restated, which repaints Tailwind's
  * utilities and every PrimeVue component at once; selector rules sit in `@layer components` so a caller's own
  * utility still wins; and the whole file is inert until `data-skin="sanctum"` is on <html>. */
 

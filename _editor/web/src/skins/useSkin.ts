@@ -9,8 +9,7 @@ import { useTheme } from "@intentic/ui/theme";
 /* THE SKIN, which whole-interface look the workspace wears, as opposed to which COLOUR it is painted in.
  *
  * The accent picker and the light/dark switch both answer "what colour"; a skin answers "what is this thing made
- * of". `none` is the app as designed. `hud` is the heads-up display in skins/hud.css, deep cool glass over a
- * survey grid, lit hairlines, angular geometry. `sanctum` is skins/sanctum.css, the SITE'S design system worn by
+ * of". `none` is the app as designed. `sanctum` is skins/sanctum.css, the SITE'S design system worn by
  * the app: warm ash stone with a whisper of tooth in it, a gold rule round everything, a flat unlit shadow for
  * the rail and the overlays, stone and bronze plaques for the two filled button tiers, and every edge eased.
  *
@@ -19,34 +18,33 @@ import { useTheme } from "@intentic/ui/theme";
  * skin's rules never matching at all. `none` therefore writes no attribute, which is how someone who picks Light
  * or Dark opts back out of a skin, and makes "is a skin on?" answerable by looking at the element.
  *
- * A SKIN IMPLIES A SCHEME. Both skins are dark by construction: their grounds, their materials and their light
+ * A SKIN IMPLIES A SCHEME. The skin is dark by construction: its grounds, its materials and its light
  * are built for a near-black canvas, and PrimeVue's own component preset keys its dark treatment off `data-mode`
  * rather than off anything this file controls. So turning a skin on turns the scheme dark with it, one call,
  * here, rather than a stylesheet trying to out-shout a component library. The scheme the user had is not
  * remembered across that: leaving the skin leaves them in dark, which is where they can see they are.
  *
- * THE DISPLAY FACE IS FETCHED ON DEMAND, AND IT IS PER SKIN. A look's typography is part of the look, the HUD
- * wants an angular technical face, the Sanctum wants the site's own two, and an app that downloads either for a
- * skin nobody has selected is an app charging everyone for one person's taste. The <link> is swapped when the
+ * THE DISPLAY FACE IS FETCHED ON DEMAND. A look's typography is part of the look, Sanctum wants the site's own
+ * two, and an app that downloads them for a skin nobody has selected is an app charging everyone for one
+ * person's taste. The <link> is swapped when the
  * skin changes and removed when there is none; if it never arrives, the skin's own font variables fall through
  * to the app's stack and everything still reads. */
 
-export type Skin = "none" | "hud" | "sanctum";
+export type Skin = "none" | "sanctum";
 
 const STORAGE_KEY = `ui-skin`;
 const ATTRIBUTE = `data-skin`;
 const FONT_ELEMENT_ID = `ui-skin-font`;
 
-/* One entry per skin that wants a face of its own. The HUD takes Chakra Petch's angular technical caps. Sanctum
+/* One entry per skin that wants a face of its own. Sanctum
  * takes the SITE'S two faces: Baloo 2 for every heading and label in the chrome, Playfair Display for the one
  * heading in the app drawn at display size, so the workspace and the marketing pages are set in the same type.
  * A skin absent from this map simply loads nothing. */
 const FONT_HREF: Partial<Record<Skin, string>> = {
-    hud: `https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap`,
     sanctum: `https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Playfair+Display:wght@600&display=swap`,
 };
 
-const isSkin = (value: unknown): value is Skin => value === `none` || value === `hud` || value === `sanctum`;
+const isSkin = (value: unknown): value is Skin => value === `none` || value === `sanctum`;
 
 /** Point the skin webfont <link> at `value`'s face, or drop it when the skin wants none. */
 const applyFont = (value: Skin): void => {
@@ -98,7 +96,7 @@ const setSkin = (value: Skin): void => {
     skin.value = value;
     /* THE SCHEME GOES DARK WITH THE SKIN, in the window the skin was CHOSEN in, and only there. Every other
      * window learns the scheme the same way it learns the skin: `useTheme().set` is itself a preference write, so
-     * the note that carries "the skin is now hud" is followed by the note that carries "the scheme is now dark",
+     * the note that carries "the skin is now sanctum" is followed by the note that carries "the scheme is now dark",
      * and a window adopting them needs no rule of its own to connect the two. Putting the rule in `apply` above
      * would have every window that hears about a skin re-decide the scheme and write it back. */
     if (value !== `none`) {

@@ -59,7 +59,7 @@
                 // look before the deep one lands — the worst flash of the three. See src/skins/README.md.
                 var uiSkin = localStorage.getItem("ui-skin");
                 if (uiSkin === "none") document.documentElement.removeAttribute("data-skin");
-                else if (uiSkin === "hud" || uiSkin === "sanctum") document.documentElement.setAttribute("data-skin", uiSkin);
+                else if (uiSkin === "sanctum") document.documentElement.setAttribute("data-skin", uiSkin);
             } catch (e) {}
         </script>
         <!-- Google Identity Services — browser-side sign-in for the direct-to-sandbox ID token. Loads async;

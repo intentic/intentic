@@ -4,10 +4,8 @@ A **skin** is a whole-interface look, as opposed to a colour. The accent picker 
 answer *what colour is this app*; a skin answers *what is this app made of*: what a surface is, what an edge is,
 what light does when you touch something.
 
-There are two, and they are deliberately opposite materials:
+There is one:
 
-- **HUD** (`hud.css`): a heads-up display. Deep cool glass over a survey grid, hairlines that glow, corner
-  brackets instead of soft rounding, angular geometry, and an angular technical face on headings.
 - **Sanctum** (`sanctum.css`): **the site's design system, worn by the app**. Same metals, same ink, same
   materials, same ornament kit as `_site/site/src/styles/global.css`: a near-colourless warm ash ground with a
   whisper of tooth in it, one gold rule round everything, cream ink, and the site's two faces. The rail and
@@ -15,15 +13,13 @@ There are two, and they are deliberately opposite materials:
   plaques with their labels cut into them, one carved stone and one cast bronze. A distant temple stands on the
   floor of the window where the app has put nothing in front of it.
 
-**They part company on the accent, and that is the interesting difference.** The HUD is *lit* by the colour the
-user picked: every glow, edge and focus ring is mixed from `--color-primary-*`, so Lagoon gives it cyan and Ember
-gives the same instrument panel amber. Sanctum's structure is **fixed gold** (`#c9a05c`, the site's own) whatever
-the picker says, and spends the accent only where it means something: a link, a focus ring, a ticked box. That is
-not a smaller idea, it is the site's own rule (*structure is gold, the ember is spent, never spread*) and it is
-what stopped the skin reading as one warm smear. A skin that lets the accent paint its hairlines has a thousand
-of them to paint.
+**Its structure is FIXED GOLD, and that is the decision worth reading.** `#c9a05c`, the site's own, whatever the
+accent picker says, and the accent is spent only where it means something: a link, a focus ring, a ticked box.
+That is not a smaller idea than letting the accent paint the chrome, it is the site's own rule (*structure is
+gold, the ember is spent, never spread*) and it is what stopped the skin reading as one warm smear. A skin that
+lets the accent paint its hairlines has a thousand of them to paint.
 
-## The rule both of them keep
+## The rule it keeps
 
 **Every surface a word sits on is flat in the low frequencies, and opaque.** Overlays that cover live text are
 solid, never translucent, and no plate ever carries a *gradient*. A wash down the top of a card puts the first
@@ -38,11 +34,11 @@ under a hundredth of a contrast ratio point.
 
 Sanctum has paid for that rule and seventeen others, and the notes are kept at the top of the file:
 
-- **A skin that says `.p-button` has said it about the tiers that are meant to have no chrome.** Both skins
-  wrote their plate — a border colour, a bevel, a drop shadow, a wash, a hover glow — against every `.p-button`
+- **A skin that says `.p-button` has said it about the tiers that are meant to have no chrome.** The skin
+  wrote its plate — a border colour, a bevel, a drop shadow, a wash, a hover glow — against every `.p-button`
   with no exclusion, so `text` and `link`, the tiers the app defines as *nothing until you point at it*, came
   out as outlined boxes. It reached the whole of `<SandboxVerbs>`, which is the Start/Stop/… cluster on every
-  machine row. Reported as the app having border weights nobody had chosen. Both skins exclude the borderless
+  machine row. Reported as the app having border weights nobody had chosen. The skin excludes the borderless
   variants now, spelled with `:where()` so the exclusion costs no specificity.
 - **A disabled control is a STAGE OF WORK, not a colour.** This one went round three times and every round is
   in the file. First it was painted at the *wall's own value*, against a live plaque of pale limestone, so the
@@ -150,17 +146,17 @@ Sanctum has paid for that rule and seventeen others, and the notes are kept at t
 
 ## How it works
 
-One attribute on `<html>`: `data-skin="hud"` or `data-skin="sanctum"`. Every rule in a skin's stylesheet is scoped
+One attribute on `<html>`: `data-skin="sanctum"`. Every rule in the skin's stylesheet is scoped
 to it, so an app with no skin selected is not a skin turned down: it is the skin's rules never matching. `none`
 writes no attribute at all.
 
 **Two routes are outside all of this, on purpose.** `/login` and `/setup` are built out of the marketing site's
 own material — see [`../styles/entry.css`](../styles/entry.css) — because a visitor meets them within a minute
-of leaving intentic.dev and has picked no skin yet. That sheet is imported **after** both skins in
+of leaving intentic.dev and has picked no skin yet. That sheet is imported **after** the skin in
 `styles.css`: a skin's rules are `[data-skin=…] .p-button…` (an attribute plus a class), which weighs exactly
 what `.entry .p-button…` weighs, so source order is what settles the tie — the same argument that puts the
-skins after the design system, one step further along. The one thing specificity cannot settle is the
-route-element backdrop above, which both skins exclude by name.
+skin after the design system, one step further along. The one thing specificity cannot settle is the
+route-element backdrop above, which the skin excludes by name.
 
 Each stylesheet overrides three tiers and then names a handful of components:
 
@@ -172,11 +168,11 @@ Each stylesheet overrides three tiers and then names a handful of components:
 
 Only after those does a skin name individual selectors, and only ever to change **paint**: colour, border,
 shadow, background, outline. Never a width, a padding or a position: a skin that moves things is a skin that
-breaks screens it has never been looked at on. That is also why neither skin touches the **body** face: heading
+breaks screens it has never been looked at on. That is also why the skin doesn't touch the **body** face: heading
 faces are paint, but the reading face sets the metrics of every truncated label in the app, which is geometry.
 
 Component rules sit in `@layer components`, one layer below Tailwind's utilities on purpose: a caller who wrote
-`bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in each
+`bg-warning/10` on a card still wins, exactly as they do without the skin. The one deliberate exception in the
 file is the section-label rule, which is unlayered because the treatment it restates is spelled out by utilities.
 
 The attribute lives on the `<html>` of every window the app runs in, and each window sets its own: a floating
@@ -187,9 +183,9 @@ attributes onto it, and `data-skin` was missing from that list for as long as sk
 rendered in the app's default look with every stylesheet present and every rule inert. There is no list to keep
 in step now.
 
-Both skins imply a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
-when a skin goes on. Each skin's display webfont is fetched only while that skin is active, and switching between
-them re-points the single `<link>` rather than stacking a second one. Sanctum asks for the site's two: Baloo 2
+The skin implies a dark scheme (PrimeVue keys its own dark preset off `data-mode`), so `useSkin` flips the scheme
+when a skin goes on. The skin's display webfont is fetched only while that skin is active, and the `<link>` is
+re-pointed rather than stacked when the skin changes. Sanctum asks for the site's two: Baloo 2
 for every heading and label in the chrome, Playfair Display for the one heading in the app drawn at display size
 (`h1.text-4xl`, the sign-in line): the site's own size band, where a serif with hairlines still has hairlines.
 
@@ -197,9 +193,9 @@ for every heading and label in the chrome, Playfair Display for the one heading 
 
 Delete this directory, then remove three one-line call sites:
 
-1. `web/src/styles.css`: the two `@import "./skins/…"` lines
+1. `web/src/styles.css`: the `@import "./skins/…"` line
 2. `web/src/pages/settings/SettingsAppearance.vue`: the `useSkin` import and the `── SKINS ──` block. The Theme
-   row then wants its two-option control back: `themeOptions` loses the `hud` and `sanctum` entries and becomes
+   row then wants its two-option control back: `themeOptions` loses the `sanctum` entry and becomes
    the plain light/dark pair bound to `:model-value="scheme"` / `@update:model-value="setScheme"`, and the row's
    icon goes back to ``scheme === `dark` ? `moon` : `sun` ``
 3. `web/index.html`: the `ui-skin` clause in the anti-flash script
@@ -210,7 +206,7 @@ that is what selecting the skin set: the leftover `ui-skin` key in their browser
 
 ## Adding another skin
 
-Add `<name>.css` beside the two, scoped to `[data-skin="<name>"]`; add the value to `Skin` in `useSkin.ts`; add an
+Add `<name>.css` beside the one here, scoped to `[data-skin="<name>"]`; add the value to `Skin` in `useSkin.ts`; add an
 option to `themeOptions` and an icon to `THEME_ICON` in the appearance page; add the `@import` to `styles.css` and
 the name to the anti-flash list in `index.html`. If it wants a face of its own, `FONT_HREF` in `useSkin.ts` is
 where that lives.

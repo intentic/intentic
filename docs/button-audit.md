@@ -128,18 +128,17 @@ than re-implement:
 
 ---
 
-## 3. The quiet tier had chrome under both skins
+## 3. The quiet tier had chrome under the skin
 
 ⚑ `sanctum.css` set `border-color`, an inset bevel and a drop shadow on **every** `.p-button`, with no
 exclusion for `.p-button-text` / `.p-button-link`. PrimeVue's transparent border came back as a gold hairline,
-and the bevel gave a control that is meant to be a *word* the silhouette of a plate. `hud.css` did the same
-with a wash and a glow.
+and the bevel gave a control that is meant to be a *word* the silhouette of a plate.
 
 That tier is defined as *no chrome at all* — Cancel, Dismiss, an inline escape hatch, and the whole of
 `<SandboxVerbs>`, which is the `Start` / `…` cluster on every machine row. That is the second screenshot: two
 controls that should be bare words, drawn as outlined boxes.
 
-Both skins now exclude the borderless variants from the plate and from its hover, spelled with `:where()` so
+The skin now excludes the borderless variants from the plate and from its hover, spelled with `:where()` so
 the exclusion costs no specificity and the plaque's own bevel still wins.
 
 ---
@@ -188,7 +187,7 @@ that shouted.
 
 ⚑ Four controls pinned themselves to one step of the palette with `bg-primary-600` + `text-white`: the
 human-help hand-back button (twice), the browser "driving" toggle, and a menu row's active highlight. The
-accent is a runtime choice — there is a picker — and both skins repaint it, so those four opted out of all of
+accent is a runtime choice — there is a picker — and the skin repaints it, so those four opted out of all of
 it. Invisible until somebody switches theme, which is why it had survived.
 
 They take the tier or the fill tokens now. The menu row takes `ui-row-select-on`, which is what every other

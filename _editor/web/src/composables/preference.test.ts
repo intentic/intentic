@@ -85,10 +85,10 @@ describe(`a change made in another window`, () => {
             apply: (v) => applied.push(v),
         });
 
-        receivePreferenceChange({ key: `ui-skin`, raw: `hud` });
+        receivePreferenceChange({ key: `ui-skin`, raw: `sanctum` });
 
-        expect(skin.value).toBe(`hud`);
-        expect(applied).toEqual([`none`, `hud`]);
+        expect(skin.value).toBe(`sanctum`);
+        expect(applied).toEqual([`none`, `sanctum`]);
     });
 
     it(`is adopted rather than written back, so this window cannot overwrite what it was told`, async () => {
@@ -121,7 +121,7 @@ describe(`a change made in another window`, () => {
 
     it(`takes every preference back to what it reads with nothing stored, when the whole store went`, async () => {
         const { definePreference, receivePreferenceChange } = await load();
-        localStorage.setItem(`ui-skin`, `hud`);
+        localStorage.setItem(`ui-skin`, `sanctum`);
         localStorage.setItem(`ui-text-size`, `large`);
         const skin = definePreference<string>({ key: `ui-skin`, read: (raw) => raw ?? `none`, write: (value) => value });
         const textSize = definePreference<string>({ key: `ui-text-size`, read: (raw) => raw ?? `compact`, write: (value) => value });
