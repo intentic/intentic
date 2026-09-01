@@ -21,13 +21,15 @@ import ProviderLogo from "./ProviderLogo.vue";
  * and the transcript inside it stops widening at its reading measure (chat.css's `.chat-turns`), so past a
  * point every extra pixel is centring. That surplus is what this occupies, and `railFitsBeside` is the whole of
  * the rule: no pane ever pays a pixel for it, and dragging the window narrower is how it goes away. It is a
- * READOUT, not a control — nothing here is clickable except the two things that are about the readings
- * themselves — because the decision it informs is made in the composer, and a second place to pick an account
- * would be a second answer to a question that already has one.
+ * READOUT, not a control — the one thing that can be pressed is the age of the readings, which re-measures them
+ * — because the decision it informs is made in the composer, and a second place to pick an account would be a
+ * second answer to a question that already has one.
  *
- * WHAT IT DOES NOT DO. It does not average, rank models, or estimate what a task will cost. It says which
- * subscriptions have room and how much, in the order you would reach for them, and hands everything else to the
- * Usage tab by name. The projection and the three rules behind it are in composables/chat/chatCapacity.ts. */
+ * WHAT IT DOES NOT DO. It does not average, rank models, or estimate what a task will cost, and it does not
+ * carry a link to the ledger it is a summary of. The exhaustive version is the Usage tab's, in the app's own
+ * window — and reaching it from a pop-out means SUMMONING that window, which is a larger thing to do than a
+ * glance surface should offer on a stray press. It says which subscriptions have room and how much, in the
+ * order you would reach for them. The projection and its rules are in composables/chat/chatCapacity.ts. */
 
 /* Ask for fresh readings on arrival rather than drawing whatever the tab loaded with. A plan's pools are
  * ACCOUNT-wide — the desktop app, another Claude Code and claude.ai itself spend the same allowance — so a
@@ -103,9 +105,13 @@ const remeasureLabel = computed(() =>
     <!-- Drawn only once there is something to say. A sandbox with no AI account connected gets no rail at all:
          an empty column standing beside the transcript would be 240px spent teaching the reader that this
          surface has nothing for them, every time they open a window. -->
+    <!-- NO SURFACE OF ITS OWN: no card fill, no rule down its left. This is a readout standing in the window's
+         empty margin, not a panel competing with the transcript, and a border plus a fill would draw a second
+         frame around something that is already separated from the panes by a column of air. What tells the
+         reader it is a distinct region is the whitespace and the heading, which is all it needs to be. -->
     <aside
         v-if="!accountsLoaded || capacity.accounts > 0"
-        class="flex h-full min-h-0 shrink-0 flex-col border-l border-line bg-card"
+        class="flex h-full min-h-0 shrink-0 flex-col"
         :style="{ width: uiLength(CAPACITY_RAIL_PX) }"
         aria-label="Plan headroom"
     >
@@ -146,8 +152,8 @@ const remeasureLabel = computed(() =>
                 <!-- ONE BLOCK PER PROVIDER, because the provider is the choice a reader makes here: the
                      translator balances turns across a provider's accounts, so "which of my 31 Google sign-ins"
                      is nobody's decision. The mark and the name head the block; the bars hang under it with no
-                     frame of their own, since the column is already a bordered surface and a card per provider
-                     inside it would be a second frame saying what whitespace says for free. -->
+                     frame of their own, since the column draws no surface at all and a card per provider would
+                     be the only box on screen, saying what the gap above it already says for free. -->
                 <div v-for="entry in capacity.providers" :key="entry.provider" class="flex flex-col gap-1.5">
                     <div class="flex items-center gap-1.5">
                         <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
@@ -232,16 +238,5 @@ const remeasureLabel = computed(() =>
                 </div>
             </div>
         </template>
-
-        <!-- The exhaustive version, one press away: every account, every pool, what has been spent against it.
-             In the app's own window, not this one — a link pressed in a popped-out panel is handled there
-             (composables/mainWindow.ts), so the chat the reader popped out stays where they put it. -->
-        <RouterLink
-            to="/sandbox/usage#accounts"
-            class="ui-row-select shrink-0 border-t border-line px-3 py-2 text-2xs text-link"
-            v-tooltip.left="`Every account, every pool, and what has been spent against it`"
-        >
-            All plan limits
-        </RouterLink>
     </aside>
 </template>

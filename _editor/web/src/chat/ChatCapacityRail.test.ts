@@ -11,7 +11,6 @@
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h } from "vue";
-import { RouterLinkStub } from "../testing/routerLinkStub";
 
 // The rail's import chain pulls in app-wide singletons that read browser globals at import time (@intentic/ui's
 // useDevice reads window.matchMedia; environment.ts reads window.env).
@@ -34,11 +33,9 @@ const mount = (accounts: Partial<OauthAccount>[], routed: TranslatorAccounts = N
     accountsLoaded.value = true;
     const el = document.createElement(`div`);
     document.body.append(el);
-    // Icon and v-tooltip are registered app-wide by installUi and RouterLink by the router itself; stand-ins
-    // keep this off the whole UI plugin and off a router this test has no navigation to make.
+    // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep this test off the whole UI plugin.
     app = createApp({ render: () => h(ChatCapacityRail) });
     app.component(`Icon`, defineComponent({ props: { name: String }, render: () => h(`i`) }));
-    app.component(`RouterLink`, RouterLinkStub);
     app.directive(`tooltip`, {});
     app.mount(el);
     return el;
