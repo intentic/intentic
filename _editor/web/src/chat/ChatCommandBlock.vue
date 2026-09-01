@@ -21,7 +21,12 @@
      actually defend, so it is the only one drawn.
 
      UNDERLINE AS WELL AS TINT, because the mark is the one thing on this card that must survive being read in
-     greyscale, by someone who cannot distinguish the amber, or on a screen in sunlight. -->
+     greyscale, by someone who cannot distinguish the amber, or on a screen in sunlight.
+
+     AND THE COLOUR HAS TO BE THE RIGHT SCHEME'S. Shiki hands each piece BOTH themes at once — an inline `color`
+     holding the light one and a `--shiki-dark` custom property holding the dark — and swapping between them is
+     a stylesheet's job, not this component's (`.chat-command-block` in chat.css, the same flip `.chat-code` and
+     the design system's `.ui-code` carry). That is why the <pre> wears a class it never styles itself with. -->
 <script setup lang="ts">
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { type CodeToken, CopyButton, Icon, ui, useHighlighter } from "@intentic/ui";
@@ -82,7 +87,7 @@ const shown = computed(() => (clamped.value ? lines.value.slice(0, CLAMP_LINES) 
                  button floats over the top-right corner, and a wrapped first line ran straight under it. Same
                  trick the design system's <Code> uses (code.css, keyed off `ui-code-copyable`). -->
             <pre
-                class="overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
+                class="chat-command-block overflow-hidden rounded-md border border-line bg-canvas py-2 pr-16 pl-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
             ><code><template v-for="(line, index) in shown" :key="index"><span v-for="(piece, at) in line.pieces" :key="at" :style="piece.style" :class="piece.marked ? 'chat-command-mark' : 'chat-command-dim'">{{ piece.text }}</span>{{ index === shown.length - 1 ? "" : "\n" }}</template></code></pre>
             <!-- The copy always carries the FULL text, never the clamped rendering: someone copying a command
                  off this card is taking it somewhere to run or to read, and half of one is worse than none. -->

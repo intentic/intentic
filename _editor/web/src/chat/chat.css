@@ -648,20 +648,29 @@
     background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
     border-color: color-mix(in srgb, var(--color-primary-500) 35%, transparent);
 }
-/* THE TWO HALVES OF A HELD COMMAND (ChatCommandBlock): the fragment the gate stopped it for, and everything
-   else. Both rules are drawn OVER Shiki's own colours, which arrive as inline styles on the same spans, so
-   neither may set `color` — the grammar has to keep reading through both.
+/* THE HELD COMMAND'S OWN COLOURS (ChatCommandBlock). Every Shiki surface in this app is coloured twice over:
+   an inline `color` carrying the LIGHT theme's token, and a `--shiki-dark` custom property beside it carrying
+   the dark one. Dark mode is then a pure CSS swap, no re-highlighting — but it only happens where a rule like
+   this one says it does, and an inline style can only be beaten with `!important`. Without it the card renders
+   light-plus on a near-black ground, which is the palette at its very worst: #a31515 paths, #0000ff flags and
+   #098658 numbers, every one of them a dark colour chosen to be read on white. The same flip, for the same
+   reason, as `.chat-code` above, `.ui-code` in the design system's code.css, and the workspace search list. */
+[data-mode="dark"] .chat-command-block span {
+    color: var(--shiki-dark) !important;
+}
+/* THE TWO HALVES OF A HELD COMMAND: the fragment the gate stopped it for, and everything else. Both rules are
+   drawn OVER those same colours, so neither may set `color` — the grammar has to keep reading through both.
 
    The dim is opacity rather than a colour, for exactly that reason: a grey would erase the syntax highlighting
    this card just gained, and the point is a hierarchy within colour, not instead of it.
 
-   80%, and the number was moved UP after looking at it rather than reasoned to. The first draft was 62%, which
-   is a defensible figure against black text on white and quite wrong here: this runs over dark-plus's already
-   low-contrast palette on the card's own dark wash, so the two reductions compound and the command came out as
-   a grey smear with one amber word floating in it. That is a card that has made itself dishonest to buy the
-   mark some contrast — the unmarked text is still the command someone is about to approve, and most of what
-   they need to judge is in it. At 80% the whole line reads as code and the mark still lands first, which is
-   all the dim was ever for. */
+   80%, and the number was arrived at by looking rather than reasoned to. The first draft was 62%, which is a
+   defensible figure against black text on white and too deep a cut here: dark-plus is a mid-brightness palette
+   to begin with, so on the card's dark wash the two reductions compound and the command comes out a grey smear
+   with one amber word floating in it. That is a card that has made itself dishonest to buy the mark some
+   contrast — the unmarked text is still the command someone is about to approve, and most of what they need to
+   judge is in it. At 80% the whole line reads as code and the mark still lands first, which is all the dim was
+   ever for. */
 .chat-command-dim {
     opacity: 0.8;
 }
