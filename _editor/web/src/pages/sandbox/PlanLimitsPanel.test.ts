@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 //
 // jsdom because both subjects are POSITION, where a fact is drawn, which is the one thing a projection test
-// cannot see. The panel's data is pinned next door in usageStatus.test.ts; what is pinned here is the two ways
-// that data was being mis-placed on screen:
+// cannot see. The panel's data is pinned next door in usageStatus.test.ts; what is pinned here is the way
+// account headings sit above the pool meters they head:
 //
-//   1. an account was set exactly like the pool labels underneath it, so a provider holding three accounts drew
-//      nine meters in one column with nothing to say which three belonged to which sign-in;
-//   2. a refusal the daemon had attributed to ONE account was drawn over the provider heading all of them:
-//      "Claude Code refused its credential" above three accounts, two of which had never refused anything.
+//   an account was set exactly like the pool labels underneath it, so a provider holding three accounts drew
+//   nine meters in one column with nothing to say which three belonged to which sign-in.
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, expect, it } from "vitest";
 import { type App, createApp, defineComponent, h, nextTick } from "vue";
@@ -16,10 +14,9 @@ import { type App, createApp, defineComponent, h, nextTick } from "vue";
 // useDevice reads window.matchMedia; environment.ts reads window.env).
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
-const { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } = await import("../../composables/chat/providerAccounts");
+const { accountsLoaded, providerAccounts, translatorAccounts } = await import("../../composables/chat/providerAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
-const HOUR = 3_600_000;
 
 // Three Claude accounts, as this sandbox actually holds them: two named by their own email, one still carrying
 // the provider's default name with an email behind it: the row that identifies nothing on name alone.
@@ -51,7 +48,6 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    providerRefusals.value = {};
 });
 
 // The account's own line, found by the name printed on it rather than by position: the tiers are what this
@@ -82,44 +78,6 @@ it(`names who an account signs in as when its own label does not`, () => {
 it(`does not print an identity twice for an account already named by its email`, () => {
     const el = mount([claudeAccount({ label: `first@example.com`, email: `first@example.com` })]);
     expect(el.textContent?.match(/first@example\.com/g)?.length).toBe(1);
-});
-
-/* The refusal, and the reason this test file exists. The daemon records the account a native turn was serving;
- * drawing that on the provider line accuses every account under it. */
-it(`draws a refusal under the account it names, not over the provider heading all of them`, async () => {
-    providerRefusals.value = {
-        claude: { at: Date.now() - 3 * HOUR, kind: `auth`, message: `401 OAuth access token has been revoked.`, account: `acc-2` },
-    };
-    const el = mount([claudeAccount({}), claudeAccount({ id: `acc-2`, label: `second@example.com` })]);
-
-    const refusal = [...el.querySelectorAll(`p`)].find((line) => /Refused its credential/.test(line.textContent ?? ``));
-    // Inside its own account's block, and that block is the refused one, not a sibling, and not the group.
-    const block = refusal?.closest(`div.flex.flex-col`);
-    expect(block?.textContent).toContain(`second@example.com`);
-    expect(block?.textContent).not.toContain(`first@example.com`);
-});
-
-// Past three accounts the panel folds the list into a strip of bars, so there is no per-account block to hang
-// the line on. It stays at group level there, but says whose refusal it is, because "one of these 24 refused"
-// is not an answer to "which one do I go and fix".
-it(`names the account in the line when the group is folded and has no block to draw it in`, () => {
-    providerRefusals.value = {
-        claude: { at: Date.now() - 3 * HOUR, kind: `limit`, message: `usage limit reached`, account: `acc-3` },
-    };
-    const el = mount(
-        [1, 2, 3, 4].map((n) =>
-            claudeAccount({
-                id: `acc-${n}`,
-                label: `account-${n}@example.com`,
-                // The refused one is still spent, so nothing has answered it and it is drawn as the live fact
-                // it is: the pairing a limit refusal actually appears in.
-                ...(n === 3 ? { usage: { measuredAt: Date.now(), windows: [{ kind: `five_hour`, utilization: 96 }] } } : {}),
-            }),
-        ),
-    );
-
-    const refusal = [...el.querySelectorAll(`p`)].find((line) => /Hit its usage limit/.test(line.textContent ?? ``));
-    expect(refusal?.textContent?.trim()).toBe(`account-3@example.com · Hit its usage limit 3h ago, usage limit reached`);
 });
 
 /* ---- the alarm ------------------------------------------------------------------------------------------------
@@ -174,19 +132,4 @@ it(`caps the names rather than growing a column again, and says how many it held
     more?.click();
     await nextTick();
     expect(el.textContent).toContain(`account-14@example.com`);
-});
-
-it(`reads a healed refusal as history: a footnote about the account, not an alarm over the provider`, () => {
-    // Refused three hours ago, and the same account has been read since without a reauth flag: the credential
-    // provably works, which is the state the daemon's own token re-mint leaves behind.
-    providerRefusals.value = {
-        claude: { at: Date.now() - 3 * HOUR, kind: `auth`, message: `401 OAuth access token has been revoked.`, account: `acc-1` },
-    };
-    const el = mount([claudeAccount({}), claudeAccount({ id: `acc-2`, label: `second@example.com` })]);
-
-    const refusal = [...el.querySelectorAll(`p`)].find((line) => /Refused its credential/.test(line.textContent ?? ``));
-    expect(refusal?.textContent?.trim()).toBe(`Refused its credential 3h ago, authenticated fine since.`);
-    // Quiet, not shouted: the warning tone is reserved for a refusal that still describes the situation.
-    expect(refusal?.className).toContain(`text-subtle`);
-    expect(refusal?.className).not.toContain(`text-warning`);
 });

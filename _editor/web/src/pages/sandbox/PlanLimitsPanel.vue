@@ -3,7 +3,7 @@ import { providerLabel } from "@intentic/sandbox-contract";
 import { RowGroup, RowNote, SearchBar, ui } from "@intentic/ui";
 import { computed, onMounted, ref } from "vue";
 import ProviderLogo from "../../chat/ProviderLogo.vue";
-import { accountsLoaded, providerAccounts, providerRefusals, translatorAccounts } from "../../composables/chat/providerAccounts";
+import { accountsLoaded, providerAccounts, translatorAccounts } from "../../composables/chat/providerAccounts";
 import { refreshConnections } from "../../composables/chat/useChat";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import {
@@ -60,7 +60,7 @@ onMounted(() => void refreshConnections());
 const outline = useSandboxOutline(computed(() => !accountsLoaded.value));
 
 const rows = computed(() => planLimitRows(providerAccounts.value, translatorAccounts.value));
-const groups = computed(() => planLimitGroups(rows.value, providerRefusals.value));
+const groups = computed(() => planLimitGroups(rows.value));
 const summary = computed(() => planLimitSummary(rows.value));
 
 // ---- capacity ------------------------------------------------------------------------------------------------
@@ -99,16 +99,6 @@ const groupNote = (group: PlanLimitGroup): string => {
     }
     return account.identity === undefined ? account.label : `${account.label} · ${account.identity}`;
 };
-
-/* WHERE A REFUSAL BELONGS. The daemon names the account it was serving whenever it has one to name (a native
- * turn does; a routed turn is served by whichever auth file CLIProxyAPI picked, so it names nobody), and drawing
- * that on the provider line instead reads as "all of Claude Code is broken", which is what put a three-hour-old
- * 401 above three accounts that had been serving turns all afternoon.
- *
- * So it goes on its own account's block, wherever that block exists. A folded group draws none, and a lone
- * account IS the provider line; both keep the line at group level and name the account inside it instead. */
-const refusedRowId = (group: PlanLimitGroup): string | undefined =>
-    isInline(group) && single(group) === undefined ? group.refusedRow?.id : undefined;
 
 // Never all 31: past this the bars are hairlines and the roster is the better answer. Rows arrive tightest-first,
 // so a truncated strip keeps the accounts that gate a turn, and says that it truncated.
@@ -258,23 +248,6 @@ const roster = computed(() => {
                          read as another provider, which is exactly what three emails under "Claude Code" used
                          to be read as. -->
                         <div class="flex flex-col gap-3 pb-1 pl-3">
-                            <!-- The last time this provider refused a turn, when it belongs to no block of its own (see
-                             refusedRowId): named with its account where the daemon knew one, because a bare provider-wide
-                             refusal over 24 bars answers "which of these do I go and fix?" with nothing.
-                             It sits ABOVE the meters because it OVERRIDES them while it is current: a meter is a poll and
-                             this is an observation, so a green bar under a fresh refusal means the poll is stale, not that
-                             there is room. Once something taken since has answered it, it drops to a footnote saying so and
-                             the provider's own sentence moves to the hover. Two lines at most: the vendors' sentences run to
-                             a paragraph with a pricing URL on the end, and the part that matters is at the front. -->
-                            <p
-                                v-if="group.refusal !== undefined && refusedRowId(group) === undefined"
-                                class="line-clamp-2 text-2xs"
-                                :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                                v-tooltip.top="group.refusal.detail"
-                            >
-                                {{ group.refusedRow === undefined ? group.refusal.line : `${group.refusedRow.label} · ${group.refusal.line}` }}
-                            </p>
-
                             <!-- Small provider: the meters themselves. Nothing that fits is folded away. -->
                             <template v-if="isInline(group)">
                                 <!-- A hairline between accounts, and none above the first: three accounts of three pools each
@@ -309,16 +282,6 @@ const roster = computed(() => {
                                             read {{ formatAge(row.measuredAt) }}
                                         </span>
                                     </div>
-
-                                    <!-- This account's own refusal, under its own name: see refusedRowId. -->
-                                    <p
-                                        v-if="group.refusal !== undefined && refusedRowId(group) === row.id"
-                                        class="line-clamp-2 text-2xs"
-                                        :class="group.refusal.current ? `text-warning` : `text-subtle`"
-                                        v-tooltip.top="group.refusal.detail"
-                                    >
-                                        {{ group.refusal.line }}
-                                    </p>
 
                                     <p v-if="row.pools.length === 0" class="text-2xs text-subtle">
                                         {{
