@@ -2,13 +2,14 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
 import { expect, test, vi } from "vitest";
 
-/* WHICH BINARIES THE IMAGE CARRIES IS NOT WHAT THIS FILE ASSERTS. The opencode arm's health asks the real PATH
- * whether the feature pack is installed, which makes its answer a property of the machine the suite happens to
- * run on: present on a developer's box, absent in the CI container, and the assertions below are about the
- * CREDENTIAL logic either way. Stubbed present so the unit tests one thing.
- *
- * Spread over the real module rather than replaced wholesale: `resolveOnPath` is reached from elsewhere in
- * this graph, and a factory naming only `onPath` would leave that one undefined. */
+/* WHICH BINARIES THE IMAGE CARRIES IS NOT WHAT THIS FILE ASSERTS. The opencode arm's health asks whether the
+ * feature pack is installed (engine store or PATH), which makes its answer a property of the machine the suite
+ * happens to run on: present on a developer's box, absent in the CI container, and the assertions below are
+ * about the CREDENTIAL logic either way. Stubbed present so the unit tests one thing. */
+vi.mock("../engines/engine-resolve.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("../engines/engine-resolve.js")>()),
+    engineBinary: async () => "/usr/bin/opencode",
+}));
 vi.mock("../platform/on-path.js", async (importOriginal) => ({
     ...(await importOriginal<typeof import("../platform/on-path.js")>()),
     onPath: async () => true,
