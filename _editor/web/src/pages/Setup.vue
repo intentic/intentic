@@ -1744,7 +1744,7 @@ watch(commandReady, (ready) => {
              arithmetic: steps (max-w-3xl) + gap + the aside's own width, so widening the aside to fit the
              cleanup one-liner came out of the page's margins rather than out of the steps. -->
         <div
-            class="animate-fade-in mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[74rem]"
+            class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5 md:gap-4 md:px-6 md:py-8 xl:max-w-[74rem]"
         >
             <!-- THE MASTHEAD, laid out the way the site lays out every page but its home page: the mark, then
                  an eyebrow, a carved heading and a line of lede, LEFT-ALIGNED down the column the work is in.
@@ -2487,9 +2487,7 @@ watch(commandReady, (ready) => {
                                      a link offering what the reader can already see on the row above sends them
                                      looking for something else. -->
                                 <template v-if="otherMachinesFolded">
-                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">
-                                        Use a machine we host
-                                    </button>
+                                    <button type="button" :class="ui.linkButton()" @click="showOtherMachines">Use a machine we host</button>
                                     <span aria-hidden="true" class="text-subtle">·</span>
                                 </template>
                                 <button type="button" :class="ui.linkButton()" @click="showCommand = !showCommand">

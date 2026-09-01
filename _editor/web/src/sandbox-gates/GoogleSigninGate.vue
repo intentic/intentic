@@ -63,7 +63,7 @@ const backToSetup = async (): Promise<void> => {
 
 <template>
     <div v-if="needsSignIn" class="fixed inset-0 z-50 flex items-center justify-center bg-canvas/70 p-6 backdrop-blur-sm">
-        <div class="animate-fade-in w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-xl">
+        <div class="w-full max-w-sm rounded-2xl border border-line bg-card p-6 shadow-xl">
             <div class="flex flex-col items-center gap-3 text-center">
                 <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-overlay text-link">
                     <Icon name="google" class="text-lg" />

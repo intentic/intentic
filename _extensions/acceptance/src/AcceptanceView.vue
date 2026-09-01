@@ -261,13 +261,13 @@ const statuses = computed<Readonly<Record<string, { readonly label: string; read
 
 /* LOADING KEEPS THE SHAPE. Both lists here are a request away, and an area that paints blank and then pops a
  * list in reads as broken on a slow sandbox. So the rows that are coming stand in for themselves: the app's
- * skeleton idiom (see the Sandbox hub's connections list): a pulsing bar wherever text will land, in the row's
+ * skeleton idiom (see the Sandbox hub's connections list): a quiet bar wherever text will land, in the row's
  * own geometry, inside the real surface.
  *
  * Only the ROWS are placeholders. The repo groups around them are already known: `byRepo` is built from
  * workspace facts, not from this query, so the headings, and the composer that ends each group, are the real
  * ones from the first paint. */
-const skeletonBar = `animate-pulse rounded bg-content/10`;
+const skeletonBar = `rounded bg-content/10`;
 // Varied so the block reads as text rather than as a bar chart.
 const skeletonTitles = [`w-56`, `w-72`, `w-44`];
 
@@ -526,7 +526,7 @@ const run = async (model: PickedModel): Promise<void> =>
                     class="group flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left hover:bg-overlay"
                     @click="openRunId = entry.row.manifest.runId"
                 >
-                    <Icon :name="entry.row.running ? `spinner` : `history`" :class="['shrink-0 text-subtle', entry.row.running && `animate-spin`]" />
+                    <Icon :name="entry.row.running ? `spinner` : `history`" :spin="entry.row.running" class="shrink-0 text-subtle" />
                     <span class="min-w-0 flex-1">
                         <!-- What it TESTED, not how many. "3 stories" makes every run in the list look
                                      like every other one; the titles are how someone finds the run they

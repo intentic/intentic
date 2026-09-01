@@ -10,7 +10,7 @@
 // it ends.
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h } from "vue";
+import { type App, createApp, defineComponent, h, nextTick } from "vue";
 import type { PendingAction } from "../composables/agents/laneDrop";
 import type { FleetAgent } from "../composables/agents/useAgents";
 
@@ -81,7 +81,6 @@ const mount = (
         render: () =>
             h(AgentCard, {
                 agent,
-                now: 2,
                 ...(pending !== undefined ? { pending } : {}),
                 ...handlers,
             }),
@@ -104,6 +103,7 @@ const mount = (
 afterEach(() => {
     app?.unmount();
     app = undefined;
+    vi.useRealTimers();
     document.body.innerHTML = ``;
     providerAccounts.value = NO_ACCOUNTS;
 });
@@ -219,7 +219,7 @@ const starting = (): FleetAgent => ({
     title: `check the vue patterns`,
     model: `claude-opus-5`,
     updatedAt: 0,
-    startedAt: 1,
+    startedAt: Date.now(),
     attention: NO_ATTENTION,
     open: true,
     unread: false,
@@ -229,9 +229,20 @@ const starting = (): FleetAgent => ({
 it(`draws a sent turn the daemon has not filed as work in flight, with what this browser knows`, () => {
     const card = mount(starting());
     expect(card.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
-    // The model it went out under, and an elapsed measured from the send: `now` is 2ms against a 1ms start.
+    // The model it went out under, and an elapsed measured from the send.
     expect(card.textContent).toContain(`Claude Opus 5`);
     expect(card.textContent).toContain(`0s`);
+});
+
+it(`ticks its own elapsed readout without a clock prop from the transition group`, async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const card = mount(starting());
+    expect(card.textContent).toContain(`0s`);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await nextTick();
+    expect(card.textContent).toContain(`1s`);
 });
 
 /* The exit, on the state that most needs one. Its turn is genuinely running daemon-side, so the daemon has no

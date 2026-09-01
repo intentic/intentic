@@ -164,7 +164,7 @@ const counts = computed<TallyItem[]>(() => {
     }
     return [
         { label: `failed`, value: c.failed, variant: `danger` },
-        { label: `running`, value: c.running, variant: `info`, pulse: true },
+        { label: `running`, value: c.running, variant: `info` },
         { label: `passed`, value: c.success, variant: `success`, always: true },
         { label: `other`, value: c.other, variant: `neutral` },
     ];

@@ -81,19 +81,17 @@ afterEach(() => {
 //
 // Seeded at a high revision, so the board's own refresh() at mount, which reaches a daemon that is not there
 // and answers nothing: cannot be mistaken for a newer roster.
-const seed = (): void =>
-    setAgents(
-        Array.from({ length: 10 }, (_unused, at): AgentSummary => ({
-            id: `a${at}`,
-            title: `agent ${at}`,
-            status: `landed`,
-            provider: `claude`,
-            harness: `native`,
-            updatedAt: 10_000 - at,
-            attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
-        })),
-        100,
-    );
+const roster = (): AgentSummary[] =>
+    Array.from({ length: 10 }, (_unused, at): AgentSummary => ({
+        id: `a${at}`,
+        title: `agent ${at}`,
+        status: `landed`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 10_000 - at,
+        attention: { plan: false, question: false, permission: false, service: false, capability: false, conflict: false },
+    }));
+const seed = (): void => setAgents(roster(), 100);
 
 // Reading a chat the board did not open: a tab click, a History row, a link. All of them land here.
 const openFromOutside = (id: string): void => {
@@ -101,7 +99,7 @@ const openFromOutside = (id: string): void => {
 };
 
 // The Finished lane is the board's third section, and a card is the only thing in it that offers a focus. Cards
-// on their way OUT are excluded: the lane animates a departure (TransitionGroup), and jsdom fires no
+// on their way OUT are excluded: the card animates its departure, and jsdom fires no
 // transitionend, so a card the board has already dropped would otherwise sit in the DOM for the rest of the run.
 const finishedCards = (el: HTMLElement): string[] =>
     [...el.querySelectorAll(`section`)[2]!.querySelectorAll(`[aria-label^="Focus agent:"]:not(.lane-leave-active)`)].map((card) =>
@@ -179,6 +177,34 @@ it(`scrolls again to a card the board once selected itself: the mark is one sele
     await settle();
 
     expect(reveals.at(-1)).toEqual({ card: `Focus agent: agent 0`, block: `nearest` });
+});
+
+/* A ROSTER FRAME IS NOT A LIST MOVE. Vue's TransitionGroup used to append and immediately remove a shallow
+ * clone of the first card after every parent update to probe whether its move class contained a transform.
+ * DevTools treats those real DOM mutations as a reason to rebuild the selected node's whole Styles pane, so
+ * every request that refreshed an agent made its CSS editor flash and discarded an edit in progress. */
+it(`does not insert probe cards when a roster frame updates an unchanged lane`, async () => {
+    seed();
+    const board = await mountBoard();
+    const inserted: Element[] = [];
+    const observer = new MutationObserver((records) => {
+        for (const record of records) {
+            for (const node of record.addedNodes) {
+                if (node instanceof Element && node.classList.contains(`session-card`)) {
+                    inserted.push(node);
+                }
+            }
+        }
+    });
+    observer.observe(board, { childList: true, subtree: true });
+
+    const next = roster();
+    next[0] = { ...next[0]!, updatedAt: next[0]!.updatedAt + 1 };
+    setAgents(next, 101);
+    await settle();
+    observer.disconnect();
+
+    expect(inserted).toEqual([]);
 });
 
 /* --- The split, and the click that ends it ------------------------------------------------------

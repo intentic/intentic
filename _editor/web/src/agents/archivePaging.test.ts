@@ -4,7 +4,7 @@
 //
 // The live lanes are bounded by what the user is working on, and the Finished lane windows itself on top of
 // that. The archive is bounded by nothing: it is every session the workspace has ever finished, and it used
-// to be drawn whole: one full card per row, each with its own slot in the lane's TransitionGroup. So on a
+// to be drawn whole: one full card per row, each with its own component and transition. So on a
 // workspace with a thousand sessions behind the door, the press that opened it built a thousand cards in a
 // single frame and the app looked hung, at the one moment the archive is meant to prove that filing things
 // away is cheap.

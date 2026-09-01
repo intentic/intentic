@@ -103,7 +103,7 @@ const startFix = (): void => {
          line rather than squeeze the commit subject to nothing — see <Row>'s own note on the prop. -->
     <DisclosureRow class="border-l-4" :class="tone.rowBorder" density="comfortable" hit="pair" body="drawer" wide-control v-model:open="expanded">
         <template #lead>
-            <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
+            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
             <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
         </template>
 

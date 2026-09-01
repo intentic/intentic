@@ -127,7 +127,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
         class="pointer-events-none fixed inset-x-3 z-50 flex max-h-[calc(100dvh-1.5rem)] flex-col items-end justify-end gap-2 overflow-hidden sm:left-auto sm:right-3 sm:max-w-[calc(100vw-1.5rem)]"
         :class="mobile ? `bottom-[calc(4.25rem+env(safe-area-inset-bottom))]` : `bottom-3`"
     >
-        <TransitionGroup name="lane">
+        <Transition v-for="entry in notifications" :key="entry.id" name="lane">
             <!-- TWO COLUMNS, NOT AN ICON BESIDE A STACK. The glyph is a grid item in the TITLE'S OWN ROW, so
                  `self-center` centres it against that row's real height and nothing has to guess an offset — the
                  nudge this was (`mt-0.5`, then `mt-1`) could only ever be right for one combination of type
@@ -135,8 +135,6 @@ const press = (entry: Notification, action: NotificationAction): void => {
                  is `col-start-2`, which is what keeps the body indented past the glyph now that the text is no
                  longer wrapped in a column of its own. -->
             <div
-                v-for="entry in notifications"
-                :key="entry.id"
                 class="pointer-events-auto grid max-w-full grid-cols-[auto_minmax(0,1fr)] gap-x-2 rounded-lg border border-line-strong bg-card p-3 shadow-lg"
                 :class="widthOf(entry)"
                 :role="roleOf(entry)"
@@ -205,7 +203,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                     />
                 </div>
             </div>
-        </TransitionGroup>
+        </Transition>
     </div>
     <!-- What the lane cannot tell a screen reader. Polite: a completion never interrupts. Questions carry
          `role="alert"` on the card itself, which is the one thing here allowed to. -->
@@ -214,11 +212,11 @@ const press = (entry: Notification, action: NotificationAction): void => {
 
 <style scoped>
 /* Rises into place and sinks out of it: the same direction both ways, so a card that expires on its own and one
- * dismissed by a press read as the same object leaving. `lane-move` is what makes the stack settle rather than
- * jump when something below a card retires. */
+ * dismissed by a press read as the same object leaving. Each card owns the transition: Vue's TransitionGroup
+ * probes move support by inserting a clone after every notification update, which makes DevTools rebuild its
+ * Styles pane while network-backed conditions change. */
 .lane-enter-active,
-.lane-leave-active,
-.lane-move {
+.lane-leave-active {
     transition:
         transform 200ms ease,
         opacity 200ms ease;

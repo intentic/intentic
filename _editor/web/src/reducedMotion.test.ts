@@ -2,23 +2,19 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/* THE MOTION BUDGET, MADE UNAVOIDABLE.
- *
- * `prefers-reduced-motion` is a preference the OS states plainly and this app used to honour by hand: three
- * call sites wrote `motion-reduce:animate-none` and thirty did not, because remembering is not a mechanism.
- * The answer now lives once, unlayered, in the design system's utilities.css, and this is what keeps it
- * whole: every animation class the app actually uses must be named there, or named here as a deliberate
- * exemption. Adding an animation therefore costs one line in one of two places, which is the point. The
- * failure this prevents is silent and invisible to whoever causes it: nobody who does not set the preference
- * can see that a new spinner ignores it.
- *
- * Scanned rather than listed, for the same reason the extension conformance tests scan: a list of "animations
- * we have" is a list that is wrong within a week. */
+/* Request and route activity must not start CSS animations: Chrome DevTools rebuilds an open Styles editor
+ * when those animations start or stop. Progress icons use an SVG animation inside Icon instead, where reduced
+ * motion is handled by its duration. Scanned rather than listed so a new call site cannot quietly regress it. */
 
 const here = import.meta.dirname;
 const uiRoot = resolve(here, `../../ui/src`);
 const extensionsRoot = resolve(here, `../../../_extensions`);
-const stylesheet = resolve(uiRoot, `styles/utilities.css`);
+const utilities = resolve(uiRoot, `styles/utilities.css`);
+const requestDrivenStyles = [
+    resolve(uiRoot, `styles/press.css`),
+    resolve(uiRoot, `styles/file-viewer.css`),
+    resolve(here, `pages/workspace/WorkspaceTree.vue`),
+];
 
 const sourceFiles = (dir: string): string[] => {
     const out: string[] = [];
@@ -56,62 +52,9 @@ const animationClasses = (): Set<string> => {
     return found;
 };
 
-/* WHAT EACH ONE DOES WHEN THE PREFERENCE IS SET, and why that is the right answer for it. Three verdicts:
- *
- * `stopped`: the motion was decoration and the state it reported is carried by something still.
- * `slowed` : the motion is load-bearing and stopping it would misreport (a frozen spinner reads as hung).
- * `kept`   : it is not movement. An opacity fade triggers nobody, and denying it is a cost with no benefit.
- *
- * Only `stopped` and `slowed` owe a rule in the stylesheet; `kept` is a decision recorded so that the next
- * person to look does not have to re-derive it. */
-const DECIDED: Record<string, { readonly verdict: "stopped" | "slowed" | "kept"; readonly why: string }> = {
-    "animate-pulse": { verdict: `stopped`, why: `decoration on a placeholder or a resting state` },
-    "animate-spin": { verdict: `slowed`, why: `the app's only running indicator on a dozen surfaces` },
-    "animate-fade-in": { verdict: `kept`, why: `opacity only, not movement` },
-    "animate-fade-in-up": { verdict: `stopped`, why: `re-pointed at the fade-only keyframes, losing the 8px travel` },
-    // Not an `animate-*` utility: the design system's loading placeholder owns its own sweep, in `components`.
-    skeleton: { verdict: `stopped`, why: `content the reader cannot act on yet` },
-};
-
-// The unlayered block at the end of utilities.css. Sliced by brace depth rather than matched, so a rule added
-// inside it is seen and one added after it is not.
-const reducedMotionBlock = (): string => {
-    const css = readFileSync(stylesheet, `utf8`);
-    const start = css.indexOf(`@media (prefers-reduced-motion: reduce)`);
-    expect(start, `utilities.css must carry a prefers-reduced-motion block`).toBeGreaterThan(-1);
-    let depth = 0;
-    for (let index = css.indexOf(`{`, start); index < css.length; index += 1) {
-        if (css[index] === `{`) {
-            depth += 1;
-        }
-        if (css[index] === `}`) {
-            depth -= 1;
-            if (depth === 0) {
-                return css.slice(start, index + 1);
-            }
-        }
-    }
-    throw new Error(`unterminated prefers-reduced-motion block`);
-};
-
 describe(`reduced motion`, () => {
-    it(`has a recorded decision for every animation the app uses`, () => {
-        const undecided = [...animationClasses()].filter((name) => DECIDED[name] === undefined).toSorted();
-        expect(
-            undecided,
-            `New animation classes. Decide what each does under prefers-reduced-motion: add a rule to the block in ` +
-                `_editor/ui/src/styles/utilities.css, then record the verdict in DECIDED here.`,
-        ).toEqual([]);
-    });
-
-    it(`carries a rule for everything it says is stopped or slowed`, () => {
-        const block = reducedMotionBlock();
-        for (const [name, { verdict, why }] of Object.entries(DECIDED)) {
-            if (verdict === `kept`) {
-                continue;
-            }
-            expect(block, `${name} is recorded as ${verdict} (${why}) but the stylesheet never names it`).toContain(`.${name}`);
-        }
+    it(`keeps request-driven CSS animation utilities out of app source`, () => {
+        expect([...animationClasses()].toSorted()).toEqual([]);
     });
 
     it(`keeps the answer central: no per-call-site opt-outs`, () => {
@@ -119,5 +62,14 @@ describe(`reduced motion`, () => {
         // nobody greps, and it is only ever written by whoever happened to remember.
         const strays = everySource.filter((text) => text.includes(`motion-reduce:`)).length;
         expect(strays, `motion-reduce: belongs in utilities.css, not at a call site`).toBe(0);
+    });
+
+    it(`keeps request-backed placeholders and effects outside CSS Animations`, () => {
+        const skeleton = readFileSync(utilities, `utf8`).match(/\.skeleton\s*\{[^}]*\}/)?.[0];
+        expect(skeleton).toEqual(expect.stringContaining(`background-color`));
+        expect(skeleton).not.toMatch(/\banimation\s*:/);
+        for (const file of requestDrivenStyles) {
+            expect(readFileSync(file, `utf8`), `${file} starts motion from request or navigation state`).not.toMatch(/\banimation\s*:/);
+        }
     });
 });

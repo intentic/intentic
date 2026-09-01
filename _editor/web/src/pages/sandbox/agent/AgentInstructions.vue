@@ -146,11 +146,7 @@ const reachLine =
 
         <!-- Terse responses: steers the assistant to answer concisely (no restating context/tool output),
              cutting its own output tokens. A stable system-prompt suffix, so it doesn't hurt prompt-cache hits. -->
-        <Row
-            icon="align-left"
-            title="Terse responses"
-            description="Answer concisely without restating context."
-        >
+        <Row icon="align-left" title="Terse responses" description="Answer concisely without restating context.">
             <template #control>
                 <ToggleSwitch
                     :model-value="settings?.terseOutput ?? false"
@@ -291,7 +287,7 @@ const reachLine =
             @update:model-value="setViewingBase"
         />
         <div v-if="builtinBusy" class="flex items-center gap-2 py-6 text-xs text-muted">
-            <Icon name="spinner" class="animate-spin" />
+            <Icon name="spinner" spin />
             Reading it from your sandbox…
         </div>
         <Notice v-else-if="builtinError !== undefined" :of="builtinError" class="mt-3" />

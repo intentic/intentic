@@ -21,7 +21,7 @@ const ROWS = [{ name: `w-32` }, { name: `w-44` }, { name: `w-24` }, { name: `w-4
 <template>
     <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
          indistinguishable from an empty board. The bars carry no text, so there is nothing to read. -->
-    <div class="animate-fade-in" role="status" aria-busy="true" aria-label="Loading deployments">
+    <div role="status" aria-busy="true" aria-label="Loading deployments">
         <StatusTally :skeleton="3" class="mb-5" />
 
         <!-- One host group. A second would be a guess about the user's infrastructure; one is the floor.

@@ -56,6 +56,9 @@ export default defineConfig({
         outDir: "dist",
         emptyOutDir: true,
         target: "es2024",
+        // Chrome DevTools rebuilds the selected node's Styles editor whenever a lazy route appends its CSS
+        // link. One initial sheet keeps stylesheet ownership stable across production route navigation.
+        cssCodeSplit: false,
         rolldownOptions: {
             // One HTML entry. A floating panel used to have a second: a near-empty page the panel's DOM was
             // teleported into from the window that opened it. It is a route of the app now (/floating/<panel>,

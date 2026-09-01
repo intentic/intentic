@@ -127,7 +127,7 @@ const view = computed(() => {
 
 <template>
     <div class="min-h-screen w-full bg-canvas p-6 text-content @container">
-        <div class="animate-fade-in mx-auto flex w-full max-w-4xl flex-col gap-4">
+        <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
             <AppBrand class="mb-4 text-2xl" />
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">

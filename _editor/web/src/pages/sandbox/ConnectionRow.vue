@@ -101,7 +101,7 @@ const DOT_TONE: Record<string, string> = {
     reauth: `bg-warning`,
     missing: `bg-content/25`,
     // Pulsing, because it is not a verdict: something is still being read.
-    unknown: `animate-pulse bg-content/25`,
+    unknown: `bg-content/25`,
 };
 </script>
 

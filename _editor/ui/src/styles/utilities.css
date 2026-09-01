@@ -1,4 +1,4 @@
-/* Custom utilities — thin scrollbars, loading placeholders and entrance animations, themed via role tokens. */
+/* Custom utilities — thin scrollbars and loading placeholders, themed via role tokens. */
 @layer utilities {
     /* The thin scrollbar's LOOK, and nothing else — reserving space is `.scrollbar-stable` below. The two were
      * one class, and that made every scroller pay for a gutter most of them can never fill: these boxes NEST.
@@ -31,14 +31,6 @@
 
     .scrollbar-thin::-webkit-scrollbar-thumb:hover {
         background: var(--color-muted);
-    }
-
-    .animate-fade-in {
-        animation: ui-fade-in 0.25s ease-out both;
-    }
-
-    .animate-fade-in-up {
-        animation: ui-fade-in-up 0.25s ease-out both;
     }
 
     /* A FINGER'S WORTH OF HIT AREA, WITHOUT MOVING A PIXEL.
@@ -107,10 +99,9 @@
 }
 
 /* Loading placeholder. The caller owns the BOX — `class="skeleton h-4 w-32 rounded-full"` — and this owns the
-   fill, the default radius and the motion, so every surface that renders a shape of the thing it is about to
-   show shimmers at one speed and one contrast instead of each view inventing its own pulse. The sweep is a
-   background-image over the fill (not opacity) so a skeleton laid on `bg-card` and one laid on `bg-canvas` read
-   the same.
+   fill and default radius, so every surface renders the same quiet shape for the thing it is about to show.
+   It deliberately stays still: request-driven CSS animations make Chrome DevTools rebuild an open Styles
+   editor when they start or stop.
 
    In `components`, not `utilities`, for the same reason cmp.ts merges classes: the caller always wins. A tie in
    `utilities` would resolve by source order, and this file loads after Tailwind's — which is how the first cut
@@ -119,10 +110,6 @@
     .skeleton {
         border-radius: 0.25rem;
         background-color: color-mix(in srgb, var(--color-content) 10%, transparent);
-        background-image: linear-gradient(90deg, transparent 20%, color-mix(in srgb, var(--color-content) 8%, transparent) 50%, transparent 80%);
-        background-repeat: no-repeat;
-        background-size: 250% 100%;
-        animation: ui-skeleton-sweep 1.6s ease-in-out infinite;
     }
 }
 
@@ -317,15 +304,6 @@
     }
 }
 
-@keyframes ui-skeleton-sweep {
-    from {
-        background-position: 150% 0;
-    }
-    to {
-        background-position: -50% 0;
-    }
-}
-
 /* The tick a checkbox draws when it is ticked (primeng.css wires it to .p-checkbox-icon). Scale AND opacity,
    not scale alone: a tick that grows from nothing at full opacity flickers at the first frame, where one that
    fades as it grows simply arrives. */
@@ -340,60 +318,21 @@
     }
 }
 
-/* EVERY LOOPING ANIMATION IN THE APP, ANSWERED IN ONE PLACE.
-
-   This was `motion-reduce:animate-none` written at the call site, which meant it was written at three call
-   sites and forgotten at thirty — a preference the OS states plainly, honoured by whoever remembered. It
-   cannot be a habit. Unlayered on purpose: an unlayered rule outranks every `@layer`, so this beats both
-   Tailwind's `utilities` and the `components` layer below without an `!important` anywhere.
-
-   The bargain differs by what the motion is FOR, which is the only distinction that matters here:
-
-   A placeholder is by definition content the reader cannot act on yet, so its motion is pure decoration — the
-   first thing to drop. The fill stays: it is what says "something is coming here". The checkbox's tick is the
-   same bargain, and so is `animate-pulse` wherever it survives: the state it reports is carried by the mark
-   and the fill, so dropping the flourish costs nothing anyone needs.
-
-   The SPINNER is the exception, and it is slowed rather than stopped. It is the app's only running indicator
-   on a dozen surfaces, and a frozen spinner does not read as "reduced motion" — it reads as hung, which is a
-   worse thing to tell someone than the truth. At 3s it has left the range that triggers anyone and still
-   plainly turns.
-
-   An ENTRANCE that only fades is left alone: opacity is not movement and nobody asked to be denied it. The one
-   that also travels 8px is re-pointed at the fade-only keyframes, so it keeps its arrival and loses its
-   journey. */
+/* The checkbox flourish is optional; its checked mark and accessible state carry the meaning without motion. */
 @media (prefers-reduced-motion: reduce) {
-    .skeleton,
-    .animate-pulse,
     .p-checkbox-checked .p-checkbox-icon {
         animation: none;
     }
-
-    .animate-spin {
-        animation-duration: 3s;
-    }
-
-    .animate-fade-in-up {
-        animation-name: ui-fade-in;
-    }
 }
 
+/* Kept for the tiny tooltip and anchored-overlay reveal. Route and request-backed content must not use it:
+   those arrivals are covered by reducedMotion.test.ts because Chrome DevTools treats their animation lifecycle
+   as a reason to rebuild the open Styles editor. */
 @keyframes ui-fade-in {
     from {
         opacity: 0;
     }
     to {
         opacity: 1;
-    }
-}
-
-@keyframes ui-fade-in-up {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
     }
 }

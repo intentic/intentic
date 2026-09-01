@@ -355,7 +355,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                  strip here and the canvas behind it are the same reading at two sizes. -->
             <section v-if="live.length > 0">
                 <div class="mb-2 flex items-center gap-2 px-0.5">
-                    <Icon name="spinner" class="animate-spin text-2xs text-link" />
+                    <Icon name="spinner" spin class="text-2xs text-link" />
                     <span :class="ui.sectionLabel('text-link')">Running now</span>
                 </div>
                 <div class="flex flex-col gap-2">
@@ -376,7 +376,7 @@ const RUN_VARIANT: Record<WorkflowRun["state"], StatusVariant> = {
                                 v-for="step in run.steps"
                                 :key="step.stepId"
                                 class="h-1 flex-1 rounded-full"
-                                :class="[STEP_TONE[step.state].bar, step.state === `running` ? `animate-pulse` : ``]"
+                                :class="STEP_TONE[step.state].bar"
                             ></span>
                         </span>
                         <!-- What this run was ASKED to do. The design is a shape; the sentence is the job, and it

@@ -529,7 +529,7 @@ onMounted(progress.recover);
                 <CloudflareConnect v-if="showCloudflare && !hasCloudflare" @connected="onCloudflareConnected" />
             </Card>
 
-            <Card v-if="showConnect" class="animate-fade-in-up mb-3 flex flex-col gap-3">
+            <Card v-if="showConnect" class="mb-3 flex flex-col gap-3">
                 <ConnectHost />
                 <div class="flex justify-end">
                     <Button type="button" label="Close" severity="secondary" :text="true" @click="showConnect = false" />

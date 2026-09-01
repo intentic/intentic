@@ -1095,7 +1095,7 @@ const endResize = (event: PointerEvent): void => {
                                 class="min-w-0 max-w-24 shrink truncate font-mono text-[0.6rem] text-muted"
                                 >{{ tabByName.get(name)?.command }}</span
                             >
-                            <span v-if="isBusy(name)" class="size-1.5 shrink-0 animate-pulse rounded-full bg-link" aria-hidden="true"></span>
+                            <span v-if="isBusy(name)" class="size-1.5 shrink-0 rounded-full bg-link" aria-hidden="true"></span>
                             <span
                                 v-if="killTabs !== undefined && renamingName !== name"
                                 class="relative flex h-3 w-3 shrink-0 items-center justify-center"
@@ -1116,7 +1116,7 @@ const endResize = (event: PointerEvent): void => {
                 <div
                     v-for="(group, gi) in placeholders"
                     :key="`held-${gi}`"
-                    class="flex h-6 shrink-0 animate-pulse items-center rounded-md bg-overlay/50 opacity-40"
+                    class="flex h-6 shrink-0 items-center rounded-md bg-overlay/50 opacity-40"
                     :class="vertical ? 'w-full min-w-0' : ''"
                     aria-hidden="true"
                 >
@@ -1216,7 +1216,7 @@ const endResize = (event: PointerEvent): void => {
                 v-if="order.length === 0 && awaiting !== undefined && !waited"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
-                <Icon name="spinner" class="animate-spin text-lg text-subtle" />
+                <Icon name="spinner" spin class="text-lg text-subtle" />
                 <p class="text-sm text-muted">
                     <template v-if="about?.title">{{ about.title }}…</template>
                     <template v-else
@@ -1236,7 +1236,7 @@ const endResize = (event: PointerEvent): void => {
                 v-else-if="order.length === 0 && answer === 'waiting'"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
-                <Icon name="spinner" class="animate-spin text-lg text-subtle" />
+                <Icon name="spinner" spin class="text-lg text-subtle" />
                 <p class="text-sm text-muted">Looking for this sandbox's terminals…</p>
             </div>
             <div

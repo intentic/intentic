@@ -424,7 +424,7 @@ watch(
                         "
                         @click="takeControl"
                     >
-                        <span v-if="view.driving.value" class="size-1.5 animate-pulse rounded-full bg-white"></span>
+                        <span v-if="view.driving.value" class="size-1.5 rounded-full bg-white"></span>
                         <template v-if="view.driving.value">{{ compact ? "Driving" : "You're driving · hand back" }}</template>
                         <template v-else>{{ compact ? "Control" : "Take control" }}</template>
                     </button>

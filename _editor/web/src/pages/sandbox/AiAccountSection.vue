@@ -384,7 +384,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 >
                     <span
                         class="h-1.5 w-1.5 shrink-0 rounded-full"
-                        :class="!accountsLoaded ? 'animate-pulse bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
+                        :class="!accountsLoaded ? 'bg-content/25' : providerReady(tab.value) ? 'bg-success' : 'bg-content/25'"
                         :aria-label="!accountsLoaded ? `checking` : providerReady(tab.value) ? `connected` : `not connected`"
                     />
                     {{ tab.label }}
@@ -428,7 +428,7 @@ onUnmounted(() => clearTimeout(ringTimer));
                 <template #title>
                     <span class="flex min-w-0 items-center gap-2.5">
                         <span class="flex w-[1.125rem] shrink-0 justify-center">
-                            <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-content/25" />
+                            <span class="h-1.5 w-1.5 rounded-full bg-content/25" />
                         </span>
                         <span class="flex min-h-[1lh] items-center">
                             <span class="skeleton block h-3" :class="placeholder === 1 ? 'w-40' : 'w-28'" />

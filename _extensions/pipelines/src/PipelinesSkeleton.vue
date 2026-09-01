@@ -29,7 +29,7 @@ const ROWS = [
 <template>
     <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
          indistinguishable from an empty board. The bars themselves carry no text, so there is nothing to read. -->
-    <div class="animate-fade-in" role="status" aria-busy="true" aria-label="Loading pipelines">
+    <div role="status" aria-busy="true" aria-label="Loading pipelines">
         <!-- Summary bar: the three status counters and the pass-rate ring, which rides the tally's own slot
              exactly as the real one does. -->
         <StatusTally :skeleton="3" class="mb-5">

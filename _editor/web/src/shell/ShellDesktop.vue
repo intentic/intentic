@@ -671,14 +671,14 @@ useKeybindings();
                     <span v-if="at > 0" class="icon-rail-band" aria-hidden="true"></span>
                     <template v-for="tile in band.items" :key="tile.to">
                         <!-- A SEAT BEING HELD, not a tile: this one was in the rail last time and hasn't loaded
-                             back yet (railMemory.ts). It draws the glyph it will draw, dim and pulsing, so the
+                             back yet (railMemory.ts). It draws the glyph it will draw, dim and quiet, so the
                              tile lights up in place instead of pushing everything under it down as it arrives.
                              Not focusable and hidden from assistive tech: there is nothing here to act on, and
                              a screen reader announcing a link that doesn't exist yet would be worse than the
                              silence. -->
                         <span
                             v-if="tile.ghost"
-                            class="icon-rail-tile flex animate-pulse items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
+                            class="icon-rail-tile flex items-center justify-center rounded-lg bg-overlay/50 text-muted opacity-40"
                             aria-hidden="true"
                         >
                             <span v-if="tile.icon === undefined" class="text-sm font-semibold">{{ initialsOf(tile.label) }}</span>

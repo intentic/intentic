@@ -123,7 +123,7 @@ const logText = computed(() => {
          headings of its own, not a fact hanging off its name. -->
     <DisclosureRow class="border-l-4" :class="tone.rowBorder" density="comfortable" body="drawer" :open="expanded" @update:open="toggle">
         <template #lead>
-            <Icon :name="tone.icon" class="shrink-0 text-base" :class="[tone.text, tone.spin ? `animate-spin` : ``]" />
+            <Icon :name="tone.icon" :spin="tone.spin" class="shrink-0 text-base" :class="tone.text" />
         </template>
 
         <template #title>

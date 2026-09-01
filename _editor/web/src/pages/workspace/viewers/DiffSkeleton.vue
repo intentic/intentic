@@ -46,7 +46,7 @@ const LINES = [
         <div
             v-for="pane in split ? 2 : 1"
             :key="pane"
-            class="flex min-w-0 flex-1 animate-pulse flex-col gap-2 overflow-hidden border-line p-4 not-first:border-l"
+            class="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden border-line p-4 not-first:border-l"
             aria-hidden="true"
         >
             <span v-for="(line, index) in LINES" :key="index" class="flex items-center gap-3">

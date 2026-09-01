@@ -146,7 +146,7 @@
 @source inline("transition{,-all,-colors,-opacity,-shadow,-transform,-none}");
 @source inline("{duration,delay}-{0,50,75,100,150,200,300,500,700,1000}");
 @source inline("ease-{linear,in,out,in-out,initial}");
-@source inline("{animate-none,animate-spin,animate-ping,animate-pulse,animate-bounce,animate-fade-in,animate-fade-in-up}");
+@source inline("animate-none");
 @source inline("scale-{0,50,75,90,95,100,105,110,125,150}");
 @source inline("{,-}rotate-{0,1,2,3,6,12,45,90,180}");
 @source inline("{,-}{translate-x,translate-y}-{0,0.5,1,1.5,2,2.5,3,4,5,6,8,10,12,16,px,full,1/2,1/3,2/3,1/4,3/4}");

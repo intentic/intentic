@@ -70,7 +70,7 @@ const display = async (text: string): Promise<{ text: string; lines?: number[] }
 };
 
 // Land a content-search jump: cursor on the line (keyboard nav continues from the hit), centered scroll, and a
-// one-shot highlight of the line (reuses the ws-line-flash keyframes). `line` is the FILE's, so with the comments
+// temporary highlight of the line (the decoration owns its 1.5s lifetime). `line` is the FILE's, so with the comments
 // out it lands on the line that kept it, or on the code the removed comment introduces.
 const jumpTo = (line: number): void => {
     if (monaco === undefined || editor.value === undefined) {

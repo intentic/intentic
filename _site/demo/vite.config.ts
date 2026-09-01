@@ -86,6 +86,14 @@ export default defineConfig({
         outDir: fromRoot(`_site/site/public/demo`),
         emptyOutDir: true,
         target: `es2024`,
+        /* The demo installs its fixture transports before dynamically importing the real app entry. With one
+         * extracted stylesheet Vite otherwise treats every lazy route as a dependency of that import and waits
+         * for the whole route graph before evaluating main.ts. The stylesheet is already linked from the HTML;
+         * route code remains lazy and the app's own idle prefetcher warms it after the shell has mounted. */
+        modulePreload: false,
+        // Match the app build's stable stylesheet ownership: route chunks may stay lazy, their CSS may not
+        // arrive underneath an open DevTools Styles editor when the visitor changes views.
+        cssCodeSplit: false,
         // One document, the same as the app's: a floating panel is a route rather than a page of its own.
         rolldownOptions: { input: { index: here(`index.html`) } },
     },

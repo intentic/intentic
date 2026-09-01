@@ -1478,18 +1478,9 @@ const openMenu = (event: MouseEvent, entry: WorkspaceTreeEntry | undefined): voi
     background: color-mix(in srgb, var(--color-primary-500) 28%, transparent);
     box-shadow: inset 0 0 0 1px var(--color-primary-500);
 }
-/* Flash a row that just changed on disk (agent/terminal edit), fading over the ~2s the path stays in
-   recentlyChanged. The animation overrides the base/hover/selection background for its duration, then the class
-   is removed and the row reverts. */
+/* Mark a row that just changed on disk (agent/terminal edit) for the ~2s the path stays in recentlyChanged.
+   Static because a network-driven CSS animation makes Chrome DevTools rebuild an open Styles editor. */
 .ui-row-select-changed {
-    animation: ui-row-select-changed-flash 2s ease-out;
-}
-@keyframes ui-row-select-changed-flash {
-    from {
-        background: color-mix(in srgb, var(--color-warning) 26%, transparent);
-    }
-    to {
-        background: color-mix(in srgb, var(--color-warning) 6%, transparent);
-    }
+    background: color-mix(in srgb, var(--color-warning) 16%, transparent);
 }
 </style>

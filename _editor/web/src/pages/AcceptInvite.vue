@@ -82,7 +82,7 @@ const switchAccount = async (): Promise<void> => {
 
 <template>
     <div class="flex min-h-screen w-full items-center justify-center bg-canvas p-6 text-content">
-        <div class="animate-fade-in w-full max-w-sm">
+        <div class="w-full max-w-sm">
             <AppBrand class="mb-10 text-2xl" />
 
             <div v-if="view === 'loading'" class="flex items-center gap-3 text-sm text-muted">

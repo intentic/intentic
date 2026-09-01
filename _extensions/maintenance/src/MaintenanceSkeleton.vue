@@ -49,7 +49,7 @@ const GROUPS = [
     <!-- aria-busy over aria-hidden: a screen reader should hear "this region is loading", not silence that is
          indistinguishable from a workspace with no chores due. The bars carry no text, so there is nothing to
          read out of them. -->
-    <div class="flex animate-fade-in flex-col gap-6" role="status" aria-busy="true" aria-label="Reading the evidence">
+    <div class="flex flex-col gap-6" role="status" aria-busy="true" aria-label="Reading the evidence">
         <RowGroup v-for="(group, index) in GROUPS" :key="index">
             <!-- The group's heading: the kind, its due count, and the caption arguing for the grouping. h-4 is
                  the one text-xs line the real heading is. -->

@@ -66,7 +66,7 @@ onMounted(() => void complete());
 
 <template>
     <div class="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 text-content">
-        <div class="animate-fade-in flex w-full max-w-sm flex-col gap-4 text-center">
+        <div class="flex w-full max-w-sm flex-col gap-4 text-center">
             <template v-if="error">
                 <Notice v-if="error" :of="error" />
                 <Button label="Back to sign in" severity="secondary" class="self-center" @click="void router.replace(`/login`)" />

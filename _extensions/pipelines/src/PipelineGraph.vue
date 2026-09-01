@@ -49,7 +49,7 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                 v-tooltip.top="stageTooltip(stage, index)"
                 @click="toggleStage(index, $event)"
             >
-                <Icon :name="STATUS_TONE[stage.status].icon" class="text-2xs" :class="STATUS_TONE[stage.status].spin ? `animate-spin` : ``" />
+                <Icon :name="STATUS_TONE[stage.status].icon" :spin="STATUS_TONE[stage.status].spin" class="text-2xs" />
             </button>
 
             <Popover
@@ -69,7 +69,8 @@ const stageTooltip = (stage: PipelineStage, index: number): string => {
                             <Icon
                                 :name="STATUS_TONE[job.status].icon"
                                 class="shrink-0 text-xs"
-                                :class="[STATUS_TONE[job.status].text, STATUS_TONE[job.status].spin ? `animate-spin` : ``]"
+                                :spin="STATUS_TONE[job.status].spin"
+                                :class="STATUS_TONE[job.status].text"
                             />
                             <!-- The whole point of opening this popover is usually "so what did that job say?" -->
                             <a

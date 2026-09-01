@@ -206,7 +206,7 @@ onMounted(() => void hand());
 
 <template>
     <div class="flex min-h-dvh w-full items-center justify-center bg-canvas px-4 text-content">
-        <div class="animate-fade-in flex w-full max-w-md flex-col gap-4 rounded-2xl border border-line bg-surface p-6">
+        <div class="flex w-full max-w-md flex-col gap-4 rounded-2xl border border-line bg-surface p-6">
             <header class="flex items-center gap-3">
                 <span
                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary-600/30 bg-linear-to-br from-primary-600/20 to-primary-600/5"

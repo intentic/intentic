@@ -165,27 +165,27 @@ watch(
         <div class="entry-plate" aria-hidden="true"><div class="entry-plate-img"></div></div>
 
         <main class="shell">
-            <header class="animate-fade-in-up mark"><AppBrand /></header>
+            <header class="mark"><AppBrand /></header>
 
             <!-- The greeting, flanked rather than underlined: a band eyebrow elsewhere trails a hairline to
                  the right, which on a centred axis tips the whole block sideways. -->
-            <p class="animate-fade-in-up entry-eyebrow" style="animation-delay: 60ms">
+            <p class="entry-eyebrow">
                 <span class="entry-lozenge"></span>
                 <span>Welcome to intentic</span>
                 <span class="entry-lozenge"></span>
             </p>
 
-            <h1 class="animate-fade-in-up headline" style="animation-delay: 110ms">
+            <h1 class="headline">
                 <span class="beat"><span class="entry-display">Sign in</span><span class="entry-stop">.</span></span>
                 <span class="beat"><span class="entry-display">Build with agents</span><span class="entry-stop">.</span></span>
             </h1>
 
-            <p class="animate-fade-in-up hero-sub" style="animation-delay: 160ms">A workspace for coding agents.</p>
+            <p class="hero-sub">A workspace for coding agents.</p>
 
             <!-- THE GATE. The one framed object on the screen, and the only place the site's turned corner and
                  lotus finial are drawn here: an ornament earns its keep on a panel big enough to carry it and
                  becomes noise everywhere else. -->
-            <section class="animate-fade-in-up entry-frame gate" style="animation-delay: 210ms">
+            <section class="entry-frame gate">
                 <span class="entry-corner entry-corner-tl"></span>
                 <span class="entry-corner entry-corner-tr"></span>
                 <span class="entry-corner entry-corner-bl"></span>
@@ -235,7 +235,7 @@ watch(
                 </p>
             </section>
 
-            <section class="animate-fade-in-up rail" style="animation-delay: 260ms">
+            <section class="rail">
                 <p class="entry-eyebrow eyebrow-bare">Three steps to your first agent</p>
                 <ol class="steps">
                     <li v-for="(step, index) in steps" :key="step.title" class="step" :aria-current="index === 0 ? `step` : undefined">

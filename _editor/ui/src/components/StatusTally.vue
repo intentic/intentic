@@ -28,8 +28,6 @@ export interface TallyItem {
     readonly variant: StatusVariant;
     /** Render at zero. For the count that IS the subject of the board. */
     readonly always?: boolean;
-    /** For a state that is in motion (running builds, deploying containers). */
-    readonly pulse?: boolean;
 }
 
 const DOT: Record<StatusVariant, string> = {
@@ -72,7 +70,7 @@ const { items = [], skeleton = 0 } = defineProps<{
         </span>
         <template v-for="item in items" :key="item.label">
             <span v-if="item.value > 0 || item.always === true" class="flex items-center gap-1.5">
-                <span class="h-2 w-2 shrink-0 rounded-full" :class="[DOT[item.variant], item.pulse === true ? `animate-pulse` : ``]"></span>
+                <span class="h-2 w-2 shrink-0 rounded-full" :class="DOT[item.variant]"></span>
                 <span class="text-sm font-semibold" :class="TEXT[item.variant]">{{ item.value }}</span>
                 <span class="text-xs text-muted">{{ item.label }}</span>
             </span>

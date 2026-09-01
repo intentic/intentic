@@ -107,10 +107,7 @@ const chatLink = (conversationId: string) => {
 
             <aside v-if="shown && shownStep" class="flex w-96 shrink-0 flex-col gap-2 overflow-y-auto border-l border-line p-3">
                 <div class="flex flex-wrap items-center gap-2">
-                    <Icon
-                        :name="STEP_TONE[shown.state].icon"
-                        :class="[STEP_TONE[shown.state].text, STEP_TONE[shown.state].spin ? `animate-spin` : ``]"
-                    />
+                    <Icon :name="STEP_TONE[shown.state].icon" :spin="STEP_TONE[shown.state].spin" :class="STEP_TONE[shown.state].text" />
                     <span class="text-sm font-medium text-content">{{ shownStep.title }}</span>
                     <span class="text-2xs" :class="STEP_TONE[shown.state].text">{{ STEP_TONE[shown.state].label }}</span>
                     <span v-if="shown.iterations > 0" class="text-2xs text-subtle"

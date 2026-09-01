@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, ProgressRing, useDevice } from "@intentic/ui";
-import { errorMessage } from "@intentic/ui/async";
+import { errorMessage, useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { requestLandAgent } from "../composables/agents/agentActions";
@@ -25,6 +25,7 @@ import {
     turnInFlight,
     unreadBadge,
     unregistered,
+    watching,
     watchLine,
 } from "../composables/agents/agentStatus";
 import { type MatchSnippet, providerLabel } from "@intentic/sandbox-contract";
@@ -45,8 +46,9 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
  * and one closing summary line that carries the stats (cost · +ins −dels · subagents · context ring) with the
  * card's "when" pinned to its right: for a running card what the turn is doing and how long it has been at it
  * (the chat rail's readout, to the letter), for a settled one its date.
- * `now` ticks from AgentsView so every card's elapsed readout advances together without per-card timers. The
- * title renames in place (hover pencil → inline input); the drill-in rides beside it as a hover glyph, except
+ * Each live card reads the shared `useNow` clock itself, so its elapsed readout advances without rerendering
+ * the whole board. `useNow` still owns one timer for every card together. The title renames in place (hover
+ * pencil → inline input); the drill-in rides beside it as a hover glyph, except
  * on a card that needs the user, where it is spelled out on the summary line. The root is a div-button, not a
  * <button>, so the nested pencil/input stay valid HTML.
  *
@@ -57,7 +59,6 @@ import { modelLabelFor } from "../composables/chat/providerCatalog";
 
 const props = defineProps<{
     agent: FleetAgent;
-    now: number;
     dense?: boolean;
     dragging?: boolean;
     // What the board has in flight against this card, if anything: the action itself, so the button that
@@ -77,6 +78,9 @@ const props = defineProps<{
     // The filter's `Aa` switch, so the marks are struck under the rule the search actually ran.
     matchCase?: boolean;
 }>();
+// Keep the second hand at the card that draws it rather than rerendering every card from the board. Settled
+// cards need no ticks, so the shared clock stands down when no turn or watch is live.
+const now = useNow(() => turnInFlight(props.agent) || watching(props.agent));
 const emit = defineEmits<{
     // The click that opened it, when there was one: a modified click asks for a pane rather than the focus.
     open: [event?: MouseEvent];
@@ -270,7 +274,7 @@ const loopLine = computed(() => (props.agent.loop === undefined ? undefined : lo
  * while it exists: an agent working right now is not, in any sense the reader cares about, waiting. The moment
  * the turn ends the watch takes the corner back, which is exactly when the card would otherwise start claiming
  * to be finished. */
-const watch = computed(() => (turnInFlight(props.agent) ? undefined : watchLine(props.agent, props.now)));
+const watch = computed(() => (turnInFlight(props.agent) ? undefined : watchLine(props.agent, now.value)));
 /* The card says WHO RUNS IT exactly once. While the tile wears the provider mark (no category yet), this
  * line needs no floor; once the category glyph takes the tile, a card with no recorded model would say the
  * provider nowhere: so the provider lands here, and only then. */
@@ -600,7 +604,7 @@ const grab = (event: PointerEvent): void => {
                  spinner with no end in sight. Survives the loop's end on purpose: how a
                  loop stopped is the thing the card is read for afterwards. -->
             <p v-if="agent.loop !== undefined" class="flex min-w-0 items-center gap-1.5 text-2xs" :class="loopLine?.class">
-                <Icon name="repeat" class="shrink-0 text-2xs" :class="loopLine?.spin ? 'animate-spin' : ''" />
+                <Icon name="repeat" :spin="loopLine?.spin" class="shrink-0 text-2xs" />
                 <span class="truncate">{{ loopLine?.text }}</span>
             </p>
 

@@ -1,3 +1,6 @@
+/* In production every lazy view's CSS is extracted into the initial stylesheet. The shared Vite config gives
+ * development the same stable style set through this style-only virtual module, before the app mounts. */
+import { installDevStyles } from "virtual:intentic-dev-styles";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
@@ -18,6 +21,8 @@ import "./extension-host/hostModules";
 import { router } from "./router";
 import { installNotificationTaps } from "./shell/notificationTaps";
 import "./styles.css";
+
+installDevStyles();
 
 // First: from here on, a startup crash wipes this origin's stored state and reloads once instead of leaving a
 // workspace only "clear site data" can fix (see selfHeal.ts). Then the two ordered steps a previous page may

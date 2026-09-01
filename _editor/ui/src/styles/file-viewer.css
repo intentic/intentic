@@ -1,6 +1,6 @@
 /* Chrome for the workspace file viewer that Monaco does NOT own: the transparency checkerboard behind previewed
- * images/SVGs, and the one-shot line flash applied when a content-search match is revealed (CodeView.flash → a
- * whole-line Monaco decoration carrying .ws-line-flash). Monaco owns all code rendering + light/dark theming
+ * images/SVGs, and the temporary line highlight applied when a content-search match is revealed (CodeView.flash
+ * → a whole-line Monaco decoration carrying .ws-line-flash). Monaco owns all code rendering + light/dark theming
  * itself (see useMonaco), so there is no Shiki-HTML chrome or --shiki-dark flip here anymore. */
 @layer components {
     /* Transparency checkerboard behind previewed images/SVGs (theme-agnostic, the conventional indicator). */
@@ -15,9 +15,10 @@
         background-position: 0 0, 0 10px, 10px -10px, -10px 0;
     }
 
-    /* One-shot highlight of the line a content-search match landed on. */
+    /* The decoration is removed after 1.5s by CodeView; keeping its paint still avoids making navigation start
+       a CSS animation, which makes Chrome DevTools rebuild an open Styles editor. */
     .monaco-editor .ws-line-flash {
-        animation: ws-line-flash 1.5s ease-out;
+        background: color-mix(in srgb, var(--color-primary-500) 20%, transparent);
     }
 
     /* The seam between two changed regions of a file too big to diff whole (DiffView → diffPatch.ts). The
@@ -31,14 +32,5 @@
 
     .monaco-editor .ws-diff-gap {
         background: color-mix(in srgb, var(--color-line) 35%, transparent);
-    }
-}
-
-@keyframes ws-line-flash {
-    from {
-        background: color-mix(in srgb, var(--color-primary-500) 30%, transparent);
-    }
-    to {
-        background: transparent;
     }
 }

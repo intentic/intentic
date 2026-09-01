@@ -333,8 +333,8 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
 
 // How many finished entries a Finished lane shows before the rest collapse behind one row. The lane's job is
 // to CONFIRM what just completed, not to be the sandbox's permanent record, everything older is still one
-// click away, and the daemon's retention sweep is what eventually retires it. Also the thing standing between
-// the board and a TransitionGroup running FLIP over several hundred cards.
+// click away, and the daemon's retention sweep is what eventually retires it. It also keeps several hundred
+// card components off screen.
 export const FINISHED_WINDOW = 7;
 
 /* The window applied, as ONE answer: the cards on screen and the number the row beneath them collapses. They

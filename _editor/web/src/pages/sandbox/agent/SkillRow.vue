@@ -126,7 +126,7 @@ watch(
         <template #below>
             <p v-if="bodyError !== undefined" class="text-2xs text-danger">{{ bodyError }}</p>
             <p v-else-if="body === undefined" class="flex items-center gap-2 text-2xs text-subtle">
-                <Icon name="spinner" class="animate-spin text-xs" />
+                <Icon name="spinner" spin class="text-xs" />
                 Reading…
             </p>
             <template v-else>

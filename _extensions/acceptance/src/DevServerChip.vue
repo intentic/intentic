@@ -123,7 +123,7 @@ const start = async (): Promise<void> => {
         v-tooltip.bottom="`A first start installs dependencies, which can take a minute: watch it in the terminal`"
         @click="host().terminal.open(panelSessionOf(repo))"
     >
-        <Icon name="spinner" class="shrink-0 animate-spin text-subtle" />
+        <Icon name="spinner" spin class="shrink-0 text-subtle" />
         Starting…
         <Icon name="desktop" class="text-subtle" />
     </button>

@@ -31,7 +31,7 @@ const TURNS = [
 const OUTLINE = [...TURNS, ...TURNS];
 
 /* Past this the outline has stopped being informative: it promised content and the promise is overdue, and a
- * placeholder left pulsing at that point is indistinguishable from one that is stuck. This component's
+ * placeholder left visible at that point is indistinguishable from one that is stuck. This component's
  * lifetime IS the visible wait (ChatPanel mounts it through useLoadingReveal), so a timer armed at setup
  * measures exactly how long the user has been looking at it. */
 const SLOW_AFTER_MS = 6_000;
@@ -53,7 +53,7 @@ onScopeDispose(() => clearTimeout(timer));
     <div class="relative min-h-0 flex-1" role="status" aria-busy="true">
         <span class="sr-only">Loading conversation…</span>
         <div class="chat-skeleton absolute inset-0 flex flex-col justify-end gap-1 overflow-hidden pb-2">
-            <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 animate-pulse flex-col gap-1" aria-hidden="true">
+            <div v-for="(turn, index) in OUTLINE" :key="index" class="flex shrink-0 flex-col gap-1" aria-hidden="true">
                 <!-- The prompt bubble, carrying .chat-prompt's own vertical padding so the turn keeps its rhythm. -->
                 <div class="flex justify-end pt-3 pb-2">
                     <div class="chat-surface flex flex-col gap-1.5 rounded-lg px-3 py-2" :class="turn.bubble">

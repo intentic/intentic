@@ -1650,7 +1650,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     class="h-full bg-link transition-[width] duration-1000 ease-linear"
                     :style="{ width: `${Math.round(checkFill * 100)}%` }"
                 ></div>
-                <div v-else class="h-full w-full animate-pulse bg-link/40"></div>
+                <div v-else class="h-full w-full bg-link/40"></div>
             </div>
         </div>
 
@@ -1721,7 +1721,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                      sentence it will file into the commit box, still being written. It pulses rather than sits,
                      because the unfinished dot above is already a static dot and two motionless dots in the same
                      slot would read as one state with two colours. Gone the moment the sentence lands. -->
-                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-current opacity-60"></span>
+                <span v-else-if="originDrafting(entry.id)" class="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60"></span>
                 <ProviderLogo v-if="originProvider(entry.id)" :provider="originProvider(entry.id)!" class="shrink-0 text-2xs" />
                 <Icon v-else name="sparkles" class="shrink-0 text-2xs" />
                 <span v-if="originFilter === entry.id" class="min-w-0 truncate">{{ originLabel(entry.id) }}</span>
@@ -1839,9 +1839,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                              times as fast (`shrink-3`, capped at `max-w-24`), because it is the annotation and
                              the repo is the heading: a squeezed row reads `refs/agent-… ⑂ feat/v…`, which is two
                              truncated facts in the right order instead of one fact and one naked glyph. -->
-                        <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{
-                            group.repo
-                        }}</span>
+                        <span class="min-w-0 truncate text-xs font-medium text-content" v-tooltip.top.overflow="group.repo">{{ group.repo }}</span>
                         <span v-if="group.branch !== undefined" class="flex min-w-0 max-w-24 shrink-3 items-center gap-0.5 text-2xs text-subtle">
                             <Icon name="fork" class="shrink-0 text-[0.6rem]" />
                             <!-- Both names now truncate, so both say the rest on hover: a 27px branch reads

@@ -11,10 +11,9 @@ import { useAgents, type FleetAgent } from "./useAgents";
  * AgentCard instead of a browser drag image, Escape cancels, and the drop target is hit-tested against the
  * live DOM so a scrolled lane still answers correctly.
  *
- * The dragged card STAYS in its lane, dimmed, while a fixed ghost follows the pointer, the lane's
- * TransitionGroup is never asked to FLIP a child that is already moving. Nothing changes lane on drop either:
- * the action fires and the daemon's next roster frame moves the card. So the board never paints a lane the
- * status machine disagrees with, which is the whole point of laneOf being a pure projection.
+ * The dragged card STAYS in its lane, dimmed, while a fixed ghost follows the pointer. Nothing changes lane on
+ * drop either: the action fires and the daemon's next roster frame moves the card. So the board never paints a
+ * lane the status machine disagrees with, which is the whole point of laneOf being a pure projection.
  *
  * Mouse and pen only. Touch is deliberately excluded, a drag would fight the lanes' own scrolling, and the
  * mobile layout stacks the lanes anyway; land and discard stay reachable there from the review panel.

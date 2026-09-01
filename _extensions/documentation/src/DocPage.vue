@@ -51,7 +51,7 @@ const rev = computed((): string => provenance?.sourceRev ?? staleness?.readmeRev
 
 <template>
     <!-- Keyed per page by the caller, so the fade is one page arriving rather than a list of them animating. -->
-    <article class="flex animate-fade-in flex-col gap-5">
+    <article class="flex flex-col gap-5">
         <!-- Staleness sits ABOVE the prose, because a reader who is about to trust a page needs to know first. It
              names the reason rather than just the verdict: "points at a file that is gone" and "12 commits behind"
              call for different actions.

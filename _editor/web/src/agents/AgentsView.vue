@@ -2,7 +2,6 @@
 import type { Disposable } from "@intentic/extension-api";
 import { isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
 import { Button, clipboardOf, ui, ContextMenu, Modal, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -46,9 +45,10 @@ import { uuid } from "../composables/uuid";
 /* The fleet as a kanban: Attention | Active | Finished, attention leftmost because the board's whole job is
  * routing the user to agents that need them. Lanes are pure projections of the registry status machine
  * (laneOf), so "finished" is automatic: the auto-land flow flips a cleanly-completed turn to landed/idle
- * within ms and the card glides over: a follow-up message glides it back. Cards animate with per-lane
- * TransitionGroups: FLIP reorder within a lane, scale-fade across lanes. A wide board is three columns; a
- * narrow one stacks the same lanes down the page (see below).
+ * within ms and the card fades into its new lane: a follow-up message moves it back. Each card owns its
+ * scale-fade transition. The list itself must not use TransitionGroup: Vue probes its move CSS by inserting a
+ * clone after every roster update, which makes Chrome DevTools rebuild the Styles pane. A wide board is three
+ * columns; a narrow one stacks the same lanes down the page (see below).
  *
  * Cards drag between lanes, but because the lanes are projections a drop can't assign a status: it runs the
  * action that causes one (laneDrop): onto Finished stops a running turn or lands a conflicted one, and the
@@ -320,7 +320,7 @@ const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.
  *
  * The live lanes are self-limiting: the board holds what the user is working on, and the Finished lane windows
  * itself (FINISHED_WINDOW), but the archive is the pile everything ends up in, and it was drawn WHOLE. Every
- * row is a full card: its status, its cost, its diff, its own animation slot in the lane's TransitionGroup. So
+ * row is a full card: its status, its cost, its diff, its own component and transition. So
  * opening the door on a workspace with a thousand sessions behind it built a thousand cards in one frame, and
  * the press that opened it looked like the app had hung: the one moment the archive is asked to prove it is
  * cheap to keep things in.
@@ -391,8 +391,8 @@ const finishedWindow = computed(() => windowFinished(boardLanes.value.finished, 
 // The lane's visible cards. Finished shows its window (or the archive, when open); the other two lanes are
 // self-emptying and show everything.
 //
-// A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep the
-// TransitionGroup off several hundred cards), and a result set is neither: hiding four of a query's six hits
+// A FILTER lifts the Finished window: that cap exists to keep a browsing list short (and to keep several
+// hundred card components off screen), and a result set is neither: hiding four of a query's six hits
 // behind an "earlier" row would be the board deciding which of the user's own matches they meant.
 //
 // THE ARCHIVE KEEPS ITS PAGE UNDER A FILTER, which is the opposite call and the same reasoning: the pile it is
@@ -665,8 +665,6 @@ const hint = computed(() => {
 const NARROW_BOARD_REM = 48;
 const boardEl = ref<HTMLElement | undefined>(undefined);
 const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
-// The shared clock, for every card's elapsed/time-ago readout.
-const now = useNow();
 onMounted(() => {
     void refresh();
     // The archive is off the live roster, so its size has to be asked for. Worth the one request at mount:
@@ -1388,7 +1386,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </header>
                     <!-- The lane's HELD WAKES, first of all: a hold is the one row here that is WHOLLY waiting
                          on you: everything below it is at least running. Attention lane only (HeldWakeCard
-                         says why), and outside the TransitionGroup for the runs' reason. -->
+                         says why), and outside the agent list for the runs' reason. -->
                     <div v-if="lane.key === 'attention' && !archiveOpen && heldWakes.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in heldWakes"
@@ -1401,8 +1399,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </div>
                     <!-- The lane's WORKFLOW RUNS, above its agents: a run is the container of several of the
                          cards below it, and a container drawn under its contents is a heading in the wrong
-                         place. Outside the TransitionGroup below: that group's FLIP animation is over the
-                         fleet, and a row of another kind moving through it would drag the cards it holds.
+                         place. Outside the list below: a run is not one of the fleet cards it contains, and
+                         moving the container through its own contents would give the lane two orders.
                          In the archive it is the archived runs that list here, in the same slot: the steps
                          filed away with a run have no cards of their own there either. -->
                     <div v-if="runsFor(lane.key).length > 0" class="flex flex-col gap-2.5 pb-2.5">
@@ -1443,33 +1441,32 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     >
                         {{ filtering ? "No matches in this lane." : lane.empty }}
                     </p>
-                    <TransitionGroup v-else tag="div" name="lane" class="relative flex flex-col gap-2.5 pb-2.5">
-                        <AgentCard
-                            v-for="agent in cardsFor(lane.key)"
-                            :key="agent.id"
-                            :ref="(el) => setCardEl(agent.id, el)"
-                            :agent="agent"
-                            :now="now"
-                            :dense="narrow"
-                            :dragging="draggedId === agent.id && dragging"
-                            :pending="pendingFor(agent)"
-                            :selected="agent.id === highlightId || inPane(agent.id)"
-                            :match="snippetOf(agent)"
-                            :query="needle"
-                            :match-case="matchCase"
-                            @open="(event) => focusAgent(agent, event)"
-                            @review="reviewAgent(agent)"
-                            @resolve="resolveNow(agent.id, agent.sandboxId)"
-                            @land="landNow(agent.id, agent.sandboxId)"
-                            @reland="relandNow(agent.id, agent.sandboxId)"
-                            @unwatch="unwatchNow(agent.id, agent.sandboxId)"
-                            @archive="archive([agent.id])"
-                            @restore="restore([agent.id])"
-                            @close="closeAgent(agent)"
-                            @grab="(event, card) => grabCard(event, agent, card)"
-                            @contextmenu.prevent.stop="openCardMenu(agent, $event)"
-                        />
-                    </TransitionGroup>
+                    <div v-else class="relative flex flex-col gap-2.5 pb-2.5">
+                        <Transition v-for="agent in cardsFor(lane.key)" :key="agent.id" name="lane">
+                            <AgentCard
+                                :ref="(el) => setCardEl(agent.id, el)"
+                                :agent="agent"
+                                :dense="narrow"
+                                :dragging="draggedId === agent.id && dragging"
+                                :pending="pendingFor(agent)"
+                                :selected="agent.id === highlightId || inPane(agent.id)"
+                                :match="snippetOf(agent)"
+                                :query="needle"
+                                :match-case="matchCase"
+                                @open="(event) => focusAgent(agent, event)"
+                                @review="reviewAgent(agent)"
+                                @resolve="resolveNow(agent.id, agent.sandboxId)"
+                                @land="landNow(agent.id, agent.sandboxId)"
+                                @reland="relandNow(agent.id, agent.sandboxId)"
+                                @unwatch="unwatchNow(agent.id, agent.sandboxId)"
+                                @archive="archive([agent.id])"
+                                @restore="restore([agent.id])"
+                                @close="closeAgent(agent)"
+                                @grab="(event, card) => grabCard(event, agent, card)"
+                                @contextmenu.prevent.stop="openCardMenu(agent, $event)"
+                            />
+                        </Transition>
+                    </div>
                     <!-- The lane's tail, not a pager: the count is the point ("there are 12 more"), and the row
                          is what keeps them one press away instead of gone. Gone while filtering: the window is
                          lifted there (see cardsFor), so there is nothing behind it to offer. -->
@@ -1562,7 +1559,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             v-for="agent in archivedHits"
                             :key="agent.id"
                             :agent="agent"
-                            :now="now"
                             :dense="narrow"
                             :pending="pendingFor(agent)"
                             :selected="agent.id === highlightId || inPane(agent.id)"
@@ -1661,7 +1657,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
              test underneath it. -->
         <div v-if="dragging && dragged !== undefined" class="pointer-events-none fixed left-0 top-0 z-50 rotate-2" :style="ghostStyle">
             <div class="opacity-90 shadow-lg">
-                <AgentCard :agent="dragged" :now="now" :dense="narrow" />
+                <AgentCard :agent="dragged" :dense="narrow" />
             </div>
             <p
                 class="mt-1 inline-block rounded px-2 py-1 text-2xs font-medium"
@@ -1675,10 +1671,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
     </div>
 </template>
 <style scoped>
-/* Kanban motion: FLIP reorder within a lane (`lane-move`), scale-fade on lane entry/exit. The leaving card
- * is absolutely positioned so its siblings glide into place instead of jumping: the standard
- * TransitionGroup requirement for smooth collapse. */
-.lane-move,
+/* Kanban motion without a list-level FLIP probe: cards scale-fade on lane entry/exit. A leaving card is
+ * absolutely positioned so the lane collapses immediately while that card finishes fading. */
 .lane-enter-active,
 .lane-leave-active {
     transition:

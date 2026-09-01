@@ -34,7 +34,7 @@ const { node } = defineProps<{ node: WorkflowNode }>();
              edge, and a mark with square ends reads as cut off. -->
         <span class="pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-full" :class="toneFor(node).bar"></span>
         <span class="flex items-center gap-1.5">
-            <Icon :name="toneFor(node).icon" class="shrink-0 text-2xs" :class="[toneFor(node).text, toneFor(node).spin ? `animate-spin` : ``]" />
+            <Icon :name="toneFor(node).icon" :spin="toneFor(node).spin" class="shrink-0 text-2xs" :class="toneFor(node).text" />
             <span class="min-w-0 flex-1 truncate text-xs font-medium leading-tight text-content">{{ node.step.title }}</span>
             <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ node.index }}</span>
         </span>

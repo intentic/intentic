@@ -186,7 +186,7 @@ const cancel = (): Promise<void> =>
                                 v-tooltip.top="'Check again'"
                                 v-action="recheck"
                             >
-                                <Icon name="refresh" class="text-sm" :class="probing ? `animate-spin` : ``" />
+                                <Icon name="refresh" :spin="probing" class="text-sm" />
                             </button>
                         </template>
                     </Row>

@@ -186,7 +186,8 @@ const caption = computed(() => {
                         <Icon
                             :name="toneOf(member.job).icon"
                             class="shrink-0 text-sm"
-                            :class="[toneOf(member.job).text, toneOf(member.job).spin ? `animate-spin` : ``]"
+                            :spin="toneOf(member.job).spin"
+                            :class="toneOf(member.job).text"
                         />
                         <!-- One line, name first: the stage only ever repeated the column the card is standing
                              in, and the duration: the thing being compared across a fan-out: was buried in the
