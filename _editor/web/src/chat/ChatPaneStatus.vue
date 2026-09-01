@@ -72,7 +72,7 @@ const usageChip = computed(() => {
     // Resolved through effectiveAccount: a conversation that never picked an account runs on the daemon's
     // first, and the usage map is keyed by that real id: looking up `undefined` kept this chip invisible on
     // every single-account setup.
-    const headroom = planHeadroom(usageStatusFor(effectiveAccount(provider.value, account.value)));
+    const headroom = planHeadroom(usageStatusFor(provider.value, effectiveAccount(provider.value, account.value)));
     // No binding pool ⇒ nothing measured, or everything has reset. Unlike an account ROW, a chat's chip stays
     // out of the way rather than pinning a 0% to the composer for a session that has not asked for anything.
     if (headroom?.binding === undefined) {

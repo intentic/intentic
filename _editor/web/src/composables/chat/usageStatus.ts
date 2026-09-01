@@ -89,8 +89,9 @@ export const isSpent = (usage: AccountUsage | undefined): boolean => {
 };
 
 // The same threshold read the other way round, as the one thing that can answer a spent allowance: a reading
-// with room left in it. Named because two callers turn on it and they must not drift, the note that decides
-// whether a refusal still stands (answersRefusal) and the pin below that reads a standing one as a full pool.
+// with room left in it. Named because the note that decides whether a refusal still stands turns on it
+// (answersRefusal), and the pin that reads a standing refusal as a full pool rides that same judgement rather
+// than carrying a second copy of this comparison.
 const hasRoom = (percent: number | undefined): boolean => percent !== undefined && percent < SPENT_PERCENT;
 
 /* The freshest reading for an account, given what the server attached to its row. Both sources are the same
@@ -121,30 +122,37 @@ const freshest = (account: string, attached: AccountUsage | undefined): AccountU
  * up when the wait ends (accountLimitReset), because the pool that refused the turn is the pool that was
  * binding it.
  *
- * ONLY WHERE THE REFUSAL NAMES THIS ACCOUNT. A native turn names the account it was serving; a routed one names
- * nobody, since CLIProxyAPI picks the auth file itself, and pinning every subscription of that provider on one
- * nameless refusal would say about each of them what is known about only one.
+ * BY PROVIDER, which is the resolution a refusal actually has, and the whole reason this reaches past Claude.
+ * The store is keyed by provider (see providerRefusals) because a ROUTED turn cannot name an account at all:
+ * CLIProxyAPI picks the auth file itself, so the daemon has nobody to write down. Matching a refusal to an
+ * account by NAME therefore fired for exactly one shape of connection, a native Claude account, and silently did
+ * nothing for every subscription the translator holds: Kimi's own "403 You've reached your 5-hour usage limit"
+ * sat over a 5-hour meter reading 93%, on the same screen, saying the opposite thing.
  *
- * IT SETTLES ITSELF, on the rule that settles the refusal note beside it: a reading taken since the refusal with
- * room in it answers the refusal, and an answered refusal pins nothing. Nor can it feed itself and so outlive its
- * own evidence. The surfaces judge that refusal against the very percentages this hands them, and both cases it
- * fires in leave the verdict untouched: a reading OLDER than the refusal cannot answer it whatever figure it
- * carries, and a reading taken since is only pinned where the raw figure is already at or above SPENT_PERCENT,
- * which is where refusalNote keeps the refusal standing regardless. */
-const spentByRefusal = (account: string, usage: AccountUsage | undefined): AccountUsage | undefined => {
+ * WHO A REFUSAL SPEAKS FOR is then the only question, and it is settled once, here and in refusalAnswer, so the
+ * pinned figure and the sentence printed beside it can never describe different events (limitStandsFor). It
+ * names an account ⇒ that account alone; it names none ⇒ every connection the provider holds, which is what a
+ * routed refusal MEANS rather than a guess about it, since the translator refuses only once every credential it
+ * holds is cooling down.
+ *
+ * ONLY A SPENT ALLOWANCE (`limit`). A rejected credential and a revoked seat say nothing whatever about a pool,
+ * and drawing them as a full one would answer a question nobody asked with a fact nobody has.
+ *
+ * IT SETTLES ITSELF, on the rule that settles the note: a reading taken since the refusal with room in it
+ * answers it, and an answered refusal pins nothing. Nor can it feed itself and so outlive its own evidence,
+ * because the judgement runs on the RAW readings (providerReadings), never on the pinned ones it produces. */
+const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined): AccountUsage | undefined => {
     const binding = bindingWindow(usage);
-    if (usage === undefined || binding === undefined || binding.utilization >= 100) {
-        return usage;
-    }
-    const refusal = Object.values(providerRefusals.value).find((entry) => entry.kind === `limit` && entry.account === account);
-    if (refusal === undefined || (usage.measuredAt > refusal.at && hasRoom(Math.round(binding.utilization)))) {
+    if (usage === undefined || binding === undefined || binding.utilization >= 100 || !limitStandsFor(provider, account, usage)) {
         return usage;
     }
     return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? { ...entry, utilization: 100 } : entry)) };
 };
 
-export const liveUsage = (account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
-    spentByRefusal(account, freshest(account, attached));
+// The provider rides along because the refusal that corrects a reading is filed under it, not under the account
+// (see spentByRefusal): every caller here holds one, the tab it is drawing being what picked it.
+export const liveUsage = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
+    spentByRefusal(provider, account, freshest(account, attached));
 
 /* The same merge for a caller that holds an account ID AND NOTHING ELSE, the composer chip, the picker's rows,
  * the sentence a refused turn prints. They are handed an account by the conversation, never the row it came
@@ -155,18 +163,20 @@ export const liveUsage = (account: string, attached: AccountUsage | undefined): 
  * hours-old floor ("≥87%") while the account rows two routes away, same store, same account, drew the
  * current number. A reading nobody can reconcile is worse than no reading, because it is the one the user
  * checks before deciding whether to send. */
-const attachedUsage = (account: string): AccountUsage | undefined =>
+// The subscriptions the translator holds for a provider, or none: it keeps auth files for four of them, and
+// every other provider key simply has no half here. Written once because both the lookup below and the readings
+// a refusal is judged against need the same "and its routed connections too".
+const routedAccounts = (provider: AgentProvider): TranslatorAccounts[keyof TranslatorAccounts] =>
+    translatorAccounts.value[provider as keyof TranslatorAccounts] ?? [];
+
+const attachedUsage = (provider: AgentProvider, account: string): AccountUsage | undefined =>
     // A provider's own account is keyed by id and a translator subscription by its auth-file name, the same
     // two keys planLimitRows files them under, because it is the same shared store on the daemon's side.
-    Object.values(providerAccounts.value)
-        .flat()
-        .find((entry) => entry.id === account)?.usage ??
-    Object.values(translatorAccounts.value)
-        .flat()
-        .find((entry) => entry.name === account)?.usage;
+    (providerAccounts.value[provider] ?? []).find((entry) => entry.id === account)?.usage ??
+    routedAccounts(provider).find((entry) => entry.name === account)?.usage;
 
-export const usageStatusFor = (account: string | undefined): AccountUsage | undefined =>
-    account === undefined ? undefined : liveUsage(account, attachedUsage(account));
+export const usageStatusFor = (provider: AgentProvider, account: string | undefined): AccountUsage | undefined =>
+    account === undefined ? undefined : liveUsage(provider, account, attachedUsage(provider, account));
 
 export interface PlanLimitPool {
     readonly kind: string;
@@ -400,7 +410,7 @@ interface PlanLimitSource {
 }
 
 const planLimitRow = (provider: AgentProvider, source: PlanLimitSource): PlanLimitRow => {
-    const usage = liveUsage(source.account, source.attached);
+    const usage = liveUsage(provider, source.account, source.attached);
     const pools = usage === undefined ? [] : usagePools(usage);
     const binding = bindingPool(pools);
     return {
@@ -676,6 +686,65 @@ export const refusalNote = (
         detail: refusal.message,
         current: answer === undefined,
     };
+};
+
+/* EVERYTHING A PROVIDER HOLDS, as the readings its refusal is judged against. Both lists, because a provider's
+ * connections are one list to the reader whichever mechanism holds them, and a routed refusal is answered by any
+ * of them (refusalAnswer).
+ *
+ * RAW: the freshest poll, WITHOUT the correction spentByRefusal lays on top. That is what stops the correction
+ * feeding itself. Judged on its own output, a pool it had pinned to 100 would read back as "still no room" and
+ * hold the refusal up for the week the store remembers it, long after the allowance reopened.
+ *
+ * It is also the list the two surfaces that print a refusal used to each build for themselves, off their own
+ * already-decorated rows: one rule, two copies, and the picker and the Agent tab free to describe the same event
+ * differently. */
+const rawReading = (account: string, attached: AccountUsage | undefined): Pick<RefusalReading, `measuredAt` | `percent`> => {
+    const raw = freshest(account, attached);
+    return { measuredAt: raw?.measuredAt, percent: usagePercent(raw) };
+};
+
+const providerReadings = (provider: AgentProvider): readonly RefusalReading[] => [
+    ...(providerAccounts.value[provider] ?? []).map((entry) => ({
+        account: entry.id,
+        ...rawReading(entry.id, entry.usage),
+        needsReauth: entry.needsReauth === true,
+    })),
+    // A routed subscription carries no reauth flag of its own: CLIProxyAPI drops an auth file it can no longer
+    // refresh, so a broken one leaves the list rather than sitting in it.
+    ...routedAccounts(provider).map((entry) => ({ account: entry.name, ...rawReading(entry.name, entry.usage), needsReauth: false })),
+];
+
+/* THE PROVIDER'S REFUSAL, READ AGAINST EVERYTHING THAT HAS HAPPENED SINCE, for a caller that holds a provider
+ * and nothing else. The composer's account footer and the Agent tab's connection list both draw this line, and
+ * `spentByRefusal` pins a pool on the same verdict, so all three come through here. */
+export const refusalFor = (provider: AgentProvider, now: number = Date.now()): RefusalNote | undefined =>
+    refusalNote(providerRefusals.value[provider], providerReadings(provider), now);
+
+/* WHETHER A SPENT ALLOWANCE IS STILL THE PROVIDER'S LAST WORD ON THIS ACCOUNT, the fact spentByRefusal pins a
+ * pool on, and the note above prints, from one judgement rather than two that can drift.
+ *
+ * Three conditions, and the middle one is where every provider but Claude used to fall out. `limit` alone, since
+ * no other refusal describes a pool. Then WHO IT SPEAKS FOR: the account it names, or, when it names none, every
+ * connection the provider has, because that is precisely what a routed refusal is a statement about, the
+ * translator having refused only once every auth file it holds was cooling down. And then: unanswered, on the
+ * one rule that answers a spent pool anywhere in this file, a reading taken since with room in it. */
+const limitStandsFor = (provider: AgentProvider, account: string, reading: AccountUsage | undefined): boolean => {
+    const refusal = providerRefusals.value[provider];
+    if (refusal === undefined || refusal.kind !== `limit` || (refusal.account !== undefined && refusal.account !== account)) {
+        return false;
+    }
+    /* THE READING BEING CORRECTED GETS ITS OWN SAY, ahead of the copy of it the list may or may not hold. It is
+     * the same account's, only newer: a turn ending in this tab pushes a frame the accounts list, fetched
+     * minutes ago, cannot know about, and an account the list has not loaded at all is not in it to speak for
+     * itself. Without this, the one reading that could answer a refusal is the one that would be ignored, and a
+     * pool that had just reopened would draw as full. (`needsReauth` is unread here: only a `limit` refusal
+     * reaches this line, and what answers one is headroom.) */
+    const readings = [
+        { account, measuredAt: reading?.measuredAt, percent: usagePercent(reading), needsReauth: false },
+        ...providerReadings(provider).filter((entry) => entry.account !== account),
+    ];
+    return refusalAnswer(refusal, readings) === undefined;
 };
 
 export interface PlanLimitSummary {

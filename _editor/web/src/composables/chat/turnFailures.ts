@@ -277,7 +277,7 @@ export class TurnFailures {
      * actually refused). It rides the notice as information and gates nothing. */
     private applyLimitError(error: TurnError): void {
         const { message } = error;
-        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.account.value))?.resetsAt;
+        const resetsAt = error.resetsAt ?? bindingWindow(usageStatusFor(this.host.provider.value, this.host.account.value))?.resetsAt;
         this.host.pickUp.value = {
             reason: `limit`,
             ...(resetsAt === undefined ? {} : { readyAt: resetsAt * 1_000 }),

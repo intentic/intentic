@@ -16,7 +16,7 @@ import { relativeTime } from "../../composables/chat/catalog";
 import { providerRefusals } from "../../composables/chat/providerAccounts";
 import { providerTabs } from "../../composables/chat/providerCatalog";
 import { refreshConnections, useChat } from "../../composables/chat/useChat";
-import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalNote } from "../../composables/chat/usageStatus";
+import { isSpent, liveUsage, type PlanHeadroom, planHeadroom, refusalFor } from "../../composables/chat/usageStatus";
 import { useSandbox } from "../../composables/sandbox/useSandbox";
 import ConnectFlow from "./ConnectFlow.vue";
 import ConnectionRow from "./ConnectionRow.vue";
@@ -204,11 +204,16 @@ interface AccountRow<T> {
 /* Decorate and sort in one pass. When a provider holds dozens of accounts the list is only useful if the ones
  * with headroom are at the top; an account with no reading counts as active, because unknown ≠ exhausted.
  * Within each group the daemon's order holds. */
-const rowsOf = <T,>(accounts: readonly T[], keyOf: (account: T) => string, usageOf: (account: T) => AccountUsage | undefined): AccountRow<T>[] => {
+const rowsOf = <T,>(
+    provider: AgentProvider,
+    accounts: readonly T[],
+    keyOf: (account: T) => string,
+    usageOf: (account: T) => AccountUsage | undefined,
+): AccountRow<T>[] => {
     const active: AccountRow<T>[] = [];
     const spent: AccountRow<T>[] = [];
     for (const account of accounts) {
-        const usage = liveUsage(keyOf(account), usageOf(account));
+        const usage = liveUsage(provider, keyOf(account), usageOf(account));
         const row = { account, headroom: planHeadroom(usage), exhausted: isSpent(usage) };
         (row.exhausted ? spent : active).push(row);
     }
@@ -217,6 +222,7 @@ const rowsOf = <T,>(accounts: readonly T[], keyOf: (account: T) => string, usage
 
 const accountRows = computed<readonly AccountRow<OauthAccount>[]>(() =>
     rowsOf(
+        managedProvider.value,
         managedAccounts.value,
         (account) => account.id,
         (account) => account.usage,
@@ -227,6 +233,7 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
     routedProvider.value === undefined
         ? []
         : rowsOf(
+              routedProvider.value,
               translatorAccounts.value[routedProvider.value],
               (account) => account.name,
               (account) => account.usage,
@@ -247,24 +254,10 @@ const translatorRows = computed<readonly AccountRow<TranslatorAccount>[]>(() =>
  * "Failed to authenticate", because that is what the harness prints over a 403, and the Agent tab showed a
  * healthy green dot beside it with nothing to reconcile the two. */
 // Loud only while nothing that happened since has answered it: see refusalNote, which also decides what a
-// refusal SAYS in each of those two states. Both lists, because the provider's accounts are one list to the
-// reader whichever mechanism holds them, and each row carries the account key a refusal names its own by.
-const refusal = computed(() =>
-    refusalNote(providerRefusals.value[managedProvider.value], [
-        ...accountRows.value.map((row) => ({
-            account: row.account.id,
-            measuredAt: row.headroom?.measuredAt,
-            percent: row.headroom?.percent,
-            needsReauth: row.account.needsReauth === true,
-        })),
-        ...translatorRows.value.map((row) => ({
-            account: row.account.name,
-            measuredAt: row.headroom?.measuredAt,
-            percent: row.headroom?.percent,
-            needsReauth: false,
-        })),
-    ]),
-);
+// refusal SAYS in each of those two states. Judged over both lists, because the provider's accounts are one list
+// to the reader whichever mechanism holds them, and asked of refusalFor rather than assembled here, so this line
+// and the pool the rings beside it draw as spent can only ever come from the same verdict.
+const refusal = computed(() => refusalFor(managedProvider.value));
 
 /* --- Collapsing long lists -----------------------------------------------------------------------------------
  * Five accounts fit comfortably; beyond that the card becomes a scroll trap that pushes the rest of the Agent

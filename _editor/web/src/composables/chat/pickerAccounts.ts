@@ -13,8 +13,7 @@ import {
     type PlanLimitBand,
     planLimitBand,
     planLimitBandTone,
-    refusalNote,
-    usagePercent,
+    refusalFor,
 } from "./usageStatus";
 import { accountsOf, refreshConnections, subscriptionOnly } from "./useChat";
 
@@ -128,34 +127,17 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
             : translatorAccounts.value[routedProvider.value].map((entry) => ({
                   name: entry.name,
                   label: entry.label,
-                  headroom: planHeadroom(liveUsage(entry.name, entry.usage)),
+                  headroom: planHeadroom(liveUsage(provider.value, entry.name, entry.usage)),
               })),
     );
 
     /* WHEN THIS PROVIDER LAST REFUSED A TURN, read against everything that has happened since, the observed half
      * of "can I run on this", beside the polled half the rings draw. Judged over BOTH lists and against the whole
-     * of each, exactly as the Agent tab judges it (AiAccountSection's `refusal`): whether a refusal still stands is
-     * a question about the provider, so every connection it holds gets a say, and the two surfaces disagreeing
-     * about the same event is the bug that made a healthy Kimi account look broken. */
-    const providerRefusalNote = computed(() =>
-        refusalNote(providerRefusals.value[provider.value], [
-            ...accounts.value.map((entry) => {
-                const usage = liveUsage(entry.id, entry.usage);
-                return {
-                    account: entry.id,
-                    measuredAt: usage?.measuredAt,
-                    percent: usagePercent(usage),
-                    needsReauth: entry.needsReauth === true,
-                };
-            }),
-            ...routedRows.value.map((row) => ({
-                account: row.name,
-                measuredAt: row.headroom?.measuredAt,
-                percent: row.headroom?.percent,
-                needsReauth: false,
-            })),
-        ]),
-    );
+     * of each (refusalFor): whether a refusal still stands is a question about the provider, so every connection
+     * it holds gets a say, and the two surfaces disagreeing about the same event is the bug that made a healthy
+     * Kimi account look broken. This footer and the Agent tab now ask the one function rather than each mapping
+     * its own rows into readings, which is what let them drift in the first place. */
+    const providerRefusalNote = computed(() => refusalFor(provider.value));
 
     /* THE SAME REFUSAL WHERE NO ROW CAN CARRY IT. Two cases, and between them they are most of the ones that matter:
      * a provider with a SINGLE account draws no account list at all (there is nothing to choose between), and a
@@ -219,7 +201,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
                           : undefined,
                 // liveUsage, not the streamed map alone: the daemon's reading rides the row itself and is the newer
                 // of the two whenever no turn has ended in this tab since, which is most of the time.
-                headroom: planHeadroom(liveUsage(entry.id, entry.usage)),
+                headroom: planHeadroom(liveUsage(provider.value, entry.id, entry.usage)),
                 /* Only while it STANDS, and only on the account it names. A refusal something since has answered is
                  * history, and history does not belong on a row someone is about to click; a refusal the daemon
                  * could not attribute (a routed turn) belongs to no row here at all. Both of those are the Agent

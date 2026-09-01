@@ -311,28 +311,28 @@ describe(`isSpent`, () => {
 describe(`liveUsage`, () => {
     it(`keeps the daemon's reading when nothing has streamed for that account`, () => {
         const attached = usage({ measuredAt: 500 });
-        expect(liveUsage(`gemini-account`, attached)).toBe(attached);
+        expect(liveUsage(`gemini`, `gemini-account`, attached)).toBe(attached);
     });
 
     it(`prefers a turn's fresher frame over the list it was fetched alongside`, () => {
         const streamed = usage({ measuredAt: 900 });
         usageStatusByAccount.value = { "claude-1": streamed };
         // toEqual, not toBe: the shared store is a Vue ref, so what comes back is its reactive proxy.
-        expect(liveUsage(`claude-1`, usage({ measuredAt: 500 }))).toEqual(streamed);
+        expect(liveUsage(`claude`, `claude-1`, usage({ measuredAt: 500 }))).toEqual(streamed);
         usageStatusByAccount.value = {};
     });
 
     it(`does not let a stale frame overwrite a newer reading from the daemon`, () => {
         const attached = usage({ measuredAt: 900 });
         usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 500 }) };
-        expect(liveUsage(`claude-1`, attached)).toBe(attached);
+        expect(liveUsage(`claude`, `claude-1`, attached)).toBe(attached);
         usageStatusByAccount.value = {};
     });
 
     it(`falls back to a streamed frame for an account the list carried no reading for`, () => {
         const streamed = usage({ measuredAt: 100 });
         usageStatusByAccount.value = { "claude-1": streamed };
-        expect(liveUsage(`claude-1`, undefined)).toEqual(streamed);
+        expect(liveUsage(`claude`, `claude-1`, undefined)).toEqual(streamed);
         usageStatusByAccount.value = {};
     });
 });
@@ -355,55 +355,92 @@ describe(`liveUsage under a standing refusal`, () => {
     const percentsOf = (reading: AccountUsage | undefined): (number | undefined)[] =>
         (reading?.windows ?? []).map((entry) => entry.utilization);
 
+    // Both halves of the connection store, because the judgement below is made against every connection the
+    // provider holds, and a leaked row from another test is another account with a say in it.
+    const noRouted: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
     afterEach(() => {
         providerRefusals.value = {};
+        providerAccounts.value = { ...providerAccounts.value, claude: [] };
+        translatorAccounts.value = noRouted;
     });
 
     it(`reads the pool that refused as full, not as the floor the last reading left behind`, () => {
         providerRefusals.value = spent();
         // The reading predates the refusal, which is the ordinary case: the plan said no after it was taken.
-        expect(percentsOf(liveUsage(`claude-1`, pools({ measuredAt: 500 })))).toEqual([40, 100]);
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })))).toEqual([40, 100]);
         // And the chip drawn off it says so plainly, rather than hedging a pool that is certainly gone.
-        const projected = planHeadroom(liveUsage(`claude-1`, pools({ measuredAt: 500 })));
+        const projected = planHeadroom(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 })));
         expect(formatUtilization(projected?.percent ?? 0, true)).toBe(`100%`);
     });
 
     it(`pins only the pool that was binding, the others keep their own readings`, () => {
         providerRefusals.value = spent();
-        const pinned = liveUsage(`claude-1`, pools({ measuredAt: 500 }));
+        const pinned = liveUsage(`claude`, `claude-1`, pools({ measuredAt: 500 }));
         expect(pinned?.windows.find((entry) => entry.kind === `five_hour`)?.utilization).toBe(40);
         expect(pinned?.measuredAt).toBe(500);
     });
 
-    it(`says nothing about an account the refusal did not name`, () => {
+    it(`says nothing about a sibling the refusal did not name, nor about another provider at all`, () => {
         providerRefusals.value = spent();
         const other = pools({ measuredAt: 500 });
-        expect(liveUsage(`claude-2`, other)).toBe(other);
-        // Nor about every subscription of a provider on one refusal a routed turn could not attribute.
-        providerRefusals.value = spent({ account: undefined });
-        expect(liveUsage(`claude-1`, other)).toBe(other);
+        expect(liveUsage(`claude`, `claude-2`, other)).toBe(other);
+        // The store is keyed by provider, so Claude's refusal cannot reach a subscription of somebody else's:
+        // matching on the account key alone, one provider's spent plan could speak for another's.
+        expect(liveUsage(`kimi`, `claude-1`, other)).toBe(other);
     });
 
     it(`is the spent-allowance refusal alone: a credential or a seat says nothing about a pool`, () => {
         const reading = pools({ measuredAt: 500 });
         providerRefusals.value = spent({ kind: `auth`, message: `401` });
-        expect(liveUsage(`claude-1`, reading)).toBe(reading);
+        expect(liveUsage(`claude`, `claude-1`, reading)).toBe(reading);
         providerRefusals.value = spent({ kind: `entitlement`, message: `disabled for this seat` });
-        expect(liveUsage(`claude-1`, reading)).toBe(reading);
+        expect(liveUsage(`claude`, `claude-1`, reading)).toBe(reading);
     });
 
     it(`lets go the moment a reading taken since finds room, the rule that settles the note beside it`, () => {
         providerRefusals.value = spent();
         const reopened = usage({ windows: [window({ utilization: 12 })], measuredAt: 2_000 });
-        expect(liveUsage(`claude-1`, reopened)).toBe(reopened);
+        expect(liveUsage(`claude`, `claude-1`, reopened)).toBe(reopened);
         // Measured since and STILL spent is the refusal being confirmed, not answered.
-        expect(percentsOf(liveUsage(`claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 100]);
+        expect(percentsOf(liveUsage(`claude`, `claude-1`, pools({ measuredAt: 2_000 })))).toEqual([40, 100]);
     });
 
-    /* THE PIN MUST NOT FEED ITSELF. The surfaces judge a refusal against the percentages they draw, so a pin
-     * that changed that verdict would keep itself alive for the week the store remembers the refusal. It cannot:
-     * it only ever fires where the raw figure already reads as spent, which is where the verdict is the same
-     * either way. */
+    /* THE ROUTED HALF, and the reason this rule is written about providers rather than account names. A turn
+     * CLIProxyAPI served names no account, so Kimi's own "403 You've reached your 5-hour usage limit" arrives
+     * attributable to nothing at all — and its 5-hour meter went on reading 93% underneath the sentence saying
+     * the pool was gone. A nameless refusal speaks for every connection the provider holds, which is what the
+     * translator issuing one MEANS: it refuses once every auth file it holds is cooling down. */
+    const kimiPools = (over: Partial<AccountUsage> = {}): AccountUsage =>
+        usage({ windows: [window({ kind: `five_hour`, utilization: 93 }), window({ kind: `seven_day`, utilization: 79 })], ...over });
+    const kimiSpent = { kimi: { at: 2_000, kind: `limit` as const, message: `403 You've reached your 5-hour usage limit` } };
+
+    it(`reads a routed subscription as spent on the refusal that could name nobody`, () => {
+        const reading = kimiPools({ measuredAt: 1_500 });
+        translatorAccounts.value = { ...noRouted, kimi: [{ name: `kimi-1`, label: `Kimi Code session`, usage: reading }] };
+        providerRefusals.value = kimiSpent;
+        expect(percentsOf(liveUsage(`kimi`, `kimi-1`, reading))).toEqual([100, 79]);
+    });
+
+    /* AND STOPS THERE. A nameless refusal is the one case where a whole fleet could be painted spent at once, so
+     * it is answered the same way it is resolved: by the provider's own connections. One of them read since with
+     * room in it means the translator has an auth file to serve turns on, and nothing here is pinned. */
+    it(`is answered for the whole provider by any one of its connections having room since`, () => {
+        const reading = kimiPools({ measuredAt: 1_500 });
+        translatorAccounts.value = {
+            ...noRouted,
+            kimi: [
+                { name: `kimi-1`, label: `Kimi Code session`, usage: reading },
+                { name: `kimi-2`, label: `Kimi spare`, usage: usage({ windows: [window({ utilization: 20 })], measuredAt: 3_000 }) },
+            ],
+        };
+        providerRefusals.value = kimiSpent;
+        expect(liveUsage(`kimi`, `kimi-1`, reading)).toBe(reading);
+    });
+
+    /* THE PIN MUST NOT FEED ITSELF. The surfaces judge a refusal against percentages this same merge produces, so
+     * a pin that changed that verdict would keep itself alive for the week the store remembers the refusal. It
+     * cannot: the judgement runs on the RAW readings (providerReadings), and on a figure already at or above
+     * SPENT_PERCENT the verdict is the same either way. */
     it(`cannot keep itself standing, the verdict is the same on the pinned figure as on the raw one`, () => {
         const refusal = refusedFor();
         const verdict = (percent: number): boolean | undefined =>
@@ -421,17 +458,20 @@ describe(`usageStatusFor`, () => {
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
         translatorAccounts.value = { ...translatorAccounts.value, gemini: [{ name: `g-1`, label: `Google`, usage: usage({ measuredAt: 7 }) }] };
 
-        expect(usageStatusFor(`claude-1`)?.measuredAt).toBe(0);
+        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(0);
         // A routed subscription is keyed by its auth-file name, the key its row is drawn under.
-        expect(usageStatusFor(`g-1`)?.measuredAt).toBe(7);
-        expect(usageStatusFor(`nobody`)).toBeUndefined();
-        expect(usageStatusFor(undefined)).toBeUndefined();
+        expect(usageStatusFor(`gemini`, `g-1`)?.measuredAt).toBe(7);
+        expect(usageStatusFor(`claude`, `nobody`)).toBeUndefined();
+        expect(usageStatusFor(`claude`, undefined)).toBeUndefined();
+        // Scoped to the provider asked for, not to whichever list happens to hold that key: two providers can
+        // file an account under the same name and only one of them is the one being drawn.
+        expect(usageStatusFor(`kimi`, `claude-1`)).toBeUndefined();
     });
 
     it(`still prefers a turn's own frame once it is the newer of the two`, () => {
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `claude-1`, label: `Claude`, connectedAt: 0, usage: usage() }] };
         usageStatusByAccount.value = { "claude-1": usage({ measuredAt: 900 }) };
-        expect(usageStatusFor(`claude-1`)?.measuredAt).toBe(900);
+        expect(usageStatusFor(`claude`, `claude-1`)?.measuredAt).toBe(900);
         usageStatusByAccount.value = {};
     });
 });

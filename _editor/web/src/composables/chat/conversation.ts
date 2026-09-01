@@ -777,7 +777,7 @@ export class Conversation {
      * climbed since. The reset instant is spent only on a pool that is effectively spent, where "when does it
      * come back" is the question the number raises; below that it is a date nobody asked for. */
     private allowanceNote(): string {
-        const headroom = planHeadroom(usageStatusFor(this.account.value));
+        const headroom = planHeadroom(usageStatusFor(this.provider.value, this.account.value));
         if (headroom === undefined) {
             return ``;
         }
