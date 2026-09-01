@@ -60,7 +60,10 @@ import ChatRunThroughMenu from "./ChatRunThroughMenu.vue";
 import ChatTranscriptSkeleton from "./ChatTranscriptSkeleton.vue";
 import ComposerEffort from "./ComposerEffort.vue";
 import ComposerModelPill from "./ComposerModelPill.vue";
+import ComposerMoreMenu from "./ComposerMoreMenu.vue";
 import ComposerTierChip from "./ComposerTierChip.vue";
+import { type ComposerControl, overflowRows, ridesRow } from "./composerMore";
+import { startingMode } from "../composables/chat/turnDefaults";
 
 /* ONE CHAT ON SCREEN: the transcript, the composer that writes into it, and the pickers and banners that
  * belong to that one conversation. The panel around it (ChatPanel) owns the frame: the chat list, the pop-out,
@@ -220,11 +223,15 @@ const modelOpen = ref(false);
 const modeOpen = ref(false);
 const personaOpen = ref(false);
 const placementOpen = ref(false);
+const moreOpen = ref(false);
 const modelPill = ref<InstanceType<typeof ComposerModelPill>>();
 const modePill = ref<HTMLElement>();
 const placementPill = ref<HTMLElement>();
 const runThroughPill = ref<HTMLElement>();
 const personaPill = ref<HTMLElement>();
+// The overflow's button, and the anchor THREE of the pickers above fall back to: a control sitting at its
+// default has no chip in the row to hang its panel off, so the panel opens over the button it was reached from.
+const morePill = ref<HTMLElement>();
 
 // Auto-follow: the transcript stays at its newest content unless the user has scrolled up to read. The rule
 // and every geometry change it has to survive live in the composable; the pane only says when a NEW transcript
@@ -485,6 +492,51 @@ const {
     end: endLoop,
 } = runThrough;
 
+/* WHAT THE ROW SHOWS AND WHAT THE OVERFLOW HOLDS (composerMore.ts owns the rule; this is the reading of it).
+ * Four controls answer to it: mode, persona, run-through and the agent voice. Each rides the row as a named
+ * chip while it is set to anything but this chat's default and sits in the overflow as a labelled row while it
+ * is not, so the row is a description of THIS chat rather than a list of everything the composer can do.
+ *
+ * Model, effort and placement are not on the list: they are the ones that stay whatever they are set to, which
+ * is the user's own reading of what a composer is for. */
+const controlSituation = computed(() => ({
+    mode: mode.value,
+    startingMode: startingMode(props.conversation.isolated.value),
+    persona: props.conversation.actsAs.value,
+    runThrough: runThroughState.value,
+    voiceAgent: voiceAgent.value,
+    personaOffered: !remote.value,
+    voiceOffered: placeable.value,
+}));
+const inRow = computed(() => ridesRow(controlSituation.value));
+const moreRows = computed(() => overflowRows(controlSituation.value));
+// What is behind the button, said on the button: the one thing an overflow owes a reader before they press it.
+const moreHint = computed(() => moreRows.value.map((row) => row.label).join(` · `));
+
+/* Each picker opens over whichever element the user reached it from: its own chip when the control is set, the
+ * overflow button when it is not. One flag either way, so nothing here can end up with a panel open over an
+ * anchor that is no longer on screen. */
+const modeAnchor = computed(() => (inRow.value.mode ? modePill.value : morePill.value));
+const personaAnchor = computed(() => (inRow.value.persona ? personaPill.value : morePill.value));
+const runThroughAnchor = computed(() => (inRow.value.runThrough ? runThroughPill.value : morePill.value));
+
+/* A row in the overflow hands off to the control that owns the choice, rather than making it here. The panel is
+ * closed FIRST and the next one opened in the same press: the overlay arms its dismissal on the open flag, after
+ * this handler has run, so the pointerdown that got here can never reach the panel it is opening. The voice is
+ * the one with nothing to pick, so its row is the press. */
+const openFromMore = (control: ComposerControl): void => {
+    moreOpen.value = false;
+    if (control === `mode`) {
+        modeOpen.value = true;
+    } else if (control === `persona`) {
+        personaOpen.value = true;
+    } else if (control === `runThrough`) {
+        runThroughOpen.value = true;
+    } else {
+        voiceAgent.value = true;
+    }
+};
+
 /* NOTHING ELSE THAT REWRITES WHAT SEND MEANS SURVIVES AN EDIT BEING ARMED: the voice, and the run-through
  * badge's two picks. All three answer the same question the edit does ("what happens when I press send") with
  * answers that cannot both hold, and submit() has to pick one; every arrangement where the loser stays LIT is a
@@ -527,6 +579,9 @@ watch([connected, pickedWorkflow], ([isConnected, workflow]) => {
         modelOpen.value = false;
         modeOpen.value = false;
         personaOpen.value = false;
+        // The overflow goes with them: everything left inside it is one of the three above, since the badge that
+        // greyed them has promoted run-through out into the row.
+        moreOpen.value = false;
     }
 });
 
@@ -1529,7 +1584,16 @@ watch(
                                      mid-way is worse than a second line. `ml-auto` rather than
                                      `justify-between`: an auto margin holds the second group against the right
                                      edge whether it is sharing the first line or sitting on its own, where
-                                     space-between would slam it left the moment it wrapped. -->
+                                     space-between would slam it left the moment it wrapped.
+
+                                     WHAT THE ROW HOLDS IS NOW A FACT ABOUT THIS CHAT, not about the app. Four of
+                                     the shaping controls (mode, persona, run-through, the agent voice) are here
+                                     only while they are set to something other than this chat's default, and sit
+                                     in the overflow beside the mic while they are not: composerMore.ts states
+                                     the rule and says why. An ordinary chat therefore reaches Send in five
+                                     controls where it used to take nine, and the wrap above is a thing that
+                                     happens to an unusual chat on a narrow column rather than to every chat in
+                                     the app on the first screen of a fresh sandbox. -->
                                 <div class="flex flex-wrap items-center gap-x-1 gap-y-1.5 px-2.5 pb-2.5">
                                     <!-- MODEL, EFFORT, MODE, PERSONA GO INERT UNDER A WORKFLOW BADGE, and that is not
                                          a caveat about the feature: it is what the badge means. Every one of them
@@ -1538,10 +1602,12 @@ watch(
                                          session on the provider, harness and model the step declares, looping the way
                                          the step says to loop. Left live they were four controls that changed nothing
                                          about the press beneath them: pick Opus · Max · Plan, watch the run come back
-                                         on something else, and you would be right to call it a bug.
+                                         on something else, and you would be right to call it a bug. The overflow dims
+                                         with them, because a picked workflow has promoted run-through out into the
+                                         row and everything still inside that menu is one of the four.
 
-                                         The run-through badge at the end of the row is the exception, because it is
-                                         the badge: see it for why it never dims.
+                                         The run-through badge is the exception, because it is the badge: see it for
+                                         why it never dims.
 
                                          Dimmed rather than hidden: they still say what an ordinary send would use, the
                                          line under the box says whose they are instead, and the badge is one press
@@ -1554,15 +1620,23 @@ watch(
                                          THE LABELS COME BACK AT THE WIDTH THEY FIT AT, WHICH IS NOT THE WIDTH
                                          THEY USED TO. Measured, at the sizes this row actually draws: the model
                                          name alone needs ~426px of pane to leave the row on one line, the
-                                         effort word ~476, the mode word ~504. They were switching back on at
-                                         320, 384 and 448: every one of them 60-100px early, so widening the
-                                         column from ~390 to ~540 turned labels on that immediately pushed the
-                                         row onto two lines, and it took another 150px of dragging to earn the
-                                         single line back. A reader who widens a column and watches it get
-                                         TALLER is not looking at a responsive layout, they are looking at a
-                                         bug. One breakpoint for the three of them (`@max-lg`, 512px) clears the
-                                         widest of the three requirements and puts them back together, which is
-                                         also how they read: they are one row of words, not three. -->
+                                         effort word ~476. They were switching back on at 320 and 384: both of
+                                         them 60-100px early, so widening the column from ~390 to ~540 turned
+                                         labels on that immediately pushed the row onto two lines, and it took
+                                         another 150px of dragging to earn the single line back. A reader who
+                                         widens a column and watches it get TALLER is not looking at a responsive
+                                         layout, they are looking at a bug. One breakpoint for the pair
+                                         (`@max-lg`, 512px) clears the wider of the two requirements and puts
+                                         them back together, which is also how they read: one row of words, not
+                                         two.
+
+                                         THE CHIPS TO THE RIGHT ARE NOT ON THIS BREAKPOINT and must not be put on
+                                         it. Mode, persona and the rest are only in the row at all while they are
+                                         set to something other than the default, so each of them keeps its word
+                                         at every width: a chip that collapsed to a bare glyph on a narrow column
+                                         would be back to the exact state the promotion rule exists to remove,
+                                         and it would do it on the chats that can least afford it. What buys the
+                                         room is that they are usually not there. -->
                                     <div class="flex min-w-0 items-center gap-1">
                                         <ComposerModelPill
                                             ref="modelPill"
@@ -1595,16 +1669,40 @@ watch(
                                     </div>
 
                                     <!-- HOW THE TURN IS SHAPED, AND THE PRESS THAT SENDS IT: the group that
-                                         keeps the right edge (see the note on the row above). -->
-                                    <div class="flex items-center gap-1 ml-auto">
-                                        <!-- MODE leads the right-hand group, and the group reads left to right as a
-                                         gradient away from the model: which brain (model · effort), then how it
-                                         works (mode), then who it is (persona), then what the message is run
-                                         through (loop or workflow). Mode sits closest to effort because the two
-                                         are one thought: how hard it thinks, and how much rope it has, and
-                                         because it is the only pill here that is always worded, so it anchors
-                                         the row's baseline where a bare glyph could not. -->
+                                         keeps the right edge (see the note on the row above).
+
+                                         IT WRAPS INTERNALLY, which the row above says a group should not have to
+                                         do, and the exception is earned. The group used to be a fixed set of
+                                         pills that shed their words under `@max-lg` and so could always be made
+                                         to fit; now its members are chips that keep their words at every width
+                                         (see the labels note above), and four of them armed at once on a 330px
+                                         column is wider than the column. Every chip is `shrink-0` and this is a
+                                         flex line, so without `flex-wrap` that case does not squeeze or clip: it
+                                         RUNS OUT PAST THE FRAME, chips and Send both, which is the exact bug the
+                                         outer row's wrapping exists to prevent and which returned here the day
+                                         the labels stopped hiding.
+
+                                         `justify-end` so the overflow lines stay against the right edge with
+                                         Send, rather than stacking left and leaving the press adrift. A tall
+                                         composer on a narrow column with four things armed is a fair price: it
+                                         is rare, it is entirely made of state the user chose, and the wrap is
+                                         the only answer that neither clips a control nor takes its word away. -->
+                                    <div class="ml-auto flex flex-wrap items-center justify-end gap-x-1 gap-y-1.5">
+                                        <!-- MODE, and the group's order is a gradient away from the model, kept
+                                         whether or not any given chip is showing: which brain (model · effort),
+                                         then how it works (mode), where it runs (placement), who it is
+                                         (persona), what the message is run through (loop or workflow), whose
+                                         words are in the box (voice), and the overflow holding whichever of them
+                                         is at its default. A chip appearing must slot into the order the row
+                                         already had, never append itself to the end, or the row's arrangement
+                                         would be a history of what the user switched on and in what sequence.
+
+                                         Mode sits closest to effort because the two are one thought: how hard it
+                                         thinks, and how much rope it has. It is worded whenever it is here (see
+                                         the note on labels above): it is here because the posture is not this
+                                         chat's usual one, and that is not a thing to say in a glyph. -->
                                         <button
+                                            v-if="inRow.mode"
                                             ref="modePill"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
@@ -1615,16 +1713,22 @@ watch(
                                             aria-label="Agent mode"
                                         >
                                             <Icon :name="modeIcon" class="text-2xs text-link" />
-                                            <span class="@max-lg:hidden">{{ modeLabel }}</span>
+                                            <span>{{ modeLabel }}</span>
                                             <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!-- WHERE IT RUNS, the last of the right-hand group and the one that is
-                                         about the machine rather than the message: this sandbox, a runner of its
-                                         own on another computer, or another sandbox on this account. Hidden
-                                         entirely until there is somewhere else to choose, and read-only once the
-                                         conversation has run, because placement is part of a conversation's
-                                         identity (ChatPlacementMenu).
+                                        <!-- WHERE IT RUNS, the one control in the group that is about the machine
+                                         rather than the message: this sandbox, a runner of its own on another
+                                         computer, or another sandbox on this account. Hidden entirely until there
+                                         is somewhere else to choose, and read-only once the conversation has run,
+                                         because placement is part of a conversation's identity
+                                         (ChatPlacementMenu).
+
+                                         NOT ON THE PROMOTION RULE, and deliberately: "Here" is a default like
+                                         any other and would collapse under it, but where an agent is running is
+                                         the fact people switch most and check before nearly every send, so it
+                                         holds its slot whatever it says. The rule buys room for the controls
+                                         worth keeping; spending that room on this one is the point of it.
 
                                          The glyph follows the KIND of place: a stack of boxes once the chat
                                          lives in another sandbox, the single machine otherwise, so the pill says
@@ -1646,84 +1750,78 @@ watch(
                                         <!-- PERSONA, who the chat IS when it reaches outside: which of your accounts
                                          this turn may speak through, and how much of the toolbox it holds.
 
-                                         A BADGE like the workflow pill beside it, for the same reason: unpicked
-                                         it is a bare glyph, because most chats are nobody in particular and a
-                                         name would be noise; picked it NAMES the persona in the active tint,
-                                         because a message about to go out under somebody's account must say
-                                         whose before it is sent, not after. Which is also why it stands AFTER
-                                         mode rather than leading the group: a bare glyph at the group's edge is
-                                         the easiest thing in the row to read as decoration, and the one pill
-                                         whose unset state most needs to be noticed cannot afford that. -->
-                                        <!-- ABSENT ON A CHAT THAT LIVES IN ANOTHER SANDBOX. A persona is a card in
-                                             one daemon's record, so the id this pill would set names nothing over
-                                             there and the send drops it (turnRequest.ts): the turn is an ordinary
-                                             attended chat on that box's own accounts, and a pill that pretended
-                                             otherwise would be promising an identity to a machine that has never
-                                             heard of it. -->
+                                         ONLY EVER HERE WHEN IT IS SOMEBODY, which is the whole promotion rule
+                                         (composerMore.ts) landing on the control that most needed it. Unset, it
+                                         was a bare grey glyph the composer carried on every chat in the app to
+                                         announce that this one was nobody in particular: the most-shown, least-
+                                         read thing in the row. Set, it must be impossible to miss, because a
+                                         message about to go out under somebody's account has to say whose before
+                                         it is sent, not after. So it is absent from most chats and NAMED in the
+                                         active tint on the few, and "Acts as · Anyone" sits in the overflow for
+                                         anyone looking to change that. Nothing about the armed state is softer
+                                         than it was; what went is the advertisement of the unarmed one.
+
+                                         ABSENT ON A CHAT THAT LIVES IN ANOTHER SANDBOX, whatever it is set to. A
+                                         persona is a card in one daemon's record, so the id this pill would set
+                                         names nothing over there and the send drops it (turnRequest.ts): the turn
+                                         is an ordinary attended chat on that box's own accounts, and a pill that
+                                         pretended otherwise would be promising an identity to a machine that has
+                                         never heard of it. -->
                                         <button
-                                            v-if="!remote"
+                                            v-if="inRow.persona"
                                             ref="personaPill"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                             :class="{
-                                                'composer-active': conversation.actsAs.value !== undefined && pickedWorkflow === undefined,
+                                                'composer-active': pickedWorkflow === undefined,
                                                 'composer-steered': pickedWorkflow !== undefined,
                                             }"
                                             :disabled="pickedWorkflow !== undefined"
                                             @click="personaOpen = !personaOpen"
-                                            v-tooltip.top="
-                                                conversation.actsAs.value !== undefined
-                                                    ? `This chat acts as ${personaName}: only its accounts are in reach`
-                                                    : `Act as one of your personas, only that person's accounts`
-                                            "
+                                            v-tooltip.top="`This chat acts as ${personaName}: only its accounts are in reach`"
                                             :aria-expanded="personaOpen"
-                                            :aria-label="conversation.actsAs.value !== undefined ? `Acts as: ${personaName}` : `Acts as anyone`"
+                                            :aria-label="`Acts as: ${personaName}`"
                                         >
-                                            <!-- PICKED, IT WEARS THE FACE. The glyph is right for the unset pill:
-                                                 "anyone" is a category and has no face, but once a message is
-                                                 about to go out under somebody's account, the pill is the last
-                                                 thing seen before Enter, and the character every other surface
-                                                 identifies that persona by belongs here too. It is also what
-                                                 survives the narrow composer: the name hides under @max-lg, and
-                                                 without this the whole pill collapsed to the same grey glyph it
-                                                 wears when nobody is picked at all. -->
+                                            <!-- IT WEARS THE FACE, and falls back to the glyph only for a card that
+                                                 has gone missing: the character every other surface identifies
+                                                 this persona by belongs on the last control seen before Enter.
+                                                 The name rides beside it at EVERY width, unlike the pills either
+                                                 side of it: a chip is in this row because it is doing something
+                                                 to the next send, and one that collapsed to a bare glyph on a
+                                                 narrow column would be back to the state this rule removed. -->
                                             <PersonaFace v-if="pickedPersona !== undefined" :persona="pickedPersona" :size="16" />
-                                            <Icon
-                                                v-else
-                                                name="users"
-                                                class="text-2xs"
-                                                :class="conversation.actsAs.value !== undefined ? 'text-link' : ''"
-                                            />
-                                            <span v-if="conversation.actsAs.value !== undefined" class="max-w-32 truncate @max-lg:hidden">
-                                                {{ personaName }}
-                                            </span>
-                                            <Icon v-if="conversation.actsAs.value !== undefined" name="chevron-down" class="text-2xs text-subtle" />
+                                            <Icon v-else name="users" class="text-2xs text-link" />
+                                            <span class="max-w-32 truncate">{{ personaName }}</span>
+                                            <Icon name="chevron-down" class="text-2xs text-subtle" />
                                         </button>
 
-                                        <!-- RUN THROUGH: the row's last shaping control, and ONE where there were
-                                         two. A loop and a workflow answer the same question about the next
-                                         message (what is it run THROUGH) with answers the composer can only
-                                         take one of, so they are one badge: picking is picking, and a pick
-                                         replaces a pick. Two glyphs side by side said the same thing only by
-                                         greying each other out, which is a rule you learn by tripping over it.
+                                        <!-- RUN THROUGH: ONE control where there were two. A loop and a workflow
+                                         answer the same question about the next message (what is it run THROUGH)
+                                         with answers the composer can only take one of, so they are one badge:
+                                         picking is picking, and a pick replaces a pick. Two glyphs side by side
+                                         said the same thing only by greying each other out, which is a rule you
+                                         learn by tripping over it.
 
-                                         Unpicked it is a bare neutral glyph: all the room a control most
-                                         chats never use deserves. Picked it wears the CHOSEN thing's own icon
-                                         and names it in the active tint, so nothing the two pills used to say
-                                         about an armed state is lost: a composer about to spend money round
-                                         after round, or to fan one message across paid sessions, still says so
-                                         before the press rather than after it.
+                                         Armed, it wears the CHOSEN thing's own icon and names it in the active
+                                         tint: a composer about to spend money round after round, or to fan one
+                                         message across paid sessions, says so before the press rather than
+                                         after it. Unarmed there is nothing to say, so it says nothing and sits
+                                         in the overflow as a named row instead — which is where the merge above
+                                         was always heading. That merge halved a pair of mute glyphs; the
+                                         promotion rule (composerMore.ts) finished the job by noticing that the
+                                         remaining one was mute on almost every chat in the app.
 
                                          A RUNNING loop takes it over entirely: the count replaces the name,
                                          the press ends it, and that outranks even an armed workflow, because
                                          stopping something already going is not a thing the next message
-                                         decides, and a badge that buried the stop in a menu would leave the
-                                         loop no way out but the fleet board. -->
+                                         decides. It is also why "running" counts as armed for the rule: a badge
+                                         that let a live loop fall into a menu would leave it no way out but the
+                                         fleet board. -->
                                         <button
+                                            v-if="inRow.runThrough"
                                             ref="runThroughPill"
                                             type="button"
-                                            class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
-                                            :class="{ 'composer-active': runThroughState !== 'idle' }"
+                                            class="composer-active composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                             :disabled="runningLoop !== undefined && !reachable"
                                             @click="runningLoop ? endLoop() : (runThroughOpen = !runThroughOpen)"
                                             v-tooltip.top="runThroughHint"
@@ -1731,52 +1829,86 @@ watch(
                                             :aria-expanded="runningLoop ? undefined : runThroughOpen"
                                             :aria-label="runThroughLabel"
                                         >
-                                            <Icon
-                                                :name="runThroughIcon"
-                                                class="text-2xs"
-                                                :class="runningLoop || runThroughName !== undefined ? 'text-link' : ''"
-                                                :spin="runningLoop !== undefined"
-                                            />
-                                            <span v-if="runningLoop" class="@max-lg:hidden"
-                                                >{{ runningLoop.iteration }}/{{ runningLoop.maxIterations }}</span
-                                            >
+                                            <Icon :name="runThroughIcon" class="text-2xs text-link" :spin="runningLoop !== undefined" />
+                                            <span v-if="runningLoop">{{ runningLoop.iteration }}/{{ runningLoop.maxIterations }}</span>
                                             <template v-else-if="runThroughName !== undefined">
-                                                <span class="max-w-32 truncate @max-lg:hidden">{{ runThroughName }}</span>
+                                                <span class="max-w-32 truncate">{{ runThroughName }}</span>
                                                 <Icon name="chevron-down" class="text-2xs text-subtle" />
                                             </template>
                                         </button>
 
-                                        <!-- VOICE, whose words the box is writing: yours (the default, a bare glyph),
-                                         or the AGENT's. Armed, it names itself in the active tint and the next
-                                         Send PLACES the draft into the transcript as the agent's own words: no
-                                         turn, no reply: then disarms. Last of the shaping pills and nearest to
-                                         Send, because it changes what Send IS more than anything else in the
-                                         row: every other pill shapes a turn, this one removes the turn entirely.
-                                         Appears with the conversation's first turn (a draft chat has no
+                                        <!-- VOICE: the box is writing the AGENT's words, not yours. The next Send
+                                         PLACES the draft into the transcript as the agent's own: no turn, no
+                                         reply: then disarms. Last of the shaping chips and nearest to Send,
+                                         because it changes what Send IS more than anything else in the row:
+                                         every other control shapes a turn, this one removes the turn entirely.
+
+                                         ARMED-ONLY, and the clearest case for the whole rule (composerMore.ts).
+                                         This is a rare, deliberate, one-shot act: the composer used to advertise
+                                         it with a permanent glyph on every chat that had ever run a turn, which
+                                         is a lot of pixels spent on a control almost nobody is about to press,
+                                         and it read as decoration in a row of other glyphs. Off, it is a named
+                                         row in the overflow, where its sentence can actually say what it does.
+                                         On, the whole composer already changes standing (.composer-voice), and
+                                         this chip is the piece of that a reader can press to take it back.
+
+                                         Offered from the conversation's first turn (a draft chat has no
                                          transcript to place into), and a workflow badge greys it like the rest:
                                          a run's request is nobody's transcript. -->
                                         <button
-                                            v-if="placeable"
+                                            v-if="inRow.voice"
                                             type="button"
                                             class="composer-ghost h-8 shrink-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
                                             :class="{
-                                                'composer-active': voiceAgent && pickedWorkflow === undefined,
+                                                'composer-active': pickedWorkflow === undefined,
                                                 'composer-steered': pickedWorkflow !== undefined,
                                             }"
                                             :disabled="pickedWorkflow !== undefined || editing !== undefined"
-                                            @click="voiceAgent = !voiceAgent"
+                                            @click="voiceAgent = false"
                                             v-tooltip.top="
                                                 editing !== undefined
                                                     ? `Finish or cancel the edit first: this box is holding a message to replace`
-                                                    : voiceAgent
-                                                      ? `Writing as the agent: Send places the words into the transcript, no reply`
-                                                      : `Write as the agent, place words into the transcript in its voice`
+                                                    : `Writing as the agent: Send places the words into the transcript, no reply. Press to write as yourself again`
                                             "
-                                            :aria-pressed="voiceAgent"
-                                            aria-label="Write as the agent"
+                                            :aria-pressed="true"
+                                            aria-label="Writing as the agent"
                                         >
-                                            <Icon name="robot" class="text-2xs" :class="voiceAgent ? 'text-link' : ''" />
-                                            <span v-if="voiceAgent" class="@max-lg:hidden">As agent</span>
+                                            <Icon name="robot" class="text-2xs text-link" />
+                                            <span>As agent</span>
+                                        </button>
+
+                                        <!-- THE OVERFLOW, and the reason the four pills above are conditional at all
+                                             (composerMore.ts states the rule; this is where it is spent). It holds
+                                             every one of them that is sitting at this chat's default, each as a row
+                                             carrying its NAME, its current value and a sentence: which is strictly
+                                             more readable than the bare glyph it replaces, whose only explanation
+                                             was a tooltip no touch device has ever shown anyone. Nothing is hidden
+                                             that is doing anything; a control set to something else has left this
+                                             menu and is a named chip to the left.
+
+                                             It is the row's growth story too. Before this, every feature that
+                                             wanted a place in the composer took a permanent slot beside Send, so
+                                             the row's width tracked the roadmap rather than the chat. The next one
+                                             lands in here and only earns the row by being switched on.
+
+                                             LAST OF THE SHAPING CONTROLS, immediately before the mic, so it holds
+                                             one fixed spot while the chips to its left come and go: an overflow
+                                             that moved as the chat changed would be worse than the glyphs it
+                                             replaced. It goes with them under a workflow badge: everything left
+                                             inside it is a control that badge has taken over. -->
+                                        <button
+                                            v-if="moreRows.length > 0"
+                                            ref="morePill"
+                                            type="button"
+                                            class="composer-ghost h-8 w-8 shrink-0 max-md:h-11 max-md:w-11"
+                                            :class="{ 'composer-steered': pickedWorkflow !== undefined }"
+                                            :disabled="pickedWorkflow !== undefined"
+                                            @click="moreOpen = !moreOpen"
+                                            v-tooltip.top="moreHint"
+                                            :aria-expanded="moreOpen"
+                                            aria-label="More composer settings"
+                                        >
+                                            <Icon name="sliders-h" class="text-xs max-md:text-base" />
                                         </button>
 
                                         <!-- HANDS-FREE VOICE: one tap arms it, and from there the pause is the send
@@ -1898,16 +2030,16 @@ watch(
         <ResponsiveOverlay v-model="modelOpen" :anchor="modelPill?.el" header="Model" panel-class="w-[26rem]">
             <ChatModelPicker :conversation="conversation" @selected="modelOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="modeOpen" :anchor="modePill" cross="end" header="Agent mode" panel-class="w-56 p-1">
+        <ResponsiveOverlay v-model="modeOpen" :anchor="modeAnchor" cross="end" header="Agent mode" panel-class="w-56 p-1">
             <ChatModeMenu @selected="modeOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="personaOpen" :anchor="personaPill" cross="end" header="Acts as" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="personaOpen" :anchor="personaAnchor" cross="end" header="Acts as" panel-class="w-80 p-1">
             <ChatPersonaMenu :picked="conversation.actsAs.value" @picked="pickPersona($event)" />
         </ResponsiveOverlay>
         <ResponsiveOverlay v-model="placementOpen" :anchor="placementPill" cross="end" header="Where this runs" panel-class="w-80 p-1">
             <ChatPlacementMenu :conversation="conversation" @selected="placementOpen = false" />
         </ResponsiveOverlay>
-        <ResponsiveOverlay v-model="runThroughOpen" :anchor="runThroughPill" cross="end" header="Run this message through" panel-class="w-80 p-1">
+        <ResponsiveOverlay v-model="runThroughOpen" :anchor="runThroughAnchor" cross="end" header="Run this message through" panel-class="w-80 p-1">
             <ChatRunThroughMenu
                 :loop="conversation.loopId.value"
                 :workflow="conversation.workflowId.value"
@@ -1915,6 +2047,12 @@ watch(
                 @workflow="pickWorkflow($event)"
                 @manage="manageRunThrough()"
             />
+        </ResponsiveOverlay>
+        <!-- The overflow itself. Its rows hand off to the three panels above, which then open over THIS button
+             (modeAnchor and the two beside it), so a control reached through the menu still makes its choice in
+             the one list that owns it. -->
+        <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" header="This message" panel-class="w-80 p-1">
+            <ComposerMoreMenu :rows="moreRows" @pick="openFromMore($event)" />
         </ResponsiveOverlay>
     </div>
 </template>
