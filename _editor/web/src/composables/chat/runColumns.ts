@@ -40,7 +40,7 @@ const ran = (state: WorkflowStepRun["state"]): boolean => state !== `pending` &&
  */
 export const runColumns = (run: WorkflowRun): Map<string, RunColumn> => {
     const { nodes, edges } = workflowDag(run.workflow, run);
-    const positions = layoutDag(nodes as readonly DagNode<never>[], edges, {
+    const { nodes: positions } = layoutDag(nodes as readonly DagNode<never>[], edges, {
         direction: `LR`,
         nodeWidth: RUN_NODE_WIDTH,
         nodeHeight: RUN_NODE_HEIGHT,

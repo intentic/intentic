@@ -274,6 +274,15 @@ jobs:
     needs: verify-core
 `;
 
+// The file `verify-core` calls. A run reports its jobs under the calling job's name (`verify-core / verify`),
+// and this file is the only place that says what they waited on, so it has to be fetched too.
+const VERIFY_YAML = `
+on:
+  workflow_call:
+jobs:
+  verify: {}
+`;
+
 const githubJobsFetch = (options: { workflow?: string; runOk?: boolean }): { fetchFn: FetchFn; urls: string[] } => {
     const urls: string[] = [];
     const fetchFn = (async (input: RequestInfo | URL) => {
@@ -292,7 +301,11 @@ const githubJobsFetch = (options: { workflow?: string; runOk?: boolean }): { fet
             return new Response(JSON.stringify({ jobs }), { status: 200, headers: { "content-type": "application/json" } });
         }
         if (url.includes("/contents/")) {
-            return options.workflow === undefined ? new Response("nope", { status: 404 }) : new Response(options.workflow, { status: 200 });
+            if (options.workflow === undefined) {
+                return new Response("nope", { status: 404 });
+            }
+            // Per path, because the run's workflow calls a second file and the graph now depends on both.
+            return new Response(url.includes("verify.yml") ? VERIFY_YAML : options.workflow, { status: 200 });
         }
         if (options.runOk === false) {
             return new Response("nope", { status: 404 });
@@ -312,8 +325,10 @@ test("github allJobs resolves needs from the run's own workflow file, pinned to 
     expect(jobs.map((job) => job.needs)).toEqual([[], ["preflight"], ["verify-core / verify"]]);
     // The reusable-workflow call reported one job under a name `needs` never mentions; `release` still reaches it.
     expect(jobs[1]?.name).toBe("verify-core / verify");
-    // The sha, not HEAD: an old run must be drawn with the graph it actually ran.
+    // The sha, not HEAD: an old run must be drawn with the graph it actually ran. Both files, at that sha:
+    // a called workflow read at the wrong revision is a graph from a different run.
     expect(urls.some((url) => url.includes("/contents/.github/workflows/ci.yml?ref=deadbee"))).toBe(true);
+    expect(urls.some((url) => url.includes("/contents/.github/workflows/verify.yml?ref=deadbee"))).toBe(true);
 });
 
 test("github allJobs still returns the jobs when the workflow file cannot be read", async () => {

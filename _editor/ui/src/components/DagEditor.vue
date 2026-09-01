@@ -72,7 +72,7 @@ const pickedEdge = ref<string>();
 const edgeKey = (from: string, to: string): string => `${from}>${to}`;
 
 const flowNodes = computed<Node<DagNode<T>>[]>(() => {
-    const positions = layoutDag(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight });
+    const { nodes: positions } = layoutDag(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight });
     return nodes.map((node) => ({
         id: node.id,
         type: `card`,

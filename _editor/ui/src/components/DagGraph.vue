@@ -5,11 +5,11 @@
      text-subtle colors the rest. The #overlay slot draws on top of the canvas (controls, legends) and is
      handed the actions a control needs. The parent must size this component (single root, h-full w-full). -->
 <script setup lang="ts" generic="T">
-import { VueFlow, Handle, Position } from "@vue-flow/core";
+import { VueFlow, BaseEdge, Handle, Position } from "@vue-flow/core";
 import type { Edge, Node, VueFlowStore } from "@vue-flow/core";
 import "@vue-flow/core/dist/style.css";
-import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
-import { type DagEdge, type DagNode, layoutDag, layoutSignature } from "./dagLayout.js";
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useId, watch } from "vue";
+import { type DagEdge, type DagNode, laneKey, lanePath, layoutDag, layoutSignature } from "./dagLayout.js";
 
 const {
     nodes,
@@ -20,10 +20,14 @@ const {
     magnify = true,
     minZoom = 0.4,
     readableZoom,
+    edgeShape = `curve`,
+    rankSep,
+    nodeSep,
 } = defineProps<{
     nodes: readonly DagNode<T>[];
     edges: readonly DagEdge[];
-    // dagre lays out fixed-size nodes; the card wrapper is sized to exactly these.
+    // The box dagre lays a node out at and the card wrapper is sized to, for every node that does not carry
+    // its own (DagNode.width / .height, which is how a compound card is as tall as the rows inside it).
     nodeWidth?: number;
     nodeHeight?: number;
     direction?: `LR` | `TB`;
@@ -50,6 +54,23 @@ const {
      * at length; this is that escape hatch, offered rather than imposed because the two caller shapes want
      * opposite answers. */
     magnify?: boolean;
+    /* HOW AN EDGE IS DRAWN, which on a layered graph is not a matter of taste. A bezier leaves its node at an
+     * angle and takes its own line across the canvas, so a run where a dozen edges span three ranks draws a
+     * dozen curves that splay apart and cross in the middle: the spaghetti a reader sees before they have read
+     * one label, and the thing they mean by "messy".
+     *
+     * `elbow` routes the way every CI vendor's own graph does: a stub out of the source, one vertical run, a
+     * stub into the target, corners rounded. Parallel edges then SHARE their horizontals instead of fanning,
+     * a long span reads as a straight line rather than a swoop, and a crossing is a crossing rather than noise.
+     *
+     * Offered rather than imposed because the two shapes of caller want opposite answers: a layered pipeline is
+     * a flow to be followed, while a graph of relations (a note's links, a package's dependents) has no reading
+     * order for elbows to reinforce, and there a curve is the gentler line. */
+    edgeShape?: `curve` | `elbow`;
+    // How much air between two columns, and between two cards in one (see DagLayoutOptions). Leave them off for
+    // the roomy default, which suits a graph of few large cards; a card that is a LIST of rows wants both tighter.
+    rankSep?: number;
+    nodeSep?: number;
 }>();
 
 // Which node is selected; re-clicking the selected node clears it.
@@ -66,16 +87,28 @@ defineSlots<{
 // Vue Flow scopes its injected state by id: unique per instance so two graphs can share a page.
 const flowId = useId();
 
-const flowNodes = computed<Node<DagNode<T>>[]>(() => {
-    const positions = layoutDag(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight });
-    return nodes.map((node) => ({
+// Everything the layout is asked for, in one place: the two components that read it (positions and lanes, and
+// the refit signature) must never disagree about the spacing.
+const layoutOptions = computed(() => ({
+    direction,
+    nodeWidth,
+    nodeHeight,
+    ...(rankSep !== undefined ? { rankSep } : {}),
+    ...(nodeSep !== undefined ? { nodeSep } : {}),
+}));
+
+// One layout run per render, read by the nodes for their positions and by the edges for their lanes.
+const placement = computed(() => layoutDag(nodes as readonly DagNode<never>[], edges, layoutOptions.value));
+
+const flowNodes = computed<Node<DagNode<T>>[]>(() =>
+    nodes.map((node) => ({
         id: node.id,
         type: `card`,
-        position: positions.get(node.id) ?? { x: 0, y: 0 },
+        position: placement.value.nodes.get(node.id) ?? { x: 0, y: 0 },
         data: node,
-        style: { width: `${nodeWidth}px`, height: `${nodeHeight}px` },
-    }));
-});
+        style: { width: `${node.width ?? nodeWidth}px`, height: `${node.height ?? nodeHeight}px` },
+    })),
+);
 
 const flowEdges = computed<Edge[]>(() => {
     const ids = new Set(nodes.map((node) => node.id));
@@ -85,6 +118,8 @@ const flowEdges = computed<Edge[]>(() => {
             id: `${edge.from}>${edge.to}${edge.kind !== undefined ? `:${edge.kind}` : ``}`,
             source: edge.from,
             target: edge.to,
+            type: edgeShape === `elbow` ? `lane` : `default`,
+            data: { lane: placement.value.lanes.get(laneKey(edge.from, edge.to)) ?? [] },
             class: [
                 edge.accent !== undefined ? `${edge.accent} dag-accent` : ``,
                 edge.dashed === true ? `dag-dashed` : ``,
@@ -99,16 +134,23 @@ const sourcePosition = computed(() => (direction === `LR` ? Position.Right : Pos
 const targetPosition = computed(() => (direction === `LR` ? Position.Left : Position.Top));
 
 // The picture's own bounding box in graph units: measured from where the nodes actually landed rather than
-// guessed from their count, because it is what decides whether a fit can stay legible.
+// guessed from their count, because it is what decides whether a fit can stay legible. Each node contributes
+// its OWN box, not the caller's default: a card that overrode its height is the one most likely to be the
+// thing hanging over the edge of a fit measured without it.
 const extent = computed(() => {
-    const boxes = flowNodes.value.map((node) => node.position);
+    // `data` is optional on Vue Flow's own node type, though every node above is built with one.
+    const boxes = flowNodes.value.map((node) => ({
+        ...node.position,
+        width: node.data?.width ?? nodeWidth,
+        height: node.data?.height ?? nodeHeight,
+    }));
     const left = Math.min(...boxes.map((box) => box.x));
     const top = Math.min(...boxes.map((box) => box.y));
     return {
         x: left,
         y: top,
-        width: Math.max(...boxes.map((box) => box.x + nodeWidth)) - left,
-        height: Math.max(...boxes.map((box) => box.y + nodeHeight)) - top,
+        width: Math.max(...boxes.map((box) => box.x + box.width)) - left,
+        height: Math.max(...boxes.map((box) => box.y + box.height)) - top,
     };
 });
 
@@ -129,7 +171,13 @@ const extent = computed(() => {
 const PADDING = 0.08;
 const FIT = computed(() => (magnify ? undefined : { padding: PADDING, maxZoom: 1 }));
 
-const flow = ref<VueFlowStore>();
+/* SHALLOW, and that is not an optimization: `ref()` deep-reactivates what it holds, and `reactive()` UNWRAPS
+ * the refs it finds, so a store parked in a plain ref hands back `dimensions` as a bare `{width, height}` while
+ * its own types still promise `Ref<Dimensions>`. `store.dimensions.value` then reads `undefined` at runtime and
+ * type-checks perfectly, which is exactly how `readableZoom` came to be dead code: `applyFit` read the frame as
+ * unmeasured, took the fallback every single time, and every graph in the app fitted the magnifying way it was
+ * asked not to. The store is an external object with its own reactivity; this ref only has to hold it. */
+const flow = shallowRef<VueFlowStore>();
 const root = ref<HTMLElement>();
 
 /* THE READER HAS TAKEN HOLD, and from here the viewport is theirs: nothing below fits over it. `@move-start`
@@ -189,7 +237,7 @@ const refit = (): void => {
 };
 
 watch(
-    () => layoutSignature(nodes as readonly DagNode<never>[], edges, { direction, nodeWidth, nodeHeight }),
+    () => layoutSignature(nodes as readonly DagNode<never>[], edges, layoutOptions.value),
     async () => {
         // A DIFFERENT graph is not the reader's view any more: whatever they had panned to was a place in the
         // picture this one replaced, so the hold is released with it and the new graph is fitted.
@@ -261,6 +309,14 @@ const toggle = (id: string): void => {
             @nodes-initialized="refit()"
             @move-start="hold()"
         >
+            <!-- The lane shape, drawn from dagre's own routing rather than from the two endpoints (see
+                 lanePath). Only reached when the caller asked for `elbow`; a `curve` graph never names it. -->
+            <template #edge-lane="edge">
+                <BaseEdge
+                    :id="edge.id"
+                    :path="lanePath({ x: edge.sourceX, y: edge.sourceY }, { x: edge.targetX, y: edge.targetY }, edge.data.lane)"
+                />
+            </template>
             <template #node-card="{ data }">
                 <button
                     type="button"
@@ -268,7 +324,10 @@ const toggle = (id: string): void => {
                     class="relative block h-full w-full overflow-hidden rounded-md border bg-canvas text-left transition-[colors,opacity]"
                     :class="[
                         data.id === selectedId ? `border-link ring-1 ring-link` : `border-line hover:border-line-strong`,
-                        data.dimmed === true ? `opacity-30` : ``,
+                        // Faded, not hidden: a highlight is only useful if the run it is picked out of is still
+                        // readable beside it. At 0.3 the rest of a dark-canvas graph went to a smear of grey on
+                        // grey, so tracing one job cost you the picture it was in.
+                        data.dimmed === true ? `opacity-50` : ``,
                     ]"
                     @click="toggle(data.id)"
                 >
@@ -297,7 +356,7 @@ const toggle = (id: string): void => {
     stroke-dasharray: 6 4;
 }
 .dag-graph .vue-flow__edge.dag-dimmed {
-    opacity: 0.15;
+    opacity: 0.35;
 }
 .dag-graph .vue-flow__handle {
     height: 1px;

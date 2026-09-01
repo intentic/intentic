@@ -14,6 +14,11 @@ export interface DagNode<T = unknown> {
     readonly tooltip?: string;
     // Closure highlighting: fade this node without removing it from the layout.
     readonly dimmed?: boolean;
+    // Per-node size overrides: when set, dagre lays this node out at these dimensions instead of the
+    // caller's default nodeWidth/nodeHeight. Used for compound nodes (e.g. a pipeline stage grouping
+    // several jobs into one card) whose height scales with the number of items inside.
+    readonly width?: number;
+    readonly height?: number;
 }
 
 export interface DagEdge {
@@ -34,7 +39,19 @@ export interface DagLayoutOptions {
     readonly direction: `LR` | `TB`;
     readonly nodeWidth: number;
     readonly nodeHeight: number;
+    /* HOW MUCH AIR THE PICTURE GETS: between two columns, and between two cards in one. The defaults suit a
+     * graph of few large cards, which is what a note's map or a designer's canvas is. A card that is a LIST
+     * wants both tighter: a run's card is a stack of 26px rows, and spacing measured for a 64px card leaves a
+     * 26-job run twice as wide as it needs to be, which is the whole difference between a diagram that fits its
+     * frame legibly and one that has to be panned. */
+    readonly rankSep?: number;
+    readonly nodeSep?: number;
 }
+
+// The air a graph gets when its caller names none: dagre is told both, and the turn a line makes on its way out
+// of a column is placed halfway across the first of them.
+const RANK_SEP = 88;
+const NODE_SEP = 28;
 
 /* WHICH GRAPH IS ON SCREEN, everything that decides where the nodes end up, as one comparable string.
  *
@@ -45,42 +62,245 @@ export interface DagLayoutOptions {
  * too much" rather than as a stale transform.
  *
  * It stays a string rather than a structural compare because a watcher needs a cheap, stable value, and it
- * covers exactly the layout inputs: ids and their order, the edges between them, the direction, and the fixed
- * node box. Node LABELS are deliberately absent, re-rendering the same shape with new text must not throw
- * away a pan the user chose. */
+ * covers exactly the layout inputs: ids and their order, the edges between them, the direction, and each
+ * node's box, which is the caller's default unless the node overrode it. A box belongs here because it moves
+ * everything downstream of it: a compound card that grows a row re-ranks its whole column, and a fit measured
+ * for the old height leaves the new one clipped. Node LABELS are deliberately absent, re-rendering the same
+ * shape with new text must not throw away a pan the user chose. */
 export const layoutSignature = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): string =>
     [
         options.direction,
-        options.nodeWidth,
-        options.nodeHeight,
-        nodes.map((node) => node.id).join(`,`),
+        `${options.rankSep ?? RANK_SEP}/${options.nodeSep ?? NODE_SEP}`,
+        nodes.map((node) => `${node.id}@${node.width ?? options.nodeWidth}x${node.height ?? options.nodeHeight}`).join(`,`),
         edges.map((edge) => `${edge.from}>${edge.to}`).join(`,`),
     ].join(`|`);
 
-// Position every node with dagre (fixed sizes; edges to unknown ids are dropped so a dangling ref can't skew
-// ranks). Returns top-left coordinates per node id, dagre yields centers.
-export const layoutDag = (
-    nodes: readonly DagNode<never>[],
+export interface DagPoint {
+    readonly x: number;
+    readonly y: number;
+}
+
+export interface DagPlacement {
+    // Each node's TOP-LEFT corner, by id, which is what a renderer positions with. dagre yields centres.
+    readonly nodes: ReadonlyMap<string, DagPoint>;
+    /* WHERE EACH EDGE TURNS, keyed by `laneKey`, in the same coordinates as the nodes: the first gap after its
+     * source, so a line drops to its target's row immediately and then runs straight to it.
+     *
+     * Every edge leaving one column turns on the same x, which is what makes a fan-out read as one bus instead
+     * of a dozen separate diagonals, and it is what the vendors' own run graphs draw. */
+    readonly lanes: ReadonlyMap<string, readonly DagPoint[]>;
+}
+
+// Edges are keyed by their endpoints alone: dagre is given one edge per pair, so two DagEdges that differ only
+// by `kind` were laid out as one and share its lane.
+export const laneKey = (from: string, to: string): string => `${from}>${to}`;
+
+/* WHICH COLUMN EACH NODE BELONGS IN: one past its deepest dependency, and column 0 for anything that has none.
+ *
+ * dagre does not rank a node by its depth. Network simplex minimises the TOTAL length of the edges, so a node is
+ * free to drift later than its dependencies require whenever that shortens the lines around it, and a root whose
+ * consumers all sit far to the right drifts with them. On the workspace's own CI run that put `preflight`, which
+ * waits for nothing at all, one column right of `changes` and shifted everything downstream of it a column too,
+ * which reads as "preflight waits for changes" and is exactly wrong.
+ *
+ * Depth is the ranking a reader assumes and the one the vendors' own run graphs draw: column N holds the jobs
+ * that could not have started before N others finished. Cycles cannot be ranked this way, so the first node that
+ * a cycle would leave unplaced is cut loose and placed from whatever of its dependencies did resolve. */
+const columnsOf = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[]): Map<string, number> => {
+    const parents = new Map<string, string[]>();
+    const children = new Map<string, string[]>();
+    const unresolved = new Map<string, number>();
+    for (const edge of edges) {
+        parents.set(edge.to, [...(parents.get(edge.to) ?? []), edge.from]);
+        children.set(edge.from, [...(children.get(edge.from) ?? []), edge.to]);
+        unresolved.set(edge.to, (unresolved.get(edge.to) ?? 0) + 1);
+    }
+    const columns = new Map<string, number>();
+    const ready = nodes.filter((node) => (unresolved.get(node.id) ?? 0) === 0).map((node) => node.id);
+    const place = (id: string): void => {
+        const deepest = (parents.get(id) ?? []).reduce((depth, from) => Math.max(depth, (columns.get(from) ?? -1) + 1), 0);
+        columns.set(id, deepest);
+        for (const child of children.get(id) ?? []) {
+            const left = (unresolved.get(child) ?? 1) - 1;
+            unresolved.set(child, left);
+            if (left === 0) {
+                ready.push(child);
+            }
+        }
+    };
+    while (columns.size < nodes.length) {
+        const id = ready.shift();
+        const next = id ?? nodes.find((node) => !columns.has(node.id))?.id;
+        if (next === undefined) {
+            break;
+        }
+        if (!columns.has(next)) {
+            place(next);
+        }
+    }
+    return columns;
+};
+
+// One node as dagre placed it: a centre, and the box the caller asked for.
+interface PlacedNode {
+    readonly id: string;
+    readonly at: DagPoint;
+    readonly width: number;
+    readonly height: number;
+}
+
+const boxOf = (node: DagNode<never>, options: DagLayoutOptions): { width: number; height: number } => ({
+    width: node.width ?? options.nodeWidth,
+    height: node.height ?? options.nodeHeight,
+});
+
+/* dagre's ORDER within a column is what its crossing minimisation earned, and it is kept. Its COORDINATE along
+ * that column is thrown away, and that is the whole of this pass.
+ *
+ * dagre places a node near the average of its neighbours so that edges come out straight, and pays for it in
+ * empty space. On the workspace's own CI run it left gaps of 121, 204 and 391 pixels INSIDE one column, started
+ * the second column four hundred pixels below the first, and drew 500px of content in a picture 944px tall.
+ * Six columns each beginning somewhere different read as a scatter rather than as a flow.
+ *
+ * So every column is packed from the same top, one gap between cards, which is what GitHub's and GitLab's own
+ * run graphs do. Edges give up their straightness and gain a step, which the elbow routing draws as a step; the
+ * reader gains a block that can be taken in at once. */
+const packColumns = (placed: readonly PlacedNode[], horizontal: boolean, gap: number): Map<string, DagPoint> => {
+    const columns = new Map<number, PlacedNode[]>();
+    for (const entry of placed) {
+        const rank = Math.round(horizontal ? entry.at.x : entry.at.y);
+        columns.set(rank, [...(columns.get(rank) ?? []), entry]);
+    }
+    const packed = new Map<string, DagPoint>();
+    for (const column of columns.values()) {
+        let next = 0;
+        for (const entry of column.toSorted((a, b) => (horizontal ? a.at.y - b.at.y : a.at.x - b.at.x))) {
+            packed.set(entry.id, {
+                x: horizontal ? entry.at.x - entry.width / 2 : next,
+                y: horizontal ? next : entry.at.y - entry.height / 2,
+            });
+            next += (horizontal ? entry.height : entry.width) + gap;
+        }
+    }
+    return packed;
+};
+
+// Where each edge turns: halfway across the gap it leaves its source column by, level with the source's handle.
+const turnPoints = (
     edges: readonly DagEdge[],
-    options: DagLayoutOptions,
-): Map<string, { x: number; y: number }> => {
+    boxes: ReadonlyMap<string, PlacedNode>,
+    horizontal: boolean,
+    gutter: number,
+): Map<string, readonly DagPoint[]> => {
+    const turns = new Map<string, readonly DagPoint[]>();
+    for (const edge of edges) {
+        const source = boxes.get(edge.from);
+        if (source !== undefined) {
+            const turn = horizontal
+                ? { x: source.at.x + source.width + gutter / 2, y: source.at.y + source.height / 2 }
+                : { x: source.at.x + source.width / 2, y: source.at.y + source.height + gutter / 2 };
+            turns.set(laneKey(edge.from, edge.to), [turn]);
+        }
+    }
+    return turns;
+};
+
+export const layoutDag = (nodes: readonly DagNode<never>[], edges: readonly DagEdge[], options: DagLayoutOptions): DagPlacement => {
     const graph = new graphlib.Graph();
-    graph.setGraph({ rankdir: options.direction, nodesep: 28, ranksep: 88 });
+    const rankSep = options.rankSep ?? RANK_SEP;
+    const nodeSep = options.nodeSep ?? NODE_SEP;
+    graph.setGraph({ rankdir: options.direction, nodesep: nodeSep, ranksep: rankSep });
     graph.setDefaultEdgeLabel(() => ({}));
     const ids = new Set(nodes.map((node) => node.id));
     for (const node of nodes) {
-        graph.setNode(node.id, { width: options.nodeWidth, height: options.nodeHeight });
+        graph.setNode(node.id, boxOf(node, options));
     }
-    for (const edge of edges) {
-        if (ids.has(edge.from) && ids.has(edge.to)) {
-            graph.setEdge(edge.from, edge.to);
-        }
+    const drawn = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to));
+    /* THE COLUMNS ARE DICTATED TO DAGRE, as the one length each edge is allowed to have.
+     *
+     * `minlen` is dagre's floor on how many ranks an edge spans, and network simplex minimises the total edge
+     * length subject to those floors. Set every floor to the distance the columns above already say the edge
+     * covers and the depth ranking becomes the only assignment that meets them all at their floor, so it is the
+     * one dagre returns, no ranker of its own choosing involved. Everything else it does is left alone: the order
+     * WITHIN a column is still its crossing minimisation, which is the part worth having. */
+    const columns = columnsOf(nodes, drawn);
+    for (const edge of drawn) {
+        graph.setEdge(edge.from, edge.to, { minlen: Math.max(1, (columns.get(edge.to) ?? 0) - (columns.get(edge.from) ?? 0)) });
     }
     layout(graph);
-    return new Map(
-        nodes.map((node) => {
-            const placed = graph.node(node.id);
-            return [node.id, { x: placed.x - options.nodeWidth / 2, y: placed.y - options.nodeHeight / 2 }];
-        }),
-    );
+
+    const horizontal = options.direction === `LR`;
+    const placed = nodes.map((node): PlacedNode => {
+        const at = graph.node(node.id);
+        return { id: node.id, at: { x: at.x, y: at.y }, ...boxOf(node, options) };
+    });
+    const packed = packColumns(placed, horizontal, nodeSep);
+    // The turns are measured off the PACKED boxes, not dagre's: a line has to leave the card where it now is.
+    const boxes = new Map(placed.map((entry): [string, PlacedNode] => [entry.id, { ...entry, at: packed.get(entry.id) ?? entry.at }]));
+    return { nodes: packed, lanes: turnPoints(edges, boxes, horizontal, rankSep) };
+};
+
+/* ONE EDGE AS A RIGHT-ANGLED PATH THROUGH ITS TURNS, with the corners rounded.
+ *
+ * Right angles rather than a curve because a layered graph is read as a flow: every line leaves its card
+ * horizontally, changes row at a turn in the gap between two columns, and arrives horizontally. Parallel edges
+ * then SHARE their horizontals instead of splaying into a dozen separate arcs, and a crossing reads as a
+ * crossing. It is the shape every CI vendor's own graph uses, and the reason theirs look ordered at thirty jobs.
+ *
+ * `from` and `to` are the handle positions the renderer measured; `via` is the layout's turns (see
+ * DagPlacement.lanes). With no turn given, one is taken in the middle, which is the classic elbow. */
+export const lanePath = (from: DagPoint, to: DagPoint, via: readonly DagPoint[] = [], radius = 8): string => {
+    const turns = via.length > 0 ? via : [{ x: (from.x + to.x) / 2, y: from.y }];
+
+    // Horizontal first for every turn but the last, which turns vertical first so the line ARRIVES horizontal.
+    const waypoints = [from, ...turns, to];
+    const corners: DagPoint[] = [];
+    const push = (point: DagPoint): void => {
+        const last = corners.at(-1);
+        if (last !== undefined && Math.abs(last.x - point.x) < 0.5 && Math.abs(last.y - point.y) < 0.5) {
+            return;
+        }
+        const before = corners.at(-2);
+        // A point in line with the two before it is not a corner: keeping it would round a bend that is straight.
+        if (
+            last !== undefined &&
+            before !== undefined &&
+            ((Math.abs(before.x - last.x) < 0.5 && Math.abs(last.x - point.x) < 0.5) ||
+                (Math.abs(before.y - last.y) < 0.5 && Math.abs(last.y - point.y) < 0.5))
+        ) {
+            corners[corners.length - 1] = point;
+            return;
+        }
+        corners.push(point);
+    };
+    push(from);
+    waypoints.slice(1).forEach((point, index) => {
+        const previous = waypoints[index] ?? from;
+        const verticalFirst = index === waypoints.length - 2;
+        push(verticalFirst ? { x: previous.x, y: point.y } : { x: point.x, y: previous.y });
+        push(point);
+    });
+
+    const round = (value: number): number => Math.round(value * 100) / 100;
+    // The point `radius` along the way from a corner towards its neighbour, where the arc starts or ends.
+    const cut = (corner: DagPoint, towards: DagPoint): DagPoint => {
+        const dx = towards.x - corner.x;
+        const dy = towards.y - corner.y;
+        const length = Math.hypot(dx, dy);
+        const step = length === 0 ? 0 : Math.min(radius, length / 2) / length;
+        return { x: corner.x + dx * step, y: corner.y + dy * step };
+    };
+    const [head, ...rest] = corners;
+    if (head === undefined) {
+        return ``;
+    }
+    const tail = rest.at(-1) ?? head;
+    const bends = rest.slice(0, -1).map((corner, index) => {
+        const previous = corners[index] ?? head;
+        const next = rest[index + 1] ?? tail;
+        const enter = cut(corner, previous);
+        const leave = cut(corner, next);
+        return `L ${round(enter.x)} ${round(enter.y)} Q ${round(corner.x)} ${round(corner.y)} ${round(leave.x)} ${round(leave.y)}`;
+    });
+    return [`M ${round(head.x)} ${round(head.y)}`, ...bends, `L ${round(tail.x)} ${round(tail.y)}`].join(` `);
 };

@@ -542,14 +542,13 @@ test("ExitPlanMode uses the adjacent prose as its plan because the current SDK c
 });
 
 test("ExitPlanMode refuses to raise an empty approval card", async () => {
+    // `null` because that is what the SDK's own signature says canUseTool resolves to, the same widening the
+    // `decide` helper above makes for the same call.
     let result: PermissionResult | null | undefined;
-    const frames = await collect(
-        { ...request, permissionMode: "plan" },
-        async function* (args) {
-            result = await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
-            yield { type: "result", subtype: "success" } as SDKMessage;
-        },
-    );
+    const frames = await collect({ ...request, permissionMode: "plan" }, async function* (args) {
+        result = await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    });
 
     expect(result).toEqual({
         behavior: "deny",
@@ -617,15 +616,11 @@ test("a rejected plan leaves the branch alone", async () => {
 test("an approved plan on a current branch says nothing", async () => {
     withoutTmux();
     const steering = new SteeringQueue();
-    const { frames } = await decide(
-        { ...request, steering, resync: async () => undefined },
-        { tool: "ExitPlanMode", prose: "# Plan" },
-        (event) => ({
-            kind: "plan",
-            requestId: event.requestId,
-            approve: true,
-        }),
-    );
+    const { frames } = await decide({ ...request, steering, resync: async () => undefined }, { tool: "ExitPlanMode", prose: "# Plan" }, (event) => ({
+        kind: "plan",
+        requestId: event.requestId,
+        approve: true,
+    }));
 
     expect(frames.some((frame) => frame.kind === "worktree")).toBe(false);
     expect(steering.delivered).toBe(0);

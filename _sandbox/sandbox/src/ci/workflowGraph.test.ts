@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { resolveNeeds } from "./workflowGraph.js";
+import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
 /* The translation this module exists for: `needs` is written in workflow job IDs, the jobs API answers in
  * display names, and matrices and reusable workflows mean those are not the same alphabet. Every test below
@@ -47,6 +47,93 @@ jobs:
     expect(resolved.get("verify-site / e2e-hermetic")).toEqual(["preflight"]);
     // Depending on the caller means depending on everything the caller produced.
     expect(resolved.get("release")).toEqual(["verify-site / verify", "verify-site / e2e-hermetic"]);
+});
+
+test("a called file that IS in front of us is drawn as the chain it declares, not as siblings", () => {
+    const ci = `
+jobs:
+  preflight: {}
+  release:
+    needs: preflight
+    uses: ./.github/workflows/release.yml
+  announce:
+    needs: release
+`;
+    const release = `
+on:
+  workflow_call:
+jobs:
+  plan: {}
+  build:
+    needs: plan
+  publish:
+    needs: [plan, build]
+`;
+    const resolved = resolveNeeds(
+        ci,
+        ["preflight", "release / plan", "release / build", "release / publish", "announce"],
+        new Map([[".github/workflows/release.yml", release]]),
+    );
+    // A root of the called file hangs where the calling job hung.
+    expect(resolved.get("release / plan")).toEqual(["preflight"]);
+    // Inside the call, the file's own edges: this is the whole point of fetching it.
+    expect(resolved.get("release / build")).toEqual(["release / plan"]);
+    expect(resolved.get("release / publish")).toEqual(["release / plan", "release / build"]);
+    // Waiting for the call is waiting for what FINISHES it, not for every job it contains.
+    expect(resolved.get("announce")).toEqual(["release / publish"]);
+});
+
+test("a called file that calls another is followed to the bottom", () => {
+    const ci = `jobs:\n  release:\n    uses: ./.github/workflows/release.yml\n`;
+    const release = `
+jobs:
+  plan: {}
+  verify:
+    needs: plan
+    uses: ./.github/workflows/smoke.yml
+  publish:
+    needs: verify
+`;
+    const smoke = `jobs:\n  smoke: {}\n`;
+    const resolved = resolveNeeds(
+        ci,
+        ["release / plan", "release / verify / smoke", "release / publish"],
+        new Map([
+            [".github/workflows/release.yml", release],
+            [".github/workflows/smoke.yml", smoke],
+        ]),
+    );
+    expect(resolved.get("release / verify / smoke")).toEqual(["release / plan"]);
+    // `publish` waited on the nested call, so it waited on the job that finishes it, two files down.
+    expect(resolved.get("release / publish")).toEqual(["release / verify / smoke"]);
+});
+
+test("a ring of calls stops instead of following itself for ever", () => {
+    const first = `jobs:\n  loop:\n    uses: ./.github/workflows/second.yml\n`;
+    const second = `jobs:\n  back:\n    uses: ./.github/workflows/first.yml\n`;
+    const sources = new Map([
+        [".github/workflows/second.yml", second],
+        [".github/workflows/first.yml", first],
+    ]);
+    // The walk stops the second time a file comes round, which leaves the innermost call unfollowed and
+    // therefore matchable, exactly like a call into another repository.
+    expect(resolveNeeds(first, ["loop / back / loop"], sources).has("loop / back / loop")).toBe(true);
+});
+
+test("localWorkflowCalls names the files in this repository and nothing else", () => {
+    const yaml = `
+jobs:
+  here:
+    uses: ./.github/workflows/verify.yml
+  elsewhere:
+    uses: other/repo/.github/workflows/verify.yml@v1
+  steps-only:
+    steps:
+      - uses: actions/checkout@v4
+  again:
+    uses: ./.github/workflows/verify.yml
+`;
+    expect(localWorkflowCalls(yaml)).toEqual([".github/workflows/verify.yml"]);
 });
 
 test("a matrix, one declared job, one reported job per leg", () => {

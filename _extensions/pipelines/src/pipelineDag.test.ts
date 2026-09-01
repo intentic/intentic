@@ -5,7 +5,12 @@ import { jobLineage, pipelineDag, pipelineStages } from "./pipelineDag";
 /* What the expanded job graph claims about a run: which cards fade, which edges light, and, the part that
  * matters most: that a run arriving WITH its dependencies declared is drawn from those and not from a guess
  * about what overlapped in time. The two sources of shape are tested side by side because the fallback has to
- * keep working exactly as it did for every run whose workflow file we cannot read. */
+ * keep working exactly as it did for every run whose workflow file we cannot read.
+ *
+ * The graph groups identically-wired jobs into one compound card, so the assertions below cover both halves of
+ * that: fewer cards and fewer edges than there are jobs, and a trace that still counts JOBS. The count is the
+ * half worth guarding, it is what the caption says out loud, and grouping is the one change that could quietly
+ * turn "four ran before" into "one". */
 
 const staged = (name: string, stage: string): PipelineJob => ({ name, status: `success`, stage });
 const declared = (name: string, needs: string[], startedAt: number): PipelineJob => ({
@@ -64,28 +69,28 @@ describe(`pipelineStages`, () => {
 
 describe(`pipelineDag with declared dependencies`, () => {
     it(`draws one edge per declared dependency, not a stage-wide join`, () => {
+        // Every job in declaredRun has a unique edge signature, so no clustering happens and each job is
+        // its own cluster node. The edges are identical to the pre-clustering output.
         const edges = pipelineDag(declaredRun).edges.map((edge) => `${edge.from}>${edge.to}`);
-        // `changes` sits in level 0 beside `preflight` but gates only `release`; a bipartite join would have
-        // wired it into both level-1 verifies.
         expect(edges.toSorted()).toEqual([`0:0>1:0`, `0:0>1:1`, `0:1>3:0`, `1:0>2:0`, `2:0>3:0`]);
     });
 
     it(`traces one leg of a fan-out without lighting its sibling's parents`, () => {
         // Hovering `verify-site / verify` (1:1): its parent preflight and nothing of the images/release line.
         const dag = pipelineDag(declaredRun, `1:1`);
-        expect(
-            dag.nodes
-                .filter((node) => node.dimmed === true)
-                .map((node) => node.data.name)
-                .toSorted(),
-        ).toEqual([`changes`, `images`, `release`, `verify-core / verify`]);
-        expect(dag.lineage).toMatchObject({ before: 1, after: 0 });
+        // Each job is its own cluster, so dimmed cluster nodes map 1:1 to dimmed jobs.
+        const dimmedNames = dag.nodes
+            .filter((node) => node.dimmed === true)
+            .flatMap((node) => node.data.jobs.map((m) => m.job.name))
+            .toSorted();
+        expect(dimmedNames).toEqual([`changes`, `images`, `release`, `verify-core / verify`]);
+        expect(dag.trace).toMatchObject({ before: 1, after: 0 });
     });
 
     it(`reaches transitively both ways from a job in the middle`, () => {
         // `images` (2:0): preflight → verify-core → images → release.
         const dag = pipelineDag(declaredRun, `2:0`);
-        expect(dag.lineage).toMatchObject({ before: 2, after: 1 });
+        expect(dag.trace).toMatchObject({ before: 2, after: 1 });
         const traced = dag.edges.filter((edge) => edge.accent === `text-link`).map((edge) => `${edge.from}>${edge.to}`);
         expect(traced.toSorted()).toEqual([`0:0>1:0`, `1:0>2:0`, `2:0>3:0`]);
         // `changes → release` has both ends related to nothing on this line and must stay dark.
@@ -94,26 +99,36 @@ describe(`pipelineDag with declared dependencies`, () => {
 });
 
 describe(`pipelineDag with only stages`, () => {
-    it(`joins every job of a stage to every job of the next`, () => {
+    it(`clusters jobs with identical edges into compound nodes`, () => {
+        // build[lint, compile] share incoming=none, outgoing={1:0, 1:1} → one cluster.
+        // test[unit, e2e] share incoming={0:0, 0:1}, outgoing={2:0} → one cluster.
+        // deploy[ship] is alone.
         const dag = pipelineDag(stageRun);
-        expect(dag.edges).toHaveLength(2 * 2 + 2 * 1);
+        expect(dag.nodes).toHaveLength(3);
+        // Cluster 0:0 holds both build jobs, 1:0 holds both test jobs, 2:0 is ship.
+        expect(dag.nodes.map((n) => n.data.jobs.map((m) => m.job.name))).toEqual([[`lint`, `compile`], [`unit`, `e2e`], [`ship`]]);
+        // Only two edges: build-cluster → test-cluster → deploy-cluster.
+        expect(dag.edges).toHaveLength(2);
+        expect(dag.edges.map((e) => `${e.from}>${e.to}`)).toEqual([`0:0>1:0`, `1:0>2:0`]);
         expect(dag.nodes.every((node) => node.dimmed === undefined)).toBe(true);
         expect(dag.edges.every((edge) => edge.dimmed === undefined && edge.accent === undefined)).toBe(true);
-        expect(dag.lineage).toBeUndefined();
+        expect(dag.trace).toBeUndefined();
     });
 
-    it(`fades the focused job's stage-mates and nothing else`, () => {
-        // The strongest true statement this shape supports: everything in an earlier or later stage is related.
+    it(`fades unrelated clusters when a job is focused`, () => {
+        // Focusing unit (1:0): the test cluster contains the focus, so it stays lit. The build and deploy
+        // clusters are on the line too (build → test → deploy), so nothing fades in this linear pipeline.
         const dag = pipelineDag(stageRun, `1:0`);
-        expect(dag.nodes.filter((node) => node.dimmed === true).map((node) => node.id)).toEqual([`1:1`]);
-        expect(dag.lineage).toMatchObject({ before: 2, after: 1 });
+        expect(dag.nodes.filter((node) => node.dimmed === true)).toEqual([]);
+        // Lineage counts individual jobs, not clusters: 2 build jobs before, 1 deploy job after.
+        expect(dag.trace).toMatchObject({ before: 2, after: 1 });
     });
 
-    it(`traces only the edges whose both ends are on the line`, () => {
+    it(`traces edges on the focused cluster's line`, () => {
         const dag = pipelineDag(stageRun, `1:0`);
         const traced = dag.edges.filter((edge) => edge.accent === `text-link`).map((edge) => `${edge.from}>${edge.to}`);
-        expect(traced.toSorted()).toEqual([`0:0>1:0`, `0:1>1:0`, `1:0>2:0`]);
-        expect(dag.edges.filter((edge) => edge.dimmed === true).length).toBe(dag.edges.length - traced.length);
+        // Both cluster edges are on the line (linear pipeline).
+        expect(traced.toSorted()).toEqual([`0:0>1:0`, `1:0>2:0`]);
     });
 });
 
@@ -140,6 +155,25 @@ describe(`pipelineDag invariants`, () => {
                 .toSorted(),
         ).toEqual([`a`, `b`]);
         expect(() => pipelineDag(run, `0:0`)).not.toThrow();
+    });
+
+    it(`draws a run with no edges at all as one card rather than a row of unrelated boxes`, () => {
+        // A single stage: nothing waited on anything, so every job carries the same (empty) edge signature.
+        const run = pipelineStages([staged(`unit`, `test`), staged(`e2e`, `test`), staged(`lint`, `test`)]);
+        const dag = pipelineDag(run);
+        expect(dag.nodes.map((node) => node.data.jobs.map((member) => member.job.name))).toEqual([[`unit`, `e2e`, `lint`]]);
+        expect(dag.edges).toEqual([]);
+    });
+
+    it(`preserves every job inside cluster nodes`, () => {
+        // Every job that went in must appear exactly once in some cluster's members.
+        for (const run of [stageRun, declaredRun]) {
+            const allJobs = run.flatMap((stage) => stage.jobs.map((job) => job.name)).toSorted();
+            const clusteredJobs = pipelineDag(run)
+                .nodes.flatMap((node) => node.data.jobs.map((m) => m.job.name))
+                .toSorted();
+            expect(clusteredJobs).toEqual(allJobs);
+        }
     });
 });
 

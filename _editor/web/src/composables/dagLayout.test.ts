@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type DagEdge, type DagNode, layoutSignature } from "@intentic/ui/dag";
+import { type DagEdge, type DagNode, type DagPlacement, lanePath, layoutDag, layoutSignature } from "@intentic/ui/dag";
 
 /* DagGraph refits its viewport when this signature changes. It lives here rather than in @intentic/ui because
  * the design system ships no test runner (same reason as figures.test.ts).
@@ -39,10 +39,28 @@ describe(`layoutSignature`, () => {
         expect(sig([node(`a`), node(`b`)])).not.toBe(sig([node(`b`), node(`a`)]));
     });
 
+    /* The spacing is a layout input like the box is: a run's card is a list of rows and asks for a tighter pair
+     * than a note's map, and changing it moves every node in the picture, so a fit measured under the old one is
+     * the wrong fit. Restating the default cannot move anything and must not read as a different graph. */
+    it(`notices the spacing, and ignores a restatement of the default`, () => {
+        expect(sig([node(`a`), node(`b`)])).not.toBe(sig([node(`a`), node(`b`)], [], { nodeSep: 14 }));
+        expect(sig([node(`a`), node(`b`)])).not.toBe(sig([node(`a`), node(`b`)], [], { rankSep: 56 }));
+        expect(sig([node(`a`)], [], { rankSep: 88, nodeSep: 28 })).toBe(sig([node(`a`)]));
+    });
+
     it(`notices direction and the node box`, () => {
         expect(sig([node(`a`)])).not.toBe(sig([node(`a`)], [], { direction: `TB` }));
         expect(sig([node(`a`)])).not.toBe(sig([node(`a`)], [], { nodeHeight: 56 }));
         expect(sig([node(`a`)])).not.toBe(sig([node(`a`)], [], { nodeWidth: 240 }));
+    });
+
+    /* A node may override the caller's box: a pipeline card is as tall as the jobs it lists. That override is a
+     * layout input like any other, the same ids at a new height re-rank the whole column, so it belongs in the
+     * signature; an override that merely restates the default cannot move anything and must not. */
+    it(`notices a per-node box override, and ignores one that restates the default`, () => {
+        const tall: DagNode<undefined> = { id: `a`, data: undefined, height: 128 };
+        expect(sig([node(`a`)])).not.toBe(sig([tall]));
+        expect(sig([{ id: `a`, data: undefined, height: options.nodeHeight }])).toBe(sig([node(`a`)]));
     });
 
     it(`still changes when the count changes, which is what it replaced`, () => {
@@ -55,5 +73,97 @@ describe(`layoutSignature`, () => {
         const plain: DagNode<undefined> = { id: `a`, data: undefined };
         const dressed: DagNode<undefined> = { id: `a`, data: undefined, tooltip: `hello`, dimmed: true };
         expect(sig([plain])).toBe(sig([dressed]));
+    });
+});
+
+/* WHICH COLUMN A NODE LANDS IN, AND WHERE IN IT. Both are corrections to what dagre answers on its own, and
+ * both are what the CI job graph was reported unreadable over. dagre ranks to keep the total edge length short
+ * and spreads a rank out to straighten the lines; the first drifts a root rightwards under the jobs it feeds,
+ * the second turns 500px of content into a 944px picture. */
+describe(`layoutDag`, () => {
+    const place = (nodes: readonly DagNode<undefined>[], edges: readonly DagEdge[]): DagPlacement =>
+        layoutDag(nodes as readonly DagNode<never>[], edges, options);
+    const columnOf = (placed: DagPlacement, id: string): number => Math.round(placed.nodes.get(id)?.x ?? Number.NaN);
+    const topOf = (placed: DagPlacement, id: string): number => Math.round(placed.nodes.get(id)?.y ?? Number.NaN);
+
+    it(`puts a root in the first column even when everything it feeds is far to the right`, () => {
+        // `b` waits for nothing, so it belongs beside `a`. Network simplex would rather move it one column right,
+        // where its only edge is one rank long instead of two, and on this workspace's own CI run that is what
+        // drew `preflight` a column right of `changes`: a root reading as though it waited for another job.
+        const placed = place([node(`a`), node(`b`), node(`c`), node(`d`)], [edge(`a`, `c`), edge(`c`, `d`), edge(`b`, `d`)]);
+        expect(columnOf(placed, `b`)).toBe(columnOf(placed, `a`));
+        expect(columnOf(placed, `c`)).toBeGreaterThan(columnOf(placed, `a`));
+        expect(columnOf(placed, `d`)).toBeGreaterThan(columnOf(placed, `c`));
+    });
+
+    it(`starts every column at the same top, and never overlaps two cards in one`, () => {
+        const placed = place([node(`a`), node(`b`), node(`c`), node(`d`)], [edge(`a`, `b`), edge(`a`, `c`), edge(`a`, `d`)]);
+        const columns = new Map<number, string[]>();
+        for (const id of [`a`, `b`, `c`, `d`]) {
+            const column = columnOf(placed, id);
+            columns.set(column, [...(columns.get(column) ?? []), id]);
+        }
+        expect(columns.size).toBe(2);
+        for (const members of columns.values()) {
+            const tops = members.map((id) => topOf(placed, id)).toSorted((one, other) => one - other);
+            expect(tops[0]).toBe(0);
+            // Consecutive cards are at least a card apart, so a column is a stack rather than a pile.
+            for (const [index, top] of tops.slice(1).entries()) {
+                expect(top - (tops[index] ?? 0)).toBeGreaterThanOrEqual(options.nodeHeight);
+            }
+        }
+    });
+
+    it(`still lays out a graph with a cycle in it`, () => {
+        // Depth is undefined round a ring, so the first node the ring would leave unplaced is cut loose and
+        // placed from whatever of its dependencies did resolve. What must not happen is nothing being placed.
+        const placed = place([node(`a`), node(`b`), node(`c`), node(`d`)], [edge(`a`, `b`), edge(`b`, `c`), edge(`c`, `a`), edge(`c`, `d`)]);
+        expect(columnOf(placed, `a`)).toBeLessThan(columnOf(placed, `b`));
+        expect(columnOf(placed, `b`)).toBeLessThan(columnOf(placed, `c`));
+        expect(columnOf(placed, `c`)).toBeLessThan(columnOf(placed, `d`));
+    });
+});
+
+/* The edge shape a layered graph is read with: horizontal out, one turn in a gap dagre left free, horizontal
+ * in. What it exists for is the TURN'S X, which comes from dagre's own routing: re-deriving a path from its two
+ * endpoints (what every built-in shape does) draws an edge that spans three ranks straight over whatever card
+ * sits in the middle, and on the workspace's own CI run that was a dozen lines crossing a card. */
+describe(`lanePath`, () => {
+    // The corners a path visits, as `x,y`, read back off the commands: `M`/`L` end on one, `Q` bends around one.
+    const corners = (path: string): string[] => [...path.matchAll(/(?:M|L|Q) (-?[\d.]+) (-?[\d.]+)/gu)].map(([, x, y]) => `${x},${y}`);
+
+    it(`turns where the layout said, not at the midpoint between the two ends`, () => {
+        // The layout turns in the first gap after the source, so a line spanning four columns drops to its
+        // target's row immediately and then runs straight, rather than bending across the middle of the picture.
+        const path = lanePath({ x: 0, y: 0 }, { x: 600, y: 100 }, [{ x: 120, y: 0 }]);
+        expect(corners(path)).toContain(`120,0`);
+        expect(corners(path)).toContain(`120,100`);
+        expect(corners(path).some((corner) => corner.startsWith(`300,`))).toBe(false);
+    });
+
+    it(`turns in the middle when it is given no turn`, () => {
+        const path = lanePath({ x: 0, y: 0 }, { x: 600, y: 100 }, []);
+        expect(corners(path)).toContain(`300,0`);
+        expect(corners(path)).toContain(`300,100`);
+    });
+
+    it(`leaves and arrives horizontally, which is what makes a column read as a column`, () => {
+        const path = lanePath({ x: 0, y: 0 }, { x: 600, y: 100 }, []);
+        const visited = corners(path);
+        const [first, second] = visited;
+        const last = visited.at(-1);
+        const penultimate = visited.at(-2);
+        expect(first?.split(`,`)[1]).toBe(second?.split(`,`)[1]);
+        expect(last?.split(`,`)[1]).toBe(penultimate?.split(`,`)[1]);
+    });
+
+    it(`draws a straight line straight, with no bend to round`, () => {
+        const path = lanePath({ x: 0, y: 50 }, { x: 600, y: 50 }, []);
+        expect(path).toBe(`M 0 50 L 600 50`);
+    });
+
+    it(`rounds every bend it does draw`, () => {
+        const path = lanePath({ x: 0, y: 0 }, { x: 600, y: 100 }, []);
+        expect((path.match(/Q/gu) ?? []).length).toBe(2);
     });
 });

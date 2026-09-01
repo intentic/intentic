@@ -73,8 +73,8 @@ const stacked = useNarrow(body, 36);
 /* WHERE THE SECOND PINNED THING STARTS. The search bar pins at the top of the section and everything else that
  * pins has to clear it: the index column's `top` and its own ceiling, and the note frame's identity bar. That
  * height is not a constant — the bar carries a field, two pickers, a count and a hint, and it wraps — so it is
- * measured and published as `--pinned-top` for all three to read, rather than written down as a `top-11` that
- * is correct at one width. */
+ * measured and published as `--pinned-top` for all three to read, rather than written down as a fixed offset
+ * that is correct at one width. */
 const chrome = ref<HTMLElement | undefined>(undefined);
 const pinned = useStickyTop(chrome);
 
@@ -227,7 +227,7 @@ const startKnowledge = async (): Promise<void> => {
              narrow anything sitting chromeless beside them. The field spanning the row is the point: the bar
              then shares its left and right edges with the two panes under it, instead of huddling in a corner
              above them. The pickers are `ghost` because the track is already the box. -->
-        <div ref="chrome" class="sticky top-0 z-3 -mb-3 bg-canvas pb-3">
+        <div ref="chrome" class="sticky top-0 z-1 -mb-3 bg-canvas pb-3">
             <FilterBar
                 v-model="q"
                 placeholder="Search the knowledge base…"

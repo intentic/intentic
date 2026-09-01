@@ -167,12 +167,23 @@ const jobNodeId = (stageIndex: number, jobIndex: number): string => `${stageInde
 // than a lookup, and it is what every question about a job's place in the run is answered from.
 export const stageOfNode = (nodeId: string): number => Number(nodeId.split(`:`)[0]);
 
+/* A CLUSTER is the compound node the graph draws: one or more jobs that share exactly the same set of incoming
+ * and outgoing edges, rendered as rows inside a single card. GitHub's own pipeline view does the same grouping
+ * visually (a box listing "release / images-amd64", "release / linux-build", …) rather than drawing N×M edges
+ * between every pair of adjacent stages.
+ *
+ * Each member carries its original job-level node id so that hover/focus can still address an individual job
+ * and the caption can name it. */
+export interface PipelineJobCluster {
+    readonly jobs: readonly { readonly id: string; readonly job: PipelineJob }[];
+}
+
 export interface PipelineDag {
-    readonly nodes: DagNode<PipelineJob>[];
+    readonly nodes: DagNode<PipelineJobCluster>[];
     readonly edges: DagEdge[];
     // The focused job's line, handed back rather than recomputed by the caller: the caption reports the same
     // walk the dimming was drawn from, so the words and the picture cannot disagree. Undefined ⇒ nothing focused.
-    readonly lineage: JobLineage | undefined;
+    readonly trace: PipelineTrace | undefined;
 }
 
 // One arrow before anything decides how to draw it. Kept separate from DagEdge because the trace has to walk
@@ -185,10 +196,10 @@ interface JobLink {
 const linkKey = (link: JobLink): string => `${link.from}>${link.to}`;
 
 /* THE DECLARED GRAPH, when the run came with one. `needs` names jobs, the graph addresses nodes, and one name
- * can own several nodes, every leg of a matrix, every job of a called workflow, so depending on a name is
- * depending on all of them. A name that no job in this run answers to is dropped rather than drawn: it is an
- * `if:` that never fired or a matrix leg that was excluded, and an edge to a node the graph does not contain
- * would be a claim about work that did not happen.
+ * can own several nodes, every leg of a matrix, every job of a called workflow nobody could read, so depending
+ * on a name is depending on all of them. A name that no job in this run answers to is dropped rather than
+ * drawn: it is an `if:` that never fired or a matrix leg that was excluded, and an edge to a node it does not
+ * contain would be a claim about work that did not happen.
  *
  * Undefined when nothing declared anything, which is how the caller knows to fall back rather than to render
  * a graph with no edges at all, a picture that says "these thirteen jobs are unrelated" and means "we did not
@@ -242,12 +253,13 @@ const stageJoinLinks = (stages: readonly PipelineStage[]): JobLink[] =>
 export interface JobLineage {
     // The focus and everything on its line, by node id: what stays lit.
     readonly nodes: ReadonlySet<string>;
+    /* That set's two halves, focus excluded: what had to finish first, and what waited. Sets rather than the
+     * counts the caption prints, because one node here can stand for several jobs (a compound card) and only
+     * the caller knows what one node is worth. */
+    readonly before: ReadonlySet<string>;
+    readonly after: ReadonlySet<string>;
     // Edge keys on the line: what the trace is drawn along.
     readonly links: ReadonlySet<string>;
-    // The two halves as counts, for the caption. "Nine jobs waited on this one" is the sentence someone
-    // hovering a failed job came for, and it is the part of the highlight that survives a screenshot.
-    readonly before: number;
-    readonly after: number;
 }
 
 export const jobLineage = (links: readonly JobLink[], focus: string): JobLineage => {
@@ -278,55 +290,151 @@ export const jobLineage = (links: readonly JobLink[], focus: string): JobLineage
     const after = walk((link, at) => (link.from === at ? link.to : undefined));
     return {
         nodes: new Set([focus, ...before.reached, ...after.reached]),
+        before: before.reached,
+        after: after.reached,
         links: new Set([...before.taken, ...after.taken]),
-        before: before.reached.size,
-        after: after.reached.size,
     };
 };
 
-/* One edge, styled by the two jobs it spans: tinted by what flowed along it so a failure's reach is
- * traceable by eye, and dashed into work that never ran rather than asserting "and then this happened".
+// ── Compound cards: the jobs that share a line share a box ──────────────────────────────────────
+
+// One job and the id the graph addresses it by.
+interface JobNode {
+    readonly id: string;
+    readonly job: PipelineJob;
+}
+
+/* THE JOBS GROUPED INTO THE CARDS THE GRAPH DRAWS. Two jobs share a card when their incoming and outgoing
+ * edges are exactly the same, which is the same property that lets a card be lit or faded as ONE thing: jobs
+ * with identical edges have identical lines through the run, so no reading of a trace would light one member
+ * and leave another dark.
+ *
+ * The signature is those two endpoint sets, sorted and joined: cheap to compare, and independent of the focus,
+ * so only styling ever moves with a hover. A job whose signature is its own stays alone in its card, which
+ * makes the grouping strictly additive, it changes how many boxes are drawn and never the topology.
+ *
+ * A card's id is its first member's job id: positional, stable, and already unique. */
+interface JobCards {
+    // First-appearance order, which is stage order: the order the nodes come back in.
+    readonly cards: readonly { readonly id: string; readonly cluster: PipelineJobCluster }[];
+    // Job id → the id of the card holding it.
+    readonly cardOf: ReadonlyMap<string, string>;
+}
+
+const jobCards = (jobs: readonly JobNode[], links: readonly JobLink[]): JobCards => {
+    const present = new Set(jobs.map((entry) => entry.id));
+    // Only edges the graph will actually draw: a dropped one must not split two otherwise identical jobs.
+    const drawn = links.filter((link) => present.has(link.from) && present.has(link.to));
+    const endpoints = (ids: readonly string[]): string => [...new Set(ids)].toSorted().join(`,`);
+    const signatureOf = (id: string): string => {
+        const waitedOn = endpoints(drawn.filter((link) => link.to === id).map((link) => link.from));
+        const opened = endpoints(drawn.filter((link) => link.from === id).map((link) => link.to));
+        return `${waitedOn}|${opened}`;
+    };
+
+    const bySignature = new Map<string, JobNode[]>();
+    for (const entry of jobs) {
+        const signature = signatureOf(entry.id);
+        bySignature.set(signature, [...(bySignature.get(signature) ?? []), entry]);
+    }
+
+    const cardOf = new Map<string, string>();
+    const cards = [...bySignature.values()].flatMap((members) => {
+        const [first] = members;
+        if (first === undefined) {
+            return [];
+        }
+        for (const member of members) {
+            cardOf.set(member.id, first.id);
+        }
+        return [{ id: first.id, cluster: { jobs: members } }];
+    });
+    return { cards, cardOf };
+};
+
+/* Job-level links → card-level links: the whole point of the grouping. A stage-sequenced run's N×M bipartite
+ * join between two stages is one arrow between two cards, which is the spaghetti this view had before, and an
+ * edge whose ends land in the same card is dropped, it was an arrow between two rows of one box. */
+const cardLinks = (links: readonly JobLink[], cardOf: ReadonlyMap<string, string>): JobLink[] => {
+    const seen = new Set<string>();
+    return links.flatMap((link) => {
+        const from = cardOf.get(link.from) ?? link.from;
+        const to = cardOf.get(link.to) ?? link.to;
+        if (from === to || seen.has(`${from}>${to}`)) {
+            return [];
+        }
+        seen.add(`${from}>${to}`);
+        return [{ from, to }];
+    });
+};
+
+/* THE FOCUSED CARD'S LINE, AS THE VIEW NEEDS IT rather than as the walk produced it: which cards stay lit,
+ * which edges the trace is drawn along, and the two halves as JOB counts. Counting jobs and not cards is the
+ * whole reason this is a second type: a reader hovering one leg of a four-way fan-out is told what the run
+ * did, and "one ran before" would be a lie about a card holding four of them. */
+export interface PipelineTrace {
+    // Card ids that stay lit. Everything else fades.
+    readonly cards: ReadonlySet<string>;
+    // Edge keys on the line.
+    readonly links: ReadonlySet<string>;
+    // Individual jobs upstream and downstream of the focus, for the caption.
+    readonly before: number;
+    readonly after: number;
+}
+
+/* One edge, styled by the cards it spans: tinted by what flowed along it so a failure's reach is traceable by
+ * eye, and dashed into work that never ran rather than asserting "and then this happened".
  *
  * While a job is focused the TRACE wins that tinting, in one colour for the whole line rather than two for its
  * two directions, which is the choice the vendors' own graphs make, and it stays out of a view where every
  * other colour on screen already means a status. Left-to-right says the direction; the accent only says
  * "you are on it". Everything off the line fades instead. */
-const linkEdge = (link: JobLink, jobOf: ReadonlyMap<string, PipelineJob>, lineage: JobLineage | undefined): DagEdge => {
-    const next = jobOf.get(link.to);
-    const dashed = next?.status === `skipped` || next?.status === `canceled` ? { dashed: true } : {};
-    if (lineage !== undefined) {
-        return lineage.links.has(linkKey(link)) ? { ...link, accent: `text-link`, ...dashed } : { ...link, dimmed: true, ...dashed };
+const linkEdge = (link: JobLink, clusterById: ReadonlyMap<string, PipelineJobCluster>, trace: PipelineTrace | undefined): DagEdge => {
+    const target = clusterById.get(link.to);
+    // Dashed only when NOTHING in the target card ran: one member that did makes this arrow a real handover.
+    const skipped = (status: PipelineStatus): boolean => status === `skipped` || status === `canceled`;
+    const dashed = target?.jobs.every((member) => skipped(member.job.status)) === true ? { dashed: true } : {};
+    if (trace !== undefined) {
+        return trace.links.has(linkKey(link)) ? { ...link, accent: `text-link`, ...dashed } : { ...link, dimmed: true, ...dashed };
     }
-    const job = jobOf.get(link.from);
-    return {
-        ...link,
-        ...(job?.status === `failed` ? { accent: `text-danger` } : {}),
-        ...(job?.status === `running` ? { accent: `text-info` } : {}),
-        ...dashed,
-    };
+    // A card's worst outcome tints what left it: a failure anywhere inside it is what a reader is tracing.
+    const source = clusterById.get(link.from);
+    const carried = (status: PipelineStatus): boolean => source?.jobs.some((member) => member.job.status === status) === true;
+    const accent = carried(`failed`) ? { accent: `text-danger` } : carried(`running`) ? { accent: `text-info` } : {};
+    return { ...link, ...accent, ...dashed };
 };
 
-// Stages → the DagGraph model: one node per job, edges from whichever source of truth this run came with.
-// `focus` is the job under the pointer (or pinned by a click): its line is drawn, the rest fades. Only the
-// STYLING moves with it, never an id or an endpoint, so a hover cannot disturb the layout or throw away the
-// reader's pan (DagGraph refits on the layout signature, which is ids and endpoints, see dagLayout.ts).
+// Stages → the DagGraph model: one compound card per group of identically-wired jobs, one edge per pair of
+// cards. `focus` is the JOB id under the pointer (or pinned by a click): the line through the card holding it
+// is drawn, the rest fades. Only the STYLING moves with it, never an id or an endpoint, so a hover cannot
+// disturb the layout or throw away the reader's pan (DagGraph refits on the layout signature, which is ids,
+// endpoints and node boxes, see dagLayout.ts).
 export const pipelineDag = (stages: readonly PipelineStage[], focus?: string): PipelineDag => {
-    // The links come first because the trace is walked over them, and a node cannot say whether it is dimmed
-    // until that walk has happened.
-    const links = declaredLinks(stages) ?? stageJoinLinks(stages);
-    const lineage = focus === undefined ? undefined : jobLineage(links, focus);
+    // Positional ids first: the links are addressed by them, and everything below is derived from the links.
+    const jobs = stages.flatMap((stage, stageIndex) => stage.jobs.map((job, jobIndex): JobNode => ({ id: jobNodeId(stageIndex, jobIndex), job })));
+    const jobLinks = declaredLinks(stages) ?? stageJoinLinks(stages);
+    const { cards, cardOf } = jobCards(jobs, jobLinks);
+    const links = cardLinks(jobLinks, cardOf);
 
-    const jobOf = new Map<string, PipelineJob>();
-    const nodes = stages.flatMap((stage, stageIndex) =>
-        stage.jobs.map((job, jobIndex) => {
-            const id = jobNodeId(stageIndex, jobIndex);
-            jobOf.set(id, job);
-            // No `tooltip`: a card's own popup is drawn ABOVE it, over the neighbours whose lighting or fading
-            // is the entire answer to the hover that summoned it. The graph's caption says the same things,
-            // full name, stage, what the job's line reaches, in a fixed corner that occludes nothing.
-            return { id, data: job, ...(lineage !== undefined && !lineage.nodes.has(id) ? { dimmed: true } : {}) };
-        }),
-    );
+    // The trace is walked over the CARDS, so a job-level focus moves to the card holding it first.
+    const focusCard = focus === undefined ? undefined : cardOf.get(focus);
+    const lineage = focusCard === undefined ? undefined : jobLineage(links, focusCard);
+    const jobsIn = (ids: ReadonlySet<string>): number =>
+        cards.reduce((count, card) => (ids.has(card.id) ? count + card.cluster.jobs.length : count), 0);
+    const trace: PipelineTrace | undefined =
+        lineage === undefined
+            ? undefined
+            : { cards: lineage.nodes, links: lineage.links, before: jobsIn(lineage.before), after: jobsIn(lineage.after) };
 
-    return { nodes, edges: links.map((link) => linkEdge(link, jobOf, lineage)), lineage };
+    const clusterById = new Map(cards.map((card) => [card.id, card.cluster]));
+    const nodes = cards.map((card): DagNode<PipelineJobCluster> => ({
+        id: card.id,
+        data: card.cluster,
+        // No `tooltip`: a card's own popup is drawn ABOVE it, over the neighbours whose lighting or fading
+        // is the entire answer to the hover that summoned it. The graph's caption says the same things,
+        // full name, stage, what the job's line reaches, in a fixed corner that occludes nothing.
+        ...(trace !== undefined && !trace.cards.has(card.id) ? { dimmed: true } : {}),
+    }));
+
+    return { nodes, edges: links.map((link) => linkEdge(link, clusterById, trace)), trace };
 };

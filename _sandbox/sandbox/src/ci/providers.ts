@@ -2,7 +2,7 @@ import type { PipelineJob, PipelineRun, PipelineStatus } from "@intentic/sandbox
 import { githubHeaders } from "../capabilities/cli/git-access.js";
 import { plainText } from "../terminal/plain-text.js";
 import type { CiProject } from "./projects.js";
-import { resolveNeeds } from "./workflowGraph.js";
+import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
 /* The two vendors' pipeline APIs behind one client shape, keyed off the account a project mapped to
  * (projects.ts). Everything the CI surface does, the view's run list, rerun/cancel, the fix context's log
@@ -134,21 +134,52 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
      * Undefined, never a throw, for every way this legitimately comes up empty: a token without `contents`
      * (the CI scopes do not imply it), a private or since-deleted workflow, or a run started by a reusable
      * workflow in another repository, whose `path` is `owner/repo/file@ref` and resolves nowhere here. The
-     * graph is an enrichment; failing to get it must never cost the caller the job list it came for. */
-    const workflowSource = async (project: CiProject, runId: number): Promise<string | undefined> => {
+     * graph is an enrichment; failing to get it must never cost the caller the job list it came for.
+     *
+     * THE FILES IT CALLS COME TOO, when they live in this repository. A `uses: ./.github/workflows/release.yml`
+     * job reports one job per job of the called file, and without that file they can only be siblings; with it
+     * they are the chain they were written as. One extra request per called file, at the same sha, and a round
+     * per level of nesting, three requests on the workspace's own CI. A file that fails to fetch is simply not
+     * in the map, which is the same unfollowed call as one in another repository. */
+    const fileAt = async (project: CiProject, path: string, ref: string): Promise<string | undefined> => {
+        // `.raw` hands back the file itself; the default json media type would wrap it in base64.
+        const file = await fetchFn(githubApi(project, `/contents/${path}?ref=${ref}`), {
+            headers: { ...githubHeaders(project.account.token), Accept: "application/vnd.github.raw" },
+        });
+        return file.ok ? await file.text() : undefined;
+    };
+    const workflowSource = async (project: CiProject, runId: number): Promise<{ root: string; called: Map<string, string> } | undefined> => {
         const runResponse = await fetchFn(githubApi(project, `/actions/runs/${runId}`), { headers: githubHeaders(project.account.token) });
         if (!runResponse.ok) {
             return undefined;
         }
         const run = (await runResponse.json()) as { path?: string; head_sha?: string };
-        if (run.path === undefined || run.head_sha === undefined) {
+        const ref = run.head_sha;
+        if (run.path === undefined || ref === undefined) {
             return undefined;
         }
-        // `.raw` hands back the file itself; the default json media type would wrap it in base64.
-        const file = await fetchFn(githubApi(project, `/contents/${run.path}?ref=${run.head_sha}`), {
-            headers: { ...githubHeaders(project.account.token), Accept: "application/vnd.github.raw" },
-        });
-        return file.ok ? await file.text() : undefined;
+        const root = await fileAt(project, run.path, ref);
+        if (root === undefined) {
+            return undefined;
+        }
+        const called = new Map<string, string>();
+        const asked = new Set([run.path]);
+        let frontier = localWorkflowCalls(root);
+        while (frontier.length > 0) {
+            const wanted = [...new Set(frontier)].filter((path) => !asked.has(path));
+            for (const path of wanted) {
+                asked.add(path);
+            }
+            const fetched = await Promise.all(wanted.map(async (path) => [path, await fileAt(project, path, ref)] as const));
+            frontier = [];
+            for (const [path, source] of fetched) {
+                if (source !== undefined) {
+                    called.set(path, source);
+                    frontier.push(...localWorkflowCalls(source));
+                }
+            }
+        }
+        return { root, called };
     };
     const post = async (project: CiProject, path: string, what: string, body?: object): Promise<void> => {
         await throwOn(
@@ -202,8 +233,9 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
                 workflow === undefined
                     ? undefined
                     : resolveNeeds(
-                          workflow,
+                          workflow.root,
                           listed.jobs.map((job) => job.name),
+                          workflow.called,
                       );
             return listed.jobs.map((job) => {
                 const status = githubStatus(job.status, job.conclusion);
