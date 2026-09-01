@@ -102,17 +102,24 @@ const remeasureLabel = computed(() =>
 </script>
 
 <template>
-    <!-- Drawn only once there is something to say. A sandbox with no AI account connected gets no rail at all:
-         an empty column standing beside the transcript would be 240px spent teaching the reader that this
-         surface has nothing for them, every time they open a window. -->
     <!-- NO SURFACE OF ITS OWN: no card fill, no rule down its left. This is a readout standing in the window's
          empty margin, not a panel competing with the transcript, and a border plus a fill would draw a second
          frame around something that is already separated from the panes by a column of air. What tells the
-         reader it is a distinct region is the whitespace and the heading, which is all it needs to be. -->
+         reader it is a distinct region is the whitespace and the heading, which is all it needs to be.
+
+         AND NOT IN THE ROW, either. Taking flex width pushed the transcript's scroller 240px in from the
+         window, and its scrollbar with it — the bar a reader moves all day, off the edge it owned and into
+         the middle of the window, which is the exact loss ChatPanel's own note about the list/rail flip
+         describes. So the column is lifted out of the flow and the pane keeps the whole width: the transcript
+         reaches the edge, its bar draws there, and what the rail actually takes is a strip of PADDING inside
+         that scroller (ChatPanel's --capacity-rail) — the margin the reading measure was leaving empty anyway.
+
+         Standing one bar's width in from the edge (--chat-scrollbar), because the strip it would otherwise
+         cover is the one the reader throws the pointer at: an element over a scrollbar takes the press meant
+         for the thumb, and a bar that stops answering shows nothing on screen to explain why. -->
     <aside
-        v-if="!accountsLoaded || capacity.accounts > 0"
-        class="flex h-full min-h-0 shrink-0 flex-col"
-        :style="{ width: uiLength(CAPACITY_RAIL_PX) }"
+        class="absolute inset-y-0 z-10 flex min-h-0 flex-col"
+        :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         aria-label="Plan headroom"
     >
         <!-- The header names the question the column answers, not the data it holds ("Plan limits" is the Usage

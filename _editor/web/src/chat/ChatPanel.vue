@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { railFitsBeside } from "../composables/chat/chatCapacity";
+import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "../composables/chat/chatCapacity";
+import { accountsLoaded } from "../composables/chat/providerAccounts";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../composables/chat/chatRun";
 import type { Conversation } from "../composables/chat/conversation";
 import { traceFocus } from "../composables/chat/focusTrace";
@@ -149,10 +150,21 @@ watch(
 );
 onBeforeUnmount(stopMeasuring);
 
-// `tabs: false` is a caller that draws no list of its own (the mobile agent route), so there is no rail taking
-// width off the panes: asking for it back would be charging them for a column that isn't there.
+/* `tabs: false` is a caller that draws no list of its own (the mobile agent route), so there is no rail taking
+ * width off the panes: asking for it back would be charging them for a column that isn't there.
+ *
+ * AND ONLY WITH SOMETHING IN IT (hasCapacity). The panel is what reserves the strip the rail stands in, so the
+ * emptiness question is settled here, before any of it is laid out: a sandbox with no AI account connected
+ * would otherwise hold 240px of padding open down the side of a transcript to make room for a column that
+ * renders nothing. Mid-load is not empty — the rail draws the shape that is coming — so the reservation stands
+ * until the connection read says otherwise, which is also what keeps the transcript from re-flowing under the
+ * reader when it lands. */
 const showsCapacity = computed(
-    () => floating.value && !mobile.value && railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
+    () =>
+        floating.value &&
+        !mobile.value &&
+        (!accountsLoaded.value || hasCapacity()) &&
+        railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
 );
 
 // Past the width floor the panes stop shrinking and the row scrolls, so the focused one has to be brought back
@@ -355,10 +367,15 @@ const endResize = (event: PointerEvent): void => {
          out on the right it owned the window's edge: the one target a pointer can throw itself at without
          aiming. Behind a list it becomes a strip floating mid-window, with the edge given to the bar of the
          column you touch least. Navigation before content, and the scroll you use against the frame. -->
+    <!-- `--capacity-rail` is the width the headroom rail stands in, published here because the rail no longer
+         occupies it: the column is lifted out of the row (see the note on it below) so the transcript's own
+         scroller can reach the window edge, and this is what the scroller pads itself by instead. Zero when
+         the rail is not drawn, which is what makes the two states one rule rather than a conditional class. -->
     <div
         ref="root"
         class="chat-panel lane-ground-card relative flex h-full min-h-0 overflow-hidden bg-card"
         :class="[chatWide ? 'flex-row' : 'flex-col', { 'is-resizing': resizing }]"
+        :style="{ '--capacity-rail': showsCapacity ? uiLength(CAPACITY_RAIL_PX) : `0px` }"
     >
         <div
             v-if="!chatWide && !mobile"
@@ -435,11 +452,15 @@ const endResize = (event: PointerEvent): void => {
             </div>
         </div>
 
-        <!-- WHAT THE READER CAN RUN NEXT, in the room the panes have no use for. Last in the row and outside
-             the pane column on purpose: it belongs to the WINDOW, not to any one chat, exactly as the chat list
-             on the other edge does. It yields to the panes rather than competing with them — adding a column
-             takes its width back without asking (see showsCapacity), which is why the pane-fit above does not
-             count it. -->
+        <!-- WHAT THE READER CAN RUN NEXT, in the room the panes have no use for. Outside the pane column on
+             purpose: it belongs to the WINDOW, not to any one chat, exactly as the chat list on the other edge
+             does. It yields to the panes rather than competing with them — adding a column takes its width back
+             without asking (see showsCapacity), which is why the pane-fit above does not count it.
+
+             OUT OF THE FLOW rather than last in the row: it is drawn over the margin the transcript was already
+             leaving empty, and the width it needs is reserved inside the scroller instead (--capacity-rail, in
+             the style block). That is what lets the transcript's scrollbar keep the window's edge, which the
+             note at the top of this template spends a paragraph explaining the value of. -->
         <ChatCapacityRail v-if="showsCapacity" />
     </div>
 </template>
@@ -460,4 +481,7 @@ const endResize = (event: PointerEvent): void => {
 .chat-panes :deep(.chat-pane + .chat-pane) {
     border-left: 1px solid var(--color-line);
 }
+/* What the headroom rail's width is taken out of is NOT this row — the rail is drawn over the margin instead,
+ * and the pane that borders it pads itself by --capacity-rail. Those two rules live in chat.css beside the
+ * scroller gutter they are about, and they qualify themselves with .chat-panel to outrank the basis above. */
 </style>

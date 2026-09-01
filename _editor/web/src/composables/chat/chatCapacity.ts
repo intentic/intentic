@@ -101,8 +101,6 @@ export interface ChatCapacity {
     /* The OLDEST reading on screen, never the freshest: the header's age qualifies every bar under it, and a
      * header vouching for its best row would be vouching for a stale one sitting directly beneath. */
     readonly measuredAt: number | undefined;
-    // How many connections this reading covers. Zero, once loaded, is a sandbox with nothing connected.
-    readonly accounts: number;
 }
 
 /* WHICH ACCOUNTS A REFUSAL TAKES OFF THE LIST, which is not always the one it names.
@@ -258,9 +256,15 @@ export const chatCapacity = (now: number = Date.now()): ChatCapacity => {
         ),
         needsReauth: rows.filter((row) => row.needsReauth).length,
         measuredAt: measured.length === 0 ? undefined : Math.min(...measured),
-        accounts: rows.length,
     };
 };
+
+/* IS THERE ANYTHING TO DRAW, asked by the PANEL rather than by the rail itself. The panel is what pays for the
+ * column — it reserves the strip the transcript may not use (ChatPanel's --capacity-rail) — so it has to know
+ * before it lays anything out. A rail that decided its own emptiness one level down would leave the panel
+ * holding 240px of padding open beside a chat with nothing standing in it, which is the one shape of this
+ * feature that costs a reader width and gives them nothing back. */
+export const hasCapacity = (): boolean => planLimitRows(providerAccounts.value, translatorAccounts.value).length > 0;
 
 /* ---- when there is room for the rail at all ----------------------------------------------------------------
  *

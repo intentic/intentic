@@ -1,6 +1,6 @@
 import type { AccountUsage, OauthAccount, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
 import { afterEach, describe, expect, it } from "vitest";
-import { CAPACITY_RAIL_PX, chatCapacity, railFitsBeside } from "./chatCapacity";
+import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { providerAccounts, providerRefusals, translatorAccounts } from "./providerAccounts";
 import { usageStatusByAccount } from "./usageStatus";
 
@@ -260,5 +260,24 @@ describe(`when there is room for the rail`, () => {
     // The panel is measured, and until it has been the rail must not flash onto a window whose width is unread.
     it(`draws nothing before the panel has been measured`, () => {
         expect(railFitsBeside(0, LIST_RAIL, 1)).toBe(false);
+    });
+
+    /* WIDTH IS NOT THE ONLY QUESTION THE PANEL ASKS. It reserves the strip the rail stands in (--capacity-rail)
+     * before anything is laid out, so an empty fleet has to be knowable up here: otherwise a sandbox with
+     * nothing connected holds a rail's width of padding open down the side of a transcript for a column that
+     * draws nothing at all.
+     *
+     * ROUTED CONNECTIONS COUNT. The obvious reading of "is anything connected" is the OAuth list, and this
+     * sandbox's Gemini pool lives entirely in the other one — that reading reserves nothing for the fleet this
+     * rail was built to report on. */
+    it(`knows an empty fleet from one whose connections are all routed`, () => {
+        expect(hasCapacity()).toBe(false);
+
+        translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4)] };
+        expect(hasCapacity()).toBe(true);
+
+        translatorAccounts.value = NO_ROUTED;
+        providerAccounts.value = { claude: [claude({ id: `a`, label: `one@example.com`, usage: usage(41) })] };
+        expect(hasCapacity()).toBe(true);
     });
 });

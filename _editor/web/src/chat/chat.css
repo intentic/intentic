@@ -351,6 +351,38 @@
 .chat-scroller {
     scrollbar-gutter: stable both-edges;
 }
+/* HOW WIDE THAT RESERVED STRIP IS, as a number other layout can be built against — the headroom rail is placed
+   with it (ChatPanel's --capacity-rail block), because a column standing where the transcript's scrollbar draws
+   would swallow the drags aimed at it: a pointer landing on a thumb that is UNDER another element hits that
+   element instead, and the bar simply stops answering with nothing on screen to say why.
+   The thin bar's width in Chromium, which is the only engine this ships on (Electron). Being a few px out costs
+   nothing either way: too small and the rail clears the bar with room to spare, too large and it clears it by
+   less — the failure mode the number prevents needs the rail drawn ON the strip, not near it. */
+.chat-panel {
+    --chat-scrollbar: 10px;
+}
+/* WHERE THE HEADROOM RAIL'S WIDTH COMES FROM, now that the rail is drawn over the margin rather than standing
+   in the row (ChatCapacityRail, mounted in ChatPanel).
+
+   It used to be a column in that row, and that cost the transcript the very thing ChatPanel's opening note
+   argues hardest for: the scroller ended a rail's width short of the window, so the bar a reader moves all day
+   left the edge it owned and became a strip floating mid-window. The pane keeps the whole width instead and
+   the rail's room is taken as PADDING inside the scroller beside it. The text stops in the same place either
+   way; the SCROLLER is what changes, and it now runs to the window's edge and draws its bar there.
+
+   THE LAST PANE, because that is the one the rail stands over. Its basis hands the padding back as width, so
+   what a reader compares between two chats — the text in them — stays equal: without it a split would put a
+   full transcript beside one squeezed by 240px, which is a worse thing to do to two columns drawn side by side
+   for comparison than anything this rail has to tell them.
+
+   Qualified by .chat-panel to outrank ChatPanel's own `flex: 1 1 0` on the same elements, which is a scoped
+   rule and therefore injected after this file however the two are ordered. */
+.chat-panel .chat-panes > .chat-pane:last-child {
+    flex-basis: var(--capacity-rail, 0px);
+}
+.chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
+    padding-right: var(--capacity-rail, 0px);
+}
 /* THE MARK A HIDDEN RUN OF TOOL CALLS LEAVES BEHIND (ChatToolRun) — and where it stands.
 
    Narrow, it sits on the end of its own line, and that line is as tall as the mark: the transcript has no room
