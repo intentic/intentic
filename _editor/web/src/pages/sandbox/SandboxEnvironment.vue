@@ -5,6 +5,7 @@ import { useEnvironment } from "../../composables/sandbox/useEnvironment";
 import { useSandboxOutline } from "../../composables/sandbox/useSandboxOutline";
 import BundleCard from "./BundleCard.vue";
 import DefinitionCard from "./DefinitionCard.vue";
+import EnginesCard from "./EnginesCard.vue";
 import EnvironmentCard from "./EnvironmentCard.vue";
 import MigrationCard from "./MigrationCard.vue";
 
@@ -44,6 +45,12 @@ const outline = useSandboxOutline(reading);
         <div v-else-if="empty && !reading" :class="ui.emptyState('py-10')">
             No environment changes yet. When the agent proposes a change to the sandbox image's overlay, its diff appears here to review and rebuild.
         </div>
+
+        <!-- Below the overlay and above the bundle, because it answers the same question one layer down: that
+             card is what this sandbox has INSTALLED, this one is which version of the programs that run the
+             turns. Never hidden — unlike the overlay above it, every sandbox has engines, and "which Claude
+             Code am I on" is worth an answer before anything has gone wrong. -->
+        <EnginesCard />
 
         <BundleCard />
 

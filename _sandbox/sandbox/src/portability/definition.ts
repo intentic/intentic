@@ -83,6 +83,10 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
     },
     { path: ".intentic/config/extension-update-policy.json", note: "Update policy, beside the extensions it governs." },
     {
+        path: ".intentic/config/engines.json",
+        note: "Where each agent engine takes its version from. A pin arrives naming a version the target has to download before it can honour it; until then that engine runs the target image's own copy.",
+    },
+    {
         path: ".intentic/config/workspace-extensions/",
         note: "Extension code, authored here. It arrives switched off; the owner enables what they trust.",
     },

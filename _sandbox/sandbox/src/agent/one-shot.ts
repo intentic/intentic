@@ -1,4 +1,5 @@
-import { type Options, query } from "@anthropic-ai/claude-agent-sdk";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../platform/leftovers.js";
 import { type HarnessCredentials, harnessEnv } from "./harness-credentials.js";
 import { isFailureSentence } from "./failure-sentences.js";
@@ -113,7 +114,7 @@ export const runOneShot = async (params: {
             ...workloadStamp(ONE_SHOT_OWNER),
         },
     };
-    const session = query({ prompt: params.prompt, options });
+    const session = sdk().query({ prompt: params.prompt, options });
     try {
         for await (const message of session) {
             /* A RETRY THIS CALLER WILL NEVER OUTLIVE. A TURN should ride out a rate limit: the user asked for

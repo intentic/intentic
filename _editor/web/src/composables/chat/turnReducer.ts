@@ -104,6 +104,9 @@ export type TurnEffect =
           // rate_limit only: the daemon is holding this turn, so continuing RE-RUNS it rather than sending a
           // message after it, and `ran` says whether it got anywhere first. See events.ts for why that matters.
           readonly held: Extract<AgentEvent, { kind: "error" }>["held"];
+          // engine-version-floor only: which agent engine is too old and the version the provider demanded, so
+          // the failure can be answered with an install rather than only described.
+          readonly engine: Extract<AgentEvent, { kind: "error" }>["engine"];
       }
     // The turn is alive and waiting on the provider. Not a transcript write at all: the caller renders it where
     // the streaming indicator goes, and the next frame of real content retires it.
@@ -379,11 +382,8 @@ const paymentOfferStatusOf = (reply: AgentReply | undefined): PaymentOfferStatus
  * hold, a replay that starts after the card was answered, changes nothing. */
 const noteCard = (state: TurnState, event: Extract<AgentEvent, { kind: "permission_note" }>): TurnState => ({
     ...state,
-    messages: state.messages.map(
-        (message): ChatMessage =>
-            message.permission?.requestId === event.requestId
-                ? { ...message, permission: { ...message.permission, explain: event.explain } }
-                : message,
+    messages: state.messages.map((message): ChatMessage =>
+        message.permission?.requestId === event.requestId ? { ...message, permission: { ...message.permission, explain: event.explain } } : message,
     ),
 });
 
@@ -391,11 +391,10 @@ const noteCard = (state: TurnState, event: Extract<AgentEvent, { kind: "permissi
 // living, which the card renders as its latest status line while the receipt is pending.
 const appendServiceEvent = (state: TurnState, event: Extract<AgentEvent, { kind: "service_event" }>): TurnState => ({
     ...state,
-    messages: state.messages.map(
-        (message): ChatMessage =>
-            message.serviceOffer?.requestId === event.requestId
-                ? { ...message, serviceOffer: { ...message.serviceOffer, events: [...(message.serviceOffer.events ?? []), event.event] } }
-                : message,
+    messages: state.messages.map((message): ChatMessage =>
+        message.serviceOffer?.requestId === event.requestId
+            ? { ...message, serviceOffer: { ...message.serviceOffer, events: [...(message.serviceOffer.events ?? []), event.event] } }
+            : message,
     ),
 });
 
@@ -577,8 +576,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
              * the ordinary path below. */
             const flushed = flushPending(state);
             const adjacent = flushed.messages.at(-1);
-            const consumesAdjacent =
-                adjacent?.role === `assistant` && adjacent.text.trim() !== `` && adjacent.text.trim() === event.text.trim();
+            const consumesAdjacent = adjacent?.role === `assistant` && adjacent.text.trim() !== `` && adjacent.text.trim() === event.text.trim();
             const opened = consumesAdjacent ? { state: flushed, id: adjacent.id } : withBubble(flushed);
             const attached = mapMessage(opened.state, opened.id, (message) => ({
                 ...message,
@@ -818,6 +816,7 @@ export const applyTurnFrame = (state: TurnState, event: AgentEvent, context: Tur
                 autoResume: event.autoResume,
                 outage: event.outage,
                 held: event.held,
+                engine: event.engine,
             });
         case `provider_retry`:
             return step(state, { kind: `providerRetry`, retry: event });

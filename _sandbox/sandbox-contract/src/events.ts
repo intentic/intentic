@@ -1048,7 +1048,30 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                  * is a real classification all the same: it says the failure came from the LOOP rather than
                  * from the provider, the credential or the request, which rules out every recovery next door. */
                 "harness-incomplete",
+                /* THE ENGINE IS TOO OLD FOR THE MODEL, and the provider says so in the same breath as the
+                 * version that would work ("Claude Code 2.1.233 does not support this model; version 2.1.251
+                 * or newer is required"). Its own code because the fix is unlike every neighbour's: nothing is
+                 * disconnected, nothing is spent, no retry of any length helps, and the thing that has to
+                 * change is not the request but the PROGRAM running it (schemas/engines.ts).
+                 *
+                 * It used to be unfixable from inside a sandbox at all — the engine came with the image, so a
+                 * whole fleet failed every turn on this model until a new image reached it. Now the daemon can
+                 * install the version the provider named, which is why this frame carries the numbers rather
+                 * than only the sentence: `engine` is what the card's Update button acts on. The install is
+                 * still a person's decision, because the version that satisfies a floor is by definition one
+                 * nobody has blessed yet. */
+                "engine-version-floor",
             ])
+            .optional(),
+        /* engine-version-floor only: which engine is too old, what it is running, and the floor the provider
+         * demanded. On the wire because the recovery is a specific, offerable action — install at or above
+         * `floor` — and a client that had only the sentence would have to parse prose to offer it. */
+        engine: z
+            .object({
+                id: z.string().describe("Which engine (e.g. claude)."),
+                running: z.string().optional().describe("The version that was refused, when the provider named it."),
+                floor: z.string().describe("The lowest version the provider will accept."),
+            })
             .optional(),
         // rate_limit only: when the exhausted window reopens (epoch seconds, from the stream's own
         // rate_limit_event or the account's persisted usage windows). Absent when the reset instant is unknown

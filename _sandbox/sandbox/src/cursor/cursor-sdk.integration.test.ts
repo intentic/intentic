@@ -6,11 +6,13 @@ import { CURSOR_SDK_MISSING, cursorSdk, forgetCursorSdk } from "./cursor-sdk.js"
 
 /* HOW THE RUNTIME IS FOUND, which on this provider is a question with real consequences: `@cursor/sdk` is
  * pruned out of every published image for licence reasons, so the daemon has to boot without it and find it
- * later, in a prefix a pack installed. Getting this wrong does not degrade Cursor — it stops the daemon
- * starting at all, for everyone, whether or not they use Cursor.
+ * later, in the engine store or in a prefix a pack installed. Getting this wrong does not degrade Cursor — it
+ * stops the daemon starting at all, for everyone, whether or not they use Cursor.
  *
  * This suite runs in a DEV CHECKOUT, where the module is a real dependency, so the fallback rung is genuinely
- * exercised and the pack rung is exercised against a fixture. */
+ * exercised and the pack rung is exercised against a fixture. The STORE rung is exercised by
+ * cursor-sdk-bootstrap.integration.test.ts, which is where an install puts a version there; here the store is
+ * empty by construction (src/testing/engine-fence.ts), which is what makes these cases about the pack. */
 
 afterEach(() => {
     delete process.env["INTENTIC_CURSOR_SDK_DIR"];

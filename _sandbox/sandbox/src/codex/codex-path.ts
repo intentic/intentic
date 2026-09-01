@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { resolveEngine } from "../engines/engine-resolve.js";
 import { resolveOnPath } from "../platform/on-path.js";
 
 /* WHICH `codex` BINARY A TURN DRIVES, and why the daemon resolves it before spawning app-server.
@@ -45,10 +46,14 @@ const vendoredWrapper = async (): Promise<string | undefined> => {
     );
 };
 
-// Resolved once per daemon: PATH is fixed at container start, and adding the pack recreates the container.
-let resolved: Promise<string | undefined> | undefined;
-
-export const codexBinary = (): Promise<string | undefined> => {
-    resolved ??= (async () => (await resolveOnPath("codex")) ?? (await vendoredWrapper()))();
-    return resolved;
+/* Resolved per call, not once per daemon, because the ENGINE STORE can move under a running daemon: an owner
+ * pressing Update installs a newer codex and the next turn must drive it. The two fallbacks below are still
+ * fixed at container start, and the store's own answer is cached for seconds (engines/engine-resolve.ts), so
+ * this costs a map lookup on the overwhelmingly common path.
+ *
+ * ORDER IS STORE, THEN PATH, THEN THE TREE. The store is what an owner asked for explicitly; PATH is the
+ * pack's global install, which is the image's floor; the tree copy is the dev checkout's. */
+export const codexBinary = async (): Promise<string | undefined> => {
+    const stored = await resolveEngine("codex");
+    return stored.paths.binPath ?? (await resolveOnPath("codex")) ?? vendoredWrapper();
 };

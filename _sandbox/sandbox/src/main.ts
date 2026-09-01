@@ -34,6 +34,7 @@ import { createServices } from "./composition.js";
 import { draftsPublisherFor } from "./drafts/drafts-publisher.js";
 import { ensureDraftsSkill } from "./drafts/drafts-store.js";
 import { startAllExtensionProcesses } from "./extensions/extension-processes.js";
+import { startEngineWatch } from "./engines/engines.js";
 import { startExtensionUpdateWatch } from "./extensions/extension-updates.js";
 import { runGitMaintenance } from "./git/maintenance.js";
 import { pinTmuxServer, reportTmuxServerNamespace } from "./terminal/tmux-server.js";
@@ -1187,6 +1188,14 @@ const main = async (): Promise<void> => {
     // advisories) shortly after boot and daily after, the Extensions tab's own reads keep it fresher.
     const extensionUpdateWatch = traits.extensionHost ? startExtensionUpdateWatch(services) : undefined;
     shutdown.push(() => extensionUpdateWatch?.stop());
+
+    /* And for the AGENT ENGINES themselves — the Claude Code CLI and its SDK, codex, @cursor/sdk, opencode,
+     * the translator. Each engine's channel says where its version comes from (blessed by this project, or
+     * upstream's newest, or a pin), and this is what acts on that answer without waiting for a new image.
+     * Started only where this daemon owns the container's furniture: two daemons on one volume converging the
+     * same store would be two downloads racing for one pointer. */
+    const engineWatch = startEngineWatch(services, role);
+    shutdown.push(() => engineWatch.stop());
 
     // The same bargain for "can each agent runtime serve a turn": probed off the turn path so the picker can
     // say a subscription is missing BEFORE a prompt is written, rather than as that turn's failure.

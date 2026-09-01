@@ -1,4 +1,4 @@
-import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { MatchSnippet, RestoredMessage, Speaker } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
@@ -195,8 +195,8 @@ const storedLines = (messages: readonly { type: string; message?: unknown }[]): 
  * request path, once per session per change, rather than by a search.
  */
 export const readSessionLines = async (dir: string, sessionId: string): Promise<readonly SpokenLine[]> => {
-    const scoped = await getSessionMessages(sessionId, { dir });
-    const messages = scoped.length > 0 ? scoped : await getSessionMessages(sessionId);
+    const scoped = await sdk().getSessionMessages(sessionId, { dir });
+    const messages = scoped.length > 0 ? scoped : await sdk().getSessionMessages(sessionId);
     return storedLines(messages);
 };
 

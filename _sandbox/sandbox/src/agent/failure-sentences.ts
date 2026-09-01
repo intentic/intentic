@@ -1,4 +1,4 @@
-import { USAGE_LIMIT_ERROR_PREFIXES } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 
 /* THE CONDITIONS THE CLI REPORTS AS PROSE, and the question every site that treats model output as data has to
  * ask of a reply before using it.
@@ -23,7 +23,10 @@ import { USAGE_LIMIT_ERROR_PREFIXES } from "@anthropic-ai/claude-agent-sdk";
  *
  * Read on its own by the stream normalizer (agent.ts, where it becomes the `rate_limit` error code) and by
  * turn-resume.ts, because a limit is the one failure here that carries an instant to wait for. */
-export const isUsageLimitText = (text: string): boolean => USAGE_LIMIT_ERROR_PREFIXES.some((prefix) => text.startsWith(prefix));
+// Read through the loaded SDK rather than imported: the prefixes are the CLI's own wording, so they have to
+// come from the copy of the SDK this turn is actually running (claude/claude-sdk.ts). A static import would
+// pin them to the image's copy while the sentences being matched came from a newer one.
+export const isUsageLimitText = (text: string): boolean => sdk().USAGE_LIMIT_ERROR_PREFIXES.some((prefix) => text.startsWith(prefix));
 
 /* A CREDENTIAL THE CLI HAS GIVEN UP ON, recognised by the sentence it says so with.
  *
@@ -41,6 +44,35 @@ export const isUsageLimitText = (text: string): boolean => USAGE_LIMIT_ERROR_PRE
 const AUTH_FAILURE_PREFIX = "Failed to authenticate";
 
 export const isAuthFailureText = (text: string): boolean => text.startsWith(AUTH_FAILURE_PREFIX);
+
+/* THE ENGINE IS TOO OLD FOR THE MODEL, the third condition the provider reports as prose, and the first one
+ * this sandbox can now do something about.
+ *
+ * The API answers a turn on a model its client is too old for with a 400 whose sentence carries BOTH numbers:
+ * "Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required. Run 'claude update'
+ * …". That last instruction is written for somebody at a terminal with an npm install of their own; here the
+ * engine store is what performs it (engines/engines.ts), so the numbers are what matter and the advice is not.
+ *
+ * Matched on the FLOOR clause rather than on the product name, because the shape of the sentence is what is
+ * being classified and Anthropic is free to reword the rest of it. The running version is optional for the
+ * same reason: it is useful for the card and never load-bearing, since the floor alone decides which version
+ * fixes this. */
+const VERSION_FLOOR = /version\s+(\d+\.\d+\.\d+)\s+or\s+newer\s+is\s+required/i;
+const RUNNING_VERSION = /Claude Code\s+(\d+\.\d+\.\d+)\s+does not support/i;
+
+export interface VersionFloor {
+    readonly floor: string;
+    readonly running?: string;
+}
+
+export const versionFloorOf = (text: string): VersionFloor | undefined => {
+    const floor = VERSION_FLOOR.exec(text)?.[1];
+    if (floor === undefined) {
+        return undefined;
+    }
+    const running = RUNNING_VERSION.exec(text)?.[1];
+    return running === undefined ? { floor } : { floor, running };
+};
 
 // Neither condition is ever a name, a commit subject, or anything else a caller asked a model to produce, so
 // this is the predicate the one-shot seam and both naming guards read, and no caller of them names a member.

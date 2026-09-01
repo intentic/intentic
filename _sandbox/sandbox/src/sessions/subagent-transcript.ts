@@ -1,4 +1,4 @@
-import { getSubagentMessages } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { RestoredMessage } from "@intentic/sandbox-contract";
 import { subagentAgentId, subagentSource } from "../agent/subagents.js";
 import { turnRunOf } from "../agent/turn-runs.js";
@@ -51,7 +51,7 @@ export const readSubagentTranscript = async (deps: SubagentTranscriptDeps, id: s
         if (source.sessionId === undefined || agentId === undefined) {
             return [];
         }
-        const messages = await getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
+        const messages = await sdk().getSubagentMessages(source.sessionId, agentId, { dir: source.cwd });
         return restoredSessionMessages(messages, deps.root);
     }
     /* A SPAWNED child is a conversation of its own, and the record's id IS that conversation's id, so both

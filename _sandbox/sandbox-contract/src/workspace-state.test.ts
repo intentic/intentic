@@ -334,6 +334,11 @@ describe(`VERSIONED_STATE_PATHS`, () => {
              * node:fs, and both used to reach that far with no diff anywhere. Kept rather than consumed, one
              * small file at a time, so tracking them yields a record instead of churn. */
             `.intentic/config/drafts/`,
+            /* Where each agent engine takes its version from. Tracked for the same reason heavy-commands is:
+             * it is a standing decision about what runs for everyone on this workspace — tracking upstream's
+             * newest Claude Code, or pinning one while a regression is open — and `git log` is the only thing
+             * that answers "since when". */
+            `.intentic/config/engines.json`,
             `.intentic/config/environment.Dockerfile`,
             `.intentic/config/environment.custom.Dockerfile`,
             `.intentic/config/environment.d/`,

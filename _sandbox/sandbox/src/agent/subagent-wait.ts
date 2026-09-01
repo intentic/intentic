@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { ChildSupervisor } from "../children/children.js";
@@ -53,7 +54,7 @@ const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; t
 });
 
 export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "subagents",
         // In the prompt, not behind tool search: a supervising parent reaches for this mid-flight, and a tool
         // it has to go looking for is a tool it replaces with a sleep-and-poll loop.
@@ -62,7 +63,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
             ...(deps.children === undefined
                 ? []
                 : [
-                      tool(
+                      sdk().tool(
                           "spawn",
                           "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor — e.g. Cursor's " +
                               "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
@@ -76,13 +77,16 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               description: z.string().max(200).optional().describe("One line naming the task, for the board and the roster."),
                               provider: AgentProviderSchema.optional().describe("Which provider serves it. Leave it out for Claude."),
                               harness: AgentHarnessSchema.optional().describe("Which agentic loop runs it. Leave it out for the provider's own."),
-                              model: z.string().optional().describe("Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default."),
+                              model: z
+                                  .string()
+                                  .optional()
+                                  .describe("Which model, e.g. composer-2.5 on cursor. Leave it out for the provider's default."),
                               effort: z.string().optional().describe("How hard it should think, where the provider offers a choice."),
                               on: z
                                   .string()
                                   .optional()
                                   .describe(
-                                      "Which machine runs it: a runner's name, or \"here\" to keep it in this sandbox. Leave it out and the fleet " +
+                                      'Which machine runs it: a runner\'s name, or "here" to keep it in this sandbox. Leave it out and the fleet ' +
                                           "decides, which is what spreads a fan-out over every machine you have connected.",
                                   ),
                           },
@@ -107,7 +111,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               );
                           },
                       ),
-                      tool(
+                      sdk().tool(
                           "send",
                           "Steer or continue an agent you started. A working child gets the message mid-turn (where its runtime " +
                               "takes one); a finished child runs a follow-up turn on its own conversation, continuing its session, " +
@@ -124,7 +128,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               return answer(await children.send(args.child, args.message));
                           },
                       ),
-                      tool(
+                      sdk().tool(
                           "answer",
                           "Answer a QUESTION a child you started is parked on (wait reports blocked and carries the question). " +
                               "Pass your picks keyed by the question's own text, values as chosen option labels or your own words. " +
@@ -145,7 +149,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           },
                       ),
                   ]),
-            tool(
+            sdk().tool(
                 "wait",
                 "Wait until an agent you started needs you. Blocks until the target is blocked on input (a question or " +
                     "permission), or finishes, whichever comes first: then returns its status, its last report, and " +
@@ -176,9 +180,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     // A blocked child's whole question rides along, options included: the difference between
                     // a parent that can answer and one that can only report.
                     const question =
-                        result.outcome === "blocked" && result.matched !== undefined
-                            ? deps.children?.pendingQuestion(result.matched.id)
-                            : undefined;
+                        result.outcome === "blocked" && result.matched !== undefined ? deps.children?.pendingQuestion(result.matched.id) : undefined;
                     return answer({
                         outcome: result.outcome,
                         ...(result.matched !== undefined ? { agent: result.matched } : {}),

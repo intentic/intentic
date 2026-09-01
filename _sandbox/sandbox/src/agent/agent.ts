@@ -1,17 +1,16 @@
-import {
-    type CanUseTool,
-    createSdkMcpServer,
-    type EffortLevel,
-    type HookCallbackMatcher,
-    type HookEvent,
-    type McpSdkServerConfigWithInstance,
-    type McpServerConfig,
-    type Options,
-    type PermissionUpdate,
-    type SpawnedProcess,
-    type SpawnOptions,
-    tool,
+import type {
+    CanUseTool,
+    EffortLevel,
+    HookCallbackMatcher,
+    HookEvent,
+    McpSdkServerConfigWithInstance,
+    McpServerConfig,
+    Options,
+    PermissionUpdate,
+    SpawnedProcess,
+    SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
+import { claudeCliPath, refreshClaudeSdk, sdk } from "../claude/claude-sdk.js";
 import { spawn } from "node:child_process";
 import {
     type AdmissionRule,
@@ -591,6 +590,11 @@ const baseOptions = (
     }
     return {
         cwd: request.cwd,
+        /* The CLI this turn spawns, named rather than left to the SDK's own resolution. Absent on the image's
+         * copy, where the SDK resolves its sibling platform package correctly and naming a path would only be
+         * a second chance to get it wrong; present for a store copy, so the binary that runs is the one this
+         * daemon chose, from the same installed prefix as the JS half above it (claude/claude-sdk.ts). */
+        ...opt("pathToClaudeCodeExecutable", claudeCliPath()),
         // Only for a native Claude turn on a sandbox-owned credential: a translator endpoint authenticates with its
         // own bearer, and the container-env fallback has no refresh token behind it to mint from.
         ...opt("getOAuthToken", request.baseUrl === undefined ? request.refreshOauthToken : undefined),
@@ -837,11 +841,11 @@ const askServer = (
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
 ): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "ui",
         alwaysLoad: true,
         tools: [
-            tool(
+            sdk().tool(
                 "ask",
                 'Ask the user 1-4 clarifying multiple-choice questions and wait for their answers. Use this whenever you need the user to choose between options before proceeding. Each question has 2-4 options; do NOT add an "Other" option: a free-text choice is provided automatically. Set multiSelect when several options may be picked together.',
                 {
@@ -1092,6 +1096,13 @@ export async function* runAgent(
     } else {
         request.signal.addEventListener("abort", () => abortController.abort(), { once: true });
     }
+
+    /* WHICH COPY OF CLAUDE CODE THIS TURN RUNS, decided once, here, before a single option is built. The
+     * engine store can have moved since the last turn (an owner pressed Update, the daily check took a blessed
+     * version), and a turn has to be built out of ONE version: the JS half `query` comes from, the tool servers
+     * built below, and the CLI binary named in the options are all the same installed prefix from this point on.
+     * Cheap when nothing moved, which is nearly always (claude/claude-sdk.ts). */
+    await refreshClaudeSdk();
 
     const queue = new EventQueue<AgentEvent>();
     const push = (event: AgentEvent): void => queue.push(event);

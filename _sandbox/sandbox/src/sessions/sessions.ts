@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { getSessionInfo, getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { MatchSnippet, RestoredMessage, RestoredToolCall } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/runtime-history.js";
@@ -60,7 +60,7 @@ const promptTitle = (firstPrompt: string | undefined): string | undefined => {
 };
 
 export const listWorkspaceSessions = async (dir: string): Promise<SessionSummary[]> => {
-    const sessions = await listSessions({ dir, limit: 50 });
+    const sessions = await sdk().listSessions({ dir, limit: 50 });
     return sessions.map((session) => ({
         id: session.sessionId,
         title: session.customTitle ?? session.summary ?? promptTitle(session.firstPrompt) ?? "New chat",
@@ -148,7 +148,7 @@ export const searchWorkspaceSessions = async (
 
 // Cheap existence probe for the pre-flight resume check: getSessionInfo reads only that session's file
 // (listSessions scans the whole project and is capped). undefined ⇒ nothing to resume.
-export const workspaceSessionExists = async (dir: string, id: string): Promise<boolean> => (await getSessionInfo(id, { dir })) !== undefined;
+export const workspaceSessionExists = async (dir: string, id: string): Promise<boolean> => (await sdk().getSessionInfo(id, { dir })) !== undefined;
 
 const blocksOf = (message: { message?: unknown }): StoredBlock[] => {
     const content = (message.message as AnthropicMessageLike | undefined)?.content;
@@ -169,8 +169,8 @@ export const readWorkspaceSession = async (dir: string, id: string): Promise<Res
     // sitting right in this workspace's own store (~/.claude/projects is symlinked per sandbox, see
     // session-store.ts). Fall back to the all-projects search before calling the session empty; ids are
     // UUIDs, so the widened search can only find the session that was asked for.
-    const scoped = await getSessionMessages(id, { dir });
-    return restoredSessionMessages(scoped.length > 0 ? scoped : await getSessionMessages(id), dir);
+    const scoped = await sdk().getSessionMessages(id, { dir });
+    return restoredSessionMessages(scoped.length > 0 ? scoped : await sdk().getSessionMessages(id), dir);
 };
 
 /* WHERE THE LAST TURN OF A STORED SESSION BEGINS, as an index into the stored messages.
@@ -214,8 +214,8 @@ const lastTurnStart = (messages: readonly { readonly type?: string; readonly mes
  * a turn boundary that is not a `user` row and the reason `lastTurnStart` reads the STORED messages instead of
  * the restored ones. */
 export const readWorkspaceSessionTail = async (dir: string, id: string): Promise<RestoredMessage[]> => {
-    const scoped = await getSessionMessages(id, { dir });
-    const messages = scoped.length > 0 ? scoped : await getSessionMessages(id);
+    const scoped = await sdk().getSessionMessages(id, { dir });
+    const messages = scoped.length > 0 ? scoped : await sdk().getSessionMessages(id);
     return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
 };
 

@@ -249,6 +249,18 @@ const STATE_FILES = [
      * missing tools, and arriving with the recurrence memory is the whole reason it is kept. The drift snapshot
      * inside is machine-scoped, and self-expires on the move: its bornAt can never match the new container. */
     { path: ".intentic/records/runtime-installs.json", invalidates: ["environment"], portability: "carry" },
+    /* Where each agent ENGINE's version comes from: the blessed list, upstream's newest, a pin, or the image
+     * (schemas/engines.ts). The versions themselves are machine state and live on the daemon's volume, because
+     * they are architecture-specific binaries; the POLICY is a decision about this workspace's work and travels
+     * with it — a team that pins Claude Code while a regression is open wants that pin to survive the move to a
+     * fresh sandbox rather than to be rediscovered by hitting the regression again.
+     *
+     * `versioned` for the config slice's usual reason (personas.json's entry argues it): it changes at human
+     * speed, holds no secret, and "since when have we been tracking upstream's newest on this repo" is a
+     * question only `git log` answers. Its own key rather than `environment`'s: the engines card is drawn on
+     * that page but reads its own route, and a channel change must not cost every open Environment tab a
+     * re-read of the overlay it did not touch. */
+    { path: ".intentic/config/engines.json", invalidates: ["engines"], portability: "carry", versioned: true },
     /* Written by the AGENT's file tools (the drafts skill), read by the owner's approval inbox, the one entry
      * here whose whole point is that a change arrives from outside the browser that renders it. `authored`:
      * a draft is text somebody wrote, and "find the reddit draft about X" is an ordinary search.

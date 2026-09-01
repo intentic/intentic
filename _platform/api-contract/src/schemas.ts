@@ -26,6 +26,8 @@ import type {
     DefinitionReportSchema,
     WorkspacePublishResultSchema,
     WorkspaceRemoteSchema,
+    EngineRowSchema,
+    EnginesViewSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -140,6 +142,8 @@ export {
     DefinitionReportSchema,
     WorkspacePublishResultSchema,
     WorkspaceRemoteSchema,
+    EngineRowSchema,
+    EnginesViewSchema,
     EnvironmentContentsSchema,
     EnvironmentSchema,
     BundleExportSchema,
@@ -195,6 +199,8 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusSchema>;
 export type CapabilitySummary = z.infer<typeof CapabilitySummarySchema>;
 export type CapabilityRecommendation = z.infer<typeof CapabilityRecommendationSchema>;
 export type CapabilityProbe = z.infer<typeof CapabilityProbeSchema>;
+export type EngineRow = z.infer<typeof EngineRowSchema>;
+export type EnginesView = z.infer<typeof EnginesViewSchema>;
 export type Environment = z.infer<typeof EnvironmentSchema>;
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 export type EnvironmentItem = EnvironmentContents["items"][number];

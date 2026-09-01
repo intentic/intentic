@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { z } from "zod";
 import { unresolvedSummary } from "./dependency-drift.js";
 import type { DependencyRequestOrigin } from "./dependency-origin.js";
@@ -67,10 +68,10 @@ const standingRule = (canInstall: boolean): string =>
     }`;
 
 export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "deps",
         tools: [
-            tool(
+            sdk().tool(
                 "status",
                 `Whether each project under /work actually has its declared dependencies installed. Call this when an import ` +
                     `will not resolve, a test fails on a missing module, or before you trust a type-check: it tells you whether ` +
@@ -99,7 +100,7 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
             ),
             ...(deps.canInstall
                 ? [
-                      tool(
+                      sdk().tool(
                           "install",
                           "Ask the daemon to install a project's dependencies. It does NOT run now: the install would corrupt the tree " +
                               "other live conversations are reading, so it is queued and runs once no conversation is mid-turn: meaning " +

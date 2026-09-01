@@ -1,0 +1,35 @@
+{
+    "$comment": [
+        "THE BLESSED ENGINE VERSIONS: which version of each upstream agent program a sandbox takes by default.",
+        "Every sandbox on the `blessed` channel reads this file (raw.githubusercontent.com, hourly, ETag'd), so a",
+        "version blessed by a commit here reaches the whole fleet within the hour — no image, no release. That is",
+        "the point of the file: an engine's version stopped being a property of the sandbox image.",
+        "An owner who would rather have upstream's newest without waiting for this list sets that engine's channel",
+        "to `latest` on the Environment card; one debugging a regression pins a version there instead.",
+        "`blessed` must be a version this repository's own suite has run against, which is what the CI check in",
+        "_tools/scripts/check-engines-blessed.mjs enforces against the pins in pnpm-workspace.yaml and the packs.",
+        "`minimum` is advisory and records a floor the provider itself enforces, so a card can explain a refusal."
+    ],
+    "engines": {
+        "claude": {
+            "blessed": "0.3.257",
+            "notes": "npm @anthropic-ai/claude-agent-sdk; ships Claude Code 2.1.257, which is the version the API states its floors in."
+        },
+        "codex": {
+            "blessed": "0.147.0",
+            "notes": "npm @openai/codex, pinned to @openai/codex-sdk's own dependency."
+        },
+        "cursor": {
+            "blessed": "1.0.28",
+            "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
+        },
+        "opencode": {
+            "blessed": "1.18.18",
+            "notes": "npm opencode-ai, the runtime behind Grok turns."
+        },
+        "translator": {
+            "blessed": "7.2.140",
+            "notes": "CLIProxyAPI GitHub release, the subscription translator behind Gemini, Kimi and ChatGPT turns."
+        }
+    }
+}

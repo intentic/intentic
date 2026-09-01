@@ -2,7 +2,13 @@ import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import type { TurnAllowance } from "./harness-credentials.js";
 import type { TurnLimit } from "../usage/translator-usage.js";
-import { isAuthFailureText, isEntitlementRefusalText, isUnsentParameterRefusalText, mentionsSpentAllowance } from "./failure-sentences.js";
+import {
+    isAuthFailureText,
+    isEntitlementRefusalText,
+    isUnsentParameterRefusalText,
+    mentionsSpentAllowance,
+    versionFloorOf,
+} from "./failure-sentences.js";
 import { opt } from "./opt.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
@@ -179,7 +185,14 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
     if (message.error === "server_error" || message.error === "overloaded") {
         return { kind: "error", code: "provider-outage", message: apiErrorMessage(message) };
     }
-    const explained = apiErrorMessage(message);
+    return sentenceFrame(apiErrorMessage(message));
+};
+
+/* THE HALF THAT READS THE SENTENCE, in the order it has to be read in. Split out from errorFrame above (which
+ * keeps the two branches that read the SDK's CATEGORY) because the ordering below is the whole of its
+ * correctness: every one of these conditions can wear another's clothes, and each comment says which neighbour
+ * it must be read before, and why. */
+const sentenceFrame = (explained: string): ErrorEvent => {
     /* The seat, not the credential: this account authenticates perfectly and its organization has switched
      * Claude Code off for it. ABOVE the auth branch because the two are only distinguishable by the sentence and
      * the recoveries are opposite, a re-mint is what a refused token wants and the one thing that cannot help
@@ -187,6 +200,23 @@ export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAl
      * account that was never disconnected. */
     if (isEntitlementRefusalText(explained)) {
         return { kind: "error", code: "claude-not-entitled", message: explained };
+    }
+    /* THE ENGINE IS TOO OLD FOR THE MODEL. Read before every branch below it because it wears a 400 and would
+     * otherwise land in the catch-all as a sentence nobody can act on, which is exactly what it was until the
+     * engine store existed: a fleet-wide outage on one model, fixable only by shipping an image.
+     *
+     * The numbers ride the frame rather than only the prose (schemas/engines.ts): the card turns them into one
+     * button, which installs the lowest version at or above the floor. That install is offered rather than
+     * taken, because a version that satisfies a floor the blessed list has not caught up with is by definition
+     * one nobody has tested here yet. */
+    const floor = versionFloorOf(explained);
+    if (floor !== undefined) {
+        return {
+            kind: "error",
+            code: "engine-version-floor",
+            message: explained,
+            engine: { id: "claude", floor: floor.floor, ...opt("running", floor.running) },
+        };
     }
     /* A SPENT ALLOWANCE WEARING A CREDENTIAL'S CLOTHES, and it has to be read before the auth branch below.
      *

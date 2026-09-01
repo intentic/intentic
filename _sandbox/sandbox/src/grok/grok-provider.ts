@@ -4,8 +4,8 @@ import { withAttachments } from "../agent/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../agent/provider-module.js";
 import type { TurnContext, TurnPlan } from "../agent/turn-plan.js";
 import type { Services } from "../composition.js";
-import { onPath } from "../platform/on-path.js";
 import { createGrokAgent, createGrokRunner } from "./grok-agent.js";
+import { engineBinary } from "../engines/engine-resolve.js";
 import { openCodeBinaryMissing, type OpenCodeService } from "./opencode.js";
 
 /* EVERYTHING GROK CONTRIBUTES TO THE DAEMON, aggregated by the provider registry (agent/provider-module.ts is
@@ -60,9 +60,10 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
         if (!connected) {
             return healthUnavailable("Sign in with your xAI (SuperGrok/X Premium) account in Setup.");
         }
-        // Signed in, but OpenCode is a feature pack and this image may not carry it, a state the credential
-        // cannot explain and only a rebuild fixes.
-        return (await onPath("opencode")) ? healthReady() : healthUnavailable(openCodeBinaryMissing("Grok"));
+        /* Signed in, but OpenCode is a feature pack and this image may not carry it, a state the credential
+         * cannot explain and only a rebuild — or an install from the Environment card, which is what the engine
+         * store answers for here — fixes. */
+        return (await engineBinary("opencode", "opencode")) !== undefined ? healthReady() : healthUnavailable(openCodeBinaryMissing("Grok"));
     },
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
@@ -90,7 +91,7 @@ export const grokProvider: ProviderModule = {
             if (!(await services.openCode.connected("xai"))) {
                 return;
             }
-            if (!(await onPath("opencode"))) {
+            if ((await engineBinary("opencode", "opencode")) === undefined) {
                 logger.info("opencode: the binary is not in this image, add it by rebuilding from the Environment card");
                 return;
             }

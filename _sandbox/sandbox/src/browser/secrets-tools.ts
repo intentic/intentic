@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { z } from "zod";
 import type { SecretAccess } from "../agent/agent-secrets.js";
 import { type NamedSecret, secretReference } from "../secrets/secret-registry.js";
@@ -33,10 +34,10 @@ export interface SecretsToolsDeps {
 }
 
 export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "secrets",
         tools: [
-            tool(
+            sdk().tool(
                 "type_secret",
                 "Type a stored secret into the FOCUSED field of a live browser page, a dashboard login, an API-key form. You never see the value: navigate with the browser tools, click the field, then call this with the secret's name (the same name `{{secret:name}}` masking shows you). Only user-kept secrets are typeable; an account's own password stays with type_credential.",
                 {

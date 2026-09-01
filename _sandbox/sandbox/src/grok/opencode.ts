@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
 import {
     type Config as OpenCodeConfig,
@@ -9,6 +9,7 @@ import {
     type OpencodeClient,
     type Permission as OpenCodePermission,
 } from "@opencode-ai/sdk";
+import { engineBinary } from "../engines/engine-resolve.js";
 import type { InputModality } from "../gemini/gemini-models.js";
 import { type CommandGate, consultWith, vendorSubject } from "../guard/command-gate.js";
 import { discoverXaiModels, humanizeModelId, isChatModel, SEED_XAI_MODELS } from "./grok-models.js";
@@ -434,11 +435,21 @@ export const createOpenCodeService = (
          * otherwise lose its runtime over a translator that happened to be unreachable at boot. */
         const geminiModels = gemini === undefined ? [] : await gemini.models().catch(() => []);
         const geminiProvider = geminiProviderConfig(gemini, geminiModels);
-        // createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
-        // XDG_DATA_HOME across the synchronous spawn only, the child captures it at launch; restoring right
-        // after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.
+        /* createOpencodeServer spawns `opencode serve` inheriting process.env (it exposes no env option), so pin
+         * XDG_DATA_HOME across the synchronous spawn only, the child captures it at launch; restoring right
+         * after keeps the daemon's other subprocess spawns (Claude/Codex) unaffected.
+         *
+         * PATH is pinned the same way and for the same reason. The SDK resolves `opencode` on PATH with no seam
+         * to name a binary, so an engine-store copy is reached by putting its bin directory in FRONT for the
+         * length of the spawn (engines/engine-resolve.ts). Without this an owner could take a newer OpenCode
+         * from the Environment card and keep running the image's. */
         const previous = process.env["XDG_DATA_HOME"];
+        const previousPath = process.env["PATH"];
+        const stored = await engineBinary("opencode", "opencode");
         process.env["XDG_DATA_HOME"] = xdgDataHome;
+        if (stored !== undefined) {
+            process.env["PATH"] = `${dirname(stored)}:${previousPath ?? ""}`;
+        }
         let server: { url: string; close(): void };
         try {
             server = await createOpencodeServer({
@@ -460,6 +471,11 @@ export const createOpenCodeService = (
                 delete process.env["XDG_DATA_HOME"];
             } else {
                 process.env["XDG_DATA_HOME"] = previous;
+            }
+            if (previousPath === undefined) {
+                delete process.env["PATH"];
+            } else {
+                process.env["PATH"] = previousPath;
             }
         }
         serverHandle = server;

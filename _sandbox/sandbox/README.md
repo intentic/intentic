@@ -273,6 +273,20 @@ reports the profile.
   the one-transfer EIP-3009 authorization is minted by the platform (src/wallet/wallet-signer.ts), which
   re-checks the same caps where the key lives: the daemon's checks are the UX, the platform's are the
   guarantee. A payment that fails after signing spends nothing, because the authorization expires unused.
+- Move the agent programs themselves without shipping an image (src/engines). The Claude Code CLI and its SDK,
+  `codex`, `@cursor/sdk`, `opencode` and the translator used to be frozen into the image, so an upstream event
+  nobody here controls — a model raising the client version it requires — failed every turn on that model in
+  every running sandbox until a new image reached it. Each of those programs is now an ENGINE with a version
+  the sandbox can move: installed into a store on the daemon's volume, verified by asking it for its version
+  (and, for the SDK loaded in-process, by importing it and checking it still exports what the daemon calls)
+  before anything points at it, and resolved once per turn with the image's copy as the answer to every doubt —
+  a bad publish is quarantined and the sandbox keeps working exactly as it did before any of this existed. The
+  default channel is `blessed`: the version this repository's suite ran against, published as `engines.json` at
+  the repo root and read hourly, so blessing a version is a commit rather than a release. An owner who would
+  rather have upstream's newest says so per engine (`latest`), or pins one, on the Environment card. What is
+  never automatic is a version OUTSIDE the channel: a turn refused for running too old an engine
+  (`engine-version-floor`) holds the message and offers the install, because a version that satisfies a floor
+  the blessed list has not reached yet is by definition one nobody here has tested.
 - Move a sandbox, two ways that share one truth (src/portability). A **bundle** is the whole environment as a
   gzipped tar of the two volumes, driven entirely by the state manifests' portability classes (carry / secret /
   identity / derived), restored onto a fresh sandbox with an honest report of what could not travel. A
@@ -313,6 +327,21 @@ reports the profile.
   dpkg's own log for apt, an mtime sweep for everything else); and an install that recurs across sessions, is
   corroborated by drift, and has a mechanical template is auto-drafted into the owner's proposal (`auto-drafts.ts`).
   Rejection tombstones the tool in the ledger so the machine never re-proposes what the owner already declined.
+- [src/engines](src/engines): which version of each upstream agent program this sandbox runs, and where it came
+  from. An *engine* is the program a runtime rides on — the Claude Code CLI and its SDK, the `codex` wrapper,
+  `@cursor/sdk`, `opencode`, the `cli-proxy-api` translator — and until this existed the only way to move one
+  was to publish a sandbox image, which made an ordinary upstream event (a model raising the client version it
+  requires) a fleet-wide outage with no local fix. Versions now live in a store on the daemon's volume
+  (`engine-store.ts`, `/history/engines/<id>/versions/<version>`, one directory per version, a data pointer
+  rather than a symlink), are installed by npm and verified before the pointer moves (`engine-install.ts`,
+  `engine-descriptors.ts` — a copy that will not launch, or an SDK missing an export the daemon calls, is
+  quarantined and never activated), and are resolved once per turn with the image's copy as the answer to every
+  doubt (`engine-resolve.ts`). Each engine's channel (`engine-policy.ts`, `.intentic/config/engines.json`) is
+  `blessed` by default — the version this repository's suite ran against, published as `engines.json` at the
+  repo root and read hourly, so blessing one is a commit rather than a release — with `latest`, a pin and the
+  image itself as the alternatives. [src/claude/claude-sdk.ts](src/claude/claude-sdk.ts) is the loader that
+  makes it real for the engine loaded IN this process: both halves of the Claude SDK come from one installed
+  prefix, resolved at turn start so a version can never change under a turn already running.
 - [src/dependencies](src/dependencies): whether the version an agent is about to pin is the one its registry
   actually has. [src/agent/agent-freshness.ts](src/agent/agent-freshness.ts) reads the pins out of an install
   command or a manifest edit and hands the difference back as context, never as a refusal — matching a version the

@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { UsageTurn } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
@@ -80,10 +81,10 @@ const render = (result: LogLineResult, what: string): string => {
 
 export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServerConfigWithInstance => {
     const now = deps.now ?? Date.now;
-    return createSdkMcpServer({
+    return sdk().createSdkMcpServer({
         name: "diagnostics",
         tools: [
-            tool(
+            sdk().tool(
                 "errors",
                 "What went wrong, newest first. Reach for this BEFORE re-instrumenting code or trying to reproduce a bug. " +
                     '`source: "daemon"` (the default) is the sandbox\'s own log: failing turns, refused providers, crashed ' +
@@ -129,7 +130,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     return ok(render(result, browser ? "browser reports" : "lines"));
                 },
             ),
-            tool(
+            sdk().tool(
                 "slow",
                 "Operations the daemon measured as slower than their budget, newest first, each with the machine's one-minute " +
                     "load at the time. Use it when something felt slow: the load field is what separates a real regression from " +
@@ -154,7 +155,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     return ok(render(result, "slow spans"));
                 },
             ),
-            tool(
+            sdk().tool(
                 "turns",
                 "How recent agent turns ended: which model actually ran, what it cost, for a failed one its error code and the " +
                     "provider's own sentence, and for one that ran, whether anything CHECKED the work it did. This is the durable " +
@@ -246,7 +247,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     );
                 },
             ),
-            tool(
+            sdk().tool(
                 "resources",
                 "One field of the sandbox's resource series over time, sampled once a minute. Answers what a log cannot: was the " +
                     "machine out of memory, was the event loop stalling, who was holding the RAM, did the kernel kill anything. " +

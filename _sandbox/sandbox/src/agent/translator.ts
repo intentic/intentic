@@ -13,7 +13,7 @@ import type { Config } from "../env.config.js";
 import type { Services } from "../composition.js";
 import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../endpoints/endpoint-translator.js";
 import { DAEMON_OWNER, workloadStamp } from "../platform/leftovers.js";
-import { onPath } from "../platform/on-path.js";
+import { engineBinary } from "../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../usage/account-usage.js";
 import { fetchTranslatorUsage, quotaPoolFor, type TranslatorAuthFile, type TurnLimit } from "../usage/translator-usage.js";
 
@@ -264,7 +264,11 @@ export const startTranslator = (services: Services): void => {
         };
         // Daemon-owned: supervised here with its own restart ladder, so it is never abandoned in this life,
         // the stamp is what lets a NEXT daemon recognise the copy this one left behind (platform/leftovers.ts).
-        child = spawn("cli-proxy-api", ["--config", configPath], {
+        /* The store's copy when an owner has taken one, the pack's global install otherwise, and the bare name
+         * when neither is here — which spawns, fails ENOENT, and is reported as the missing pack it is
+         * (engines/engine-resolve.ts). */
+        const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
+        child = spawn(binary, ["--config", configPath], {
             stdio: ["ignore", "pipe", "pipe"],
             env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
         });
@@ -343,7 +347,9 @@ export const createCliProxyClient = (params: {
 }): CliProxyClient => {
     const { managementUrl, token, configPath, authDir, usageStore } = params;
     const fetchFn = params.fetchFn ?? fetch;
-    const binaryPresent = params.binaryPresent ?? (() => onPath("cli-proxy-api"));
+    // The store counts as present: a core image bakes no translator, and an owner who installed one from the
+    // Environment card has a working binary that PATH knows nothing about.
+    const binaryPresent = params.binaryPresent ?? (async () => (await engineBinary("translator", "cli-proxy-api")) !== undefined);
     const auth = { authorization: `Bearer ${token}` };
 
     /* WHY THE PROXY DIDN'T ANSWER, which is two entirely different situations with two different things for the
@@ -441,10 +447,13 @@ export const createCliProxyClient = (params: {
     // so drive that as a subprocess: parse the URL + code it prints, surface them, and leave it running to poll to
     // completion (writing the token to auth-dir). A superseding connect kills the prior child.
     let codexChild: ChildProcess | undefined;
-    const connectCodex = (): Promise<TranslatorLogin> =>
-        new Promise((resolve, reject) => {
+    const connectCodex = async (): Promise<TranslatorLogin> => {
+        // Resolved before the executor, which is synchronous: the login has to drive the SAME binary the
+        // supervised proxy does, or a store copy would sign in through the image's.
+        const binary = (await engineBinary("translator", "cli-proxy-api")) ?? "cli-proxy-api";
+        return new Promise((resolve, reject) => {
             codexChild?.kill("SIGTERM");
-            const child = spawn("cli-proxy-api", ["--codex-device-login", "--no-browser", "--config", configPath], {
+            const child = spawn(binary, ["--codex-device-login", "--no-browser", "--config", configPath], {
                 stdio: ["ignore", "pipe", "pipe"],
                 env: { ...process.env, ...workloadStamp(DAEMON_OWNER) },
             });
@@ -485,6 +494,7 @@ export const createCliProxyClient = (params: {
                 }
             });
         });
+    };
 
     // Drop ONE account: the provider check keeps a name from another provider's file (or a stale row) from
     // deleting a credential the user didn't point at. A pending codex device login still dies with any codex

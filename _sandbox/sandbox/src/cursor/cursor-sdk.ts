@@ -1,10 +1,10 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import type * as CursorSdk from "@cursor/sdk";
-import { readPack } from "../environment/packs.js";
+import { engineDescriptor } from "../engines/engine-descriptors.js";
+import { type EngineInstallOutcome, installEngine } from "../engines/engine-install.js";
+import { forgetEngineResolution, resolveEngine } from "../engines/engine-resolve.js";
 
 /* WHERE `@cursor/sdk` COMES FROM AT RUNTIME, and why the daemon cannot simply `import` it at the top of a file.
  *
@@ -13,20 +13,20 @@ import { readPack } from "../environment/packs.js";
  * reserved, use subject to Cursor's Terms of Service". That grants no redistribution, and a published Docker
  * image containing it would be redistributing it — to everyone who pulls the image, whether or not they have a
  * Cursor account. So it is pruned out of the deployed tree (prepare-image-trees.sh, the @openai/codex
- * precedent) and packs/cursor.Dockerfile installs the same pin back on the OWNER'S machine, into a prefix of
- * its own. The first explicit Connect press bootstraps that same install into the running container so the
- * sign-in that creates the credential is not circular; the credential then keeps it in the durable overlay.
+ * precedent) and packs/cursor.Dockerfile installs the same pin back on the OWNER'S machine.
  *
  * Which makes the import dynamic by necessity rather than by taste: a static one would make the daemon fail to
  * BOOT on every image that does not carry the pack, which is every published image. The types are still
  * static (`import type` erases), so nothing here is loosely typed, only lazily loaded.
  *
- * TWO PLACES IT CAN LIVE, tried in that order:
- *   1. the pack's prefix (/opt/cursor-sdk), which is the only copy in a real sandbox;
- *   2. this package's own dependency, which is what a dev checkout has after `pnpm install` and what the
- *      catalog pin exists for.
- * A dev run therefore needs no pack. A published sandbox downloads the pack's exact pin only when its owner
- * asks to connect Cursor, then the normal provider-pack composition makes that installation durable. */
+ * THREE PLACES IT CAN LIVE, tried in that order:
+ *   1. the ENGINE STORE (/history/engines/cursor/<version>), which is where the first Connect installs it and
+ *      where an owner picks its version — the same store, channels and revert every other engine has;
+ *   2. the pack's prefix (/opt/cursor-sdk), the copy an image rebuild bakes onto the owner's machine;
+ *   3. this package's own dependency, which is what a dev checkout has after `pnpm install`.
+ * A dev run therefore needs no pack and no store. A published sandbox installs into the store the moment its
+ * owner asks to connect Cursor, which is also what makes the version they end up on visible and revertable
+ * rather than a fact buried in an image layer. */
 
 // The rebuild-fixable state, in the user's terms. "rebuild" is load-bearing: the UI routes a state to the
 // Environment card by that word, so it survives any rewording of the rest of this sentence.
@@ -36,30 +36,6 @@ export const CURSOR_SDK_MISSING =
 // Where packs/cursor.Dockerfile installs it. Overridable so a test can point at a fixture tree without a pack,
 // and so a dev container can put it somewhere else; the packs test holds the default and the Dockerfile in step.
 const packRoot = (): string => process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";
-
-const execFileAsync = promisify(execFile);
-
-/* THE PACKAGE SPEC TO INSTALL, derived from the pack rather than copied into a third pin. The Dockerfile
- * fragment is already the source the persistent rebuild executes, and packs.integration.test.ts holds that
- * pin against the dependency this daemon was compiled with. Bootstrapping reads the same instruction, so the
- * temporary copy that performs login and the copy a rebuild preserves cannot skew. */
-const cursorSdkSpec = async (): Promise<string> => {
-    const pack = await readPack("cursor");
-    const specs = [...(pack?.content.matchAll(/@cursor\/sdk@[^\s\\]+/g) ?? [])].map((match) => match[0]);
-    if (specs.length !== 1) {
-        throw new Error("The Cursor feature pack does not name exactly one SDK version.");
-    }
-    return specs[0]!;
-};
-
-export type CursorSdkInstall = (root: string, spec: string) => Promise<void>;
-
-const installCursorSdk: CursorSdkInstall = async (root, spec) => {
-    await execFileAsync("npm", ["install", "--prefix", root, "--no-save", "--no-package-lock", spec], {
-        timeout: 5 * 60_000,
-        maxBuffer: 2 * 1024 * 1024,
-    });
-};
 
 /* The ESM entry of a copy installed under `root`, read off the package's OWN manifest rather than assembled
  * from a path we happen to know today.
@@ -87,18 +63,25 @@ const entryUnder = async (root: string): Promise<string | undefined> => {
     return isAbsolute(declared) ? declared : resolve(dirname(manifestPath), declared);
 };
 
-// Loaded once per daemon and CACHED EVEN WHEN ABSENT: a pack cannot appear under a running daemon (installing
-// one recreates the container), so a second miss would only re-pay the resolution to reach the same answer.
-let loaded: Promise<typeof CursorSdk | undefined> | undefined;
+/* Loaded once per resolved ENTRY, and cached even when absent. The engine store can move under a running
+ * daemon (an owner takes a newer version from the card), so the cache is keyed by the path that was loaded
+ * rather than being a single process-lifetime answer the way it was when only a pack could provide this. */
+let loaded: { readonly entry: string | undefined; readonly module: Promise<typeof CursorSdk | undefined> } | undefined;
 
-/* The module, or undefined on an image that carries no Cursor pack. Every caller reads undefined as
- * CURSOR_SDK_MISSING rather than as an error: an image without the pack is an ordinary state of a sandbox, the
- * same way a missing `codex` binary is. */
-export const cursorSdk = (): Promise<typeof CursorSdk | undefined> => {
-    loaded ??= (async () => {
-        const packed = await entryUnder(packRoot());
-        if (packed !== undefined) {
-            return (await import(pathToFileURL(packed).href)) as typeof CursorSdk;
+const entryNow = async (): Promise<string | undefined> => (await resolveEngine("cursor")).paths.jsEntry ?? entryUnder(packRoot());
+
+/* The module, or undefined on a sandbox that has neither a store copy nor a Cursor pack. Every caller reads
+ * undefined as CURSOR_SDK_MISSING rather than as an error: an image without the pack is an ordinary state of a
+ * sandbox, the same way a missing `codex` binary is. */
+export const cursorSdk = async (): Promise<typeof CursorSdk | undefined> => {
+    const entry = await entryNow();
+    const cached = loaded;
+    if (cached !== undefined && cached.entry === entry) {
+        return cached.module;
+    }
+    const module = (async () => {
+        if (entry !== undefined) {
+            return (await import(pathToFileURL(entry).href)) as typeof CursorSdk;
         }
         try {
             return await import("@cursor/sdk");
@@ -106,20 +89,29 @@ export const cursorSdk = (): Promise<typeof CursorSdk | undefined> => {
             return undefined;
         }
     })();
-    return loaded;
+    loaded = { entry, module };
+    return module;
 };
 
 /* Make the runtime available because the OWNER explicitly asked to connect Cursor. This is deliberately not
  * part of cursorSdk(): health probes and a picker merely looking at Cursor must stay read-only and must never
  * download software. Only the sign-in route calls this stronger operation.
  *
- * The process-wide promise serializes two tabs pressing Connect together. An absent result may already be
- * cached from the adapter-health sweep; after npm lands the package, forget that ordinary miss and resolve
- * again through the exact same loader every turn uses. A failed install clears `installing`, so Retry really
- * retries rather than inheriting a rejected promise forever. */
+ * IT INSTALLS THROUGH THE ENGINE STORE, at the version the pack pins. That pin is the floor every other engine
+ * treats as the image's copy, so a first Connect lands on a known-good version, and everything after it — a
+ * newer blessed release, upstream's latest, a revert — is the ordinary engine lifecycle on the Environment
+ * card rather than a second, private update path that only Cursor has.
+ *
+ * The process-wide promise serializes two tabs pressing Connect together. A failed install clears it, so Retry
+ * really retries rather than inheriting a rejected promise forever. */
 let installing: Promise<typeof CursorSdk> | undefined;
 
-export const ensureCursorSdk = async (install: CursorSdkInstall = installCursorSdk): Promise<typeof CursorSdk> => {
+/* The install itself is a parameter, defaulting to the engine store's. Not for taste: the seam is what lets a
+ * suite exercise this whole path — miss, install, reload, retry after a failure — without a real `npm install`
+ * into the machine's own store, which is a download the test would then be trusting to have worked. */
+export type EngineInstall = (id: "cursor", version: string) => Promise<EngineInstallOutcome>;
+
+export const ensureCursorSdk = async (install: EngineInstall = installEngine): Promise<typeof CursorSdk> => {
     const available = await cursorSdk().catch(() => {
         // A half-written / stale prefix is repairable by the same explicit install below. Clear its rejected
         // loader promise first, or Retry would only replay that rejection without asking npm to repair it.
@@ -130,26 +122,29 @@ export const ensureCursorSdk = async (install: CursorSdkInstall = installCursorS
         return available;
     }
     installing ??= (async () => {
-        await install(packRoot(), await cursorSdkSpec());
-        forgetCursorSdk();
-        try {
-            const installed = await cursorSdk();
-            if (installed === undefined) {
-                throw new Error("The Cursor SDK installation completed, but its runtime could not be loaded.");
-            }
-            return installed;
-        } catch (error) {
-            forgetCursorSdk();
-            throw error;
+        const version = await engineDescriptor("cursor").baked();
+        if (version === undefined) {
+            throw new Error("The Cursor feature pack does not name exactly one SDK version.");
         }
+        const outcome = await install("cursor", version);
+        if (!outcome.ok) {
+            throw new Error(`The Cursor SDK could not be installed: ${outcome.reason}`);
+        }
+        forgetCursorSdk();
+        const installed = await cursorSdk();
+        if (installed === undefined) {
+            throw new Error("The Cursor SDK installation completed, but its runtime could not be loaded.");
+        }
+        return installed;
     })().finally(() => {
         installing = undefined;
     });
     return installing;
 };
 
-// Test seam only: forget the resolution so a suite can move INTENTIC_CURSOR_SDK_DIR between cases. Production
-// never calls it, which is why the cache above needs no invalidation of its own.
+// Forget the resolution: after an install (the store's pointer has moved) and, in a suite, between fixture
+// trees. Clears the engine resolver's own cache too, since the two answers are one answer.
 export const forgetCursorSdk = (): void => {
     loaded = undefined;
+    forgetEngineResolution("cursor");
 };

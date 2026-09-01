@@ -219,35 +219,62 @@ export class TurnFailures {
                 this.host.error.value = message;
                 return;
             default:
-                /* `subscription-required`, `agent-busy`, `claude-not-entitled`, and every uncoded failure: the
-                 * red line and nothing else.
-                 *
-                 * `claude-not-entitled` is here DELIBERATELY, next to two codes it superficially resembles but
-                 * must not be treated like. It is not markReauth's: the credential is in perfect health, so
-                 * lighting the reconnect badge would send the user through a sign-in that works and changes
-                 * nothing. And it is not requeue's: the fix is an administrator re-enabling the seat, which is
-                 * not a thing that resolves while someone waits at the composer, so holding their message for
-                 * it would be a promise this cannot keep. The provider's own sentence already names the two
-                 * ways out ("use an API key, or ask your admin"), and a red line carrying it is the whole
-                 * honest response. What DOES persist is the refusal the daemon filed against the account, which
-                 * is what stops the picker offering it as though it had headroom. */
-                this.host.error.value = message;
-                /* AND, for the UNCODED half of this branch only, the offer to pick the turn back up.
-                 *
-                 * An uncoded failure is one the daemon could not name: the harness died mid-run, the agent
-                 * stopped answering, a turn ended in a subtype nobody has a sentence for ("agent did not
-                 * complete"). Those have one thing in common that every code above them lacks, nothing is
-                 * broken that the user could go and fix, the session is intact, and the only thing between the
-                 * work and its finish is somebody saying carry on. That is exactly what a pick-up offers.
-                 *
-                 * The three NAMED codes here are excluded by hand, because for them the sentence is the point:
-                 * a seat nobody enabled, an agent already running a turn, a subscription that isn't there. A
-                 * Continue button under any of those re-fails on the press, which is worse than no button,
-                 * it converts a clear refusal into one the user now blames themselves for. */
-                if (code === undefined) {
-                    this.host.pickUp.value = { reason: `stopped` };
-                }
+                this.applyUnhandledError(error, turn);
                 return;
+        }
+    }
+
+    /* THE FAILURES WITH NO RECOVERY OF THEIR OWN, and the one that has a recovery this window cannot perform.
+     *
+     * Split out of the switch above because these two answers share everything except a sentence: neither can
+     * be fixed from this screen, so both end in the red line, and what differs is only whether the user's words
+     * are worth holding while they go and fix it.
+     *
+     * ENGINE-VERSION-FLOOR is the one that is holdable. The provider refused the turn for running too old an
+     * agent engine and named the version that would work, so nothing was processed and the words are still only
+     * in this window: they are held, exactly as they are for every other refusal that ran nothing, and the
+     * sentence says where a newer engine is installed (Sandbox ▸ Environment ▸ Agent engines). It is not one of
+     * the muted conditions: a person really does have to go and do something.
+     *
+     * `subscription-required`, `agent-busy`, `claude-not-entitled` and every uncoded failure end here with
+     * the red line and nothing else.
+     *
+     * `claude-not-entitled` is here DELIBERATELY, next to two codes it superficially resembles but must not be
+     * treated like. It is not markReauth's: the credential is in perfect health, so lighting the reconnect badge
+     * would send the user through a sign-in that works and changes nothing. And it is not requeue's: the fix is
+     * an administrator re-enabling the seat, which is not a thing that resolves while someone waits at the
+     * composer, so holding their message for it would be a promise this cannot keep. The provider's own sentence
+     * already names the two ways out ("use an API key, or ask your admin"), and a red line carrying it is the
+     * whole honest response. What DOES persist is the refusal the daemon filed against the account, which is
+     * what stops the picker offering it as though it had headroom. */
+    private applyUnhandledError(error: TurnError, turn: TurnContext): void {
+        const { message, code } = error;
+        if (code === `engine-version-floor`) {
+            /* Nothing ran: the provider refused the turn for the version of the engine driving it, so the words
+             * are still only in this window and are held like every other refusal that ran nothing. The sentence
+             * adds the one thing the provider's own cannot know — where a newer engine is installed. */
+            this.host.requeue(turn.userMessageId);
+            const floor = error.engine?.floor;
+            this.host.error.value =
+                `${message} Install a newer engine under Sandbox ▸ Environment ▸ Agent engines` +
+                `${floor === undefined ? `` : ` (${floor} or newer)`}. Your message is held below.`;
+            return;
+        }
+        this.host.error.value = message;
+        /* AND, for the UNCODED half of this branch only, the offer to pick the turn back up.
+         *
+         * An uncoded failure is one the daemon could not name: the harness died mid-run, the agent stopped
+         * answering, a turn ended in a subtype nobody has a sentence for ("agent did not complete"). Those have
+         * one thing in common that every code above them lacks, nothing is broken that the user could go and
+         * fix, the session is intact, and the only thing between the work and its finish is somebody saying
+         * carry on. That is exactly what a pick-up offers.
+         *
+         * The three NAMED codes here are excluded by hand, because for them the sentence is the point: a seat
+         * nobody enabled, an agent already running a turn, a subscription that isn't there. A Continue button
+         * under any of those re-fails on the press, which is worse than no button, it converts a clear refusal
+         * into one the user now blames themselves for. */
+        if (code === undefined) {
+            this.host.pickUp.value = { reason: `stopped` };
         }
     }
 

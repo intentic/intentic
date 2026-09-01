@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { type AdmissionRule, classifyCommand, type CommandClass } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { commandRun } from "../guard/actions.js";
@@ -50,11 +51,11 @@ const ruleRefusal = (command: string, rules: WatchServerDeps["commandRules"], cw
 };
 
 export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "watch",
         alwaysLoad: true,
         tools: [
-            tool(
+            sdk().tool(
                 "start",
                 "Watch an outside condition and get woken when it fires: instead of writing a polling loop. Give a cheap " +
                     "check command that exits 0 once the condition is met and non-zero while still waiting (e.g. query a CI " +
@@ -128,7 +129,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     });
                 },
             ),
-            tool(
+            sdk().tool(
                 "stop",
                 "Stop an armed watch by id (from watch start), when the condition stopped mattering. No wake will fire for it. Passing no id lists this conversation's armed watches instead.",
                 {

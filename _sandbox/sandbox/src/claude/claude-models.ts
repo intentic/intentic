@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { type Options, query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "./claude-sdk.js";
 import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Config } from "../env.config.js";
@@ -104,7 +105,7 @@ const discoverClaudeModels = async (oauthToken: string | undefined, cwd: string)
             ...(oauthToken !== undefined ? { CLAUDE_CODE_OAUTH_TOKEN: oauthToken } : {}),
         },
     };
-    const session = query({ prompt: pendingInput(abort.signal), options });
+    const session = sdk().query({ prompt: pendingInput(abort.signal), options });
     try {
         return (await session.supportedModels()).map((model) => {
             const entry: Model = { id: model.value, label: model.displayName };

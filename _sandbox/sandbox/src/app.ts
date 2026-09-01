@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import {
     DefinitionApplySchema,
+    EngineChannelInputSchema,
+    EngineRevertInputSchema,
+    EngineUpdateInputSchema,
     type EnrollHostInput,
     EnrollHostInputSchema,
     type GrantedRole,
@@ -54,6 +57,8 @@ import { gatedServiceRun } from "./platform/service-offer.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createChildrenRoutes } from "./children/children.routes.js";
 import { readEnvironmentContents } from "./environment/contents.js";
+import { opt } from "./agent/opt.js";
+import { enginesView, revertEngine, setChannel, updateEngine } from "./engines/engines.js";
 import { approveEnvironment, composeEnvironment, readEnvironment, rejectEnvironment } from "./environment/environment.js";
 import { clearVersionCache } from "./environment/version-probe.js";
 import { ExportBusyError, isReadyExport, listExports, openExport, removeExport, startExport } from "./portability/exports.js";
@@ -1034,6 +1039,73 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         }
         await rejectEnvironment(services);
         return c.json(await readEnvironment(services));
+    });
+
+    /* THE AGENT ENGINES: which version of Claude Code, codex, @cursor/sdk, opencode and the translator this
+     * sandbox runs, and where each of those versions comes from (engines/engines.ts).
+     *
+     * Beside /environment because it answers the same owner question — what is installed here — and because
+     * these four writes are the ones that end the era of "wait for an image". Members read; only the owner
+     * changes a channel, takes a version or reverts one, for the reason /environment/approve is owner-only:
+     * this installs code that every turn in this sandbox then runs.
+     *
+     * Update takes an optional version. Absent means what the channel offers, which is the row's button.
+     * Naming one is deliberate and takes a version nobody has blessed — the way past an upstream floor the
+     * blessed list has not caught up with, which is a decision a person makes with the reason in front of them. */
+    app.get("/engines", async (c) => c.json(await enginesView(services)));
+    app.post("/engines/channel", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = EngineChannelInputSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (parsed.data === undefined) {
+            return c.json({ error: "an engine id and a channel are required" }, 400);
+        }
+        const { id, kind, version } = parsed.data;
+        try {
+            await setChannel(services, id, { kind, ...opt("version", version) });
+        } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : "the channel could not be set" }, 400);
+        }
+        // The same shape all three writes answer with: what happened (nothing, for a channel that needs a
+        // download first) and the whole view, so a card never has to reconcile a patch with what it was drawing.
+        return c.json({ applied: null, engines: await enginesView(services) });
+    });
+    app.post("/engines/update", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = EngineUpdateInputSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (parsed.data === undefined) {
+            return c.json({ error: "an engine id is required" }, 400);
+        }
+        try {
+            const applied = await updateEngine(services, parsed.data.id, {
+                ...opt("version", parsed.data.version),
+                ...opt("floor", parsed.data.floor),
+            });
+            // Nothing to do is a 200 with the view, not an error: two tabs pressing Update on the same row is
+            // an ordinary race, and the second one is right about the state it is looking at.
+            return c.json({ applied: applied ?? null, engines: await enginesView(services) });
+        } catch (error) {
+            // The install itself refused (a bad download, a version that would not launch). The reason is the
+            // one the store recorded, and the row carries the quarantine that goes with it.
+            return c.json({ error: error instanceof Error ? error.message : "the engine could not be installed" }, 502);
+        }
+    });
+    app.post("/engines/revert", async (c) => {
+        const denied = await ownerDenied(c);
+        if (denied !== undefined) {
+            return denied;
+        }
+        const parsed = EngineRevertInputSchema.safeParse(await c.req.json().catch(() => undefined));
+        if (parsed.data === undefined) {
+            return c.json({ error: "an engine id is required" }, 400);
+        }
+        const applied = await revertEngine(services, parsed.data.id);
+        return c.json({ applied, engines: await enginesView(services) });
     });
 
     /* The environment BUNDLE: this sandbox's two volumes packed for a move, and the restore that unpacks one.

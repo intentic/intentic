@@ -1,4 +1,5 @@
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { z } from "zod";
 import { resolveCommandSecrets, type SecretAccess } from "../agent/agent-secrets.js";
 import type { TurnPlacement } from "../agents/isolation.js";
@@ -64,13 +65,13 @@ export const jsToolDescription = (plan: JsExecutionPlan): string =>
     `stdout and stderr come back tail-capped with the exit status; the process is killed at the timeout.`;
 
 export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: JS_SERVER_NAME,
         // In the prompt, not behind tool search: an execution mode the model has to go looking for is one it
         // replaces with the shell habit it already has, the same reasoning that keeps the ask tool loaded.
         alwaysLoad: true,
         tools: [
-            tool(
+            sdk().tool(
                 "run",
                 jsToolDescription(deps.plan),
                 {

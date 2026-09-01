@@ -8,6 +8,7 @@ import {
     isUnsentParameterRefusalText,
     isUsageLimitText,
     mentionsSpentAllowance,
+    versionFloorOf,
     withoutToolCallStandIns,
 } from "./failure-sentences.js";
 
@@ -170,4 +171,29 @@ test("strips the stand-in lines and keeps whatever the model actually wrote", ()
     expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']\nSandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(withoutToolCallStandIns("Sandbox freezes · fix")).toBe("Sandbox freezes · fix");
     expect(withoutToolCallStandIns("[tool_call: glob for pattern '**']")).toBe("");
+});
+
+/* THE FOURTH CONDITION REPORTED AS PROSE, and the first one the sandbox can fix by itself: the provider refuses
+ * a model because the engine driving it is too old, and names the version that would work. Both numbers are
+ * read out of the sentence because the card turns them into an install (engines/engines.ts); the running one is
+ * optional, since only the floor decides which version fixes it. */
+const TOO_OLD =
+    "API Error: 400 Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required. Run 'claude update', or update the Claude desktop app, then try again.";
+
+test("reads both versions out of an engine-too-old refusal", () => {
+    expect(versionFloorOf(TOO_OLD)).toEqual({ floor: "2.1.251", running: "2.1.233" });
+});
+
+// The floor clause is what is matched, not the product name: the rest of the sentence is Anthropic's to reword
+// and a classification that broke on a comma would take the recovery down with it.
+test("reads the floor even when the sentence is reworded around it", () => {
+    expect(versionFloorOf("This model needs a newer client: version 3.0.0 or newer is required.")).toEqual({ floor: "3.0.0" });
+});
+
+/* Neighbouring failures must not read as this one. A spent allowance and a refused credential both mention
+ * numbers and neither is fixed by installing anything, so a false positive here would answer a billing problem
+ * with a download. */
+test("does not read other refusals as a version floor", () => {
+    expect(versionFloorOf(KIMI_403)).toBeUndefined();
+    expect(versionFloorOf("You've hit your session limit · resets 1:40pm (UTC)")).toBeUndefined();
 });

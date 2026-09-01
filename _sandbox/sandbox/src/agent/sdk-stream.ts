@@ -2,14 +2,8 @@
  * mode, and TurnFold maps each message onto the typed frames the client renders. High-value block types get a
  * dedicated frame; any SDK message without a mapping is dropped. Does NOT emit the terminal `done` (runAgent
  * does that once the whole turn settles). */
-import {
-    type Options,
-    query,
-    type SDKAssistantMessage,
-    type SDKMessage,
-    type SDKUserMessage,
-    type SlashCommand,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { AgentEvent, FastModeState, PermissionMode, UsageWindow } from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { screenshotImage } from "../browser/browser-artifacts.js";
@@ -32,7 +26,7 @@ export type AgentQuery = AsyncIterable<SDKMessage> & {
 
 // The SDK `query` is injected so tests drive a fake message stream, no API calls, no bundled binary.
 export type QueryFn = (args: { readonly prompt: string | AsyncIterable<SDKUserMessage>; readonly options: Options }) => AgentQuery;
-export const defaultQuery: QueryFn = (args) => query(args);
+export const defaultQuery: QueryFn = (args) => sdk().query(args);
 
 // The SDK's slash commands, mapped onto the wire shape the composer's `/` popover renders. `argumentHint`
 // is always a string there (empty when the command takes no argument), so an empty one carries no hint.

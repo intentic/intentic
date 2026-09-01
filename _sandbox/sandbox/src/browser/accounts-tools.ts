@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { createRequest, resolveRequest } from "../agent/agent-requests.js";
@@ -169,11 +170,11 @@ export type AccountsServerFactory = (push: (event: AgentEvent) => void, signal: 
 export const accountsServer =
     (deps: AccountsDeps): AccountsServerFactory =>
     (push, signal) =>
-        createSdkMcpServer({
+        sdk().createSdkMcpServer({
             name: "accounts",
             alwaysLoad: true,
             tools: [
-                tool(
+                sdk().tool(
                     "type_credential",
                     "Type an account's STORED username or password into the focused field of its live browser page. You never see the value: click the field with the browser tools first, then call this. An identity's username is its email; an identity-born account with no username of its own types its identity's email. The result confirms the typed username (you may need it, e.g. to find its inbox); a password is never echoed.",
                     {
@@ -206,7 +207,7 @@ export const accountsServer =
                         return ok(field === "username" ? `typed the stored username: ${value}` : "typed the stored password (not shown)");
                     },
                 ),
-                tool(
+                sdk().tool(
                     "create_password",
                     "Generate a strong password for a browser account and STORE it on the account's card (its secret). You never see it: fill sign-up forms by focusing the password field and calling type_credential (twice for a confirm field). Refuses to replace an existing stored password unless `replace` is set.",
                     {
@@ -235,7 +236,7 @@ export const accountsServer =
                         );
                     },
                 ),
-                tool(
+                sdk().tool(
                     "mark_connected",
                     "Mark an account as connected, AFTER you verified the sign-in landed (you are on the site signed in as the account, not on a login page). For an identity: after its email provider shows you signed in. This is what flips the capability from pending to active, so future turns get its browser already authenticated.",
                     { account: z.string().describe("The account (capability id) that is now signed in") },
@@ -248,7 +249,7 @@ export const accountsServer =
                         return ok(`"${account}" is marked connected: its browser opens signed in from now on`);
                     },
                 ),
-                tool(
+                sdk().tool(
                     "fetch_email_code",
                     "The newest verification code or confirmation link a site emailed to this account's identity, and nothing else; you never see the inbox. Reads the mailbox linked on the identity's card, looks at the last half hour, and answers with the sender, subject, codes and links of the newest mail from the site you are signing into. Open confirmation links in the identity's own browser.",
                     { account: z.string().describe("The account (capability id) whose identity's mailbox to ask") },
@@ -295,7 +296,7 @@ export const accountsServer =
                         }
                     },
                 ),
-                tool(
+                sdk().tool(
                     "open_account",
                     "Open a NEW platform account through an identity: files a browser account under it (they share the identity's browser), so you can then perform the signup there, prefer the site's \"Continue with\" the identity's provider; fall back to email signup with fetch_email_code for the confirmation. Works for ANY site: one the sandbox has a card for gets that site's cheatsheet, anything else rides the generic browser session, pass homeUrl and it files fine. This is the only record that the account exists, so file it as part of signing up, never afterwards from memory. Refused unless the identity's owner turned on \"may open accounts\". Tell the owner what you opened and why.",
                     {
@@ -336,7 +337,7 @@ export const accountsServer =
                         }
                     },
                 ),
-                tool(
+                sdk().tool(
                     "roster",
                     "Who this sandbox is online: every identity you can act as, the accounts each already holds (site, what it was opened for, when, and whether it is signed in), and which identities hold nothing yet. Read this BEFORE opening an account anywhere, signing in to one that exists beats minting another, and an identity with no accounts is the one to spend on a site that should not be tied to the others. Derived from the live manifest, so it is never out of date.",
                     {},
@@ -374,7 +375,7 @@ export const accountsServer =
                 ),
                 ...(deps.attended
                     ? [
-                          tool(
+                          sdk().tool(
                               "request_help",
                               "Ask the owner to step into this account's live browser and clear something only a person can (a captcha, a password you don't hold, a phone check). Your browser stays open; the owner sees your message on the Browsers view, takes control, fixes that step, and hands back: this call waits for them and returns how it ended. Say precisely what you need done.",
                               {

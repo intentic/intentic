@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
@@ -165,7 +166,7 @@ export interface TerminalHelpDeps {
 }
 
 export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "terminal",
         /* IN THE PROMPT, not behind tool search, the `ui` ask tool's reasoning, and this feature is the
          * clearest case of it there is. A model that has to go LOOKING for this tool does not know the
@@ -175,7 +176,7 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
          * because the alternative is not "no handover" but "a worse handover, in words". */
         alwaysLoad: true,
         tools: [
-            tool(
+            sdk().tool(
                 "request_help",
                 "Ask the owner to type into your terminal and clear something only a person can, a one-time password, a security-key touch, a confirmation you cannot answer. Use it when a command you started is SITTING AT A PROMPT (Bash handed the turn back saying it is still running): the command keeps waiting, the owner is shown your message over that very terminal, types, and hands back. This call waits for them and returns what the terminal says afterwards. Say precisely what you need typed.",
                 {

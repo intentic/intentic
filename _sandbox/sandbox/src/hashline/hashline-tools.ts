@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from "@anthropic-ai/claude-agent-sdk";
+import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import { z } from "zod";
 import { resolveWithin } from "../workspace/workspace-files.js";
 import { applyEdit, type HashlineOp, renderForRead } from "./hashline.js";
@@ -20,10 +21,10 @@ const opSchema = z.discriminatedUnion("op", [
 ]);
 
 export const createHashlineServer = (root: string): McpSdkServerConfigWithInstance =>
-    createSdkMcpServer({
+    sdk().createSdkMcpServer({
         name: "hashline",
         tools: [
-            tool(
+            sdk().tool(
                 "read",
                 "Read a text file for editing. Returns an `anchor` for the whole file and a short tag before each line: pass both back to hashline_edit to anchor an edit. Call this before hashline_edit. (For images/PDFs or plain viewing, the normal Read tool still works.)",
                 { path: z.string().describe("Absolute or workspace-relative path to the file") },
@@ -39,7 +40,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     }
                 },
             ),
-            tool(
+            sdk().tool(
                 "edit",
                 'Edit a file by anchored ops instead of retyping unchanged lines. Pass the `anchor` from a recent hashline_read of this file plus one or more ops, each anchored to line tags from that read: replace {from,to?,lines}, insert {after,lines} (after "^" = top of file), delete {from,to?}. The edit is rejected if the file changed since you read it, re-read for a fresh anchor. On success it returns the re-tagged file so you can chain further edits.',
                 {
@@ -68,7 +69,7 @@ export const createHashlineServer = (root: string): McpSdkServerConfigWithInstan
                     return ok(renderForRead(next));
                 },
             ),
-            tool(
+            sdk().tool(
                 "write",
                 "Create a new file or overwrite an existing one with the given content. Use this for new files; use hashline_edit to change part of an existing file (far fewer output tokens).",
                 { path: z.string().describe("Absolute or workspace-relative path"), content: z.string().describe("Full file content") },

@@ -22,13 +22,19 @@ const sourceAlias = { "@intentic/sandbox-contract": here(`../../_sandbox/sandbox
 export default defineConfig({
     test: {
         projects: [
-            { resolve: { alias: sourceAlias }, test: UNIT_SUITE },
+            // The engine fence is on BOTH projects, unlike the tmux one: engine resolution is reached by
+            // ordinary unit code (a provider's readiness rung, the Cursor loader), not only by suites that
+            // drive something real. src/testing/engine-fence.ts says what it costs without one.
+            { resolve: { alias: sourceAlias }, test: { ...UNIT_SUITE, setupFiles: [here(`./src/testing/engine-fence.ts`)] } },
             /* The integration suites here are the ones that drive real tmux, and on this sandbox the default
              * socket is the daemon's own server — the one the owner's terminal tabs live in. The fence puts a
              * private socket under the whole project (src/testing/tmux-fence.ts says what it costs without
              * one). Stated on the project rather than in each file because the suites that reach tmux do it
              * through production code and do not know they have. */
-            { resolve: { alias: sourceAlias }, test: { ...INTEGRATION_SUITE, setupFiles: [here(`./src/testing/tmux-fence.ts`)] } },
+            {
+                resolve: { alias: sourceAlias },
+                test: { ...INTEGRATION_SUITE, setupFiles: [here(`./src/testing/tmux-fence.ts`), here(`./src/testing/engine-fence.ts`)] },
+            },
         ],
     },
 });

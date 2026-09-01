@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { sdk } from "../claude/claude-sdk.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
 /* CLAUDE CODE'S OWN SYSTEM PROMPT, READ OUT OF THE CLI THAT IS INSTALLED, not transcribed into this repo.
@@ -102,7 +102,7 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
     const { port } = server.address() as AddressInfo;
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), CAPTURE_TIMEOUT_MS);
-    const session = query({
+    const session = sdk().query({
         prompt: "hi",
         options: {
             cwd,

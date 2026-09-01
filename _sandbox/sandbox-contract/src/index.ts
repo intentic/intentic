@@ -144,6 +144,7 @@ export * from "./schemas/claude-gate.js";
 export * from "./schemas/codebase-health.js";
 export * from "./schemas/computers.js";
 export * from "./schemas/drafts.js";
+export * from "./schemas/engines.js";
 export * from "./schemas/environment.js";
 export * from "./schemas/exit.js";
 export * from "./schemas/extension-updates.js";

@@ -120,6 +120,7 @@ export const BUNDLE_EXPORTS = family(`bundle-exports`);
 export const CAPABILITIES = family(`capabilities`);
 export const COMPUTERS = family(`computers`);
 export const DEPLOYMENTS = family(`deployments`);
+export const ENGINES = family(`engines`);
 export const ENVIRONMENT = family(`environment`);
 export const ENVIRONMENT_CONTENTS = family(`environment-contents`);
 export const EXTENSIONS = family(`extensions`);
