@@ -617,6 +617,18 @@ const refusal = computed(() => sendRefusal(situation.value));
 const continueStrip = computed(() => continueVisible(situation.value));
 const continueOffer = computed(() => continueOffered(situation.value));
 const canSend = computed(() => sendable(situation.value, intent.value, refusal.value));
+/* THE END OF THE ROW HOLDS ONE PRIMARY BUTTON, and mid-turn which one it is follows the box.
+ *
+ * Send survives a live turn because a message written mid-turn always has somewhere to go (it steers the turn
+ * or queues behind it), but with NOTHING TYPED there is no such message: the button was a dead grey circle
+ * sitting where the eye looks for the primary action, with the live Stop demoted to its left. So an empty box
+ * mid-turn gives the slot to Stop, which is the only thing a user with nothing to say can want from this row,
+ * and the first keystroke brings Send back with Stop stepping aside.
+ *
+ * `staged`, not `canSend`, deliberately: a send that is REFUSED with words in the box (an armed edit, an
+ * attachment still climbing) keeps its greyed button, because the tooltip on it is the only place the reason
+ * is written. An empty composer is the one state that explains itself. */
+const sendShown = computed(() => !streaming.value || staged.value);
 // Everything a press that spends the box needs to be true, in one name: the two intercepting intents (the
 // agent's voice and an armed edit) return before `canSend` is ever consulted, and Enter arrives straight into
 // submit() without passing the disabled Send button at all.
@@ -1942,7 +1954,11 @@ watch(
                                         <!-- Stop is present for the whole live turn: generating OR parked on a plan /
                                      question / permission card. A parked turn still holds the conversation's run
                                      lock, so without this the user's only exits were answering a card they didn't
-                                     want to answer or closing the tab. -->
+                                     want to answer or closing the tab.
+
+                                     It sits BEFORE Send in the row and never moves out of that order, so the two
+                                     never trade places under a finger: with an empty box (no Send, see
+                                     `sendShown`) it simply inherits the end of the row. -->
                                         <button
                                             v-if="streaming"
                                             type="button"
@@ -1954,11 +1970,13 @@ watch(
                                         >
                                             <Icon name="stop" class="text-sm" />
                                         </button>
-                                        <!-- Send stays alongside Stop for the whole live turn: mid-turn text goes into the
-                                     running turn where the harness takes it, and queues behind the turn where it
-                                     doesn't. There is no state in which the composer has nowhere to put a message,
-                                     so there is no state in which this button is missing. -->
+                                        <!-- Send stands alongside Stop for as long as there is a message to send: mid-turn
+                                     text goes into the running turn where the harness takes it, and queues behind
+                                     the turn where it doesn't. There is no message the composer has nowhere to put,
+                                     so anything typed keeps this button on screen — and an empty box mid-turn hands
+                                     the slot to Stop rather than parking a dead circle in it (`sendShown`). -->
                                         <button
+                                            v-if="sendShown"
                                             type="submit"
                                             class="composer-send shrink-0 max-md:h-11 max-md:w-11"
                                             :disabled="!canSend || !reachable"
